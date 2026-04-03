@@ -1,0 +1,3449 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="GPU-accelerated solar envelope generation for urban design">
+      
+      
+      
+        <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/api/grid/">
+      
+      
+        <link rel="prev" href="../raytracer/">
+      
+      
+        <link rel="next" href="../sky-patches/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Grid Operations - Urban Solar Carver</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#grid-operations" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Urban Solar Carver" class="md-header__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Urban Solar Carver
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Grid Operations
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Urban Solar Carver" class="md-nav__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Urban Solar Carver
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../modes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../grasshopper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grasshopper Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project-map/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Map
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../carving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../raytracer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ray Tracer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grid Operations
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grid Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        grid
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="grid">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.AnalysisMesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisMesh
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AnalysisMesh">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.AnalysisMesh.to_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.AnalysisMesh.to_ladybug_mesh3d" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_ladybug_mesh3d
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.AnalysisMesh.to_trimesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_trimesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.voxelize" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        voxelize
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.sample_surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sample_surface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.finalize_mesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        finalize_mesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.plane_frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plane_frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.sample_planar_surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sample_planar_surface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.discretize_surface_with_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        discretize_surface_with_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.voxelize_and_clean" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        voxelize_and_clean
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.voxelize_mesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        voxelize_mesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.prune_voxels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prune_voxels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.prune_voxels_morph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prune_voxels_morph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.polish_mesh_taubin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        polish_mesh_taubin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.mesh_from_voxels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_from_voxels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.mesh_from_voxels_smoothed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_from_voxels_smoothed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.mesh_from_voxels_select" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_from_voxels_select
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.cleanup_mesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cleanup_mesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sky-patches/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sky Patches
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sun Vectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../daemon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Daemon
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        grid
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="grid">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.AnalysisMesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        AnalysisMesh
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="AnalysisMesh">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.AnalysisMesh.to_dict" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_dict
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.AnalysisMesh.to_ladybug_mesh3d" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_ladybug_mesh3d
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.AnalysisMesh.to_trimesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        to_trimesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.voxelize" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        voxelize
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.sample_surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sample_surface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.finalize_mesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        finalize_mesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.plane_frame" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        plane_frame
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.sample_planar_surface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sample_planar_surface
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.discretize_surface_with_normals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        discretize_surface_with_normals
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.voxelize_and_clean" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        voxelize_and_clean
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.voxelize_mesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        voxelize_mesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.prune_voxels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prune_voxels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.prune_voxels_morph" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        prune_voxels_morph
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.polish_mesh_taubin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        polish_mesh_taubin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.mesh_from_voxels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_from_voxels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.mesh_from_voxels_smoothed" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_from_voxels_smoothed
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.mesh_from_voxels_select" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_from_voxels_select
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.grid.cleanup_mesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        cleanup_mesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="grid-operations">Grid Operations<a class="headerlink" href="#grid-operations" title="Permanent link">&para;</a></h1>
+<p>Handles the geometry pipeline from raw meshes to final output:</p>
+<ol>
+<li><strong>Voxelization</strong> -- converts the max-volume mesh into a dense 3D boolean grid at the configured <code>voxel_size</code>.</li>
+<li><strong>Surface sampling</strong> -- discretizes test-surface faces into evenly spaced points with outward-facing normals, respecting <code>grid_step</code> and coplanarity tolerance.</li>
+<li><strong>Pruning</strong> -- removes small disconnected voxel clusters below <code>min_voxels</code> using connected-component labelling.</li>
+<li><strong>Mesh reconstruction</strong> -- converts the carved voxel mask back into a triangle mesh, either as cubic voxel faces or via SDF smoothing + marching cubes + Taubin polishing.</li>
+</ol>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="urbansolarcarver.grid" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-module"></code>            <code>urbansolarcarver.grid</code>
+
+
+<a href="#urbansolarcarver.grid" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>UrbanSolarCarver — Grid utilities</p>
+<p>Tools for sampling nearly planar geometry, converting meshes to voxels,
+cleaning occupancy, and building meshes. Used by the carving pipeline
+to generate point/normal sets, binary grids, and final surfaces.</p>
+
+
+<details class="overview" open>
+  <summary>Overview</summary>
+  <p>Two meshing modes are supported:</p>
+<p>1) Cubic (apply_smoothing == False)
+   - Clean the binary grid with component pruning, a 3×3×3 majority filter,
+     and one 6-connected closing.
+   - Triangulate with a cubic voxel mesher (Kaolin dual-cubes).</p>
+<p>2) Smoothed SDF (apply_smoothing == True)
+   - Convert occupancy to a signed distance field (SDF) in voxel units.
+   - Light Gaussian blur, then edge-preserving Perona–Malik diffusion
+     applied only near the zero level.
+   - Pick an iso value that preserves the original inside volume.
+   - Extract a surface with marching cubes (trimesh + scikit-image).
+   - Optionally run a tiny Taubin polish (0..6 iters) after cleanup.</p>
+</details>
+
+<details class="public-api" open>
+  <summary>Public API</summary>
+  <p>sample_planar_surface(mesh, sample_step, include_boundary=True)
+    Uniformly sample a strictly planar patch and return per-point normals.</p>
+<p>discretize_surface_with_normals(mesh, sample_step, coplanarity_tol_deg=5.0)
+    Collect point/normal pairs and an analysis mesh from near-planar components.</p>
+<p>voxelize_mesh(mesh, voxel_size, margin_frac, device=None)
+    Rasterize a watertight mesh into a padded cubic occupancy grid.</p>
+<p>prune_voxels(voxels, min_voxels)
+    Remove 26-connected components smaller than min_voxels.</p>
+<p>prune_voxels_morph(voxels, min_voxels)
+    Gentle cleanup for the cubic path: component prune, majority filter,
+    single closing. Preserves thin slabs better than erosion/opening.</p>
+<p>voxelize_and_clean(mesh, voxel_size, margin_frac, min_voxels)
+    Convenience wrapper: voxelize_mesh then prune_voxels.</p>
+<p>mesh_from_voxels(voxels, min_corner, voxel_size)
+    Build a blocky mesh from the binary grid. Returns an unprocessed Trimesh.</p>
+<p>mesh_from_voxels_smoothed(voxels, min_corner, voxel_size)
+    Build a smooth mesh by contouring a smoothed SDF with marching cubes.
+    Uses a volume-matched iso to avoid systematic thinning.</p>
+<p>mesh_from_voxels_select(voxels, min_corner, voxel_size, apply_smoothing)
+    Dispatch to the cubic or SDF path based on the flag above.</p>
+<p>cleanup_mesh(mesh, min_face_count=100)
+    Fix winding/normals, weld vertices, drop tiny fragments.</p>
+<p>polish_mesh_taubin(mesh, iters=0)
+    Optional micro-polish after SDF+MC. Scale-normalized. Safe for 0..6 iters.</p>
+</details>
+
+<details class="internal-helpers" open>
+  <summary>Internal helpers</summary>
+  <p>plane_frame(normal)
+    Orthonormal in-plane basis for planar sampling.</p>
+<p>_voxel_presmooth(field_bool)
+    SDF build + Gaussian + narrow-band Perona–Malik diffusion.</p>
+<p>_pm_anisotropic_diffuse(sdf, iters, k, tau)
+    Edge-preserving diffusion stepper used by _voxel_presmooth.</p>
+<p>_volume_matched_threshold(sdf, target_inside_voxels)
+    Iso selection that matches the original inside count.</p>
+<p>_median_edge_length(mesh)
+    Median of unique edge lengths; used to normalize the Taubin polish.</p>
+</details>
+
+<details class="data-types-and-units" open>
+  <summary>Data types and units</summary>
+  <ul>
+<li>Points and normals: np.ndarray, shape (N, 3), world units.</li>
+<li>Voxel grids: torch.Tensor, shape (D, D, D), uint8/bool, 1 = inside.</li>
+<li>Meshes: trimesh.Trimesh in world coordinates.</li>
+<li>voxel_size is in world units and is passed to marching cubes as pitch.</li>
+</ul>
+</details>
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li>The cubic path aims for stable, interpretable “voxel look” with minimal
+  flicker between runs. No erosion by default to protect thin volumes.</li>
+<li>The smoothed path operates in SDF space, not on the triangle mesh. This
+  removes terracing while keeping the overall form.</li>
+<li>The Taubin step is deliberately tiny and optional. Heavy smoothing belongs
+  in SDF space, not post-mesh.</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="urbansolarcarver.grid.AnalysisMesh" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>              <code class="highlight language-python"><span class="n">AnalysisMesh</span><span class="p">(</span><span class="n">vertices</span><span class="p">,</span> <span class="n">faces</span><span class="p">,</span> <span class="n">face_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.AnalysisMesh" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>Lightweight quad mesh container.  Holds raw numpy arrays and builds
+a Ladybug <code>Mesh3D</code> or trimesh <code>Trimesh</code> on demand.</p>
+
+
+<p><span class="doc-section-title">Attributes:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td><code><span title="urbansolarcarver.grid.AnalysisMesh.vertices">vertices</span></code></td>
+            <td>
+                  <code>(V, 3) float64 ndarray — quad corner positions.</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="urbansolarcarver.grid.AnalysisMesh.faces">faces</span></code></td>
+            <td>
+                  <code>(N, 4) int32 ndarray   — quad face vertex indices.</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td><code><span title="urbansolarcarver.grid.AnalysisMesh.face_normals">face_normals</span></code></td>
+            <td>
+                  <code>(N, 3) float32 ndarray or None — outward unit normals per face.</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="urbansolarcarver.grid.AnalysisMesh.to_dict" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <code class="highlight language-python"><span class="n">to_dict</span><span class="p">()</span></code>
+
+<a href="#urbansolarcarver.grid.AnalysisMesh.to_dict" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Serialise to a plain dict (vertices + faces as nested lists).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="urbansolarcarver.grid.AnalysisMesh.to_ladybug_mesh3d" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <code class="highlight language-python"><span class="n">to_ladybug_mesh3d</span><span class="p">()</span></code>
+
+<a href="#urbansolarcarver.grid.AnalysisMesh.to_ladybug_mesh3d" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build a <code>ladybug_geometry.geometry3d.mesh.Mesh3D</code> (slow, use lazily).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h4 id="urbansolarcarver.grid.AnalysisMesh.to_trimesh" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <code class="highlight language-python"><span class="n">to_trimesh</span><span class="p">(</span><span class="n">face_colors</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.AnalysisMesh.to_trimesh" class="headerlink" title="Permanent link">&para;</a></h4>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Triangulate quads and return a <code>trimesh.Trimesh</code>.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.voxelize" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">voxelize</span><span class="p">(</span><span class="n">envelope_mesh</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.voxelize" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Rasterize the envelope into a padded cubic voxel grid.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>envelope_mesh</code>
+            </td>
+            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>config</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="            UserConfig (urbansolarcarver.load_config.user_config)" href="../config/#urbansolarcarver.pydantic_schemas.UserConfig">user_config</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>voxel_grid</code></td>            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>(<span title="D">D</span>, <span title="D">D</span>, <span title="D">D</span>), <span title="uint8">uint8</span>)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>1 indicates inside/filled.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>grid_origin</code></td>            <td>
+                  <code><span title="numpy.ndarray">ndarray</span>(3)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World-space min corner for index (0,0,0).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>grid_extent</code></td>            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Physical cube size (meters).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>grid_resolution</code></td>            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of voxels per side (D).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If voxelization returns an empty grid.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.sample_surface" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sample_surface</span><span class="p">(</span><span class="n">insolation_mesh</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.sample_surface" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Sample quasi-planar patches to produce point/normal sets for carving.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>sample_points</code></td>            <td>
+                  <code><span title="numpy.ndarray">ndarray</span>(<span title="N">N</span>, 3)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>sample_normals</code></td>            <td>
+                  <code><span title="numpy.ndarray">ndarray</span>(<span title="N">N</span>, 3)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>analysis_mesh</code></td>            <td>
+                  <code><span title="ladybug_geometry.geometry3d.mesh.Mesh3D">Mesh3D</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The analysis mesh whose face centroids are the sample points.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If no points are sampled from the insolation surface.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.finalize_mesh" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">finalize_mesh</span><span class="p">(</span><span class="n">carved_grid</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">config</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.finalize_mesh" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Convert carved voxels to a mesh and clean results.</p>
+
+
+<details class="behavior" open>
+  <summary>Behavior</summary>
+  <p>• If <code>apply_smoothing</code> is False:
+    prune small components + gentle morphology (majority + closing),
+    cubic meshing, then <code>cleanup_mesh</code>.
+• If <code>apply_smoothing</code> is True:
+    prune small components,
+    SDF presmooth + marching cubes, then <code>cleanup_mesh</code>,
+    optional micro Taubin polish capped to 0..6 iterations.</p>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>carved_grid</code>
+            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span>(<span title="D">D</span>, <span title="D">D</span>, <span title="D">D</span>)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Binary occupancy after carving.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>grid_origin</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span>(3)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World-space min corner for index (0,0,0).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>config</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="            UserConfig (urbansolarcarver.load_config.user_config)" href="../config/#urbansolarcarver.pydantic_schemas.UserConfig">user_config</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>cleaned_voxels</code></td>            <td>
+                  <code><span title="torch.Tensor">Tensor</span>(<span title="D">D</span>, <span title="D">D</span>, <span title="D">D</span>)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Post-pruned (and possibly morphologically cleaned) occupancy.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>initial_mesh</code></td>            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Mesh directly from the selected meshing path (pre-cleanup copy).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>final_mesh</code></td>            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Cleaned (and optionally micro-polished) mesh.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.plane_frame" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">plane_frame</span><span class="p">(</span><span class="n">surface_normal</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.plane_frame" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return two orthonormal vectors spanning the plane orthogonal to <code>surface_normal</code>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>surface_normal</code>
+            </td>
+            <td>
+                  <code>(3,) array_like</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Plane normal (need not be unit length).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code>axis_u, axis_v : (3,) np.ndarray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unit vectors forming a right-handed 2D basis in the plane.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li>The normal is normalized internally.</li>
+<li>A stable reference axis is chosen to avoid degeneracy when the normal is
+  almost aligned with X.</li>
+<li>Used by <code>sample_planar_surface</code> to build a local 2D sampling frame.</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.sample_planar_surface" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sample_planar_surface</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">sample_step</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">include_boundary</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.sample_planar_surface" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Uniformly sample points on a strictly planar submesh and return per-point normals.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>mesh</code>
+            </td>
+            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Single planar connected component (convex or with holes).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_step</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Spacing of the sampling grid in world units.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>include_boundary</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, include points that fall on polygon boundaries; otherwise drop them.</p>
+              </div>
+            </td>
+            <td>
+                  <code>True</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>points</code></td>            <td>
+                  <code>(N, 3) float32 np.ndarray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sample locations in world coordinates.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>normals</code></td>            <td>
+                  <code>(N, 3) float32 np.ndarray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unit normals (constant over the patch, oriented consistently with the mesh).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li>Builds a local 2D grid in the plane (see <code>plane_frame</code>) and rasterizes the
+  polygon footprint to select in-polygon grid sites.</li>
+<li>Used by <code>discretize_surface_with_normals</code> for planar-only sampling.</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.discretize_surface_with_normals" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">discretize_surface_with_normals</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">sample_step</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">coplanarity_tol_deg</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.discretize_surface_with_normals" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Sample nearly planar regions of a mesh and return point/normal pairs.</p>
+<p>Uses the fast Shapely-based rasterizer (<code>sample_planar_surface</code>) for
+point/normal generation and builds a quad analysis mesh from the same
+2D grid.  The mesh has a 1:1 face-to-point mapping suitable for
+per-face coloring (e.g. "LB Spatial Heatmap" in GH/Rhino).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>mesh</code>
+            </td>
+            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Input triangle mesh (test surface).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sample_step</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sampling grid spacing in world units.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>coplanarity_tol_deg</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum face-normal deviation (degrees) to consider a component planar.</p>
+              </div>
+            </td>
+            <td>
+                  <code>5.0</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>points</code></td>            <td>
+                  <code>(N, 3) float32 np.ndarray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sample points (centroids of the analysis-mesh quads).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>normals</code></td>            <td>
+                  <code>(N, 3) float32 np.ndarray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Outward-facing normals at each sample point.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>analysis_mesh</code></td>            <td>
+                  <code><a class="autorefs autorefs-internal" title="              AnalysisMesh(vertices, faces, face_normals=None) (urbansolarcarver.grid.AnalysisMesh)" href="#urbansolarcarver.grid.AnalysisMesh">AnalysisMesh</a> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Combined quad analysis mesh, or None if no points were sampled.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.voxelize_and_clean" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">voxelize_and_clean</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">margin_frac</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">min_voxels</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.voxelize_and_clean" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Convenience wrapper: voxelize a mesh and prune tiny connected components.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>voxels</code></td>            <td>
+                  <code>(D, D, D) uint8 torch.Tensor</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Binary occupancy (1 = inside/filled).</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>origin</code></td>            <td>
+                  <code>(3,) np.ndarray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World-space min corner of the grid.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>grid_extent</code></td>            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Physical cube size covered by the grid.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>resolution</code></td>            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Voxel resolution (D).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="see-also" open>
+  <summary>See Also</summary>
+  <p>voxelize_mesh, prune_voxels</p>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.voxelize_mesh" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">voxelize_mesh</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">voxel_size</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">margin_frac</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.voxelize_mesh" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Rasterize a watertight mesh into a padded binary voxel grid.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>mesh</code>
+            </td>
+            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>voxel_size</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Edge length of one voxel in world units.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>margin_frac</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Padding on each side as a fraction of the mesh AABB's max side.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.2</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span> or None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target device for the returned tensor.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>voxels</code></td>            <td>
+                  <code>(D, D, D) uint8 torch.Tensor</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>1 where inside/filled, 0 otherwise.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>origin</code></td>            <td>
+                  <code>(3,) np.ndarray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World-space min corner of the grid.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>grid_extent</code></td>            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Physical size of the cubic domain.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>resolution</code></td>            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Number of voxels per side (D).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li>Uses trimesh ray-based voxelization and scipy cavity fill.</li>
+<li>Grid is axis-aligned and cubic by construction.</li>
+<li>No GPU dependency for voxelization itself (runs on CPU via trimesh).</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.prune_voxels" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">prune_voxels</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">min_voxels</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.prune_voxels" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Remove connected components smaller than <code>min_voxels</code> (26-connectivity).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>voxels</code>
+            </td>
+            <td>
+                  <code>(D, D, D) uint8/bool torch.Tensor</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_voxels</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Size threshold; components with fewer voxels are removed.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>cleaned</code></td>            <td>
+                  <code>(D, D, D) uint8 torch.Tensor</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Binary occupancy on the same device as <code>voxels</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li>Used on the smoothed path (<code>apply_smoothing=True</code>) prior to SDF smoothing.</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.prune_voxels_morph" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">prune_voxels_morph</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">min_voxels</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.prune_voxels_morph" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Gentle cleanup for the cubic (unsmoothed) path.</p>
+
+
+<details class="steps" open>
+  <summary>Steps</summary>
+  <ol>
+<li>Remove tiny connected components (26-connectivity).</li>
+<li>Apply a 3×3×3 majority filter (keeps voxels with ≥3 neighbors) to
+   suppress isolated specks.</li>
+<li>Run a single binary closing with a 6-connected structuring element to
+   seal pinholes without shrinking slabs.</li>
+</ol>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>voxels</code>
+            </td>
+            <td>
+                  <code>(D, D, D) uint8/bool torch.Tensor</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_voxels</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>cleaned</code></td>            <td>
+                  <code>(D, D, D) uint8 torch.Tensor</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.polish_mesh_taubin" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">polish_mesh_taubin</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">iters</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.polish_mesh_taubin" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Apply a tiny, scale-normalized Taubin pass to knock down micro-ripples.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>mesh</code>
+            </td>
+            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>iters</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Small integer in [0, 6]. If 0, the mesh is returned unchanged.</p>
+              </div>
+            </td>
+            <td>
+                  <code>2</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>mesh</code></td>            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li>Uses fixed stable parameters (λ≈0.28, ν≈−0.31) and normalizes by the
+  median edge length to avoid scale sensitivity.</li>
+<li>Intended only after the SDF+MC path. Keep very small to avoid shape drift.</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.mesh_from_voxels" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">mesh_from_voxels</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">min_corner</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.mesh_from_voxels" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Construct a blocky (cubic) mesh from a binary occupancy grid.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>voxels</code>
+            </td>
+            <td>
+                  <code>(D, D, D) uint8/bool torch.Tensor</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_corner</code>
+            </td>
+            <td>
+                  <code>(3,) array_like</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World-space origin of the grid (maps index [0,0,0] to this point).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>voxel_size</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Size of one voxel in world units.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>mesh</code></td>            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unprocessed triangle mesh (process=False). Call <code>cleanup_mesh</code> next.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="see-also" open>
+  <summary>See Also</summary>
+  <p>mesh_from_voxels_smoothed, mesh_from_voxels_select</p>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.mesh_from_voxels_smoothed" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">mesh_from_voxels_smoothed</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">min_corner</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.mesh_from_voxels_smoothed" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Construct a smooth mesh by conturing a smoothed SDF with marching cubes.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>voxels</code>
+            </td>
+            <td>
+                  <code>(D, D, D) uint8/bool torch.Tensor</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Binary occupancy (1 = inside).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_corner</code>
+            </td>
+            <td>
+                  <code>(3,) array_like</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World-space grid origin.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>voxel_size</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World units per voxel (passed as <code>pitch</code> to marching cubes).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>mesh</code></td>            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Triangle mesh positioned in world coordinates.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li>Internally calls <code>_voxel_presmooth</code> and chooses an iso-value via
+  <code>_volume_matched_threshold</code> to preserve volume.</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.mesh_from_voxels_select" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">mesh_from_voxels_select</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">min_corner</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">apply_smoothing</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.mesh_from_voxels_select" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Dispatch to cubic or SDF-smoothed meshing based on <code>apply_smoothing</code>.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>mesh</code></td>            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="see-also" open>
+  <summary>See Also</summary>
+  <p>mesh_from_voxels, mesh_from_voxels_smoothed</p>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.grid.cleanup_mesh" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">cleanup_mesh</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span> <span class="n">min_face_count</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">light</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.grid.cleanup_mesh" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Repair and prune small fragments from a mesh.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>mesh</code>
+            </td>
+            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_face_count</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fragments with fewer faces than this are discarded.</p>
+              </div>
+            </td>
+            <td>
+                  <code>100</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>light</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, skip expensive repair steps (fill_holes, fix_inversion,
+merge_vertices). Use for cubic meshes which are already watertight
+with correct winding. ~10x faster on large meshes.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>mesh</code></td>            <td>
+                  <code><span title="trimesh.Trimesh">Trimesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Cleaned mesh (may be a concatenation of surviving components).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

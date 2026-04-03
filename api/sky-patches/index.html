@@ -1,0 +1,1761 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="GPU-accelerated solar envelope generation for urban design">
+      
+      
+      
+        <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/api/sky-patches/">
+      
+      
+        <link rel="prev" href="../grid/">
+      
+      
+        <link rel="next" href="../sun/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Sky Patches - Urban Solar Carver</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#sky-patches" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Urban Solar Carver" class="md-header__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Urban Solar Carver
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Sky Patches
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Urban Solar Carver" class="md-nav__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Urban Solar Carver
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../modes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../grasshopper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grasshopper Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project-map/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Map
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../carving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../raytracer/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ray Tracer
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../grid/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grid Operations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sky Patches
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sky Patches
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sky_patches
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="sky_patches">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_directions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fetch_tregenza_patch_directions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_solid_angles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fetch_tregenza_patch_solid_angles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_radiative_cooling_weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.compute_EPW_based_weights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_EPW_based_weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sun Vectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../daemon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Daemon
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sky_patches
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="sky_patches">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_directions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fetch_tregenza_patch_directions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_solid_angles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fetch_tregenza_patch_solid_angles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_radiative_cooling_weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.compute_EPW_based_weights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        compute_EPW_based_weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="sky-patches">Sky Patches<a class="headerlink" href="#sky-patches" title="Permanent link">&para;</a></h1>
+<p>Implements the Tregenza hemisphere subdivision (145 patches) used by all weighted carving modes. Each patch represents a solid-angle region of the sky dome; the scoring module assigns a weight to each patch depending on the analysis mode.</p>
+<ul>
+<li><strong>Tregenza geometry</strong> -- 145 direction vectors and their solid angles, following the standard subdivision used in climate-based daylight modelling.</li>
+<li><strong>EPW-based weights</strong> (<code>compute_EPW_based_weights</code>) -- aggregates hourly direct and diffuse irradiance from an EPW weather file onto each patch using the Perez all-weather sky model. Supports filtering by heating-benefit hours (outdoor temperature below balance point) and CIE overcast luminance.</li>
+<li><strong>Radiative cooling weights</strong> (<code>compute_radiative_cooling_weights</code>) -- models long-wave sky emissivity per patch using the Martin-Berdahl clear-sky model with Bliss angular attenuation.</li>
+</ul>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="urbansolarcarver.sky_patches" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-module"></code>            <code>urbansolarcarver.sky_patches</code>
+
+
+<a href="#urbansolarcarver.sky_patches" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p>UrbanSolarCarver Sky Patch Weighting Module</p>
+<p>Generates sky-patch direction vectors, solid angles, and per-patch weight
+distributions for the voxel carving pipeline.</p>
+
+
+<details class="core-functions" open>
+  <summary>Core Functions</summary>
+  <ol>
+<li>
+<p>fetch_tregenza_patch_directions(device) → torch.Tensor
+   Lazily loads a Ladybug ViewSphere and returns a (P×3) tensor of unit
+   vectors for the P Tregenza sky patches.</p>
+</li>
+<li>
+<p>fetch_tregenza_patch_solid_angles(device) → torch.Tensor
+   Returns a length-P tensor of solid angles (steradians) per patch.</p>
+</li>
+<li>
+<p>compute_EPW_based_weights(mode, epw_file, hoys, device, ...) → torch.Tensor
+   Climate-based weights via Ladybug SkyMatrix (Perez all-weather model).
+   Supports modes: irradiance, benefit, daylight.</p>
+</li>
+<li>
+<p>compute_radiative_cooling_weights(dew_point, bliss_k, device) → torch.Tensor
+   Theoretical radiative cooling potential per patch (Martin-Berdahl +
+   Bliss angular attenuation).  Assumes horizontal analysis surface.
+Compute_weights yields all the sky-patch coefficients necessary to
+accumulate per-voxel exposure scores. Tregenza vectors and solid angles
+are also available for diagnostics or custom weighting schemes.</p>
+</li>
+</ol>
+</details>
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.fetch_tregenza_patch_directions" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">fetch_tregenza_patch_directions</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_directions" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns the 145 unit direction vectors of the Tregenza hemisphere
+subdivision (Tregenza, 1987). The dome divides the sky hemisphere
+into 145 patches of approximately equal solid angle, organized in
+7 altitude rings plus a zenith cap.</p>
+<p>Returns tensor [P, 3] of unit vectors for each Tregenza sky patch.
+Uses ladybug ViewSphere internally.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.fetch_tregenza_patch_solid_angles" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">fetch_tregenza_patch_solid_angles</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_solid_angles" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Returns tensor [P] of solid angles (in steradians) per tregenza sky patch.
+Uses ladybug viewsphere</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">compute_radiative_cooling_weights</span><span class="p">(</span><span class="n">dewpoint_celsius</span><span class="p">,</span> <span class="n">bliss_k</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return a long-wave "cooling potential" weight for each
+Tregenza sky patch, given an outdoor dew-point temperature.</p>
+
+
+<details class="scientific-background" open>
+  <summary>Scientific background</summary>
+  <p>• Sky (hemispherical) emissivity, εₛky<br />
+  The clear-sky emissivity in the 8-13 µm thermal-IR window can be
+  estimated from near-surface water-vapour content.  Martin &amp; Berdahl
+  (1984) fit a quadratic in relative dew-point x = T_dp / 100 °C
+  to a wide range of radiometer measurements:</p>
+<div class="highlight"><pre><span></span><code>  εₛky(x) = 0.758 + 0.521 x + 0.625 x²                (Eq. 1)
+</code></pre></div>
+<p>A larger εₛky means the sky behaves more like a blackbody,
+  emitting and absorbing more long-wave radiation and therefore
+  offering less potential cooling for a hot surface.</p>
+<p>• Directional emissivity (ε_dir)
+  Long-wave exchange also depends on zenith angle θ: the drier,
+  higher-altitude air seen near the zenith is usually "blacker" than
+  the humid boundary layer near the horizon.  Bliss (1961) proposed
+  an exponential attenuation law that relates the hemispherical
+  value in Eq. 1 to a direction-dependent value:</p>
+<div class="highlight"><pre><span></span><code>  ε_dir(θ) = 1 - (1 - εₛky)^(1 /(k · cos θ))          (Eq. 2)
+</code></pre></div>
+<p>with k ≈ 1.8 for clear nocturnal skies.  The code clamps
+  cos θ to <code>1e-3</code> to avoid division by zero at the horizon.</p>
+<p>• Radiative cooling potential<br />
+  A surface "sees" the sky patch through its solid angle Ω_p.
+  Assuming the surface itself is nearly black in the long-wave,
+  its net radiative heat <em>loss</em> in direction <em>p</em> is proportional to</p>
+<div class="highlight"><pre><span></span><code>  (1 - ε_dir) · Ω_p                                 (Eq. 3)
+</code></pre></div>
+<p>because (1 - ε_dir) is the fraction of the surface's own emission
+  not returned by the sky (i.e. the deficit in sky emission).</p>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>dewpoint_celsius</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Outdoor dew-point temperature [°C].  Acts as a proxy for
+absolute humidity in Eq. 1.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>bliss_k</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Empirical constant from Bliss (1961) governing angular variation of atmospheric
+emissivity. Typical clear-sky values range 1.5 - 2.0; larger k increases zenith-horizon contrast.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.8</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target compute device for the returned tensor.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code>torch.Tensor  (length = P sky patches, dtype =float32)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>cooling weights wᵢ ≥ 0,  Σ wᵢ = 1.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li><strong>Assumes horizontal analysis surface</strong> (flat roof).  The view-factor
+  weighting cos(θ)/π used in Eq. 3 is only correct for an upward-facing
+  horizontal surface.  For tilted or vertical surfaces the angular
+  integration bounds change significantly; applying these weights to
+  non-horizontal surfaces will over-weight the zenith and under-weight
+  low-altitude patches.</li>
+<li>Valid for clear nights; clouds would raise εₛky toward unity and
+  flatten the weight distribution.</li>
+<li>Units cancel, so the weights are dimensionless fractions that can
+  multiply any radiative-heat-transfer coefficient in further
+  calculations.</li>
+</ul>
+</details>
+
+<details class="references" open>
+  <summary>References</summary>
+  <ul>
+<li>Bliss, R.W. 1961. "Atmospheric Radiation near the Surface of the
+  Ground." <em>Solar Energy</em> 5 (3): 103-120.</li>
+<li>Martin, M. &amp; Berdahl, P. 1984. "Characteristics of Infrared Sky
+  Radiation in the United States." Solar Energy 33 (3-4): 321-336.</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.compute_EPW_based_weights" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">compute_EPW_based_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">epw_path</span><span class="p">,</span> <span class="n">hoys</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ground_reflectance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.sky_patches.compute_EPW_based_weights" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return a vector of sky-patch weights (length P) derived from
+Energy-Plus Weather (EPW) data or CIE overcast sky (for daylight).
+Each weight expresses the relative importance of the
+corresponding Tregenza sky patch for a chosen metric:</p>
+<div class="highlight"><pre><span></span><code>┌──────────────┬──────────────────────────────────────────────┐
+│ mode         │ physical meaning of the weight wᵢ            │
+├──────────────┼──────────────────────────────────────────────┤
+│ time-based   │ uniform probability 1/P                      │
+│ daylight     │ CIE overcast luminance Ω·(1+2 cos θ)/3       │
+│ irradiance   │ solar short-wave power (direct+diffuse)      │
+│ benefit      │ net *heating benefit* of solar gains         │
+└──────────────┴──────────────────────────────────────────────┘
+</code></pre></div>
+
+
+<details class="scientific-background" open>
+  <summary>Scientific background</summary>
+  <ul>
+<li>
+<p>Sky patch geometry — Tregenza subdivides the hemisphere into
+  145 quasi-equal solid-angle patches.
+  <code>fetch_tregenza_patch_</code> returns Ωᵢ and view vector
+  d̂ᵢ = (lᵢ, mᵢ, nᵢ)*<em> with nᵢ = cos θ</em>.</p>
+</li>
+<li>
+<p>time-based — Baseline uninformative prior:<br />
+  wᵢ = 1/P. 
+  For time-based carving using traditional time-based solar envelope methods.</p>
+</li>
+<li>
+<p>daylight — The CIE Standard Overcast Sky (Darula &amp; Kittler 2002)
+  prescribes relative luminance<br />
+  L(θ) ∝ (1 + 2 cos θ)/3.  </p>
+</li>
+<li>
+<p>irradiance — 'SkyMatrix.from_epw' (Ladybug Tools) builds a
+  Perez All-Weather sky for every time step, then integrates the
+  selected hours ('hoys') to obtain cumulative short-wave
+  energy per patch:</p>
+<p>wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) [J m⁻²]</p>
+</li>
+</ul>
+<p>where E_dirᵢₜ is direct beam contribution and E_difᵢₜ
+  diffuse.</p>
+<ul>
+<li>
+<p>benefit — Uses Ladybug's heating-benefit framework
+  implemented in 'SkyMatrix.from_components_benefit', whereby only
+  solar gains occurring when Tₐ &lt; T_bal - ΔT are credited:</p>
+<p>wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) · H( T_bal - ΔT - Tₐₜ )</p>
+</li>
+</ul>
+<p>with Heaviside switch H. 'balance_temperature'
+  (T_bal) and 'balance_offset' (ΔT) loosely represent the
+  building's heating set-point and internal gains.
+  A Grasshopper/Ladybug simple E+ workflow is included. It
+  can be used to derive project-specific balance temperatures.</p>
+</details>
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>mode</code>
+            </td>
+            <td>
+                  <code>(<span title="time">time</span> - <span title="based">based</span>, <span title="daylight">daylight</span>, <span title="irradiance">irradiance</span>, <span title="benefit">benefit</span>)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Weighting strategy (see table above).</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;time-based&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>epw_path</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Path to an EPW file.  Required for <em>irradiance</em> and <em>benefit</em>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>hoys</code>
+            </td>
+            <td>
+                  <code><span title="typing.Sequence">Sequence</span>[<span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Hour-of-year indices to sample.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Compute device for the returned tensor.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;cuda&#39; if available else &#39;cpu&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ground_reflectance</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Lambertian ground albedo used by Perez model.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.2</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>balance_temperature</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Base-temperature for the heating-benefit filter.</p>
+              </div>
+            </td>
+            <td>
+                  <code>15 °C</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>balance_offset</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dead-band between comfort set-point and base temperature.</p>
+              </div>
+            </td>
+            <td>
+                  <code>2 °C</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Shape (P,), dtype float32, residing on device.
+Weights are non-negative.  Only <code>radiative_cooling</code> normalises
+to Σwᵢ = 1.  Other modes preserve the physical scale returned
+by Ladybug (Wh/m² for irradiance/benefit) or the CIE luminance
+distribution (daylight).  Threshold methods (carve_fraction,
+headtail) are scale-invariant, so the difference does not affect
+carving results.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<details class="note" open>
+  <summary>Notes</summary>
+  <ul>
+<li>The EPW-driven modes assume typical meteorology; rare events
+  (e.g. &gt; 99th percentile irradiance) may be under-represented.</li>
+<li>For benefit mode the heating-balance filter is purely
+  temperature-based; construction, occupancy and HVAC control logic are not
+  considered.</li>
+</ul>
+</details>
+
+<details class="references" open>
+  <summary>References</summary>
+  <ul>
+<li>Perez, R. et al. 1990. "Modeling daylight availability and
+  irradiance components from direct and global irradiance."
+  <em>Solar Energy</em> 44(5): 271-289.</li>
+<li>Darula, S. &amp; Kittler, R. 2002. "CIE general sky standard defining
+  luminance distributions." <em>Proceedings eSim</em> 11: 13.</li>
+<li>Ladybug Tools. "SkyMatrix.from_components_benefit" — heating-benefit
+  sky matrix filtering hours by balance-point temperature.
+  https://www.ladybug.tools/ladybug/docs/ladybug.skymatrix.html</li>
+</ul>
+</details>
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
