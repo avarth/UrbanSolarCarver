@@ -127,7 +127,11 @@ USC extends the lineage of voxel-based solar form-finding, from Knowles' solar e
 
 ## Citation
 
-A publication describing USC is in preparation. Citation details will be added here upon publication.
+USC is described in a paper accepted for publication (proceedings in press). Please cite:
+
+> Vartholomaios, A. (in press). *Urban Solar Carver: A GPU-accelerated framework for solar-driven urban form finding.* In L. Bragança, K. Tsikaloudaki, C. Giarma, et al. (Eds.), *ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026* (Lecture Notes in Civil Engineering). Springer.
+
+The DOI will be added once the proceedings are published. To cite the software itself, use the [Zenodo DOI](https://doi.org/10.5281/zenodo.19443738). See [`CITATION.cff`](CITATION.cff) for machine-readable metadata.
 
 ## Built With
 
