@@ -15,8 +15,11 @@ url: "https://avarth.github.io/UrbanSolarCarver/"
 license: AGPL-3.0-or-later
 identifiers:
   - type: doi
+    value: 10.5281/zenodo.19443737
+    description: "Zenodo concept DOI (all versions; resolves to latest)"
+  - type: doi
     value: 10.5281/zenodo.19443738
-    description: "Zenodo archive of the software (all versions)"
+    description: "Zenodo DOI for version 0.9.0"
 preferred-citation:
   type: conference-paper
   title: "Urban Solar Carver: A GPU-accelerated framework for solar-driven urban form finding"

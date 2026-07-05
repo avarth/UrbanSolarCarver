@@ -2,7 +2,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19443738.svg)](https://doi.org/10.5281/zenodo.19443738)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19443737.svg)](https://doi.org/10.5281/zenodo.19443737)
 
 Urban Solar Carver (USC) is a Python library for generating maximum buildable volumes that respect solar access, daylight, and thermal comfort constraints in urban environments. It uses GPU-accelerated voxel carving driven by climate data to produce 3D building envelopes ready for urban planning, design, and architectural applications.
 
@@ -131,7 +131,7 @@ USC is described in a paper accepted for publication (proceedings in press). Ple
 
 > Vartholomaios, A. (in press). *Urban Solar Carver: A GPU-accelerated framework for solar-driven urban form finding.* In L. Bragança, K. Tsikaloudaki, C. Giarma, et al. (Eds.), *ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026* (Lecture Notes in Civil Engineering). Springer.
 
-The DOI will be added once the proceedings are published. To cite the software itself, use the [Zenodo DOI](https://doi.org/10.5281/zenodo.19443738). See [`CITATION.cff`](CITATION.cff) for machine-readable metadata.
+The DOI will be added once the proceedings are published. To cite the software itself, use the [Zenodo DOI](https://doi.org/10.5281/zenodo.19443737). See [`CITATION.cff`](CITATION.cff) for machine-readable metadata.
 
 ## Built With
 
