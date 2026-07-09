@@ -104,7 +104,8 @@ def thresholding(
     cfg : user_config | str | Path
         Validated config or path to config file.
     out_dir : str | Path
-        Root output directory; a ``thresholding/`` subdirectory is created.
+        Output directory for this stage; created if it does not exist.
+        All artifacts are written directly into it.
 
     Returns
     -------
@@ -200,7 +201,7 @@ def thresholding(
         else:
             key = thr.lower()
             if key == "headtail":
-                thr_val = float(headtail_threshold(scores, max_iterations=getattr(conf, "headtail_max_iter", 50)))
+                thr_val = float(headtail_threshold(scores, max_iterations=50))
             elif key == "carve_fraction":
                 # Score-mass cutoff: remove the highest-scoring voxels that
                 # collectively account for `carve_fraction` of the total score.
@@ -305,23 +306,15 @@ def thresholding(
             summary["mean_obstruction_carved_per_sample"] = round(score_mass_carved / n_samples, 2)
             summary["sample_point_count"] = n_samples
 
-    # Histogram with threshold line — background thread when enabled.
+    # Histogram with threshold line — only when diagnostic plots are enabled.
     if getattr(conf, "diagnostic_plots", False):
-        import threading
         summary["threshold_histogram"] = str(diag_dir / "threshold_histogram.png")
-        _nn = nn.copy()
-
-        def _render_thr_hist():
-            save_histogram(
-                _nn, diag_dir, "threshold_histogram.png",
-                threshold_line=thr_val,
-                title=f"Voxel Scores — threshold={thr_val:.4g} ({threshold_method})",
-                xlabel=weight_unit,
-            )
-
-        _thr_plot_thread = threading.Thread(target=_render_thr_hist, daemon=True)
-        _thr_plot_thread.start()
-        _thr_plot_thread.join()
+        save_histogram(
+            nn, diag_dir, "threshold_histogram.png",
+            threshold_line=thr_val,
+            title=f"Voxel Scores — threshold={thr_val:.4g} ({threshold_method})",
+            xlabel=weight_unit,
+        )
 
     # Consolidated diagnostic — one file per stage.
     summary["timings"] = {

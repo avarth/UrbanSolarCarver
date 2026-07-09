@@ -60,15 +60,16 @@ def exporting(
     triangle mesh suitable for downstream CAD / BIM / visualisation workflows.
 
     Mesh extraction proceeds through :func:`~urbansolarcarver.grid.finalize_mesh`,
-    which supports two strategies (selected by ``cfg.mesh_method``):
+    which supports two strategies (selected by ``cfg.apply_smoothing``):
 
-    * **cubic** -- axis-aligned cuboid faces are emitted for every occupied
-      voxel; fast but produces staircase geometry.
-    * **sdf** (default) -- the binary field is converted to a signed-distance
-      field, optionally smoothed (Gaussian sigma controlled by
-      ``cfg.sdf_smooth``), and iso-surfaced with Marching Cubes, yielding a
-      smoother envelope.  Small disconnected fragments below
-      ``cfg.min_component_fraction`` of the largest component are removed.
+    * **cubic** (``apply_smoothing=False``, default) -- axis-aligned cuboid
+      faces are emitted for every occupied voxel; fast, produces the classic
+      voxel look.
+    * **smoothed** (``apply_smoothing=True``) -- the binary field is converted
+      to a signed-distance field, smoothed, and iso-surfaced with Marching
+      Cubes, then optionally polished with up to ``cfg.smooth_iters`` Taubin
+      passes.  Voxel clusters below ``cfg.min_voxels`` and mesh fragments
+      below ``cfg.min_face_count`` faces are removed on both paths.
 
     Parameters
     ----------
@@ -78,7 +79,8 @@ def exporting(
     cfg : user_config | str | Path
         Validated config or path to config file.
     out_dir : str | Path
-        Root output directory; an ``exporting/`` subdirectory is created.
+        Output directory for this stage; created if it does not exist.
+        All artifacts are written directly into it.
 
     Returns
     -------

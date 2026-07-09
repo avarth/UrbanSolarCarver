@@ -334,7 +334,7 @@ def cmd_exporting(
     Reads the thresholding manifest (``-f``) to locate ``mask.npy``,
     prunes small disconnected clusters, reconstructs a triangle mesh
     (cubic faces or SDF-smoothed marching cubes), and writes
-    ``carved_mesh.ply``.
+    ``export.<format>`` (format from ``final_mesh_format``, default ply).
     """
     if daemon:
         resp = _daemon_send({
@@ -548,7 +548,8 @@ def daemon_start(
                 if resp.get("status") == "ok":
                     break
             except (ConnectionRefusedError, OSError):
-                time.sleep(interval)
+                pass
+            time.sleep(interval)
         else:
             typer.secho(f"  Daemon did not become ready after {max_retries}s", fg="red")
             raise typer.Exit(1)

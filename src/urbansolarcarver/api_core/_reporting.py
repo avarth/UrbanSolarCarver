@@ -10,10 +10,14 @@ import json
 import numpy as np
 
 from ..load_config import user_config
+from ..mode_registry import MODES_NEEDING_EPW
 
 
 def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float = 0.01) -> dict:
     """Estimate voxel grid dimensions and memory without running the full pipeline.
+
+    Mirrors :func:`~urbansolarcarver.grid.voxelize_mesh`, which always builds
+    a CUBIC grid sized to the largest bounding-box side plus margin.
 
     Returns dict with keys: grid_dims, total_voxels, memory_mb, warning.
     """
@@ -21,10 +25,11 @@ def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float =
     mesh = trimesh.load(mesh_path, force='mesh')
     bbox = mesh.bounds
     span = bbox[1] - bbox[0]
-    margin = span.max() * margin_frac
-    padded = span + 2 * margin
-    dims = tuple(int(np.ceil(s / voxel_size)) for s in padded)
-    total = dims[0] * dims[1] * dims[2]
+    max_dim = float(span.max())
+    side = max_dim + 2 * max_dim * margin_frac
+    resolution = int(np.ceil(side / voxel_size))
+    dims = (resolution, resolution, resolution)
+    total = resolution ** 3
     # float32 scores + bool grid + overhead ≈ 5 bytes/voxel
     mem_mb = total * 5 / (1024**2)
     warning = None
@@ -77,7 +82,7 @@ def generate_run_report(
         ("Smoothing", conf.apply_smoothing),
         ("Output format", getattr(conf, "final_mesh_format", "ply")),
     ]
-    if conf.mode not in ("tilted_plane", "daylight"):
+    if conf.mode in MODES_NEEDING_EPW:
         cfg_items.append(("EPW", conf.epw_path or "\u2014"))
         if conf.start_month is not None:
             period = (f"{conf.start_month}/{conf.start_day} {conf.start_hour}:00 \u2192 "

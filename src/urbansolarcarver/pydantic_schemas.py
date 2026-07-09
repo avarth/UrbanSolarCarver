@@ -153,8 +153,8 @@ class UserConfig(BaseModel):
         False,
         description=(
             "Generate diagnostic plot images (score histogram, sky patch weight/intensity plots, "
-            "threshold histogram). Plots are rendered in a background thread so they do not block "
-            "the pipeline. When False (default), only JSON diagnostics are written — no matplotlib overhead."
+            "threshold histogram). When False (default), only JSON diagnostics are written — "
+            "no matplotlib overhead."
         ),
     )
     device: str = Field('auto', description="Compute device: 'auto', 'cpu', or 'cuda'")
@@ -192,8 +192,16 @@ class UserConfig(BaseModel):
         if v is None:
             return v
         if isinstance(v, str):
-            if v not in {'headtail', 'carve_fraction', 'numeric'}:
-                raise ValueError("threshold must be one of {'headtail','carve_fraction','numeric'}")
+            if v == 'numeric':
+                # 'numeric' is a UI-side placeholder (Grasshopper Threshold
+                # component); the pipeline needs the actual number.
+                raise ValueError(
+                    "threshold='numeric' requires an explicit value — "
+                    "set threshold to the raw-score cutoff number itself "
+                    "(in Grasshopper, connect a number to the 'value' input)."
+                )
+            if v not in {'headtail', 'carve_fraction'}:
+                raise ValueError("threshold must be one of {'headtail','carve_fraction'} or a number")
             return v
         if v < 0:
             raise ValueError("numeric threshold must be >= 0")

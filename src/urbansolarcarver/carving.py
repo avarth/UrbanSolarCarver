@@ -14,10 +14,11 @@ through a voxelized envelope, and remove the voxels they visit. Supports:
 
 Raytracing contract
 -------------------
-All carving is executed via `trace_multi_hit_grid`, which:
-  • samples at cell centers: distances = (0.5 + k) * voxel_size
-  • maps world → grid with floor(), not round()
-This avoids lattice aliasing, especially for the plane method.
+All carving is executed via `trace_multi_hit_grid`, which guarantees each
+(ray, voxel) pair is reported at most once.  The Warp DDA backend traverses
+voxels exactly; the PyTorch fallback samples at cell centers
+(distances = (0.5 + k) * voxel_size) and maps world → grid with floor(),
+not round(), to avoid lattice aliasing (especially for the plane method).
 
 Coordinate/scale conventions
 ----------------------------
@@ -34,6 +35,7 @@ Given a fixed config, carving is deterministic. Rays are processed in batches
 import warnings
 import torch
 import numpy as np
+from numba import njit
 
 from .scoring import (
     get_weights,
@@ -48,7 +50,7 @@ import json
 from .sun import get_sun_vectors
 from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
-    auto_batch_size, _warp_available,
+    auto_batch_size, dda_backend_available,
 )
 # Fused kernel import (conditional -- only available when Warp is installed)
 try:
@@ -241,8 +243,11 @@ def carve_with_sun_rays(
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
     res_sq = res * res
 
-    # sun directions on device
-    sun_dirs = get_sun_vectors(config.epw_path, datetimes, config.min_altitude)
+    # sun directions on device (rotated to model coordinates via north_deg)
+    sun_dirs = get_sun_vectors(
+        config.epw_path, datetimes, config.min_altitude,
+        north_deg=config.north_deg,
+    )
     if isinstance(sun_dirs, torch.Tensor):
         sun_arr = sun_dirs.clone().detach().to(voxel_grid.device)
     else:
@@ -446,7 +451,7 @@ def carve_with_sky_patch_rays(
     # --- 5) Batch ray tracing & weighting ----------------------------------
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
     batch_size = _resolve_batch_size(config, res, device)
-    use_fused = (_fused_dda is not None and _warp_available and device.type == "cuda")
+    use_fused = (_fused_dda is not None and dda_backend_available(device))
 
     with torch.no_grad():
         for start in range(0, total_rays, batch_size):
@@ -493,21 +498,8 @@ def carve_with_sky_patch_rays(
                 if idx_flat.numel() == 0:
                     continue
 
-                # Fixed-step tracer may visit the same voxel multiple times per
-                # ray (discrete stepping overshoots).  Deduplicate so each
-                # (ray, voxel) pair contributes only once:
-                #   1. Encode each hit as a unique integer key = ray_id * N + voxel_id
-                #   2. torch.unique → inverse mapping from hits to unique keys
-                #   3. scatter with flipped indices keeps the *first* occurrence
-                #      of each key (flip ensures earlier indices overwrite later)
-                ray_voxel_key = hit_ray_ids * num_voxels + idx_flat
-                _, inv = torch.unique(ray_voxel_key, return_inverse=True)
-                perm = torch.arange(inv.size(0), device=device)
-                first = torch.empty(inv.max() + 1, dtype=torch.long, device=device)
-                first.scatter_(0, inv.flip(0), perm.flip(0))
-                idx_flat = idx_flat[first]
-                hit_patch_ids = hit_patch_ids[first]
-
+                # trace_multi_hit_grid guarantees each (ray, voxel) pair
+                # appears at most once, so weights can be accumulated directly.
                 weights_for_hits = patch_weights[hit_patch_ids]
                 scores.scatter_add_(0, idx_flat, weights_for_hits)
 
@@ -569,8 +561,9 @@ def carve_with_planes(
 
     Notes
     -----
-    • The underlying tracer uses half-voxel steps and floor indexing to
-      avoid checkerboarding on regular planar lattices.
+    • The underlying tracer samples at cell centers with floor indexing to
+      avoid checkerboarding on regular planar lattices (see
+      :func:`~urbansolarcarver.raytracer.trace_multi_hit_grid`).
     """
     _validate_cubic_resolution(grid_resolution, "carve_tilted_plane")
     side_len = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
@@ -613,8 +606,11 @@ def carve_with_planes(
             raise ValueError(
                 "tilted_plane_angle_deg must be a single number or an 8-length list [N, NE, E, SE, S, SW, W, NW]"
             )
-        # Compute azimuth from +Y (North) clockwise toward +X (East), in degrees [0, 360).
-        phi = (np.degrees(np.arctan2(n_xy[:, 0], n_xy[:, 1])) + 360.0) % 360.0
+        # Compute the model-space azimuth from +Y clockwise toward +X, then
+        # subtract north_deg (model north, degrees clockwise from +Y) to get
+        # the true compass azimuth of each surface normal.
+        north_deg = float(getattr(config, "north_deg", 0.0) or 0.0)
+        phi = (np.degrees(np.arctan2(n_xy[:, 0], n_xy[:, 1])) - north_deg + 360.0) % 360.0
         # 22.5° = 360° / (8 × 2) — half-octant offset so bin centers align with
         # cardinal/intercardinal directions (N=0°, NE=45°, E=90°, ...)
         # 45° = 360° / 8 — angular width of each octant bin
@@ -823,45 +819,40 @@ def carve_above_columns(
         Modified mask with short runs patched and voxels above qualifying
         runs carved.
     """
-    import numpy as np
+    out = np.ascontiguousarray(mask.astype(bool, copy=True))
+    occ = np.ascontiguousarray(voxel_grid.astype(bool, copy=False))
+    _carve_above_kernel(out, occ, int(min_consecutive))
+    return out
 
-    out = mask.copy()
-    nx, ny, nz = mask.shape
 
+@njit(cache=True)
+def _carve_above_kernel(out, voxel_grid, min_consecutive):
+    """Numba kernel for :func:`carve_above_columns` — mutates *out* in place.
+
+    Scans each column bottom-to-top: short carved runs are patched back to
+    kept; the first run of >= min_consecutive carved voxels triggers
+    carve-above for all occupied voxels higher in that column.
+    """
+    nx, ny, nz = out.shape
     for x in range(nx):
         for y in range(ny):
-            col_occ = voxel_grid[x, y, :]
-
-            # Collect all runs of consecutive carved (False) voxels.
-            carved = ~out[x, y, :]  # True where carved
-            runs = []  # list of (start_z, length)
-            run_start = -1
-            for z in range(nz):
-                if carved[z]:
-                    if run_start < 0:
-                        run_start = z
-                else:
-                    if run_start >= 0:
-                        runs.append((run_start, z - run_start))
-                        run_start = -1
-            if run_start >= 0:
-                runs.append((run_start, nz - run_start))
-
-            # Patch short runs (below threshold) back to kept.
             trigger_top = -1
-            for start_z, length in runs:
-                if length >= min_consecutive:
-                    trigger_top = start_z + length - 1
-                    break
+            z = 0
+            while z < nz:
+                if not out[x, y, z]:  # carved voxel — start of a run
+                    run_start = z
+                    while z < nz and not out[x, y, z]:
+                        z += 1
+                    if z - run_start >= min_consecutive:
+                        trigger_top = z - 1
+                        break
+                    # Short run — noise: patch carved voxels back to kept.
+                    for zz in range(run_start, z):
+                        out[x, y, zz] = True
                 else:
-                    # Patch: fill carved voxels back in.
-                    for z in range(start_z, start_z + length):
-                        out[x, y, z] = True
+                    z += 1
 
-            # Carve all occupied voxels above the triggering run.
             if trigger_top >= 0:
                 for z_above in range(trigger_top + 1, nz):
-                    if col_occ[z_above]:
+                    if voxel_grid[x, y, z_above]:
                         out[x, y, z_above] = False
-
-    return out

@@ -7,16 +7,18 @@ rays) and voxel-grid traversal for the carving pipeline.
 
 Two traversal backends are available:
 
-* DDA (Amanatides & Woo 1987) -- a Warp GPU kernel that launches one
+* DDA (Amanatides & Woo 1987) -- a Warp kernel that launches one
   thread per ray and walks through voxels using the standard 3-D DDA
   algorithm. Each voxel is visited exactly once per ray, eliminating
   duplicate hits and reducing VRAM usage by ~10x compared to the
-  broadcasting approach. This is the default when Warp is available and
-  the device is CUDA.
+  broadcasting approach. This is the default whenever Warp is available
+  (both CUDA and CPU devices).
 
 * Fixed-step (legacy) -- pure-PyTorch tensor broadcasting.
-  Materializes the full R x S x 3 sample-point tensor in GPU memory.
-  Kept as a CPU fallback and for validation.
+  Materializes the full R x S x 3 sample-point tensor in memory.
+  Kept as a last-resort fallback when Warp is not installed.  Note that
+  fixed stepping is approximate: oblique rays can skip voxels whose
+  intersection segment is shorter than the step, under-counting hits.
 
 References
 ----------
@@ -45,12 +47,35 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _warp_available = False
 _warp_fallback_warned = False
+_warp_cpu_ok_cache: "bool | None" = None
 try:
     import warp as wp
     wp.init()
     _warp_available = True
 except Exception as _warp_err:
     log.debug("Warp unavailable: %s", _warp_err)
+
+
+def _warp_cpu_ok() -> bool:
+    """True if Warp can compile and launch kernels on the CPU device."""
+    global _warp_cpu_ok_cache
+    if _warp_cpu_ok_cache is None:
+        try:
+            _warp_cpu_ok_cache = bool(_warp_available and wp.is_cpu_available())
+        except Exception:
+            _warp_cpu_ok_cache = False
+    return _warp_cpu_ok_cache
+
+
+def dda_backend_available(device) -> bool:
+    """True if the exact Warp DDA backend can run on *device*.
+
+    Callers can use this to know whether trace results come from the exact
+    DDA traversal or the approximate fixed-step fallback.
+    """
+    if not _warp_available:
+        return False
+    return device.type == "cuda" or _warp_cpu_ok()
 
 if _warp_available:
     # ===================================================================
@@ -674,8 +699,9 @@ def trace_multi_hit_grid(
     """Trace rays through a uniform voxel grid, recording every voxel hit.
 
     Dispatches to the Warp DDA kernel on CUDA (Amanatides & Woo 1987) or
-    falls back to fixed-step PyTorch broadcasting on CPU. The DDA backend
-    visits each voxel exactly once per ray -- no deduplication needed.
+    falls back to fixed-step PyTorch broadcasting on CPU.  Both backends
+    guarantee that each (ray, voxel) pair appears at most once in the
+    output, so callers can accumulate hits without deduplicating.
 
     Parameters
     ----------
@@ -723,21 +749,22 @@ def trace_multi_hit_grid(
     else:
         scale_f = float(scale)
 
-    # --- DDA backend (Warp on CUDA) ---
-    if _warp_available and origins.is_cuda:
+    # --- DDA backend (Warp, CUDA or CPU) ---
+    if dda_backend_available(origins.device):
         return _trace_dda_warp(
             min_corner, scale_f, resolution,
             origins, ray_dirs, sky_patch_ids,
             voxel_size, ray_length,
         )
 
-    # --- Legacy fixed-step fallback (CPU or no Warp) ---
+    # --- Legacy fixed-step fallback (Warp not available) ---
     global _warp_fallback_warned
-    if not _warp_available and not _warp_fallback_warned:
+    if not _warp_fallback_warned:
         import warnings
         warnings.warn(
-            "Warp is not available — using fixed-step ray marcher (slower). "
-            "Install NVIDIA Warp for GPU-accelerated DDA tracing.",
+            "Warp DDA backend is not available — using the fixed-step ray "
+            "marcher, which is slower and can miss voxels on oblique rays. "
+            "Install NVIDIA Warp for exact DDA tracing.",
             stacklevel=2,
         )
         _warp_fallback_warned = True
@@ -762,10 +789,15 @@ def _trace_fixed_step(
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """Legacy fixed-step ray marcher (pure PyTorch, CPU fallback).
 
-    Traces rays through a uniform voxel grid by stepping at half-voxel
-    intervals and recording every in-bounds voxel hit.  Used when the
-    Warp DDA kernel is unavailable (no GPU or Warp not installed).
-    Also serves as a reference implementation for validating the DDA kernel.
+    Traces rays through a uniform voxel grid by sampling at cell-center
+    offsets ``(k + 0.5) * voxel_size`` and recording every in-bounds voxel
+    hit.  Each (ray, voxel) pair is reported at most once, matching the
+    DDA backend's contract.  Used when the Warp DDA kernel is unavailable
+    (no GPU or Warp not installed).
+
+    Note: with a step of one voxel, oblique rays can skip voxels whose
+    intersection segment is short.  The Warp DDA backend is exact; prefer
+    it when Warp is installed.
 
     To avoid materializing a single massive ``(R, S, 3)`` tensor that can
     exceed available memory, rays are processed in sub-batches whose size
@@ -851,12 +883,33 @@ def _trace_fixed_step(
         ray_indices = torch.arange(c, device=device)[:, None].expand_as(in_bounds)
         chunk_ray_ids = ray_indices[in_bounds] + start  # offset to global index
         chunk_voxels = voxel_idxs[in_bounds]
-        chunk_patches = sky_patch_ids[chunk_ray_ids]
 
         if chunk_ray_ids.numel() > 0:
-            all_ray_ids.append(chunk_ray_ids)
-            all_patch_ids.append(chunk_patches)
-            all_voxel_indices.append(chunk_voxels)
+            # Deduplicate (ray, voxel) pairs: discrete stepping can sample
+            # the same voxel more than once per ray, which would inflate
+            # scores and violation counts downstream.  The DDA backend
+            # visits each voxel exactly once per ray; enforce the same
+            # contract here.  Duplicates only arise within a single ray,
+            # and a ray is never split across chunks, so per-chunk dedup
+            # is exact.  torch.unique sorts keys, making the output order
+            # deterministic and independent of chunk size.
+            res_sq = resolution * resolution
+            n_vox = res_sq * resolution
+            flat_vox = (
+                chunk_voxels[:, 0] * res_sq
+                + chunk_voxels[:, 1] * resolution
+                + chunk_voxels[:, 2]
+            )
+            ukey = torch.unique(chunk_ray_ids * n_vox + flat_vox)
+            uray = ukey // n_vox
+            uflat = ukey - uray * n_vox
+            uvox = torch.stack(
+                (uflat // res_sq, (uflat % res_sq) // resolution, uflat % resolution),
+                dim=1,
+            )
+            all_ray_ids.append(uray)
+            all_patch_ids.append(sky_patch_ids[uray])
+            all_voxel_indices.append(uvox)
 
         # Free chunk tensors eagerly (matters on GPU)
         del sample_pts, voxel_rel, voxel_idxs, in_bounds

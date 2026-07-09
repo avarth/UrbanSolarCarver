@@ -102,13 +102,20 @@ def _load_epw(weather_file_path: str) -> EPW:
     return _load_epw_file(canonical)
 
 @lru_cache(maxsize=None)
-def _initialize_sunpath(latitude: float, longitude: float, time_zone: float) -> Sunpath:
+def _initialize_sunpath(
+    latitude: float, longitude: float, time_zone: float, north_angle: float = 0.0
+) -> Sunpath:
     """
     Create and cache a Sunpath instance for given geographic coordinates.
 
     Explanation:
       - Sunpath computes the sun's position over time at a fixed location.
       - Caching prevents re-initialization overhead for repeated calls.
+
+    Args:
+      north_angle: Ladybug convention — degrees COUNTERCLOCKWISE from the
+        +Y axis. Callers using the USC ``north_deg`` config value (clockwise)
+        must negate it before passing it here.
 
     Raises:
       RuntimeError: If the Sunpath constructor fails.
@@ -117,7 +124,7 @@ def _initialize_sunpath(latitude: float, longitude: float, time_zone: float) -> 
       A Ladybug Sunpath object for sun position calculations.
     """
     try:
-        sunpath_object = Sunpath(latitude, longitude, time_zone)
+        sunpath_object = Sunpath(latitude, longitude, time_zone, north_angle=north_angle)
     except Exception as err:
         raise RuntimeError(f"_initialize_sunpath: failed to init Sunpath: {err}")
     return sunpath_object
@@ -141,7 +148,8 @@ def get_sun_vectors(
     epw_file: str,
     date_list: Sequence[DateTime],
     min_altitude: float = 5.0,
-    device: torch.device = torch.device('cpu')
+    device: torch.device = torch.device('cpu'),
+    north_deg: float = 0.0,
 ) -> torch.Tensor:
     """
     Determine the sun's unit direction vectors at specified times.
@@ -157,6 +165,9 @@ def get_sun_vectors(
       date_list   : Collection of Ladybug DateTime objects to evaluate.
       min_altitude: Minimum sun elevation (degrees) to include.
       device      : Torch device to store result (CPU or GPU).
+      north_deg   : Model north in degrees CLOCKWISE from the +Y axis
+                    (USC convention, same as ``cfg.north_deg``).  Sun
+                    vectors are returned in model coordinates.
 
     Returns:
       A torch.Tensor of shape (N,3), dtype float32, where each row
@@ -192,11 +203,14 @@ def get_sun_vectors(
             f"get_sun_vectors: min_altitude must be finite, got {min_altitude}"
         )
 
-    # Step 3: Initialize sunpath for this location
+    # Step 3: Initialize sunpath for this location.
+    # USC's north_deg is clockwise from +Y; Ladybug's north_angle is
+    # counterclockwise, so negate to convert.
     sunpath_calculator = _initialize_sunpath(
         location_info.latitude,
         location_info.longitude,
-        location_info.time_zone
+        location_info.time_zone,
+        north_angle=-float(north_deg),
     )
 
     # Step 4: Compute and filter sun vectors

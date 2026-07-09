@@ -56,11 +56,14 @@ def test_smoke_tilted_plane(tmp_path, tmp_mesh_files):
 
 # --- EPW-dependent modes ---
 
+# Weighted modes use the relative carve_fraction threshold: a raw numeric
+# cutoff like 0.5 is meaningless against cumulative Wh/m² scores (it would
+# carve every voxel any ray touched, producing an empty envelope).
 @pytest.mark.parametrize("mode,extra", [
     ("time-based", {}),
-    ("irradiance", {}),
-    ("benefit", {}),
-    ("daylight", {}),
+    ("irradiance", {"threshold": "carve_fraction", "carve_fraction": 0.7}),
+    ("benefit", {"threshold": "carve_fraction", "carve_fraction": 0.7}),
+    ("daylight", {"threshold": "carve_fraction", "carve_fraction": 0.7}),
 ])
 def test_smoke_epw_modes(tmp_path, tmp_mesh_files, example_epw_path, mode, extra):
     vol_path, srf_path = tmp_mesh_files

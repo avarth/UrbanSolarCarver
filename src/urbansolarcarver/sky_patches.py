@@ -234,7 +234,7 @@ def compute_EPW_based_weights(
     ground_reflectance: float = 0.2,                        # reflectivity coefficient
     balance_temperature: float = 15.0,                      # benefit model balance temperature (°C)
     balance_offset: float = 2.0,                            # benefit model +/- offset (°C)
-    north: float = 0.0,                                     # north direction (degrees CW from Y)
+    north: float = 0.0,                                     # north direction (degrees CW from +Y, USC convention)
 ) -> torch.Tensor:
     """
     Return a vector of sky-patch weights (length P) derived from
@@ -344,6 +344,10 @@ def compute_EPW_based_weights(
     if not isinstance(mode, str) or not mode.strip():
         raise TypeError(f"mode must be a non-empty string, got {mode!r}")
 
+    # USC's north is degrees clockwise from +Y; Ladybug's SkyMatrix north is
+    # counterclockwise ("90 is West"), so negate to convert.
+    lb_north = -float(north)
+
     key = mode.strip().lower()
     P = fetch_tregenza_patch_directions(device).shape[0]  # [145]
 
@@ -387,7 +391,7 @@ def compute_EPW_based_weights(
         sky = SkyMatrix.from_epw(
             epw_path,
             hoys=hoys,
-            north=north,
+            north=lb_north,
             high_density=False,
             ground_reflectance=ground_reflectance
         )
@@ -419,7 +423,7 @@ def compute_EPW_based_weights(
             balance_temperature,                      # balance T for heating (°C)
             balance_offset,                           # dead-band offset (°C)
             hoys=hoys,                                # hours-of-year to include
-            north=north,                              # sky rotation (degrees CW from Y)
+            north=lb_north,                           # Ladybug convention (CCW from +Y)
             high_density=False,                       # force Tregenza 145-patch grid
             ground_reflectance=ground_reflectance     # ground albedo (0–1)
         )

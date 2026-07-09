@@ -210,6 +210,44 @@ class TestEdgeSampling:
         )
 
 
+class TestSmoothedMeshPath:
+    """Tests for mesh_from_voxels_smoothed (SDF + marching cubes)."""
+
+    def _cube_voxels(self):
+        vox = torch.zeros((24, 24, 24), dtype=torch.uint8)
+        vox[4:20, 4:20, 4:20] = 1  # 16^3 cube, volume 4096
+        return vox
+
+    def test_watertight_positive_volume(self):
+        from urbansolarcarver.grid import mesh_from_voxels_smoothed
+        mesh = mesh_from_voxels_smoothed(self._cube_voxels(), np.zeros(3), 1.0)
+        assert len(mesh.faces) > 0
+        assert mesh.is_watertight
+        assert mesh.volume > 0, "faces must be wound outward"
+
+    def test_volume_matched(self):
+        """Volume-matched iso keeps the mesh volume close to the voxel count."""
+        from urbansolarcarver.grid import mesh_from_voxels_smoothed
+        mesh = mesh_from_voxels_smoothed(self._cube_voxels(), np.zeros(3), 1.0)
+        assert 0.85 * 4096 < mesh.volume < 1.15 * 4096
+
+    def test_surface_actually_smoothed(self):
+        """Marching cubes must run on the continuous SDF: vertices should
+        interpolate between voxel centers, not sit on the binary lattice."""
+        from urbansolarcarver.grid import mesh_from_voxels_smoothed
+        mesh = mesh_from_voxels_smoothed(self._cube_voxels(), np.zeros(3), 1.0)
+        frac = np.abs(mesh.vertices - np.round(mesh.vertices))
+        assert (frac > 0.05).any(), "all vertices on lattice — SDF was binarized"
+
+    def test_world_alignment(self):
+        """Voxel [4:20) at voxel_size=1 spans world [4, 20] (+/- smoothing)."""
+        from urbansolarcarver.grid import mesh_from_voxels_smoothed
+        origin = np.array([100.0, 200.0, 300.0])
+        mesh = mesh_from_voxels_smoothed(self._cube_voxels(), origin, 1.0)
+        lo, hi = mesh.bounds - origin
+        assert np.all(lo > 2.5) and np.all(hi < 21.5), f"bounds off: {lo}..{hi}"
+
+
 class TestPruneVoxels:
     def test_prune_removes_small_components(self):
         """Pruning should remove components smaller than threshold."""

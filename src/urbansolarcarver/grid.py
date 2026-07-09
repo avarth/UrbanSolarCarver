@@ -10,9 +10,9 @@ Overview
 Two meshing modes are supported:
 
 1) Cubic (apply_smoothing == False)
-   - Clean the binary grid with component pruning, a 3×3×3 majority filter,
-     and one 6-connected closing.
-   - Triangulate with a cubic voxel mesher (Kaolin dual-cubes).
+   - Clean the binary grid with component pruning and a 3×3×3 majority filter.
+   - Triangulate with the shared-vertex cubic mesher
+     (`_cubic_mesh_from_occupancy`).
 
 2) Smoothed SDF (apply_smoothing == True)
    - Convert occupancy to a signed distance field (SDF) in voxel units.
@@ -25,7 +25,8 @@ Two meshing modes are supported:
 Public API
 ----------
 sample_planar_surface(mesh, sample_step, include_boundary=True)
-    Uniformly sample a strictly planar patch and return per-point normals.
+    Uniformly sample a strictly planar patch. Returns points, normals, and
+    quad-mesh data (vertices + faces) for the analysis mesh.
 
 discretize_surface_with_normals(mesh, sample_step, coplanarity_tol_deg=5.0)
     Collect point/normal pairs and an analysis mesh from near-planar components.
@@ -111,7 +112,6 @@ from shapely.geometry import Polygon, LineString
 from shapely import contains_xy
 import trimesh
 from trimesh import repair
-from trimesh.voxel import ops as voxel_ops  # marching cubes on dense fields
 from urbansolarcarver.session import session_cache
 
 # Helpers migrated from api_core
@@ -266,10 +266,10 @@ def plane_frame(surface_normal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     if norm_len < 1e-12:
         raise ValueError("plane_frame: surface_normal has near-zero length")
     plane_normal = surface_normal / norm_len
-    # Choose a reference vector not parallel to the normal
-    # 0.9 threshold: if the normal is nearly aligned with Z (cos > 0.9,
-    # i.e. < ~26 deg from vertical), use X as reference axis instead to
-    # avoid near-parallel cross product degeneracy.
+    # Choose a reference vector not parallel to the normal.
+    # 0.9 threshold: if the normal is nearly aligned with X (|cos| > 0.9,
+    # i.e. < ~26 deg from the X axis), use Y as the reference axis instead
+    # to avoid near-parallel cross-product degeneracy.
     if abs(plane_normal[0]) < 0.9:
         ref_axis = np.array([1.0, 0.0, 0.0])
     else:
@@ -397,10 +397,14 @@ def sample_planar_surface(
 
     Returns
     -------
-    points : (N, 3) float32 np.ndarray
+    points : (N, 3) np.ndarray
         Sample locations in world coordinates.
-    normals : (N, 3) float32 np.ndarray
+    normals : (N, 3) np.ndarray
         Unit normals (constant over the patch, oriented consistently with the mesh).
+    quad_verts : (4N, 3) float64 np.ndarray
+        Corner positions of one analysis-mesh quad per sample point.
+    quad_faces : (N, 4) int32 np.ndarray
+        Vertex indices of each quad (indices into `quad_verts`).
 
     Notes
     -----
@@ -753,7 +757,7 @@ def voxelize_and_clean(
     return clean, origin, scale, res
 
 
-@session_cache("vox:{args[0].identifier}:{kwargs[voxel_size]}")
+@session_cache("vox:{args[0].identifier}:{kwargs[voxel_size]}:{kwargs[margin_frac]}")
 def voxelize_mesh(
     mesh: trimesh.Trimesh,
     voxel_size: float = 1.0,
@@ -1396,17 +1400,40 @@ def mesh_from_voxels_smoothed(
     -----
     - Internally calls `_voxel_presmooth` and chooses an iso-value via
       `_volume_matched_threshold` to preserve volume.
+    - Marching cubes runs directly on the continuous SDF so the surface
+      interpolates smoothly between voxel centers.  (trimesh's
+      ``matrix_to_marching_cubes(threshold=...)`` would binarize the field
+      first, throwing the smoothing away.)
     """
     # Work on CPU ndarray
     occ = voxels.detach().to('cpu').numpy().astype(bool)
     field = _voxel_presmooth(occ)  # smoothed SDF
     # pick iso to match original volume so medium-thick parts don't disappear
     iso = _volume_matched_threshold(field, int(occ.sum()))
-    mesh = voxel_ops.matrix_to_marching_cubes(
-        field,
-        pitch=float(voxel_size),
-        threshold=iso,
+
+    s = float(voxel_size)
+    # Pad with a strongly-outside value so surfaces touching the grid
+    # boundary are closed rather than left open.
+    pad_val = float(field.min()) - 1.0
+    padded = np.pad(field, 1, mode="constant", constant_values=pad_val)
+    # skimage requires the level to lie strictly inside the data range.
+    lo, hi = float(padded.min()), float(padded.max())
+    if hi <= lo:
+        return trimesh.Trimesh()  # degenerate (constant) field — nothing to mesh
+    iso = float(np.clip(iso, lo + 1e-6 * max(abs(lo), 1.0), hi - 1e-6 * max(abs(hi), 1.0)))
+
+    from skimage import measure
+    verts, faces, _normals, _values = measure.marching_cubes(
+        padded, level=iso, spacing=(s, s, s),
     )
+    # Index i samples the SDF at the voxel CENTER, which sits at
+    # min_corner + (i + 0.5) * s in world space.  Remove the 1-voxel pad
+    # (-s) and add the half-voxel center offset (+0.5 s).
+    verts = verts - 0.5 * s
+    # skimage's winding points normals inward for a positive-inside field;
+    # reverse each face so normals face outward (positive enclosed volume).
+    faces = faces[:, ::-1]
+    mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
     # Add world-space origin
     mesh.apply_translation(min_corner)
     return mesh

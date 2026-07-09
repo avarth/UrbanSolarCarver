@@ -18,16 +18,12 @@ This module does not touch geometry. It only prepares inputs for the
 carving and meshing stages.
 """
 
-#imports
 import os
 import yaml
 from typing import Optional, List, Tuple, Any, Dict, Mapping, Union
 from pydantic import ValidationError
-from pathlib import Path
-import warnings
 from .pydantic_schemas import UserConfig as user_config
-
-from .pydantic_schemas import UrbanSolarCarverWarning  # single definition
+from .pydantic_schemas import UrbanSolarCarverWarning  # noqa: F401 (re-exported)
 
 
 # --- utility functions for parsing overrides, merging configs and exporting default config.YAML ---

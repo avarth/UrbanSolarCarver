@@ -88,6 +88,21 @@ class TestFixedStepMarcher:
         # The fixed-step marcher uses int(), losing the last cell
         # This is a mathematical demonstration of the truncation
 
+    def test_no_duplicate_ray_voxel_pairs(self):
+        """Each (ray, voxel) pair must appear at most once — duplicates would
+        inflate scores and violation counts downstream."""
+        # A nearly axis-aligned ray samples some voxels twice per step
+        # without dedup (discrete stepping overshoot).
+        origins = torch.tensor([[-0.5, 2.5, 2.5]], dtype=torch.float32)
+        dirs = torch.nn.functional.normalize(
+            torch.tensor([[1.0, 0.001, 0.001]]), dim=1)
+        pids = torch.tensor([0], dtype=torch.long)
+        rid, _, vox = _trace_fixed_step(
+            (0.0, 0.0, 0.0), 10.0, 10, origins, dirs, pids, 1.0, 30.0,
+        )
+        pairs = list(zip(rid.tolist(), map(tuple, vox.tolist())))
+        assert len(pairs) == len(set(pairs)), "duplicate (ray, voxel) hits"
+
     def test_zero_ray_length_returns_empty(self):
         """ray_length=0 should produce no hits."""
         min_corner = (0.0, 0.0, 0.0)

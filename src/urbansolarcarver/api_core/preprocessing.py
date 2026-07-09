@@ -8,10 +8,12 @@ from ..load_config import user_config
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, device_summary, dump_config_snapshot
 from ._diagnostics import save_sky_patch_weights, save_histogram, score_statistics
 from ..pydantic_schemas import PreprocessingManifest, schema_to_json
-from ..carving import carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes
+from ..carving import (
+    carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes,
+    load_meshes, sample_period, validate_inputs,
+)
 from ..grid import voxelize, sample_surface
-from ..carving import load_meshes, sample_period
-from ..mode_registry import MODES_NEEDING_PERIOD
+from ..mode_registry import MODES, MODES_NEEDING_PERIOD
 
 @dataclass(frozen=True)
 class PreprocessingResult:
@@ -105,6 +107,7 @@ def preprocessing(
         _step_times[label] = time.perf_counter() - _t0_wall
 
     conf = _resolve_cfg(cfg)
+    validate_inputs(conf)  # fail fast on missing mesh/EPW files
     out_path = _ensure_out_dir(out_dir, "preprocessing")
 
     full_cfg = conf.model_dump()
@@ -201,11 +204,6 @@ def preprocessing(
     np.save(test_points_path, pts, allow_pickle=False)
     np.save(test_normals_path, norms, allow_pickle=False)
 
-    # Record test surface path for downstream re-discretization if needed.
-    # Use the ORIGINAL file (before trimesh processing) to preserve unwelded
-    # vertices — critical for coplanarity check on separate facade components.
-    test_surface_path = conf.test_surface_path
-
     # Persist voxel grid so exporting can reuse it without re-voxelizing
     import torch
     voxel_grid_path = out_path / "voxel_grid.npy"
@@ -257,45 +255,20 @@ def preprocessing(
     }
     summary["device"] = device_info
     _mark("build_summary")
-    from ..mode_registry import MODES
     xlabel = MODES[mode].weight_unit if mode in MODES else "Score"
 
-    # Diagnostic plots: gated behind diagnostic_plots flag, rendered in a
-    # background thread so they never block the pipeline return.
-    _plot_thread = None
+    # Diagnostic plots: gated behind the diagnostic_plots flag so the
+    # matplotlib overhead is only paid when explicitly requested.
     if getattr(conf, "diagnostic_plots", False):
-        import threading
-
-        # Determine paths eagerly so the summary can reference them even
-        # before the thread finishes writing the actual files.
-        sky_img_paths = []
         if patch_weights is not None and hasattr(patch_weights, 'size') and patch_weights.size > 0:
-            sky_img_paths = [
+            summary["sky_patch_images"] = [
                 str(diag_dir / "sky_patch_weights.png"),
                 str(diag_dir / "sky_patch_weights_intensity.png"),
             ]
-            summary["sky_patch_images"] = sky_img_paths
-        hist_expected = str(diag_dir / "score_histogram.png")
-        summary["score_histogram"] = hist_expected
-
-        # Capture variables for the thread closure
-        _pw = patch_weights
-        _rs = rs.copy()  # avoid racing on the array
-        _dd = diag_dir
-        _xl = xlabel
-        _mode = mode
-
-        def _render_plots():
-            if _pw is not None and hasattr(_pw, 'size') and _pw.size > 0:
-                save_sky_patch_weights(_pw, _dd, weight_unit=_xl)
-            save_histogram(_rs, _dd, "score_histogram.png",
-                           title=f"Raw Scores ({_mode})", xlabel=_xl)
-
-        _plot_thread = threading.Thread(target=_render_plots, daemon=True)
-        _plot_thread.start()
-
-    if _plot_thread is not None:
-        _plot_thread.join()
+            save_sky_patch_weights(patch_weights, diag_dir, weight_unit=xlabel)
+        summary["score_histogram"] = str(diag_dir / "score_histogram.png")
+        save_histogram(rs, diag_dir, "score_histogram.png",
+                       title=f"Raw Scores ({mode})", xlabel=xlabel)
     _mark("diagnostic_plots_done")
     # Consolidated diagnostic — one file per stage.
     # Step timings are cumulative (elapsed since t0) — subtract consecutive

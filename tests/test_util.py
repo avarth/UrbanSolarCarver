@@ -6,6 +6,24 @@ from pathlib import Path
 from urbansolarcarver.api_core._diagnostics import save_histogram, score_statistics
 
 
+class TestEstimateGridMemory:
+    def test_matches_actual_cubic_grid(self, tmp_path):
+        """The dry-run estimate must mirror voxelize_mesh, which always
+        builds a CUBIC grid sized to the longest bounding-box side."""
+        import trimesh
+        from urbansolarcarver.api_core._reporting import estimate_grid_memory
+        from urbansolarcarver.grid import voxelize_mesh
+
+        slab = trimesh.creation.box(extents=(40.0, 10.0, 5.0))
+        slab_path = tmp_path / "slab.ply"
+        slab.export(str(slab_path))
+
+        est = estimate_grid_memory(2.0, str(slab_path), margin_frac=0.01)
+        _, _, _, res = voxelize_mesh.__wrapped__(slab, voxel_size=2.0, margin_frac=0.01)
+        assert est["grid_dims"] == (res, res, res)
+        assert est["total_voxels"] == res ** 3
+
+
 # ---------------------------------------------------------------------------
 # score_statistics
 # ---------------------------------------------------------------------------
