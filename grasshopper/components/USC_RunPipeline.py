@@ -237,8 +237,23 @@ def _load_ply_to_rhino(path):
 
     with open(path, "rb") as f:
         # Parse header — track vertex property list to compute stride
+        first = True
         while True:
-            line = f.readline().decode("ascii", errors="replace").strip()
+            raw_line = f.readline()
+            if not raw_line:
+                # EOF before end_header: not a PLY (or truncated).  Without
+                # this guard, readline() returns b"" forever → infinite loop.
+                raise ValueError(
+                    "Not a valid PLY file (no end_header found): {}".format(path)
+                )
+            line = raw_line.decode("ascii", errors="replace").strip()
+            if first:
+                if line != "ply":
+                    raise ValueError(
+                        "Not a PLY file (missing 'ply' magic): {}".format(path)
+                    )
+                first = False
+                continue
             if line == "end_header":
                 break
             if "binary_little_endian" in line:
@@ -447,10 +462,22 @@ else:
             else:
                 result_path = _run_subprocess(session, config_for_run)
 
-            # Load result mesh
+            # Load result mesh (canvas preview is PLY-only; other formats
+            # are saved to disk without preview)
             export_path = result_path
             if os.path.isfile(result_path):
-                mesh = _load_ply_to_rhino(result_path)
+                if result_path.lower().endswith(".ply"):
+                    mesh = _load_ply_to_rhino(result_path)
+                else:
+                    try:
+                        from Grasshopper.Kernel import GH_RuntimeMessageLevel
+                        ghenv.Component.AddRuntimeMessage(
+                            GH_RuntimeMessageLevel.Remark,
+                            "Mesh saved to {} — canvas preview only supports "
+                            "PLY (set final_mesh_format=ply to preview)".format(result_path),
+                        )
+                    except Exception:
+                        pass
 
             # Read diagnostics
             elapsed = time.perf_counter() - t_start

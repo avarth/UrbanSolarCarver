@@ -105,30 +105,38 @@ except Exception:
 
 _items = []
 
-if method is not None:
-    m = str(method).strip().lower()
-    if m in ("headtail", "carve_fraction", "numeric"):
-        _items.append(f"threshold={m}")
-    else:
-        # Might be a bare number (legacy shorthand for numeric threshold)
-        try:
-            float(m)
-            _items.append(f"threshold={m}")
-        except ValueError:
-            pass  # invalid, ignore
+_m = str(method).strip().lower() if method is not None else None
 
-if value is not None:
-    v = float(value)
-    # Determine which backend key this value maps to based on method
-    m = str(method).strip().lower() if method is not None else "carve_fraction"
-    if m == "carve_fraction":
-        _items.append(f"carve_fraction={v}")
-    elif m == "numeric":
-        # For numeric method, the value IS the threshold — replace the
-        # placeholder "threshold=numeric" entry with the actual number.
-        _items = [x for x in _items if not x.startswith("threshold=")]
-        _items.append(f"threshold={v}")
-    # headtail: value is ignored (automatic algorithm)
+if _m == "numeric":
+    # 'numeric' is only a UI label — the pipeline needs the actual number.
+    # Never emit the bare placeholder (the config schema rejects it).
+    if value is not None:
+        _items.append(f"threshold={float(value)}")
+    else:
+        try:
+            from Grasshopper.Kernel import GH_RuntimeMessageLevel
+            ghenv.Component.AddRuntimeMessage(
+                GH_RuntimeMessageLevel.Warning,
+                "method='numeric' needs a number in the 'value' input — "
+                "no threshold override emitted (mode default will be used).",
+            )
+        except Exception:
+            pass
+elif _m in ("headtail", "carve_fraction"):
+    _items.append(f"threshold={_m}")
+    # carve_fraction: value is the fraction to carve; headtail ignores value.
+    if _m == "carve_fraction" and value is not None:
+        _items.append(f"carve_fraction={float(value)}")
+elif _m is not None:
+    # Might be a bare number (legacy shorthand for numeric threshold)
+    try:
+        float(_m)
+        _items.append(f"threshold={_m}")
+    except ValueError:
+        pass  # invalid, ignore
+elif value is not None:
+    # No method connected: value maps to carve_fraction (the mode default).
+    _items.append(f"carve_fraction={float(value)}")
 
 if score_smoothing is not None:
     _items.append(f"score_smoothing={float(score_smoothing)}")

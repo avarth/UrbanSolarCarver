@@ -3,8 +3,9 @@
 Provides a validated mode string for the USC pipeline. Each mode
 determines how sky-patch weights are computed:
 
-  - time-based:        Uniform weight per patch; carving preserves
-                       sun access during user-defined HOYs. (needs EPW)
+  - time-based:        Traces actual sun-position rays for the selected
+                       hours; carves any voxel that shades a test point
+                       during those hours. (needs EPW)
   - irradiance:        Cumulative solar irradiance (Wh/m²) from EPW
                        direct + diffuse. (needs EPW)
   - benefit:           Net heating benefit — irradiance weighted by
@@ -42,8 +43,9 @@ _MODES = [
 
 _DESCRIPTIONS = {
     "time-based": (
-        "Uniform weight per sky patch. Carving preserves sun access "
-        "during user-defined hours of year. Requires EPW + analysis period."
+        "Classical solar envelope: traces actual sun-position rays for the "
+        "selected hours of year and carves any voxel that shades a test "
+        "point during those hours. Requires EPW + analysis period."
     ),
     "irradiance": (
         "Cumulative solar irradiance (Wh/m\u00b2). Patches weighted by "

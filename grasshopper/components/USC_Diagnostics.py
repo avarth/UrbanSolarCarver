@@ -1,24 +1,25 @@
-"""USC Diagnostics — Enable/disable diagnostic output for all pipeline stages.
+"""USC Diagnostics — Control diagnostic output for all pipeline stages.
 
-When enabled, each stage writes score statistics and wall/CPU timings to
-a ``diagnostics/`` subdirectory alongside the stage artifacts.
+Each stage always writes core JSON diagnostics (score statistics and
+wall/CPU timings) to a ``diagnostics/`` subdirectory alongside the stage
+artifacts.
 
-Optionally, plot images (histograms, sky patch visualizations) can be
-generated.  These are rendered in a background thread so they do not
-block the pipeline, but they do add matplotlib overhead on the first
-call.  Image paths are surfaced by the Preprocess and ThresholdStage
-components via their ``diag_images`` output, which can be fed directly
-to Ladybug's Image Viewer component.
+The ``plots`` toggle additionally generates plot images (score
+histograms, sky patch weight/intensity plots, threshold histograms).
+These add matplotlib overhead, so they are off by default.  Image paths
+are surfaced by the Preprocess and ThresholdStage components via their
+``diag_images`` output, which can be fed directly to Ladybug's Image
+Viewer component.
 
 Inputs
 ------
 enable : bool
-    True = write JSON diagnostics (stats, timings).
-    False = skip diagnostics entirely (faster). Default: False.
+    Sets the ``diagnostics`` config flag. Currently the core JSON
+    diagnostics are always written regardless; this flag is reserved
+    for future verbosity control.
 plots : bool, optional
-    True = also generate diagnostic plot images (score histograms,
-    sky patch weight/intensity plots, threshold histograms).
-    Plots render in a background thread and do not block the pipeline.
+    True = generate diagnostic plot images (score histograms, sky patch
+    weight/intensity plots, threshold histograms).
     Default: False (no matplotlib overhead).
 
 Outputs
@@ -31,13 +32,13 @@ overrides : str
 try:
     ghenv.Component.Name = "USC Diagnostics"
     ghenv.Component.NickName = "USC_Diag"
-    ghenv.Component.Description = "Toggles diagnostic output (statistics, timings) and optional plot images (histograms, sky dome plots). Plots render in a background thread. Enable for inspection and validation. Disable for faster production runs."
+    ghenv.Component.Description = "Controls diagnostic plot images (histograms, sky dome plots). Core JSON diagnostics (statistics, timings) are always written by each stage. Enable plots for inspection and validation; disable for faster production runs."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     if len(ii) > 0:
-        ii[0].Name, ii[0].Description = "enable", "True = write JSON diagnostic outputs (statistics, timings) for each pipeline stage. False = skip diagnostics for faster execution. Default: False."
+        ii[0].Name, ii[0].Description = "enable", "Sets the 'diagnostics' config flag. Core JSON diagnostics (statistics, timings) are currently always written regardless; this flag is reserved for future verbosity control."
     if len(ii) > 1:
-        ii[1].Name, ii[1].Description = "plots", "True = also generate diagnostic plot images (score histograms, sky dome plots). Rendered in a background thread — does not block the pipeline. Default: False (no matplotlib overhead)."
+        ii[1].Name, ii[1].Description = "plots", "True = generate diagnostic plot images (score histograms, sky dome plots) in each stage's diagnostics folder. Adds matplotlib overhead. Default: False."
     if len(oo) > 0:
         oo[0].Name, oo[0].Description = "overrides", "Diagnostics toggle formatted for USC_Config. Connect to Config's 'overrides' input."
 except Exception:
