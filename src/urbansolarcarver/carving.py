@@ -453,55 +453,76 @@ def carve_with_sky_patch_rays(
     batch_size = _resolve_batch_size(config, res, device)
     use_fused = (_fused_dda is not None and dda_backend_available(device))
 
+    def _score_batch(start: int, end: int) -> None:
+        origins_batch = ray_origins[start:end]
+        directions_batch = ray_directions[start:end]
+        patches_batch = patch_ids[start:end]
+
+        if use_fused:
+            # Fused DDA: traverse + score in a single Warp kernel.
+            # No output buffer, no post-processing. Modifies scores in-place.
+            _fused_dda(
+                grid_origin, float(grid_extent_m), grid_resolution,
+                origins_batch, directions_batch, patches_batch,
+                patch_weights, scores, config.ray_length,
+            )
+            return
+
+        # Legacy path: trace then accumulate on host
+        hit_ray_ids, hit_patch_ids, hit_voxel_idxs = trace_multi_hit_grid(
+            grid_origin, grid_extent_m, grid_resolution,
+            origins_batch, directions_batch, patches_batch,
+            config.voxel_size, config.ray_length,
+        )
+        if hit_voxel_idxs.numel() == 0:
+            return
+
+        idx_flat = (
+            hit_voxel_idxs[:, 0] * res * res +
+            hit_voxel_idxs[:, 1] * res +
+            hit_voxel_idxs[:, 2]
+        )
+
+        # Guard: filter out-of-bounds indices
+        if (idx_flat < 0).any() or (idx_flat >= num_voxels).any():
+            warnings.warn(
+                "trace_multi_hit_grid returned out-of-bounds voxel indices.",
+                stacklevel=2,
+            )
+            valid = (idx_flat >= 0) & (idx_flat < num_voxels)
+            idx_flat = idx_flat[valid]
+            hit_patch_ids = hit_patch_ids[valid]
+
+        if idx_flat.numel() == 0:
+            return
+
+        # trace_multi_hit_grid guarantees each (ray, voxel) pair
+        # appears at most once, so weights can be accumulated directly.
+        weights_for_hits = patch_weights[hit_patch_ids]
+        scores.scatter_add_(0, idx_flat, weights_for_hits)
+
+    batch_ranges = [
+        (start, min(start + batch_size, total_rays))
+        for start in range(0, total_rays, batch_size)
+    ]
     with torch.no_grad():
-        for start in range(0, total_rays, batch_size):
-            end = start + batch_size
-            origins_batch = ray_origins[start:end]
-            directions_batch = ray_directions[start:end]
-            patches_batch = patch_ids[start:end]
-
-            if use_fused:
-                # Fused DDA: traverse + score in a single GPU kernel.
-                # No output buffer, no post-processing. Modifies scores in-place.
-                _fused_dda(
-                    grid_origin, float(grid_extent_m), grid_resolution,
-                    origins_batch, directions_batch, patches_batch,
-                    patch_weights, scores, config.ray_length,
-                )
-            else:
-                # Legacy path: trace then accumulate on host
-                hit_ray_ids, hit_patch_ids, hit_voxel_idxs = trace_multi_hit_grid(
-                    grid_origin, grid_extent_m, grid_resolution,
-                    origins_batch, directions_batch, patches_batch,
-                    config.voxel_size, config.ray_length,
-                )
-                if hit_voxel_idxs.numel() == 0:
-                    continue
-
-                idx_flat = (
-                    hit_voxel_idxs[:, 0] * res * res +
-                    hit_voxel_idxs[:, 1] * res +
-                    hit_voxel_idxs[:, 2]
-                )
-
-                # Guard: filter out-of-bounds indices
-                if (idx_flat < 0).any() or (idx_flat >= num_voxels).any():
-                    warnings.warn(
-                        "trace_multi_hit_grid returned out-of-bounds voxel indices.",
-                        stacklevel=2,
-                    )
-                    valid = (idx_flat >= 0) & (idx_flat < num_voxels)
-                    idx_flat = idx_flat[valid]
-                    hit_patch_ids = hit_patch_ids[valid]
-                    hit_ray_ids = hit_ray_ids[valid]
-
-                if idx_flat.numel() == 0:
-                    continue
-
-                # trace_multi_hit_grid guarantees each (ray, voxel) pair
-                # appears at most once, so weights can be accumulated directly.
-                weights_for_hits = patch_weights[hit_patch_ids]
-                scores.scatter_add_(0, idx_flat, weights_for_hits)
+        if use_fused and device.type == "cpu" and len(batch_ranges) > 1:
+            # Warp executes CPU kernel launches single-threaded, and the
+            # launches release the GIL, so dispatching batches from a small
+            # thread pool runs them on multiple cores (~2x measured; gains
+            # taper beyond a few workers — the kernel is memory-bound).
+            # The shared score buffer stays correct because the kernel
+            # accumulates with atomic adds.  Note: like on CUDA, atomic
+            # float addition order varies, so scores can differ by
+            # float-rounding noise between runs.
+            from concurrent.futures import ThreadPoolExecutor
+            n_workers = min(4, os.cpu_count() or 1, len(batch_ranges))
+            with ThreadPoolExecutor(max_workers=n_workers) as pool:
+                # list() drains the iterator so worker exceptions propagate
+                list(pool.map(lambda rng: _score_batch(*rng), batch_ranges))
+        else:
+            for start, end in batch_ranges:
+                _score_batch(start, end)
 
     # Synchronize GPU before reading scores
     if device.type == "cuda":

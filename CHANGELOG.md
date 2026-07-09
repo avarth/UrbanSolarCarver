@@ -38,6 +38,31 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - Missing input files (meshes, EPW) are validated at the start of
   preprocessing for fast, clear errors.
 
+### Performance
+
+Measured on a 306³ grid / 375k sample points (daylight mode, CPU): full
+pipeline 112 s → 73 s.  The exporting and thresholding gains apply
+equally to CUDA machines, since those stages always run on the CPU.
+
+- **`carve_fraction` thresholding**: the full `argsort` over the score
+  volume (O(N log N); ~5 s at 306³ and minutes at 500³) is replaced by an
+  exact two-pass weighted-histogram method (O(N)).  Mass accounting now
+  accumulates in float64 — the old float32 cumulative sum drifted
+  measurably on large grids, so thresholds may shift very slightly (the
+  new values are the more accurate ones).
+- **Perona–Malik SDF smoothing** (`apply_smoothing=True` exports): the
+  serial in-place stencil is now a parallel Jacobi stencil
+  (numba `prange`, ~10× on a 306³ grid).  The Jacobi update scheme
+  differs from the previous in-place sweep by a fraction of a voxel in
+  SDF units; the volume-matched iso compensates globally.  The two
+  distance transforms feeding the SDF also run concurrently (~1.9×).
+- **CPU ray tracing**: Warp executes CPU launches single-threaded, so
+  batches of the fused trace+score kernel are now dispatched from a small
+  thread pool when running on CPU (kernels release the GIL; the shared
+  score buffer stays correct via atomic adds).  Like on CUDA, atomic
+  float addition makes scores reproducible only up to rounding noise.
+  CUDA dispatch is unchanged.
+
 ### Changed
 
 - The `diagnostics` config flag (previously unused) now gates the detailed

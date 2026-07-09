@@ -13,7 +13,7 @@ from ..pydantic_schemas import (
     schema_from_json,
     schema_to_json,
 )
-from ..scoring import headtail_threshold
+from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..mode_registry import MODES
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json
 from ._diagnostics import save_histogram, score_statistics
@@ -205,23 +205,10 @@ def thresholding(
             elif key == "carve_fraction":
                 # Score-mass cutoff: remove the highest-scoring voxels that
                 # collectively account for `carve_fraction` of the total score.
-                #   1. Sort scores descending (worst obstructors first).
-                #   2. Cumulative sum tracks running total of score mass.
-                #   3. Find where cumsum reaches the target fraction of total.
-                #   4. The score at that index becomes the threshold — all
-                #      voxels scoring above it are carved.
                 # This is NOT a percentile (which counts voxels); it weights
                 # by obstruction severity, so a few high-scoring voxels can
                 # account for a large fraction of the total.
-                flat = scores.ravel()
-                if flat.size == 0 or float(flat.max()) == 0.0:
-                    thr_val = 0.0
-                else:
-                    order = np.argsort(flat)[::-1]          # descending by score
-                    csum = np.cumsum(flat[order])            # running score mass
-                    lim = float(conf.carve_fraction) * float(csum[-1])  # target mass
-                    idx = int(np.searchsorted(csum, lim, side="right"))
-                    thr_val = float(flat[order[idx]] if idx < len(flat) else flat.min())
+                thr_val = carve_fraction_threshold(scores, float(conf.carve_fraction))
             else:
                 raise ValueError(f"Unknown threshold mode: {thr}")
 

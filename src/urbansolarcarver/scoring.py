@@ -104,6 +104,75 @@ def get_weights(
 
 
 
+def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
+    """Score-mass cutoff: the threshold above which voxels collectively
+    account for *fraction* of the total score mass.
+
+    Equivalent to sorting all scores descending and walking the cumulative
+    sum until it reaches ``fraction * total`` — but a full argsort of a
+    large grid is O(N log N) with a heavy constant (seconds to minutes at
+    300³+).  This implementation makes two O(N) passes instead:
+
+    1. A weighted histogram locates the bin containing the cutoff.
+    2. Only the scores inside that single bin (N / n_bins expected) are
+       sorted exactly, reproducing the argsort result.
+
+    Parameters
+    ----------
+    scores : np.ndarray
+        Array of non-negative voxel scores (any shape).
+    fraction : float
+        Fraction of the total score mass to carve, in [0, 1].
+
+    Returns
+    -------
+    float
+        Threshold value; voxels scoring strictly above it are carved.
+    """
+    flat = scores.ravel()
+    if flat.size == 0:
+        return 0.0
+    vmax = float(flat.max())
+    if vmax <= 0.0:
+        return 0.0
+    # float64 accumulation: float32 cumsum over many elements loses mass
+    total = float(flat.sum(dtype=np.float64))
+    target = float(fraction) * total
+    if target <= 0.0:
+        return vmax  # carve nothing: only scores above the max qualify
+
+    # Pass 1: weighted histogram → mass contributed by each score bin.
+    n_bins = 8192
+    hist, edges = np.histogram(flat, bins=n_bins, range=(0.0, vmax),
+                               weights=flat.astype(np.float64, copy=False))
+    # Cumulative mass from the top bin downward; mass_above[b] is the mass
+    # in bins strictly above b.
+    mass_from_top = np.cumsum(hist[::-1])[::-1]
+    mass_above = np.concatenate([mass_from_top[1:], [0.0]])
+    # Boundary bin: highest bin where including it reaches the target.
+    candidates = np.nonzero(mass_from_top >= target)[0]
+    if candidates.size == 0:
+        return float(flat.min())  # target exceeds all mass (fraction ~ 1)
+    b = int(candidates[-1])
+
+    # Pass 2: exact resolution inside the boundary bin only.
+    lo_edge = edges[b]
+    if b == n_bins - 1:
+        in_bin = flat[flat >= lo_edge]  # last bin includes vmax
+    else:
+        in_bin = flat[(flat >= lo_edge) & (flat < edges[b + 1])]
+    if in_bin.size == 0:
+        return float(lo_edge)
+    desc = np.sort(in_bin)[::-1]
+    csum = mass_above[b] + np.cumsum(desc.astype(np.float64))
+    idx = int(np.searchsorted(csum, target, side="right"))
+    if idx < desc.size:
+        return float(desc[idx])
+    # Cutoff falls just below this bin: threshold is the largest lower score.
+    below = flat[flat < lo_edge]
+    return float(below.max()) if below.size else float(desc[-1])
+
+
 def headtail_threshold(
     scores: np.ndarray,
     max_iterations: int = 10
