@@ -1,0 +1,60 @@
+cff-version: 1.2.0
+message: "If you use Urban Solar Carver, please cite the paper below (in press). To cite the software itself, use the Zenodo DOI."
+title: "Urban Solar Carver"
+abstract: "GPU-accelerated generation of maximum buildable volumes that respect solar access, daylight, and thermal comfort constraints in urban environments."
+type: software
+version: "0.9.0"
+date-released: "2026-04-03"
+authors:
+  - family-names: "Vartholomaios"
+    given-names: "Aristotelis"
+    orcid: "https://orcid.org/0000-0001-6177-1130"
+    affiliation: "University of Thessaly"
+repository-code: "https://github.com/avarth/UrbanSolarCarver"
+url: "https://avarth.github.io/UrbanSolarCarver/"
+license: AGPL-3.0-or-later
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.19443737
+    description: "Zenodo concept DOI (all versions; resolves to latest)"
+  - type: doi
+    value: 10.5281/zenodo.19443738
+    description: "Zenodo DOI for version 0.9.0"
+preferred-citation:
+  type: conference-paper
+  title: "Urban Solar Carver: A GPU-accelerated framework for solar-driven urban form finding"
+  status: in-press
+  authors:
+    - family-names: "Vartholomaios"
+      given-names: "Aristotelis"
+      orcid: "https://orcid.org/0000-0001-6177-1130"
+      affiliation: "University of Thessaly"
+  collection-title: "ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026 International Conference, Volume 1"
+  collection-type: proceedings
+  conference:
+    name: "ReSBE 2026 - International Conference on ReShaping the Built Environment through Sustainability and Circularity"
+    city: "Thessaloniki"
+    country: "GR"
+    date-start: "2026-10-20"
+    date-end: "2026-10-23"
+  editors:
+    - family-names: "Bragança"
+      given-names: "Luís"
+    - family-names: "Tsikaloudaki"
+      given-names: "Katerina"
+    - family-names: "Giarma"
+      given-names: "Christina"
+    - family-names: "Mateus"
+      given-names: "Ricardo"
+    - family-names: "Kontoleon"
+      given-names: "Karolos"
+    - family-names: "Askar"
+      given-names: "Rand"
+    - family-names: "Salles"
+      given-names: "Adriana"
+    - family-names: "Cervantes"
+      given-names: "Camila"
+  publisher:
+    name: "Springer"
+  year: 2026
+  notes: "Accepted; proceedings in press (Springer, Lecture Notes in Civil Engineering). DOI and final page numbers to be added upon publication."
