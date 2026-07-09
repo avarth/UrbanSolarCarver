@@ -223,11 +223,19 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
     use_smooth = bool(config.apply_smoothing)
 
     if use_smooth:
-        # Smooth path: prune → SDF smooth → marching cubes → full repair → Taubin
+        # Smooth path: prune → SDF smooth → marching cubes → cleanup → Taubin
         cleaned_voxels = prune_voxels(carved_grid, config.min_voxels)
         raw_mesh = mesh_from_voxels_smoothed(cleaned_voxels, grid_origin, config.voxel_size)
         initial_mesh = raw_mesh.copy()
-        filtered_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=False)
+        # Marching cubes on the padded SDF yields a watertight, consistently
+        # wound mesh; the expensive full repair (fill_holes / fix_winding /
+        # fix_normals) is only needed if that guarantee fails.  Weld
+        # coincident vertices FIRST: MC emits zero-area faces where the iso
+        # passes exactly through lattice nodes, and dropping those before
+        # welding would open pinholes.
+        raw_mesh.merge_vertices()
+        light = bool(raw_mesh.is_watertight)
+        filtered_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=light)
         iters = int(min(max(getattr(config, "smooth_iters", 0), 0), 6))
         final_mesh = polish_mesh_taubin(filtered_mesh, iters=iters)
     else:
@@ -826,42 +834,62 @@ def voxelize_mesh(
     center = (bmin + bmax) / 2.0
     origin = center - grid_extent/2.0
 
-    # Voxelize with trimesh.  The default 'subdivide' method produces
-    # surface-only voxels; we then fill the interior.
+    # --- Rasterize: Warp parity voxelizer first (CUDA or warp-CPU), with
+    # the trimesh rasterize-and-fill path as fallback.  The Warp kernel
+    # casts one ray per grid column along each axis and majority-votes
+    # the parities — far faster than trimesh's CPU rasterizer, and it
+    # avoids the fragile orthographic-fill fallback chain.
+    grid_np = None
     try:
-        vox = mesh.voxelized(pitch=voxel_size)
+        from .raytracer import voxelize_solid_warp
+        grid_np = voxelize_solid_warp(
+            mesh.vertices, mesh.faces, origin, voxel_size, resolution, device
+        )
+    except Exception as exc:
+        _log.warning("Warp voxelization failed (%s) — falling back to trimesh", exc)
+        grid_np = None
 
-        # Try trimesh's orthographic fill first — it casts rays from all
-        # 6 axis directions and is robust to small gaps in the surface
-        # shell (which binary_fill_holes cannot handle).
+    if grid_np is None:
+        # Voxelize with trimesh.  The default 'subdivide' method produces
+        # surface-only voxels; we then fill the interior.
         try:
-            vox = vox.fill(method='orthographic')
-        except Exception as exc:
-            _log.warning("Orthographic fill failed (%s), trying default fill", exc)
+            vox = mesh.voxelized(pitch=voxel_size)
+
+            # Try trimesh's orthographic fill first — it casts rays from all
+            # 6 axis directions and is robust to small gaps in the surface
+            # shell (which binary_fill_holes cannot handle).
             try:
-                vox = vox.fill()
-            except Exception as exc2:
-                _log.warning("Default fill also failed (%s), proceeding with surface-only voxels", exc2)
+                vox = vox.fill(method='orthographic')
+            except Exception as exc:
+                _log.warning("Orthographic fill failed (%s), trying default fill", exc)
+                try:
+                    vox = vox.fill()
+                except Exception as exc2:
+                    _log.warning("Default fill also failed (%s), proceeding with surface-only voxels", exc2)
 
-        raw_grid = vox.matrix  # (Dx, Dy, Dz) bool, tightly cropped to mesh AABB
+            raw_grid = vox.matrix  # (Dx, Dy, Dz) bool, tightly cropped to mesh AABB
 
-        # Embed the cropped grid into the padded cubic grid.
-        # trimesh's voxel origin may differ from ours, so we re-index.
-        vox_origin = np.asarray(vox.transform[:3, 3])  # world-space origin of trimesh grid
-        offset = np.round((vox_origin - origin) / voxel_size).astype(int)
+            # Embed the cropped grid into the padded cubic grid.
+            # trimesh's transform maps voxel indices to voxel CENTERS, so
+            # vox.transform[:3, 3] is the center of trimesh voxel (0,0,0).
+            # Our voxel m has center origin + (m + 0.5) * voxel_size; solve
+            # for m to align the two lattices.  (Treating the transform as
+            # a corner would bias the embed by half a voxel.)
+            vox_center0 = np.asarray(vox.transform[:3, 3])
+            offset = np.round((vox_center0 - origin) / voxel_size - 0.5).astype(int)
 
-        grid_np = np.zeros((resolution, resolution, resolution), dtype=bool)
-        # Clip insertion to valid bounds
-        src_start = np.maximum(-offset, 0)
-        dst_start = np.maximum(offset, 0)
-        src_end = np.minimum(np.array(raw_grid.shape), np.array(grid_np.shape) - offset)
-        copy_shape = np.minimum(src_end - src_start, np.array(grid_np.shape) - dst_start)
-        if (copy_shape > 0).all():
-            slc_dst = tuple(slice(d, d + s) for d, s in zip(dst_start, copy_shape))
-            slc_src = tuple(slice(s, s + sz) for s, sz in zip(src_start, copy_shape))
-            grid_np[slc_dst] = raw_grid[slc_src]
-    except Exception as e:
-        raise RuntimeError(f"voxelize_mesh: trimesh voxelization failed: {e}")
+            grid_np = np.zeros((resolution, resolution, resolution), dtype=bool)
+            # Clip insertion to valid bounds
+            src_start = np.maximum(-offset, 0)
+            dst_start = np.maximum(offset, 0)
+            src_end = np.minimum(np.array(raw_grid.shape), np.array(grid_np.shape) - offset)
+            copy_shape = np.minimum(src_end - src_start, np.array(grid_np.shape) - dst_start)
+            if (copy_shape > 0).all():
+                slc_dst = tuple(slice(d, d + s) for d, s in zip(dst_start, copy_shape))
+                slc_src = tuple(slice(s, s + sz) for s, sz in zip(src_start, copy_shape))
+                grid_np[slc_dst] = raw_grid[slc_src]
+        except Exception as e:
+            raise RuntimeError(f"voxelize_mesh: trimesh voxelization failed: {e}")
 
     # --- Cavity fill: skip if orthographic fill left no interior voids ---
     # The padded grid guarantees corner [0,0,0] is empty exterior.

@@ -41,8 +41,28 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ### Performance
 
 Measured on a 306³ grid / 375k sample points (daylight mode, CPU): full
-pipeline 112 s → 73 s.  The exporting and thresholding gains apply
-equally to CUDA machines, since those stages always run on the CPU.
+pipeline 112 s → ~34 s.  Except for the CPU trace dispatch, the gains
+apply equally to CUDA machines.
+
+- **Voxelization**: new Warp parity voxelizer — one BVH ray per grid
+  column along each axis, majority vote across the three parities plus
+  surface-hit marking (the same robustness idea as trimesh's
+  orthographic fill).  Runs on CUDA or the Warp CPU device: 10–50×
+  faster than the trimesh rasterize-and-fill path (6.4 s → 0.6 s at
+  306³), which remains as the no-Warp fallback.  The occupancy is
+  center-exact; differences vs trimesh are confined to the 1-voxel
+  surface shell (regression-tested).
+- **Fixed a half-voxel embed bug in the trimesh voxelization path**:
+  `vox.transform[:3, 3]` is the CENTER of trimesh's voxel (0,0,0), not a
+  grid corner, so the occupancy grid was systematically misplaced by
+  half a voxel (rounding to a full voxel at ambiguous alignments) in all
+  previous releases.
+- **Smoothed exporting**: marching-cubes output is welded
+  (`merge_vertices`) and then given the light cleanup instead of the
+  full trimesh repair whenever it is watertight (it normally is); the
+  full repair remains the fallback.  Welding first matters: MC emits
+  zero-area faces where the iso crosses lattice nodes, and dropping
+  them before welding would open pinholes.
 
 - **`carve_fraction` thresholding**: the full `argsort` over the score
   volume (O(N log N); ~5 s at 306³ and minutes at 500³) is replaced by an

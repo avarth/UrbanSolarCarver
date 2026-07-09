@@ -410,6 +410,149 @@ if _warp_available:
             if vx < 0 or vx >= resolution or vy < 0 or vy >= resolution or vz < 0 or vz >= resolution:
                 return
 
+    @wp.kernel
+    def _parity_voxelize_kernel(
+        mesh_id: wp.uint64,
+        axis: int,                       # marching axis: 0 (x), 1 (y), or 2 (z)
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        votes: wp.array(dtype=wp.int32),    # +1 per axis whose parity sees the voxel inside
+        surface: wp.array(dtype=wp.int32),  # 1 where a ray/mesh hit falls in the voxel
+    ):
+        """Solid voxelization by parity ray casting: one thread per grid
+        column.  The ray starts below the grid and walks successive
+        mesh intersections; voxels whose CENTERS lie between an odd and
+        even crossing get an inside-vote, and every crossing marks the
+        voxel containing the hit point as surface.  Columns are exclusive
+        per thread and per-axis launches are serialized, so no atomics
+        are needed.
+        """
+        tid = wp.tid()
+        i = tid // resolution   # index along axis (axis+1) % 3
+        j = tid % resolution    # index along axis (axis+2) % 3
+
+        res_sq = resolution * resolution
+        ci = (float(i) + 0.5) * cell_size
+        cj = (float(j) + 0.5) * cell_size
+
+        # Ray origin (just below the grid on the marching axis) and the
+        # flat-index mapping coords[axis]=k, coords[(axis+1)%3]=i,
+        # coords[(axis+2)%3]=j with flat = x*res^2 + y*res + z.
+        if axis == 0:
+            ro = wp.vec3(grid_origin[0] - cell_size, grid_origin[1] + ci, grid_origin[2] + cj)
+            rd = wp.vec3(1.0, 0.0, 0.0)
+            base = i * resolution + j
+            stride = res_sq
+        elif axis == 1:
+            ro = wp.vec3(grid_origin[0] + cj, grid_origin[1] - cell_size, grid_origin[2] + ci)
+            rd = wp.vec3(0.0, 1.0, 0.0)
+            base = j * res_sq + i
+            stride = resolution
+        else:
+            ro = wp.vec3(grid_origin[0] + ci, grid_origin[1] + cj, grid_origin[2] - cell_size)
+            rd = wp.vec3(0.0, 0.0, 1.0)
+            base = i * res_sq + j * resolution
+            stride = 1
+
+        span = (float(resolution) + 2.0) * cell_size
+        eps = 1.0e-4 * cell_size
+
+        t_off = float(0.0)
+        inside = int(0)  # parity state: 1 while between an odd/even crossing pair
+        entry_pos = float(0.0)  # axis-coordinate of the entry crossing
+        origin_a = grid_origin[axis]
+
+        for _hit in range(256):
+            if t_off >= span:
+                break
+            q = wp.mesh_query_ray(mesh_id, ro + rd * t_off, rd, span - t_off)
+            if not q.result:
+                break
+            t_hit = t_off + q.t
+
+            # Mark the surface voxel on the SOLID side of the crossing:
+            # nudge the hit point forward when entering, backward when
+            # exiting.  Without the nudge, a surface lying exactly on a
+            # voxel boundary would be assigned to the outside voxel.
+            if inside == 0:
+                p = ro + rd * (t_hit + eps)
+            else:
+                p = ro + rd * (t_hit - eps)
+            hx = int(wp.floor((p[0] - grid_origin[0]) / cell_size))
+            hy = int(wp.floor((p[1] - grid_origin[1]) / cell_size))
+            hz = int(wp.floor((p[2] - grid_origin[2]) / cell_size))
+            if hx < 0: hx = 0
+            if hy < 0: hy = 0
+            if hz < 0: hz = 0
+            if hx >= resolution: hx = resolution - 1
+            if hy >= resolution: hy = resolution - 1
+            if hz >= resolution: hz = resolution - 1
+            surface[hx * res_sq + hy * resolution + hz] = 1
+
+            pos = ro[axis] + t_hit
+            if inside == 1:
+                # Vote for voxels with centers in (entry_pos, pos):
+                # center_k = origin_a + (k + 0.5) * cell_size
+                k0 = int(wp.ceil((entry_pos - origin_a) / cell_size - 0.5))
+                k1 = int(wp.floor((pos - origin_a) / cell_size - 0.5))
+                if k0 < 0: k0 = 0
+                if k1 >= resolution: k1 = resolution - 1
+                for k in range(k0, k1 + 1):
+                    idx = base + k * stride
+                    votes[idx] = votes[idx] + 1
+            else:
+                entry_pos = pos
+            inside = 1 - inside
+            t_off = t_hit + eps
+
+
+def voxelize_solid_warp(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    grid_origin,
+    voxel_size: float,
+    resolution: int,
+    device,
+) -> "np.ndarray | None":
+    """Solid-voxelize a triangle mesh via 3-axis parity ray casting on the
+    Warp BVH.  Returns a (res, res, res) bool occupancy array, or None when
+    the Warp backend is unavailable on *device*.
+
+    A voxel is occupied when at least 2 of the 3 axis parities agree that
+    its center is inside (majority vote — the same robustness idea as
+    trimesh's orthographic fill), or when the surface passes through it.
+    Runs on CUDA or the Warp CPU device; both are far faster than the
+    trimesh rasterize-and-fill path.
+    """
+    if not dda_backend_available(device):
+        return None
+    device_str = f"cuda:{device.index or 0}" if device.type == "cuda" else "cpu"
+
+    pts = wp.array(np.ascontiguousarray(vertices, dtype=np.float32), dtype=wp.vec3, device=device_str)
+    idx = wp.array(np.ascontiguousarray(faces, dtype=np.int32).ravel(), dtype=wp.int32, device=device_str)
+    wp_mesh = wp.Mesh(points=pts, indices=idx)
+
+    n = resolution ** 3
+    votes = wp.zeros(n, dtype=wp.int32, device=device_str)
+    surface = wp.zeros(n, dtype=wp.int32, device=device_str)
+    origin_wp = wp.vec3(float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
+
+    for axis in (0, 1, 2):
+        wp.launch(
+            _parity_voxelize_kernel,
+            dim=resolution * resolution,
+            inputs=[wp_mesh.id, axis, origin_wp, float(voxel_size), int(resolution),
+                    votes, surface],
+            device=device_str,
+        )
+    wp.synchronize()
+
+    shape = (resolution, resolution, resolution)
+    v = votes.numpy().reshape(shape)
+    s = surface.numpy().reshape(shape)
+    return (v >= 2) | (s > 0)
+
 
 def trace_and_score_dda(
     min_corner: Tuple[float, float, float],

@@ -210,6 +210,70 @@ class TestEdgeSampling:
         )
 
 
+def _warp_cpu_available():
+    from urbansolarcarver.raytracer import dda_backend_available
+    return dda_backend_available(torch.device("cpu"))
+
+
+class TestWarpVoxelizer:
+    """Parity ray-casting voxelizer vs the trimesh rasterize-and-fill path."""
+
+    def _trimesh_reference(self, mesh, voxel_size, margin_frac):
+        """Run voxelize_mesh with the Warp path disabled."""
+        import urbansolarcarver.raytracer as rt
+        from urbansolarcarver.grid import voxelize_mesh
+        saved = rt.voxelize_solid_warp
+        rt.voxelize_solid_warp = lambda *a, **k: None
+        try:
+            grid, origin, _, res = voxelize_mesh.__wrapped__(
+                mesh, voxel_size=voxel_size, margin_frac=margin_frac
+            )
+        finally:
+            rt.voxelize_solid_warp = saved
+        return grid.numpy().astype(bool), origin, res
+
+    @pytest.mark.skipif(not _warp_cpu_available(), reason="Warp CPU unavailable")
+    def test_cube_matches_center_truth_exactly(self):
+        """On a boundary-aligned cube, the parity voxelizer must reproduce
+        the center-inside ground truth voxel for voxel."""
+        import trimesh
+        from urbansolarcarver.raytracer import voxelize_solid_warp
+        cube = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
+        res, vs = 7, 2.0
+        origin = np.array([-7.0, -7.0, -7.0])
+        occ = voxelize_solid_warp(cube.vertices, cube.faces, origin, vs, res, torch.device("cpu"))
+
+        centers = origin[0] + (np.arange(res) + 0.5) * vs
+        in1d = (centers > -5.0) & (centers < 5.0)
+        truth = np.zeros((res,) * 3, dtype=bool)
+        ix = np.nonzero(in1d)[0]
+        truth[np.ix_(ix, ix, ix)] = True
+        np.testing.assert_array_equal(occ, truth)
+
+    @pytest.mark.skipif(not _warp_cpu_available(), reason="Warp CPU unavailable")
+    @pytest.mark.parametrize("shape", ["sphere", "box"])
+    def test_differences_confined_to_surface_shell(self, shape):
+        """Warp and trimesh voxelizations may disagree only within one
+        voxel of the surface (center-based vs conservative shell)."""
+        import trimesh
+        from scipy.ndimage import binary_dilation
+        from urbansolarcarver.raytracer import voxelize_solid_warp
+
+        if shape == "sphere":
+            mesh = trimesh.creation.icosphere(subdivisions=3, radius=8.0)
+        else:
+            mesh = trimesh.creation.box(extents=(11.0, 7.0, 5.0))
+        ref, origin, res = self._trimesh_reference(mesh, 0.5, 0.1)
+        occ = voxelize_solid_warp(mesh.vertices, mesh.faces, origin, 0.5, res, torch.device("cpu"))
+
+        st = np.ones((3, 3, 3), dtype=bool)
+        assert not (occ & ~binary_dilation(ref, structure=st)).any()
+        assert not (ref & ~binary_dilation(occ, structure=st)).any()
+        # And the interiors overwhelmingly agree
+        iou = (ref & occ).sum() / max((ref | occ).sum(), 1)
+        assert iou > 0.9
+
+
 class TestSmoothedMeshPath:
     """Tests for mesh_from_voxels_smoothed (SDF + marching cubes)."""
 
@@ -246,6 +310,20 @@ class TestSmoothedMeshPath:
         mesh = mesh_from_voxels_smoothed(self._cube_voxels(), origin, 1.0)
         lo, hi = mesh.bounds - origin
         assert np.all(lo > 2.5) and np.all(hi < 21.5), f"bounds off: {lo}..{hi}"
+
+    def test_finalize_mesh_smooth_path(self):
+        """The full smoothed finalize path (prune → SDF → MC → cleanup →
+        Taubin) must deliver a watertight, positive-volume mesh."""
+        from types import SimpleNamespace
+        from urbansolarcarver.grid import finalize_mesh
+        cfg = SimpleNamespace(
+            apply_smoothing=True, min_voxels=10, min_face_count=10,
+            smooth_iters=2, voxel_size=1.0,
+        )
+        _, _, final = finalize_mesh(self._cube_voxels(), np.zeros(3), cfg)
+        assert len(final.faces) > 0
+        assert final.is_watertight
+        assert final.volume > 0.8 * 4096
 
 
 class TestPruneVoxels:
