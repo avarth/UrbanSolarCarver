@@ -279,7 +279,7 @@ def thresholding(
         "score_smooth_applied": _smooth_applied,
         "score_smoothing_m": _smooth_radius_m,
         "score_smoothing_sigma_voxels": _sigma_voxels,
-        "normalized_score_stats": score_statistics(nn),
+        "normalized_score_stats": score_statistics(nn, detailed=conf.diagnostics),
     }
     # Performance reporting — physical units from mode registry
     mode_name = pre_manifest.mode or "unknown"

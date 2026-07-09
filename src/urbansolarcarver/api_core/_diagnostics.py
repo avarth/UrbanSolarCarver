@@ -60,26 +60,37 @@ def save_histogram(
     return path
 
 
-def score_statistics(values: np.ndarray) -> dict:
-    """Compute summary statistics for a score array."""
+def score_statistics(values: np.ndarray, detailed: bool = True) -> dict:
+    """Compute summary statistics for a score array.
+
+    Basic statistics (count, min, max, mean, nonzero counts) are cheap
+    single-pass reductions and are always included.  ``detailed=True``
+    adds median, std, and percentiles, which need sorting-like passes
+    over the full array — noticeably slower on large score volumes.
+    The pipeline gates the detailed set behind ``cfg.diagnostics``.
+    """
     flat = np.asarray(values, dtype=float).ravel()
     finite = flat[np.isfinite(flat)]
     if finite.size == 0:
         return {"count": 0}
-    return {
+    stats = {
         "count": int(finite.size),
         "min": float(finite.min()),
         "max": float(finite.max()),
         "mean": float(finite.mean()),
-        "median": float(np.median(finite)),
-        "std": float(finite.std()),
-        "p5": float(np.percentile(finite, 5)),
-        "p25": float(np.percentile(finite, 25)),
-        "p75": float(np.percentile(finite, 75)),
-        "p95": float(np.percentile(finite, 95)),
         "nonzero_count": int((finite != 0).sum()),
         "nonzero_fraction": float((finite != 0).mean()),
     }
+    if detailed:
+        stats.update({
+            "median": float(np.median(finite)),
+            "std": float(finite.std()),
+            "p5": float(np.percentile(finite, 5)),
+            "p25": float(np.percentile(finite, 25)),
+            "p75": float(np.percentile(finite, 75)),
+            "p95": float(np.percentile(finite, 95)),
+        })
+    return stats
 
 
 def _plot_tregenza_hemisphere(

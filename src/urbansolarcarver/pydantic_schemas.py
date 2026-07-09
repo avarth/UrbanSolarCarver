@@ -148,7 +148,15 @@ class UserConfig(BaseModel):
     balance_offset:      float = Field( 2.0, description="Balance offset for benefit mode (°C)")
 
     # misc
-    diagnostics: bool = Field(False, description="Enable detailed diagnostics")
+    diagnostics: bool = Field(
+        False,
+        description=(
+            "Include detailed score statistics (median, std, percentiles) in the "
+            "per-stage diagnostics JSON. Basic statistics (count, min, max, mean) "
+            "and timings are always written; the detailed set adds sorting passes "
+            "over the full score volume, which is slow on large grids."
+        ),
+    )
     diagnostic_plots: bool = Field(
         False,
         description=(

@@ -391,6 +391,16 @@ def _run_subprocess(session, config_dict):
 
 # -- Main logic --------------------------------------------------------------
 
+def _add_error(msg):
+    """Surface an error on the GH component (turns it red) and return msg."""
+    try:
+        from Grasshopper.Kernel import GH_RuntimeMessageLevel
+        ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, msg)
+    except Exception:
+        pass
+    return msg
+
+
 mesh = None
 export_path = None
 report_path = None
@@ -399,11 +409,11 @@ diagnostics = ""
 if not run:
     diagnostics = "Idle — set run=True to execute"
 elif config is None:
-    diagnostics = "ERROR: connect a USC Config component"
+    diagnostics = _add_error("Connect a USC Config component")
 elif max_volume is None:
-    diagnostics = "ERROR: connect max_volume geometry"
+    diagnostics = _add_error("Connect max_volume geometry")
 elif test_surfaces is None:
-    diagnostics = "ERROR: connect test_surfaces geometry"
+    diagnostics = _add_error("Connect test_surfaces geometry")
 else:
     t_start = time.perf_counter()
     session = config.session
@@ -415,9 +425,9 @@ else:
     srf_meshes = _flatten_geometry(test_surfaces)
 
     if not vol_meshes:
-        diagnostics = "ERROR: max_volume contains no valid geometry"
+        diagnostics = _add_error("max_volume contains no valid geometry")
     elif not srf_meshes:
-        diagnostics = "ERROR: test_surfaces contains no valid geometry"
+        diagnostics = _add_error("test_surfaces contains no valid geometry")
     else:
         # Combine into single meshes and weld seams left by Append:
         # merge duplicate vertices at Brep face boundaries so trimesh
@@ -522,4 +532,4 @@ else:
             diagnostics = "\n".join(diag_lines)
 
         except Exception as e:
-            diagnostics = f"ERROR: {e}"
+            diagnostics = _add_error(str(e))

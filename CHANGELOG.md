@@ -40,6 +40,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- The `diagnostics` config flag (previously unused) now gates the detailed
+  score statistics (median, std, percentiles) in per-stage diagnostics JSON.
+  Basic statistics (count, min, max, mean, nonzero counts) and timings are
+  always written.
+- Grasshopper components: the PLY preview loader no longer hangs Rhino on
+  non-PLY export formats (obj/stl/glb are saved to disk with a canvas
+  Remark instead); USC_Threshold warns instead of emitting the invalid
+  bare `threshold=numeric` placeholder; USC_Session finds the backend
+  Python in `.venv`/`venv` (Windows and POSIX layouts) or via an optional
+  `python_path.txt` override, and no longer passes Windows-only process
+  flags on macOS; USC_RunPipeline errors turn the component red like the
+  stage components.
 - `carve_above_columns` compiled with numba (was a pure-Python triple loop;
   large grids dropped from minutes to milliseconds).
 - Diagnostic plots render synchronously; the previous "background thread" was

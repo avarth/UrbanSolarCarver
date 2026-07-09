@@ -136,7 +136,10 @@ def generate_run_report(
         stats = pre_summary.get("score_stats", {})
         if stats and stats.get("count", 0) > 0:
             lines.append(f"- **Score range:** [{stats.get('min', 0):.4g}, {stats.get('max', 0):.4g}]")
-            lines.append(f"- **Score mean / median:** {stats.get('mean', 0):.4g} / {stats.get('median', 0):.4g}")
+            if "median" in stats:  # detailed stats (cfg.diagnostics=True)
+                lines.append(f"- **Score mean / median:** {stats.get('mean', 0):.4g} / {stats['median']:.4g}")
+            else:
+                lines.append(f"- **Score mean:** {stats.get('mean', 0):.4g}")
             nzf = stats.get("nonzero_fraction", 0)
             lines.append(f"- **Non-zero voxels:** {stats.get('nonzero_count', 0):,} ({100*nzf:.1f}%)")
     if pre_timing:

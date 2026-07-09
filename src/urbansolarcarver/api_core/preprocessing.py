@@ -251,7 +251,7 @@ def preprocessing(
         "test_points_path": str(test_points_path),
         "test_normals_path": str(test_normals_path),
         "scores_path": str(scores_path),
-        "score_stats": score_statistics(rs),
+        "score_stats": score_statistics(rs, detailed=conf.diagnostics),
     }
     summary["device"] = device_info
     _mark("build_summary")

@@ -56,6 +56,15 @@ class TestScoreStatistics:
         result = score_statistics(scores)
         assert result["count"] == 2  # inf filtered out
 
+    def test_basic_mode_skips_expensive_stats(self):
+        """detailed=False (cfg.diagnostics off) keeps cheap single-pass stats
+        and skips the sorting-based ones (median, std, percentiles)."""
+        scores = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
+        result = score_statistics(scores, detailed=False)
+        assert {"count", "min", "max", "mean",
+                "nonzero_count", "nonzero_fraction"} <= set(result)
+        assert not {"median", "std", "p5", "p25", "p75", "p95"} & set(result)
+
     def test_3d_array(self):
         scores = np.ones((5, 5, 5))
         result = score_statistics(scores)

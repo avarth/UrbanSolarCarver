@@ -6,7 +6,11 @@ for persistent GPU sessions (essential for Grasshopper workflows).
 Inputs
 ------
 carver_root : str
-    Path to the UrbanSolarCarver repository root (must contain .venv/).
+    Path to the UrbanSolarCarver repository root. The backend Python is
+    located automatically: .venv/ or venv/ inside the root, or the path
+    written in an optional <root>/python_path.txt override file (one line,
+    full path to the python executable — useful when the venv lives
+    elsewhere on the machine).
 start_daemon : bool, optional
     True (default) = start daemon if not running. False = report only.
 verbose : bool, optional
@@ -60,7 +64,7 @@ try:
     ghenv.Component.Description = "Connects to the UrbanSolarCarver computation daemon. The daemon keeps the GPU context alive between runs for fast iteration. Place this component once and wire 'session' to USC_Config."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
-    ii[0].Name, ii[0].Description = "carver_root", "Path to the UrbanSolarCarver folder on your computer. This is the folder that contains the '.venv' and 'src' subfolders. Right-click > Set One String, then paste the full path."
+    ii[0].Name, ii[0].Description = "carver_root", "Path to the UrbanSolarCarver folder on your computer (the folder containing the 'src' subfolder). The Python environment is found automatically in '.venv' or 'venv' inside it; if your venv lives elsewhere, create a text file 'python_path.txt' in this folder containing the full path to python.exe. Right-click > Set One String, then paste the full path."
     ii[1].Name, ii[1].Description = "start_daemon", "Wire a Boolean True to launch the background computation server (daemon). If left unconnected (None) or False the daemon is NOT started — status will be 'no_daemon'. The daemon keeps the GPU warm between runs for fast iteration."
     if len(ii) > 2:
         ii[2].Name, ii[2].Description = "verbose", "Set to True to open a visible console window showing daemon activity. Useful for debugging if things go wrong. Leave False for normal use."
@@ -72,9 +76,34 @@ except Exception:
 # -- Helpers -----------------------------------------------------------------
 
 def _venv_python(root):
-    """Locate the venv Python executable."""
-    p = Path(root) / ".venv" / "Scripts" / "python.exe"
-    return p if p.exists() else None
+    """Locate the backend Python interpreter.
+
+    Search order:
+      1. <root>/python_path.txt — a one-line text file containing the full
+         path to a python executable.  Machine-specific override for venvs
+         that live outside the repo (the file is gitignored).
+      2. <root>/.venv  (Windows then POSIX layout — setup_env.py default)
+      3. <root>/venv
+    """
+    root = Path(root)
+    override = root / "python_path.txt"
+    if override.is_file():
+        try:
+            cand = Path(override.read_text(encoding="utf-8").strip().strip('"'))
+            if cand.is_file():
+                return cand
+        except Exception:
+            pass
+    for rel in (
+        (".venv", "Scripts", "python.exe"),
+        ("venv", "Scripts", "python.exe"),
+        (".venv", "bin", "python"),
+        ("venv", "bin", "python"),
+    ):
+        p = root.joinpath(*rel)
+        if p.exists():
+            return p
+    return None
 
 
 def _read_authkey(root):
@@ -143,10 +172,13 @@ def _start_daemon(root, verbose=False):
         flags = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
         out, err = subprocess.DEVNULL, subprocess.DEVNULL
 
+    popen_kwargs = {}
+    if os.name == "nt":
+        popen_kwargs["creationflags"] = flags  # Windows-only argument
     proc = subprocess.Popen(
         cmd, env=env, cwd=str(root),
         stdout=out, stderr=err,
-        creationflags=flags,
+        **popen_kwargs,
     )
     return proc.pid
 
@@ -163,7 +195,11 @@ else:
 
     if py is None:
         session = None
-        status = "error: .venv/Scripts/python.exe not found in " + str(root)
+        status = (
+            "error: no Python interpreter found under " + str(root) + " — "
+            "run setup_env.py to create .venv/, or write the full path to "
+            "your python executable into <carver_root>/python_path.txt"
+        )
     else:
         authkey = _read_authkey(root)
         port_open_now = _port_open()
