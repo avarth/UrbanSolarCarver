@@ -13,9 +13,10 @@ import pytest
 import torch
 
 
-_EPW = os.environ.get("USC_EPW_PATH", "")
+from _epw import resolve_epw
+_EPW = resolve_epw()
 _SKIP_EPW = pytest.mark.skipif(
-    not (_EPW and Path(_EPW).is_file()),
+    not _EPW,
     reason="EPW file not available — set USC_EPW_PATH env var to enable",
 )
 

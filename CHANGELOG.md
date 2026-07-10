@@ -7,6 +7,48 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Canonical `ThresholdSpec`**: `threshold` now normalizes every accepted
+  spelling (bare number, `headtail`, `carve_fraction`, or the canonical
+  mapping `{method: ..., value: ...}`) into one validated object at config
+  load. Methods: `carve_fraction`, `headtail`, `cutoff`. Mode defaults are
+  resolved at load time (weighted modes → `carve_fraction`, count modes →
+  `cutoff 0`), and the method is cross-checked against the mode's score
+  kind — misuse fails at load with a precise message. All previous config
+  spellings keep working.
+- **`analysis_period` mapping**: the analysis period can be given as one
+  mapping using Ladybug's `AnalysisPeriod.to_dict()` keys (`st_month` …
+  `end_hour`; `start_*` spellings also accepted; LB's `type`/`timestep`/
+  `is_leap_year` extras are ignored). The six flat fields remain valid.
+- **Bundled example weather file**: a public-domain NREL TMY3 EPW (Golden,
+  Colorado) ships under `examples/weather/`, so the tutorial notebooks and
+  the EPW-dependent tests run out of the box. `USC_EPW_PATH` still overrides
+  it for the test suite.
+- **`setup_env.py` long-path preflight**: on Windows, the installer now
+  predicts the 260-character path failure that torch's wheel triggers under
+  deep repo paths, and falls back to a short per-user venv (`~/.usc-venv`)
+  with clear instructions — instead of dying mid-install with WinError 206.
+  A `--venv-dir` option overrides the location.
+
+### Removed
+
+- The monolithic `configs/user_config.yaml` starter (superseded by the
+  per-mode templates).
+- Dead nested/dotted-key override machinery in `load_config` — the schema is
+  flat and the advertised `a.b=c` form never validated. Overrides are plain
+  `key=value` (JSON lists/objects are parsed as values).
+
+### Changed
+
+- The thresholding stage hash now derives from `{threshold_method,
+  threshold_value, score_smoothing}` — previously it could embed a
+  score-dependent resolved cutoff (making identical configs hash
+  differently) and an irrelevant `carve_fraction` for non-fraction methods.
+  Stage hashes change once across this version boundary.
+- `threshold_method` in diagnostics reports `cutoff` where it previously
+  reported `numeric`.
+
 ### Fixed
 
 - **CPU ray tracing accuracy and speed**: the CPU path now runs the same exact

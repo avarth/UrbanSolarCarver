@@ -1,4 +1,4 @@
-# UrbanSolarCarver — Time-based mode
+﻿# UrbanSolarCarver — Time-based mode
 # Classic solar envelope: carves voxels that cast shadows on test surfaces
 # during the specified hours. Binary carving (shadow / no shadow).
 # Typical use: solar access guarantees for a specific date and time window.
@@ -6,19 +6,21 @@
 # --- Required paths ---
 max_volume_path:    "path/to/maxVolume.ply"
 test_surface_path:  "path/to/testSurfaces.ply"
-epw_path:           "path/to/weather.epw"
+epw_path:           "path/to/weather.epw"  # bundled sample: examples/weather/USA_CO_Golden-NREL.724666_TMY3.epw
 out_dir:            "path/to/output"
 
 mode: time-based
 
 # Analysis period — usually a single day or narrow window
 # Example: winter solstice, 10 AM – 2 PM
-start_month: 12
-start_day:   21
-start_hour:  10
-end_month:   12
-end_day:     21
-end_hour:    14
+# (ladybug AnalysisPeriod.to_dict() can be pasted here)
+analysis_period:
+  st_month:  12
+  st_day:    21
+  st_hour:   10
+  end_month: 12
+  end_day:   21
+  end_hour:  14
 
 # Grid
 voxel_size: 1.0

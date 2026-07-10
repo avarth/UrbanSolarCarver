@@ -96,9 +96,12 @@ configs/
 ├── config_irradiance.yaml       Perez all-weather irradiance mode
 ├── config_radiative_cooling.yaml  Nighttime radiative cooling (experimental)
 ├── config_tilted_plane.yaml     Fixed-angle geometric envelope
-├── config_timebased.yaml        Solar envelope (actual sun paths)
-└── user_config.yaml             Starter template -- fill in paths and mode
+└── config_time_based.yaml       Solar envelope (actual sun paths)
 ```
+
+Start from the template matching your mode and fill in the paths; each
+template lists only the parameters relevant to that mode, with commonly
+tuned defaults commented at the bottom.
 
 ## Tests (`tests/`)
 

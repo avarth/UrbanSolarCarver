@@ -13,9 +13,9 @@ from __future__ import annotations
 import calendar
 import os
 import warnings
-from typing import Optional, Union, List, Tuple, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from .mode_registry import ALL_MODE_NAMES, EXPERIMENTAL_MODES, MODES_NEEDING_EPW
+from typing import Annotated, Optional, Union, List, Tuple, Literal
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
+from .mode_registry import ALL_MODE_NAMES, EXPERIMENTAL_MODES, MODES, MODES_NEEDING_EPW
 
 
 # ---------- Pydantic v2 JSON helpers (public) ----------
@@ -31,9 +31,133 @@ def schema_to_json(model: BaseModel, *, indent: int = 2) -> str:
 class UrbanSolarCarverWarning(UserWarning):
     """Non-fatal configuration warning."""
 
+# ---------- Threshold specification ----------
+class ThresholdSpec(BaseModel):
+    """Canonical thresholding strategy: how per-voxel scores become a mask.
+
+    Every accepted config spelling of ``threshold`` (a bare number, a
+    strategy name, or a mapping) is normalized into this one shape at load
+    time, so downstream stages never re-interpret raw user input.
+
+    Methods
+    -------
+    * ``carve_fraction`` — remove voxels accounting for ``value`` of the
+      total score mass (0-1).
+    * ``headtail`` — head/tail breaks (Jiang 2013); takes no value.
+    * ``cutoff`` — carve voxels scoring strictly above ``value``; for the
+      violation-count modes this is the tolerated violation count.
+    """
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    method: Literal["carve_fraction", "headtail", "cutoff"]
+    value: Optional[float] = None
+
+    @model_validator(mode="after")
+    def _check_value(self) -> "ThresholdSpec":
+        if self.method == "cutoff":
+            if self.value is None:
+                raise ValueError(
+                    "threshold method 'cutoff' requires a value "
+                    "(raw-score cutoff, >= 0)"
+                )
+            if self.value < 0:
+                raise ValueError("cutoff threshold must be >= 0")
+        elif self.method == "carve_fraction":
+            if self.value is not None and not (0.0 <= self.value <= 1.0):
+                raise ValueError("carve_fraction threshold value must be in [0, 1]")
+        elif self.method == "headtail" and self.value is not None:
+            raise ValueError("threshold method 'headtail' takes no value")
+        return self
+
+    def __str__(self) -> str:
+        return self.method if self.value is None else f"{self.method}={self.value:g}"
+
+
+def _normalize_threshold(v):
+    """Accept threshold shorthands and return the canonical form.
+
+    * ``None`` — resolved to the mode default later
+    * number — ``{method: cutoff, value: n}``
+    * ``'headtail'`` / ``'carve_fraction'`` — method name
+    * mapping — validated as :class:`ThresholdSpec` directly
+    """
+    if v is None or isinstance(v, ThresholdSpec):
+        return v
+    if isinstance(v, bool):
+        raise ValueError("threshold cannot be a boolean")
+    if isinstance(v, (int, float)):
+        return {"method": "cutoff", "value": float(v)}
+    if isinstance(v, str):
+        key = v.strip().lower()
+        if key == "numeric":
+            raise ValueError(
+                "threshold='numeric' requires an explicit number — set "
+                "threshold to the raw-score cutoff itself (e.g. threshold: 0.35)."
+            )
+        if key in ("headtail", "carve_fraction"):
+            return {"method": key}
+        raise ValueError(
+            "threshold must be a number (raw-score cutoff), 'headtail', "
+            "'carve_fraction', or a mapping like {method: carve_fraction, value: 0.7}"
+        )
+    return v
+
+
+# Ladybug-aligned analysis_period mapping: LB AnalysisPeriod.to_dict() keys
+# map onto the six flat period fields; plain start_*/end_* spellings are
+# accepted too, and LB's bookkeeping extras are tolerated and ignored.
+_PERIOD_KEY_ALIASES = {
+    "st_month": "start_month", "st_day": "start_day", "st_hour": "start_hour",
+    "start_month": "start_month", "start_day": "start_day", "start_hour": "start_hour",
+    "end_month": "end_month", "end_day": "end_day", "end_hour": "end_hour",
+}
+_PERIOD_IGNORED_KEYS = {"type", "timestep", "is_leap_year"}
+
+
 # ---------- YAML config schema ----------
 class UserConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _expand_analysis_period(cls, data):
+        """Expand an ``analysis_period`` mapping into the six flat fields.
+
+        Canonical form uses Ladybug's ``AnalysisPeriod.to_dict()`` keys
+        (``st_month`` ... ``end_hour``), so a Ladybug period can be pasted
+        or passed directly; ``start_month``-style keys work as well.  The
+        flat top-level fields remain valid aliases.
+        """
+        if not isinstance(data, dict) or "analysis_period" not in data:
+            return data
+        data = dict(data)  # don't mutate the caller's dict
+        period = data.pop("analysis_period")
+        if period is None:
+            return data
+        if not isinstance(period, dict):
+            raise ValueError(
+                "analysis_period must be a mapping, e.g. "
+                "{st_month: 10, st_day: 15, st_hour: 7, "
+                "end_month: 4, end_day: 15, end_hour: 19} "
+                "(ladybug AnalysisPeriod.to_dict() works directly)"
+            )
+        for key, raw in period.items():
+            if key in _PERIOD_IGNORED_KEYS:
+                continue
+            target = _PERIOD_KEY_ALIASES.get(key)
+            if target is None:
+                raise ValueError(
+                    f"analysis_period: unknown key '{key}' — expected "
+                    f"st_month/st_day/st_hour/end_month/end_day/end_hour "
+                    f"(or start_* spellings)"
+                )
+            if target in data and data[target] != raw:
+                raise ValueError(
+                    f"analysis_period.{key}={raw!r} conflicts with top-level "
+                    f"{target}={data[target]!r} — specify the period once"
+                )
+            data[target] = raw
+        return data
 
     # file paths
     max_volume_path: str = Field(..., description="Path to the maximum volume mesh (PLY)")
@@ -46,7 +170,9 @@ class UserConfig(BaseModel):
         pattern=r"^(ply|obj|stl|glb)$",
     )
 
-    # analysis period (required for sun/sky modes, ignored by tilted_plane)
+    # analysis period (required for sun/sky modes, ignored by tilted_plane).
+    # Can also be given as one `analysis_period:` mapping with ladybug
+    # AnalysisPeriod.to_dict() keys — see _expand_analysis_period above.
     start_month: Optional[int] = Field(None, ge=1, le=12, description="Start month (1-12)")
     start_day:   Optional[int] = Field(None, ge=1, le=31, description="Start day of month (1-31)")
     start_hour:  Optional[int] = Field(None, ge=0, le=23, description="Start hour of day (0-23)")
@@ -117,16 +243,21 @@ class UserConfig(BaseModel):
     )
 
     # thresholding & classification
-    threshold: Union[float, str, None] = Field(
+    threshold: Annotated[Optional[ThresholdSpec], BeforeValidator(_normalize_threshold)] = Field(
         None,
         description=(
-            "How to decide which voxels to carve. "
-            "'carve_fraction' (recommended): remove a percentage of obstructing volume, "
-            "controlled by carve_fraction parameter. "
-            "'headtail': automatic split biased toward removing only the worst obstructors. "
-            "A numeric value (≥ 0): manual threshold on raw scores — "
-            "carve voxels scoring above this value (inspect the score histogram first). "
-            "None: use mode default (carve_fraction)."
+            "How to decide which voxels to carve. Canonical form is a mapping "
+            "{method: ..., value: ...}; shorthands are accepted and normalized: "
+            "'carve_fraction' (recommended): remove a fraction of the obstructing "
+            "score mass (value from the carve_fraction parameter unless given). "
+            "'headtail': automatic split biased toward removing only the worst "
+            "obstructors. "
+            "A bare number (≥ 0): raw-score cutoff — carve voxels scoring above it "
+            "(inspect the score histogram first); for time-based/tilted_plane this "
+            "is the tolerated violation count. "
+            "Unset: mode default (carve_fraction for weighted modes, 0 for "
+            "violation-count modes). After validation this field is always a "
+            "ThresholdSpec."
         ),
     )
     carve_fraction: float = Field(
@@ -195,25 +326,44 @@ class UserConfig(BaseModel):
             raise ValueError(f"device must be one of {opts}")
         return v
 
-    @field_validator('threshold')
-    def _validate_threshold(cls, v: Union[float, str, None]) -> Union[float, str, None]:
-        if v is None:
-            return v
-        if isinstance(v, str):
-            if v == 'numeric':
-                # 'numeric' is a UI-side placeholder (Grasshopper Threshold
-                # component); the pipeline needs the actual number.
+    @model_validator(mode='after')
+    def _resolve_threshold_spec(self) -> 'UserConfig':
+        """Resolve ``threshold`` to a concrete :class:`ThresholdSpec`.
+
+        After this validator the field is never None and never a shorthand:
+        the mode default is filled in (carve_fraction for weighted modes,
+        cutoff 0 for violation-count modes) and the method is cross-checked
+        against the mode's score kind.
+        """
+        kind = MODES[self.mode].score_kind
+        spec = self.threshold
+
+        if kind == "violation_count":
+            if spec is None:
+                spec = ThresholdSpec(method="cutoff", value=0.0)
+            elif spec.method != "cutoff":
                 raise ValueError(
-                    "threshold='numeric' requires an explicit value — "
-                    "set threshold to the raw-score cutoff number itself "
-                    "(in Grasshopper, connect a number to the 'value' input)."
+                    f"threshold method '{spec.method}' is not valid for mode "
+                    f"'{self.mode}': it produces integer violation counts, not "
+                    f"continuous scores. Use a non-negative number (0 = strict, "
+                    f"1 = allow one violation, ...) or leave threshold unset."
                 )
-            if v not in {'headtail', 'carve_fraction'}:
-                raise ValueError("threshold must be one of {'headtail','carve_fraction'} or a number")
-            return v
-        if v < 0:
-            raise ValueError("numeric threshold must be >= 0")
-        return float(v)
+            if self.mode == "tilted_plane" and spec.value != 0.0:
+                # tilted_plane is binary: a voxel either protrudes above a
+                # plane or it does not — a tolerance has no meaning.
+                raise ValueError(
+                    "tilted_plane mode is binary — threshold must be unset or 0. "
+                    "A voxel either protrudes above the daylight plane (culled) "
+                    "or it does not (kept)."
+                )
+        else:  # weighted_sum
+            if spec is None:
+                spec = ThresholdSpec(method="carve_fraction", value=self.carve_fraction)
+            elif spec.method == "carve_fraction" and spec.value is None:
+                spec = ThresholdSpec(method="carve_fraction", value=self.carve_fraction)
+
+        self.threshold = spec
+        return self
 
     @model_validator(mode='after')
     def _check_mode_requirements(self) -> 'UserConfig':
@@ -263,16 +413,6 @@ class UserConfig(BaseModel):
                     raise ValueError("tilted_plane_angle_deg list must contain numeric values")
             elif not isinstance(spec, (int, float)):
                 raise ValueError("tilted_plane_angle_deg must be a number or an 8-length list")
-            # tilted_plane is binary: a voxel either protrudes above a plane or it does not.
-            # threshold > 0 or a string method has no architectural meaning here.
-            thr = self.threshold
-            if thr is not None:
-                if isinstance(thr, str) or float(thr) > 0:
-                    raise ValueError(
-                        "tilted_plane mode is binary — threshold must be None or 0. "
-                        "A voxel either protrudes above the daylight plane (culled) or it does not (kept). "
-                        "String methods and tolerance values > 0 are not applicable."
-                    )
         return self
 
     @model_validator(mode='after')

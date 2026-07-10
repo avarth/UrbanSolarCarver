@@ -9,13 +9,25 @@ final_mesh_format: ply        # Final mesh format. One of {'ply','obj','stl','gl
 # Carving Mode: {'time-based','irradiance','benefit','daylight','tilted_plane','radiative_cooling [experimental]'}
 mode:           'benefit'
 
-# Analysis period (usually heating season for benefit mode, only a handful of hours of a specific day for time-based mode)
-start_month:    10
-start_day:      15
-start_hour:     7
-end_month:      4
-end_day:        15
-end_hour:       19
+# Analysis period (usually heating season for benefit mode, only a handful of
+# hours of a specific day for time-based mode).
+# Canonical form is one mapping with ladybug AnalysisPeriod.to_dict() keys —
+# an AnalysisPeriod from Ladybug Tools can be pasted/passed directly, and
+# extra LB keys (type, timestep, is_leap_year) are ignored:
+analysis_period:
+  st_month:  10
+  st_day:    15
+  st_hour:   7
+  end_month: 4
+  end_day:   15
+  end_hour:  19
+# The six flat keys remain valid as well:
+# start_month: 10
+# start_day:   15
+# start_hour:  7
+# end_month:   4
+# end_day:     15
+# end_hour:    19
 
 # Dew point settings for radiative cooling
 dew_point_celsius: 14.0    # Night-time dew-point in °C for radiative_cooling.
@@ -55,8 +67,16 @@ carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-
 # Violation-count modes (time-based, tilted_plane) are unaffected.
 score_smoothing: null
 
-# Thresholding and scoring for weighted carving
-threshold: 'carve_fraction'  # 'headtail', 'carve_fraction', or a numeric value. For time-based/tilted_plane, use an integer (violation count).
+# Thresholding and scoring for weighted carving.
+# Canonical form is a mapping:
+#   threshold: {method: carve_fraction, value: 0.7}   # methods: carve_fraction | headtail | cutoff
+# Shorthands are accepted and normalized:
+#   threshold: carve_fraction   # value taken from the carve_fraction key below
+#   threshold: headtail         # automatic split, no value
+#   threshold: 0.35             # bare number = raw-score cutoff
+#                               # (for time-based/tilted_plane: tolerated violation count)
+# Unset = mode default (carve_fraction for weighted modes, 0 for count modes).
+threshold: 'carve_fraction'
 carve_fraction: 0.7
 
 # Benefit mode settings (used when mode: benefit)

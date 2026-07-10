@@ -6,13 +6,12 @@ import numpy as np
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# EPW path resolution — set USC_EPW_PATH env var on any machine to point at a
-# local EPW file.  No hardcoded machine-specific paths live here.
+# EPW path resolution — USC_EPW_PATH env var wins, else the bundled NREL file.
 # ---------------------------------------------------------------------------
-_EPW = os.environ.get("USC_EPW_PATH", "")
-_EPW_AVAILABLE = bool(_EPW) and Path(_EPW).is_file()
+from _epw import resolve_epw
+_EPW = resolve_epw()
 _SKIP_EPW = pytest.mark.skipif(
-    not _EPW_AVAILABLE,
+    not _EPW,
     reason="EPW file not available — set USC_EPW_PATH env var to enable",
 )
 

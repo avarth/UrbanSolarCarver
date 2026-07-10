@@ -44,6 +44,11 @@ from pathlib import Path
 VENV_DIR = ".venv"
 MIN_PYTHON = (3, 10)
 
+# Deepest path the torch wheel creates under site-packages (its dist-info
+# license tree nests ~160 chars); used to predict Windows MAX_PATH failures.
+TORCH_PATH_HEADROOM = 170
+WINDOWS_MAX_PATH = 260
+
 # PyTorch CUDA version → pip index URL
 # Updated for PyTorch 2.5+; check https://pytorch.org/get-started/locally/
 TORCH_INDEX = {
@@ -123,11 +128,66 @@ def resolve_torch_index(cuda_version: str | None, force_cpu: bool) -> tuple[str,
     return TORCH_INDEX["cpu"], f"CPU-only (unknown CUDA {cuda_version})"
 
 
-def venv_python() -> Path:
+def venv_python(venv_dir: Path) -> Path:
     """Return path to the venv's Python executable."""
     if platform.system() == "Windows":
-        return Path(VENV_DIR) / "Scripts" / "python.exe"
-    return Path(VENV_DIR) / "bin" / "python"
+        return venv_dir / "Scripts" / "python.exe"
+    return venv_dir / "bin" / "python"
+
+
+def _windows_long_paths_enabled() -> bool:
+    """True if Windows has long-path support enabled in the registry."""
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\CurrentControlSet\Control\FileSystem",
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
+            return value == 1
+    except OSError:
+        return False
+
+
+def resolve_venv_dir(requested: str | None) -> Path:
+    """Pick the venv location, avoiding Windows MAX_PATH failures.
+
+    The torch wheel's dist-info tree nests deeply enough that extracting it
+    into a venv under a long repo path exceeds MAX_PATH (WinError 206,
+    'filename too long') unless long-path support is enabled.  Predict that
+    before pip dies mid-install: if the default in-repo .venv would be too
+    deep and long paths are off, fall back to a short per-user location.
+    """
+    if requested:
+        venv_dir = Path(requested).resolve()
+    else:
+        venv_dir = Path(VENV_DIR).resolve()
+
+    if platform.system() != "Windows":
+        return venv_dir
+
+    projected = len(str(venv_dir)) + TORCH_PATH_HEADROOM
+    if projected <= WINDOWS_MAX_PATH or _windows_long_paths_enabled():
+        return venv_dir
+
+    if requested:
+        # Explicit choice: respect it, but tell the user what's coming.
+        log(f"venv path is {len(str(venv_dir))} chars; torch install may hit "
+            f"the Windows 260-char path limit. Enable long paths "
+            f"(LongPathsEnabled=1) if the install fails.", "warn")
+        return venv_dir
+
+    fallback = Path.home() / ".usc-venv"
+    log(f"Repo path is too deep for an in-repo venv on this system: "
+        f"{venv_dir}", "warn")
+    log(f"Installing torch there would exceed the Windows 260-character "
+        f"path limit (projected {projected} chars) and long-path support "
+        f"is not enabled.", "warn")
+    log(f"Using {fallback} instead.", "warn")
+    log("To keep the venv in the repo: enable long paths (run as admin: "
+        "reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem "
+        "/v LongPathsEnabled /t REG_DWORD /d 1) or pass --venv-dir.", "info")
+    return fallback
 
 
 # ── Main ───────────────────────────────────────────────────────────────
@@ -143,6 +203,12 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Show what would be installed without doing anything"
+    )
+    parser.add_argument(
+        "--venv-dir", default=None, metavar="PATH",
+        help=f"Virtual environment location (default: {VENV_DIR}/ in the repo; "
+             f"on Windows a short per-user path is used automatically when the "
+             f"repo path is too deep for the 260-char limit)"
     )
     args = parser.parse_args()
 
@@ -166,20 +232,22 @@ def main():
     log(f"PyTorch target: {desc}")
     log(f"Index URL: {index_url}")
 
+    venv_dir = resolve_venv_dir(args.venv_dir)
+
     if args.dry_run:
         log("Dry run — would execute:", "info")
-        print(f"  1. python -m venv {VENV_DIR}")
+        print(f"  1. python -m venv {venv_dir}")
         print(f"  2. pip install torch --index-url {index_url}")
         print(f"  3. pip install .[dev]")
         return
 
     # ── 2. Create venv ──
-    vpy = venv_python()
+    vpy = venv_python(venv_dir)
     if not vpy.is_file():
-        log(f"Creating virtual environment in {VENV_DIR}/")
-        run([sys.executable, "-m", "venv", VENV_DIR])
+        log(f"Creating virtual environment in {venv_dir}")
+        run([sys.executable, "-m", "venv", str(venv_dir)])
     else:
-        log(f"Virtual environment already exists at {VENV_DIR}/")
+        log(f"Virtual environment already exists at {venv_dir}")
 
     if not vpy.is_file():
         log(f"venv creation failed — {vpy} not found", "error")
@@ -255,8 +323,8 @@ def main():
     print()
     log("Setup complete!", "ok")
     print()
-    print(f"  Activate:  {VENV_DIR}\\Scripts\\activate" if platform.system() == "Windows"
-          else f"  Activate:  source {VENV_DIR}/bin/activate")
+    print(f"  Activate:  {venv_dir}\\Scripts\\activate" if platform.system() == "Windows"
+          else f"  Activate:  source {venv_dir}/bin/activate")
     print(f"  CLI:       urbansolarcarver --help")
     print(f"  Jupyter:   {vpy} -m jupyter notebook")
     print()

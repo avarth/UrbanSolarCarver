@@ -1,4 +1,4 @@
-# UrbanSolarCarver — Radiative cooling mode [EXPERIMENTAL]
+﻿# UrbanSolarCarver — Radiative cooling mode [EXPERIMENTAL]
 # Carves voxels based on long-wave radiative cooling potential of the night sky.
 # Uses Martin-Berdahl (1984) emissivity and Bliss (1961) angular attenuation.
 # Assumes clear sky, horizontal analysis surfaces (flat roofs).
@@ -10,18 +10,20 @@
 # --- Required paths ---
 max_volume_path:    "path/to/maxVolume.ply"
 test_surface_path:  "path/to/testSurfaces.ply"
-epw_path:           "path/to/weather.epw"
+epw_path:           "path/to/weather.epw"  # bundled sample: examples/weather/USA_CO_Golden-NREL.724666_TMY3.epw
 out_dir:            "path/to/output"
 
 mode: radiative_cooling
 
 # Analysis period — defines which nighttime hours to analyse
-start_month: 6
-start_day:   1
-start_hour:  20
-end_month:   8
-end_day:     31
-end_hour:    6
+# (ladybug AnalysisPeriod.to_dict() can be pasted here)
+analysis_period:
+  st_month:  6
+  st_day:    1
+  st_hour:   20
+  end_month: 8
+  end_day:   31
+  end_hour:  6
 
 # Radiative cooling parameters
 dew_point_celsius: 14.0   # night-time dew-point (C)

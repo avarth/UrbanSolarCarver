@@ -38,16 +38,13 @@ def tmp_mesh_files(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
 
 @pytest.fixture
 def example_epw_path():
-    """Return path to a real EPW file if available, else skip the test.
+    """Return path to a real EPW file, else skip the test.
 
-    Set the ``USC_EPW_PATH`` environment variable to point to a local EPW file
-    to enable integration tests on any machine without hardcoded paths.
+    Uses ``USC_EPW_PATH`` if set, otherwise the NREL TMY3 file bundled in
+    ``examples/weather/``.
     """
-    candidates = [
-        Path(os.environ["USC_EPW_PATH"]) if "USC_EPW_PATH" in os.environ else None,
-        Path.home() / "weather" / "test.epw",
-    ]
-    for p in candidates:
-        if p is not None and p.is_file():
-            return p
-    pytest.skip("No EPW file found — set USC_EPW_PATH env var to enable integration tests")
+    from _epw import resolve_epw
+    epw = resolve_epw()
+    if not epw:
+        pytest.skip("No EPW file found — set USC_EPW_PATH env var to enable integration tests")
+    return Path(epw)

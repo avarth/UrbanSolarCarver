@@ -82,40 +82,23 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing):
     return smoothed, True, radius_m, sigma_voxels
 
 
-def _resolve_threshold(scores, kind, thr, carve_fraction, suggested_threshold):
-    """Resolve the configured threshold spec into a numeric cutoff.
+def _resolve_threshold(scores, spec):
+    """Resolve a validated :class:`ThresholdSpec` into a numeric cutoff.
 
-    ``violation_count`` scores accept only numeric thresholds (tolerated
-    violation count; default 0 = strict).  ``weighted_sum`` scores accept a
-    number (manual raw-score cutoff) or a strategy name: ``headtail``
-    (Jiang 2013 head/tail breaks) or ``carve_fraction`` (score-mass cutoff —
-    NOT a percentile: it weights by obstruction severity, so a few
-    high-scoring voxels can account for a large fraction of the total).
+    The config layer guarantees the spec is complete and valid for the
+    mode (see ``UserConfig._resolve_threshold_spec``), so this is a pure
+    dispatch: ``cutoff`` is the value itself; ``headtail`` (Jiang 2013
+    head/tail breaks) and ``carve_fraction`` (score-mass cutoff — NOT a
+    percentile: it weights by obstruction severity) compute it from the
+    score distribution.
     """
-    if kind == "violation_count":
-        if isinstance(thr, (int, float)):
-            return float(thr)
-        if isinstance(thr, str):
-            raise ValueError(
-                f"threshold='{thr}' is not valid for time-based/tilted_plane modes. "
-                f"These modes produce integer violation counts, not continuous scores. "
-                f"Use a non-negative integer: 0 = strict (zero violations tolerated), "
-                f"1 = allow 1 violation, etc. "
-                f"Leave threshold unset (None) to use the strict default (0)."
-            )
-        # None → use suggested_threshold from preprocessing (always 0.0)
-        return float(suggested_threshold or 0.0)
-
-    if thr is None:
-        thr = "carve_fraction"
-    if isinstance(thr, (int, float)):
-        return float(thr)
-    key = thr.lower()
-    if key == "headtail":
+    if spec.method == "cutoff":
+        return float(spec.value)
+    if spec.method == "headtail":
         return float(headtail_threshold(scores, max_iterations=50))
-    if key == "carve_fraction":
-        return carve_fraction_threshold(scores, float(carve_fraction))
-    raise ValueError(f"Unknown threshold mode: {thr}")
+    if spec.method == "carve_fraction":
+        return carve_fraction_threshold(scores, float(spec.value))
+    raise ValueError(f"Unknown threshold method: {spec.method!r}")
 
 
 @overload
@@ -138,17 +121,18 @@ def thresholding(
     For ``violation_count`` scores (time-based / tilted_plane modes),
     a numeric threshold from the config is applied directly.
 
-    Threshold strategies (set via ``cfg.threshold``):
+    Threshold strategies (set via ``cfg.threshold``; the config layer
+    normalizes every accepted spelling into a ``ThresholdSpec``):
 
-    * Numeric value -- a literal float cutoff; voxels with
-      ``score <= threshold`` are kept.
-    * ``"headtail"`` -- Head/tail breaks (Jiang 2013): iteratively splits the
+    * ``cutoff`` (shorthand: a bare number) -- a literal cutoff; voxels with
+      ``score <= value`` are kept.
+    * ``headtail`` -- Head/tail breaks (Jiang 2013): iteratively splits the
       distribution at the arithmetic mean until the head proportion falls
       below 40 %, targeting heavy-tailed score distributions common in
       urban solar access studies.
-    * ``"carve_fraction"`` (default) -- cumulative-score cutoff: sorts voxels
-      by descending score and finds the cutoff that accounts for
-      ``cfg.carve_fraction`` of the total score mass.
+    * ``carve_fraction`` (default) -- cumulative-score cutoff: sorts voxels
+      by descending score and finds the cutoff that accounts for the given
+      fraction of the total score mass.
 
     Score smoothing (``cfg.score_smoothing``):
 
@@ -249,15 +233,18 @@ def thresholding(
     )
 
     scores = raw.astype(np.float32, copy=False)
-    thr = conf.threshold
-    if thr is None and kind != "violation_count":
-        # Make the default strategy explicit here (not just inside
-        # _resolve_threshold) so threshold_method and the stage-hash
-        # snippet below record the stable strategy name rather than
-        # "numeric" / a score-dependent float.
-        thr = "carve_fraction"
-    thr_val = _resolve_threshold(scores, kind, thr, conf.carve_fraction,
-                                 pre_manifest.suggested_threshold)
+    spec = conf.threshold
+    # Cross-check config vs manifest: standalone re-thresholding can pair a
+    # weighted-mode config with violation-count scores (or vice versa) —
+    # the config-time validation only saw the config's own mode.
+    if kind == "violation_count" and spec.method != "cutoff":
+        raise ValueError(
+            f"Scores in {scores_path} are violation counts (preprocessing mode "
+            f"'{pre_manifest.mode}'), but the config requests threshold method "
+            f"'{spec.method}'. Use a numeric threshold (tolerated violation "
+            f"count) or match the config mode to the preprocessing run."
+        )
+    thr_val = _resolve_threshold(scores, spec)
 
     # Threshold to mask.
     mask = (scores <= thr_val).reshape(grid_shape)
@@ -278,10 +265,11 @@ def thresholding(
     mask_path = out_path / "mask.npy"
     np.save(mask_path, mask, allow_pickle=False)
 
-    # Stable stage hash for reproducibility.
+    # Stable stage hash for reproducibility: method + configured value,
+    # never the resolved (score-dependent) cutoff.
     snippet = {
-        "threshold": thr if isinstance(thr, str) else float(thr_val),
-        "carve_fraction": conf.carve_fraction,
+        "threshold_method": spec.method,
+        "threshold_value": spec.value,
         "score_smoothing": conf.score_smoothing,
     }
     stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
@@ -300,7 +288,7 @@ def thresholding(
     total_voxels = int(nn.size)
     kept = int(mask.sum())
     removed = total_voxels - kept
-    threshold_method = thr if isinstance(thr, str) else "numeric"
+    threshold_method = spec.method
     summary = {
         "threshold_method": threshold_method,
         "threshold_value": float(thr_val),

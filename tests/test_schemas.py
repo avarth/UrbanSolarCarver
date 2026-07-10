@@ -163,21 +163,70 @@ class TestThresholdValidation:
             **kw,
         )
 
-    def test_string_threshold_accepted(self):
+    def test_string_shorthand_normalized(self):
         cfg = self._benefit_base(threshold="headtail")
-        assert cfg.threshold == "headtail"
+        assert cfg.threshold.method == "headtail"
+        assert cfg.threshold.value is None
 
     def test_invalid_string_rejected(self):
         with pytest.raises(ValidationError):
             self._benefit_base(threshold="bogus")
 
-    def test_numeric_threshold_accepted(self):
+    def test_numeric_shorthand_becomes_cutoff(self):
         cfg = self._benefit_base(threshold=0.5)
-        assert cfg.threshold == 0.5
+        assert cfg.threshold.method == "cutoff"
+        assert cfg.threshold.value == 0.5
 
-    def test_none_threshold_accepted(self):
-        cfg = self._benefit_base(threshold=None)
-        assert cfg.threshold is None
+    def test_none_resolves_to_mode_default(self):
+        """Unset threshold resolves to carve_fraction for weighted modes,
+        picking up the carve_fraction key as its value."""
+        cfg = self._benefit_base(threshold=None, carve_fraction=0.6)
+        assert cfg.threshold.method == "carve_fraction"
+        assert cfg.threshold.value == 0.6
+
+    def test_canonical_mapping_accepted(self):
+        cfg = self._benefit_base(threshold={"method": "carve_fraction", "value": 0.4})
+        assert cfg.threshold.method == "carve_fraction"
+        assert cfg.threshold.value == 0.4
+
+    def test_carve_fraction_shorthand_fills_value(self):
+        cfg = self._benefit_base(threshold="carve_fraction", carve_fraction=0.3)
+        assert cfg.threshold.method == "carve_fraction"
+        assert cfg.threshold.value == 0.3
+
+    def test_headtail_with_value_rejected(self):
+        with pytest.raises(ValidationError):
+            self._benefit_base(threshold={"method": "headtail", "value": 0.5})
+
+    def test_cutoff_requires_value(self):
+        with pytest.raises(ValidationError):
+            self._benefit_base(threshold={"method": "cutoff"})
+
+    def test_bool_threshold_rejected(self):
+        with pytest.raises(ValidationError):
+            self._benefit_base(threshold=True)
+
+    def test_numeric_placeholder_rejected(self):
+        with pytest.raises(ValidationError):
+            self._benefit_base(threshold="numeric")
+
+    def _timebased_base(self, **kw):
+        return _make_config(
+            mode="time-based", epw_path="dummy.epw",
+            start_month=1, start_day=1, start_hour=8,
+            end_month=1, end_day=1, end_hour=16,
+            tilted_plane_angle_deg=None,
+            **kw,
+        )
+
+    def test_violation_mode_default_is_strict_cutoff(self):
+        cfg = self._timebased_base(threshold=None)
+        assert cfg.threshold.method == "cutoff"
+        assert cfg.threshold.value == 0.0
+
+    def test_violation_mode_rejects_strategy(self):
+        with pytest.raises(ValidationError):
+            self._timebased_base(threshold="carve_fraction")
 
     def test_tilted_plane_rejects_string_threshold(self):
         with pytest.raises(ValidationError):
@@ -187,14 +236,78 @@ class TestThresholdValidation:
         with pytest.raises(ValidationError):
             _make_config(threshold=0.5)
 
+    def test_tilted_plane_accepts_zero(self):
+        cfg = _make_config(threshold=0)
+        assert cfg.threshold.method == "cutoff"
+        assert cfg.threshold.value == 0.0
+
     def test_otsu_rejected(self):
         """Otsu was removed — should no longer be accepted."""
         with pytest.raises(ValidationError):
             self._benefit_base(threshold="otsu")
 
-    def test_carve_fraction_accepted(self):
-        cfg = self._benefit_base(threshold="carve_fraction")
-        assert cfg.threshold == "carve_fraction"
+
+class TestAnalysisPeriodMapping:
+    """analysis_period mapping (ladybug AnalysisPeriod.to_dict() keys)
+    expands into the six flat period fields."""
+
+    _PERIOD = {"st_month": 10, "st_day": 15, "st_hour": 7,
+               "end_month": 4, "end_day": 15, "end_hour": 19}
+
+    def test_ladybug_keys_expand(self):
+        cfg = _make_config(
+            mode="benefit", epw_path="dummy.epw",
+            tilted_plane_angle_deg=None,
+            analysis_period=self._PERIOD,
+        )
+        assert (cfg.start_month, cfg.start_day, cfg.start_hour) == (10, 15, 7)
+        assert (cfg.end_month, cfg.end_day, cfg.end_hour) == (4, 15, 19)
+
+    def test_ladybug_to_dict_extras_tolerated(self):
+        """type/timestep/is_leap_year from AnalysisPeriod.to_dict() are ignored."""
+        period = dict(self._PERIOD, type="AnalysisPeriod", timestep=1, is_leap_year=False)
+        cfg = _make_config(
+            mode="benefit", epw_path="dummy.epw",
+            tilted_plane_angle_deg=None,
+            analysis_period=period,
+        )
+        assert cfg.start_month == 10
+
+    def test_start_spellings_accepted(self):
+        cfg = _make_config(
+            mode="benefit", epw_path="dummy.epw",
+            tilted_plane_angle_deg=None,
+            analysis_period={"start_month": 1, "start_day": 1, "start_hour": 8,
+                             "end_month": 12, "end_day": 31, "end_hour": 16},
+        )
+        assert cfg.start_hour == 8
+        assert cfg.end_hour == 16
+
+    def test_unknown_key_rejected(self):
+        with pytest.raises(ValidationError, match="analysis_period"):
+            _make_config(
+                mode="benefit", epw_path="dummy.epw",
+                tilted_plane_angle_deg=None,
+                analysis_period=dict(self._PERIOD, st_minute=30),
+            )
+
+    def test_conflict_with_flat_field_rejected(self):
+        with pytest.raises(ValidationError, match="conflicts"):
+            _make_config(
+                mode="benefit", epw_path="dummy.epw",
+                tilted_plane_angle_deg=None,
+                start_month=1,
+                analysis_period=self._PERIOD,
+            )
+
+    def test_matching_flat_field_allowed(self):
+        cfg = _make_config(
+            mode="benefit", epw_path="dummy.epw",
+            tilted_plane_angle_deg=None,
+            start_month=10,
+            analysis_period=self._PERIOD,
+        )
+        assert cfg.start_month == 10
 
 
 class TestDaylightMode:
