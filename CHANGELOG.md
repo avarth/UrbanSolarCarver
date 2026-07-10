@@ -100,6 +100,16 @@ apply equally to CUDA machines.
   (an (R, 3) tensor nobody consumes — hundreds of MB of VRAM);
   pass `include_normals=True` to get them.
 
+### Added
+
+- **Kernel warmup**: Warp JIT-compiles kernels on first use (~3-10 s once
+  per machine, per device, per code version; cached on disk afterwards).
+  That one-time cost is now paid where waiting is expected instead of on
+  the first carving run: `setup_env.py` precompiles at the end of
+  installation, the daemon precompiles during startup (before READY), and
+  a new `usc warmup [-d cpu|cuda]` command covers manual updates.
+  Public API: `urbansolarcarver.raytracer.warmup_kernels(device)`.
+
 ### Robustness / code quality
 
 - Defensive validation at stage boundaries: thresholding and exporting now

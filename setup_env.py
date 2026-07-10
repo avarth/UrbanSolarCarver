@@ -236,6 +236,21 @@ def main():
         print(r.stderr)
         sys.exit(1)
 
+    # ── 7. Precompile Warp kernels ──
+    # Warp JIT-compiles kernels on first use (~3-10 s, once per machine,
+    # cached on disk).  Doing it now — while the user already expects the
+    # installer to take time — means the first carving run reflects real
+    # compute time instead of compilation.
+    log("Precompiling Warp compute kernels (one-time, cached)...")
+    r = run([str(vpy), "-c",
+             "from urbansolarcarver.raytracer import warmup_kernels; "
+             "print('warm' if warmup_kernels() else 'skipped')"],
+            capture=True, check=False)
+    if r.returncode == 0 and "warm" in r.stdout:
+        log("Warp kernels compiled and cached", "ok")
+    else:
+        log("Kernel precompilation skipped — kernels will compile on first run", "warn")
+
     # ── Done ──
     print()
     log("Setup complete!", "ok")

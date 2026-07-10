@@ -390,6 +390,40 @@ def cmd_exporting(
 
 
 # ---------------------------------------------------------------------------
+# warmup — precompile Warp kernels so the first run isn't misleadingly slow
+# ---------------------------------------------------------------------------
+@app.command(help="Precompile GPU/CPU compute kernels (one-time, cached on disk)")
+def warmup(
+    device: str = Option("auto", "--device", "-d", help="Target device: 'auto', 'cpu', or 'cuda'"),
+):
+    """Compile the Warp compute kernels ahead of time.
+
+    Warp JIT-compiles kernels on first use — a one-time ~3-10 s cost per
+    machine and per code version, cached on disk afterwards.  Run this once
+    after installation or after updating UrbanSolarCarver so your first
+    carving run reflects real compute time.  (``setup_env.py`` and the
+    daemon do this automatically.)
+    """
+    if device not in ("auto", "cpu", "cuda"):
+        typer.secho(f"  Invalid device {device!r} — use 'auto', 'cpu', or 'cuda'", fg="red")
+        raise typer.Exit(1)
+
+    typer.secho(f"  Compiling Warp kernels (device={device})...", fg="yellow")
+    t0 = time.perf_counter()
+    from .raytracer import warmup_kernels
+    ok = warmup_kernels(None if device == "auto" else device)
+    elapsed = time.perf_counter() - t0
+    if ok:
+        typer.secho(f"  Kernels ready in {elapsed:.1f}s (cached on disk for future runs)", fg="green")
+    else:
+        typer.secho(
+            "  Warp backend not available on the requested device — "
+            "kernels will compile lazily on first use.", fg="yellow",
+        )
+        raise typer.Exit(1)
+
+
+# ---------------------------------------------------------------------------
 # validate — quick config check without loading heavy deps
 # ---------------------------------------------------------------------------
 @app.command(help="Validate a config file without running the pipeline")

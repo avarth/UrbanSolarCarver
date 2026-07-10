@@ -150,6 +150,18 @@ def serve(address, authkey, device_arg="auto"):
     from multiprocessing.connection import Listener
     device = _pick_device(device_arg)
     with CarverSession(device) as sess:
+        # Precompile the Warp kernels while the client is already waiting
+        # for daemon startup — otherwise the first carving run pays the
+        # one-time JIT cost and looks misleadingly slow.  Served from
+        # Warp's disk cache (milliseconds) on subsequent daemon starts.
+        try:
+            from urbansolarcarver.raytracer import warmup_kernels
+            print(f"[daemon] warming up Warp kernels on {device}...", flush=True)
+            warmed = warmup_kernels(device)
+            print(f"[daemon] kernel warmup {'done' if warmed else 'skipped (no Warp backend)'}", flush=True)
+        except Exception as exc:
+            print(f"[daemon] kernel warmup failed ({exc}) — continuing; "
+                  f"kernels will compile on first use", flush=True)
         listener = Listener(address, authkey=authkey)
         print(f"[daemon] READY — listening on {address[0]}:{address[1]} (device={device}, pid={os.getpid()})", flush=True)
         try:

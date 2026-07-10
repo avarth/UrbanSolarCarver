@@ -67,6 +67,50 @@ def _warp_cpu_ok() -> bool:
     return _warp_cpu_ok_cache
 
 
+def warmup_kernels(device=None) -> bool:
+    """Eagerly compile (or load from the on-disk cache) this module's Warp
+    kernels for *device*.
+
+    Warp JIT-compiles all kernels in a module on the first launch — a
+    one-time ~3-10 s cost per machine, per device, per code version, after
+    which the compiled binaries are served from Warp's disk cache in
+    milliseconds.  Calling this during installation (``setup_env.py``),
+    daemon startup, or via ``usc warmup`` moves that cost to a moment
+    where the user already expects to wait, so the first carving run is
+    not misleadingly slow.
+
+    Parameters
+    ----------
+    device : torch.device | str | None
+        Target device.  None resolves like ``cfg.device='auto'``:
+        CUDA when available, else the Warp CPU backend.
+
+    Returns
+    -------
+    bool
+        True if the kernels are ready on the device (compiled or cached);
+        False if Warp is unavailable or compilation failed (the pipeline
+        still works — kernels compile lazily on first use).
+    """
+    if not _warp_available:
+        return False
+    try:
+        if device is None:
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        elif isinstance(device, str):
+            device = torch.device(device)
+        if not dda_backend_available(device):
+            return False
+        device_str = f"cuda:{device.index or 0}" if device.type == "cuda" else "cpu"
+        import sys
+        wp.load_module(module=sys.modules[__name__], device=device_str)
+        return True
+    except Exception as exc:
+        log.warning("Warp kernel warmup failed (%s) — kernels will compile "
+                    "lazily on first use instead.", exc)
+        return False
+
+
 def dda_backend_available(device) -> bool:
     """True if the exact Warp DDA backend can run on *device*.
 
