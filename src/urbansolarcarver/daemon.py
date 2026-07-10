@@ -150,6 +150,15 @@ def serve(address, authkey, device_arg="auto"):
     from multiprocessing.connection import Listener
     device = _pick_device(device_arg)
     with CarverSession(device) as sess:
+        # Bind the port BEFORE the (potentially slow) kernel warmup: clients
+        # polling for readiness connect immediately and their ping simply
+        # blocks until the accept loop below starts.  Binding after warmup
+        # could exceed the pollers' fixed windows (CLI: 30x1s, Grasshopper:
+        # 60x0.5s) on a cold kernel cache, failing the start command while
+        # the daemon later comes up anyway and holds the port.
+        listener = Listener(address, authkey=authkey)
+        print(f"[daemon] listening on {address[0]}:{address[1]} "
+              f"(device={device}, pid={os.getpid()}) — warming up...", flush=True)
         # Precompile the Warp kernels while the client is already waiting
         # for daemon startup — otherwise the first carving run pays the
         # one-time JIT cost and looks misleadingly slow.  Served from
@@ -162,7 +171,6 @@ def serve(address, authkey, device_arg="auto"):
         except Exception as exc:
             print(f"[daemon] kernel warmup failed ({exc}) — continuing; "
                   f"kernels will compile on first use", flush=True)
-        listener = Listener(address, authkey=authkey)
         print(f"[daemon] READY — listening on {address[0]}:{address[1]} (device={device}, pid={os.getpid()})", flush=True)
         try:
             while True:

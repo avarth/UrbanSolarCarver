@@ -132,6 +132,15 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
     flat = scores.ravel()
     if flat.size == 0:
         return 0.0
+    finite = np.isfinite(flat)
+    if not finite.all():
+        # Non-finite scores (NaN/Inf) are always carved by the downstream
+        # `score <= threshold` comparison, so exclude them from the mass
+        # calculation instead of letting max()/np.histogram raise on a
+        # non-finite range.
+        flat = flat[finite]
+        if flat.size == 0:
+            return 0.0
     vmax = float(flat.max())
     if vmax <= 0.0:
         return 0.0

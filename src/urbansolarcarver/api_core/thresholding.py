@@ -16,7 +16,7 @@ from ..pydantic_schemas import (
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..mode_registry import MODES
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json
-from ._diagnostics import save_histogram, score_statistics
+from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
 
 @dataclass(frozen=True)
 class ThresholdingResult:
@@ -238,12 +238,24 @@ def thresholding(
             f"manifest are from different runs."
         )
 
+    # Guard the consumer side too: thresholding can run standalone (CLI,
+    # daemon, Grasshopper) on a scores.npy that never went through this
+    # process's preprocessing, and `score <= thr` silently carves every
+    # non-finite voxel.
+    warn_score_anomalies(raw, context="thresholding")
+
     raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
         raw, kind, pre_manifest.voxel_size, conf.score_smoothing
     )
 
     scores = raw.astype(np.float32, copy=False)
     thr = conf.threshold
+    if thr is None and kind != "violation_count":
+        # Make the default strategy explicit here (not just inside
+        # _resolve_threshold) so threshold_method and the stage-hash
+        # snippet below record the stable strategy name rather than
+        # "numeric" / a score-dependent float.
+        thr = "carve_fraction"
     thr_val = _resolve_threshold(scores, kind, thr, conf.carve_fraction,
                                  pre_manifest.suggested_threshold)
 

@@ -187,12 +187,37 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
     res_sq = res * res
 
     if dda_backend_available(device):
-        for i in range(0, origins.shape[0], batch_size):
+        batch_ranges = [
+            (start, min(start + batch_size, origins.shape[0]))
+            for start in range(0, origins.shape[0], batch_size)
+        ]
+
+        def _count_batch(start, end):
             trace_and_count_dda(
                 min_corner, scale, res,
-                origins[i: i + batch_size], directions[i: i + batch_size],
+                origins[start:end], directions[start:end],
                 counts, float(config.ray_length),
             )
+
+        if device.type == "cpu" and len(batch_ranges) > 1:
+            # Same dispatch as the fused score path: Warp CPU launches are
+            # single-threaded and release the GIL, so a small thread pool
+            # runs batches on multiple cores.  Integer wp.atomic_add keeps
+            # the shared counts buffer exact.  The first batch runs
+            # synchronously so Warp's lazy JIT compile happens once.
+            from concurrent.futures import ThreadPoolExecutor
+            _count_batch(*batch_ranges[0])
+            n_workers = min(4, os.cpu_count() or 1, len(batch_ranges) - 1)
+            with ThreadPoolExecutor(max_workers=n_workers) as pool:
+                # list() drains the iterator so worker exceptions propagate
+                list(pool.map(lambda rng: _count_batch(*rng), batch_ranges[1:]))
+        else:
+            for start, end in batch_ranges:
+                _count_batch(start, end)
+        # Warp launches run on Warp's own CUDA stream; the counts buffer is
+        # shared zero-copy with torch, so synchronize before torch reads it.
+        if device.type == "cuda":
+            torch.cuda.synchronize()
         return counts
 
     for i in range(0, origins.shape[0], batch_size):
@@ -540,9 +565,14 @@ def carve_with_sky_patch_rays(
             # float-rounding noise between runs.
             from concurrent.futures import ThreadPoolExecutor
             n_workers = min(4, os.cpu_count() or 1, len(batch_ranges))
+            # Run the first batch synchronously: it triggers Warp's lazy
+            # module load/JIT compile exactly once, single-threaded.
+            # Concurrent first launches from the pool would race the
+            # module build (Warp does not document it as thread-safe).
+            _score_batch(*batch_ranges[0])
             with ThreadPoolExecutor(max_workers=n_workers) as pool:
                 # list() drains the iterator so worker exceptions propagate
-                list(pool.map(lambda rng: _score_batch(*rng), batch_ranges))
+                list(pool.map(lambda rng: _score_batch(*rng), batch_ranges[1:]))
         else:
             for start, end in batch_ranges:
                 _score_batch(start, end)

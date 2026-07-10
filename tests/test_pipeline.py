@@ -216,6 +216,76 @@ class TestOverrideParsing:
 
 
 # ---------------------------------------------------------------------------
+# Default-threshold reporting (no GPU / EPW needed)
+# ---------------------------------------------------------------------------
+
+class TestDefaultThresholdReporting:
+    """With threshold unset on weighted scores, the default strategy must be
+    recorded by name ('carve_fraction'), and the stage hash must depend on
+    the strategy, not on the score-dependent resolved cutoff (regression:
+    the method was reported as 'numeric' and identical configs hashed
+    differently across runs)."""
+
+    def _run_thresholding(self, tmp_path, sub, scores):
+        pre_dir = tmp_path / sub / "preprocessing"
+        pre_dir.mkdir(parents=True, exist_ok=True)
+        scores_path = pre_dir / "scores.npy"
+        np.save(scores_path, scores, allow_pickle=False)
+        from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
+        pm = PreprocessingManifest(
+            hash="test1234",
+            scores_path=str(scores_path),
+            scores_kind="weighted_sum",
+            shape=tuple(scores.shape),
+            origin=(0.0, 0.0, 0.0),
+            voxel_size=1.0,
+            mode="irradiance",
+        )
+        (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
+
+        from urbansolarcarver.load_config import user_config
+        cfg = user_config(
+            max_volume_path="dummy", test_surface_path="dummy",
+            out_dir=str(tmp_path / sub), mode="irradiance", epw_path="dummy",
+            start_month=1, start_day=1, start_hour=0,
+            end_month=12, end_day=31, end_hour=23,
+            # threshold intentionally left unset (None → carve_fraction)
+        )
+        from urbansolarcarver.api_core.thresholding import thresholding
+        return thresholding(pre_dir, cfg, tmp_path / sub / "thr")
+
+    def test_default_reported_as_carve_fraction(self, tmp_path):
+        rng = np.random.default_rng(11)
+        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
+        result = self._run_thresholding(tmp_path, "a", scores)
+        diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
+        assert diag["threshold_method"] == "carve_fraction"
+
+    def test_stage_hash_independent_of_score_data(self, tmp_path):
+        """Same config + same upstream hash → same stage hash, even when the
+        score data (and therefore the resolved cutoff) differ."""
+        rng = np.random.default_rng(12)
+        r1 = self._run_thresholding(
+            tmp_path, "run1", rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32))
+        r2 = self._run_thresholding(
+            tmp_path, "run2", rng.uniform(0, 500, size=(8, 8, 8)).astype(np.float32))
+        h1 = json.loads((r1.out_dir / "manifest.json").read_text())["hash"]
+        h2 = json.loads((r2.out_dir / "manifest.json").read_text())["hash"]
+        assert h1 == h2
+
+    def test_thresholding_warns_on_nonfinite_scores(self, tmp_path):
+        """Standalone thresholding (CLI/daemon/GH) must warn about NaN/Inf
+        scores loaded from disk — preprocessing's guard doesn't cover it —
+        and must not crash on the default carve_fraction strategy."""
+        rng = np.random.default_rng(13)
+        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
+        scores[0, 0, :] = np.nan
+        with pytest.warns(UserWarning, match="thresholding: scores contain"):
+            result = self._run_thresholding(tmp_path, "nonfinite", scores)
+        assert result.mask_path.exists()
+
+
+# ---------------------------------------------------------------------------
 # Score smoothing unit tests (no GPU / EPW needed)
 # ---------------------------------------------------------------------------
 

@@ -123,14 +123,202 @@ def dda_backend_available(device) -> bool:
 
 if _warp_available:
     # ===================================================================
-    # IMPORTANT — PAIRED DDA KERNELS
-    # _dda_trace_kernel and _dda_fused_score_kernel share identical DDA
-    # traversal logic (ray-AABB intersection, init, step).  Warp kernels
-    # cannot call shared helpers, so the code is duplicated.
-    #
-    # ANY change to the DDA traversal (EPS, clamping, step logic, bounds
-    # checks) MUST be applied to BOTH kernels.
+    # SHARED DDA TRAVERSAL
+    # The three DDA kernels below (trace / fused score / fused count)
+    # differ only in what they do at each visited voxel.  The traversal
+    # itself — ray-AABB entry test, DDA state setup, per-voxel advance —
+    # lives in the _dda_init/_dda_step device functions, so any change
+    # to it (EPS, clamping, step logic, bounds checks) is made in ONE
+    # place and applies to all three kernels.
     # ===================================================================
+
+    @wp.struct
+    class _DDAState:
+        active: int          # 1 while the ray is still traversing the grid
+        vx: int
+        vy: int
+        vz: int
+        step_x: int
+        step_y: int
+        step_z: int
+        t_max_x: float
+        t_max_y: float
+        t_max_z: float
+        t_delta_x: float
+        t_delta_y: float
+        t_delta_z: float
+
+    @wp.func
+    def _dda_init(
+        o: wp.vec3,
+        d: wp.vec3,
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        max_t: float,
+    ) -> _DDAState:
+        """Ray-AABB intersection + Amanatides & Woo DDA state setup.
+
+        Returns a state with ``active == 0`` when the ray misses the grid
+        entirely; otherwise the state points at the (clamped, in-bounds)
+        entry voxel with per-axis step/t_max/t_delta initialised.
+        """
+        s = _DDAState()
+        s.active = 0
+
+        # --- Ray-AABB intersection to find entry/exit t -----------------
+        # Grid spans [grid_origin, grid_origin + resolution * cell_size]
+        t_near = 0.0
+        t_far = max_t
+        for axis in range(3):
+            o_a = o[axis]
+            d_a = d[axis]
+            lo = grid_origin[axis]
+            hi = lo + float(resolution) * cell_size
+            if wp.abs(d_a) < 1.0e-12:
+                # Ray parallel to slab -- miss if origin outside
+                if o_a < lo or o_a >= hi:
+                    return s
+            else:
+                inv_d = 1.0 / d_a
+                t1 = (lo - o_a) * inv_d
+                t2 = (hi - o_a) * inv_d
+                if t1 > t2:
+                    tmp = t1
+                    t1 = t2
+                    t2 = tmp
+                if t1 > t_near:
+                    t_near = t1
+                if t2 < t_far:
+                    t_far = t2
+                if t_near > t_far:
+                    return s
+        if t_near < 0.0:
+            t_near = 0.0
+
+        # --- Initialise DDA at entry point ------------------------------
+        inv_cell = 1.0 / cell_size
+        entry = wp.vec3(
+            o[0] + d[0] * t_near,
+            o[1] + d[1] * t_near,
+            o[2] + d[2] * t_near,
+        )
+        vx = int(wp.floor((entry[0] - grid_origin[0]) * inv_cell))
+        vy = int(wp.floor((entry[1] - grid_origin[1]) * inv_cell))
+        vz = int(wp.floor((entry[2] - grid_origin[2]) * inv_cell))
+
+        # Clamp to valid range (entry point may land exactly on far boundary)
+        if vx >= resolution:
+            vx = resolution - 1
+        if vy >= resolution:
+            vy = resolution - 1
+        if vz >= resolution:
+            vz = resolution - 1
+        if vx < 0:
+            vx = 0
+        if vy < 0:
+            vy = 0
+        if vz < 0:
+            vz = 0
+        s.vx = vx
+        s.vy = vy
+        s.vz = vz
+
+        # Step direction (+1 or -1) per axis
+        s.step_x = 1
+        s.step_y = 1
+        s.step_z = 1
+        if d[0] < 0.0:
+            s.step_x = -1
+        if d[1] < 0.0:
+            s.step_y = -1
+        if d[2] < 0.0:
+            s.step_z = -1
+
+        # t_max: t value at which the ray crosses the next cell boundary
+        # t_delta: t increment to traverse one full cell along this axis
+        #
+        # EPS: threshold to treat a direction component as zero (ray parallel
+        # to that axis).  Set far below float32 machine epsilon (~1e-7) so that
+        # any ray with a nonzero component is handled by the DDA stepper.
+        EPS = 1.0e-20
+
+        abs_dx = wp.abs(d[0])
+        abs_dy = wp.abs(d[1])
+        abs_dz = wp.abs(d[2])
+
+        if abs_dx > EPS:
+            if s.step_x > 0:
+                s.t_max_x = (grid_origin[0] + float(vx + 1) * cell_size - o[0]) / d[0]
+            else:
+                s.t_max_x = (grid_origin[0] + float(vx) * cell_size - o[0]) / d[0]
+            s.t_delta_x = cell_size / abs_dx
+        else:
+            s.t_max_x = 1.0e30
+            s.t_delta_x = 1.0e30
+
+        if abs_dy > EPS:
+            if s.step_y > 0:
+                s.t_max_y = (grid_origin[1] + float(vy + 1) * cell_size - o[1]) / d[1]
+            else:
+                s.t_max_y = (grid_origin[1] + float(vy) * cell_size - o[1]) / d[1]
+            s.t_delta_y = cell_size / abs_dy
+        else:
+            s.t_max_y = 1.0e30
+            s.t_delta_y = 1.0e30
+
+        if abs_dz > EPS:
+            if s.step_z > 0:
+                s.t_max_z = (grid_origin[2] + float(vz + 1) * cell_size - o[2]) / d[2]
+            else:
+                s.t_max_z = (grid_origin[2] + float(vz) * cell_size - o[2]) / d[2]
+            s.t_delta_z = cell_size / abs_dz
+        else:
+            s.t_max_z = 1.0e30
+            s.t_delta_z = 1.0e30
+
+        s.active = 1
+        return s
+
+    @wp.func
+    def _dda_step(s: _DDAState, resolution: int, max_t: float) -> _DDAState:
+        """Advance to the next voxel (smallest t_max wins).
+
+        Clears ``active`` when the ray would exceed *max_t* or leaves the
+        grid; callers loop while ``s.active == 1``.
+        """
+        if s.t_max_x < s.t_max_y:
+            if s.t_max_x < s.t_max_z:
+                if s.t_max_x > max_t:
+                    s.active = 0
+                    return s
+                s.vx = s.vx + s.step_x
+                s.t_max_x = s.t_max_x + s.t_delta_x
+            else:
+                if s.t_max_z > max_t:
+                    s.active = 0
+                    return s
+                s.vz = s.vz + s.step_z
+                s.t_max_z = s.t_max_z + s.t_delta_z
+        else:
+            if s.t_max_y < s.t_max_z:
+                if s.t_max_y > max_t:
+                    s.active = 0
+                    return s
+                s.vy = s.vy + s.step_y
+                s.t_max_y = s.t_max_y + s.t_delta_y
+            else:
+                if s.t_max_z > max_t:
+                    s.active = 0
+                    return s
+                s.vz = s.vz + s.step_z
+                s.t_max_z = s.t_max_z + s.t_delta_z
+
+        # Out of grid → done
+        if (s.vx < 0 or s.vx >= resolution or s.vy < 0 or s.vy >= resolution
+                or s.vz < 0 or s.vz >= resolution):
+            s.active = 0
+        return s
 
     @wp.kernel
     def _dda_trace_kernel(
@@ -152,176 +340,31 @@ if _warp_available:
     ):
         """Amanatides & Woo DDA: one GPU thread per ray.
 
-        Each thread computes the ray's entry into the grid via ray-AABB
-        intersection, initialises t_max and t_delta per axis, then steps
-        through voxels recording each unique cell visited. Traversal
-        stops when the ray exits the grid or exceeds max_t.
-
-        Hits are written to flat output arrays using an atomic counter
-        to avoid collisions between threads.
+        Traversal is shared via ``_dda_init``/``_dda_step``; this kernel
+        records each visited voxel to flat output arrays using an atomic
+        counter to avoid collisions between threads.
         """
         tid = wp.tid()
-        o = ray_origins[tid]
-        d = ray_dirs[tid]
-        inv_cell = 1.0 / cell_size
-        res_f = float(resolution)
+        s = _dda_init(ray_origins[tid], ray_dirs[tid], grid_origin,
+                      cell_size, resolution, max_t)
 
-        # --- Ray-AABB intersection to find entry/exit t -----------------
-        # Grid spans [grid_origin, grid_origin + resolution * cell_size]
-        t_near = 0.0
-        t_far = max_t
-
-        for axis in range(3):
-            o_a = o[axis]
-            d_a = d[axis]
-            lo = grid_origin[axis]
-            hi = lo + res_f * cell_size
-
-            if wp.abs(d_a) < 1.0e-12:
-                # Ray parallel to slab -- miss if origin outside
-                if o_a < lo or o_a >= hi:
-                    return
-            else:
-                inv_d = 1.0 / d_a
-                t1 = (lo - o_a) * inv_d
-                t2 = (hi - o_a) * inv_d
-                if t1 > t2:
-                    tmp = t1
-                    t1 = t2
-                    t2 = tmp
-                if t1 > t_near:
-                    t_near = t1
-                if t2 < t_far:
-                    t_far = t2
-                if t_near > t_far:
-                    return
-
-        if t_near < 0.0:
-            t_near = 0.0
-
-        # --- Initialise DDA at entry point ------------------------------
-        entry = wp.vec3(
-            o[0] + d[0] * t_near,
-            o[1] + d[1] * t_near,
-            o[2] + d[2] * t_near,
-        )
-
-        # Current voxel indices
-        vx = int(wp.floor((entry[0] - grid_origin[0]) * inv_cell))
-        vy = int(wp.floor((entry[1] - grid_origin[1]) * inv_cell))
-        vz = int(wp.floor((entry[2] - grid_origin[2]) * inv_cell))
-
-        # Clamp to valid range (entry point may land exactly on far boundary)
-        if vx >= resolution:
-            vx = resolution - 1
-        if vy >= resolution:
-            vy = resolution - 1
-        if vz >= resolution:
-            vz = resolution - 1
-        if vx < 0:
-            vx = 0
-        if vy < 0:
-            vy = 0
-        if vz < 0:
-            vz = 0
-
-        # Step direction (+1 or -1) and t_delta (t to cross one cell)
-        step_x = 1
-        step_y = 1
-        step_z = 1
-
-        if d[0] < 0.0:
-            step_x = -1
-        if d[1] < 0.0:
-            step_y = -1
-        if d[2] < 0.0:
-            step_z = -1
-
-        # t_max: t value at which the ray crosses the next cell boundary
-        # t_delta: t increment to traverse one full cell along this axis
-        #
-        # EPS: threshold to treat a direction component as zero (ray parallel
-        # to that axis).  Set far below float32 machine epsilon (~1e-7) so that
-        # any ray with a nonzero component is handled by the DDA stepper.
-        EPS = 1.0e-20
-
-        abs_dx = wp.abs(d[0])
-        abs_dy = wp.abs(d[1])
-        abs_dz = wp.abs(d[2])
-
-        if abs_dx > EPS:
-            if step_x > 0:
-                t_max_x = (grid_origin[0] + float(vx + 1) * cell_size - o[0]) / d[0]
-            else:
-                t_max_x = (grid_origin[0] + float(vx) * cell_size - o[0]) / d[0]
-            t_delta_x = cell_size / abs_dx
-        else:
-            t_max_x = 1.0e30
-            t_delta_x = 1.0e30
-
-        if abs_dy > EPS:
-            if step_y > 0:
-                t_max_y = (grid_origin[1] + float(vy + 1) * cell_size - o[1]) / d[1]
-            else:
-                t_max_y = (grid_origin[1] + float(vy) * cell_size - o[1]) / d[1]
-            t_delta_y = cell_size / abs_dy
-        else:
-            t_max_y = 1.0e30
-            t_delta_y = 1.0e30
-
-        if abs_dz > EPS:
-            if step_z > 0:
-                t_max_z = (grid_origin[2] + float(vz + 1) * cell_size - o[2]) / d[2]
-            else:
-                t_max_z = (grid_origin[2] + float(vz) * cell_size - o[2]) / d[2]
-            t_delta_z = cell_size / abs_dz
-        else:
-            t_max_z = 1.0e30
-            t_delta_z = 1.0e30
-
-        # --- Walk through voxels ----------------------------------------
         # Safety bound: a ray can cross at most 3 * resolution voxels
         max_steps = 3 * resolution
         for _step in range(max_steps):
+            if s.active == 0:
+                return
             # Record this voxel
-            if vx >= 0 and vx < resolution and vy >= 0 and vy < resolution and vz >= 0 and vz < resolution:
+            if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
+                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution):
                 idx = wp.atomic_add(hit_counter, 0, 1)
                 if idx < max_hits:
                     out_ray_ids[idx] = tid
-                    out_voxel_x[idx] = vx
-                    out_voxel_y[idx] = vy
-                    out_voxel_z[idx] = vz
-
-            # Advance to next voxel (smallest t_max wins)
-            if t_max_x < t_max_y:
-                if t_max_x < t_max_z:
-                    if t_max_x > max_t:
-                        return
-                    vx = vx + step_x
-                    t_max_x = t_max_x + t_delta_x
-                else:
-                    if t_max_z > max_t:
-                        return
-                    vz = vz + step_z
-                    t_max_z = t_max_z + t_delta_z
-            else:
-                if t_max_y < t_max_z:
-                    if t_max_y > max_t:
-                        return
-                    vy = vy + step_y
-                    t_max_y = t_max_y + t_delta_y
-                else:
-                    if t_max_z > max_t:
-                        return
-                    vz = vz + step_z
-                    t_max_z = t_max_z + t_delta_z
-
-            # Out of grid → done
-            if vx < 0 or vx >= resolution or vy < 0 or vy >= resolution or vz < 0 or vz >= resolution:
-                return
+                    out_voxel_x[idx] = s.vx
+                    out_voxel_y[idx] = s.vy
+                    out_voxel_z[idx] = s.vz
+            s = _dda_step(s, resolution, max_t)
 
 
-    # See PAIRED DDA KERNELS note above _dda_trace_kernel.
     @wp.kernel
     def _dda_fused_score_kernel(
         # Ray data
@@ -349,112 +392,24 @@ if _warp_available:
         - Deduplication (DDA visits each voxel exactly once per ray)
         """
         tid = wp.tid()
-        o = ray_origins[tid]
-        d = ray_dirs[tid]
         pid = ray_patch_ids[tid]
         w = patch_weights[pid]
-        inv_cell = 1.0 / cell_size
-        res_f = float(resolution)
         res_sq = resolution * resolution
-
-        # --- Ray-AABB intersection ---
-        t_near = 0.0
-        t_far = max_t
-        for axis in range(3):
-            o_a = o[axis]
-            d_a = d[axis]
-            lo = grid_origin[axis]
-            hi = lo + res_f * cell_size
-            if wp.abs(d_a) < 1.0e-12:
-                if o_a < lo or o_a >= hi:
-                    return
-            else:
-                inv_d = 1.0 / d_a
-                t1 = (lo - o_a) * inv_d
-                t2 = (hi - o_a) * inv_d
-                if t1 > t2:
-                    tmp = t1; t1 = t2; t2 = tmp
-                if t1 > t_near:
-                    t_near = t1
-                if t2 < t_far:
-                    t_far = t2
-                if t_near > t_far:
-                    return
-        if t_near < 0.0:
-            t_near = 0.0
-
-        # --- Init DDA ---
-        entry = wp.vec3(
-            o[0] + d[0] * t_near,
-            o[1] + d[1] * t_near,
-            o[2] + d[2] * t_near,
-        )
-        vx = int(wp.floor((entry[0] - grid_origin[0]) * inv_cell))
-        vy = int(wp.floor((entry[1] - grid_origin[1]) * inv_cell))
-        vz = int(wp.floor((entry[2] - grid_origin[2]) * inv_cell))
-        if vx >= resolution: vx = resolution - 1
-        if vy >= resolution: vy = resolution - 1
-        if vz >= resolution: vz = resolution - 1
-        if vx < 0: vx = 0
-        if vy < 0: vy = 0
-        if vz < 0: vz = 0
-
-        step_x = 1; step_y = 1; step_z = 1
-        if d[0] < 0.0: step_x = -1
-        if d[1] < 0.0: step_y = -1
-        if d[2] < 0.0: step_z = -1
-
-        EPS = 1.0e-20  # parallel-axis threshold (see first DDA kernel)
-        abs_dx = wp.abs(d[0]); abs_dy = wp.abs(d[1]); abs_dz = wp.abs(d[2])
-
-        if abs_dx > EPS:
-            if step_x > 0: t_max_x = (grid_origin[0] + float(vx + 1) * cell_size - o[0]) / d[0]
-            else:           t_max_x = (grid_origin[0] + float(vx) * cell_size - o[0]) / d[0]
-            t_delta_x = cell_size / abs_dx
-        else:
-            t_max_x = 1.0e30; t_delta_x = 1.0e30
-
-        if abs_dy > EPS:
-            if step_y > 0: t_max_y = (grid_origin[1] + float(vy + 1) * cell_size - o[1]) / d[1]
-            else:           t_max_y = (grid_origin[1] + float(vy) * cell_size - o[1]) / d[1]
-            t_delta_y = cell_size / abs_dy
-        else:
-            t_max_y = 1.0e30; t_delta_y = 1.0e30
-
-        if abs_dz > EPS:
-            if step_z > 0: t_max_z = (grid_origin[2] + float(vz + 1) * cell_size - o[2]) / d[2]
-            else:           t_max_z = (grid_origin[2] + float(vz) * cell_size - o[2]) / d[2]
-            t_delta_z = cell_size / abs_dz
-        else:
-            t_max_z = 1.0e30; t_delta_z = 1.0e30
+        s = _dda_init(ray_origins[tid], ray_dirs[tid], grid_origin,
+                      cell_size, resolution, max_t)
 
         # --- Walk and score ---
         max_steps = 3 * resolution
         for _step in range(max_steps):
-            if vx >= 0 and vx < resolution and vy >= 0 and vy < resolution and vz >= 0 and vz < resolution:
-                # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
-                flat_idx = vx * res_sq + vy * resolution + vz
-                wp.atomic_add(scores, flat_idx, w)
-
-            if t_max_x < t_max_y:
-                if t_max_x < t_max_z:
-                    if t_max_x > max_t: return
-                    vx = vx + step_x; t_max_x = t_max_x + t_delta_x
-                else:
-                    if t_max_z > max_t: return
-                    vz = vz + step_z; t_max_z = t_max_z + t_delta_z
-            else:
-                if t_max_y < t_max_z:
-                    if t_max_y > max_t: return
-                    vy = vy + step_y; t_max_y = t_max_y + t_delta_y
-                else:
-                    if t_max_z > max_t: return
-                    vz = vz + step_z; t_max_z = t_max_z + t_delta_z
-
-            if vx < 0 or vx >= resolution or vy < 0 or vy >= resolution or vz < 0 or vz >= resolution:
+            if s.active == 0:
                 return
+            if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
+                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution):
+                # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
+                flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
+                wp.atomic_add(scores, flat_idx, w)
+            s = _dda_step(s, resolution, max_t)
 
-    # See PAIRED DDA KERNELS note above _dda_trace_kernel.
     @wp.kernel
     def _dda_fused_count_kernel(
         # Ray data
@@ -477,107 +432,20 @@ if _warp_available:
         no overflow-retry re-tracing.
         """
         tid = wp.tid()
-        o = ray_origins[tid]
-        d = ray_dirs[tid]
-        inv_cell = 1.0 / cell_size
-        res_f = float(resolution)
         res_sq = resolution * resolution
-
-        # --- Ray-AABB intersection ---
-        t_near = 0.0
-        t_far = max_t
-        for axis in range(3):
-            o_a = o[axis]
-            d_a = d[axis]
-            lo = grid_origin[axis]
-            hi = lo + res_f * cell_size
-            if wp.abs(d_a) < 1.0e-12:
-                if o_a < lo or o_a >= hi:
-                    return
-            else:
-                inv_d = 1.0 / d_a
-                t1 = (lo - o_a) * inv_d
-                t2 = (hi - o_a) * inv_d
-                if t1 > t2:
-                    tmp = t1; t1 = t2; t2 = tmp
-                if t1 > t_near:
-                    t_near = t1
-                if t2 < t_far:
-                    t_far = t2
-                if t_near > t_far:
-                    return
-        if t_near < 0.0:
-            t_near = 0.0
-
-        # --- Init DDA ---
-        entry = wp.vec3(
-            o[0] + d[0] * t_near,
-            o[1] + d[1] * t_near,
-            o[2] + d[2] * t_near,
-        )
-        vx = int(wp.floor((entry[0] - grid_origin[0]) * inv_cell))
-        vy = int(wp.floor((entry[1] - grid_origin[1]) * inv_cell))
-        vz = int(wp.floor((entry[2] - grid_origin[2]) * inv_cell))
-        if vx >= resolution: vx = resolution - 1
-        if vy >= resolution: vy = resolution - 1
-        if vz >= resolution: vz = resolution - 1
-        if vx < 0: vx = 0
-        if vy < 0: vy = 0
-        if vz < 0: vz = 0
-
-        step_x = 1; step_y = 1; step_z = 1
-        if d[0] < 0.0: step_x = -1
-        if d[1] < 0.0: step_y = -1
-        if d[2] < 0.0: step_z = -1
-
-        EPS = 1.0e-20  # parallel-axis threshold (see first DDA kernel)
-        abs_dx = wp.abs(d[0]); abs_dy = wp.abs(d[1]); abs_dz = wp.abs(d[2])
-
-        if abs_dx > EPS:
-            if step_x > 0: t_max_x = (grid_origin[0] + float(vx + 1) * cell_size - o[0]) / d[0]
-            else:           t_max_x = (grid_origin[0] + float(vx) * cell_size - o[0]) / d[0]
-            t_delta_x = cell_size / abs_dx
-        else:
-            t_max_x = 1.0e30; t_delta_x = 1.0e30
-
-        if abs_dy > EPS:
-            if step_y > 0: t_max_y = (grid_origin[1] + float(vy + 1) * cell_size - o[1]) / d[1]
-            else:           t_max_y = (grid_origin[1] + float(vy) * cell_size - o[1]) / d[1]
-            t_delta_y = cell_size / abs_dy
-        else:
-            t_max_y = 1.0e30; t_delta_y = 1.0e30
-
-        if abs_dz > EPS:
-            if step_z > 0: t_max_z = (grid_origin[2] + float(vz + 1) * cell_size - o[2]) / d[2]
-            else:           t_max_z = (grid_origin[2] + float(vz) * cell_size - o[2]) / d[2]
-            t_delta_z = cell_size / abs_dz
-        else:
-            t_max_z = 1.0e30; t_delta_z = 1.0e30
+        s = _dda_init(ray_origins[tid], ray_dirs[tid], grid_origin,
+                      cell_size, resolution, max_t)
 
         # --- Walk and count ---
         max_steps = 3 * resolution
         for _step in range(max_steps):
-            if vx >= 0 and vx < resolution and vy >= 0 and vy < resolution and vz >= 0 and vz < resolution:
-                flat_idx = vx * res_sq + vy * resolution + vz
-                wp.atomic_add(counts, flat_idx, 1)
-
-            if t_max_x < t_max_y:
-                if t_max_x < t_max_z:
-                    if t_max_x > max_t: return
-                    vx = vx + step_x; t_max_x = t_max_x + t_delta_x
-                else:
-                    if t_max_z > max_t: return
-                    vz = vz + step_z; t_max_z = t_max_z + t_delta_z
-            else:
-                if t_max_y < t_max_z:
-                    if t_max_y > max_t: return
-                    vy = vy + step_y; t_max_y = t_max_y + t_delta_y
-                else:
-                    if t_max_z > max_t: return
-                    vz = vz + step_z; t_max_z = t_max_z + t_delta_z
-
-            if vx < 0 or vx >= resolution or vy < 0 or vy >= resolution or vz < 0 or vz >= resolution:
+            if s.active == 0:
                 return
+            if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
+                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution):
+                flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
+                wp.atomic_add(counts, flat_idx, 1)
+            s = _dda_step(s, resolution, max_t)
 
     @wp.kernel
     def _parity_voxelize_kernel(
@@ -639,15 +507,21 @@ if _warp_available:
             if not q.result:
                 break
             t_hit = t_off + q.t
+            # The fixed eps is absorbed by float32 rounding once t_hit
+            # exceeds ~2000 cells (eps < 0.5 ULP), which would restart the
+            # query at the exact hit point and freeze the traversal on one
+            # triangle.  Scale the advance with t_hit (1e-6 ~ 8 ULPs) so it
+            # always moves past the hit.
+            eps_t = wp.max(eps, t_hit * 1.0e-6)
 
             # Mark the surface voxel on the SOLID side of the crossing:
             # nudge the hit point forward when entering, backward when
             # exiting.  Without the nudge, a surface lying exactly on a
             # voxel boundary would be assigned to the outside voxel.
             if inside == 0:
-                p = ro + rd * (t_hit + eps)
+                p = ro + rd * (t_hit + eps_t)
             else:
-                p = ro + rd * (t_hit - eps)
+                p = ro + rd * (t_hit - eps_t)
             hx = int(wp.floor((p[0] - grid_origin[0]) / cell_size))
             hy = int(wp.floor((p[1] - grid_origin[1]) / cell_size))
             hz = int(wp.floor((p[2] - grid_origin[2]) / cell_size))
@@ -673,7 +547,7 @@ if _warp_available:
             else:
                 entry_pos = pos
             inside = 1 - inside
-            t_off = t_hit + eps
+            t_off = t_hit + eps_t
 
 
 def voxelize_solid_warp(

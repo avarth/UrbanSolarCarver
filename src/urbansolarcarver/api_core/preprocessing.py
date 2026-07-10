@@ -71,28 +71,42 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
         Per-sky-patch weights (weighted modes only).
     """
     mode = conf.mode
+    spec = MODES.get(mode)
+    if spec is None:
+        raise ValueError(
+            f"Unknown mode '{mode}' — not registered in mode_registry.MODES"
+        )
     if mode in MODES_NEEDING_PERIOD:
         datetimes, hoys = sample_period(conf)
     else:
         datetimes, hoys = [], []
 
-    if mode == "time-based":
-        _carved, _ro, _rd, counts = carve_with_sun_rays(
-            voxel_grid, origin, extent, resolution, pts, norms, conf, datetimes,
-            return_counts=True,
-        )
-        return counts.astype(np.float32), "violation_count", 0.0, None
-    if mode == "tilted_plane":
-        _carved, _ro, _rd, counts = carve_with_planes(
-            voxel_grid, origin, extent, resolution, pts, norms, conf,
-            return_counts=True,
-        )
-        return counts.astype(np.float32), "violation_count", 0.0, None
+    # Route by the registry's score_kind (single source of truth) so a new
+    # violation-count mode fails loudly here instead of silently falling
+    # through to the weighted sky-patch carver.
+    if spec.score_kind == "violation_count":
+        if mode == "time-based":
+            _carved, _ro, _rd, counts = carve_with_sun_rays(
+                voxel_grid, origin, extent, resolution, pts, norms, conf,
+                datetimes, return_counts=True,
+            )
+        elif mode == "tilted_plane":
+            _carved, _ro, _rd, counts = carve_with_planes(
+                voxel_grid, origin, extent, resolution, pts, norms, conf,
+                return_counts=True,
+            )
+        else:
+            raise NotImplementedError(
+                f"mode '{mode}' declares score_kind='violation_count' but has "
+                f"no carver wired in _compute_raw_scores"
+            )
+        return counts.astype(np.float32), spec.score_kind, 0.0, None
 
+    # weighted_sum: all sky-patch modes share one carver.
     carve_out = carve_with_sky_patch_rays(
         voxel_grid, origin, extent, resolution, pts, norms, conf, hoys
     )
-    return carve_out.raw_voxel_scores, "weighted_sum", None, carve_out.patch_weights
+    return carve_out.raw_voxel_scores, spec.score_kind, None, carve_out.patch_weights
 
 
 def preprocessing(

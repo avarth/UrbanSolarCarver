@@ -67,6 +67,28 @@ class TestCarveFractionThreshold:
         assert thr == _reference_argsort_threshold(flat, 0.5) == 5.0
         assert not (flat > thr).any()
 
+    def test_nan_scores_do_not_crash(self):
+        """Non-finite scores must not crash (np.histogram raises on a NaN
+        range); they are always carved downstream, so the cutoff is the
+        one computed over the finite subset."""
+        rng = np.random.default_rng(3)
+        flat = rng.uniform(0, 100, 10_000).astype(np.float32)
+        flat[::97] = np.nan
+        thr = carve_fraction_threshold(flat, 0.5)
+        assert np.isfinite(thr)
+        assert thr == carve_fraction_threshold(flat[np.isfinite(flat)], 0.5)
+
+    def test_inf_scores_do_not_crash(self):
+        rng = np.random.default_rng(4)
+        flat = rng.uniform(0, 100, 10_000).astype(np.float32)
+        flat[::53] = np.inf
+        thr = carve_fraction_threshold(flat, 0.5)
+        assert np.isfinite(thr)
+        assert thr == carve_fraction_threshold(flat[np.isfinite(flat)], 0.5)
+
+    def test_all_nonfinite_returns_zero(self):
+        assert carve_fraction_threshold(np.full(100, np.nan, dtype=np.float32), 0.5) == 0.0
+
 
 # --- Head-tail threshold ---
 
