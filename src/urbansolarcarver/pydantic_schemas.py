@@ -208,7 +208,6 @@ class UserConfig(BaseModel):
 
     # sky model parameters
     north_deg: float = Field(0.0, ge=0.0, lt=360.0, description="North direction in degrees clockwise from Y-axis (0 = Y-up is north)")
-    ground_reflectance: float = Field(0.2, ge=0.0, le=1.0, description="Ground surface reflectance for sky model (0-1)")
 
     # grid & ray parameters
     voxel_size:    float = Field(1.0, ge=0.01, le=100.0, description="Voxel edge length (m), 0.01–100")
@@ -305,8 +304,42 @@ class UserConfig(BaseModel):
         ),
     )
     # benefit parameters
-    balance_temperature: float = Field(20.0, description="Balance temperature for benefit mode (°C)")
-    balance_offset:      float = Field( 2.0, description="Balance offset for benefit mode (°C)")
+    balance_temperature: float = Field(
+        15.0,
+        description=(
+            "Free-running balance-point temperature (°C) for benefit mode: "
+            "solar gains are credited only in hours with outdoor temperature "
+            "below balance_temperature - balance_offset. Default 15 follows "
+            "Ladybug (typical range: ~12 commercial to ~18 residential; "
+            "older, poorly insulated stock can sit higher). Derive "
+            "project-specific values with the Honeybee/E+ balance-point "
+            "workflow."
+        ),
+    )
+    balance_offset: float = Field(
+        2.0, ge=0.0,
+        description=(
+            "Dead-band (°C) below the balance point for benefit mode; hours "
+            "warmer than balance_temperature - balance_offset are not "
+            "credited. Must be >= 0 (0 = no dead-band)."
+        ),
+    )
+    include_harm: bool = Field(
+        False,
+        description=(
+            "benefit mode only, EXPERIMENTAL. False (default): weights use "
+            "the documented heating-benefit formula — radiation of cold "
+            "hours only; warm hours in the analysis period contribute "
+            "nothing (period-stable, recommended). True: reproduce "
+            "Ladybug's composite radiation-benefit concept — hot-hour "
+            "(T > balance + offset) radiation is subtracted per sky patch "
+            "and the result clipped at zero. Results then depend on how "
+            "much of the warm season the analysis period includes, and "
+            "patches whose summer harm exceeds winter benefit drop to zero "
+            "weight (harm never rewards mass: shading value cannot be a "
+            "carving force)."
+        ),
+    )
 
     # misc
     diagnostics: bool = Field(

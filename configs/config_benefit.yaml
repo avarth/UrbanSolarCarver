@@ -11,7 +11,10 @@ out_dir:            "path/to/output"
 
 mode: benefit
 
-# Analysis period — heating season (ladybug AnalysisPeriod.to_dict() can be pasted here)
+# Analysis period (ladybug AnalysisPeriod.to_dict() can be pasted here).
+# A FULL-YEAR period is safe and natural for benefit mode: the balance
+# filter selects the beneficial (cold) hours by itself. A heating-season
+# window like the one below merely reduces compute time.
 analysis_period:
   st_month:  10
   st_day:    15
@@ -21,8 +24,17 @@ analysis_period:
   end_hour:  19
 
 # Benefit parameters
-balance_temperature: 20.0   # °C — building balance point
-balance_offset:       2.0   # °C — dead-band around balance point
+balance_temperature: 15.0   # °C — free-running balance point (Ladybug default;
+                            # typ. ~12 commercial to ~18 residential, higher for
+                            # older poorly insulated stock). Derive project-specific
+                            # values with the Honeybee/E+ balance-point workflow.
+balance_offset:       2.0   # °C — dead-band below the balance point (>= 0)
+# include_harm: false       # EXPERIMENTAL. true = Ladybug's composite concept:
+#                           # hot-hour (T > balance + offset) radiation is
+#                           # subtracted per sky patch, clipped at zero. Results
+#                           # then depend on how much warm season the analysis
+#                           # period includes. Default false = cold-hour benefit
+#                           # only (period-stable, recommended).
 
 # Grid (adjust voxel_size for resolution vs speed)
 voxel_size: 1.0

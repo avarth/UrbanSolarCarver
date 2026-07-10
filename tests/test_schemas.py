@@ -373,19 +373,31 @@ class TestNorthDegAndGroundReflectance:
         with pytest.raises(ValidationError):
             _make_config(north_deg=360.0)
 
-    def test_ground_reflectance_default(self):
+    def test_ground_reflectance_removed(self):
+        """ground_reflectance never affected results and was removed; the
+        strict schema (extra='forbid') must reject configs that carry it."""
+        with pytest.raises(ValidationError, match="ground_reflectance"):
+            _make_config(ground_reflectance=0.2)
+
+
+class TestBenefitParams:
+    def test_balance_defaults_follow_ladybug(self):
         cfg = _make_config()
-        assert cfg.ground_reflectance == 0.2
+        assert cfg.balance_temperature == 15.0
+        assert cfg.balance_offset == 2.0
 
-    def test_ground_reflectance_bounds(self):
-        cfg = _make_config(ground_reflectance=0.0)
-        assert cfg.ground_reflectance == 0.0
-        cfg = _make_config(ground_reflectance=1.0)
-        assert cfg.ground_reflectance == 1.0
+    def test_negative_balance_offset_rejected(self):
+        """A negative offset would silently invert the dead-band."""
+        with pytest.raises(ValidationError, match="balance_offset"):
+            _make_config(balance_offset=-1.0)
 
-    def test_ground_reflectance_out_of_range(self):
-        with pytest.raises(ValidationError):
-            _make_config(ground_reflectance=1.5)
+    def test_zero_offset_allowed(self):
+        cfg = _make_config(balance_offset=0.0)
+        assert cfg.balance_offset == 0.0
+
+    def test_include_harm_default_false(self):
+        cfg = _make_config()
+        assert cfg.include_harm is False
 
 
 class TestEnvVarFallback:

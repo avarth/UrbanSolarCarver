@@ -9,9 +9,9 @@ _EXPECTED_MODE_PARAMS = {
     "tilted_plane": {"tilted_plane_angle_deg"},
     "time-based": {"epw_path", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "min_altitude"},
     "irradiance": {"epw_path", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "min_altitude"},
-    "benefit": {"epw_path", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "min_altitude", "balance_temperature", "balance_offset"},
+    "benefit": {"epw_path", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "min_altitude", "balance_temperature", "balance_offset", "include_harm"},
     "daylight": set(),  # CIE overcast sky — geometry only, no EPW needed
-    "radiative_cooling": {"epw_path", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "dew_point_celsius", "bliss_k"},
+    "radiative_cooling": {"epw_path", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "dew_point_celsius", "bliss_k", "min_sky_elevation_deg"},
 }
 
 

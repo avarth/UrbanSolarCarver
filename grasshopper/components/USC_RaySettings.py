@@ -10,8 +10,6 @@ north_deg : float, optional
     North direction in degrees clockwise from Y-axis. Default: 0.0
     (Y-up is north). Rotates the sky dome / sun positions to match
     your model's orientation.
-ground_reflectance : float, optional
-    Ground surface albedo for the sky model (0-1). Default: 0.2
 
 Outputs
 -------
@@ -29,7 +27,6 @@ try:
         ("ray_length", "Maximum distance each ray travels, in meters. Must be long enough to reach from test surfaces through the entire max volume. Default: 300 m. Increase for very large sites."),
         ("min_altitude", "Minimum sun altitude angle in degrees above the horizon. Sun positions below this angle are ignored (they would hit the ground anyway). Default: 5 deg. Range: 0-20 deg."),
         ("north_deg", "North direction in degrees clockwise from the Y-axis. 0 = Y-up is north (Rhino default). Set this to match your model's orientation. E.g. if your model's north points along +X, set to 90."),
-        ("ground_reflectance", "Ground surface reflectance (albedo) for the sky model. 0.0 = black ground, 1.0 = perfectly reflective. Default: 0.2 (typical urban). Affects ground-reflected diffuse radiation."),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d
@@ -37,12 +34,15 @@ try:
 except Exception:
     pass
 
+# NOTE: ground_reflectance was removed — it never affected USC results (the
+# sky-patch pipeline reads only the 145 sky values; the ground-reflected
+# component is a RadiationStudy concept USC does not run). Old canvases may
+# still show the input; it is intentionally not read here.
 _items = []
 for key, val in [
     ("ray_length", ray_length),
     ("min_altitude", min_altitude),
     ("north_deg", north_deg),
-    ("ground_reflectance", ground_reflectance),
 ]:
     if val is not None:
         _items.append(f"{key}={float(val)}")

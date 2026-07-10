@@ -25,11 +25,11 @@ def get_weights(
     hoys: Sequence[int] = None,
     dew_point_celsius: float = 10.0,
     bliss_k: float = 1.8,
-    ground_reflectance: float = 0.2,
     balance_temperature: float = 15.0,
     balance_offset: float = 2.0,
     north_deg: float = 0.0,
     min_sky_elevation_deg: float = 0.0,
+    include_harm: bool = False,
 ) -> torch.Tensor:
     """
     Build a vector of weights for each sky patch, according to a chosen analysis mode.
@@ -46,9 +46,8 @@ def get_weights(
       hoys : Hour-of-year indices for EPW sampling.
       dew_point_celsius: Parameter for radiative cooling estimation.
       bliss_k: Angular-attenuation constant for radiative cooling.
-      ground_reflectance: Reflectivity coefficient of ground surface.
-      balance_temperature: Indoor-outdoor temperature threshold for comfort benefit.
-      balance_offset: Temperature offset for comfort benefit.
+      balance_temperature: Free-running balance-point temperature for benefit mode.
+      balance_offset: Dead-band below the balance point for benefit mode.
 
     Returns:
       Tensor of length V (number of sky patches) with the computed weight for each patch.
@@ -77,7 +76,6 @@ def get_weights(
             None,              # epw_path not used by daylight
             None,              # hoys not used by daylight
             torch.device(device),
-            ground_reflectance,
             balance_temperature,
             balance_offset,
             north=north_deg,
@@ -94,10 +92,10 @@ def get_weights(
             epw_file,
             hoys,
             torch.device(device),
-            ground_reflectance,
             balance_temperature,
             balance_offset,
             north=north_deg,
+            include_harm=include_harm,
         )
 
     # Raise error for unsupported modes

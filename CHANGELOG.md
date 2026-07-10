@@ -7,6 +7,42 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Benefit mode now implements its documented formula exactly (by
+  default)**: patch weights are a plain cumulative irradiance matrix over
+  the hours below `balance_temperature − balance_offset` (Heaviside filter
+  on EPW dry-bulb). Previously the weights were always Ladybug's signed
+  benefit−harm net clipped at zero, which silently let hot-hour radiation
+  erode winter weights and made results depend on whether the analysis
+  period included summer. A full-year analysis period is now safe and
+  natural — the balance filter selects the beneficial hours by itself.
+  The composite remains available as a declared, opt-in experiment:
+  `include_harm: true` subtracts hot-hour radiation per patch (clipped at
+  zero, dead-band hours count for neither side), with its period-dependence
+  documented. Shading value is deliberately never a carving force — with
+  signed retention, every voxel along a hot-hour ray earns shade credit, so
+  the "optimal" envelope keeps whole sun-path prisms (cave-like volumes).
+- `balance_temperature` default changed from 20 to **15 °C** (Ladybug's
+  default; typical range ~12 commercial to ~18 residential, higher for
+  older poorly insulated stock). Derive project-specific values via the
+  Honeybee/E+ balance-point workflow.
+- `balance_offset` now validates `>= 0` (a negative offset silently inverted
+  the dead-band into inverted hour classification).
+- Benefit mode warns loudly and returns all-zero weights when the analysis
+  period contains no beneficial hours (previously this fell through toward a
+  degenerate carve with only a generic downstream warning; an empty hour
+  list must also never reach Ladybug, which treats it as "whole year").
+
+### Removed
+
+- **`ground_reflectance` config field** — it never affected results: Ladybug
+  SkyMatrix only stores it as metadata for RadiationStudy, which USC does
+  not run, and USC's ray casting targets sky patches only. Configs carrying
+  the key now fail validation with a clear message; remove the line. The
+  USC_RaySettings Grasshopper component no longer emits it (old canvases
+  keep the input; it is ignored).
+
 ### Added
 
 - **`edge_taper` design constraint** (all weighted sky-patch modes): sample

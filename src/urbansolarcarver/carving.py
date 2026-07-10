@@ -494,11 +494,11 @@ def carve_with_sky_patch_rays(
             hoys=hoys,
             dew_point_celsius=config.dew_point_celsius,
             bliss_k=config.bliss_k,
-            ground_reflectance=config.ground_reflectance,
             balance_temperature=config.balance_temperature,
             balance_offset=config.balance_offset,
             north_deg=config.north_deg,
             min_sky_elevation_deg=config.min_sky_elevation_deg,
+            include_harm=config.include_harm,
         )
 
     if sess:
@@ -512,8 +512,8 @@ def carve_with_sky_patch_rays(
             "balance_T": config.balance_temperature,
             "balance_off": config.balance_offset,
             "north": config.north_deg,
-            "ground_refl": config.ground_reflectance,
             "min_elev": config.min_sky_elevation_deg,
+            "incl_harm": config.include_harm,
         }
         cache_key = "patch_weights:" + hashlib.md5(
             json.dumps(key_payload, sort_keys=True).encode()

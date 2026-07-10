@@ -75,3 +75,94 @@ def test_smoke_epw_modes(tmp_path, tmp_mesh_files, example_epw_path, mode, extra
     import trimesh
     mesh = trimesh.load(str(result.export_path))
     assert len(mesh.vertices) > 0
+
+
+# --- Benefit weight semantics (documented Heaviside formula) ---
+
+class TestBenefitWeights:
+    def test_benefit_equals_irradiance_over_cold_hours(self, example_epw_path):
+        """The benefit weights must equal a plain irradiance matrix computed
+        over exactly the hours below balance_temperature - balance_offset —
+        the documented formula, with no hidden harm subtraction."""
+        import torch
+        from ladybug.epw import EPW
+        from urbansolarcarver.sky_patches import compute_EPW_based_weights
+
+        # Shoulder-season days: a genuine mix of cold and warm hours.
+        hoys = list(range(24 * 100, 24 * 110))  # ~April 10-20
+        bal, off = 15.0, 2.0
+        dbt = EPW(str(example_epw_path)).dry_bulb_temperature.values
+        cold = [h for h in hoys if dbt[h] < bal - off]
+        assert cold, "expected some cold hours in the test window"
+        assert len(cold) < len(hoys), "expected some warm hours in the test window"
+
+        w_benefit = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            balance_temperature=bal, balance_offset=off,
+        )
+        w_cold_irr = compute_EPW_based_weights(
+            "irradiance", str(example_epw_path), cold, torch.device("cpu"),
+        )
+        torch.testing.assert_close(w_benefit, w_cold_irr, rtol=1e-5, atol=1e-3)
+
+    def test_no_cold_hours_warns_and_returns_zeros(self, example_epw_path):
+        """An analysis period with no beneficial hours must warn loudly and
+        return all-zero weights — NOT fall through to Ladybug, which treats
+        an empty hoy list as the whole year."""
+        import torch
+        from urbansolarcarver.sky_patches import compute_EPW_based_weights
+
+        hoys = list(range(24 * 190, 24 * 195))  # July days
+        with pytest.warns(UserWarning, match="no hours in the analysis period"):
+            w = compute_EPW_based_weights(
+                "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+                balance_temperature=-60.0, balance_offset=0.0,
+            )
+        assert float(w.sum()) == 0.0
+        assert w.shape[0] == 145
+
+    def test_include_harm_composite(self, example_epw_path):
+        """include_harm=True must equal clip(cold-hour matrix − hot-hour
+        matrix, 0), and can only reduce weights vs the default formula."""
+        import torch
+        from ladybug.epw import EPW
+        from urbansolarcarver.sky_patches import compute_EPW_based_weights
+
+        # Wide shoulder-to-summer window: guaranteed hot AND cold hours.
+        hoys = list(range(24 * 100, 24 * 200))  # ~April 10 – July 19
+        bal, off = 15.0, 2.0
+        dbt = EPW(str(example_epw_path)).dry_bulb_temperature.values
+        cold = [h for h in hoys if dbt[h] < bal - off]
+        hot = [h for h in hoys if dbt[h] > bal + off]
+        assert cold and hot, "expected a cold/hot mix in the test window"
+
+        w_default = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            balance_temperature=bal, balance_offset=off,
+        )
+        w_composite = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            balance_temperature=bal, balance_offset=off, include_harm=True,
+        )
+        w_hot = compute_EPW_based_weights(
+            "irradiance", str(example_epw_path), hot, torch.device("cpu"),
+        )
+        expected = torch.clamp(w_default - w_hot, min=0.0)
+        torch.testing.assert_close(w_composite, expected, rtol=1e-5, atol=1e-3)
+        assert (w_composite <= w_default + 1e-6).all()
+        assert float(w_composite.sum()) < float(w_default.sum())
+
+    def test_include_harm_noop_without_hot_hours(self, example_epw_path):
+        """With a cold-only window the composite equals the default formula
+        (and the empty hot-hour list must never reach Ladybug)."""
+        import torch
+        from urbansolarcarver.sky_patches import compute_EPW_based_weights
+
+        hoys = list(range(24 * 5, 24 * 15))  # early January
+        kw = dict(balance_temperature=15.0, balance_offset=2.0)
+        w_default = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"), **kw)
+        w_composite = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            include_harm=True, **kw)
+        torch.testing.assert_close(w_composite, w_default)

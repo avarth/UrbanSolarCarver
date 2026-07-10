@@ -37,7 +37,6 @@ min_sky_elevation_deg: 0.0 # radiative_cooling only: design-constraint protectio
 
 # Sky model parameters
 north_deg: 0.0             # North direction in degrees clockwise from Y-axis (0 = Y-up is north)
-ground_reflectance: 0.2    # Ground surface reflectance for sky model (0-1)
 
 # Voxel grid and sampling
 voxel_size:     1.0    # length of cube edge
@@ -87,8 +86,15 @@ threshold: 'carve_fraction'
 carve_fraction: 0.7
 
 # Benefit mode settings (used when mode: benefit)
-balance_temperature: 20.0      # °C, for benefit mode
-balance_offset:      2.0       # °C, for benefit mode
+balance_temperature: 15.0      # °C — free-running balance point; gains credited when T_air < balance - offset.
+                               # Ladybug default 15 (typ. ~12 commercial to ~18 residential; older, poorly
+                               # insulated stock can sit higher). Derive per project via the Honeybee/E+
+                               # balance-point workflow.
+balance_offset:      2.0       # °C — dead-band below the balance point (>= 0)
+include_harm:        false     # EXPERIMENTAL (benefit only). true = Ladybug's composite concept: hot-hour
+                               # (T > balance + offset) radiation subtracted per patch, clipped at zero.
+                               # Results then depend on how much warm season the period includes.
+                               # false (default) = cold-hour benefit only (period-stable, recommended).
 
 
 # Diagnostics and devices

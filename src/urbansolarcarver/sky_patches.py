@@ -254,10 +254,10 @@ def compute_EPW_based_weights(
     epw_path: str,                                          # file path to EPW weather data
     hoys: Sequence[float],                                   # hour-of-year indices
     device: torch.device = None,                               # output tensor device (default: auto-detect)
-    ground_reflectance: float = 0.2,                        # reflectivity coefficient
     balance_temperature: float = 15.0,                      # benefit model balance temperature (°C)
     balance_offset: float = 2.0,                            # benefit model +/- offset (°C)
     north: float = 0.0,                                     # north direction (degrees CW from +Y, USC convention)
+    include_harm: bool = False,                             # benefit only: subtract hot-hour radiation (clipped at 0)
 ) -> torch.Tensor:
     """
     Return a vector of sky-patch weights (length P) derived from
@@ -299,18 +299,32 @@ def compute_EPW_based_weights(
       where E_dirᵢₜ is direct beam contribution and E_difᵢₜ
       diffuse.
 
-    * benefit — Uses Ladybug's heating-benefit framework
-      implemented in 'SkyMatrix.from_components_benefit', whereby only
-      solar gains occurring when Tₐ < T_bal - ΔT are credited:
+    * benefit — Heating-benefit filter: only solar gains occurring in
+      hours cold enough to offset heating demand are credited,
 
           wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) · H( T_bal - ΔT - Tₐₜ )
 
-      with Heaviside switch H. 'balance_temperature'
-      (T_bal) and 'balance_offset' (ΔT) loosely represent the
-      building's heating set-point and internal gains.
-      A Grasshopper/Ladybug simple E+ workflow is included. It
-      can be used to derive project-specific balance temperatures.
-      
+      with Heaviside switch H.  Implemented by selecting the cold hours
+      from the EPW dry-bulb series and building a plain cumulative
+      irradiance SkyMatrix over exactly those hours, so the formula
+      above IS the implementation (period-stable: warm hours in the
+      analysis period contribute nothing).
+      With ``include_harm=True`` (opt-in, experimental) the weights
+      instead reproduce Ladybug's composite radiation-benefit concept:
+      hot-hour (Tₐ > T_bal + ΔT) radiation is subtracted per patch and
+      the result clipped at zero,
+
+          wᵢ = max( Σ_cold E − Σ_hot E , 0 )
+
+      Results then depend on how much of the warm season the analysis
+      period includes, and a patch's weight erodes only to zero, never
+      below — shading value cannot be a carving force.
+      'balance_temperature' (T_bal) is the building's free-running
+      balance point — derive project-specific values with the
+      Honeybee/E+ balance-point workflow; 'balance_offset' (ΔT) is the
+      dead-band around it (hours inside the band count for neither
+      side).
+
     Parameters
     ----------
     mode : {'time-based', 'daylight', 'irradiance', 'benefit'}
@@ -318,15 +332,15 @@ def compute_EPW_based_weights(
     epw_path : str
         Path to an EPW file.  Required for *irradiance* and *benefit*.
     hoys : Sequence[float]
-        Hour-of-year indices to sample.
+        Hour-of-year indices to sample.  For *benefit*, a full-year
+        period is safe and natural: the balance filter selects the
+        beneficial hours by itself.
     device : torch.device, default 'cuda' if available else 'cpu'
         Compute device for the returned tensor.
-    ground_reflectance : float, default 0.2
-        Lambertian ground albedo used by Perez model.
     balance_temperature : float, default 15 °C
-        Base-temperature for the heating-benefit filter.
+        Free-running balance-point temperature for the benefit filter.
     balance_offset : float, default 2 °C
-        Dead-band between comfort set-point and base temperature.
+        Dead-band below the balance point.
 
     Returns
     -------
@@ -354,9 +368,9 @@ def compute_EPW_based_weights(
       *Solar Energy* 44(5): 271-289.
     * Darula, S. & Kittler, R. 2002. "CIE general sky standard defining
       luminance distributions." *Proceedings eSim* 11: 13.
-    * Ladybug Tools. "SkyMatrix.from_components_benefit" — heating-benefit
-      sky matrix filtering hours by balance-point temperature.
-      https://www.ladybug.tools/ladybug/docs/ladybug.skymatrix.html
+    * Ladybug Tools. "SkyMatrix" — cumulative Radiance sky matrix
+      (gendaymtx / Perez all-weather).
+      https://www.ladybug.tools/ladybug-radiance/docs/
     """
     
     # --- 0. resolve device --------------------------------------------------------
@@ -416,7 +430,6 @@ def compute_EPW_based_weights(
             hoys=hoys,
             north=lb_north,
             high_density=False,
-            ground_reflectance=ground_reflectance
         )
         direct  = np.clip(np.asarray(sky.direct_values,  dtype=np.float32), 0.0, None)
         diffuse = np.clip(np.asarray(sky.diffuse_values, dtype=np.float32), 0.0, None)
@@ -430,39 +443,85 @@ def compute_EPW_based_weights(
     if key == 'benefit':
         from ladybug.epw import EPW
 
-        # Same as irradiance: Ladybug's SkyMatrix already includes solid
-        # angles in the Wh/m² benefit values — no Ωᵢ multiply needed.
-
-        # 1) Read EPW and sky‐matrix generator
-        weather   = EPW(epw_path)
-        SkyMatrix = _load_sky_matrix()
- 
-        # 2) Build the benefit sky matrix (145 patches)
-        sky = SkyMatrix.from_components_benefit(
-            weather.location,                         # location (lat, lon, tz)
-            weather.direct_normal_radiation,          # DNI series (W/m²)
-            weather.diffuse_horizontal_radiation,     # DHI series (W/m²)
-            weather.dry_bulb_temperature,             # air temp series (°C)
-            balance_temperature,                      # balance T for heating (°C)
-            balance_offset,                           # dead-band offset (°C)
-            hoys=hoys,                                # hours-of-year to include
-            north=lb_north,                           # Ladybug convention (CCW from +Y)
-            high_density=False,                       # force Tregenza 145-patch grid
-            ground_reflectance=ground_reflectance     # ground albedo (0–1)
-        )
-
-        # 3) Extract the cleaned per-patch direct and diffuse benefit values
-        direct  = np.clip(np.asarray(sky.direct_values,  dtype=np.float32), 0.0, None)
-        diffuse = np.clip(np.asarray(sky.diffuse_values, dtype=np.float32), 0.0, None)
-
-        # 4) Sum them to get the total un-normalized weight per patch
-        weights_np = direct + diffuse
-        if weights_np.shape[0] != P:
-            raise RuntimeError(
-                f"SkyMatrix returned {weights_np.shape[0]} patches, expected {P}"
+        # Heating-benefit filter — this IS the documented formula:
+        #     wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) · H(T_bal − ΔT − Tₐₜ)
+        # The hour selection happens here (dry-bulb from the EPW); the sky
+        # matrix is then a plain cumulative irradiance matrix over exactly
+        # those cold hours.  Harmful (hot-hour) radiation does not enter
+        # the weights at all: shading value cannot be expressed as a
+        # carving force without producing physically meaningless "shade
+        # volumes" — evaluate it as a separate irradiance analysis over
+        # hot hours instead.
+        weather = EPW(epw_path)
+        dry_bulb = weather.dry_bulb_temperature.values  # hourly °C, len 8760
+        t_cutoff = float(balance_temperature) - float(balance_offset)
+        cold_hoys = [
+            h for h in hoys_list
+            if int(h) < len(dry_bulb) and dry_bulb[int(h)] < t_cutoff
+        ]
+        if not cold_hoys:
+            # IMPORTANT: do not fall through to Ladybug with an empty hoy
+            # list — SkyMatrix treats [] as "the whole year".
+            import warnings
+            warnings.warn(
+                f"benefit mode: no hours in the analysis period are below "
+                f"balance_temperature - balance_offset = {t_cutoff:g} °C, "
+                f"so all patch weights are zero and the carve will be "
+                f"degenerate. Widen the analysis period or check "
+                f"balance_temperature.",
+                stacklevel=2,
             )
+            return torch.zeros(P, device=device)
 
-        # 5) Convert to a torch tensor on the target device
+        SkyMatrix = _load_sky_matrix()
+
+        def _cumulative_patch_matrix(sel_hoys):
+            # Ladybug's SkyMatrix already includes solid angles in the
+            # Wh/m² values — no Ωᵢ multiply needed (same as irradiance).
+            # Clip guards against small negative values from gendaymtx
+            # numerical noise; all physical values are non-negative here.
+            sky = SkyMatrix.from_epw(
+                epw_path, hoys=sel_hoys, north=lb_north, high_density=False,
+            )
+            d = np.clip(np.asarray(sky.direct_values,  dtype=np.float32), 0.0, None)
+            f = np.clip(np.asarray(sky.diffuse_values, dtype=np.float32), 0.0, None)
+            w = d + f
+            if w.shape[0] != P:
+                raise RuntimeError(
+                    f"SkyMatrix returned {w.shape[0]} patches, expected {P}"
+                )
+            return w
+
+        weights_np = _cumulative_patch_matrix(cold_hoys)
+
+        if include_harm:
+            # Opt-in composite (Ladybug's radiation-benefit concept):
+            # subtract hot-hour radiation per patch and clip at zero.
+            # EXPERIMENTAL semantics, declared in the config docs:
+            #   * results depend on how much of the warm season the
+            #     analysis period includes;
+            #   * harm erodes a patch's weight only to zero, never below
+            #     (shading value cannot be a carving force — see above).
+            t_hot = float(balance_temperature) + float(balance_offset)
+            hot_hoys = [
+                h for h in hoys_list
+                if int(h) < len(dry_bulb) and dry_bulb[int(h)] > t_hot
+            ]
+            if hot_hoys:  # empty list must never reach Ladybug (= full year)
+                weights_np = np.clip(
+                    weights_np - _cumulative_patch_matrix(hot_hoys), 0.0, None
+                )
+                if not weights_np.any():
+                    import warnings
+                    warnings.warn(
+                        "benefit mode (include_harm=true): hot-hour harm "
+                        "exceeds cold-hour benefit for every sky patch — all "
+                        "weights are zero and the carve will be degenerate. "
+                        "Narrow the analysis period or use "
+                        "include_harm=false.",
+                        stacklevel=2,
+                    )
+
         return torch.from_numpy(weights_np).to(device)
 
     raise ValueError(f"Unsupported weighting mode '{mode}' requested.")
