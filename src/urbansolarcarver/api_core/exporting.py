@@ -113,11 +113,31 @@ def exporting(
     mask_path = Path(thr_manifest.mask_path)
 
     # Load preprocessing manifest for grid metadata
-    pre_manifest = schema_from_json(PreprocessingManifest, Path(thr_manifest.upstream_manifest).read_text(encoding="utf-8"))
+    upstream_path = Path(thr_manifest.upstream_manifest)
+    try:
+        pre_manifest = schema_from_json(PreprocessingManifest, upstream_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(
+            f"Unable to load the preprocessing manifest referenced by the "
+            f"thresholding manifest ({upstream_path}). Re-run preprocessing, "
+            f"or fix the manifest chain."
+        ) from exc
 
+    grid_shape = tuple(pre_manifest.shape)
+    if not mask_path.is_file():
+        raise FileNotFoundError(
+            f"Mask file not found: {mask_path} (referenced by {thr_path}). "
+            f"Re-run thresholding."
+        )
     mask = np.load(mask_path, allow_pickle=False)
     if mask.ndim == 1:
-        mask = mask.reshape(tuple(pre_manifest.shape))
+        mask = mask.reshape(grid_shape)
+    elif tuple(mask.shape) != grid_shape:
+        raise ValueError(
+            f"Mask shape {tuple(mask.shape)} does not match the grid shape "
+            f"{grid_shape} recorded in {upstream_path} — the mask and manifest "
+            f"are from different runs."
+        )
 
     import torch  # lazy
     resolved_device = resolve_device(conf.device)
@@ -130,18 +150,24 @@ def exporting(
     else:
         env_mesh, _ = load_meshes(conf)
         voxel_grid, *_ = voxelize(env_mesh, conf, device=resolved_device)
+    if tuple(voxel_grid.shape) != grid_shape:
+        raise ValueError(
+            f"Voxel grid shape {tuple(voxel_grid.shape)} does not match the mask "
+            f"shape {grid_shape} — the occupancy grid and mask are from "
+            f"different runs (check voxel_size / margin_frac consistency)."
+        )
 
     # Column post-processing: carve occupied voxels above carved runs.
     _carve_above_extra = 0
-    if getattr(conf, 'carve_above', False):
+    if conf.carve_above:
         from ..carving import carve_above_columns
         vg_np = voxel_grid.cpu().numpy().astype(bool)
-        mask_before = mask.copy()
+        mask_before_count = int(mask.sum())
         mask = carve_above_columns(
             mask, vg_np,
-            min_consecutive=getattr(conf, 'carve_above_min_consecutive', 1),
+            min_consecutive=conf.carve_above_min_consecutive,
         )
-        _carve_above_extra = int(mask_before.sum()) - int(mask.sum())
+        _carve_above_extra = mask_before_count - int(mask.sum())
         mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
     carve_grid = (voxel_grid.bool() & mask_tensor)
@@ -149,7 +175,7 @@ def exporting(
 
     cleaned_voxels, mesh_pre, final_mesh = finalize_mesh(carve_grid, origin, conf)
 
-    ext = getattr(conf, "final_mesh_format", "ply")
+    ext = conf.final_mesh_format
     export_path = out_path / f"export.{ext}"
 
     save_mesh(final_mesh, str(export_path))
@@ -190,8 +216,8 @@ def exporting(
         "voxels_original": original_voxels,
         "voxels_carved": carved_voxels,
         "voxel_retention_pct": retention_pct,
-        "carve_above_applied": getattr(conf, 'carve_above', False),
-        "carve_above_min_consecutive": getattr(conf, 'carve_above_min_consecutive', 1) if getattr(conf, 'carve_above', False) else None,
+        "carve_above_applied": conf.carve_above,
+        "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
         "carve_above_extra_voxels_removed": _carve_above_extra,
     }
     # Consolidated diagnostic — one file per stage.

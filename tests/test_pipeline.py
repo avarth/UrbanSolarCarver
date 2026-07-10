@@ -132,6 +132,90 @@ def test_run_pipeline_convenience(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
 
 
 # ---------------------------------------------------------------------------
+# Stage-boundary validation (no GPU / EPW needed)
+# ---------------------------------------------------------------------------
+
+class TestStageBoundaryValidation:
+    """Mismatched or missing artifacts must fail with clear errors, not
+    cryptic numpy/torch failures deep in a stage."""
+
+    def _cfg(self, tmp_path):
+        from urbansolarcarver.load_config import user_config
+        return user_config(
+            max_volume_path="dummy", test_surface_path="dummy",
+            out_dir=str(tmp_path), mode="irradiance", epw_path="dummy",
+            start_month=1, start_day=1, start_hour=0,
+            end_month=12, end_day=31, end_hour=23,
+            threshold=50.0,
+        )
+
+    def _write_pre_manifest(self, tmp_path, scores, manifest_shape):
+        from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
+        pre_dir = tmp_path / "preprocessing"
+        pre_dir.mkdir(parents=True, exist_ok=True)
+        scores_path = pre_dir / "scores.npy"
+        np.save(scores_path, scores, allow_pickle=False)
+        pm = PreprocessingManifest(
+            hash="t", scores_path=str(scores_path), scores_kind="weighted_sum",
+            shape=manifest_shape, origin=(0.0, 0.0, 0.0), voxel_size=1.0,
+            mode="irradiance",
+        )
+        (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
+        return pre_dir
+
+    def test_scores_shape_mismatch_rejected(self, tmp_path):
+        from urbansolarcarver.api_core.thresholding import thresholding
+        pre_dir = self._write_pre_manifest(
+            tmp_path, np.zeros((8, 8, 8), dtype=np.float32), manifest_shape=(9, 9, 9),
+        )
+        with pytest.raises(ValueError, match="does not match the grid shape"):
+            thresholding(pre_dir, self._cfg(tmp_path), tmp_path / "thr")
+
+    def test_missing_scores_file_rejected(self, tmp_path):
+        from urbansolarcarver.api_core.thresholding import thresholding
+        pre_dir = self._write_pre_manifest(
+            tmp_path, np.zeros((8, 8, 8), dtype=np.float32), manifest_shape=(8, 8, 8),
+        )
+        (pre_dir / "scores.npy").unlink()
+        with pytest.raises(FileNotFoundError, match="Scores file not found"):
+            thresholding(pre_dir, self._cfg(tmp_path), tmp_path / "thr")
+
+
+class TestLoadMeshGuards:
+    def test_empty_mesh_rejected(self, tmp_path):
+        """A PLY with no faces must fail at load, not as a cryptic
+        empty-voxel-grid error later."""
+        import trimesh
+        from urbansolarcarver.io import load_mesh
+        pc_path = tmp_path / "points_only.ply"
+        trimesh.points.PointCloud(np.random.rand(10, 3)).export(str(pc_path))
+        with pytest.raises(ValueError, match="no triangle geometry"):
+            load_mesh(str(pc_path))
+
+
+class TestOverrideParsing:
+    def test_scientific_notation(self):
+        from urbansolarcarver.load_config import parse_override_value
+        assert parse_override_value("1e-3") == pytest.approx(0.001)
+        assert parse_override_value("2E5") == pytest.approx(200000.0)
+
+    def test_inf_nan_stay_strings(self):
+        """'inf'/'nan' as config values are almost certainly typos — keep
+        them as strings so schema validation produces a clear error."""
+        from urbansolarcarver.load_config import parse_override_value
+        assert parse_override_value("inf") == "inf"
+        assert parse_override_value("nan") == "nan"
+
+    def test_plain_types_unchanged(self):
+        from urbansolarcarver.load_config import parse_override_value
+        assert parse_override_value("3") == 3
+        assert parse_override_value("3.5") == 3.5
+        assert parse_override_value("true") is True
+        assert parse_override_value("none") is None
+        assert parse_override_value("hello") == "hello"
+
+
+# ---------------------------------------------------------------------------
 # Score smoothing unit tests (no GPU / EPW needed)
 # ---------------------------------------------------------------------------
 

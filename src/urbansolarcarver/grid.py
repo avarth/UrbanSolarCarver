@@ -41,18 +41,12 @@ prune_voxels_morph(voxels, min_voxels)
     Gentle cleanup for the cubic path: component prune, majority filter,
     single closing. Preserves thin slabs better than erosion/opening.
 
-voxelize_and_clean(mesh, voxel_size, margin_frac, min_voxels)
-    Convenience wrapper: voxelize_mesh then prune_voxels.
-
 mesh_from_voxels(voxels, min_corner, voxel_size)
     Build a blocky mesh from the binary grid. Returns an unprocessed Trimesh.
 
 mesh_from_voxels_smoothed(voxels, min_corner, voxel_size)
     Build a smooth mesh by contouring a smoothed SDF with marching cubes.
     Uses a volume-matched iso to avoid systematic thinning.
-
-mesh_from_voxels_select(voxels, min_corner, voxel_size, apply_smoothing)
-    Dispatch to the cubic or SDF path based on the flag above.
 
 cleanup_mesh(mesh, min_face_count=100)
     Fix winding/normals, weld vertices, drop tiny fragments.
@@ -236,7 +230,7 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         raw_mesh.merge_vertices()
         light = bool(raw_mesh.is_watertight)
         filtered_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=light)
-        iters = int(min(max(getattr(config, "smooth_iters", 0), 0), 6))
+        iters = int(min(max(config.smooth_iters, 0), 6))
         final_mesh = polish_mesh_taubin(filtered_mesh, iters=iters)
     else:
         # Cubic path: prune + gentle morphology, cubic meshing, then cleanup
@@ -386,6 +380,56 @@ def _sample_boundary_edges(
     return candidates if len(candidates) > 0 else np.empty((0, 2), dtype=np.float64)
 
 
+def _mesh_boundary_loops(mesh: trimesh.Trimesh) -> "list[list[int]]":
+    """Extract the mesh's boundary loops as ordered vertex-index rings.
+
+    Interior edges are shared by exactly 2 faces; boundary edges appear
+    only once.  The boundary edges are chained into closed loops by walking
+    an adjacency graph (greedy Euler-path traversal), consuming edges as
+    they are visited so each loop is extracted once.  Open chains and
+    loops with fewer than 3 vertices are discarded.
+    """
+    faces = mesh.faces                      # (F, 3)
+    all_edges = np.vstack([
+        faces[:, [0, 1]],
+        faces[:, [1, 2]],
+        faces[:, [2, 0]]
+    ])                                      # (3F, 2)
+    all_edges = np.sort(all_edges, axis=1)  # make edges undirected
+    unique_edges, edge_counts = np.unique(
+        all_edges, axis=0, return_counts=True
+    )
+    boundary_edges = unique_edges[edge_counts == 1]
+
+    adjacency: dict[int, list[int]] = {}
+    for v_start, v_end in boundary_edges:
+        adjacency.setdefault(int(v_start), []).append(int(v_end))
+        adjacency.setdefault(int(v_end), []).append(int(v_start))
+    boundary_loops: list[list[int]] = []
+    while adjacency:
+        start_vertex = next(iter(adjacency))
+        loop = [start_vertex]
+        current, previous = start_vertex, None
+        while True:
+            neighbors = [nbr for nbr in adjacency[current] if nbr != previous]
+            if not neighbors:
+                break
+            next_vertex = neighbors[0]
+            loop.append(next_vertex)
+            adjacency[current].remove(next_vertex)
+            adjacency[next_vertex].remove(current)
+            if not adjacency[current]:
+                adjacency.pop(current)
+            if not adjacency.get(next_vertex):
+                adjacency.pop(next_vertex, None)
+            previous, current = current, next_vertex
+            if current == start_vertex:
+                break
+        if len(loop) > 2:
+            boundary_loops.append(loop)
+    return boundary_loops
+
+
 def sample_planar_surface(
     mesh: trimesh.Trimesh,
     sample_step: float = 1.0,
@@ -435,52 +479,8 @@ def sample_planar_surface(
     #    All subsequent sampling happens in this 2D coordinate system.
     axis_u, axis_v = plane_frame(plane_normal)
 
-    # 3) Extract mesh boundary edges.
-    #    Interior edges are shared by exactly 2 faces; boundary edges
-    #    appear only once.  Sort vertex pairs so (a,b) == (b,a).
-    faces = mesh.faces                      # (F, 3)
-    all_edges = np.vstack([
-        faces[:, [0, 1]],
-        faces[:, [1, 2]],
-        faces[:, [2, 0]]
-    ])                                      # (3F, 2)
-    all_edges = np.sort(all_edges, axis=1)  # make edges undirected
-    unique_edges, edge_counts = np.unique(
-        all_edges, axis=0, return_counts=True
-    )
-    boundary_edges = unique_edges[edge_counts == 1]
-
-    # 4) Chain boundary edges into ordered vertex loops.
-    #    Build an adjacency graph from boundary edges, then walk each
-    #    connected component by always choosing the neighbor that isn't
-    #    the previous vertex (greedy Euler-path traversal).  Remove
-    #    edges as they're consumed so each loop is extracted once.
-    adjacency: dict[int, list[int]] = {}
-    for v_start, v_end in boundary_edges:
-        adjacency.setdefault(int(v_start), []).append(int(v_end))
-        adjacency.setdefault(int(v_end), []).append(int(v_start))
-    boundary_loops: list[list[int]] = []
-    while adjacency:
-        start_vertex = next(iter(adjacency))
-        loop = [start_vertex]
-        current, previous = start_vertex, None
-        while True:
-            neighbors = [nbr for nbr in adjacency[current] if nbr != previous]
-            if not neighbors:
-                break
-            next_vertex = neighbors[0]
-            loop.append(next_vertex)
-            adjacency[current].remove(next_vertex)
-            adjacency[next_vertex].remove(current)
-            if not adjacency[current]:
-                adjacency.pop(current)
-            if not adjacency.get(next_vertex):
-                adjacency.pop(next_vertex, None)
-            previous, current = current, next_vertex
-            if current == start_vertex:
-                break
-        if len(loop) > 2:
-            boundary_loops.append(loop)
+    # 3-4) Extract the mesh's boundary loops (ordered vertex-index rings).
+    boundary_loops = _mesh_boundary_loops(mesh)
 
     # 5) Project loops into the local 2D frame and identify exterior/interior.
     #    Each 3D vertex is projected to (u, v) by dotting with the plane
@@ -734,35 +734,6 @@ def discretize_surface_with_normals(
         )
 
     return points, normals, analysis_mesh
-
-
-def voxelize_and_clean(
-    mesh: trimesh.Trimesh,
-    voxel_size: float = 1.0,
-    margin_frac: float = 0.2,
-    min_voxels: int = 100,
-) -> Tuple[torch.Tensor, np.ndarray, float, int]:
-    """
-    Convenience wrapper: voxelize a mesh and prune tiny connected components.
-
-    Returns
-    -------
-    voxels : (D, D, D) uint8 torch.Tensor
-        Binary occupancy (1 = inside/filled).
-    origin : (3,) np.ndarray
-        World-space min corner of the grid.
-    grid_extent : float
-        Physical cube size covered by the grid.
-    resolution : int
-        Voxel resolution (D).
-
-    See Also
-    --------
-    voxelize_mesh, prune_voxels
-    """
-    vox, origin, scale, res = voxelize_mesh(mesh, voxel_size, margin_frac)
-    clean = prune_voxels(vox, min_voxels)
-    return clean, origin, scale, res
 
 
 @session_cache("vox:{args[0].identifier}:{kwargs[voxel_size]}:{kwargs[margin_frac]}")
@@ -1288,7 +1259,7 @@ def mesh_from_voxels(
 
     See Also
     --------
-    mesh_from_voxels_smoothed, mesh_from_voxels_select
+    mesh_from_voxels_smoothed
     """
     verts, faces = _cubic_mesh_from_occupancy(voxels, min_corner, voxel_size)
     return trimesh.Trimesh(vertices=verts, faces=faces, process=False)
@@ -1467,29 +1438,6 @@ def mesh_from_voxels_smoothed(
     # Add world-space origin
     mesh.apply_translation(min_corner)
     return mesh
-
-def mesh_from_voxels_select(
-    voxels: torch.Tensor,
-    min_corner: np.ndarray,
-    voxel_size: float,
-    apply_smoothing: bool
-) -> trimesh.Trimesh:
-    """
-    Dispatch to cubic or SDF-smoothed meshing based on `apply_smoothing`.
-
-    Returns
-    -------
-    mesh : trimesh.Trimesh
-
-    See Also
-    --------
-    mesh_from_voxels, mesh_from_voxels_smoothed
-    """
-    return (
-        mesh_from_voxels_smoothed(voxels, min_corner, voxel_size)
-        if apply_smoothing else
-        mesh_from_voxels(voxels, min_corner, voxel_size)
-    )
 
 def cleanup_mesh(
     mesh: trimesh.Trimesh,

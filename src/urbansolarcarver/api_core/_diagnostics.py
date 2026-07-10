@@ -60,6 +60,32 @@ def save_histogram(
     return path
 
 
+def warn_score_anomalies(scores: np.ndarray, context: str = "preprocessing") -> dict:
+    """Warn loudly if a score array contains NaN or Inf values.
+
+    Non-finite scores indicate a numerical problem upstream (degenerate
+    geometry, broken weights) and would silently corrupt thresholding —
+    ``NaN <= thr`` is False, so NaN voxels are always carved without any
+    signal to the user.
+
+    Returns a dict with ``nan_count`` and ``inf_count`` for diagnostics.
+    """
+    import warnings
+
+    nan_count = int(np.isnan(scores).sum())
+    inf_count = int(np.isinf(scores).sum())
+    if nan_count or inf_count:
+        total = scores.size
+        warnings.warn(
+            f"{context}: scores contain {nan_count} NaN and {inf_count} Inf "
+            f"values ({100.0 * (nan_count + inf_count) / max(total, 1):.2f}% "
+            f"of {total} voxels). Check input geometry and weights — "
+            f"non-finite voxels will always be carved.",
+            stacklevel=2,
+        )
+    return {"nan_count": nan_count, "inf_count": inf_count}
+
+
 def score_statistics(values: np.ndarray, detailed: bool = True) -> dict:
     """Compute summary statistics for a score array.
 

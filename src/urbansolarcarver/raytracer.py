@@ -527,6 +527,8 @@ def voxelize_solid_warp(
     """
     if not dda_backend_available(device):
         return None
+    if len(vertices) == 0 or len(faces) == 0:
+        raise ValueError("voxelize_solid_warp: mesh has no vertices or faces")
     device_str = f"cuda:{device.index or 0}" if device.type == "cuda" else "cpu"
 
     pts = wp.array(np.ascontiguousarray(vertices, dtype=np.float32), dtype=wp.vec3, device=device_str)

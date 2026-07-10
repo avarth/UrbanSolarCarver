@@ -61,14 +61,9 @@ def _ensure_api():
 
 
 def __getattr__(name):
-    # Light imports (load_config, user_config) are imported at module level
-    # above.  If they failed, surface the real error instead of masking it
-    # behind a confusing _ensure_api() / AttributeError.
-    if name in ("load_config", "user_config"):
-        raise AttributeError(
-            f"module 'urbansolarcarver' could not import {name!r} "
-            "— check that pydantic and PyYAML are installed"
-        )
+    # load_config / user_config are imported eagerly at module level; if that
+    # import had failed, `import urbansolarcarver` itself would have raised,
+    # so only the heavy lazy names can reach this hook.
     if name in __all__:
         _ensure_api()
         if name in _api_names:

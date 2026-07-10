@@ -86,7 +86,9 @@ def _load_epw_file(weather_file_path: str) -> EPW:
     try:
         epw_object = EPW(weather_file_path)
     except Exception as err:
-        raise IOError(f"_load_epw_file: failed to load EPW '{weather_file_path}': {err}")
+        raise IOError(
+            f"_load_epw_file: failed to load EPW '{weather_file_path}': {err}"
+        ) from err
     return epw_object
 
 
@@ -126,7 +128,7 @@ def _initialize_sunpath(
     try:
         sunpath_object = Sunpath(latitude, longitude, time_zone, north_angle=north_angle)
     except Exception as err:
-        raise RuntimeError(f"_initialize_sunpath: failed to init Sunpath: {err}")
+        raise RuntimeError(f"_initialize_sunpath: failed to init Sunpath: {err}") from err
     return sunpath_object
 
 # Function to pre-load both EPW and Sunpath caches
@@ -225,7 +227,7 @@ def get_sun_vectors(
         except Exception as err:
             raise RuntimeError(
                 f"get_sun_vectors: error computing sun for {date_time}: {err}"
-            )
+            ) from err
 
         # Filter: sun must be above the horizon AND above min_altitude.
         # Low-altitude sun has long atmospheric paths and contributes little

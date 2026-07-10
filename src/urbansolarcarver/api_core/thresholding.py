@@ -43,6 +43,81 @@ class ThresholdingResult:
     def __fspath__(self) -> str:
         return str(self.manifest_path)
 
+def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing):
+    """Gaussian-blur the continuous score volume before thresholding.
+
+    Smooths resolution-dependent noise so the binary mask (and carved mesh)
+    is cleaner at fine voxel sizes.  Only applied to weighted-score modes;
+    violation-count modes (time-based, tilted_plane) are left untouched.
+
+    ``score_smoothing`` semantics: None → auto (1.1 × voxel_size);
+    0 → disabled; > 0 → explicit radius in meters.
+
+    Returns (scores, applied, radius_m, sigma_voxels).
+    """
+    if kind != "weighted_sum":
+        return raw, False, 0.0, 0.0
+
+    radius_m = 0.0
+    if score_smoothing is None and voxel_size and voxel_size > 0:
+        radius_m = 1.1 * voxel_size  # auto-default
+    elif score_smoothing is not None and score_smoothing > 0:
+        radius_m = float(score_smoothing)
+
+    if radius_m <= 0:
+        return raw, False, 0.0, 0.0
+    if not voxel_size or voxel_size <= 0:
+        import warnings
+        warnings.warn(
+            "score_smoothing requested but the preprocessing manifest has no "
+            "voxel_size — cannot convert meters to voxels, skipping smoothing. "
+            "Re-run preprocessing to regenerate the manifest.",
+            stacklevel=3,
+        )
+        return raw, False, 0.0, 0.0
+
+    from scipy.ndimage import gaussian_filter
+    sigma_voxels = float(np.clip(radius_m / voxel_size, 0.5, 8.0))
+    smoothed = gaussian_filter(raw.astype(np.float32), sigma=sigma_voxels)
+    return smoothed, True, radius_m, sigma_voxels
+
+
+def _resolve_threshold(scores, kind, thr, carve_fraction, suggested_threshold):
+    """Resolve the configured threshold spec into a numeric cutoff.
+
+    ``violation_count`` scores accept only numeric thresholds (tolerated
+    violation count; default 0 = strict).  ``weighted_sum`` scores accept a
+    number (manual raw-score cutoff) or a strategy name: ``headtail``
+    (Jiang 2013 head/tail breaks) or ``carve_fraction`` (score-mass cutoff —
+    NOT a percentile: it weights by obstruction severity, so a few
+    high-scoring voxels can account for a large fraction of the total).
+    """
+    if kind == "violation_count":
+        if isinstance(thr, (int, float)):
+            return float(thr)
+        if isinstance(thr, str):
+            raise ValueError(
+                f"threshold='{thr}' is not valid for time-based/tilted_plane modes. "
+                f"These modes produce integer violation counts, not continuous scores. "
+                f"Use a non-negative integer: 0 = strict (zero violations tolerated), "
+                f"1 = allow 1 violation, etc. "
+                f"Leave threshold unset (None) to use the strict default (0)."
+            )
+        # None → use suggested_threshold from preprocessing (always 0.0)
+        return float(suggested_threshold or 0.0)
+
+    if thr is None:
+        thr = "carve_fraction"
+    if isinstance(thr, (int, float)):
+        return float(thr)
+    key = thr.lower()
+    if key == "headtail":
+        return float(headtail_threshold(scores, max_iterations=50))
+    if key == "carve_fraction":
+        return carve_fraction_threshold(scores, float(carve_fraction))
+    raise ValueError(f"Unknown threshold mode: {thr}")
+
+
 @overload
 def thresholding(volume: "PreprocessingResult", cfg: Union[user_config, str, Path], out_dir: Union[str, Path]) -> ThresholdingResult: ...
 @overload
@@ -146,71 +221,31 @@ def thresholding(
     grid_shape = tuple(pre_manifest.shape)
     kind = pre_manifest.scores_kind
 
-    # Load scores.
+    # Load scores — validate against the manifest so a stale or mismatched
+    # artifact fails here with a clear message instead of deep in numpy.
+    if not scores_path.is_file():
+        raise FileNotFoundError(
+            f"Scores file not found: {scores_path} (referenced by manifest "
+            f"{pre_manifest_path}). Re-run preprocessing, or fix the manifest path."
+        )
     raw = np.load(scores_path, allow_pickle=False)
     if raw.ndim == 1:
         raw = raw.reshape(grid_shape)
+    elif tuple(raw.shape) != grid_shape:
+        raise ValueError(
+            f"Scores array shape {tuple(raw.shape)} does not match the grid shape "
+            f"{grid_shape} recorded in {pre_manifest_path} — the scores file and "
+            f"manifest are from different runs."
+        )
 
-    # Score smoothing — Gaussian blur on continuous scores before thresholding.
-    # Smooths resolution-dependent noise so the binary mask (and carved mesh)
-    # is cleaner at fine voxel sizes.  Only applied to weighted-score modes;
-    # violation-count modes (time-based, tilted_plane) are left untouched.
-    #   None  → auto: 1.1 × voxel_size (recommended default)
-    #   0     → disabled
-    #   > 0   → explicit radius in meters
-    _smooth_applied = False
-    _sigma_voxels = 0.0
-    _smooth_radius_m = 0.0
-    if kind == "weighted_sum":
-        voxel_size = getattr(pre_manifest, "voxel_size", None)
-        raw_smooth = getattr(conf, "score_smoothing", None)
-        if raw_smooth is None and voxel_size and voxel_size > 0:
-            _smooth_radius_m = 1.1 * voxel_size  # auto-default
-        elif raw_smooth is not None and raw_smooth > 0:
-            _smooth_radius_m = float(raw_smooth)
-        if _smooth_radius_m > 0 and voxel_size and voxel_size > 0:
-            from scipy.ndimage import gaussian_filter
-            _sigma_voxels = float(np.clip(_smooth_radius_m / voxel_size, 0.5, 8.0))
-            raw = gaussian_filter(raw.astype(np.float32), sigma=_sigma_voxels)
-            _smooth_applied = True
+    raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
+        raw, kind, pre_manifest.voxel_size, conf.score_smoothing
+    )
 
-    # Normalize if requested.
-    if kind == "violation_count":
-        scores = raw.astype(np.float32, copy=False)
-        thr = conf.threshold
-        if isinstance(thr, (int, float)):
-            thr_val = float(thr)
-        elif isinstance(thr, str):
-            raise ValueError(
-                f"threshold='{thr}' is not valid for time-based/tilted_plane modes. "
-                f"These modes produce integer violation counts, not continuous scores. "
-                f"Use a non-negative integer: 0 = strict (zero violations tolerated), "
-                f"1 = allow 1 violation, etc. "
-                f"Leave threshold unset (None) to use the strict default (0)."
-            )
-        else:
-            # None → use suggested_threshold from preprocessing (always 0.0)
-            thr_val = float(pre_manifest.suggested_threshold or 0.0)
-    else:
-        scores = raw.astype(np.float32, copy=False)
-        thr = conf.threshold
-        if thr is None:
-            thr = "carve_fraction"
-        if isinstance(thr, (int, float)):
-            thr_val = float(thr)
-        else:
-            key = thr.lower()
-            if key == "headtail":
-                thr_val = float(headtail_threshold(scores, max_iterations=50))
-            elif key == "carve_fraction":
-                # Score-mass cutoff: remove the highest-scoring voxels that
-                # collectively account for `carve_fraction` of the total score.
-                # This is NOT a percentile (which counts voxels); it weights
-                # by obstruction severity, so a few high-scoring voxels can
-                # account for a large fraction of the total.
-                thr_val = carve_fraction_threshold(scores, float(conf.carve_fraction))
-            else:
-                raise ValueError(f"Unknown threshold mode: {thr}")
+    scores = raw.astype(np.float32, copy=False)
+    thr = conf.threshold
+    thr_val = _resolve_threshold(scores, kind, thr, conf.carve_fraction,
+                                 pre_manifest.suggested_threshold)
 
     # Threshold to mask.
     mask = (scores <= thr_val).reshape(grid_shape)
@@ -234,8 +269,8 @@ def thresholding(
     # Stable stage hash for reproducibility.
     snippet = {
         "threshold": thr if isinstance(thr, str) else float(thr_val),
-        "carve_fraction": getattr(conf, "carve_fraction", None),
-        "score_smoothing": getattr(conf, "score_smoothing", None),
+        "carve_fraction": conf.carve_fraction,
+        "score_smoothing": conf.score_smoothing,
     }
     stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
 
@@ -273,18 +308,17 @@ def thresholding(
     mode_spec = MODES.get(mode_name)
     weight_unit = mode_spec.weight_unit if mode_spec else "dimensionless"
     # Load patch weights if available
-    pw_path = getattr(pre_manifest, "patch_weights_path", None)
-    n_samples = getattr(pre_manifest, "sample_point_count", None)
+    pw_path = pre_manifest.patch_weights_path
+    n_samples = pre_manifest.sample_point_count
     if pw_path and Path(pw_path).is_file():
         patch_weights = np.load(pw_path, allow_pickle=False)
         total_weight = float(patch_weights.sum())
         summary["total_patch_weight"] = total_weight
         summary["weight_unit"] = weight_unit
         # Obstruction removed: sum of scores of carved voxels / total score mass
-        flat_scores = nn.copy()
         carved_mask = ~mask.ravel()  # True = carved away
-        score_mass_carved = float(flat_scores[carved_mask].sum())
-        score_mass_total = float(flat_scores.sum())
+        score_mass_carved = float(nn[carved_mask].sum())
+        score_mass_total = float(nn.sum())
         if score_mass_total > 0:
             summary["obstruction_fraction_carved"] = round(score_mass_carved / score_mass_total, 4)
         if n_samples and n_samples > 0:
@@ -294,7 +328,7 @@ def thresholding(
             summary["sample_point_count"] = n_samples
 
     # Histogram with threshold line — only when diagnostic plots are enabled.
-    if getattr(conf, "diagnostic_plots", False):
+    if conf.diagnostic_plots:
         summary["threshold_histogram"] = str(diag_dir / "threshold_histogram.png")
         save_histogram(
             nn, diag_dir, "threshold_histogram.png",

@@ -83,6 +83,35 @@ apply equally to CUDA machines.
   float addition makes scores reproducible only up to rounding noise.
   CUDA dispatch is unchanged.
 
+### Robustness / code quality
+
+- Defensive validation at stage boundaries: thresholding and exporting now
+  verify that scores/mask files exist and match the grid shape recorded in
+  the manifest, failing with a clear message instead of a cryptic
+  numpy/torch error when artifacts from different runs are mixed.
+- `load_mesh` rejects files with no triangle geometry at load time (was a
+  cryptic empty-grid failure later).
+- Preprocessing warns loudly when scores contain NaN/Inf (non-finite voxels
+  are always carved, previously without any signal); the test suite now
+  exercises the real check instead of a copy of its logic.
+- `usc schema` (and any CLI output) no longer crashes with
+  UnicodeEncodeError on legacy Windows code pages when piped.
+- CLI overrides accept scientific notation (`-o score_smoothing=1e-1`);
+  'inf'/'nan' spellings stay strings so validation rejects them clearly.
+- `session_cache` warns once when a key template does not match the call
+  signature (a silently dead cache was invisible before).
+- Direct attribute access on the validated config everywhere (the
+  `getattr(conf, "field", default)` pattern silently masked typos).
+- Daemon RPC handlers consolidated into one dispatcher (was 4 copies of
+  the same try/except/close block).
+- Monolith decomposition: threshold resolution and score smoothing
+  extracted from `thresholding()`; mode dispatch and the
+  radiative-cooling guard extracted from `preprocessing()`; boundary-loop
+  chaining extracted from `sample_planar_surface()`.
+- Removed dead/speculative API: `carve_directional`, `voxelize_and_clean`,
+  `mesh_from_voxels_select`, `CarverSession.get_kernel` (Warp caches its
+  own compiled modules), plus unused parameters and unreachable branches.
+
 ### Changed
 
 - The `diagnostics` config flag (previously unused) now gates the detailed

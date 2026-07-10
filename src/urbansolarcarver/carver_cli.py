@@ -40,6 +40,17 @@ from typer import Option
 # Light imports only — no torch, no warp, no api_core at module level.
 from .load_config import load_config, user_config
 
+# Windows consoles may use legacy code pages (cp1252/cp125x); when output is
+# piped or redirected, printing schema descriptions containing ≥ / ° / —
+# would raise UnicodeEncodeError.  Degrade unencodable characters to '?'
+# instead of crashing.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(errors="replace")
+        except Exception:
+            pass
+
 # ---------------------------------------------------------------------------
 # Version — read from installed package metadata; fall back to hardcoded.
 # ---------------------------------------------------------------------------
@@ -98,7 +109,7 @@ def _daemon_send(payload: dict) -> dict:
         conn.close()
 
 
-def _echo_result(label: str, res, key_fields: dict):
+def _echo_result(label: str, key_fields: dict):
     """Print a human-friendly summary after a stage completes."""
     typer.secho(f"\n  {label} complete", fg="green", bold=True)
     for k, v in key_fields.items():
@@ -180,12 +191,12 @@ def run(
     run_pipeline = _api("run_pipeline")
 
     if not quiet:
-        typer.secho("  [1/3] Preprocessing...", fg="yellow")
+        typer.secho("  Running pipeline (preprocessing + thresholding + exporting)...", fg="yellow")
     t0 = time.perf_counter()
     res = run_pipeline(cfg, out)
     elapsed = time.perf_counter() - t0
 
-    _echo_result("Pipeline", res, {
+    _echo_result("Pipeline", {
         "Mesh": str(res.export_path),
         "Volume retained": f"{res.retention_pct:.1f}%" + (f" ({res.mesh_volume_m3:.0f} m³)" if res.mesh_volume_m3 is not None else ""),
         "Faces": f"{res.faces:,}",
@@ -250,7 +261,7 @@ def cmd_preprocessing(
     res = _api("preprocessing")(cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
-    _echo_result("Preprocessing", res, {
+    _echo_result("Preprocessing", {
         "Device": res.device_info,
         "Grid": f"{res.volume_shape}",
         "Scores": str(res.volume_path),
@@ -311,7 +322,7 @@ def cmd_thresholding(
     res = _api("thresholding")(from_manifest, cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
-    _echo_result("Thresholding", res, {
+    _echo_result("Thresholding", {
         "Method": f"{res.threshold_method} -> {res.threshold_value:.4g}",
         "Carved": f"{res.voxels_removed:,} voxels ({100 - res.retention_pct:.1f}% of volume)",
         "Retained": f"{res.voxels_kept:,} voxels ({res.retention_pct:.1f}%)",
@@ -370,7 +381,7 @@ def cmd_exporting(
     res = _api("exporting")(from_manifest, cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
-    _echo_result("Exporting", res, {
+    _echo_result("Exporting", {
         "Mesh": str(res.export_path),
         "Volume retained": f"{res.retention_pct:.1f}%" + (f" ({res.mesh_volume_m3:.0f} m³)" if res.mesh_volume_m3 is not None else ""),
         "Faces": f"{res.faces:,}",

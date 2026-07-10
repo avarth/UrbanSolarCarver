@@ -10,7 +10,6 @@ through a voxelized envelope, and remove the voxels they visit. Supports:
 • Time-based solar carving (sun vectors from EPW for specific datetimes)
 • Sky-patch-weighted carving (Tregenza patches + mode-specific weights)
 • Tilted-plane daylight carving (single or per-octant plane angle)
-• Simple directional carving (global vector, per-point normals, or +Z)
 
 Raytracing contract
 -------------------
@@ -37,10 +36,7 @@ import torch
 import numpy as np
 from numba import njit
 
-from .scoring import (
-    get_weights,
-    headtail_threshold,
-)
+from .scoring import get_weights
 from .load_config import user_config
 from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
@@ -57,7 +53,7 @@ try:
     from .raytracer import trace_and_score_dda as _fused_dda
 except ImportError:
     _fused_dda = None
-from typing import NamedTuple, Sequence, Literal, Tuple
+from typing import NamedTuple, Sequence
 
 
 class SkyPatchCarvingResult(NamedTuple):
@@ -78,9 +74,8 @@ def _resolve_batch_size(config, resolution: int, device) -> int:
     If ``config.ray_batch_size`` is 0 the batch size is computed from
     available GPU memory via :func:`auto_batch_size`.
     """
-    bs = getattr(config, "ray_batch_size", 0)
-    if bs and bs > 0:
-        return int(bs)
+    if config.ray_batch_size > 0:
+        return int(config.ray_batch_size)
     return auto_batch_size(resolution, device)
 
 
@@ -618,7 +613,7 @@ def carve_with_planes(
     # Scalar: all surfaces share the same angle.
     # 8-element list: each surface gets an angle based on the compass octant
     # its horizontal normal faces ([N, NE, E, SE, S, SW, W, NW]).
-    spec = getattr(config, "tilted_plane_angle_deg", None)
+    spec = config.tilted_plane_angle_deg
     if isinstance(spec, (int, float)) or np.isscalar(spec):
         alpha_deg = np.full((n_xy.shape[0],), float(spec), dtype=np.float32)
     else:
@@ -630,7 +625,7 @@ def carve_with_planes(
         # Compute the model-space azimuth from +Y clockwise toward +X, then
         # subtract north_deg (model north, degrees clockwise from +Y) to get
         # the true compass azimuth of each surface normal.
-        north_deg = float(getattr(config, "north_deg", 0.0) or 0.0)
+        north_deg = float(config.north_deg)
         phi = (np.degrees(np.arctan2(n_xy[:, 0], n_xy[:, 1])) - north_deg + 360.0) % 360.0
         # 22.5° = 360° / (8 × 2) — half-octant offset so bin centers align with
         # cardinal/intercardinal directions (N=0°, NE=45°, E=90°, ...)
@@ -701,111 +696,6 @@ def carve_with_planes(
     if counts is None:
         return carved_grid, pts_np, dirs_np
     return carved_grid, pts_np, dirs_np, counts.detach().cpu().numpy()
-
-
-def carve_directional(
-    voxel_grid,
-    grid_origin,
-    grid_extent,
-    grid_resolution,
-    sample_points,
-    sample_normals,
-    config: "user_config",
-    mode: Literal["vector", "normals", "positive_z"] = "vector",
-    direction: Tuple[float, float, float] | None = None,
-):
-    """
-    Simple directional carving primitive (geometry-only, no scoring).
-
-    March rays from `sample_points` and delete all visited voxels.
-    Unlike :func:`carve_with_sun_rays` and :func:`carve_with_planes`,
-    ``return_counts`` is not supported here because this mode produces
-    a binary mask without score accumulation.
-
-    Direction can be:
-      • "vector"     — one global world-space vector for all points
-      • "normals"    — the per-point surface normal
-      • "positive_z" — +Z for all points (vertical clearance)
-
-    Parameters
-    ----------
-    mode : Literal["vector","normals","positive_z"]
-        Direction policy.
-    direction : tuple[float, float, float] | None
-        Required when `mode=="vector"`. Ignored otherwise.
-
-    Returns
-    -------
-    carved_grid : torch.Tensor, shape (D, D, D)
-    ray_origins : np.ndarray, shape (N, 3)
-    ray_directions : np.ndarray, shape (N, 3)
-
-    Notes
-    -----
-    • This is geometry-only; it ignores EPW and weights.
-    • Useful for vertical setbacks ("positive_z") or view corridors
-      along a fixed vector.
-    """
-    _validate_cubic_resolution(grid_resolution, "carve_directional")
-    side = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
-    side_sq = side * side
-
-    # Inputs to numpy
-    pts_np = sample_points.detach().cpu().numpy().astype(np.float32) if isinstance(sample_points, torch.Tensor) else np.asarray(sample_points, dtype=np.float32)
-    if mode == "normals":
-        norms_np = sample_normals.detach().cpu().numpy().astype(np.float32) if isinstance(sample_normals, torch.Tensor) else np.asarray(sample_normals, dtype=np.float32)
-        dirs_np = norms_np
-    elif mode == "positive_z":
-        dirs_np = np.tile(np.array([0.0, 0.0, 1.0], dtype=np.float32), (pts_np.shape[0], 1))
-    else:
-        if direction is None:
-            raise ValueError("carve_directional(mode='vector') requires `direction=(x,y,z)`")
-        d = np.asarray(direction, dtype=np.float32)
-        n = np.linalg.norm(d)
-        if n < 1e-9:
-            raise ValueError("direction must be non-zero")
-        d /= n
-        dirs_np = np.tile(d, (pts_np.shape[0], 1))
-
-    # Normalize directions
-    nrm = np.linalg.norm(dirs_np, axis=1, keepdims=True)
-    np.maximum(nrm, 1e-9, out=nrm)
-    dirs_np = dirs_np / nrm
-
-    device = voxel_grid.device
-    origins_tensor = torch.from_numpy(pts_np).to(device, non_blocking=True)
-    dirs_tensor    = torch.from_numpy(dirs_np).to(device, non_blocking=True)
-    voxel_flat     = voxel_grid.reshape(-1).clone().float()
-
-    min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-    scale      = float(grid_extent)
-    res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
-    batch_size = _resolve_batch_size(config, res, device)
-
-    for i in range(0, origins_tensor.shape[0], batch_size):
-        o = origins_tensor[i:i+batch_size]
-        d = dirs_tensor[i:i+batch_size]
-        if o.numel() == 0:
-           break
-        dummy = torch.zeros((o.shape[0],), dtype=torch.long, device=device)
-        _, _, vox_idx = trace_multi_hit_grid(
-            min_corner=min_corner,
-            scale=scale,
-            resolution=side,
-            origins=o,
-            ray_dirs=d,
-           sky_patch_ids=dummy,
-            voxel_size=float(config.voxel_size),
-            ray_length=float(config.ray_length),
-        )
-        if vox_idx.numel():
-            flat_idx = vox_idx[:,0]*side_sq + vox_idx[:,1]*side + vox_idx[:,2]
-            valid = (flat_idx >= 0) & (flat_idx < voxel_flat.numel())
-            flat_idx = flat_idx[valid]
-            voxel_flat[flat_idx] = 0
-
-    carved = voxel_flat.view_as(voxel_grid).to(voxel_grid.dtype)
-    return carved, pts_np, dirs_np
 
 
 def carve_above_columns(

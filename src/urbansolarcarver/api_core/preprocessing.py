@@ -6,7 +6,7 @@ from typing import Tuple, Union
 import numpy as np
 from ..load_config import user_config
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, device_summary, dump_config_snapshot
-from ._diagnostics import save_sky_patch_weights, save_histogram, score_statistics
+from ._diagnostics import save_sky_patch_weights, save_histogram, score_statistics, warn_score_anomalies
 from ..pydantic_schemas import PreprocessingManifest, schema_to_json
 from ..carving import (
     carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes,
@@ -37,6 +37,63 @@ class PreprocessingResult:
        return self.out_dir / "manifest.json"
     def __fspath__(self) -> str:
         return str(self.manifest_path)
+
+def _check_radiative_cooling_surface(norms: np.ndarray) -> None:
+    """Guard: radiative_cooling assumes horizontal, upward-facing surfaces.
+
+    The mode's view-factor weighting (cos θ / π) is only valid for surfaces
+    facing the sky, so reject test surfaces whose mean normal is not
+    predominantly vertical.
+    """
+    mean_normal = norms.mean(axis=0)
+    mean_normal /= (np.linalg.norm(mean_normal) + 1e-12)
+    z_component = float(mean_normal[2])
+    if z_component < 0.7:  # ~45° from vertical
+        raise ValueError(
+            f"radiative_cooling mode requires a horizontal, upward-facing test surface "
+            f"(mean normal Z-component = {z_component:.2f}, expected > 0.7). "
+            f"This mode's view-factor weighting (cos θ / π) is only valid for "
+            f"surfaces facing the sky. For vertical facades, use a different mode."
+        )
+
+
+def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf):
+    """Dispatch to the mode-appropriate carver and return the score field.
+
+    Returns
+    -------
+    raw_scores : np.ndarray (float32, flat or grid-shaped)
+    scores_kind : {"violation_count", "weighted_sum"}
+    suggested_threshold : float | None
+        0.0 for the binary modes (carve any violation); None for weighted
+        modes, whose threshold is resolved in the thresholding stage.
+    patch_weights : np.ndarray | None
+        Per-sky-patch weights (weighted modes only).
+    """
+    mode = conf.mode
+    if mode in MODES_NEEDING_PERIOD:
+        datetimes, hoys = sample_period(conf)
+    else:
+        datetimes, hoys = [], []
+
+    if mode == "time-based":
+        _carved, _ro, _rd, counts = carve_with_sun_rays(
+            voxel_grid, origin, extent, resolution, pts, norms, conf, datetimes,
+            return_counts=True,
+        )
+        return counts.astype(np.float32), "violation_count", 0.0, None
+    if mode == "tilted_plane":
+        _carved, _ro, _rd, counts = carve_with_planes(
+            voxel_grid, origin, extent, resolution, pts, norms, conf,
+            return_counts=True,
+        )
+        return counts.astype(np.float32), "violation_count", 0.0, None
+
+    carve_out = carve_with_sky_patch_rays(
+        voxel_grid, origin, extent, resolution, pts, norms, conf, hoys
+    )
+    return carve_out.raw_voxel_scores, "weighted_sum", None, carve_out.patch_weights
+
 
 def preprocessing(
     cfg: Union[user_config, str, Path],
@@ -113,7 +170,7 @@ def preprocessing(
     full_cfg = conf.model_dump()
     stage_hash = hashlib.sha256(json.dumps(full_cfg, sort_keys=True).encode()).hexdigest()[:8]
 
-    resolved_device = resolve_device(getattr(conf, "device", "auto"))
+    resolved_device = resolve_device(conf.device)
     device_info = device_summary(resolved_device)
     _mark("config_and_device")
 
@@ -138,53 +195,13 @@ def preprocessing(
         )
 
     mode = conf.mode
-
-    # Guard: radiative_cooling assumes horizontal, upward-facing test surfaces.
-    # Check that the mean normal of the test surface is predominantly vertical.
     if mode == "radiative_cooling":
-        mean_normal = norms.mean(axis=0)
-        mean_normal /= (np.linalg.norm(mean_normal) + 1e-12)
-        z_component = float(mean_normal[2])
-        if z_component < 0.7:  # ~45° from vertical
-            raise ValueError(
-                f"radiative_cooling mode requires a horizontal, upward-facing test surface "
-                f"(mean normal Z-component = {z_component:.2f}, expected > 0.7). "
-                f"This mode's view-factor weighting (cos θ / π) is only valid for "
-                f"surfaces facing the sky. For vertical facades, use a different mode."
-            )
+        _check_radiative_cooling_surface(norms)
 
-    patch_weights = None
-    suggested_threshold = None
-
-    if mode in MODES_NEEDING_PERIOD:
-        datetimes, hoys = sample_period(conf)
-    else:
-        datetimes, hoys = [], []
-
-    if mode == "time-based":
-        _carved, _ro, _rd, counts = carve_with_sun_rays(
-            voxel_grid, origin, extent, resolution, pts, norms, conf, datetimes, return_counts=True
-        )
-        raw_scores = counts.astype(np.float32)
-        scores_kind = "violation_count"
-        suggested_threshold = 0.0
-    elif mode == "tilted_plane":
-        _carved, _ro, _rd, counts = carve_with_planes(
-            voxel_grid, origin, extent, resolution, pts, norms, conf, return_counts=True
-        )
-        raw_scores = counts.astype(np.float32)
-        scores_kind = "violation_count"
-        suggested_threshold = 0.0
-    else:
-        carve_out = carve_with_sky_patch_rays(
-            voxel_grid, origin, extent, resolution, pts, norms, conf, hoys
-        )
-        raw_scores = carve_out.raw_voxel_scores
-        patch_weights = carve_out.patch_weights
-        scores_kind = "weighted_sum"
-        # Threshold is now computed exclusively in thresholding stage
-        suggested_threshold = None
-
+    raw_scores, scores_kind, suggested_threshold, patch_weights = _compute_raw_scores(
+        voxel_grid, origin, extent, resolution, pts, norms, conf
+    )
+    warn_score_anomalies(raw_scores, context="preprocessing")
     _mark("ray_tracing")
 
     scores_path = out_path / "scores.npy"
@@ -259,7 +276,7 @@ def preprocessing(
 
     # Diagnostic plots: gated behind the diagnostic_plots flag so the
     # matplotlib overhead is only paid when explicitly requested.
-    if getattr(conf, "diagnostic_plots", False):
+    if conf.diagnostic_plots:
         if patch_weights is not None and hasattr(patch_weights, 'size') and patch_weights.size > 0:
             summary["sky_patch_images"] = [
                 str(diag_dir / "sky_patch_weights.png"),

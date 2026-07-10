@@ -10,40 +10,35 @@ from urbansolarcarver.api_core._diagnostics import score_statistics
 
 
 class TestScoreAnomalyDetection:
-    """Verify NaN/Inf detection in preprocessing scores."""
-
-    def test_nan_detected(self):
-        """NaN values should be flagged."""
-        scores = np.array([1.0, np.nan, 3.0])
-        has_nan = bool(np.isnan(scores).any())
-        assert has_nan
-
-    def test_inf_detected(self):
-        """Inf values should be flagged."""
-        scores = np.array([1.0, np.inf, 3.0])
-        has_inf = bool(np.isinf(scores).any())
-        assert has_inf
-
-    def test_clean_scores_no_anomaly(self):
-        """Normal scores should not have NaN or Inf."""
-        scores = np.array([0.0, 1.0, 2.0, 3.0])
-        assert not np.isnan(scores).any()
-        assert not np.isinf(scores).any()
+    """Verify NaN/Inf detection via the real preprocessing anomaly check."""
 
     def test_nan_produces_warning(self):
-        """NaN in scores should emit a user-visible warning via the anomaly check."""
-        # We test the warning logic inline (same logic as preprocessing uses)
-        scores = np.array([1.0, np.nan, 3.0])
-        nan_count = int(np.isnan(scores).sum())
+        from urbansolarcarver.api_core._diagnostics import warn_score_anomalies
+        scores = np.array([1.0, np.nan, 3.0], dtype=np.float32)
         with warnings.catch_warnings(record=True) as w:
             warnings.simplefilter("always")
-            if nan_count:
-                total = scores.size
-                warnings.warn(
-                    f"Scores contain {nan_count} NaN values ({100*nan_count/total:.1f}% of {total} voxels).",
-                )
-            assert len(w) == 1
-            assert "NaN" in str(w[0].message)
+            counts = warn_score_anomalies(scores)
+        assert counts == {"nan_count": 1, "inf_count": 0}
+        assert len(w) == 1
+        assert "NaN" in str(w[0].message)
+
+    def test_inf_produces_warning(self):
+        from urbansolarcarver.api_core._diagnostics import warn_score_anomalies
+        scores = np.array([1.0, np.inf, 3.0], dtype=np.float32)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            counts = warn_score_anomalies(scores)
+        assert counts == {"nan_count": 0, "inf_count": 1}
+        assert len(w) == 1
+
+    def test_clean_scores_no_warning(self):
+        from urbansolarcarver.api_core._diagnostics import warn_score_anomalies
+        scores = np.array([0.0, 1.0, 2.0, 3.0], dtype=np.float32)
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            counts = warn_score_anomalies(scores)
+        assert counts == {"nan_count": 0, "inf_count": 0}
+        assert len(w) == 0
 
 
 class TestScoreStatisticsIntegration:

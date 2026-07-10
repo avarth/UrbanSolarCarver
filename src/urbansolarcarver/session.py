@@ -1,9 +1,10 @@
 """GPU/Warp session management for UrbanSolarCarver.
 
 Provides CarverSession, a long-lived context manager that keeps a CUDA
-(or CPU) context alive and caches compiled Warp kernels and tensors
-across multiple pipeline runs.  A weak-reference registry ensures at
-most one session per device index exists at any time.
+(or CPU) context alive and caches tensors across multiple pipeline runs.
+(Compiled Warp kernels are cached by Warp itself, per module, on disk.)
+A weak-reference registry ensures at most one session per device index
+exists at any time.
 
 Key public API:
     CarverSession  -- context manager for device lifecycle and caching.
@@ -14,7 +15,6 @@ Key public API:
 import contextlib
 import functools
 import logging
-import threading
 import weakref
 from typing import Optional, Union, Dict, Callable
 from .load_config import user_config
@@ -38,15 +38,14 @@ def _device_key(device: torch.device) -> int:
 class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
     """
     A long-lived GPU/Warp session that keeps the CUDA context alive
-    and caches compiled Warp modules or tensors if desired.
+    and caches tensors across pipeline runs.
 
-    Use this to avoid repeated GPU startup and JIT overhead across
-    multiple runs.
+    Use this to avoid repeated GPU startup and recomputation overhead
+    across multiple runs.
     """
 
     # Registry of live sessions, keyed by device index (-1 for CPU)
     _sessions: "weakref.WeakValueDictionary[int, CarverSession]" = weakref.WeakValueDictionary()
-    _kernel_lock = threading.Lock()
 
     def __init__(
         self,
@@ -75,9 +74,8 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
         else:
             raise TypeError(f"device must be str, torch.device, or None, not {type(device)}")
 
-        # Optional caches (use get_tensor or get_kernel to populate)
+        # Tensor cache (use get_tensor to populate)
         self.tensors: Dict[str, torch.Tensor] = {}
-        self.kernels: Dict[str, object] = {}
 
         # Register this session for retrieval
         CarverSession._sessions[_device_key(self.device)] = self
@@ -87,8 +85,8 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
 
     def bump(self, flush: bool = False) -> None:
         """
-        Invalidate session tensor cache between independent runs.
-        Kernels are kept. Optionally free CUDA memory.
+        Invalidate the session tensor cache between independent runs.
+        Optionally free CUDA memory.
         """
         self.tensors.clear()
         if flush and self.device.type == "cuda":
@@ -145,35 +143,12 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
             self.tensors[key] = value
         return self.tensors[key]
 
-    def get_kernel(
-        self,
-        key: str,
-        factory: Callable[[], object],  # returns a Warp module
-    ) -> object:
-        """
-        Cache or build a Warp kernel module, thread-safe via double-checked
-        locking.
-
-        Args:
-            key: Cache lookup identifier.
-            factory: Zero-argument callable that returns a compiled Warp module.
-
-        Returns:
-            Cached or freshly built Warp module.
-        """
-        if key not in self.kernels:
-            with CarverSession._kernel_lock:
-                if key not in self.kernels:
-                    module = factory()
-                    self.kernels[key] = module
-        return self.kernels[key]
-
     def close(self, flush: bool = True) -> None:
         """
-        Clear all in-memory caches. If on CUDA and flush=True, empties torch's cache.
+        Clear the in-memory tensor cache. If on CUDA and flush=True,
+        empties torch's cache.
         """
         self.tensors.clear()
-        self.kernels.clear()
         if flush and self.device.type == "cuda":
             torch.cuda.empty_cache()
 
@@ -210,22 +185,31 @@ def session_cache(key_template: str):
         def fetch_dirs(device): ...
     """
     def decorator(fn):
+        warned = False
+
         @functools.wraps(fn)
         def wrapper(*args, session: "CarverSession | None" = None, **kw):
+            nonlocal warned
             sess = session or get_active_session()
             if sess is None:
                 return fn(*args, **kw)          # fallback, no cache
             # Build cache key by substituting {args}/{kwargs} in the template.
             # E.g., 'tregenza_dirs' (constant) or 'weights_{args[0]}' (dynamic).
             # If the template references missing kwargs or attributes,
-            # fall back to uncached execution rather than crashing.
+            # fall back to uncached execution — but say so ONCE, loudly:
+            # a silently dead cache is a performance bug that is otherwise
+            # invisible.
             try:
                 key = key_template.format(args=args, kwargs=kw)
             except (KeyError, IndexError, AttributeError):
-                _log.debug(
-                    "session_cache: key template %r failed for %s, running uncached",
-                    key_template, fn.__name__,
-                )
+                if not warned:
+                    _log.warning(
+                        "session_cache: key template %r does not match how %s "
+                        "was called (e.g. positional vs keyword arguments) — "
+                        "running uncached. This warning is shown once.",
+                        key_template, fn.__name__,
+                    )
+                    warned = True
                 return fn(*args, **kw)
             return sess.get_tensor(key, lambda: fn(*args, **kw))
         return wrapper

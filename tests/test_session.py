@@ -104,41 +104,15 @@ class TestTensorCache:
 
 
 # ---------------------------------------------------------------------------
-# Kernel caching
-# ---------------------------------------------------------------------------
-
-class TestKernelCache:
-    def test_factory_called_once(self):
-        sess = CarverSession(device="cpu")
-        factory = MagicMock(return_value="compiled_kernel")
-        sess.get_kernel("kern1", factory)
-        sess.get_kernel("kern1", factory)
-        factory.assert_called_once()
-        sess.close()
-
-    def test_kernels_survive_bump(self):
-        """Kernels should NOT be cleared by bump() — only tensors are."""
-        sess = CarverSession(device="cpu")
-        factory = MagicMock(return_value="compiled_kernel")
-        sess.get_kernel("kern1", factory)
-        sess.bump()
-        sess.get_kernel("kern1", factory)
-        factory.assert_called_once()  # kernel still cached
-        sess.close()
-
-
-# ---------------------------------------------------------------------------
 # close()
 # ---------------------------------------------------------------------------
 
 class TestClose:
-    def test_close_clears_all_caches(self):
+    def test_close_clears_tensor_cache(self):
         sess = CarverSession(device="cpu")
         sess.get_tensor("t1", lambda: torch.tensor([1.0]))
-        sess.get_kernel("k1", lambda: "module")
         sess.close()
         assert len(sess.tensors) == 0
-        assert len(sess.kernels) == 0
 
 
 # ---------------------------------------------------------------------------

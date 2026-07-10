@@ -76,10 +76,18 @@ def load_mesh(path: str) -> trimesh.Trimesh:
     Load a triangle mesh from file and ensure face normals are consistently
     oriented (outward-facing). Trimesh’s process=True fixes winding order,
     merges duplicate vertices, and removes degenerate faces.
+
+    Raises a clear error for files that contain no usable triangles, which
+    would otherwise surface much later as a cryptic empty-grid failure.
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"load_mesh: file not found: {path}")
     mesh = trimesh.load(path, force="mesh")
+    if not isinstance(mesh, trimesh.Trimesh) or len(mesh.faces) == 0:
+        raise ValueError(
+            f"load_mesh: no triangle geometry found in {path!r} — the file is "
+            f"empty, contains only points/curves, or could not be parsed as a mesh."
+        )
     if not mesh.is_watertight:
         mesh.fix_normals()
     return mesh

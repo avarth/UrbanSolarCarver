@@ -105,6 +105,35 @@ def _pick_device(arg: str) -> str:
     except (ImportError, RuntimeError):
         return "cpu"
 
+def _handle_stage_command(cmd, msg, sess):
+    """Dispatch a pipeline RPC command and build the reply dict.
+
+    Raises on failure — the caller converts exceptions into error replies.
+    """
+    from urbansolarcarver import api
+
+    cfg = load_config(msg["config"], msg.get("overrides", []))
+    if cmd in ("preprocessing", "run_pipeline"):
+        # New run: invalidate cached tensors (kernel caches persist on disk).
+        sess.bump(flush=False)
+
+    if cmd == "run_pipeline":
+        result = api.run_pipeline(cfg, msg.get("out_dir") or cfg.out_dir)
+        return {"status": "ok", "export_path": str(result.export_path)}
+
+    out_dir = msg.get("out_dir") or (Path(cfg.out_dir) / cmd)
+    if cmd == "preprocessing":
+        result = api.preprocessing(cfg, out_dir)
+        return {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
+    if cmd == "thresholding":
+        result = api.thresholding(msg["from"], cfg, out_dir)
+        return {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
+    if cmd == "exporting":
+        result = api.exporting(msg["from"], cfg, out_dir)
+        return {"status": "ok", "export_path": str(result.export_path)}
+    raise ValueError(f"Unknown command: {cmd!r}")
+
+
 def serve(address, authkey, device_arg="auto"):
     """Start the persistent RPC listener for CUDA/Warp session reuse.
 
@@ -166,74 +195,27 @@ def serve(address, authkey, device_arg="auto"):
                         conn.close()
                     continue
 
-                if cmd == "preprocessing":
-                    try:
-                        cfg = load_config(msg["config"], msg.get("overrides", []))
-                        sess.bump(flush=False)
-                        from urbansolarcarver.api import preprocessing
-                        out_dir = msg.get("out_dir") or (Path(cfg.out_dir) / "preprocessing")
-                        result = preprocessing(cfg, out_dir)
-                        conn.send({"status": "ok", "manifest": str(result.out_dir / "manifest.json")})
-                    except Exception as e:
-                        traceback.print_exc()  # full details server-side only
-                        conn.send({"status": "error", "error": str(e)})
-                    finally:
-                        conn.close()
-
-                elif cmd == "thresholding":
-                    try:
-                        cfg = load_config(msg["config"], msg.get("overrides", []))
-                        from urbansolarcarver.api import thresholding
-                        out_dir = msg.get("out_dir") or (Path(cfg.out_dir) / "thresholding")
-                        result = thresholding(msg["from"], cfg, out_dir)
-                        conn.send({"status": "ok", "manifest": str(result.out_dir / "manifest.json")})
-                    except Exception as e:
-                        traceback.print_exc()
-                        conn.send({"status": "error", "error": str(e)})
-                    finally:
-                        conn.close()
-
-                elif cmd == "exporting":
-                    try:
-                        cfg = load_config(msg["config"], msg.get("overrides", []))
-                        from urbansolarcarver.api import exporting
-                        out_dir = msg.get("out_dir") or (Path(cfg.out_dir) / "exporting")
-                        result = exporting(msg["from"], cfg, out_dir)
-                        conn.send({"status": "ok", "export_path": str(result.export_path)})
-                    except Exception as e:
-                        traceback.print_exc()
-                        conn.send({"status": "error", "error": str(e)})
-                    finally:
-                        conn.close()
-
-                elif cmd == "run_pipeline":
-                    try:
-                        cfg = load_config(msg["config"], msg.get("overrides", []))
-                        sess.bump(flush=False)
-                        from urbansolarcarver.api import run_pipeline
-                        out_dir = msg.get("out_dir") or cfg.out_dir
-                        result = run_pipeline(cfg, out_dir)
-                        conn.send({"status": "ok", "export_path": str(result.export_path)})
-                    except Exception as e:
-                        traceback.print_exc()
-                        conn.send({"status": "error", "error": str(e)})
-                    finally:
-                        conn.close()
-
-                elif cmd == "ping":
+                if cmd == "ping":
                     conn.send({"status": "ok", "pid": os.getpid()})
                     conn.close()
+                    continue
 
-                elif cmd == "shutdown":
+                if cmd == "shutdown":
                     conn.send({"status": "ok"})
                     conn.close()
                     break
 
-                else:
-                    try:
-                        conn.send({"status": "error", "error": f"Unknown cmd {cmd!r}"})
-                    finally:
-                        conn.close()
+                # Pipeline commands share one handler; failures become
+                # error replies (full traceback stays server-side only).
+                try:
+                    reply = _handle_stage_command(cmd, msg, sess)
+                except Exception as e:
+                    traceback.print_exc()
+                    reply = {"status": "error", "error": str(e)}
+                try:
+                    conn.send(reply)
+                finally:
+                    conn.close()
         finally:
             listener.close()
 

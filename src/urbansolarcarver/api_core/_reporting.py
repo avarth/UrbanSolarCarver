@@ -80,7 +80,7 @@ def generate_run_report(
         ("Min altitude", f"{conf.min_altitude}\u00b0"),
         ("Device", conf.device),
         ("Smoothing", conf.apply_smoothing),
-        ("Output format", getattr(conf, "final_mesh_format", "ply")),
+        ("Output format", conf.final_mesh_format),
     ]
     if conf.mode in MODES_NEEDING_EPW:
         cfg_items.append(("EPW", conf.epw_path or "\u2014"))

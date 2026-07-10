@@ -18,6 +18,7 @@ This module does not touch geometry. It only prepares inputs for the
 carving and meshing stages.
 """
 
+import math
 import os
 import yaml
 from typing import Optional, List, Tuple, Any, Dict, Mapping, Union
@@ -61,13 +62,21 @@ def parse_override_value(raw: str) -> Any:
             return json.loads(stripped)
         except (json.JSONDecodeError, ValueError):
             pass
-    # int or float?
+    # int, then float (also covers scientific notation like "1e-3").
     try:
-        if "." in raw:
-            return float(raw)
         return int(raw)
     except ValueError:
-        return raw  # keep as string
+        pass
+    try:
+        value = float(raw)
+        # Reject inf/nan spellings ("inf", "nan"): as config values they are
+        # almost certainly typos, so keep them as strings and let the schema
+        # produce a clear validation error.
+        if math.isfinite(value):
+            return value
+    except ValueError:
+        pass
+    return raw  # keep as string
 
 def assign_override_path(root: Dict[str, Any], path: Tuple[str, ...], value: Any) -> None:
     """
