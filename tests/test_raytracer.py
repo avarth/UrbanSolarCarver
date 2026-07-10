@@ -205,6 +205,43 @@ class TestGenerateSunRays:
 
 
 # ---------------------------------------------------------------------------
+# Fused count kernel (binary carving modes)
+# ---------------------------------------------------------------------------
+
+class TestFusedCountKernel:
+    @pytest.mark.skipif(
+        not __import__("urbansolarcarver.raytracer", fromlist=["dda_backend_available"])
+        .dda_backend_available(torch.device("cpu")),
+        reason="Warp CPU unavailable",
+    )
+    def test_matches_buffered_trace_counts(self):
+        """The fused count kernel must produce exactly the same per-voxel
+        hit counts as accumulating the buffered DDA trace output."""
+        from urbansolarcarver.raytracer import trace_and_count_dda
+
+        res, scale, voxel, ray_len = 20, 20.0, 1.0, 60.0
+        rng = np.random.default_rng(3)
+        n = 2000
+        origins = torch.from_numpy(rng.uniform(0, scale, (n, 3)).astype(np.float32))
+        d = rng.normal(size=(n, 3)).astype(np.float32)
+        d /= np.linalg.norm(d, axis=1, keepdims=True)
+        dirs = torch.from_numpy(d)
+        pids = torch.zeros(n, dtype=torch.long)
+
+        counts_fused = torch.zeros(res**3, dtype=torch.int32)
+        trace_and_count_dda((0.0, 0.0, 0.0), scale, res, origins, dirs,
+                            counts_fused, ray_len)
+
+        _, _, vox = trace_multi_hit_grid((0.0, 0.0, 0.0), scale, res,
+                                         origins, dirs, pids, voxel, ray_len)
+        counts_ref = torch.zeros(res**3, dtype=torch.int32)
+        flat = vox[:, 0] * res * res + vox[:, 1] * res + vox[:, 2]
+        counts_ref.index_add_(0, flat, torch.ones_like(flat, dtype=torch.int32))
+
+        torch.testing.assert_close(counts_fused, counts_ref)
+
+
+# ---------------------------------------------------------------------------
 # Auto batch size
 # ---------------------------------------------------------------------------
 

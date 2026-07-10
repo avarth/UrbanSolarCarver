@@ -410,6 +410,131 @@ if _warp_available:
             if vx < 0 or vx >= resolution or vy < 0 or vy >= resolution or vz < 0 or vz >= resolution:
                 return
 
+    # See PAIRED DDA KERNELS note above _dda_trace_kernel.
+    @wp.kernel
+    def _dda_fused_count_kernel(
+        # Ray data
+        ray_origins: wp.array(dtype=wp.vec3),
+        ray_dirs: wp.array(dtype=wp.vec3),
+        # Grid parameters
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        max_t: float,
+        # Hit counter per voxel (modified in-place via atomic_add)
+        counts: wp.array(dtype=wp.int32),   # flat count volume [res^3]
+    ):
+        """Fused DDA + hit counting: traverse the grid and increment each
+        visited voxel's counter in-place.
+
+        Used by the binary carving modes (time-based, tilted_plane), where
+        the count is the number of violating rays per voxel.  Like the
+        fused score kernel, this needs no output buffer — which also means
+        no overflow-retry re-tracing.
+        """
+        tid = wp.tid()
+        o = ray_origins[tid]
+        d = ray_dirs[tid]
+        inv_cell = 1.0 / cell_size
+        res_f = float(resolution)
+        res_sq = resolution * resolution
+
+        # --- Ray-AABB intersection ---
+        t_near = 0.0
+        t_far = max_t
+        for axis in range(3):
+            o_a = o[axis]
+            d_a = d[axis]
+            lo = grid_origin[axis]
+            hi = lo + res_f * cell_size
+            if wp.abs(d_a) < 1.0e-12:
+                if o_a < lo or o_a >= hi:
+                    return
+            else:
+                inv_d = 1.0 / d_a
+                t1 = (lo - o_a) * inv_d
+                t2 = (hi - o_a) * inv_d
+                if t1 > t2:
+                    tmp = t1; t1 = t2; t2 = tmp
+                if t1 > t_near:
+                    t_near = t1
+                if t2 < t_far:
+                    t_far = t2
+                if t_near > t_far:
+                    return
+        if t_near < 0.0:
+            t_near = 0.0
+
+        # --- Init DDA ---
+        entry = wp.vec3(
+            o[0] + d[0] * t_near,
+            o[1] + d[1] * t_near,
+            o[2] + d[2] * t_near,
+        )
+        vx = int(wp.floor((entry[0] - grid_origin[0]) * inv_cell))
+        vy = int(wp.floor((entry[1] - grid_origin[1]) * inv_cell))
+        vz = int(wp.floor((entry[2] - grid_origin[2]) * inv_cell))
+        if vx >= resolution: vx = resolution - 1
+        if vy >= resolution: vy = resolution - 1
+        if vz >= resolution: vz = resolution - 1
+        if vx < 0: vx = 0
+        if vy < 0: vy = 0
+        if vz < 0: vz = 0
+
+        step_x = 1; step_y = 1; step_z = 1
+        if d[0] < 0.0: step_x = -1
+        if d[1] < 0.0: step_y = -1
+        if d[2] < 0.0: step_z = -1
+
+        EPS = 1.0e-20  # parallel-axis threshold (see first DDA kernel)
+        abs_dx = wp.abs(d[0]); abs_dy = wp.abs(d[1]); abs_dz = wp.abs(d[2])
+
+        if abs_dx > EPS:
+            if step_x > 0: t_max_x = (grid_origin[0] + float(vx + 1) * cell_size - o[0]) / d[0]
+            else:           t_max_x = (grid_origin[0] + float(vx) * cell_size - o[0]) / d[0]
+            t_delta_x = cell_size / abs_dx
+        else:
+            t_max_x = 1.0e30; t_delta_x = 1.0e30
+
+        if abs_dy > EPS:
+            if step_y > 0: t_max_y = (grid_origin[1] + float(vy + 1) * cell_size - o[1]) / d[1]
+            else:           t_max_y = (grid_origin[1] + float(vy) * cell_size - o[1]) / d[1]
+            t_delta_y = cell_size / abs_dy
+        else:
+            t_max_y = 1.0e30; t_delta_y = 1.0e30
+
+        if abs_dz > EPS:
+            if step_z > 0: t_max_z = (grid_origin[2] + float(vz + 1) * cell_size - o[2]) / d[2]
+            else:           t_max_z = (grid_origin[2] + float(vz) * cell_size - o[2]) / d[2]
+            t_delta_z = cell_size / abs_dz
+        else:
+            t_max_z = 1.0e30; t_delta_z = 1.0e30
+
+        # --- Walk and count ---
+        max_steps = 3 * resolution
+        for _step in range(max_steps):
+            if vx >= 0 and vx < resolution and vy >= 0 and vy < resolution and vz >= 0 and vz < resolution:
+                flat_idx = vx * res_sq + vy * resolution + vz
+                wp.atomic_add(counts, flat_idx, 1)
+
+            if t_max_x < t_max_y:
+                if t_max_x < t_max_z:
+                    if t_max_x > max_t: return
+                    vx = vx + step_x; t_max_x = t_max_x + t_delta_x
+                else:
+                    if t_max_z > max_t: return
+                    vz = vz + step_z; t_max_z = t_max_z + t_delta_z
+            else:
+                if t_max_y < t_max_z:
+                    if t_max_y > max_t: return
+                    vy = vy + step_y; t_max_y = t_max_y + t_delta_y
+                else:
+                    if t_max_z > max_t: return
+                    vz = vz + step_z; t_max_z = t_max_z + t_delta_z
+
+            if vx < 0 or vx >= resolution or vy < 0 or vy >= resolution or vz < 0 or vz >= resolution:
+                return
+
     @wp.kernel
     def _parity_voxelize_kernel(
         mesh_id: wp.uint64,
@@ -623,6 +748,55 @@ def trace_and_score_dda(
     )
 
 
+def trace_and_count_dda(
+    min_corner: Tuple[float, float, float],
+    scale: float,
+    resolution: int,
+    origins: torch.Tensor,
+    ray_dirs: torch.Tensor,
+    counts: torch.Tensor,
+    ray_length: float,
+) -> None:
+    """Fused DDA traversal + per-voxel hit counting (Warp kernel).
+
+    Atomically increments ``counts`` for every voxel each ray visits.
+    No output buffer and no overflow-retry re-tracing (unlike the
+    buffered :func:`trace_multi_hit_grid` path).  Modifies ``counts``
+    in-place.
+
+    Parameters
+    ----------
+    counts : torch.Tensor, shape (resolution**3,)
+        Flat int32 hit-count volume, modified in-place.
+    """
+    num_rays = origins.shape[0]
+    if num_rays == 0:
+        return
+    device_str = f"cuda:{origins.device.index or 0}" if origins.is_cuda else "cpu"
+    cell_size = scale / resolution
+
+    if not counts.is_contiguous() or counts.dtype != torch.int32:
+        raise ValueError(
+            "trace_and_count_dda: counts must be a contiguous int32 tensor "
+            "(in-place update would silently fail on a copy)"
+        )
+    wp_origins = wp.from_torch(origins.contiguous().float(), dtype=wp.vec3)
+    wp_dirs = wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3)
+    wp_counts = wp.from_torch(counts)
+    grid_origin_wp = wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2]))
+
+    wp.launch(
+        _dda_fused_count_kernel,
+        dim=num_rays,
+        inputs=[
+            wp_origins, wp_dirs,
+            grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
+            wp_counts,
+        ],
+        device=device_str,
+    )
+
+
 def _trace_dda_warp(
     min_corner: Tuple[float, float, float],
     scale: float,
@@ -719,21 +893,25 @@ def generate_sky_patch_rays(
     patch_dirs: torch.Tensor,  # Unit vectors representing directions of sky patches (shape Vx3).
     device: torch.device,       # Compute device (CPU or GPU).
     *,
+    include_normals: bool = False,
     ray_id: str | None = None,
     session: "CarverSession | None" = None,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, "torch.Tensor | None", torch.Tensor]:
     """
     Build rays for each sample point and sky patch direction.
     1. We have P sample locations on a surface and V directions in the sky (divided into patches).
     2. For each surface point, we want to know which sky patches are 'visible' (face-culling) by checking if the normal faces that patch.
     3. We then record an origin (the point) and a direction (the sky patch) for each valid combination.
-    4. Normals_per_ray carries the surface normal for each ray, useful later for shading or weighting.
+
+    ``include_normals`` gates the per-ray normal gather: it is an (R, 3)
+    tensor nobody in the pipeline consumes — hundreds of MB of VRAM at
+    typical ray counts — so it is only materialized on request.
 
     Returns:
       origins           : Tensor of 3D positions where rays start (one per valid combination).
       ray_dirs          : Tensor of unit vectors indicating ray directions.
       sky_patch_ids     : Integer index for which sky patch each ray corresponds to.
-      normals_per_ray   : Surface normal vectors repeated per ray.
+      normals_per_ray   : Surface normal per ray, or None unless include_normals=True.
       point_idx         : Integer index mapping each ray back to its source sample point.
     """
 
@@ -748,7 +926,10 @@ def generate_sky_patch_rays(
     from urbansolarcarver.session import get_active_session
     sess = session or get_active_session()
     if sess is not None:
-        cache_key = f"patch_rays:{pts.shape[0]}:{patch_dirs.shape[0]}:{id(pts)}"
+        cache_key = (
+            f"patch_rays:{pts.shape[0]}:{patch_dirs.shape[0]}:{id(pts)}"
+            f":n{int(include_normals)}"
+        )
         cached = sess.tensors.get(f"{cache_key}|g{sess._gen}")
         if cached is not None:
             return cached
@@ -767,7 +948,7 @@ def generate_sky_patch_rays(
     origins         = point_coords[point_idx]  # (R,3) where R is number of valid rays.
     ray_dirs        = sky_vectors[vector_idx]   # (R,3)
     sky_patch_ids   = vector_idx                # (R,)
-    normals_per_ray = normal_vecs[point_idx]    # (R,3)
+    normals_per_ray = normal_vecs[point_idx] if include_normals else None  # (R,3)
 
     result = (origins, ray_dirs, sky_patch_ids, normals_per_ray, point_idx)
 

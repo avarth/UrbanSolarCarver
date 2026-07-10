@@ -83,6 +83,23 @@ apply equally to CUDA machines.
   float addition makes scores reproducible only up to rounding noise.
   CUDA dispatch is unchanged.
 
+### GPU-path efficiency
+
+- The carvers no longer transfer the full ray set to host memory: at
+  typical ray counts (~34M rays at 0.5 m sampling) this was ~0.8 GB of
+  device→host copying per preprocessing run whose result was immediately
+  discarded.  `carve_with_sky_patch_rays` and `carve_with_sun_rays` now
+  take `return_rays=False` (opt-in) and return None ray fields otherwise.
+- New fused DDA count kernel (`trace_and_count_dda`) for the binary
+  carving modes (time-based, tilted_plane): counts hits atomically
+  in-place, replacing the buffered trace path that guessed 20 hits/ray
+  and re-traced every batch on overflow (2-3x wasted GPU work on scenes
+  with long rays).  The buffered path remains for the no-Warp fallback.
+  Equivalence with the buffered counts is regression-tested.
+- `generate_sky_patch_rays` no longer materializes per-ray normals
+  (an (R, 3) tensor nobody consumes — hundreds of MB of VRAM);
+  pass `include_normals=True` to get them.
+
 ### Robustness / code quality
 
 - Defensive validation at stage boundaries: thresholding and exporting now

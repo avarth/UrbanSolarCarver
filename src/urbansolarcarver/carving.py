@@ -46,7 +46,7 @@ import json
 from .sun import get_sun_vectors
 from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
-    auto_batch_size, dda_backend_available,
+    trace_and_count_dda, auto_batch_size, dda_backend_available,
 )
 # Fused kernel import (conditional -- only available when Warp is installed)
 try:
@@ -57,11 +57,16 @@ from typing import NamedTuple, Sequence
 
 
 class SkyPatchCarvingResult(NamedTuple):
-    """Return type for :func:`carve_with_sky_patch_rays`."""
-    ray_origins: np.ndarray      # (N, 3) ray start points
-    ray_directions: np.ndarray   # (N, 3) ray unit vectors
-    raw_voxel_scores: np.ndarray # (X*Y*Z,) per-voxel weighted scores
-    patch_weights: np.ndarray    # (P,) weight per Tregenza sky patch
+    """Return type for :func:`carve_with_sky_patch_rays`.
+
+    ``ray_origins`` / ``ray_directions`` are None unless the carver was
+    called with ``return_rays=True`` — transferring the full ray set to
+    host memory costs hundreds of MB at typical ray counts.
+    """
+    ray_origins: "np.ndarray | None"      # (N, 3) ray start points, or None
+    ray_directions: "np.ndarray | None"   # (N, 3) ray unit vectors, or None
+    raw_voxel_scores: np.ndarray          # (X*Y*Z,) per-voxel weighted scores
+    patch_weights: np.ndarray             # (P,) weight per Tregenza sky patch
 
 # High-level helpers migrated from api_core
 import os
@@ -168,6 +173,56 @@ def _validate_cubic_resolution(grid_resolution, func_name: str):
       
 #--- Defs for time-based or weighted carving -------------------------------------------------------------------
 
+def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, config):
+    """Count how many rays visit each voxel; returns a flat int32 tensor.
+
+    Uses the fused Warp count kernel when available (no hit buffers, no
+    overflow-retry re-tracing); otherwise falls back to the buffered
+    :func:`trace_multi_hit_grid` path.  Both count each (ray, voxel) pair
+    at most once.
+    """
+    device = voxel_grid.device
+    counts = torch.zeros(voxel_grid.numel(), dtype=torch.int32, device=device)
+    batch_size = _resolve_batch_size(config, res, device)
+    res_sq = res * res
+
+    if dda_backend_available(device):
+        for i in range(0, origins.shape[0], batch_size):
+            trace_and_count_dda(
+                min_corner, scale, res,
+                origins[i: i + batch_size], directions[i: i + batch_size],
+                counts, float(config.ray_length),
+            )
+        return counts
+
+    for i in range(0, origins.shape[0], batch_size):
+        o_batch = origins[i: i + batch_size]
+        d_batch = directions[i: i + batch_size]
+        # tracer requires per-ray patch ids; unused for counting
+        patch_ids_stub = torch.zeros((o_batch.shape[0],), dtype=torch.long, device=device)
+        _, _, voxel_idx = trace_multi_hit_grid(
+            min_corner=min_corner,
+            scale=scale,
+            resolution=res,
+            origins=o_batch,
+            ray_dirs=d_batch,
+            sky_patch_ids=patch_ids_stub,
+            voxel_size=float(config.voxel_size),
+            ray_length=float(config.ray_length),
+        )
+        if voxel_idx.numel() > 0:
+            # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
+            flat_idx = voxel_idx[:, 0] * res_sq + voxel_idx[:, 1] * res + voxel_idx[:, 2]
+            counts.index_add_(0, flat_idx, torch.ones_like(flat_idx, dtype=torch.int32))
+    return counts
+
+
+def _carve_by_counts(voxel_grid, counts) -> torch.Tensor:
+    """Remove every voxel visited by at least one ray."""
+    keep = counts.view_as(voxel_grid) == 0
+    return (voxel_grid.bool() & keep).to(voxel_grid.dtype)
+
+
 def carve_with_sun_rays(
     voxel_grid,
     grid_origin,
@@ -178,6 +233,7 @@ def carve_with_sun_rays(
     config: "user_config",
     datetimes,
     return_counts: bool = False,
+    return_rays: bool = False,
 ):
     """
     Perform time-based carving of a voxel grid using time-based sun vectors.
@@ -192,10 +248,9 @@ def carve_with_sun_rays(
          by minimum altitude.
       2. For each surface sample point with outward normal, build rays toward the sun
          directions that lie in its visible hemisphere (facing-mask from normals).
-      3. March points along each ray in fixed steps equal to `voxel_size` up to
-         `ray_length`.
-      4. Map sampled world positions to grid indices and zero all intersected voxels.
-      5. Return the carved grid and the full set of ray origins and directions.
+      3. Trace each ray through the grid (exact Warp DDA when available),
+         counting hits per voxel.
+      4. Remove every voxel visited by at least one ray.
 
     Parameters
     ----------
@@ -222,21 +277,24 @@ def carve_with_sun_rays(
         Wall-clock timestamps for which sun vectors are generated.
     return_counts : bool, default False
         If True, return a 4th element: per-voxel hit counts (int32 array).
+    return_rays : bool, default False
+        If True, return the full ray set as host numpy arrays.  Off by
+        default: at millions of rays this is hundreds of MB of
+        device→host transfer that the pipeline never uses.
 
     Returns
     -------
     carved_grid : torch.Tensor, shape (X, Y, Z)
         Voxel grid after removing all cells intersected by any traced ray.
-    ray_origins : np.ndarray, shape (N, 3)
-        World-space starting points for all emitted rays after facing cull.
-    ray_directions : np.ndarray, shape (N, 3)
-        Unit direction vectors for the emitted rays.
+    ray_origins : np.ndarray, shape (N, 3), or None
+        World-space ray start points (None unless *return_rays* is True).
+    ray_directions : np.ndarray, shape (N, 3), or None
+        Unit ray directions (None unless *return_rays* is True).
     counts : np.ndarray, shape (V,), optional
         Per-voxel hit counts (flat).  Only returned when *return_counts* is True.
     """
     _validate_cubic_resolution(grid_resolution, "carve_with_sun_rays")
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
-    res_sq = res * res
 
     # sun directions on device (rotated to model coordinates via north_deg)
     sun_dirs = get_sun_vectors(
@@ -253,7 +311,7 @@ def carve_with_sun_rays(
             "grid will be returned unmodified.",
             stacklevel=2,
         )
-        empty = np.empty((0, 3), dtype=np.float32)
+        empty = np.empty((0, 3), dtype=np.float32) if return_rays else None
         if return_counts:
             return voxel_grid.clone(), empty, empty, np.zeros(voxel_grid.numel(), dtype=np.int32)
         return voxel_grid.clone(), empty, empty
@@ -266,52 +324,17 @@ def carve_with_sun_rays(
     origins, directions = generate_sun_rays(
         sample_points, sample_normals, sun_arr.cpu().numpy(), voxel_grid.device
     )
-    R = origins.shape[0]
-    ray_origins = origins.cpu().numpy()
-    ray_directions = directions.cpu().numpy()
-
-    device = voxel_grid.device
-    flat = voxel_grid.reshape(-1).clone().to(torch.float32)
-    counts = None
-    if return_counts:
-        counts = torch.zeros_like(flat, dtype=torch.int32)
+    ray_origins = origins.cpu().numpy() if return_rays else None
+    ray_directions = directions.cpu().numpy() if return_rays else None
 
     # scale is the cubic grid extent in world units (meters), not per-voxel size
     min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-    scale = float(grid_extent)
+    counts = _count_ray_hits(
+        voxel_grid, min_corner, float(grid_extent), res, origins, directions, config
+    )
+    carved_grid = _carve_by_counts(voxel_grid, counts)
 
-    batch_size = _resolve_batch_size(config, res, device)
-    for i in range(0, R, batch_size):
-        o_batch = origins[i: i + batch_size]
-        d_batch = directions[i: i + batch_size]
-        if o_batch.numel() == 0:
-            break
-
-        # tracer requires per-ray patch ids; unused for carving
-        patch_ids_stub = torch.zeros((o_batch.shape[0],), dtype=torch.long, device=device)
-
-        _, _, voxel_idx = trace_multi_hit_grid(
-            min_corner=min_corner,
-            scale=scale,
-            resolution=res,
-            origins=o_batch,
-            ray_dirs=d_batch,
-            sky_patch_ids=patch_ids_stub,
-            voxel_size=float(config.voxel_size),
-            ray_length=float(config.ray_length),
-        )
-
-        if voxel_idx.numel() > 0:
-            # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
-            flat_idx = voxel_idx[:, 0] * res_sq + voxel_idx[:, 1] * res + voxel_idx[:, 2]
-            valid = (flat_idx >= 0) & (flat_idx < flat.numel())
-            flat_idx = flat_idx[valid]
-            flat[flat_idx] = 0
-            if counts is not None:
-                counts.index_add_(0, flat_idx, torch.ones_like(flat_idx, dtype=torch.int32))
-
-    carved_grid = flat.view_as(voxel_grid).to(voxel_grid.dtype)
-    if counts is None:
+    if not return_counts:
         return carved_grid, ray_origins, ray_directions
     return carved_grid, ray_origins, ray_directions, counts.detach().cpu().numpy()
 
@@ -323,7 +346,8 @@ def carve_with_sky_patch_rays(
     sample_points,
     sample_normals,
     config: user_config,
-    hoys : Sequence[int]
+    hoys: Sequence[int],
+    return_rays: bool = False,
     ):
     """
     Perform sky-patch-weighted carving of a voxel grid using mode-specific weight metrics.
@@ -368,13 +392,17 @@ def carve_with_sky_patch_rays(
           - voxel_size, ray_length: tracer resolution and extent.
     hoys : Sequence[int]
         Hours-of-year indices mapping to EPW or other time-series input.
+    return_rays : bool, default False
+        If True, include the full ray set (host numpy arrays) in the
+        result.  Off by default: at millions of rays this is hundreds of
+        MB of device→host transfer that the pipeline never uses.
 
     Returns
     -------
     SkyPatchCarvingResult
         NamedTuple with fields:
-        - ray_origins (N, 3): world-space ray start points.
-        - ray_directions (N, 3): unit ray vectors.
+        - ray_origins (N, 3): ray start points, or None unless return_rays.
+        - ray_directions (N, 3): unit ray vectors, or None unless return_rays.
         - raw_voxel_scores (X*Y*Z,): accumulated patch weights per voxel.
         - patch_weights (P,): weight per Tregenza sky patch.
     """
@@ -525,13 +553,13 @@ def carve_with_sky_patch_rays(
 
     raw_voxel_scores = scores.cpu().numpy()  # Move accumulated scores to CPU NumPy
 
-    # Return raw scores, ray geometry, and patch weights.
+    # Return raw scores, patch weights, and (only on request) ray geometry.
     # Thresholding and mask creation are handled exclusively by
     # api_core.thresholding — keeping them separate avoids duplication
     # and lets users re-threshold without re-tracing rays.
     return SkyPatchCarvingResult(
-        ray_origins=ray_origins.cpu().numpy(),
-        ray_directions=ray_directions.cpu().numpy(),
+        ray_origins=ray_origins.cpu().numpy() if return_rays else None,
+        ray_directions=ray_directions.cpu().numpy() if return_rays else None,
         raw_voxel_scores=raw_voxel_scores,
         patch_weights=patch_weights.cpu().numpy(),
     )
@@ -583,7 +611,6 @@ def carve_with_planes(
     """
     _validate_cubic_resolution(grid_resolution, "carve_tilted_plane")
     side_len = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
-    side_len_sq = side_len * side_len
 
     device = voxel_grid.device
 
@@ -650,50 +677,14 @@ def carve_with_planes(
     origins_tensor = torch.from_numpy(pts_np).to(device, non_blocking=True)
     dirs_tensor = torch.from_numpy(dirs_np).to(device, non_blocking=True)
 
-    voxel_occupancy_flat = voxel_grid.reshape(-1).clone().float()
-    counts = None
-    if return_counts:
-        counts = torch.zeros_like(voxel_occupancy_flat, dtype=torch.int32)
-
     grid_min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-    scale_tensor = float(grid_extent)
-    batch_size = _resolve_batch_size(config, side_len, device)
+    counts = _count_ray_hits(
+        voxel_grid, grid_min_corner, float(grid_extent), side_len,
+        origins_tensor, dirs_tensor, config,
+    )
+    carved_grid = _carve_by_counts(voxel_grid, counts)
 
-    total_rays = origins_tensor.shape[0]
-    for batch_start in range(0, total_rays, batch_size):
-        origins_batch = origins_tensor[batch_start: batch_start + batch_size]
-        dirs_batch = dirs_tensor[batch_start: batch_start + batch_size]
-        if origins_batch.numel() == 0:
-            break
-
-        # required by tracer but unused for carving
-        patch_ids_placeholder = torch.zeros((origins_batch.shape[0],), dtype=torch.long, device=device)
-
-        _, _, visited_voxel_indices = trace_multi_hit_grid(
-            min_corner=grid_min_corner,
-            scale=scale_tensor,          # full-box world extent
-            resolution=side_len,         # cubic grid
-            origins=origins_batch,
-            ray_dirs=dirs_batch,
-            sky_patch_ids=patch_ids_placeholder,
-            voxel_size=float(config.voxel_size),
-            ray_length=float(config.ray_length),
-        )
-
-        if visited_voxel_indices.numel() > 0:
-            flat_indices = (
-                visited_voxel_indices[:, 0] * side_len_sq
-                + visited_voxel_indices[:, 1] * side_len
-                + visited_voxel_indices[:, 2]
-            )
-            valid = (flat_indices >= 0) & (flat_indices < voxel_occupancy_flat.numel())
-            flat_indices = flat_indices[valid]
-            voxel_occupancy_flat[flat_indices] = 0
-            if counts is not None:
-                counts.index_add_(0, flat_indices, torch.ones_like(flat_indices, dtype=torch.int32))
-
-    carved_grid = voxel_occupancy_flat.view_as(voxel_grid).to(voxel_grid.dtype)
-    if counts is None:
+    if not return_counts:
         return carved_grid, pts_np, dirs_np
     return carved_grid, pts_np, dirs_np, counts.detach().cpu().numpy()
 
