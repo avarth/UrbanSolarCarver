@@ -98,7 +98,8 @@ def fetch_tregenza_patch_solid_angles(
 def compute_radiative_cooling_weights(
     dewpoint_celsius: float,   # ambient dew point in °C for emissivity fit
     bliss_k: float,            # empirical angular‐attenuation constant (Bliss 1961)
-    device: torch.device       # compute device for output tensor  
+    device: torch.device,      # compute device for output tensor
+    min_elevation_deg: float = 0.0,  # protection-cone cutoff (design constraint)
 ) -> torch.Tensor:
     """
     Return a long-wave "cooling potential" weight for each
@@ -151,6 +152,13 @@ def compute_radiative_cooling_weights(
         emissivity. Typical clear-sky values range 1.5 - 2.0; larger k increases zenith-horizon contrast.
     device : torch.device
         Target compute device for the returned tensor.
+    min_elevation_deg : float, default=0.0
+        Design-constraint protection cone: sky patches whose center
+        elevation is below this angle are excluded (weight 0) and the
+        remaining weights renormalized.  This is NOT part of the physical
+        model — it declares which portion of the sky dome the design
+        defends, analogous to obstruction-angle rules in daylight codes.
+        0 (default) keeps the full hemisphere (pure physical model).
 
     Returns
     -------
@@ -218,6 +226,21 @@ def compute_radiative_cooling_weights(
     # (1 - eps_dir) is the emissivity deficit: patches where the atmosphere
     # emits less radiation allow more heat to radiate to deep space.
     raw = view_factor * (1.0 - eps_dir) * solid_angles
+
+    # Design-constraint protection cone: exclude patches below the declared
+    # elevation.  Applied AFTER the physical weights so the null case
+    # (min_elevation_deg=0) is exactly the unmodified physical model.
+    if min_elevation_deg > 0.0:
+        elevation_deg = torch.rad2deg(torch.asin(dirs[:, 2].clamp(-1.0, 1.0)))
+        raw = torch.where(elevation_deg >= min_elevation_deg, raw,
+                          torch.zeros_like(raw))
+        if not (raw > 0.0).any():
+            raise ValueError(
+                f"min_sky_elevation_deg={min_elevation_deg:g} excludes every "
+                f"sky patch (highest Tregenza patch center is at 90°) — "
+                f"lower the cutoff."
+            )
+
     total = raw.sum()
     if total <= 0.0:
         # No net cooling (e.g., very humid climate). Fall back to uniform.

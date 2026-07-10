@@ -215,6 +215,71 @@ class TestOverrideParsing:
 
 
 # ---------------------------------------------------------------------------
+# edge_taper end-to-end (daylight mode needs no EPW)
+# ---------------------------------------------------------------------------
+
+class TestEdgeTaperPipeline:
+    def _run_preprocessing(self, tmp_path, sub, tiny_cube_mesh, tiny_surface_mesh,
+                           **cfg_extra):
+        from urbansolarcarver import preprocessing
+        from urbansolarcarver.load_config import user_config
+        vol_path = tmp_path / sub / "vol.ply"
+        srf_path = tmp_path / sub / "srf.ply"
+        vol_path.parent.mkdir(parents=True, exist_ok=True)
+        tiny_cube_mesh.export(str(vol_path))
+        tiny_surface_mesh.export(str(srf_path))
+        cfg = user_config(
+            max_volume_path=str(vol_path), test_surface_path=str(srf_path),
+            out_dir=str(tmp_path / sub / "out"), mode="daylight",
+            voxel_size=2.0, grid_step=2.0, ray_length=50.0,
+            min_voxels=1, min_face_count=1, device="cpu",
+            **cfg_extra,
+        )
+        return preprocessing(cfg, tmp_path / sub / "out")
+
+    def test_taper_reduces_score_mass(self, tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+        """A taper wider than the surface strictly reduces every weight,
+        so total blocked score mass must drop versus the untapered run."""
+        base = self._run_preprocessing(
+            tmp_path, "base", tiny_cube_mesh, tiny_surface_mesh)
+        tapered = self._run_preprocessing(
+            tmp_path, "tapered", tiny_cube_mesh, tiny_surface_mesh,
+            edge_taper=10.0)  # surface is 6x6 → max boundary distance 3
+        s_base = np.load(base.volume_path).sum(dtype=np.float64)
+        s_tap = np.load(tapered.volume_path).sum(dtype=np.float64)
+        assert s_base > 0
+        assert 0 < s_tap < 0.6 * s_base  # all weights <= 3/10
+
+    def test_taper_recorded_in_diagnostics(self, tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+        import json as _json
+        result = self._run_preprocessing(
+            tmp_path, "diag", tiny_cube_mesh, tiny_surface_mesh, edge_taper=1.0)
+        diag = _json.loads(
+            (result.out_dir / "diagnostics" / "diagnostic.json").read_text())
+        assert diag["edge_taper"]["meters"] == 1.0
+        assert diag["edge_taper"]["applied"] is True
+        assert diag["edge_taper"]["components"]
+
+    def test_taper_ignored_for_violation_modes(self, tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+        from urbansolarcarver import preprocessing
+        from urbansolarcarver.load_config import user_config
+        vol_path = tmp_path / "tp" / "vol.ply"
+        srf_path = tmp_path / "tp" / "srf.ply"
+        vol_path.parent.mkdir(parents=True, exist_ok=True)
+        tiny_cube_mesh.export(str(vol_path))
+        tiny_surface_mesh.export(str(srf_path))
+        cfg = user_config(
+            max_volume_path=str(vol_path), test_surface_path=str(srf_path),
+            out_dir=str(tmp_path / "tp" / "out"), mode="tilted_plane",
+            tilted_plane_angle_deg=45.0, voxel_size=2.0, grid_step=2.0,
+            ray_length=50.0, min_voxels=1, min_face_count=1, device="cpu",
+            edge_taper=1.0,
+        )
+        with pytest.warns(UserWarning, match="edge_taper.*ignored"):
+            preprocessing(cfg, tmp_path / "tp" / "out")
+
+
+# ---------------------------------------------------------------------------
 # Default-threshold reporting (no GPU / EPW needed)
 # ---------------------------------------------------------------------------
 

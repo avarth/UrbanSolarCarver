@@ -242,6 +242,62 @@ class TestFusedCountKernel:
 
 
 # ---------------------------------------------------------------------------
+# Point-weighted fused score kernel (edge_taper)
+# ---------------------------------------------------------------------------
+
+class TestFusedScorePointWeighted:
+    @pytest.mark.skipif(
+        not __import__("urbansolarcarver.raytracer", fromlist=["dda_backend_available"])
+        .dda_backend_available(torch.device("cpu")),
+        reason="Warp CPU unavailable",
+    )
+    def test_point_weights_scale_scores(self):
+        """Per-ray contribution must be patch_weight × point_weight."""
+        from urbansolarcarver.raytracer import trace_and_score_dda
+
+        res, scale, ray_len = 8, 8.0, 20.0
+        # Two vertical rays in different columns, same patch, different points.
+        origins = torch.tensor([[2.5, 2.5, 0.5], [5.5, 5.5, 0.5]],
+                               dtype=torch.float32)
+        dirs = torch.tensor([[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]],
+                            dtype=torch.float32)
+        patch_ids = torch.zeros(2, dtype=torch.long)
+        patch_weights = torch.tensor([2.0], dtype=torch.float32)
+
+        baseline = torch.zeros(res**3, dtype=torch.float32)
+        trace_and_score_dda((0.0, 0.0, 0.0), scale, res, origins, dirs,
+                            patch_ids, patch_weights, baseline, ray_len)
+
+        weighted = torch.zeros(res**3, dtype=torch.float32)
+        trace_and_score_dda((0.0, 0.0, 0.0), scale, res, origins, dirs,
+                            patch_ids, patch_weights, weighted, ray_len,
+                            point_ids=torch.tensor([0, 1], dtype=torch.int32),
+                            point_weights=torch.tensor([1.0, 0.25],
+                                                       dtype=torch.float32))
+
+        b = baseline.reshape(res, res, res)
+        w = weighted.reshape(res, res, res)
+        # Column of point 0 (full weight) identical; column of point 1 scaled.
+        torch.testing.assert_close(w[2, 2, :], b[2, 2, :])
+        torch.testing.assert_close(w[5, 5, :], b[5, 5, :] * 0.25)
+
+    def test_point_args_must_come_together(self):
+        from urbansolarcarver.raytracer import (
+            trace_and_score_dda, dda_backend_available,
+        )
+        if not dda_backend_available(torch.device("cpu")):
+            pytest.skip("Warp CPU unavailable")
+        with pytest.raises(ValueError, match="together"):
+            trace_and_score_dda(
+                (0.0, 0.0, 0.0), 8.0, 8,
+                torch.zeros((1, 3)), torch.tensor([[0.0, 0.0, 1.0]]),
+                torch.zeros(1, dtype=torch.long),
+                torch.ones(1), torch.zeros(512), 10.0,
+                point_ids=torch.zeros(1, dtype=torch.int32),
+            )
+
+
+# ---------------------------------------------------------------------------
 # Kernel warmup
 # ---------------------------------------------------------------------------
 

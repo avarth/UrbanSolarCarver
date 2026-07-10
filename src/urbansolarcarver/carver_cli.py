@@ -488,7 +488,7 @@ def schema(
     # Parameters shared by all modes.
     COMMON = {"max_volume_path", "test_surface_path", "out_dir", "mode", "voxel_size", "grid_step",
               "ray_length", "ray_batch_size", "threshold", "carve_fraction", "apply_smoothing",
-              "min_voxels", "device", "diagnostics"}
+              "min_voxels", "device", "diagnostics", "edge_taper"}
 
     if mode and mode not in MODE_PARAMS:
         typer.secho(f"  Unknown mode {mode!r}. Valid modes: {', '.join(sorted(MODE_PARAMS))}", fg="red")

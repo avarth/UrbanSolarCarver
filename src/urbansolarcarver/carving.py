@@ -373,6 +373,7 @@ def carve_with_sky_patch_rays(
     config: user_config,
     hoys: Sequence[int],
     return_rays: bool = False,
+    point_weights: "np.ndarray | None" = None,
     ):
     """
     Perform sky-patch-weighted carving of a voxel grid using mode-specific weight metrics.
@@ -421,6 +422,11 @@ def carve_with_sky_patch_rays(
         If True, include the full ray set (host numpy arrays) in the
         result.  Off by default: at millions of rays this is hundreds of
         MB of device→host transfer that the pipeline never uses.
+    point_weights : np.ndarray (R,), optional
+        Per-sample-point design weights in [0, 1] (edge_taper): each ray's
+        contribution is patch_weight × point_weight, and zero-weight rays
+        are dropped before tracing.  None (default) = all points count
+        fully.
 
     Returns
     -------
@@ -441,15 +447,38 @@ def carve_with_sky_patch_rays(
 
     # --- 2) Ray generation ------------------------------------------------
     # Generate rays: sample_points (R×3), sample_normals (R×3), sky_dirs (P×3)
-    # generate_sky_patch_rays also returns normals_per_ray and point_idx,
-    # discarded here — point_idx would enable per-sample-point attribution
-    # but is not needed by the current pipeline (evaluation is out of scope).
-    ray_origins, ray_directions, patch_ids, *_ = generate_sky_patch_rays(
-        sample_points,
-        sample_normals,
-        sky_dirs,
-        device=device
+    # point_idx maps each ray back to its source sample point — needed when
+    # per-point design weights (edge_taper) are active.
+    ray_origins, ray_directions, patch_ids, _normals_per_ray, point_idx = (
+        generate_sky_patch_rays(
+            sample_points,
+            sample_normals,
+            sky_dirs,
+            device=device
+        )
     )
+
+    # --- 2b) Per-point design weights (edge_taper) -------------------------
+    # Fold sample-point weights into per-ray weighting; rays from
+    # zero-weight points contribute nothing, so drop them before tracing.
+    pw_t = None
+    ray_point_ids = None
+    if point_weights is not None:
+        pw_t = torch.as_tensor(point_weights, dtype=torch.float32, device=device)
+        n_pts = sample_points.shape[0]
+        if pw_t.numel() != n_pts:
+            raise ValueError(
+                f"carve_with_sky_patch_rays: point_weights length "
+                f"{pw_t.numel()} does not match sample_points ({n_pts})"
+            )
+        keep = pw_t[point_idx] > 0.0
+        if not bool(keep.all()):
+            ray_origins = ray_origins[keep]
+            ray_directions = ray_directions[keep]
+            patch_ids = patch_ids[keep]
+            point_idx = point_idx[keep]
+        ray_point_ids = point_idx.to(torch.int32)
+
     total_rays = ray_origins.size(0)  # Total number of rays (R * P)
 
     # --- 3) Load patch weights ---------------------------------------------
@@ -469,6 +498,7 @@ def carve_with_sky_patch_rays(
             balance_temperature=config.balance_temperature,
             balance_offset=config.balance_offset,
             north_deg=config.north_deg,
+            min_sky_elevation_deg=config.min_sky_elevation_deg,
         )
 
     if sess:
@@ -483,6 +513,7 @@ def carve_with_sky_patch_rays(
             "balance_off": config.balance_offset,
             "north": config.north_deg,
             "ground_refl": config.ground_reflectance,
+            "min_elev": config.min_sky_elevation_deg,
         }
         cache_key = "patch_weights:" + hashlib.md5(
             json.dumps(key_payload, sort_keys=True).encode()
@@ -513,6 +544,9 @@ def carve_with_sky_patch_rays(
                 grid_origin, float(grid_extent_m), grid_resolution,
                 origins_batch, directions_batch, patches_batch,
                 patch_weights, scores, config.ray_length,
+                point_ids=(ray_point_ids[start:end]
+                           if ray_point_ids is not None else None),
+                point_weights=pw_t,
             )
             return
 
@@ -531,6 +565,15 @@ def carve_with_sky_patch_rays(
             hit_voxel_idxs[:, 2]
         )
 
+        # trace_multi_hit_grid guarantees each (ray, voxel) pair
+        # appears at most once, so weights can be accumulated directly.
+        weights_for_hits = patch_weights[hit_patch_ids]
+        if pw_t is not None:
+            # hit_ray_ids index into this batch; map back to sample points.
+            weights_for_hits = weights_for_hits * pw_t[
+                point_idx[start:end][hit_ray_ids]
+            ]
+
         # Guard: filter out-of-bounds indices
         if (idx_flat < 0).any() or (idx_flat >= num_voxels).any():
             warnings.warn(
@@ -539,14 +582,11 @@ def carve_with_sky_patch_rays(
             )
             valid = (idx_flat >= 0) & (idx_flat < num_voxels)
             idx_flat = idx_flat[valid]
-            hit_patch_ids = hit_patch_ids[valid]
+            weights_for_hits = weights_for_hits[valid]
 
         if idx_flat.numel() == 0:
             return
 
-        # trace_multi_hit_grid guarantees each (ray, voxel) pair
-        # appears at most once, so weights can be accumulated directly.
-        weights_for_hits = patch_weights[hit_patch_ids]
         scores.scatter_add_(0, idx_flat, weights_for_hits)
 
     batch_ranges = [

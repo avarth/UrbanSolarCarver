@@ -29,9 +29,11 @@ analysis_period:
 # end_day:     15
 # end_hour:    19
 
-# Dew point settings for radiative cooling
+# Radiative cooling settings
 dew_point_celsius: 14.0    # Night-time dew-point in °C for radiative_cooling.
-bliss_k:          1.8      # Empirical angular attenuation constant for radiative_cooling.
+bliss_k:          1.8      # Angular attenuation constant (Bliss 1961) for radiative_cooling — physical constant, leave at 1.8.
+min_sky_elevation_deg: 0.0 # radiative_cooling only: design-constraint protection cone — exclude sky patches
+                           # below this elevation from the cooling weights (renormalized). 0 = full hemisphere.
 
 # Sky model parameters
 north_deg: 0.0             # North direction in degrees clockwise from Y-axis (0 = Y-up is north)
@@ -40,6 +42,11 @@ ground_reflectance: 0.2    # Ground surface reflectance for sky model (0-1)
 # Voxel grid and sampling
 voxel_size:     1.0    # length of cube edge
 grid_step:      1.0    # spacing between sample points
+edge_taper:     0.0    # design constraint (m): test-surface sample points within this distance of
+                       # their component's edge count proportionally less (0 at the edge → 1 at
+                       # edge_taper), so perimeter/corner points don't force carving of directly
+                       # adjacent volume. 0 = off. Weighted sky-patch modes only; requires planar
+                       # test surfaces (already enforced by sampling).
 ray_length:     300.0  # max ray cast distance
 min_altitude:   5.0    # ignore low sun angles
 margin_frac:    0.01   # extra margin around mesh

@@ -1,4 +1,4 @@
-"""Invariant tests for grid operations — mathematical constraints that must hold."""
+﻿"""Invariant tests for grid operations — mathematical constraints that must hold."""
 import pytest
 import numpy as np
 import torch
@@ -66,19 +66,19 @@ class TestCoplanarityCheck:
     def test_perfectly_planar_accepted(self):
         from urbansolarcarver.grid import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=0.0)
-        pts, norms, _mesh = discretize_surface_with_normals(mesh, sample_step=0.2)
+        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2)
         assert pts.shape[0] > 0, "Perfectly planar mesh should produce samples"
 
     def test_within_tolerance_accepted(self):
         from urbansolarcarver.grid import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=3.0)
-        pts, norms, _mesh = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
+        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
         assert pts.shape[0] > 0, "3° spread should pass 5° tolerance"
 
     def test_exceeds_tolerance_rejected(self):
         from urbansolarcarver.grid import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=10.0)
-        pts, norms, _mesh = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
+        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
         assert pts.shape[0] == 0, "10° spread should fail 5° tolerance"
 
     def test_single_triangle_always_passes(self):
@@ -88,14 +88,14 @@ class TestCoplanarityCheck:
         verts = np.array([[0, 0, 0], [2, 0, 0], [1, 2, 0]], dtype=np.float64)
         faces = np.array([[0, 1, 2]], dtype=np.int32)
         mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
-        pts, norms, _mesh = discretize_surface_with_normals(mesh, sample_step=0.3)
+        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.3)
         assert pts.shape[0] > 0
 
     def test_all_rejected_returns_empty(self):
         """When all components fail planarity, return empty arrays."""
         from urbansolarcarver.grid import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=20.0)
-        pts, norms, _mesh = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
+        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
         assert pts.shape == (0, 3)
         assert norms.shape == (0, 3)
 
@@ -103,7 +103,7 @@ class TestCoplanarityCheck:
         """Output normals should be approximately unit length."""
         from urbansolarcarver.grid import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=0.0)
-        pts, norms, _mesh = discretize_surface_with_normals(mesh, sample_step=0.2)
+        pts, norms, _mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2)
         if norms.shape[0] > 0:
             lengths = np.linalg.norm(norms, axis=1)
             np.testing.assert_allclose(lengths, 1.0, atol=0.01)
@@ -112,7 +112,7 @@ class TestCoplanarityCheck:
         """Planar mesh should return an AnalysisMesh with 1:1 face mapping."""
         from urbansolarcarver.grid import discretize_surface_with_normals, AnalysisMesh
         mesh = self._make_planar_mesh(normal_spread_deg=0.0)
-        pts, norms, analysis_mesh = discretize_surface_with_normals(mesh, sample_step=0.2)
+        pts, norms, analysis_mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2)
         assert pts.shape[0] > 0
         assert isinstance(analysis_mesh, AnalysisMesh)
         # Face count == sample point count (1:1 mapping)
@@ -122,7 +122,7 @@ class TestCoplanarityCheck:
         """When all components fail planarity, analysis_mesh should be None."""
         from urbansolarcarver.grid import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=20.0)
-        pts, norms, analysis_mesh = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
+        pts, norms, analysis_mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=0.2, coplanarity_tol_deg=5.0)
         assert pts.shape == (0, 3)
         assert analysis_mesh is None
 
@@ -130,7 +130,7 @@ class TestCoplanarityCheck:
         """When sample_step exceeds the face size, skip gracefully (no crash)."""
         from urbansolarcarver.grid import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=0.0)  # 1x1 quad
-        pts, norms, analysis_mesh = discretize_surface_with_normals(mesh, sample_step=10.0)
+        pts, norms, analysis_mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=10.0)
         # Either returns 0 points (face too small) or a few points — must not crash
         assert pts.shape[1] == 3
 
@@ -153,7 +153,7 @@ class TestEdgeSampling:
         from shapely.geometry import Polygon, LineString
         mesh = self._make_flat_quad(1.0, 1.0)
         step = 0.3
-        pts, norms, qv, qf = sample_planar_surface(mesh, sample_step=step)
+        pts, norms, qv, qf, _w = sample_planar_surface(mesh, sample_step=step)
         # Project points to XY (mesh is on XY plane)
         pts_2d = pts[:, :2]
         # Check that every point along the boundary has a nearby sample
@@ -178,7 +178,7 @@ class TestEdgeSampling:
         # Build a polygon and grid the same way the function does
         mesh = self._make_flat_quad(2.0, 2.0)
         step = 0.4
-        pts, _, _, _ = sample_planar_surface(mesh, sample_step=step)
+        pts, _, _, _, _w = sample_planar_surface(mesh, sample_step=step)
         # All pairwise distances should be > step * 0.3 (generous margin)
         from scipy.spatial import cKDTree
         pts_2d = pts[:, :2]
@@ -194,7 +194,7 @@ class TestEdgeSampling:
         """Quad face count must equal sample point count (1:1 mapping)."""
         from urbansolarcarver.grid import sample_planar_surface
         mesh = self._make_flat_quad(1.0, 1.0)
-        pts, norms, qv, qf = sample_planar_surface(mesh, sample_step=0.3)
+        pts, norms, qv, qf, _w = sample_planar_surface(mesh, sample_step=0.3)
         assert len(qf) == len(pts), (
             f"Quad faces ({len(qf)}) != points ({len(pts)})"
         )
@@ -204,7 +204,7 @@ class TestEdgeSampling:
         from urbansolarcarver.grid import sample_planar_surface
         # Width 0.1, height 3.0, step 0.5 — too thin for interior grid points
         mesh = self._make_flat_quad(0.1, 3.0)
-        pts, norms, qv, qf = sample_planar_surface(mesh, sample_step=0.5)
+        pts, norms, qv, qf, _w = sample_planar_surface(mesh, sample_step=0.5)
         assert len(pts) >= 2, (
             f"Thin rectangle should have edge points, got {len(pts)}"
         )
@@ -415,3 +415,114 @@ class TestVoxelizeFillSkip:
         )
         total = grid.sum().item()
         assert total > 100, f"Expected solid fill, got {total} voxels"
+
+
+class TestEdgeTaper:
+    """edge_taper design weights: distance-to-boundary ramp on sample points."""
+
+    def _flat_quad(self, w, h, z=0.0):
+        import trimesh
+        verts = np.array([[0, 0, z], [w, 0, z], [w, h, z], [0, h, z]],
+                         dtype=np.float64)
+        faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
+        return trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+
+    def test_taper_off_returns_ones(self):
+        from urbansolarcarver.grid import discretize_surface_with_normals
+        mesh = self._flat_quad(10, 10)
+        pts, _n, _m, w, stats = discretize_surface_with_normals(
+            mesh, sample_step=1.0, edge_taper=0.0)
+        assert w.shape == (pts.shape[0],)
+        np.testing.assert_array_equal(w, 1.0)
+        assert stats == []
+
+    def test_square_ramp_matches_analytic_distance(self):
+        """On a rectangle the boundary distance is min(x, w-x, y, h-y)."""
+        from urbansolarcarver.grid import discretize_surface_with_normals
+        taper = 2.0
+        mesh = self._flat_quad(10, 10)
+        pts, _n, _m, w, _s = discretize_surface_with_normals(
+            mesh, sample_step=0.5, edge_taper=taper)
+        x, y = pts[:, 0], pts[:, 1]
+        dist = np.minimum.reduce([x, 10 - x, y, 10 - y])
+        expected = np.clip(dist / taper, 0.0, 1.0)
+        np.testing.assert_allclose(w, expected, atol=1e-4)
+        # Deep interior reaches full weight; edge-seeded points are ~0.
+        assert w.max() == pytest.approx(1.0)
+        assert w.min() < 0.05
+
+    def test_exploded_coincident_panels_have_no_seam(self):
+        """Two abutting coplanar panels with duplicated (coincident) vertices
+        weld into one component (trimesh process=True), so the internal seam
+        must NOT count as a boundary."""
+        import trimesh
+        from urbansolarcarver.grid import discretize_surface_with_normals
+        verts = np.array([
+            # panel A: [0,5]x[0,10]
+            [0, 0, 0], [5, 0, 0], [5, 10, 0], [0, 10, 0],
+            # panel B: [5,10]x[0,10] — seam vertices duplicated
+            [5, 0, 0], [10, 0, 0], [10, 10, 0], [5, 10, 0],
+        ], dtype=np.float64)
+        faces = np.array([[0, 1, 2], [0, 2, 3], [4, 5, 6], [4, 6, 7]],
+                         dtype=np.int32)
+        mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=True)
+        assert len(mesh.split(only_watertight=False)) == 1, "panels must weld"
+
+        pts, _n, _m, w, _s = discretize_surface_with_normals(
+            mesh, sample_step=0.5, edge_taper=1.0)
+        # Points on the seam line (x≈5) but deep inside the outline must have
+        # full weight — a phantom seam boundary would drag them to ~0.
+        on_seam = (np.abs(pts[:, 0] - 5.0) < 0.3) & (np.abs(pts[:, 1] - 5.0) < 2.0)
+        assert on_seam.any(), "expected samples near the seam"
+        assert w[on_seam].min() > 0.99
+
+    def test_narrow_component_warns_and_never_reaches_full_weight(self):
+        from urbansolarcarver.grid import discretize_surface_with_normals
+        mesh = self._flat_quad(1.5, 20)  # narrower than 2 x taper
+        with pytest.warns(UserWarning, match="never reaches full weight"):
+            pts, _n, _m, w, stats = discretize_surface_with_normals(
+                mesh, sample_step=0.25, edge_taper=1.0)
+        assert w.max() < 1.0
+        assert len(stats) == 1
+        assert stats[0]["max_weight"] < 1.0
+
+    def test_hole_boundary_tapers(self):
+        """Interior holes count as boundary: points near the hole edge taper."""
+        import trimesh
+        from urbansolarcarver.grid import discretize_surface_with_normals
+        # 10x10 plate with a 2x2 hole in the middle (ring of 8 triangles).
+        o = [[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]]
+        i = [[4, 4, 0], [6, 4, 0], [6, 6, 0], [4, 6, 0]]
+        verts = np.array(o + i, dtype=np.float64)
+        faces = np.array([
+            [0, 1, 5], [0, 5, 4], [1, 2, 6], [1, 6, 5],
+            [2, 3, 7], [2, 7, 6], [3, 0, 4], [3, 4, 7],
+        ], dtype=np.int32)
+        mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+        pts, _n, _m, w, _s = discretize_surface_with_normals(
+            mesh, sample_step=0.5, edge_taper=1.0)
+        # A point ~0.5 m from the hole edge must taper to ~0.5 even though it
+        # is 3.5 m from the outer boundary.
+        near_hole = (np.abs(pts[:, 0] - 3.5) < 0.15) & (np.abs(pts[:, 1] - 5.0) < 0.15)
+        assert near_hole.any()
+        assert w[near_hole].max() < 0.6
+
+    def test_l_shape_concave(self):
+        """Concave (L-shaped) outlines are handled by plain boundary distance."""
+        import trimesh
+        from urbansolarcarver.grid import discretize_surface_with_normals
+        # L: 10x10 square minus the [4..10]x[4..10] corner.
+        verts = np.array([
+            [0, 0, 0], [10, 0, 0], [10, 4, 0], [4, 4, 0], [4, 10, 0], [0, 10, 0],
+        ], dtype=np.float64)
+        faces = np.array([[0, 1, 2], [0, 2, 3], [0, 3, 4], [0, 4, 5]],
+                         dtype=np.int32)
+        mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
+        pts, _n, _m, w, _s = discretize_surface_with_normals(
+            mesh, sample_step=0.5, edge_taper=1.0)
+        assert ((w >= 0.0) & (w <= 1.0)).all()
+        # Centers of both legs are >= 1 m from any edge: full weight.
+        leg_a = (np.abs(pts[:, 0] - 7.0) < 0.3) & (np.abs(pts[:, 1] - 2.0) < 0.3)
+        leg_b = (np.abs(pts[:, 0] - 2.0) < 0.3) & (np.abs(pts[:, 1] - 7.0) < 0.3)
+        assert w[leg_a].min() > 0.99
+        assert w[leg_b].min() > 0.99

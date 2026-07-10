@@ -57,8 +57,14 @@ def _check_radiative_cooling_surface(norms: np.ndarray) -> None:
         )
 
 
-def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf):
+def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf,
+                        point_weights=None):
     """Dispatch to the mode-appropriate carver and return the score field.
+
+    Parameters
+    ----------
+    point_weights : np.ndarray (N,) | None
+        Per-sample-point design weights (edge_taper); weighted modes only.
 
     Returns
     -------
@@ -104,7 +110,8 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
 
     # weighted_sum: all sky-patch modes share one carver.
     carve_out = carve_with_sky_patch_rays(
-        voxel_grid, origin, extent, resolution, pts, norms, conf, hoys
+        voxel_grid, origin, extent, resolution, pts, norms, conf, hoys,
+        point_weights=point_weights,
     )
     return carve_out.raw_voxel_scores, spec.score_kind, None, carve_out.patch_weights
 
@@ -199,7 +206,7 @@ def preprocessing(
             f"Voxel grid has {total_voxels:,} voxels — this would exhaust memory. "
             f"Increase voxel_size (currently {conf.voxel_size}m) or reduce geometry extent."
         )
-    pts, norms, analysis_mesh = sample_surface(mesh_insol, conf)
+    pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, conf)
     _mark("sample_surface")
     if pts.shape[0] == 0:
         raise ValueError(
@@ -212,8 +219,24 @@ def preprocessing(
     if mode == "radiative_cooling":
         _check_radiative_cooling_surface(norms)
 
+    # edge_taper is a weighting of the score accumulation — meaningless for
+    # the binary violation-count modes, so it is ignored there (loudly).
+    point_weights = None
+    if conf.edge_taper > 0.0:
+        if MODES[mode].score_kind == "violation_count":
+            import warnings
+            warnings.warn(
+                f"edge_taper={conf.edge_taper:g} m is ignored by mode "
+                f"'{mode}': violation-count carving is binary per ray and "
+                f"has no per-point weighting.",
+                stacklevel=2,
+            )
+        else:
+            point_weights = sample_weights
+
     raw_scores, scores_kind, suggested_threshold, patch_weights = _compute_raw_scores(
-        voxel_grid, origin, extent, resolution, pts, norms, conf
+        voxel_grid, origin, extent, resolution, pts, norms, conf,
+        point_weights=point_weights,
     )
     warn_score_anomalies(raw_scores, context="preprocessing")
     _mark("ray_tracing")
@@ -284,6 +307,18 @@ def preprocessing(
         "scores_path": str(scores_path),
         "score_stats": score_statistics(rs, detailed=conf.diagnostics),
     }
+    if conf.edge_taper > 0.0:
+        # Taper transparency: record what the design constraint excluded.
+        sw = np.asarray(sample_weights)
+        summary["edge_taper"] = {
+            "meters": float(conf.edge_taper),
+            "applied": point_weights is not None,
+            "mean_weight": round(float(sw.mean()), 4) if sw.size else None,
+            "near_zero_fraction": round(float((sw < 0.1).mean()), 4) if sw.size else None,
+            "components": taper_stats,
+        }
+    if conf.mode == "radiative_cooling" and conf.min_sky_elevation_deg > 0.0:
+        summary["min_sky_elevation_deg"] = float(conf.min_sky_elevation_deg)
     summary["device"] = device_info
     _mark("build_summary")
     xlabel = MODES[mode].weight_unit if mode in MODES else "Score"

@@ -9,6 +9,26 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **`edge_taper` design constraint** (all weighted sky-patch modes): sample
+  points within `edge_taper` meters of their test-surface component's
+  boundary count proportionally less (linear ramp), so perimeter/corner
+  points no longer force carving of directly adjacent volume — replacing the
+  manual practice of offsetting test-surface edges. Distances are exact 2D
+  distances to the welded component outline (exterior and holes), so
+  exploded-but-coincident panels (e.g. street networks) have no phantom
+  seams. Zero-weight rays are dropped before tracing. Components narrower
+  than ~2× the taper warn loudly and per-component stats are recorded in the
+  preprocessing diagnostics — the taper never silently excludes geometry.
+  Ignored (with a warning) by the binary violation-count modes.
+- **`min_sky_elevation_deg` protection cone** (radiative_cooling): sky
+  patches below the declared elevation are excluded from the cooling weights
+  (renormalized) — a declared design constraint analogous to
+  obstruction-angle daylight rules, controlling how steeply the envelope may
+  rise around protected surfaces. Default 0 keeps the pure physical model.
+- The radiative-cooling template now documents both constraints and ships a
+  mode-appropriate `carve_fraction: 0.35` default (cooling scores are
+  diffuse; the 0.7 used by solar modes over-carves drastically).
+
 - **Canonical `ThresholdSpec`**: `threshold` now normalizes every accepted
   spelling (bare number, `headtail`, `carve_fraction`, or the canonical
   mapping `{method: ..., value: ...}`) into one validated object at config

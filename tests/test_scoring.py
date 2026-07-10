@@ -90,6 +90,49 @@ class TestCarveFractionThreshold:
         assert carve_fraction_threshold(np.full(100, np.nan, dtype=np.float32), 0.5) == 0.0
 
 
+# --- Radiative cooling protection cone (min_sky_elevation_deg) ---
+
+class TestRadiativeCoolingCone:
+    def _weights(self, cutoff):
+        import torch
+        from urbansolarcarver.sky_patches import compute_radiative_cooling_weights
+        return compute_radiative_cooling_weights(
+            14.0, 1.8, torch.device("cpu"), min_elevation_deg=cutoff
+        )
+
+    def _elevations(self):
+        import torch
+        from urbansolarcarver.sky_patches import fetch_tregenza_patch_directions
+        dirs = fetch_tregenza_patch_directions(torch.device("cpu"))
+        return np.degrees(np.arcsin(np.clip(dirs[:, 2].numpy(), -1, 1)))
+
+    def test_zero_cutoff_is_pure_model(self):
+        w = self._weights(0.0)
+        assert abs(float(w.sum()) - 1.0) < 1e-5
+        assert (w.numpy() > 0).all(), "full hemisphere: every patch contributes"
+
+    def test_cutoff_zeroes_low_patches_and_renormalizes(self):
+        w = self._weights(30.0).numpy()
+        elev = self._elevations()
+        assert (w[elev < 30.0] == 0.0).all()
+        assert (w[elev >= 30.0] > 0.0).all()
+        assert abs(w.sum() - 1.0) < 1e-5
+        # Renormalization: surviving patches gain weight vs the full model.
+        w0 = self._weights(0.0).numpy()
+        zenith = int(np.argmax(elev))
+        assert w[zenith] > w0[zenith]
+
+    def test_high_cutoff_keeps_zenith(self):
+        w = self._weights(85.0).numpy()
+        elev = self._elevations()
+        assert (w[elev < 85.0] == 0.0).all()
+        assert abs(w.sum() - 1.0) < 1e-5
+
+    def test_cutoff_excluding_everything_raises(self):
+        with pytest.raises(ValueError, match="excludes every"):
+            self._weights(95.0)
+
+
 # --- Head-tail threshold ---
 
 def test_headtail_empty():

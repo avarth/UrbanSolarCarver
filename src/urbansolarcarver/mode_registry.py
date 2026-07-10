@@ -81,7 +81,8 @@ MODES: Dict[str, ModeSpec] = {
         needs_period=True,
         score_kind="weighted_sum",
         weight_unit="W/m² (cooling potential)",
-        extra_params=_EPW_AND_PERIOD | {"dew_point_celsius", "bliss_k"},
+        extra_params=_EPW_AND_PERIOD | {"dew_point_celsius", "bliss_k",
+                                        "min_sky_elevation_deg"},
         experimental=True,
     ),
 }

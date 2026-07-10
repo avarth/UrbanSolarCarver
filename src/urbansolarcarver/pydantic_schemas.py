@@ -186,9 +186,25 @@ class UserConfig(BaseModel):
         description="Carving mode: time-based, irradiance, benefit, daylight, tilted_plane, or radiative_cooling [experimental]"
     )
 
-    # radiative cooling option
+    # radiative cooling options
     dew_point_celsius: float = Field(14.0, description="Night-time dew-point (°C) for radiative_cooling mode")
-    bliss_k: float = Field(1.8, gt=0, description="Bliss (1961) angular-attenuation constant for radiative_cooling")
+    bliss_k: float = Field(1.8, gt=0, description=(
+        "Bliss (1961) angular-attenuation constant for radiative_cooling. "
+        "A physical constant (atmospheric diffusivity factor, ~1.5-2.0) — "
+        "leave at 1.8 unless you have a reason not to."
+    ))
+    min_sky_elevation_deg: float = Field(
+        0.0, ge=0.0, le=85.0,
+        description=(
+            "radiative_cooling only: design-constraint protection cone (degrees). "
+            "Sky patches below this elevation are excluded from the cooling "
+            "weights (renormalized), declaring that only the dome above the "
+            "cutoff is defended — analogous to obstruction-angle rules in "
+            "daylight codes. It shapes how steeply the envelope may rise around "
+            "protected surfaces. 0 (default) = full hemisphere (pure physical "
+            "model)."
+        ),
+    )
 
     # sky model parameters
     north_deg: float = Field(0.0, ge=0.0, lt=360.0, description="North direction in degrees clockwise from Y-axis (0 = Y-up is north)")
@@ -197,6 +213,20 @@ class UserConfig(BaseModel):
     # grid & ray parameters
     voxel_size:    float = Field(1.0, ge=0.01, le=100.0, description="Voxel edge length (m), 0.01–100")
     grid_step:     float = Field(1.0, gt=0, description="Surface sampling spacing (m)")
+    edge_taper:    float = Field(
+        0.0, ge=0.0,
+        description=(
+            "Design-constraint taper (meters) on test-surface sample weights: "
+            "a point closer than this to its component's boundary counts "
+            "proportionally less (linear ramp from 0 at the edge to full "
+            "weight at edge_taper). Declares the perimeter strip as outside "
+            "the protected program, so edge/corner samples don't force "
+            "carving of the directly adjacent volume. 0 (default) = off. "
+            "Weighted sky-patch modes only; ignored with a warning by "
+            "time-based and tilted_plane. Requires planar test surfaces "
+            "(already enforced by sampling)."
+        ),
+    )
     ray_length:    float = Field(300.0, gt=0, description="Max ray cast distance (m)")
     min_altitude:  float = Field(5.0, ge=0, le=90, description="Minimum sun altitude (°)")
     margin_frac:   float = Field(0.01, ge=0, le=1.0, description="Padding fraction around geometry")

@@ -411,6 +411,46 @@ if _warp_available:
             s = _dda_step(s, resolution, max_t)
 
     @wp.kernel
+    def _dda_fused_score_pw_kernel(
+        # Ray data
+        ray_origins: wp.array(dtype=wp.vec3),
+        ray_dirs: wp.array(dtype=wp.vec3),
+        ray_patch_ids: wp.array(dtype=int),
+        ray_point_ids: wp.array(dtype=int),
+        # Grid parameters
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        max_t: float,
+        # Scoring arrays (modified in-place via atomic_add)
+        scores: wp.array(dtype=float),          # flat score volume [res^3]
+        patch_weights: wp.array(dtype=float),   # weight per patch [num_patches]
+        point_weights: wp.array(dtype=float),   # weight per sample point [num_points]
+    ):
+        """Point-weighted fused score kernel: per-ray weight is
+        patch_weight × sample-point weight (edge_taper design constraint).
+
+        A separate kernel so the unweighted hot path pays no extra
+        per-ray gathers or memory.
+        """
+        tid = wp.tid()
+        w = patch_weights[ray_patch_ids[tid]] * point_weights[ray_point_ids[tid]]
+        res_sq = resolution * resolution
+        s = _dda_init(ray_origins[tid], ray_dirs[tid], grid_origin,
+                      cell_size, resolution, max_t)
+
+        # --- Walk and score ---
+        max_steps = 3 * resolution
+        for _step in range(max_steps):
+            if s.active == 0:
+                return
+            if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
+                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution):
+                flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
+                wp.atomic_add(scores, flat_idx, w)
+            s = _dda_step(s, resolution, max_t)
+
+    @wp.kernel
     def _dda_fused_count_kernel(
         # Ray data
         ray_origins: wp.array(dtype=wp.vec3),
@@ -609,6 +649,8 @@ def trace_and_score_dda(
     patch_weights: torch.Tensor,
     scores: torch.Tensor,
     ray_length: float,
+    point_ids: "torch.Tensor | None" = None,
+    point_weights: "torch.Tensor | None" = None,
 ) -> None:
     """Fused DDA traversal + score accumulation (Warp GPU kernel).
 
@@ -634,10 +676,21 @@ def trace_and_score_dda(
         Flat score volume, modified in-place.
     ray_length : float
         Maximum march distance.
+    point_ids : torch.Tensor, shape (R,), optional
+        Sample-point index per ray.  Together with ``point_weights``
+        switches to the point-weighted kernel (per-ray weight =
+        patch_weight × point_weight; edge_taper design constraint).
+    point_weights : torch.Tensor, shape (num_points,), optional
+        Weight per sample point in [0, 1].
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
         return
+    if (point_ids is None) != (point_weights is None):
+        raise ValueError(
+            "trace_and_score_dda: point_ids and point_weights must be "
+            "provided together"
+        )
     # Warp requires explicit device index (e.g. "cuda:0", not just "cuda")
     device_str = f"cuda:{origins.device.index or 0}" if origins.is_cuda else "cpu"
     cell_size = scale / resolution
@@ -653,6 +706,21 @@ def trace_and_score_dda(
     wp_scores = wp.from_torch(scores)
     wp_weights = wp.from_torch(patch_weights.contiguous().float())
     grid_origin_wp = wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2]))
+
+    if point_ids is not None:
+        wp_point_ids = wp.from_torch(point_ids.contiguous().int())
+        wp_point_weights = wp.from_torch(point_weights.contiguous().float())
+        wp.launch(
+            _dda_fused_score_pw_kernel,
+            dim=num_rays,
+            inputs=[
+                wp_origins, wp_dirs, wp_patch_ids, wp_point_ids,
+                grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
+                wp_scores, wp_weights, wp_point_weights,
+            ],
+            device=device_str,
+        )
+        return
 
     wp.launch(
         _dda_fused_score_kernel,

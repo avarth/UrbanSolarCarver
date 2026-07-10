@@ -310,6 +310,24 @@ class TestAnalysisPeriodMapping:
         assert cfg.start_month == 10
 
 
+class TestDesignConstraintFields:
+    def test_edge_taper_default_off(self):
+        cfg = _make_config()
+        assert cfg.edge_taper == 0.0
+
+    def test_edge_taper_negative_rejected(self):
+        with pytest.raises(ValidationError, match="edge_taper"):
+            _make_config(edge_taper=-1.0)
+
+    def test_min_sky_elevation_bounds(self):
+        cfg = _make_config(min_sky_elevation_deg=30.0)
+        assert cfg.min_sky_elevation_deg == 30.0
+        with pytest.raises(ValidationError, match="min_sky_elevation_deg"):
+            _make_config(min_sky_elevation_deg=90.0)
+        with pytest.raises(ValidationError, match="min_sky_elevation_deg"):
+            _make_config(min_sky_elevation_deg=-5.0)
+
+
 class TestDaylightMode:
     def test_daylight_no_epw_required(self):
         """Daylight mode uses CIE overcast sky — should not require EPW."""

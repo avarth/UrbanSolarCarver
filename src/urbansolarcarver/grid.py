@@ -159,14 +159,21 @@ def sample_surface(insolation_mesh, config: user_config):
     sample_normals : np.ndarray (N, 3)
     analysis_mesh : ladybug_geometry.geometry3d.mesh.Mesh3D or None
         The analysis mesh whose face centroids are the sample points.
+    sample_weights : np.ndarray (N,)
+        Edge-taper design weights in [0, 1] (all ones when
+        ``config.edge_taper`` is 0).
+    taper_stats : list of dict
+        Per-component taper statistics (empty when edge_taper is 0).
 
     Raises
     ------
     RuntimeError
         If no points are sampled from the insolation surface.
     """
-    sample_points, sample_normals, analysis_mesh = discretize_surface_with_normals(
-        insolation_mesh, config.grid_step
+    sample_points, sample_normals, analysis_mesh, sample_weights, taper_stats = (
+        discretize_surface_with_normals(
+            insolation_mesh, config.grid_step, edge_taper=config.edge_taper
+        )
     )
 
     if sample_points.size == 0:
@@ -181,7 +188,7 @@ def sample_surface(insolation_mesh, config: user_config):
             "connecting to USC_Preprocess. Also check that grid_step ({:g} m) is smaller than "
             "your smallest surface.".format(n_components, config.grid_step)
         )
-    return sample_points, sample_normals, analysis_mesh
+    return sample_points, sample_normals, analysis_mesh, sample_weights, taper_stats
 
 def finalize_mesh(carved_grid, grid_origin, config: user_config):
     """
@@ -433,7 +440,8 @@ def _mesh_boundary_loops(mesh: trimesh.Trimesh) -> "list[list[int]]":
 def sample_planar_surface(
     mesh: trimesh.Trimesh,
     sample_step: float = 1.0,
-    include_boundary: bool = True
+    include_boundary: bool = True,
+    edge_taper: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Uniformly sample points on a strictly planar submesh and return per-point normals.
@@ -446,6 +454,10 @@ def sample_planar_surface(
         Spacing of the sampling grid in world units.
     include_boundary : bool, default True
         If True, include points that fall on polygon boundaries; otherwise drop them.
+    edge_taper : float, default 0.0
+        Design-constraint taper distance (world units).  When > 0, each
+        sample gets a weight ramping linearly from 0 at the component
+        outline (exterior and holes) to 1 at ``edge_taper`` from it.
 
     Returns
     -------
@@ -457,6 +469,8 @@ def sample_planar_surface(
         Corner positions of one analysis-mesh quad per sample point.
     quad_faces : (N, 4) int32 np.ndarray
         Vertex indices of each quad (indices into `quad_verts`).
+    weights : (N,) float32 np.ndarray
+        Edge-taper design weights in [0, 1]; all ones when edge_taper == 0.
 
     Notes
     -----
@@ -541,6 +555,22 @@ def sample_planar_surface(
     if len(points_2d) == 0 and planar_polygon.area > 0:
         points_2d = np.array([[0.0, 0.0]])  # centroid in local frame
 
+    # Edge-taper design weights: exact 2D distance from each sample to the
+    # component outline (exterior ring and holes), ramped linearly over
+    # `edge_taper`.  The polygon is the welded component boundary, so
+    # internal seams of exploded-but-coincident panels do not count as
+    # edges (trimesh merges duplicate vertices at load).
+    if edge_taper > 0.0 and len(points_2d) > 0:
+        import shapely
+        dists = shapely.distance(
+            shapely.points(points_2d), planar_polygon.boundary
+        )
+        point_weights = np.clip(
+            np.asarray(dists, dtype=np.float64) / float(edge_taper), 0.0, 1.0
+        ).astype(np.float32)
+    else:
+        point_weights = np.ones(len(points_2d), dtype=np.float32)
+
     points_3d = (
         centroid
         + points_2d[:, 0:1] * axis_u
@@ -578,7 +608,7 @@ def sample_planar_surface(
         quad_verts_3d = np.empty((0, 3), dtype=np.float64)
         quad_faces = np.empty((0, 4), dtype=np.int32)
 
-    return points_3d, point_normals, quad_verts_3d, quad_faces
+    return points_3d, point_normals, quad_verts_3d, quad_faces, point_weights
 
 class AnalysisMesh:
     """Lightweight quad mesh container.  Holds raw numpy arrays and builds
@@ -651,8 +681,9 @@ class AnalysisMesh:
 def discretize_surface_with_normals(
     mesh: trimesh.Trimesh,
     sample_step: float = 1.0,
-    coplanarity_tol_deg: float = 5.0
-) -> tuple[np.ndarray, np.ndarray, "AnalysisMesh | None"]:
+    coplanarity_tol_deg: float = 5.0,
+    edge_taper: float = 0.0,
+) -> tuple[np.ndarray, np.ndarray, "AnalysisMesh | None", np.ndarray, list]:
     """
     Sample nearly planar regions of a mesh and return point/normal pairs.
 
@@ -669,6 +700,11 @@ def discretize_surface_with_normals(
         Sampling grid spacing in world units.
     coplanarity_tol_deg : float, default 5.0
         Maximum face-normal deviation (degrees) to consider a component planar.
+    edge_taper : float, default 0.0
+        Design-constraint taper distance (meters): sample weights ramp
+        from 0 at each component's outline to 1 at ``edge_taper`` inward.
+        Requires planar components (already enforced by the coplanarity
+        check — curved surfaces are not supported by the sampler).
 
     Returns
     -------
@@ -678,11 +714,24 @@ def discretize_surface_with_normals(
         Outward-facing normals at each sample point.
     analysis_mesh : AnalysisMesh or None
         Combined quad analysis mesh, or None if no points were sampled.
+    weights : (N,) float32 np.ndarray
+        Edge-taper design weights in [0, 1]; all ones when edge_taper == 0.
+    taper_stats : list of dict
+        Per-component taper statistics (empty when edge_taper == 0).
+        Components that never reach full weight (narrower than ~2× the
+        taper) additionally emit a UserWarning — a taper must never
+        silently exclude geometry from the protected program.
     """
-    submeshes = mesh.split(only_watertight=False)
-    all_points, all_normals = [], []
+    # repair=False: trimesh's default submesh repair fills small (3-4
+    # vertex) boundary loops, which destroys real openings — a plate with
+    # a rectangular hole comes back closed, its boundary loops vanish, and
+    # the component is rejected.  Sampling needs the true open boundary.
+    submeshes = mesh.split(only_watertight=False, repair=False)
+    all_points, all_normals, all_weights = [], [], []
     all_quad_verts, all_quad_faces = [], []
     vertex_offset = 0
+    taper_stats: list = []
+    component_index = 0
 
     for submesh in submeshes:
         # 1) Planarity check via face normals (area-weighted reference)
@@ -699,10 +748,36 @@ def discretize_surface_with_normals(
             continue
 
         # 2) Sample this planar sheet (fast Shapely rasterizer)
-        pts3d, nrm3d, qv, qf = sample_planar_surface(submesh, sample_step)
+        pts3d, nrm3d, qv, qf, wts = sample_planar_surface(
+            submesh, sample_step, edge_taper=edge_taper
+        )
 
         if pts3d.size == 0:
             continue
+
+        # 2b) Taper transparency: a component that never reaches full
+        # weight is narrower than ~2× edge_taper and is partially or
+        # wholly excluded from the protected program — never silently.
+        if edge_taper > 0.0:
+            max_w = float(wts.max())
+            taper_stats.append({
+                "component": component_index,
+                "points": int(wts.size),
+                "mean_weight": round(float(wts.mean()), 4),
+                "max_weight": round(max_w, 4),
+                "near_zero_fraction": round(float((wts < 0.1).mean()), 4),
+            })
+            if max_w < 0.999:
+                import warnings
+                warnings.warn(
+                    f"edge_taper={edge_taper:g} m: test-surface component "
+                    f"{component_index} never reaches full weight "
+                    f"(max {max_w:.2f}) — it is narrower than ~2x edge_taper "
+                    f"and is partially or wholly excluded from the protected "
+                    f"program.",
+                    stacklevel=2,
+                )
+        component_index += 1
 
         # 3) Ensure normal orientation matches component
         avg_face_normal = face_normals.mean(axis=0)
@@ -711,6 +786,7 @@ def discretize_surface_with_normals(
 
         all_points.append(pts3d)
         all_normals.append(nrm3d)
+        all_weights.append(wts)
 
         # 4) Accumulate quad mesh data (offset face indices)
         if qf.size > 0:
@@ -719,10 +795,13 @@ def discretize_surface_with_normals(
             vertex_offset += qv.shape[0]
 
     if not all_points:
-        return np.empty((0, 3), dtype=np.float32), np.empty((0, 3), dtype=np.float32), None
+        return (np.empty((0, 3), dtype=np.float32),
+                np.empty((0, 3), dtype=np.float32), None,
+                np.empty((0,), dtype=np.float32), taper_stats)
 
     points = np.vstack(all_points).astype(np.float32)
     normals = np.vstack(all_normals).astype(np.float32)
+    weights = np.concatenate(all_weights).astype(np.float32)
 
     # 5) Build lightweight analysis mesh (numpy only — no Ladybug overhead)
     analysis_mesh = None
@@ -733,7 +812,7 @@ def discretize_surface_with_normals(
             normals,  # correct outward-facing normals (1 per face = 1 per point)
         )
 
-    return points, normals, analysis_mesh
+    return points, normals, analysis_mesh, weights, taper_stats
 
 
 @session_cache("vox:{args[0].identifier}:{kwargs[voxel_size]}:{kwargs[margin_frac]}")

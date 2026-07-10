@@ -27,14 +27,26 @@ analysis_period:
 
 # Radiative cooling parameters
 dew_point_celsius: 14.0   # night-time dew-point (C)
-bliss_k:            1.8   # angular attenuation constant (Bliss 1961)
+bliss_k:            1.8   # angular attenuation constant (Bliss 1961) — physical constant, leave at 1.8
 
 # Grid
 voxel_size: 1.0
 
 # Thresholding
+# Cooling scores are DIFFUSE (every voxel above a surface obstructs some sky),
+# so a given carve_fraction removes far more volume than in the solar modes.
+# Start around 0.3-0.4 and inspect; 0.7 is usually far too aggressive here.
 threshold: carve_fraction
-carve_fraction: 0.7
+carve_fraction: 0.35
+
+# -- Design constraints (declared, not physics — see docs) --------------------
+# edge_taper: 1.5             # metres: sample points within this distance of a
+#                             # test-surface edge count proportionally less, so
+#                             # perimeter/corner points don't force carving of
+#                             # the directly adjacent volume.
+# min_sky_elevation_deg: 30   # protection cone: only defend sky above this
+#                             # elevation (weights renormalized). Controls how
+#                             # steeply the envelope may rise around surfaces.
 
 # -- Defaults you may want to override ----------------------------------------
 # score_smoothing: null  # Gaussian blur radius (m) on scores before thresholding. null = auto (1.1× voxel_size). 0 = off. Try 1.0-1.2× voxel_size.

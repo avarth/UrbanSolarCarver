@@ -29,6 +29,7 @@ def get_weights(
     balance_temperature: float = 15.0,
     balance_offset: float = 2.0,
     north_deg: float = 0.0,
+    min_sky_elevation_deg: float = 0.0,
 ) -> torch.Tensor:
     """
     Build a vector of weights for each sky patch, according to a chosen analysis mode.
@@ -59,7 +60,8 @@ def get_weights(
     # Radiative cooling mode uses dew point to compute cooling potential per patch.
     if mode_key == 'radiative_cooling':
         return compute_radiative_cooling_weights(
-            dew_point_celsius, bliss_k, torch.device(device)
+            dew_point_celsius, bliss_k, torch.device(device),
+            min_elevation_deg=min_sky_elevation_deg,
         )
 
     # Time-based mode: assign a weight of 1 to every patch (uniform importance). Carving based on user-defined HOYs.
