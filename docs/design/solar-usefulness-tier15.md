@@ -24,6 +24,11 @@ weighting — and swaps the *generator* of that weighting:
 | **1.5** | **ISO 13790 Annex C hourly 5R1C model + perturbation attribution** | **hour-resolved lag, diurnal mass state, saturation at operating point** | **seconds** |
 | 2 | E+ shoebox perturbation (future) | schedules, HVAC detail, multi-zone | heavy setup |
 
+Tier 1 implementation is deferred: the cooling-side loss-utilization sign
+conventions (§12.2.1.1) must be transcribed from the standard text, not
+memory, and Tier 1's only role beside Tier 1.5 is as a comparison
+baseline. Tier 1.5 ships first.
+
 All tiers emit the same artifact (§5); `usefulness_path` in benefit mode
 consumes it (§6). Tier 2 is explicitly out of scope here.
 

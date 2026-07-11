@@ -1,0 +1,27 @@
+# Example archetype for `usc usefulness` (Tier 1.5 solar-usefulness generator).
+#
+# NEUTRAL EXAMPLE VALUES — source real ones from your project, your national
+# code tables, or archetype libraries (e.g. TABULA for Europe, DOE prototypes
+# for the US). See docs/design/solar-usefulness-tier15.md for the model and
+# its declared limitations.
+
+floor_area: 100.0        # m² conditioned floor area
+volume: 300.0            # m³ conditioned volume
+u_opaque: 0.6            # W/m²K — area-weighted opaque envelope U-value
+area_opaque: 220.0       # m² opaque envelope in contact with outside
+u_window: 1.6            # W/m²K — glazing U-value
+area_window: 20.0        # m² total glazing (must equal the sum below)
+ach_vent: 0.8            # 1/h intentional ventilation
+ach_infiltration: 0.3    # 1/h infiltration
+heat_recovery: 0.0       # 0–1 ventilation heat-recovery efficiency
+mass_class: medium       # very_light | light | medium | heavy | very_heavy (ISO 13790 Table 12)
+t_set_heating: 20.0      # °C
+t_set_cooling: 26.0      # °C
+internal_gains_w_m2: 5.0 # W per m² floor area, flat schedule
+
+# Glazing per orientation: [azimuth_deg, area_m2, g_value]
+# Azimuth in Ladybug convention: 0 = N, 90 = E, 180 = S, 270 = W.
+windows:
+  - [180, 10.0, 0.6]
+  - [90, 5.0, 0.6]
+  - [270, 5.0, 0.6]

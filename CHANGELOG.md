@@ -7,6 +7,24 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Solar-usefulness generator (Tier 1.5)** — `usc usefulness` and the
+  `urbansolarcarver.usefulness` module: an ISO 13790 Annex C simple hourly
+  ("5R1C") thermal model plus batched central-difference perturbation,
+  producing hourly *marginal* solar usefulness — `benefit[t]` (fraction of
+  a marginal joule of solar gain that offsets heating over the year) and
+  `harm[t]` (fraction that becomes cooling load) — written to a
+  `solar_usefulness.json` artifact with full provenance metadata. Inputs:
+  one EPW plus ~10 archetype parameters (`configs/archetype_example.yaml`;
+  neutral values, no national defaults). The engine is validated against
+  ETH's RC_BuildingSimulator on three archetypes under the bundled Golden
+  TMY3 weather (annual demands and hourly node states; driving arrays
+  stored verbatim in `tests/data/`), plus steady-state closure against an
+  independent network reduction. Design, tier ladder, and declared
+  limitations: `docs/design/solar-usefulness-tier15.md`. The benefit-mode
+  hook (`usefulness_path`) that consumes the artifact lands separately.
+
 ### Changed
 
 - **Benefit mode now implements its documented formula exactly (by

@@ -426,6 +426,42 @@ def warmup(
 # ---------------------------------------------------------------------------
 # validate — quick config check without loading heavy deps
 # ---------------------------------------------------------------------------
+@app.command(help="Generate a solar-usefulness artifact (ISO 13790 5R1C) for benefit mode")
+def usefulness(
+    epw: Path = Option(..., "-e", "--epw", exists=True, readable=True,
+                       help="EPW weather file"),
+    archetype: Path = Option(..., "-a", "--archetype", exists=True, readable=True,
+                             help="Archetype YAML (see configs/archetype_example.yaml)"),
+    out: Path = Option(Path("solar_usefulness.json"), "-o", "--out",
+                       help="Output artifact path"),
+    eps: float = Option(1.0, "--eps",
+                        help="Perturbation size in W (central differences)"),
+):
+    """Tier 1.5 generator: hourly marginal solar usefulness (benefit + harm)
+    from the ISO 13790 Annex C simple hourly model, by perturbation.
+
+    The artifact feeds benefit mode's ``usefulness_path`` config key,
+    replacing the balance-point Heaviside hour filter with physics-derived
+    hourly weights. See docs/design/solar-usefulness-tier15.md.
+    """
+    import yaml
+    from urbansolarcarver.usefulness import generate_tier15
+
+    arch = yaml.safe_load(archetype.read_text(encoding="utf-8"))
+    if not isinstance(arch, dict):
+        typer.secho("  Archetype file must be a YAML mapping", fg="red")
+        raise typer.Exit(1)
+    internal = arch.pop("internal_gains_w_m2", 5.0)
+    typer.echo(f"  Running 5R1C perturbation attribution ({epw.name}) ...")
+    try:
+        path = generate_tier15(str(epw), arch, out,
+                               internal_gains_w_m2=internal, eps=eps)
+    except (ValueError, TypeError) as exc:
+        typer.secho(f"  {exc}", fg="red")
+        raise typer.Exit(1)
+    typer.secho(f"  Wrote {path}", fg="green")
+
+
 @app.command(help="Validate a config file without running the pipeline")
 def validate(
     config: Path = Option(..., "-c", "--config", exists=True, readable=True, help="YAML config path"),
