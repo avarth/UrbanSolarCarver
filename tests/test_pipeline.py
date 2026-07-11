@@ -215,6 +215,49 @@ class TestOverrideParsing:
 
 
 # ---------------------------------------------------------------------------
+# usefulness_path end-to-end (benefit mode + artifact)
+# ---------------------------------------------------------------------------
+
+@_SKIP_EPW
+def test_benefit_with_usefulness_artifact(tmp_path, tiny_cube_mesh,
+                                          tiny_surface_mesh):
+    """Full benefit preprocessing consuming a usefulness artifact: runs
+    green and records the artifact's provenance in the diagnostics."""
+    import numpy as _np
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.load_config import user_config
+    from urbansolarcarver.usefulness import write_usefulness
+
+    vol_path = tmp_path / "vol.ply"
+    srf_path = tmp_path / "srf.ply"
+    tiny_cube_mesh.export(str(vol_path))
+    tiny_surface_mesh.export(str(srf_path))
+
+    artifact = write_usefulness(
+        tmp_path / "u.json",
+        _np.full(8760, 0.8), _np.zeros(8760),
+        {"method": "test-schedule", "generated": "2026",
+         "archetype": {"mass_class": "medium"}},
+    )
+    cfg = user_config(
+        max_volume_path=str(vol_path), test_surface_path=str(srf_path),
+        out_dir=str(tmp_path / "out"), mode="benefit", epw_path=_EPW,
+        start_month=1, start_day=1, start_hour=8,
+        end_month=1, end_day=5, end_hour=16,
+        voxel_size=2.0, grid_step=2.0, ray_length=50.0,
+        min_voxels=1, min_face_count=1, device="cpu",
+        usefulness_path=str(artifact),
+    )
+    result = preprocessing(cfg, tmp_path / "out")
+    scores = np.load(result.volume_path)
+    assert scores.sum() > 0, "artifact-weighted carve produced no scores"
+    diag = json.loads(
+        (result.out_dir / "diagnostics" / "diagnostic.json").read_text())
+    assert diag["usefulness"]["method"] == "test-schedule"
+    assert diag["usefulness"]["archetype"]["mass_class"] == "medium"
+
+
+# ---------------------------------------------------------------------------
 # edge_taper end-to-end (daylight mode needs no EPW)
 # ---------------------------------------------------------------------------
 

@@ -319,6 +319,16 @@ def preprocessing(
         }
     if conf.mode == "radiative_cooling" and conf.min_sky_elevation_deg > 0.0:
         summary["min_sky_elevation_deg"] = float(conf.min_sky_elevation_deg)
+    if conf.mode == "benefit" and conf.usefulness_path:
+        # Provenance: which physics-derived schedule weighted this carve.
+        from ..usefulness import read_usefulness
+        _b, _h, u_meta = read_usefulness(conf.usefulness_path)
+        summary["usefulness"] = {
+            "path": str(conf.usefulness_path),
+            "method": u_meta.get("method"),
+            "generated": u_meta.get("generated"),
+            "archetype": u_meta.get("archetype"),
+        }
     summary["device"] = device_info
     _mark("build_summary")
     xlabel = MODES[mode].weight_unit if mode in MODES else "Score"

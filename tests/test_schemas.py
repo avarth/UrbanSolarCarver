@@ -399,6 +399,27 @@ class TestBenefitParams:
         cfg = _make_config()
         assert cfg.include_harm is False
 
+    def test_usefulness_path_requires_benefit_mode(self):
+        cfg = _make_config(mode="benefit", epw_path="w.epw",
+                           start_month=1, start_day=1, start_hour=0,
+                           end_month=12, end_day=31, end_hour=23,
+                           usefulness_path="u.json")
+        assert cfg.usefulness_path == "u.json"
+        with pytest.raises(ValidationError, match="only valid for mode"):
+            _make_config(usefulness_path="u.json")  # base config: tilted_plane
+
+    def test_usefulness_path_warns_on_customized_balance(self):
+        import warnings as _w
+        kwargs = dict(mode="benefit", epw_path="w.epw",
+                      start_month=1, start_day=1, start_hour=0,
+                      end_month=12, end_day=31, end_hour=23,
+                      usefulness_path="u.json")
+        with pytest.warns(UserWarning, match="unused when"):
+            _make_config(balance_temperature=18.0, **kwargs)
+        with _w.catch_warnings():
+            _w.simplefilter("error")  # defaults must NOT warn
+            _make_config(**kwargs)
+
 
 class TestEnvVarFallback:
     def test_garbage_ray_batch_env(self, monkeypatch):

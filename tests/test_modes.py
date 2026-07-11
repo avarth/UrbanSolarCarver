@@ -1,4 +1,5 @@
 """Smoke tests: every carving mode runs without crashing on a tiny mesh."""
+import numpy as np
 import pytest
 import yaml
 from pathlib import Path
@@ -151,6 +152,85 @@ class TestBenefitWeights:
         torch.testing.assert_close(w_composite, expected, rtol=1e-5, atol=1e-3)
         assert (w_composite <= w_default + 1e-6).all()
         assert float(w_composite.sum()) < float(w_default.sum())
+
+    def test_usefulness_all_ones_equals_irradiance(self, example_epw_path):
+        """An all-ones usefulness schedule must reproduce plain irradiance
+        weights over the same hours — the artifact path is a pure hourly
+        re-weighting of the same sky integration."""
+        import torch
+        from urbansolarcarver.sky_patches import compute_EPW_based_weights
+
+        hoys = list(range(24 * 40, 24 * 50))
+        ones = np.ones(8760)
+        zeros = np.zeros(8760)
+        w_sched = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            usefulness=(ones, zeros),
+        )
+        w_irr = compute_EPW_based_weights(
+            "irradiance", str(example_epw_path), hoys, torch.device("cpu"),
+        )
+        torch.testing.assert_close(w_sched, w_irr, rtol=1e-3, atol=1e-2)
+
+    def test_usefulness_binary_schedule_equals_heaviside(self, example_epw_path):
+        """A 0/1 schedule built from the balance filter must reproduce the
+        default benefit weights — the Heaviside is the binary special case."""
+        import torch
+        from ladybug.epw import EPW
+        from urbansolarcarver.sky_patches import compute_EPW_based_weights
+
+        hoys = list(range(24 * 100, 24 * 110))
+        bal, off = 15.0, 2.0
+        dbt = np.asarray(EPW(str(example_epw_path)).dry_bulb_temperature.values)
+        schedule = (dbt < bal - off).astype(np.float64)
+        w_sched = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            usefulness=(schedule, np.zeros(8760)),
+        )
+        w_default = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            balance_temperature=bal, balance_offset=off,
+        )
+        torch.testing.assert_close(w_sched, w_default, rtol=1e-3, atol=1e-2)
+
+    def test_usefulness_harm_composite(self, example_epw_path):
+        """With include_harm, the artifact path must equal
+        clip(benefit-scaled − harm-scaled, 0)."""
+        import torch
+        from urbansolarcarver.sky_patches import compute_EPW_based_weights
+
+        hoys = list(range(24 * 150, 24 * 160))
+        rng = np.random.default_rng(5)
+        benefit = rng.uniform(0.2, 1.0, 8760)
+        harm = rng.uniform(0.0, 0.9, 8760)
+        w_ben_only = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            usefulness=(benefit, np.zeros(8760)),
+        )
+        w_harm_only = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            usefulness=(harm, np.zeros(8760)),
+        )
+        w_composite = compute_EPW_based_weights(
+            "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+            usefulness=(benefit, harm), include_harm=True,
+        )
+        expected = torch.clamp(w_ben_only - w_harm_only, min=0.0)
+        torch.testing.assert_close(w_composite, expected, rtol=1e-3, atol=1e-2)
+
+    def test_usefulness_zero_in_period_warns(self, example_epw_path):
+        import torch
+        from urbansolarcarver.sky_patches import compute_EPW_based_weights
+
+        hoys = list(range(24 * 10, 24 * 20))
+        schedule = np.zeros(8760)
+        schedule[24 * 300:] = 1.0  # nonzero only outside the period
+        with pytest.warns(UserWarning, match="zero everywhere"):
+            w = compute_EPW_based_weights(
+                "benefit", str(example_epw_path), hoys, torch.device("cpu"),
+                usefulness=(schedule, np.zeros(8760)),
+            )
+        assert float(w.sum()) == 0.0
 
     def test_include_harm_noop_without_hot_hours(self, example_epw_path):
         """With a cold-only window the composite equals the default formula

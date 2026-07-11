@@ -29,6 +29,13 @@ balance_temperature: 15.0   # °C — free-running balance point (Ladybug defaul
                             # older poorly insulated stock). Derive project-specific
                             # values with the Honeybee/E+ balance-point workflow.
 balance_offset:       2.0   # °C — dead-band below the balance point (>= 0)
+# usefulness_path: solar_usefulness.json
+#                           # Physics-derived hourly weights (ISO 13790 5R1C):
+#                           # generate with `usc usefulness -e weather.epw
+#                           # -a configs/archetype_example.yaml`. Replaces the
+#                           # balance-point filter with hour-resolved marginal
+#                           # usefulness (thermal lag, mass state). balance_*
+#                           # are then unused.
 # include_harm: false       # EXPERIMENTAL. true = Ladybug's composite concept:
 #                           # hot-hour (T > balance + offset) radiation is
 #                           # subtracted per sky patch, clipped at zero. Results

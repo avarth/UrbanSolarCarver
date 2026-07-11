@@ -22,8 +22,17 @@ versioning follows [Semantic Versioning](https://semver.org/).
   TMY3 weather (annual demands and hourly node states; driving arrays
   stored verbatim in `tests/data/`), plus steady-state closure against an
   independent network reduction. Design, tier ladder, and declared
-  limitations: `docs/design/solar-usefulness-tier15.md`. The benefit-mode
-  hook (`usefulness_path`) that consumes the artifact lands separately.
+  limitations: `docs/design/solar-usefulness-tier15.md`.
+- **`usefulness_path`** (benefit mode): consume a solar-usefulness artifact
+  in place of the balance-point hour filter — each hour's DNI/DHI is scaled
+  by `benefit[t]` before the cumulative sky matrix (the balance filter is
+  the binary special case of this mechanism), and `include_harm: true`
+  subtracts the `harm[t]`-scaled matrix clipped at zero. Analysis-period
+  hours outside the period are zero-weighted. `balance_temperature`/
+  `balance_offset` are unused (warns if customized); artifact provenance is
+  recorded in preprocessing diagnostics and the patch-weight cache keys on
+  artifact content. Occupancy: archetypes accept a flat internal-gains
+  value or a 24-value daily profile.
 
 ### Changed
 

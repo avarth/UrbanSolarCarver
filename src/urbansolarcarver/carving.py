@@ -499,6 +499,7 @@ def carve_with_sky_patch_rays(
             north_deg=config.north_deg,
             min_sky_elevation_deg=config.min_sky_elevation_deg,
             include_harm=config.include_harm,
+            usefulness_path=config.usefulness_path,
         )
 
     if sess:
@@ -515,6 +516,11 @@ def carve_with_sky_patch_rays(
             "min_elev": config.min_sky_elevation_deg,
             "incl_harm": config.include_harm,
         }
+        if config.usefulness_path:
+            # Cache on artifact CONTENT, not path: regenerating the file
+            # must invalidate cached patch weights.
+            with open(config.usefulness_path, "rb") as f:
+                key_payload["usefulness"] = hashlib.md5(f.read()).hexdigest()
         cache_key = "patch_weights:" + hashlib.md5(
             json.dumps(key_payload, sort_keys=True).encode()
         ).hexdigest()

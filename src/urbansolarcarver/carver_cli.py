@@ -451,7 +451,14 @@ def usefulness(
     if not isinstance(arch, dict):
         typer.secho("  Archetype file must be a YAML mapping", fg="red")
         raise typer.Exit(1)
-    internal = arch.pop("internal_gains_w_m2", 5.0)
+    profile = arch.pop("internal_gains_profile_w_m2", None)
+    flat = arch.pop("internal_gains_w_m2", None)
+    if profile is not None and flat is not None:
+        typer.secho("  Specify either internal_gains_w_m2 or "
+                    "internal_gains_profile_w_m2, not both", fg="red")
+        raise typer.Exit(1)
+    internal = profile if profile is not None else (
+        flat if flat is not None else 5.0)
     typer.echo(f"  Running 5R1C perturbation attribution ({epw.name}) ...")
     try:
         path = generate_tier15(str(epw), arch, out,

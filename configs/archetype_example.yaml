@@ -18,6 +18,9 @@ mass_class: medium       # very_light | light | medium | heavy | very_heavy (ISO
 t_set_heating: 20.0      # °C
 t_set_cooling: 26.0      # °C
 internal_gains_w_m2: 5.0 # W per m² floor area, flat schedule
+# OR a 24-value daily occupancy profile (W/m² per hour of day, tiled over
+# the year) — specify one of the two, not both:
+# internal_gains_profile_w_m2: [2,2,2,2,2,2,3,5, 8,8,8,8,8,8,8,8, 8,8,6,5,4,3,2,2]
 
 # Glazing per orientation: [azimuth_deg, area_m2, g_value]
 # Azimuth in Ladybug convention: 0 = N, 90 = E, 180 = S, 270 = W.

@@ -247,6 +247,38 @@ def compute_radiative_cooling_weights(
         return torch.full_like(raw, fill_value=1.0 / raw.numel())
     return (raw / total).to(torch.float32)
 
+def _scaled_cumulative_matrix(epw_path: str, hourly_weights, lb_north: float,
+                              expected_patches: int) -> np.ndarray:
+    """Cumulative Tregenza sky matrix with each hour's DNI/DHI scaled by
+    ``hourly_weights`` (length 8760, non-negative).
+
+    Zero-weighted hours contribute nothing, so out-of-period hours are
+    handled by zeroing their weight; the wea keeps its full-year duration
+    (Ladybug's average→cumulative conversion is duration-consistent either
+    way).
+    """
+    from ladybug.wea import Wea
+
+    w = np.asarray(hourly_weights, dtype=np.float64)
+    wea = Wea.from_epw_file(str(epw_path))
+    dni = wea.direct_normal_irradiance.duplicate()
+    dhi = wea.diffuse_horizontal_irradiance.duplicate()
+    dni.values = [float(v) * float(s) for v, s in zip(dni.values, w)]
+    dhi.values = [float(v) * float(s) for v, s in zip(dhi.values, w)]
+    SkyMatrix = _load_sky_matrix()
+    sky = SkyMatrix(Wea(wea.location, dni, dhi), north=lb_north,
+                    high_density=False)
+    d = np.clip(np.asarray(sky.direct_values, dtype=np.float64), 0.0, None)
+    f = np.clip(np.asarray(sky.diffuse_values, dtype=np.float64), 0.0, None)
+    out = d + f
+    if out.shape[0] != expected_patches:
+        raise RuntimeError(
+            f"SkyMatrix returned {out.shape[0]} patches, "
+            f"expected {expected_patches}"
+        )
+    return out
+
+
 # Main function: compute weights per sky patch
 
 def compute_EPW_based_weights(
@@ -258,6 +290,7 @@ def compute_EPW_based_weights(
     balance_offset: float = 2.0,                            # benefit model +/- offset (°C)
     north: float = 0.0,                                     # north direction (degrees CW from +Y, USC convention)
     include_harm: bool = False,                             # benefit only: subtract hot-hour radiation (clipped at 0)
+    usefulness: "tuple | None" = None,                      # benefit only: (benefit[8760], harm[8760]) hourly weights
 ) -> torch.Tensor:
     """
     Return a vector of sky-patch weights (length P) derived from
@@ -442,6 +475,55 @@ def compute_EPW_based_weights(
 
     if key == 'benefit':
         from ladybug.epw import EPW
+
+        if usefulness is not None:
+            # Physics-derived hourly weights (usefulness_path artifact):
+            # scale each hour's DNI/DHI by benefit[t] before the cumulative
+            # sky matrix — the sky integration then distributes usefulness
+            # onto exactly the patches each hour's sun and sky occupied.
+            # The balance-point filter below is the binary special case of
+            # this mechanism.
+            benefit_series, harm_series = usefulness
+            benefit_series = np.asarray(benefit_series, dtype=np.float64)
+            harm_series = np.asarray(harm_series, dtype=np.float64)
+            period_mask = np.zeros(8760)
+            for h in hoys_list:
+                if int(h) < 8760:
+                    period_mask[int(h)] = 1.0
+
+            w_ben = benefit_series * period_mask
+            if not w_ben.any():
+                import warnings
+                warnings.warn(
+                    "benefit mode (usefulness_path): the artifact's benefit "
+                    "weights are zero everywhere in the analysis period — "
+                    "all patch weights are zero and the carve will be "
+                    "degenerate. Widen the period or check the artifact.",
+                    stacklevel=2,
+                )
+                return torch.zeros(P, device=device)
+
+            weights_np = _scaled_cumulative_matrix(epw_path, w_ben, lb_north, P)
+            if include_harm:
+                w_harm = harm_series * period_mask
+                if w_harm.any():
+                    weights_np = np.clip(
+                        weights_np
+                        - _scaled_cumulative_matrix(epw_path, w_harm,
+                                                    lb_north, P),
+                        0.0, None,
+                    )
+                    if not weights_np.any():
+                        import warnings
+                        warnings.warn(
+                            "benefit mode (usefulness_path, include_harm): "
+                            "harm exceeds benefit for every sky patch — all "
+                            "weights are zero and the carve will be "
+                            "degenerate.",
+                            stacklevel=2,
+                        )
+            return torch.from_numpy(
+                weights_np.astype(np.float32)).to(device)
 
         # Heating-benefit filter — this IS the documented formula:
         #     wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) · H(T_bal − ΔT − Tₐₜ)

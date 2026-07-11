@@ -235,6 +235,30 @@ class TestGenerateTier15:
             generate_tier15("dummy.epw", {"floor_area": 10.0},
                             tmp_path / "u.json")
 
+    def test_daily_occupancy_profile(self, tmp_path):
+        """A 24-value profile is tiled over the year and recorded in meta;
+        wrong lengths are rejected."""
+        import yaml
+        from _epw import resolve_epw
+        from urbansolarcarver.usefulness import generate_tier15
+
+        epw = resolve_epw()
+        if not epw:
+            pytest.skip("No EPW available")
+        arch_path = (Path(__file__).parent.parent / "configs"
+                     / "archetype_example.yaml")
+        arch = yaml.safe_load(arch_path.read_text(encoding="utf-8"))
+        arch.pop("internal_gains_w_m2")
+        profile = [2.0] * 8 + [10.0] * 12 + [2.0] * 4  # office-like day
+        out = generate_tier15(epw, arch, tmp_path / "u.json",
+                              internal_gains_w_m2=profile)
+        _b, _h, meta = read_usefulness(out)
+        assert meta["archetype"]["internal_gains_w_m2"] == profile
+
+        with pytest.raises(ValueError, match="24-value"):
+            generate_tier15(epw, arch, tmp_path / "u2.json",
+                            internal_gains_w_m2=[1.0, 2.0, 3.0])
+
 
 # ---------------------------------------------------------------------------
 # Artifact I/O

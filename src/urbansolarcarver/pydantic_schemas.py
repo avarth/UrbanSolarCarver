@@ -324,6 +324,19 @@ class UserConfig(BaseModel):
             "credited. Must be >= 0 (0 = no dead-band)."
         ),
     )
+    usefulness_path: Optional[str] = Field(
+        None,
+        description=(
+            "benefit mode only: path to a solar_usefulness.json artifact "
+            "(generate with `usc usefulness`). When set, the balance-point "
+            "hour filter is replaced by the artifact's physics-derived "
+            "hourly weights: each hour's radiation is scaled by benefit[t] "
+            "before the sky matrix, and with include_harm the harm[t]-"
+            "scaled matrix is subtracted (clipped at zero). "
+            "balance_temperature and balance_offset are then unused. "
+            "None (default) = the built-in balance-point filter."
+        ),
+    )
     include_harm: bool = Field(
         False,
         description=(
@@ -443,6 +456,26 @@ class UserConfig(BaseModel):
             if missing:
                 raise ValueError(
                     f"mode '{self.mode}' requires analysis period fields: {', '.join(missing)}"
+                )
+        return self
+
+    @model_validator(mode='after')
+    def _check_usefulness_path(self) -> 'UserConfig':
+        if self.usefulness_path is not None:
+            if self.mode != "benefit":
+                raise ValueError(
+                    "usefulness_path is only valid for mode 'benefit' "
+                    f"(got mode '{self.mode}')"
+                )
+            defaults = (self.balance_temperature == 15.0
+                        and self.balance_offset == 2.0)
+            if not defaults:
+                warnings.warn(
+                    "balance_temperature/balance_offset are unused when "
+                    "usefulness_path is set — the artifact's hourly weights "
+                    "replace the balance-point filter.",
+                    UrbanSolarCarverWarning,
+                    stacklevel=2,
                 )
         return self
 

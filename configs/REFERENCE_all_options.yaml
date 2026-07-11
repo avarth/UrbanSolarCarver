@@ -95,6 +95,10 @@ include_harm:        false     # EXPERIMENTAL (benefit only). true = Ladybug's c
                                # (T > balance + offset) radiation subtracted per patch, clipped at zero.
                                # Results then depend on how much warm season the period includes.
                                # false (default) = cold-hour benefit only (period-stable, recommended).
+usefulness_path:     null      # benefit only: path to a solar_usefulness.json artifact (`usc usefulness`).
+                               # Replaces the balance-point hour filter with physics-derived hourly weights
+                               # from an ISO 13790 5R1C model (thermal lag, mass state). balance_temperature/
+                               # balance_offset are then unused; include_harm uses the artifact's harm series.
 
 
 # Diagnostics and devices

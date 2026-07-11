@@ -391,13 +391,16 @@ def generate_tier15(
     epw_path: str,
     archetype: dict,
     out_path,
-    internal_gains_w_m2: float = 5.0,
+    internal_gains_w_m2: "float | Sequence[float]" = 5.0,
     eps: float = 1.0,
 ) -> Path:
     """Run the full Tier 1.5 pipeline: EPW + archetype → artifact.
 
     ``archetype`` holds the :meth:`ZoneParams.from_archetype` keyword
     arguments plus ``windows``: a list of [azimuth_deg, area_m2, g_value].
+
+    ``internal_gains_w_m2`` is either a single flat value or a 24-value
+    daily occupancy profile [W/m² per hour of day], tiled over the year.
     """
     arch = dict(archetype)
     windows = arch.pop("windows", None)
@@ -412,16 +415,28 @@ def generate_tier15(
     epw = EPW(str(epw_path))
     t_out = np.asarray(epw.dry_bulb_temperature.values, dtype=np.float64)
     phi_sol = transmitted_solar_from_epw(epw_path, windows)
-    phi_int = np.full(HOURS, float(internal_gains_w_m2) * params.floor_area)
+
+    gains = np.asarray(internal_gains_w_m2, dtype=np.float64)
+    if gains.ndim == 0:
+        phi_int = np.full(HOURS, float(gains) * params.floor_area)
+    elif gains.shape == (24,):
+        phi_int = np.tile(gains, HOURS // 24) * params.floor_area
+    else:
+        raise ValueError(
+            "internal_gains_w_m2 must be a single value or a 24-value "
+            f"daily profile, got shape {gains.shape}"
+        )
 
     benefit, harm = solar_usefulness(params, t_out, phi_int, phi_sol, eps=eps)
 
     from datetime import datetime, timezone
+    gains_meta = (float(gains) if gains.ndim == 0
+                  else [float(v) for v in gains])
     meta = {
         "method": "iso13790-5r1c-perturbation",
         "epw": str(epw_path),
         "archetype": {**arch, "windows": [list(w) for w in windows],
-                      "internal_gains_w_m2": internal_gains_w_m2},
+                      "internal_gains_w_m2": gains_meta},
         "eps_w": eps,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "generator": "usc usefulness (tier 1.5)",
