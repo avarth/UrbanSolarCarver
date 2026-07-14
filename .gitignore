@@ -81,6 +81,8 @@ src.zip
 
 # Weather files (ASHRAE/IWEC copyright — users download their own)
 *.epw
+# except the bundled public-domain sample the tutorials and tests rely on
+!examples/weather/USA_CO_Golden-NREL.724666_TMY3.epw
 
 # Private files
 fullText.pdf
