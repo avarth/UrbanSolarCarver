@@ -288,3 +288,64 @@ class TestArtifactIO:
                      encoding="utf-8")
         with pytest.raises(ValueError, match="schema_version"):
             read_usefulness(p)
+
+
+# ---------------------------------------------------------------------------
+# Shoebox geometry shorthand
+# ---------------------------------------------------------------------------
+
+class TestExpandShoebox:
+    BASE = {
+        "width": 10.0, "length": 8.0, "height": 3.0,
+        "wwr": {"south": 0.4, "east": 0.2},
+        "u_opaque": 0.6, "u_window": 1.6,
+        "ach_vent": 0.8, "ach_infiltration": 0.3, "heat_recovery": 0.0,
+        "mass_class": "medium", "t_set_heating": 20.0, "t_set_cooling": 26.0,
+    }
+
+    def test_derived_areas(self):
+        from urbansolarcarver.usefulness import expand_shoebox
+        arch = expand_shoebox(self.BASE)
+        assert arch["floor_area"] == pytest.approx(80.0)
+        assert arch["volume"] == pytest.approx(240.0)
+        # south facade 10x3=30 at wwr 0.4 -> 12; east 8x3=24 at 0.2 -> 4.8
+        assert arch["area_window"] == pytest.approx(16.8)
+        # gross walls 2*(30+24)=108, minus glazing, plus roof 80
+        assert arch["area_opaque"] == pytest.approx(108 - 16.8 + 80)
+        windows = {az: (area, g) for az, area, g in arch["windows"]}
+        assert windows[180.0][0] == pytest.approx(12.0)
+        assert windows[90.0][0] == pytest.approx(4.8)
+        assert all(g == pytest.approx(0.6) for _, g in windows.values())
+        # geometry keys consumed
+        assert "width" not in arch and "wwr" not in arch
+
+    def test_orientation_rotates_azimuths(self):
+        from urbansolarcarver.usefulness import expand_shoebox
+        arch = expand_shoebox({**self.BASE, "orientation": 30.0})
+        azimuths = sorted(az for az, _, _ in arch["windows"])
+        assert azimuths == [pytest.approx(120.0), pytest.approx(210.0)]
+
+    def test_passthrough_without_shoebox_keys(self):
+        from urbansolarcarver.usefulness import expand_shoebox
+        explicit = {"floor_area": 100.0, "windows": [[180, 10, 0.6]]}
+        assert expand_shoebox(explicit) == explicit
+
+    def test_rejects_mixed_forms(self):
+        from urbansolarcarver.usefulness import expand_shoebox
+        with pytest.raises(ValueError, match="not both"):
+            expand_shoebox({**self.BASE, "floor_area": 100.0})
+
+    def test_rejects_incomplete_geometry(self):
+        from urbansolarcarver.usefulness import expand_shoebox
+        bad = {k: v for k, v in self.BASE.items() if k != "height"}
+        with pytest.raises(ValueError, match="height"):
+            expand_shoebox(bad)
+
+    def test_rejects_bad_wwr(self):
+        from urbansolarcarver.usefulness import expand_shoebox
+        with pytest.raises(ValueError, match="wwr keys"):
+            expand_shoebox({**self.BASE, "wwr": {"southeast": 0.3}})
+        with pytest.raises(ValueError, match=r"\[0, 1\)"):
+            expand_shoebox({**self.BASE, "wwr": {"south": 1.0}})
+        with pytest.raises(ValueError, match="no windows"):
+            expand_shoebox({**self.BASE, "wwr": {}})

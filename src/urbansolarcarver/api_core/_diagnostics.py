@@ -3,8 +3,10 @@
 Histogram plots, sky-patch hemisphere charts, and score summary
 statistics.  Used by preprocessing and thresholding.
 
-The Agg backend is set before any matplotlib import so that plots
-render correctly from background threads (no tkinter dependency).
+If no matplotlib backend has been selected yet, fall back to Agg so
+plots render correctly from background threads (no tkinter dependency).
+An already-chosen backend (e.g. a notebook's inline backend) is kept —
+forcing Agg here would silently break plotting for notebook users.
 """
 from pathlib import Path
 from typing import List, Union, Optional
@@ -13,7 +15,12 @@ import numpy as np
 
 try:
     import matplotlib
-    matplotlib.use("Agg")
+    try:
+        _backend_chosen = matplotlib.rcParams._get_backend_or_none() is not None
+    except AttributeError:  # matplotlib < 3.6
+        _backend_chosen = "matplotlib.pyplot" in __import__("sys").modules
+    if not _backend_chosen:
+        matplotlib.use("Agg")
 except ImportError:
     pass
 
@@ -124,6 +131,9 @@ def _plot_tregenza_hemisphere(
     title: str,
     cbar_label: str,
     path: Path,
+    cmap: str = "viridis",
+    vmin: Optional[float] = None,
+    vmax: Optional[float] = None,
 ) -> Path:
     """Render a 145-patch Tregenza hemisphere as a polar sector chart.
 
@@ -137,6 +147,10 @@ def _plot_tregenza_hemisphere(
         Colorbar axis label.
     path : Path
         Output PNG path (parent directory must exist).
+    cmap : str
+        Matplotlib colormap name (e.g. "RdBu_r" for signed differences).
+    vmin, vmax : float, optional
+        Color scale limits; default to the data range.
 
     Returns
     -------
@@ -147,9 +161,10 @@ def _plot_tregenza_hemisphere(
 
     ring_counts = [30, 30, 24, 24, 18, 12, 6]  # patches per Tregenza ring
     zenith = w[-1]
-    wmin, wmax = float(w.min()), float(w.max())
+    wmin = float(w.min()) if vmin is None else float(vmin)
+    wmax = float(w.max()) if vmax is None else float(vmax)
     _norm = _mpl.colors.Normalize(vmin=wmin, vmax=wmax)
-    _cmap = plt.cm.viridis
+    _cmap = plt.get_cmap(cmap)
 
     fig = plt.figure(figsize=(5, 5))
     ax = fig.add_subplot(111, projection="polar")
@@ -299,3 +314,76 @@ def save_sky_patch_weights(
     fig.savefig(str(path), bbox_inches="tight", dpi=120)
     plt.close(fig)
     return [path]
+
+
+def save_sky_patch_comparison(
+    weights_a: np.ndarray,
+    weights_b: np.ndarray,
+    out_dir: Union[str, Path],
+    labels: tuple = ("A", "B"),
+    fname: str = "sky_patch_comparison.png",
+) -> Optional[tuple]:
+    """Save a difference hemisphere comparing two 145-patch weight sets.
+
+    Both weight sets are normalized to sum to 1 first, so the plot shows
+    how the *share* of credited sky moved between the two runs per patch
+    (diverging colors: red = ``B`` weights that direction more than ``A``).
+    Useful for comparing benefit formulations, analysis periods, or
+    usefulness archetypes on otherwise identical runs.
+
+    Parameters
+    ----------
+    weights_a, weights_b : ndarray, shape (145,)
+        Per-patch weights of the two runs (``preprocessing/patch_weights.npy``).
+    out_dir : str or Path
+        Directory to write the PNG into (created if missing).
+    labels : (str, str)
+        Names for the two runs, used in the figure title.
+    fname : str
+        Output file name.
+
+    Returns
+    -------
+    (path, stats) where ``stats`` reports the redistribution in relative
+    terms — ``mass_redistributed_pct`` (share of total weight that moved),
+    ``patches_over_20pct`` (patches whose own share changed by more than
+    20 %), ``rel_change_min_pct`` / ``rel_change_max_pct`` (extremes) —
+    or None if matplotlib is unavailable.
+    """
+    try:
+        import matplotlib  # noqa: F401
+    except ImportError:
+        return None
+
+    a = np.asarray(weights_a, dtype=float).reshape(-1)
+    b = np.asarray(weights_b, dtype=float).reshape(-1)
+    if a.size != 145 or b.size != 145:
+        raise ValueError(
+            f"expected two 145-patch Tregenza weight sets, got {a.size} and {b.size}"
+        )
+    if a.sum() <= 0 or b.sum() <= 0:
+        raise ValueError("patch weights must have positive total mass")
+
+    na, nb = a / a.sum(), b / b.sum()
+    diff = nb - na
+    with np.errstate(divide="ignore", invalid="ignore"):
+        rel = np.where(na > 1e-12, diff / na * 100.0, np.nan)
+    stats = {
+        "mass_redistributed_pct": float(np.abs(diff).sum() / 2 * 100),
+        "patches_over_20pct": int(np.nansum(np.abs(rel) > 20)),
+        "rel_change_min_pct": float(np.nanmin(rel)),
+        "rel_change_max_pct": float(np.nanmax(rel)),
+    }
+
+    d = Path(out_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    lim = float(np.abs(diff).max()) or 1.0
+    path = _plot_tregenza_hemisphere(
+        diff,
+        title=f"Sky-share difference: {labels[1]} − {labels[0]}\n"
+              f"(red = {labels[1]} weights this direction more)",
+        cbar_label="Δ normalized patch weight",
+        path=d / fname,
+        cmap="RdBu_r", vmin=-lim, vmax=lim,
+    )
+    return path, stats

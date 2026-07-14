@@ -1,4 +1,4 @@
-"""Physics-derived solar usefulness for benefit mode (Tier 1.5).
+"""Physics-derived solar usefulness for benefit mode (ISO 13790 5R1C).
 
 Implements the ISO 13790 Annex C simple hourly method ("5R1C" — five
 conductances, one capacitance) and derives, by perturbation, the marginal
@@ -387,14 +387,127 @@ def _validate_series(name: str, arr: np.ndarray) -> None:
 # Generator orchestration
 # ---------------------------------------------------------------------------
 
-def generate_tier15(
+_SHOEBOX_KEYS = frozenset({"width", "length", "height"})
+_EXPLICIT_KEYS = frozenset({"floor_area", "volume", "area_opaque",
+                            "area_window", "windows"})
+_FACADES = {  # cardinal name -> (azimuth_deg, horizontal-extent key)
+    "north": (0.0, "width"),
+    "east": (90.0, "length"),
+    "south": (180.0, "width"),
+    "west": (270.0, "length"),
+}
+
+
+def expand_shoebox(archetype: dict) -> dict:
+    """Expand the shoebox geometry shorthand into explicit archetype areas.
+
+    Instead of ``floor_area`` / ``volume`` / ``area_opaque`` / ``area_window``
+    / ``windows``, an archetype may describe a rectangular single-zone box:
+
+    - ``width``  — east-west dimension (m)
+    - ``length`` — north-south dimension (m)
+    - ``height`` — storey height (m)
+    - ``wwr``    — window-to-wall ratio per facade, keyed by cardinal name
+      (``north`` / ``east`` / ``south`` / ``west``); omitted sides get none
+    - ``g_value`` — glazing solar transmittance for all windows (default 0.6)
+    - ``orientation`` — degrees to rotate the box clockwise from north
+      (optional, default 0)
+
+    Derived: floor area = width x length; volume = floor area x height;
+    per-facade window areas = wwr x facade area; ``area_opaque`` = opaque
+    walls + roof (ground slab excluded); ``area_window`` = sum of windows.
+    Archetypes without shoebox keys pass through unchanged.
+    """
+    keys = set(archetype)
+    if not keys & _SHOEBOX_KEYS:
+        return dict(archetype)
+    if not keys >= _SHOEBOX_KEYS:
+        missing = sorted(_SHOEBOX_KEYS - keys)
+        raise ValueError(f"shoebox archetype is missing {missing}")
+    if keys & _EXPLICIT_KEYS:
+        raise ValueError(
+            "give either shoebox geometry (width/length/height/wwr) or "
+            f"explicit areas ({sorted(keys & _EXPLICIT_KEYS)}), not both"
+        )
+
+    arch = dict(archetype)
+    width = float(arch.pop("width"))
+    length = float(arch.pop("length"))
+    height = float(arch.pop("height"))
+    if min(width, length, height) <= 0:
+        raise ValueError("shoebox width, length and height must be positive")
+    wwr = arch.pop("wwr", None) or {}
+    g_value = float(arch.pop("g_value", 0.6))
+    orientation = float(arch.pop("orientation", 0.0))
+
+    unknown = set(wwr) - set(_FACADES)
+    if unknown:
+        raise ValueError(f"wwr keys must be one of {sorted(_FACADES)}, "
+                         f"got {sorted(unknown)}")
+
+    dims = {"width": width, "length": length}
+    windows, window_area, gross_walls = [], 0.0, 0.0
+    for name, (azimuth, extent_key) in _FACADES.items():
+        facade_area = dims[extent_key] * height
+        gross_walls += facade_area
+        ratio = float(wwr.get(name, 0.0))
+        if not 0.0 <= ratio < 1.0:
+            raise ValueError(f"wwr[{name}] must be in [0, 1), got {ratio}")
+        if ratio > 0.0:
+            area = ratio * facade_area
+            windows.append([(azimuth + orientation) % 360.0, area, g_value])
+            window_area += area
+    if not windows:
+        raise ValueError("shoebox archetype has no windows: set wwr for at "
+                         "least one facade")
+
+    arch["floor_area"] = width * length
+    arch["volume"] = width * length * height
+    arch["area_window"] = window_area
+    # Opaque envelope = walls minus glazing, plus roof (slab-on-grade floor
+    # is treated as adiabatic, consistent with the explicit-areas examples).
+    arch["area_opaque"] = gross_walls - window_area + width * length
+    arch["windows"] = windows
+    return arch
+
+
+def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path) -> "Path | None":
+    """Save the benefit/harm hourly series as day x hour heatmaps.
+
+    Companion preview for the artifact. Returns the PNG path, or None
+    when matplotlib is unavailable.
+    """
+    try:
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return None
+    days = HOURS // 24
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 3.6), sharey=True)
+    for ax, series, title, cmap in (
+        (ax1, benefit, "benefit: marginal solar offsets HEATING", "YlOrRd"),
+        (ax2, harm, "harm: marginal solar becomes COOLING load", "PuBu"),
+    ):
+        im = ax.imshow(series.reshape(days, 24).T, aspect="auto",
+                       origin="lower", cmap=cmap, vmin=0.0, vmax=1.0)
+        ax.set_title(title, fontsize=10)
+        ax.set_xlabel("day of year")
+        fig.colorbar(im, ax=ax)
+    ax1.set_ylabel("hour of day")
+    fig.tight_layout()
+    path = Path(path)
+    fig.savefig(str(path), bbox_inches="tight", dpi=120)
+    plt.close(fig)
+    return path
+
+
+def generate_usefulness(
     epw_path: str,
     archetype: dict,
     out_path,
     internal_gains_w_m2: "float | Sequence[float]" = 5.0,
     eps: float = 1.0,
 ) -> Path:
-    """Run the full Tier 1.5 pipeline: EPW + archetype → artifact.
+    """Run the full 5R1C usefulness pipeline: EPW + archetype → artifact.
 
     ``archetype`` holds the :meth:`ZoneParams.from_archetype` keyword
     arguments plus ``windows``: a list of [azimuth_deg, area_m2, g_value].
@@ -402,12 +515,12 @@ def generate_tier15(
     ``internal_gains_w_m2`` is either a single flat value or a 24-value
     daily occupancy profile [W/m² per hour of day], tiled over the year.
     """
-    arch = dict(archetype)
+    arch = expand_shoebox(archetype)
     windows = arch.pop("windows", None)
     if not windows:
         raise ValueError(
-            "archetype must define 'windows': a list of "
-            "[azimuth_deg, area_m2, g_value] entries"
+            "archetype must define 'windows' ([azimuth_deg, area_m2, g_value] "
+            "entries) or shoebox geometry (width/length/height/wwr)"
         )
     params = ZoneParams.from_archetype(**arch)
 
@@ -439,6 +552,13 @@ def generate_tier15(
                       "internal_gains_w_m2": gains_meta},
         "eps_w": eps,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "generator": "usc usefulness (tier 1.5)",
+        "generator": "usc usefulness (iso13790-5r1c)",
     }
-    return write_usefulness(out_path, benefit, harm, meta)
+    artifact = write_usefulness(out_path, benefit, harm, meta)
+    # Companion preview so users can inspect the weights without writing code.
+    _save_heatmaps(benefit, harm, artifact.with_suffix(".png"))
+    return artifact
+
+
+# Backwards-compatible alias (original internal name)
+generate_tier15 = generate_usefulness

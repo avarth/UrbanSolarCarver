@@ -1,16 +1,36 @@
-# Example archetype for `usc usefulness` (Tier 1.5 solar-usefulness generator).
+# Example archetype for `usc usefulness` (simulated benefit weights).
 #
-# NEUTRAL EXAMPLE VALUES — source real ones from your project, your national
+# Describes a *typical* building for your site as a single-zone shoebox.
+# NEUTRAL EXAMPLE VALUES: source real ones from your project, your national
 # code tables, or archetype libraries (e.g. TABULA for Europe, DOE prototypes
 # for the US). See docs/design/solar-usefulness-tier15.md for the model and
 # its declared limitations.
 
-floor_area: 100.0        # m² conditioned floor area
-volume: 300.0            # m³ conditioned volume
-u_opaque: 0.6            # W/m²K — area-weighted opaque envelope U-value
-area_opaque: 220.0       # m² opaque envelope in contact with outside
-u_window: 1.6            # W/m²K — glazing U-value
-area_window: 20.0        # m² total glazing (must equal the sum below)
+# --- Geometry (shoebox): floor area, volume, facade and window areas are
+# --- derived from these. wwr = window-to-wall ratio per facade.
+width: 10.0              # m, east-west dimension
+length: 10.0             # m, north-south dimension
+height: 3.0              # m, storey height
+wwr:                     # omit a side for no windows on that facade
+  south: 0.35
+  east: 0.15
+  west: 0.15
+g_value: 0.6             # glazing solar transmittance (applies to all windows)
+# orientation: 0.0       # deg, rotate the whole box clockwise from north
+
+# --- Alternative to the shoebox: explicit areas (use one form, not both) ---
+# floor_area: 100.0      # m² conditioned floor area
+# volume: 300.0          # m³ conditioned volume
+# area_opaque: 220.0     # m² opaque envelope in contact with outside
+# area_window: 20.0      # m² total glazing (must equal the sum below)
+# windows:               # [azimuth_deg, area_m2, g_value]; 0 = N, 90 = E, 180 = S, 270 = W
+#   - [180, 10.0, 0.6]
+#   - [90, 5.0, 0.6]
+#   - [270, 5.0, 0.6]
+
+# --- Fabric and systems ---
+u_opaque: 0.6            # W/m²K, area-weighted opaque envelope U-value
+u_window: 1.6            # W/m²K, glazing U-value
 ach_vent: 0.8            # 1/h intentional ventilation
 ach_infiltration: 0.3    # 1/h infiltration
 heat_recovery: 0.0       # 0–1 ventilation heat-recovery efficiency
@@ -19,12 +39,5 @@ t_set_heating: 20.0      # °C
 t_set_cooling: 26.0      # °C
 internal_gains_w_m2: 5.0 # W per m² floor area, flat schedule
 # OR a 24-value daily occupancy profile (W/m² per hour of day, tiled over
-# the year) — specify one of the two, not both:
+# the year); specify one of the two, not both:
 # internal_gains_profile_w_m2: [2,2,2,2,2,2,3,5, 8,8,8,8,8,8,8,8, 8,8,6,5,4,3,2,2]
-
-# Glazing per orientation: [azimuth_deg, area_m2, g_value]
-# Azimuth in Ladybug convention: 0 = N, 90 = E, 180 = S, 270 = W.
-windows:
-  - [180, 10.0, 0.6]
-  - [90, 5.0, 0.6]
-  - [270, 5.0, 0.6]

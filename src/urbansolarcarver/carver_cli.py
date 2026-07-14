@@ -437,15 +437,15 @@ def usefulness(
     eps: float = Option(1.0, "--eps",
                         help="Perturbation size in W (central differences)"),
 ):
-    """Tier 1.5 generator: hourly marginal solar usefulness (benefit + harm)
-    from the ISO 13790 Annex C simple hourly model, by perturbation.
+    """Hourly marginal solar usefulness (benefit + harm) from the
+    ISO 13790 Annex C simple hourly model (5R1C), by perturbation.
 
     The artifact feeds benefit mode's ``usefulness_path`` config key,
     replacing the balance-point Heaviside hour filter with physics-derived
     hourly weights. See docs/design/solar-usefulness-tier15.md.
     """
     import yaml
-    from urbansolarcarver.usefulness import generate_tier15
+    from urbansolarcarver.usefulness import generate_usefulness
 
     arch = yaml.safe_load(archetype.read_text(encoding="utf-8"))
     if not isinstance(arch, dict):
@@ -461,12 +461,15 @@ def usefulness(
         flat if flat is not None else 5.0)
     typer.echo(f"  Running 5R1C perturbation attribution ({epw.name}) ...")
     try:
-        path = generate_tier15(str(epw), arch, out,
-                               internal_gains_w_m2=internal, eps=eps)
+        path = generate_usefulness(str(epw), arch, out,
+                                   internal_gains_w_m2=internal, eps=eps)
     except (ValueError, TypeError) as exc:
         typer.secho(f"  {exc}", fg="red")
         raise typer.Exit(1)
     typer.secho(f"  Wrote {path}", fg="green")
+    preview = path.with_suffix(".png")
+    if preview.exists():
+        typer.echo(f"  Weights preview: {preview}")
 
 
 @app.command(help="Validate a config file without running the pipeline")

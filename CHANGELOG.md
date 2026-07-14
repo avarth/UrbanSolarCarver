@@ -9,7 +9,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Solar-usefulness generator (Tier 1.5)** — `usc usefulness` and the
+- **Solar-usefulness generator (simulated benefit weights)** — `usc usefulness` and the
   `urbansolarcarver.usefulness` module: an ISO 13790 Annex C simple hourly
   ("5R1C") thermal model plus batched central-difference perturbation,
   producing hourly *marginal* solar usefulness — `benefit[t]` (fraction of
@@ -33,6 +33,25 @@ versioning follows [Semantic Versioning](https://semver.org/).
   recorded in preprocessing diagnostics and the patch-weight cache keys on
   artifact content. Occupancy: archetypes accept a flat internal-gains
   value or a 24-value daily profile.
+- **Shoebox archetype shorthand**: instead of explicit areas, an archetype
+  may give `width`/`length`/`height` plus per-facade `wwr` (window-to-wall
+  ratio), `g_value`, and optional `orientation` — floor area, volume,
+  per-facade window areas, `area_window`, and `area_opaque` (opaque walls +
+  roof) are derived. `configs/archetype_example.yaml` shows both forms.
+- **Weights preview**: `usc usefulness` / `generate_usefulness` write a
+  `.png` companion next to the artifact — benefit and harm as day x hour
+  heatmaps — so the schedule can be inspected without writing code.
+- **Sky-weight comparison in diagnostics**: a benefit run that consumes a
+  usefulness artifact (with `diagnostic_plots: true`) also records a
+  difference dome versus the simple balance-point rule for the same config
+  (`sky_patch_comparison_image` + redistribution stats in
+  `diagnostic.json`).
+- **Tutorial 5** (`examples/5_benefit_5r1c.ipynb`): simulated benefit
+  weights end-to-end — archetype, weights generation and inspection,
+  simple-vs-simulated carve comparison, harm channel, provenance.
+- The sample Golden CO TMY3 EPW is now actually committed
+  (`.gitignore` exception) — the tutorials and EPW-dependent tests run
+  out of the box as documented.
 
 ### Changed
 
@@ -56,6 +75,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   Honeybee/E+ balance-point workflow.
 - `balance_offset` now validates `>= 0` (a negative offset silently inverted
   the dead-band into inverted hour classification).
+- User-facing terminology for the two benefit weightings: "simple weights"
+  (balance-point rule) vs "simulated weights" (5R1C hourly simulation);
+  the internal "Tier 1.5" label no longer appears in docs, CLI, or configs.
+  `generate_tier15` is renamed `generate_usefulness` (old name kept as a
+  compatible alias).
 - Benefit mode warns loudly and returns all-zero weights when the analysis
   period contains no beneficial hours (previously this fell through toward a
   degenerate carve with only a generic downstream warning; an empty hour
@@ -134,6 +158,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **`setup_env.py` on current NVIDIA drivers**: the CUDA-to-wheel map ended
+  at 12.x, so drivers reporting CUDA 13.x silently fell back to CPU-only
+  PyTorch; CUDA >= 13 now maps to cu128 wheels. The script also installs
+  the package editable (`pip install -e .[dev]`) as its docs always claimed,
+  instead of a static site-packages copy that ignored source edits.
+- **Session cache on CUDA machines with CPU sessions**: `get_active_session()`
+  with no device preferred cuda-when-available, so a `device: cpu` run on a
+  GPU machine silently lost all session caching; a single active session now
+  wins regardless of device.
+- **Matplotlib backend hijack**: `api_core._diagnostics` forced the Agg
+  backend at import time, breaking inline plotting in any notebook that
+  imports USC; Agg is now only the fallback when no backend was chosen yet.
+- The Warp voxelizer parity test crashed on CUDA machines (`.numpy()` on a
+  cuda tensor) before asserting anything; it is now device-aware and
+  parametrized over both cpu and cuda, so the parity guarantee is actually
+  exercised on GPUs.
 - **CPU ray tracing accuracy and speed**: the CPU path now runs the same exact
   Warp DDA kernel as CUDA. The previous fixed-step marcher skipped up to ~37 %
   of the voxels traversed by oblique rays, systematically under-counting

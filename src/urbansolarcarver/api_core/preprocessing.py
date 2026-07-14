@@ -6,7 +6,10 @@ from typing import Tuple, Union
 import numpy as np
 from ..load_config import user_config
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, device_summary, dump_config_snapshot
-from ._diagnostics import save_sky_patch_weights, save_histogram, score_statistics, warn_score_anomalies
+from ._diagnostics import (
+    save_sky_patch_weights, save_sky_patch_comparison, save_histogram,
+    score_statistics, warn_score_anomalies,
+)
 from ..pydantic_schemas import PreprocessingManifest, schema_to_json
 from ..carving import (
     carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes,
@@ -342,6 +345,28 @@ def preprocessing(
                 str(diag_dir / "sky_patch_weights_intensity.png"),
             ]
             save_sky_patch_weights(patch_weights, diag_dir, weight_unit=xlabel)
+            if conf.mode == "benefit" and conf.usefulness_path:
+                # How the simulated weights shifted the sky relative to the
+                # simple balance-point rule under the same config.
+                import torch
+                from ..scoring import get_weights
+                _, cf_hoys = sample_period(conf)
+                simple = get_weights(
+                    "benefit", device=torch.device("cpu"),
+                    epw_file=conf.epw_path, hoys=cf_hoys,
+                    balance_temperature=conf.balance_temperature,
+                    balance_offset=conf.balance_offset,
+                    north_deg=conf.north_deg,
+                    include_harm=conf.include_harm,
+                ).cpu().numpy()
+                comparison = save_sky_patch_comparison(
+                    simple, np.asarray(patch_weights, dtype=float), diag_dir,
+                    labels=("simple (balance point)", "simulated"),
+                )
+                if comparison is not None:
+                    cmp_path, cmp_stats = comparison
+                    summary["sky_patch_comparison_image"] = str(cmp_path)
+                    summary["sky_patch_comparison_stats"] = cmp_stats
         summary["score_histogram"] = str(diag_dir / "score_histogram.png")
         save_histogram(rs, diag_dir, "score_histogram.png",
                        title=f"Raw Scores ({mode})", xlabel=xlabel)
