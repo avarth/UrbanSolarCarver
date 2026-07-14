@@ -55,6 +55,7 @@ Tutorial notebooks are in `examples/`:
 2. **Solar envelope** -- time-based solar envelope
 3. **Tilted plane & daylight** -- geometric and CIE overcast envelopes
 4. **Advanced** -- chaining modes, post-processing, decomposed pipeline
+5. **Benefit with simulated weights** -- building-simulation-driven hour weighting (ISO 13790 5R1C)
 
 ## Input Requirements
 

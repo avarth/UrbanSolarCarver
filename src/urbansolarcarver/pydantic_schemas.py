@@ -42,10 +42,10 @@ class ThresholdSpec(BaseModel):
     Methods
     -------
     * ``carve_fraction`` — remove voxels accounting for ``value`` of the
-      total score mass (0-1).
+        total score mass (0-1).
     * ``headtail`` — head/tail breaks (Jiang 2013); takes no value.
     * ``cutoff`` — carve voxels scoring strictly above ``value``; for the
-      violation-count modes this is the tolerated violation count.
+        violation-count modes this is the tolerated violation count.
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
 

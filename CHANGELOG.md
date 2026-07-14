@@ -22,7 +22,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   TMY3 weather (annual demands and hourly node states; driving arrays
   stored verbatim in `tests/data/`), plus steady-state closure against an
   independent network reduction. Design, tier ladder, and declared
-  limitations: `docs/design/solar-usefulness-tier15.md`.
+  limitations: `design/solar-usefulness.md`.
 - **`usefulness_path`** (benefit mode): consume a solar-usefulness artifact
   in place of the balance-point hour filter — each hour's DNI/DHI is scaled
   by `benefit[t]` before the cumulative sky matrix (the balance filter is

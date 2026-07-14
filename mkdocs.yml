@@ -40,6 +40,7 @@ nav:
     - Sky Patches: api/sky-patches.md
     - Sun Vectors: api/sun.md
     - Scoring: api/scoring.md
+    - Solar Usefulness: api/usefulness.md
     - I/O: api/io.md
     - Configuration: api/config.md
     - Session: api/session.md

@@ -59,11 +59,39 @@ Weights each Tregenza sky patch by its cumulative direct + diffuse irradiance ov
 
 ## benefit
 
-Similar to irradiance, but filters hours by a heating-benefit criterion: only hours when the outdoor temperature is below the building's balance-point temperature contribute to patch weights. This focuses carving on protecting solar access when it is most useful for passive heating.
+Similar to irradiance, but weights hours by a heating-benefit criterion. Two weightings are available:
+
+**Simple weights (default)**: only hours when the outdoor temperature is below the building's balance-point temperature contribute to patch weights. This focuses carving on protecting solar access when it is most useful for passive heating.
 
 **Use case**: maximize passive solar heating potential during the heating season.
 
 **Key parameters**: `balance_temperature` (free-running balance point, typically 15--20 C), `balance_offset` (dead-band width).
+
+### Simulated weights
+
+Instead of the binary cold-hour rule, benefit mode can consume hourly weights derived from a thermal simulation of a typical building (the compact 5R1C hourly model from ISO 13790). For every hour of the year the simulation answers: *if one extra watt of sun arrived in this hour, how much less heating, and how much more cooling, would the building need over the whole year?* This captures thermal lag (a noon gain stored in the mass and released into the cold evening still earns credit), diurnal mass state, and gain saturation -- everything the binary rule cannot express. The simple rule is the special case where the weights are 0 or 1.
+
+Generate the weights once from an EPW and a building **archetype** (roughly ten numbers describing a typical building; the easiest form is a shoebox with per-facade window-to-wall ratios, see `configs/archetype_example.yaml`):
+
+```bash
+urbansolarcarver usefulness -e weather.epw -a configs/archetype_example.yaml
+```
+
+This writes `solar_usefulness.json` (the weights plus full provenance) and a `.png` preview of the weights next to it. Then point a benefit config at the artifact:
+
+```yaml
+mode: benefit
+usefulness_path: solar_usefulness.json
+# include_harm: true   # experimental: also subtract summer-overheating contributions
+```
+
+A full-year `analysis_period` is the natural choice with simulated weights, since the schedule itself selects the useful hours. `balance_temperature` / `balance_offset` are unused (USC warns if you customize them). With `diagnostic_plots: true`, the run's diagnostics include a comparison dome showing how the simulated weights shifted the sky relative to the simple rule.
+
+**Use case**: benefit envelopes that respond to the thermal mass, insulation, and glazing of the building stock being protected.
+
+**Key parameters**: `usefulness_path`, `include_harm` (experimental; the model has no operable shading or night ventilation, so harm is overstated -- treat it as a bracketing scenario).
+
+See Tutorial 5 (`examples/5_benefit_5r1c.ipynb`) for an end-to-end walkthrough.
 
 ## daylight
 

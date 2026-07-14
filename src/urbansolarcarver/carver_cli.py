@@ -442,7 +442,7 @@ def usefulness(
 
     The artifact feeds benefit mode's ``usefulness_path`` config key,
     replacing the balance-point Heaviside hour filter with physics-derived
-    hourly weights. See docs/design/solar-usefulness-tier15.md.
+    hourly weights. See design/solar-usefulness.md.
     """
     import yaml
     from urbansolarcarver.usefulness import generate_usefulness

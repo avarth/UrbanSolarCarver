@@ -1,36 +1,47 @@
-# Design note — Physics-derived solar usefulness for benefit mode (Tier 1.5)
+# Design note — Simulated solar-usefulness weights for benefit mode
 
-**Status:** draft for author sign-off. The equation block below was
-cross-checked against the ETH RC_BuildingSimulator source (MIT, Jayathissa
-et al.), which transcribes the same annex; it must additionally be verified
-against the standard text (EN ISO 13790:2008 §12 and Annex C, or the
-national adaptation) before the engine's results are trusted.
+**Status:** implemented and shipped (`usc usefulness`, `usefulness_path`).
+The engine's Annex C recurrence is regression-tested against the ETH
+RC_BuildingSimulator source (MIT, Jayathissa et al.) to ~1 Wh/year on three
+archetypes, plus steady-state closure against an independent network
+reduction; the full suite has been validated on a CUDA workstation. One
+verification step remains open: the equation block below was cross-checked
+against RC_BuildingSimulator's transcription of the annex, and should
+additionally be verified against the standard text (EN ISO 13790:2008 §12
+and Annex C, or the national adaptation) before results are used in
+publication-grade claims.
+
+**Naming:** user-facing text calls the two benefit weightings **simple
+weights** (the balance-point rule) and **simulated weights** (this
+generator). The tier vocabulary below is retained only as internal design
+framing; it appears nowhere in the CLI, configs, docs site, or tutorials.
 
 ## 1. Problem and approach
 
 USC's benefit mode weights each sky patch by the radiation of *beneficial*
-hours. The default hour filter is a balance-point Heaviside (hours with
+hours. The simple hour filter is a balance-point Heaviside (hours with
 `T_air < balance_temperature − balance_offset` count fully, others not at
 all): explainable and code-aligned, but blind to thermal lag, mass state,
 and gain saturation.
 
-The upgrade path keeps USC untouched at its natural boundary — the hourly
-weighting — and swaps the *generator* of that weighting:
+The upgrade path keeps USC untouched at its natural boundary, the hourly
+weighting, and swaps the *generator* of that weighting:
 
-| Tier | Generator | Resolves | Cost |
-|------|-----------|----------|------|
-| 0 | Balance-point Heaviside (current default) | nothing dynamic | zero |
-| 1 | ISO 13790 monthly utilization factor η(γ, τ), *marginal* form | season + mass | closed form |
-| **1.5** | **ISO 13790 Annex C hourly 5R1C model + perturbation attribution** | **hour-resolved lag, diurnal mass state, saturation at operating point** | **seconds** |
-| 2 | E+ shoebox perturbation (future) | schedules, HVAC detail, multi-zone | heavy setup |
+| Generator | Resolves | Cost | Status |
+|-----------|----------|------|--------|
+| Balance-point Heaviside ("simple") | nothing dynamic | zero | default |
+| ISO 13790 monthly utilization factor η(γ, τ), *marginal* form | season + mass | closed form | deferred |
+| **ISO 13790 Annex C hourly 5R1C + perturbation attribution ("simulated")** | **hour-resolved lag, diurnal mass state, saturation at operating point** | **seconds** | **shipped** |
+| E+ shoebox perturbation | schedules, HVAC detail, multi-zone | heavy setup | not planned |
 
-Tier 1 implementation is deferred: the cooling-side loss-utilization sign
+The monthly-η variant is deferred: the cooling-side loss-utilization sign
 conventions (§12.2.1.1) must be transcribed from the standard text, not
-memory, and Tier 1's only role beside Tier 1.5 is as a comparison
-baseline. Tier 1.5 ships first.
+memory, and its only role beside the hourly model is as a comparison
+baseline. An EnergyPlus generator is not planned; the 5R1C model provides
+a solid basis for a massing tool.
 
-All tiers emit the same artifact (§5); `usefulness_path` in benefit mode
-consumes it (§6). Tier 2 is explicitly out of scope here.
+All generators emit the same artifact (§5); `usefulness_path` in benefit
+mode consumes it (§6), so a future generator is a drop-in.
 
 ## 2. The 5R1C network (ISO 13790 Annex C)
 
@@ -110,10 +121,20 @@ magnitude of negative `Φ_HC,nd`.
 ## 3. Inputs
 
 Archetype (user-supplied; one neutral example ships, **no national
-defaults**): `A_f`, volume `V`, opaque `U·A` (or H_tr,op), window `U·A`,
-per-orientation window area × g-value, ACH (vent + infiltration),
-heat-recovery η_hr, mass class, set-points (default 20/26 °C), flat
-internal gains [W/m²].
+defaults**), in either of two forms:
+
+- **Shoebox shorthand** (preferred for non-experts): `width`, `length`,
+  `height`, per-facade `wwr` (window-to-wall ratio keyed north/east/
+  south/west), `g_value`, optional `orientation`. Floor area, volume,
+  per-facade window areas, `area_window`, and `area_opaque` (opaque walls
+  minus glazing, plus roof; slab-on-grade treated adiabatic) are derived
+  by `expand_shoebox()`.
+- **Explicit areas**: `A_f`, volume `V`, opaque `U·A` (or H_tr,op), window
+  `U·A`, per-orientation window area × g-value (`windows` list).
+
+Both forms additionally take ACH (vent + infiltration), heat-recovery
+η_hr, mass class, set-points (default 20/26 °C), and flat internal gains
+[W/m²] or a 24-value daily profile.
 
 Climate: one EPW. Hourly transmitted solar
 `Φ_sol(t) = Σ_orient A_w·g·I_orient(t)` with `I_orient` from the EPW via
@@ -152,9 +173,9 @@ clamped with a tolerance check rather than asserted exactly.
   "meta": {
     "method": "iso13790-5r1c-perturbation",
     "epw": "<path/name as given>",
-    "archetype": { "...all §3 inputs verbatim..." },
+    "archetype": { "...all §3 inputs, expanded form..." },
     "generated": "<iso timestamp>",
-    "generator": "usc usefulness <version>"
+    "generator": "usc usefulness (iso13790-5r1c)"
   },
   "hourly": {
     "benefit": [8760 floats in [0,1]],
@@ -164,45 +185,69 @@ clamped with a tolerance check rather than asserted exactly.
 ```
 
 8760 hourly values (TMY, non-leap), index = hour of year, timestep 1.
+The generator (`generate_usefulness`; `generate_tier15` kept as a
+backwards-compatible alias) also writes a `.png` companion next to the
+artifact: benefit and harm as day × hour heatmaps, so the schedule can be
+inspected without writing code.
 
 ## 6. USC hook
 
-New optional benefit-mode key `usefulness_path`. When set:
+Optional benefit-mode key `usefulness_path`. When set:
 
 - the Heaviside filter is replaced: each hour's DNI/DHI in the Wea is
   scaled by `benefit[t]` before the cumulative SkyMatrix — the sky
   integration distributes usefulness onto exactly the patches each hour's
-  sun and sky occupied (the current cold-hours filter is the binary special
+  sun and sky occupied (the simple cold-hours filter is the binary special
   case of this mechanism);
 - `include_harm: true` additionally subtracts the `harm[t]`-scaled matrix,
   clipped at zero — same semantics and same rationale (shading value never
   rewards mass) as the existing composite;
 - balance_temperature / balance_offset are unused → warn if customized;
-- the artifact path and its meta hash enter the patch-weight cache key and
-  the preprocessing diagnostics.
+- the artifact content hash enters the patch-weight cache key, and the
+  artifact provenance enters the preprocessing diagnostics;
+- with `diagnostic_plots: true`, the run's diagnostics additionally record
+  a **comparison dome**: the difference between the consumed weights and
+  the simple-rule counterfactual for the same config
+  (`sky_patch_comparison_image` + redistribution stats in
+  `diagnostic.json`). This keeps run-to-run comparison out of the public
+  API: the diagnostics of a single run carry it.
 
-## 7. Validation plan
+## 7. Validation status
 
-Engine: energy-balance closure (steady state: demand = Σ H·ΔT − gains);
-zero-mass and infinite-mass limits; regression against RC_BuildingSimulator
-on three archetype scenarios driven by the **bundled Golden TMY3 EPW**
-(dry bulb direct; transmitted solar from Ladybug's isotropic directional
-irradiance on each scenario's glazing, g = 0.6). The exact hourly driving
-arrays are stored verbatim inside `tests/data/oracle_5r1c_reference.json`
-alongside the oracle's derived conductances (its `h_tr,em = U·A`
-convention is fed to our engine as-is, so the recurrence is compared, not
-the parameter derivation), annual demands, and sampled hourly node states.
+Engine (all passing in `tests/test_usefulness.py`): steady-state closure
+(demand = Σ H·ΔT − gains, air held at set-point, verified against an
+independent series/parallel network reduction); heavier `C_m` flattens
+hour-to-hour `θ_m` variance; regression against RC_BuildingSimulator on
+three archetype scenarios driven by the bundled Golden TMY3 EPW (annual
+demands to ~1 Wh, sampled hourly node states; dry bulb direct; transmitted
+solar from Ladybug's isotropic directional irradiance on each scenario's
+glazing, g = 0.6). The exact hourly driving arrays are stored verbatim
+inside `tests/data/oracle_5r1c_reference.json` alongside the oracle's
+derived conductances (its `h_tr,em = U·A` convention is fed to our engine
+as-is, so the recurrence is compared, not the parameter derivation).
 Tests replay the stored arrays — deterministic, no weather generation, no
 EPW parsing in the engine layer. Capture provenance:
-`tests/data/capture_oracle_5r1c.py`.
+`tests/data/capture_oracle_5r1c.py` (note: its oracle/repo paths are
+machine-specific and need adjusting before re-capture).
 
-Attribution: winter-night benefit ≈ high with zero harm; summer-afternoon
-harm > 0 with benefit ≈ 0; heavier mass class ⇒ flatter diurnal usefulness;
-monthly aggregation of 5R1C usefulness correlates with Tier 1 marginal-η.
+Attribution (passing): winter benefit high with zero harm; summer-afternoon
+harm high with benefit ≈ 0; winter-noon benefit stays high (lag credit);
+heavier mass class ⇒ flatter diurnal usefulness. The monthly-η correlation
+check is deferred together with the monthly generator itself.
 
-End-to-end: Tier 0 vs Tier 1.5 weights on the bundled EPW → both run
-through the same carve on the demo geometry (the paper's comparison
-figure).
+Hook (passing, `tests/test_modes.py` / `test_pipeline.py`): an all-ones
+schedule reproduces plain irradiance weights; a binary balance-filter
+schedule reproduces the simple-rule weights exactly (the special-case
+claim, tested); `include_harm` composite equals clip(benefit−harm, 0);
+zero-in-period warns and returns zero weights; end-to-end artifact
+consumption with provenance in diagnostics.
+
+End-to-end evaluation on real hardware (CUDA workstation, RTX 3060):
+simple vs simulated weights redistribute ~9% of sky-weight mass on the
+demo site (east-morning share down, south-west-afternoon share up, the
+thermal-lag signature); with `include_harm` the redistribution reaches
+~20–30% and concentrates into the low southern band. Tutorial 5
+(`examples/5_benefit_5r1c.ipynb`) reproduces the comparison.
 
 ## 8. Declared limitations
 

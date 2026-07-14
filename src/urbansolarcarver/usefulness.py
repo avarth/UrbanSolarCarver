@@ -10,7 +10,7 @@ usefulness of solar gain at every hour of the year:
 The two series are written to a ``solar_usefulness.json`` artifact that
 benefit mode can consume in place of its balance-point Heaviside filter.
 Design, coefficient provenance, and declared limitations:
-``docs/design/solar-usefulness-tier15.md``.
+``design/solar-usefulness.md``.
 
 This module is deliberately NumPy-only at import time (no torch, no
 ladybug) so it stays usable as a standalone generator; the EPW-facing

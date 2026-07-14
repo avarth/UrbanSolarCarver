@@ -3,7 +3,7 @@
 # Describes a *typical* building for your site as a single-zone shoebox.
 # NEUTRAL EXAMPLE VALUES: source real ones from your project, your national
 # code tables, or archetype libraries (e.g. TABULA for Europe, DOE prototypes
-# for the US). See docs/design/solar-usefulness-tier15.md for the model and
+# for the US). See design/solar-usefulness.md for the model and
 # its declared limitations.
 
 # --- Geometry (shoebox): floor area, volume, facade and window areas are
