@@ -230,7 +230,7 @@ class TestWarpVoxelizer:
             )
         finally:
             rt.voxelize_solid_warp = saved
-        return grid.numpy().astype(bool), origin, res
+        return grid.cpu().numpy().astype(bool), origin, res
 
     @pytest.mark.skipif(not _warp_cpu_available(), reason="Warp CPU unavailable")
     def test_cube_matches_center_truth_exactly(self):
@@ -252,7 +252,12 @@ class TestWarpVoxelizer:
 
     @pytest.mark.skipif(not _warp_cpu_available(), reason="Warp CPU unavailable")
     @pytest.mark.parametrize("shape", ["sphere", "box"])
-    def test_differences_confined_to_surface_shell(self, shape):
+    @pytest.mark.parametrize(
+        "device",
+        ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(
+            not torch.cuda.is_available(), reason="CUDA unavailable"))],
+    )
+    def test_differences_confined_to_surface_shell(self, shape, device):
         """Warp and trimesh voxelizations may disagree only within one
         voxel of the surface (center-based vs conservative shell)."""
         import trimesh
@@ -264,7 +269,7 @@ class TestWarpVoxelizer:
         else:
             mesh = trimesh.creation.box(extents=(11.0, 7.0, 5.0))
         ref, origin, res = self._trimesh_reference(mesh, 0.5, 0.1)
-        occ = voxelize_solid_warp(mesh.vertices, mesh.faces, origin, 0.5, res, torch.device("cpu"))
+        occ = voxelize_solid_warp(mesh.vertices, mesh.faces, origin, 0.5, res, torch.device(device))
 
         st = np.ones((3, 3, 3), dtype=bool)
         assert not (occ & ~binary_dilation(ref, structure=st)).any()

@@ -118,6 +118,9 @@ def resolve_torch_index(cuda_version: str | None, force_cpu: bool) -> tuple[str,
 
     # Try just the major version with common minor
     major = cuda_version.split(".")[0]
+    if major.isdigit() and int(major) >= 13:
+        # Drivers are backward compatible: newer-than-known CUDA runs cu128 wheels
+        return "https://download.pytorch.org/whl/cu128", f"CUDA {major_minor} (using cu128 wheels)"
     if major == "12":
         # All CUDA 12.x uses cu124 wheels (binary compatible)
         return TORCH_INDEX["12.4"], f"CUDA {major_minor} (using cu124 wheels)"
@@ -264,7 +267,7 @@ def main():
 
     # ── 5. Install UrbanSolarCarver + all deps ──
     log("Installing UrbanSolarCarver and dependencies...")
-    run([str(vpy), "-m", "pip", "install", ".[dev]", "--quiet"])
+    run([str(vpy), "-m", "pip", "install", "-e", ".[dev]", "--quiet"])
 
     # ── 6. Verify ──
     log("Verifying installation...")

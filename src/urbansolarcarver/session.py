@@ -165,6 +165,10 @@ def get_active_session(
         is registered.
     """
     if device is None or (isinstance(device, str) and device == "auto"):
+        # No device requested: a single active session wins regardless of
+        # device, so a CPU session on a CUDA machine still gets its cache.
+        if len(CarverSession._sessions) == 1:
+            return next(iter(CarverSession._sessions.values()))
         dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     else:
         dev = torch.device(device)

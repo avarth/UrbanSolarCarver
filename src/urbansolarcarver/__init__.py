@@ -22,6 +22,17 @@ __all__ = [
 # Light imports that don't touch torch/warp
 from .load_config import load_config, user_config  # noqa: F401
 
+# Static-analysis-only imports: give IDEs/type checkers the lazy names
+# without triggering the heavy torch/warp imports at runtime.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from .api import (  # noqa: F401
+        run_pipeline,
+        preprocessing, thresholding, exporting,
+        PreprocessingResult, ThresholdingResult, ExportingResult,
+    )
+
 # Everything else is deferred until actually accessed.
 _api_loaded = False
 _api_names = {}
