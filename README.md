@@ -27,7 +27,7 @@ The tool is scale-agnostic and works on any voxelizable geometry. Surface normal
 | **tilted_plane** | Cuts voxels above a fixed angle from each test surface, uniform or varying by orientation octant. Suitable for daylight access envelopes and quick regulatory checks. No weather data required. |
 | **time-based** | Solar envelope: traces actual sun paths for specific dates and hours, carving any voxel that casts a shadow on protected surfaces during those times. |
 | **irradiance** | Weights sky directions by cumulative solar energy over an analysis period (direct + diffuse, Perez all-weather model). |
-| **benefit** | Like irradiance, but filtered by a heating-benefit criterion: only hours when outdoor temperature falls below the building's balance-point temperature contribute, focusing carving on periods when solar gain is thermally useful. |
+| **benefit** | Like irradiance, but filtered by a heating-benefit criterion: only hours when outdoor temperature falls below the building's balance-point temperature contribute, focusing carving on periods when solar gain is thermally useful. Optionally consumes **simulated weights** from a built-in hourly building simulation (ISO 13790 5R1C) that captures thermal lag and mass state; see [Simulated Weights](https://avarth.github.io/UrbanSolarCarver/simulated-weights/). |
 | **daylight** | Weights sky patches by CIE overcast luminance for diffuse daylight access. |
 | **radiative_cooling** | Preserves sky-dome access for passive nighttime cooling using Martin-Berdahl emissivity. Works inversely (rays cast from surfaces to sky). Horizontal surfaces only (experimental). |
 
@@ -50,6 +50,7 @@ https://github.com/user-attachments/assets/7fb20820-bd24-4ccd-86f5-4f4f868b372a
 ## Features
 
 - **GPU-accelerated** ray tracing via NVIDIA Warp, with CPU fallback
+- **Simulated benefit weights**: a built-in ISO 13790 (5R1C) hourly building simulation derives when a marginal joule of solar gain is actually useful (thermal lag, mass state, gain saturation), independently implemented and validated against ETH's [RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator)
 - **Grasshopper plugin** for Rhino 3D with 17 components and persistent GPU daemon
 - **3-stage pipeline** (preprocessing, thresholding, exporting), each re-runnable independently
 - **YAML configuration** with CLI overrides (`-o voxel_size=0.5 -o mode=irradiance`) and mode-specific templates
