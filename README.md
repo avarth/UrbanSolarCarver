@@ -71,6 +71,8 @@ Auto-detects your GPU and installs the correct PyTorch + CUDA wheels. Use `--cpu
 
 ### Grasshopper (Rhino 3D)
 
+> **Note:** the `.ghuser` component binaries are being refreshed for the recent simulated-weights additions and will be updated with the next merge. Until then, the component *sources* under `grasshopper/components/` are current, but the packaged `.ghuser` files may lag slightly behind them.
+
 1. Complete the Python installation above.
 2. Copy all `.ghuser` files from `grasshopper/USC_GHplugin/` into your Grasshopper User Objects folder.
 3. On the Grasshopper canvas, use the **USC_Session** component to start the GPU daemon.
