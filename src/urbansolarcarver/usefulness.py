@@ -9,8 +9,20 @@ usefulness of solar gain at every hour of the year:
 
 The two series are written to a ``solar_usefulness.json`` artifact that
 benefit mode can consume in place of its balance-point Heaviside filter.
-Design, coefficient provenance, and declared limitations:
-``design/solar-usefulness.md``.
+
+Provenance: this is an independent implementation written directly from
+the ISO 13790 Annex C equation set (not a fork or port of an existing
+simulator). It is cross-validated against ETH Zurich's RC_BuildingSimulator
+(MIT, https://github.com/architecture-building-systems/RC_BuildingSimulator;
+Jayathissa et al., Applied Energy 202, 2017) on three archetype scenarios
+(medium office, heavy masonry, light insulated) driven by the bundled
+Golden TMY3 EPW: annual heating/cooling demand totals to ~1 Wh/year plus
+hourly air/mass temperatures and demands at sampled hours, with the
+oracle's derived conductances fed in directly so the hourly recurrence is
+what is compared. Reference data: ``tests/data/oracle_5r1c_reference.json``;
+regression: ``tests/test_usefulness.py``. Design, coefficient provenance,
+and declared limitations: ``design/solar-usefulness.md``; user-level
+documentation: ``docs/simulated-weights.md``.
 
 This module is deliberately NumPy-only at import time (no torch, no
 ladybug) so it stays usable as a standalone generator; the EPW-facing

@@ -29,6 +29,7 @@ nav:
     - Quick Start: getting-started/quick-start.md
     - Configuration: getting-started/configuration.md
   - Carving Modes: modes.md
+  - Simulated Weights: simulated-weights.md
   - Grasshopper Plugin: grasshopper.md
   - Project Map: project-map.md
   - API Reference:
