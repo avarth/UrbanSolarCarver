@@ -349,3 +349,35 @@ class TestExpandShoebox:
             expand_shoebox({**self.BASE, "wwr": {"south": 1.0}})
         with pytest.raises(ValueError, match="no windows"):
             expand_shoebox({**self.BASE, "wwr": {}})
+
+
+class TestGainsFromArchetype:
+    """generate_simulated_weights reads internal gains from the archetype."""
+
+    def _epw(self):
+        from tests._epw import resolve_epw
+        return resolve_epw() or None
+
+    def test_gains_key_inside_archetype(self, tmp_path):
+        epw = self._epw()
+        if epw is None:
+            pytest.skip("no EPW available")
+        from urbansolarcarver.simulated_weights import (
+            generate_simulated_weights, read_simulated_weights,
+        )
+        arch = dict(TestExpandShoebox.BASE)
+        arch["internal_gains_w_m2"] = 7.5
+        out = generate_simulated_weights(epw, arch, tmp_path / "w.json")
+        _b, _h, meta = read_simulated_weights(out)
+        assert meta["archetype"]["internal_gains_w_m2"] == pytest.approx(7.5)
+
+    def test_both_gains_keys_raise(self, tmp_path):
+        epw = self._epw()
+        if epw is None:
+            pytest.skip("no EPW available")
+        from urbansolarcarver.simulated_weights import generate_simulated_weights
+        arch = dict(TestExpandShoebox.BASE)
+        arch["internal_gains_w_m2"] = 5.0
+        arch["internal_gains_profile_w_m2"] = [5.0] * 24
+        with pytest.raises(ValueError, match="not both"):
+            generate_simulated_weights(epw, arch, tmp_path / "w.json")

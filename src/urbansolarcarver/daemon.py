@@ -197,6 +197,7 @@ def serve(address, authkey, device_arg="auto"):
                     "thresholding": ("config", "from"),
                     "exporting": ("config", "from"),
                     "run_pipeline": ("config",),
+                    "simulate_weights": ("epw", "archetype", "out"),
                     "ping": (),
                     "shutdown": (),
                 }
@@ -224,6 +225,38 @@ def serve(address, authkey, device_arg="auto"):
                     conn.send({"status": "ok"})
                     conn.close()
                     break
+
+                if cmd == "simulate_weights":
+                    # Weights generation needs no config or GPU session —
+                    # handled here so Grasshopper avoids a cold Python start.
+                    try:
+                        from urbansolarcarver.simulated_weights import (
+                            generate_simulated_weights,
+                        )
+                        arch = msg["archetype"]
+                        if isinstance(arch, str):
+                            # A YAML path instead of an inline mapping.
+                            import yaml
+                            arch = yaml.safe_load(
+                                Path(arch).read_text(encoding="utf-8"))
+                        path = generate_simulated_weights(
+                            msg["epw"], arch, msg["out"],
+                            internal_gains_w_m2=msg.get("internal_gains_w_m2"),
+                            eps=msg.get("eps", 1.0),
+                        )
+                        reply = {
+                            "status": "ok",
+                            "artifact": str(path),
+                            "preview": str(Path(path).with_suffix(".png")),
+                        }
+                    except Exception as e:
+                        traceback.print_exc()
+                        reply = {"status": "error", "error": str(e)}
+                    try:
+                        conn.send(reply)
+                    finally:
+                        conn.close()
+                    continue
 
                 # Pipeline commands share one handler; failures become
                 # error replies (full traceback stays server-side only).

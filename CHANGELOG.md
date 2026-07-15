@@ -52,6 +52,31 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - The sample Golden CO TMY3 EPW is now actually committed
   (`.gitignore` exception) — the tutorials and EPW-dependent tests run
   out of the box as documented.
+- **`usc archetype`**: builds a shoebox archetype YAML from defaults or an
+  existing file (`--from`), with `-s key=value` overrides (`wwr_south=0.4`
+  style for the per-facade ratios). The file is validated through the
+  generator's own code path before writing, and the derived floor area,
+  volume, and per-facade window areas are printed — mistakes surface here,
+  not inside a simulation.
+- **`usc validate` checks the weights artifact**: when
+  `simulated_weights_path` is set, the artifact itself is read and
+  validated (existence, schema, 8760 bounded values) at validate time
+  instead of failing mid-preprocessing.
+- **Daemon `simulate_weights` RPC**: the persistent daemon generates
+  weights artifacts on request (archetype as inline mapping or YAML path),
+  so Grasshopper avoids a cold Python start per generation.
+- **Grasshopper components for simulated weights**: new `USC_Archetype`
+  (canvas-native shoebox builder: dimensions, per-facade WWR, fabric,
+  mass class, setpoints) and `USC_SimulateWeights` (runs the simulation
+  through the daemon; outputs the artifact path and the heatmap preview).
+  `USC_BenefitParams` gains `simulated_weights_path` and `include_harm`
+  inputs (with an on-canvas remark when balance settings are wired but
+  unused), and `USC_Preprocess` surfaces the sky-weight comparison dome
+  and redistribution stats in its diagnostics outputs.
+- `generate_simulated_weights` reads internal gains from the archetype's
+  `internal_gains_w_m2` / `internal_gains_profile_w_m2` keys when the
+  argument is omitted, so CLI, daemon, and Grasshopper pass archetypes
+  through unmodified.
 
 ### Changed
 

@@ -53,8 +53,9 @@ _DESCRIPTIONS = {
     ),
     "benefit": (
         "Net heating benefit (Wh/m\u00b2). Solar gain weighted by outdoor "
-        "temperature relative to a balance point. Positive = reduces heating. "
-        "Requires EPW + analysis period + Benefit Params."
+        "temperature relative to a balance point (simple weights), or by an "
+        "ISO 13790 5R1C building simulation via USC_SimulateWeights "
+        "(simulated weights). Requires EPW + analysis period + Benefit Params."
     ),
     "daylight": (
         "CIE overcast sky obstruction score (dimensionless). Geometry-only model "

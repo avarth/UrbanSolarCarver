@@ -54,6 +54,15 @@ The archetype describes a *typical* building in about ten numbers. Two equivalen
 
 The shipped example values are deliberately **neutral, with no national defaults**. For real projects, source values from [TABULA](https://episcope.eu/building-typology/) (EU building-stock typologies), DOE prototype buildings (US), or your national code tables.
 
+The `usc archetype` command builds and validates the file for you, printing the derived floor area, volume, and per-facade window areas so mistakes surface before any simulation runs:
+
+```bash
+usc archetype -o my_building.yaml -s width=12 -s wwr_south=0.4 -s mass_class=heavy
+usc archetype --from my_building.yaml -o variant.yaml -s mass_class=light   # derive a variant
+```
+
+In Grasshopper, the **USC_Archetype** component plays the same role with sliders, feeding **USC_SimulateWeights**, whose output path wires into **USC_BenefitParams**.
+
 ## Limitations
 
 The weights are a *marginal, single-zone, schedule-free* physics signal. That is a large step past the binary balance-point rule (thermal lag, mass state, gain saturation), but the following simplifications are declared and deliberate:

@@ -488,13 +488,18 @@ def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path) -> "Path | None"
 
     Companion preview for the artifact. Returns the PNG path, or None
     when matplotlib is unavailable.
+
+    Uses the object-oriented Figure API rather than pyplot: rendering to a
+    PNG must never trigger interactive-backend resolution (a broken or
+    display-less GUI toolkit would make artifact generation fail).
     """
     try:
-        import matplotlib.pyplot as plt
+        from matplotlib.figure import Figure
     except ImportError:
         return None
     days = HOURS // 24
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(13, 3.6), sharey=True)
+    fig = Figure(figsize=(13, 3.6))
+    ax1, ax2 = fig.subplots(1, 2, sharey=True)
     for ax, series, title, cmap in (
         (ax1, benefit, "benefit: marginal solar offsets HEATING", "YlOrRd"),
         (ax2, harm, "harm: marginal solar becomes COOLING load", "PuBu"),
@@ -508,7 +513,6 @@ def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path) -> "Path | None"
     fig.tight_layout()
     path = Path(path)
     fig.savefig(str(path), bbox_inches="tight", dpi=120)
-    plt.close(fig)
     return path
 
 
@@ -516,18 +520,32 @@ def generate_simulated_weights(
     epw_path: str,
     archetype: dict,
     out_path,
-    internal_gains_w_m2: "float | Sequence[float]" = 5.0,
+    internal_gains_w_m2: "float | Sequence[float] | None" = None,
     eps: float = 1.0,
 ) -> Path:
     """Run the full 5R1C weights pipeline: EPW + archetype → artifact.
 
     ``archetype`` holds the :meth:`ZoneParams.from_archetype` keyword
-    arguments plus ``windows``: a list of [azimuth_deg, area_m2, g_value].
+    arguments plus ``windows``: a list of [azimuth_deg, area_m2, g_value]
+    (or the shoebox geometry shorthand).
 
-    ``internal_gains_w_m2`` is either a single flat value or a 24-value
+    Internal gains are either a single flat value [W/m²] or a 24-value
     daily occupancy profile [W/m² per hour of day], tiled over the year.
+    They may come from the ``internal_gains_w_m2`` /
+    ``internal_gains_profile_w_m2`` archetype keys, or be passed as the
+    ``internal_gains_w_m2`` argument (which takes precedence). Default 5.0.
     """
     arch = expand_shoebox(archetype)
+    profile = arch.pop("internal_gains_profile_w_m2", None)
+    flat = arch.pop("internal_gains_w_m2", None)
+    if internal_gains_w_m2 is None:
+        if profile is not None and flat is not None:
+            raise ValueError(
+                "archetype: specify either internal_gains_w_m2 or "
+                "internal_gains_profile_w_m2, not both"
+            )
+        internal_gains_w_m2 = (profile if profile is not None
+                               else flat if flat is not None else 5.0)
     windows = arch.pop("windows", None)
     if not windows:
         raise ValueError(
