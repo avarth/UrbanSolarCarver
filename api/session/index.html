@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -547,6 +574,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,7 +589,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -582,14 +611,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -804,6 +833,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../io/" class="md-nav__link">
         
   
@@ -992,17 +1049,6 @@
     <span class="md-ellipsis">
       
         get_tensor
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#urbansolarcarver.session.CarverSession.get_kernel" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        get_kernel
       
     </span>
   </a>
@@ -1230,17 +1276,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.session.CarverSession.get_kernel" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        get_kernel
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#urbansolarcarver.session.CarverSession.close" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1322,9 +1357,10 @@
 
         <p>GPU/Warp session management for UrbanSolarCarver.</p>
 <p>Provides CarverSession, a long-lived context manager that keeps a CUDA
-(or CPU) context alive and caches compiled Warp kernels and tensors
-across multiple pipeline runs.  A weak-reference registry ensures at
-most one session per device index exists at any time.</p>
+(or CPU) context alive and caches tensors across multiple pipeline runs.
+(Compiled Warp kernels are cached by Warp itself, per module, on disk.)
+A weak-reference registry ensures at most one session per device index
+exists at any time.</p>
 <p>Key public API:
     CarverSession  -- context manager for device lifecycle and caching.
     session_cache  -- decorator that memoises tensor results on the
@@ -1366,9 +1402,9 @@ most one session per device index exists at any time.</p>
 
 
         <p>A long-lived GPU/Warp session that keeps the CUDA context alive
-and caches compiled Warp modules or tensors if desired.</p>
-<p>Use this to avoid repeated GPU startup and JIT overhead across
-multiple runs.</p>
+and caches tensors across pipeline runs.</p>
+<p>Use this to avoid repeated GPU startup and recomputation overhead
+across multiple runs.</p>
 
         <p>device: 
   - "auto" (default) to use CUDA if available, otherwise CPU
@@ -1407,8 +1443,8 @@ multiple runs.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Invalidate session tensor cache between independent runs.
-Kernels are kept. Optionally free CUDA memory.</p>
+        <p>Invalidate the session tensor cache between independent runs.
+Optionally free CUDA memory.</p>
 
 
     </div>
@@ -1502,30 +1538,6 @@ is moved to self.device automatically.</p>
 <div class="doc doc-object doc-function">
 
 
-<h4 id="urbansolarcarver.session.CarverSession.get_kernel" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <code class="highlight language-python"><span class="n">get_kernel</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">factory</span><span class="p">)</span></code>
-
-<a href="#urbansolarcarver.session.CarverSession.get_kernel" class="headerlink" title="Permanent link">&para;</a></h4>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Cache or build a Warp kernel module, thread-safe via double-checked
-locking.</p>
-<p>Args:
-    key: Cache lookup identifier.
-    factory: Zero-argument callable that returns a compiled Warp module.</p>
-<p>Returns:
-    Cached or freshly built Warp module.</p>
-
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
 <h4 id="urbansolarcarver.session.CarverSession.close" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-method"></code>            <code class="highlight language-python"><span class="n">close</span><span class="p">(</span><span class="n">flush</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></code>
 
@@ -1534,7 +1546,8 @@ locking.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Clear all in-memory caches. If on CUDA and flush=True, empties torch's cache.</p>
+        <p>Clear the in-memory tensor cache. If on CUDA and flush=True,
+empties torch's cache.</p>
 
 
     </div>

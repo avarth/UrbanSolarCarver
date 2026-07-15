@@ -16,7 +16,7 @@
         <link rel="prev" href="../getting-started/configuration/">
       
       
-        <link rel="next" href="../grasshopper/">
+        <link rel="next" href="../simulated-weights/">
       
       
         
@@ -574,6 +574,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="benefit">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#simulated-weights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simulated weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -613,6 +630,33 @@
   
 </nav>
       
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -708,6 +752,8 @@
       
         
       
+        
+      
     
     
     
@@ -723,7 +769,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -745,14 +791,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -947,6 +993,34 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
   
 
     
@@ -1214,6 +1288,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="benefit">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#simulated-weights" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simulated weights
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1391,9 +1482,24 @@
 <p>Weights each Tregenza sky patch by its cumulative direct + diffuse irradiance over the analysis period, using the Perez all-weather sky model. Voxels blocking high-irradiance patches receive higher scores.</p>
 <p><strong>Use case</strong>: climate-based solar resource assessment over an entire heating or cooling season.</p>
 <h2 id="benefit">benefit<a class="headerlink" href="#benefit" title="Permanent link">&para;</a></h2>
-<p>Similar to irradiance, but filters hours by a heating-benefit criterion: only hours when the outdoor temperature is below the building's balance-point temperature contribute to patch weights. This focuses carving on protecting solar access when it is most useful for passive heating.</p>
+<p>Similar to irradiance, but weights hours by a heating-benefit criterion. Two weightings are available:</p>
+<p><strong>Simple weights (default)</strong>: only hours when the outdoor temperature is below the building's balance-point temperature contribute to patch weights. This focuses carving on protecting solar access when it is most useful for passive heating.</p>
 <p><strong>Use case</strong>: maximize passive solar heating potential during the heating season.</p>
 <p><strong>Key parameters</strong>: <code>balance_temperature</code> (free-running balance point, typically 15--20 C), <code>balance_offset</code> (dead-band width).</p>
+<h3 id="simulated-weights">Simulated weights<a class="headerlink" href="#simulated-weights" title="Permanent link">&para;</a></h3>
+<p>Instead of the binary cold-hour rule, benefit mode can consume hourly weights derived from a thermal simulation of a typical building (the compact 5R1C hourly model from ISO 13790). For every hour of the year the simulation answers: <em>if one extra watt of sun arrived in this hour, how much less heating, and how much more cooling, would the building need over the whole year?</em> This captures thermal lag (a noon gain stored in the mass and released into the cold evening still earns credit), diurnal mass state, and gain saturation -- everything the binary rule cannot express. The simple rule is the special case where the weights are 0 or 1.</p>
+<p>Generate the weights once from an EPW and a building <strong>archetype</strong> (roughly ten numbers describing a typical building; the easiest form is a shoebox with per-facade window-to-wall ratios, see <code>configs/archetype_example.yaml</code>):</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>urbansolarcarver<span class="w"> </span>usefulness<span class="w"> </span>-e<span class="w"> </span>weather.epw<span class="w"> </span>-a<span class="w"> </span>configs/archetype_example.yaml
+</code></pre></div>
+<p>This writes <code>solar_usefulness.json</code> (the weights plus full provenance) and a <code>.png</code> preview of the weights next to it. Then point a benefit config at the artifact:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benefit</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">usefulness_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solar_usefulness.json</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># include_harm: true   # experimental: also subtract summer-overheating contributions</span>
+</code></pre></div>
+<p>A full-year <code>analysis_period</code> is the natural choice with simulated weights, since the schedule itself selects the useful hours. <code>balance_temperature</code> / <code>balance_offset</code> are unused (USC warns if you customize them). With <code>diagnostic_plots: true</code>, the run's diagnostics include a comparison dome showing how the simulated weights shifted the sky relative to the simple rule.</p>
+<p><strong>Use case</strong>: benefit envelopes that respond to the thermal mass, insulation, and glazing of the building stock being protected.</p>
+<p><strong>Key parameters</strong>: <code>usefulness_path</code>, <code>include_harm</code> (experimental; the model has no operable shading or night ventilation, so harm is overstated -- treat it as a bracketing scenario).</p>
+<p>See <a href="../simulated-weights/">Simulated Benefit Weights</a> for the engine's documentation -- what it implements, how it was validated against RC_BuildingSimulator, the archetype inputs, and the declared limitations -- and Tutorial 5 (<code>examples/5_benefit_5r1c.ipynb</code>) for an end-to-end walkthrough.</p>
 <h2 id="daylight">daylight<a class="headerlink" href="#daylight" title="Permanent link">&para;</a></h2>
 <p>Weights sky patches using the CIE standard overcast sky luminance distribution. No direct sun is considered -- only diffuse sky luminance weighted by solid angle and zenith angle.</p>
 <p><strong>Use case</strong>: protect diffuse daylight access (e.g., for daylighting codes, visual comfort).</p>

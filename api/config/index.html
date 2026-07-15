@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -547,6 +574,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,7 +589,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -582,14 +611,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -804,6 +833,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../io/" class="md-nav__link">
         
   
@@ -926,28 +983,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.load_config.assign_override_path" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        assign_override_path
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#urbansolarcarver.load_config.merge_dicts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        merge_dicts
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#urbansolarcarver.load_config.load_config" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -991,6 +1026,17 @@
     <span class="md-ellipsis">
       
         UrbanSolarCarverWarning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.pydantic_schemas.ThresholdSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ThresholdSpec
       
     </span>
   </a>
@@ -1218,28 +1264,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.load_config.assign_override_path" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        assign_override_path
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#urbansolarcarver.load_config.merge_dicts" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        merge_dicts
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#urbansolarcarver.load_config.load_config" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1283,6 +1307,17 @@
     <span class="md-ellipsis">
       
         UrbanSolarCarverWarning
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.pydantic_schemas.ThresholdSpec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ThresholdSpec
       
     </span>
   </a>
@@ -1405,9 +1440,9 @@ Also emits a human-readable sample YAML.</p>
 
 <details class="highlights" open>
   <summary>Highlights</summary>
-  <p>• Strict schema: fails fast on typos or bad values<br />
-• Overrides: dotted keys supported (e.g. "thresholding.carve_fraction=0.7")<br />
-• Clear errors: aggregates Pydantic messages into one readable string<br />
+  <p>• Strict schema: fails fast on typos or bad values
+• Overrides: flat "key=value" pairs or a flat mapping (the schema itself is flat)
+• Clear errors: aggregates Pydantic messages into one readable string
 • Sample writer: exports a ready-to-edit template with sane defaults</p>
 <p>This module does not touch geometry. It only prepares inputs for the
 carving and meshing stages.</p>
@@ -1471,116 +1506,6 @@ carving and meshing stages.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="urbansolarcarver.load_config.assign_override_path" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">assign_override_path</span><span class="p">(</span><span class="n">root</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span></code>
-
-<a href="#urbansolarcarver.load_config.assign_override_path" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Set a nested key in-place using a path tuple.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>root</code>
-            </td>
-            <td>
-                  <code><span title="dict">dict</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Target dictionary to mutate.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>path</code>
-            </td>
-            <td>
-                  <code><span title="tuple">tuple</span>[<span title="str">str</span>, ...]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Dotted key split into parts, e.g. ("thresholding","carve_fraction").</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>value</code>
-            </td>
-            <td>
-                  <code><span title="typing.Any">Any</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Value to assign at the nested location.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<details class="note" open>
-  <summary>Notes</summary>
-  <p>Creates intermediate dictionaries as needed.</p>
-</details>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="urbansolarcarver.load_config.merge_dicts" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">merge_dicts</span><span class="p">(</span><span class="n">base</span><span class="p">,</span> <span class="n">update</span><span class="p">)</span></code>
-
-<a href="#urbansolarcarver.load_config.merge_dicts" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Recursively overlay <code>update</code> onto <code>base</code> in place.</p>
-
-
-<details class="rules" open>
-  <summary>Rules</summary>
-  <p>• If both sides are dicts, merge recursively.<br />
-• Otherwise replace the value in <code>base</code> with the one from <code>update</code>.</p>
-</details>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
 <h3 id="urbansolarcarver.load_config.load_config" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">load_config</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">overrides</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
@@ -1628,9 +1553,10 @@ carving and meshing stages.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Optional overrides.<br />
-• list[str]: each item is "key=value" with dotted keys allowed<br />
-• mapping  : nested dict mirroring YAML structure</p>
+                <p>Optional overrides for top-level config keys (the schema is flat).
+• list[str]: each item is "key=value"; scalars are type-coerced,
+  JSON lists/objects are parsed (e.g. "tilted_plane_angle_deg=[30,27,...]")
+• mapping  : flat dict of key → value, used as-is</p>
               </div>
             </td>
             <td>
@@ -1699,8 +1625,7 @@ carving and meshing stages.</p>
 
 <details class="note" open>
   <summary>Notes</summary>
-  <p>• Scalars in CLI overrides are type-coerced by <code>parse_override_value</code>.<br />
-• Dotted keys in overrides are expanded via <code>assign_override_path</code>.<br />
+  <p>• Scalars in CLI overrides are type-coerced by <code>parse_override_value</code>.
 • The function does not mutate the YAML on disk.</p>
 </details>
 
@@ -1782,6 +1707,94 @@ caught at load time rather than silently ignored.</p>
 
 
 
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="urbansolarcarver.pydantic_schemas.ThresholdSpec" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <code>ThresholdSpec</code>
+
+
+<a href="#urbansolarcarver.pydantic_schemas.ThresholdSpec" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+
+
+
+        <p>Canonical thresholding strategy: how per-voxel scores become a mask.</p>
+<p>Every accepted config spelling of <code>threshold</code> (a bare number, a
+strategy name, or a mapping) is normalized into this one shape at load
+time, so downstream stages never re-interpret raw user input.</p>
+
+
+<p><span class="doc-section-title">Methods:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+            <tr class="doc-section-item">
+              <td><code><span title="urbansolarcarver.pydantic_schemas.ThresholdSpec.* ``carve_fraction`` — remove voxels accounting for ``value`` of the">* ``carve_fraction`` — remove voxels accounting for ``value`` of the</span></code></td>
+              <td>
+                <div class="doc-md-description">
+                  <p>total score mass (0-1).</p>
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><span title="urbansolarcarver.pydantic_schemas.ThresholdSpec.* ``headtail`` — head/tail breaks">* ``headtail`` — head/tail breaks</span></code></td>
+              <td>
+                <div class="doc-md-description">
+                  
+                </div>
+              </td>
+            </tr>
+            <tr class="doc-section-item">
+              <td><code><span title="urbansolarcarver.pydantic_schemas.ThresholdSpec.* ``cutoff`` — carve voxels scoring strictly above ``value``; for the">* ``cutoff`` — carve voxels scoring strictly above ``value``; for the</span></code></td>
+              <td>
+                <div class="doc-md-description">
+                  <p>violation-count modes this is the tolerated violation count.</p>
+                </div>
+              </td>
+            </tr>
+      </tbody>
+    </table>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
 
     </div>
 

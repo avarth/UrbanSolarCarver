@@ -16,7 +16,7 @@
         <link rel="prev" href="../sun/">
       
       
-        <link rel="next" href="../io/">
+        <link rel="next" href="../usefulness/">
       
       
         
@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -547,6 +574,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,7 +589,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -582,14 +611,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -859,6 +888,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.scoring.carve_fraction_threshold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        carve_fraction_threshold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.scoring.headtail_threshold" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -878,6 +918,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1080,6 +1148,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.scoring.carve_fraction_threshold" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        carve_fraction_threshold
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.scoring.headtail_threshold" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1182,7 +1261,7 @@
 
 
 <h3 id="urbansolarcarver.scoring.get_weights" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">get_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cuda&#39;</span><span class="p">),</span> <span class="n">epw_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">hoys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dew_point_celsius</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">bliss_k</span><span class="o">=</span><span class="mf">1.8</span><span class="p">,</span> <span class="n">ground_reflectance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">get_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cuda&#39;</span><span class="p">),</span> <span class="n">epw_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">hoys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dew_point_celsius</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">bliss_k</span><span class="o">=</span><span class="mf">1.8</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">min_sky_elevation_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">include_harm</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">usefulness_path</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.scoring.get_weights" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1202,11 +1281,108 @@ Args:
   hoys : Hour-of-year indices for EPW sampling.
   dew_point_celsius: Parameter for radiative cooling estimation.
   bliss_k: Angular-attenuation constant for radiative cooling.
-  ground_reflectance: Reflectivity coefficient of ground surface.
-  balance_temperature: Indoor-outdoor temperature threshold for comfort benefit.
-  balance_offset: Temperature offset for comfort benefit.</p>
+  balance_temperature: Free-running balance-point temperature for benefit mode.
+  balance_offset: Dead-band below the balance point for benefit mode.</p>
 <p>Returns:
   Tensor of length V (number of sky patches) with the computed weight for each patch.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.scoring.carve_fraction_threshold" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">carve_fraction_threshold</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">fraction</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.scoring.carve_fraction_threshold" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Score-mass cutoff: the threshold above which voxels collectively
+account for <em>fraction</em> of the total score mass.</p>
+<p>Equivalent to sorting all scores descending and walking the cumulative
+sum until it reaches <code>fraction * total</code> — but a full argsort of a
+large grid is O(N log N) with a heavy constant (seconds to minutes at
+300³+).  This implementation makes two O(N) passes instead:</p>
+<ol>
+<li>A weighted histogram locates the bin containing the cutoff.</li>
+<li>Only the scores inside that single bin (N / n_bins expected) are
+   sorted exactly, reproducing the argsort result.</li>
+</ol>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>scores</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Array of non-negative voxel scores (any shape).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>fraction</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fraction of the total score mass to carve, in [0, 1].</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Threshold value; voxels scoring strictly above it are carved.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>

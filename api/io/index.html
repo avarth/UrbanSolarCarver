@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/api/io/">
       
       
-        <link rel="prev" href="../scoring/">
+        <link rel="prev" href="../usefulness/">
       
       
         <link rel="next" href="../config/">
@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -547,6 +574,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,7 +589,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -582,14 +611,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -784,6 +813,34 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
   
 
     
@@ -1382,6 +1439,8 @@ and diagnostics are saved reliably and consistently for later analysis or public
         <p>Load a triangle mesh from file and ensure face normals are consistently
 oriented (outward-facing). Trimesh’s process=True fixes winding order,
 merges duplicate vertices, and removes degenerate faces.</p>
+<p>Raises a clear error for files that contain no usable triangles, which
+would otherwise surface much later as a cryptic empty-grid failure.</p>
 
 
     </div>

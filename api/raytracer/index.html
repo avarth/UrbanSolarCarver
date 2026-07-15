@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -547,6 +574,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,7 +589,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -582,14 +611,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -747,10 +776,54 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.raytracer.warmup_kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        warmup_kernels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.raytracer.dda_backend_available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dda_backend_available
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.raytracer.voxelize_solid_warp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        voxelize_solid_warp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.raytracer.trace_and_score_dda" class="md-nav__link">
     <span class="md-ellipsis">
       
         trace_and_score_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.raytracer.trace_and_count_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_and_count_dda
       
     </span>
   </a>
@@ -914,6 +987,34 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
   
 
     
@@ -1124,10 +1225,54 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.raytracer.warmup_kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        warmup_kernels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.raytracer.dda_backend_available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dda_backend_available
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.raytracer.voxelize_solid_warp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        voxelize_solid_warp
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.raytracer.trace_and_score_dda" class="md-nav__link">
     <span class="md-ellipsis">
       
         trace_and_score_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.raytracer.trace_and_count_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_and_count_dda
       
     </span>
   </a>
@@ -1231,17 +1376,19 @@ rays) and voxel-grid traversal for the carving pipeline.</p>
 <p>Two traversal backends are available:</p>
 <ul>
 <li>
-<p>DDA (Amanatides &amp; Woo 1987) -- a Warp GPU kernel that launches one
+<p>DDA (Amanatides &amp; Woo 1987) -- a Warp kernel that launches one
   thread per ray and walks through voxels using the standard 3-D DDA
   algorithm. Each voxel is visited exactly once per ray, eliminating
   duplicate hits and reducing VRAM usage by ~10x compared to the
-  broadcasting approach. This is the default when Warp is available and
-  the device is CUDA.</p>
+  broadcasting approach. This is the default whenever Warp is available
+  (both CUDA and CPU devices).</p>
 </li>
 <li>
 <p>Fixed-step (legacy) -- pure-PyTorch tensor broadcasting.
-  Materializes the full R x S x 3 sample-point tensor in GPU memory.
-  Kept as a CPU fallback and for validation.</p>
+  Materializes the full R x S x 3 sample-point tensor in memory.
+  Kept as a last-resort fallback when Warp is not installed.  Note that
+  fixed stepping is approximate: oblique rays can skip voxels whose
+  intersection segment is shorter than the step, under-counting hits.</p>
 </li>
 </ul>
 
@@ -1283,8 +1430,136 @@ Ray Tracing." Eurographics '87, pp. 3-10.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="urbansolarcarver.raytracer.warmup_kernels" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">warmup_kernels</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.raytracer.warmup_kernels" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Eagerly compile (or load from the on-disk cache) this module's Warp
+kernels for <em>device</em>.</p>
+<p>Warp JIT-compiles all kernels in a module on the first launch — a
+one-time ~3-10 s cost per machine, per device, per code version, after
+which the compiled binaries are served from Warp's disk cache in
+milliseconds.  Calling this during installation (<code>setup_env.py</code>),
+daemon startup, or via <code>usc warmup</code> moves that cost to a moment
+where the user already expects to wait, so the first carving run is
+not misleadingly slow.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span> | <span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target device.  None resolves like <code>cfg.device='auto'</code>:
+CUDA when available, else the Warp CPU backend.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>True if the kernels are ready on the device (compiled or cached);
+False if Warp is unavailable or compilation failed (the pipeline
+still works — kernels compile lazily on first use).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.raytracer.dda_backend_available" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">dda_backend_available</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.raytracer.dda_backend_available" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>True if the exact Warp DDA backend can run on <em>device</em>.</p>
+<p>Callers can use this to know whether trace results come from the exact
+DDA traversal or the approximate fixed-step fallback.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.raytracer.voxelize_solid_warp" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">voxelize_solid_warp</span><span class="p">(</span><span class="n">vertices</span><span class="p">,</span> <span class="n">faces</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.raytracer.voxelize_solid_warp" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Solid-voxelize a triangle mesh via 3-axis parity ray casting on the
+Warp BVH.  Returns a (res, res, res) bool occupancy array, or None when
+the Warp backend is unavailable on <em>device</em>.</p>
+<p>A voxel is occupied when at least 2 of the 3 axis parities agree that
+its center is inside (majority vote — the same robustness idea as
+trimesh's orthographic fill), or when the surface passes through it.
+Runs on CUDA or the Warp CPU device; both are far faster than the
+trimesh rasterize-and-fill path.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="urbansolarcarver.raytracer.trace_and_score_dda" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_score_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_score_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">point_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.raytracer.trace_and_score_dda" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1452,6 +1727,93 @@ each ray visits. No output buffer, no post-processing. Modifies
                 <em>required</em>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_ids</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sample-point index per ray.  Together with <code>point_weights</code>
+switches to the point-weighted kernel (per-ray weight =
+patch_weight × point_weight; edge_taper design constraint).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_weights</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="num_points">num_points</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Weight per sample point in [0, 1].</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.raytracer.trace_and_count_dda" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_count_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">counts</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.raytracer.trace_and_count_dda" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Fused DDA traversal + per-voxel hit counting (Warp kernel).</p>
+<p>Atomically increments <code>counts</code> for every voxel each ray visits.
+No output buffer and no overflow-retry re-tracing (unlike the
+buffered :func:<code>trace_multi_hit_grid</code> path).  Modifies <code>counts</code>
+in-place.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>counts</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="resolution">resolution</span> ** 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Flat int32 hit-count volume, modified in-place.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1464,7 +1826,7 @@ each ray visits. No output buffer, no post-processing. Modifies
 
 
 <h3 id="urbansolarcarver.raytracer.generate_sky_patch_rays" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">generate_sky_patch_rays</span><span class="p">(</span><span class="n">pts</span><span class="p">,</span> <span class="n">norms</span><span class="p">,</span> <span class="n">patch_dirs</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">ray_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">session</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">generate_sky_patch_rays</span><span class="p">(</span><span class="n">pts</span><span class="p">,</span> <span class="n">norms</span><span class="p">,</span> <span class="n">patch_dirs</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">include_normals</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">ray_id</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">session</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.raytracer.generate_sky_patch_rays" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1474,13 +1836,15 @@ each ray visits. No output buffer, no post-processing. Modifies
         <p>Build rays for each sample point and sky patch direction.
 1. We have P sample locations on a surface and V directions in the sky (divided into patches).
 2. For each surface point, we want to know which sky patches are 'visible' (face-culling) by checking if the normal faces that patch.
-3. We then record an origin (the point) and a direction (the sky patch) for each valid combination.
-4. Normals_per_ray carries the surface normal for each ray, useful later for shading or weighting.</p>
+3. We then record an origin (the point) and a direction (the sky patch) for each valid combination.</p>
+<p><code>include_normals</code> gates the per-ray normal gather: it is an (R, 3)
+tensor nobody in the pipeline consumes — hundreds of MB of VRAM at
+typical ray counts — so it is only materialized on request.</p>
 <p>Returns:
   origins           : Tensor of 3D positions where rays start (one per valid combination).
   ray_dirs          : Tensor of unit vectors indicating ray directions.
   sky_patch_ids     : Integer index for which sky patch each ray corresponds to.
-  normals_per_ray   : Surface normal vectors repeated per ray.
+  normals_per_ray   : Surface normal per ray, or None unless include_normals=True.
   point_idx         : Integer index mapping each ray back to its source sample point.</p>
 
 
@@ -1535,8 +1899,9 @@ each ray visits. No output buffer, no post-processing. Modifies
 
         <p>Trace rays through a uniform voxel grid, recording every voxel hit.</p>
 <p>Dispatches to the Warp DDA kernel on CUDA (Amanatides &amp; Woo 1987) or
-falls back to fixed-step PyTorch broadcasting on CPU. The DDA backend
-visits each voxel exactly once per ray -- no deduplication needed.</p>
+falls back to fixed-step PyTorch broadcasting on CPU.  Both backends
+guarantee that each (ray, voxel) pair appears at most once in the
+output, so callers can accumulate hits without deduplicating.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>

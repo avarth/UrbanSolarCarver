@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -547,6 +574,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,7 +589,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -582,14 +611,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -892,6 +921,34 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
   
 
     
@@ -1278,7 +1335,7 @@ Uses ladybug viewsphere</p>
 
 
 <h3 id="urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">compute_radiative_cooling_weights</span><span class="p">(</span><span class="n">dewpoint_celsius</span><span class="p">,</span> <span class="n">bliss_k</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">compute_radiative_cooling_weights</span><span class="p">(</span><span class="n">dewpoint_celsius</span><span class="p">,</span> <span class="n">bliss_k</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">min_elevation_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1382,6 +1439,27 @@ emissivity. Typical clear-sky values range 1.5 - 2.0; larger k increases zenith-
                 <em>required</em>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_elevation_deg</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Design-constraint protection cone: sky patches whose center
+elevation is below this angle are excluded (weight 0) and the
+remaining weights renormalized.  This is NOT part of the physical
+model — it declares which portion of the sky dome the design
+defends, analogous to obstruction-angle rules in daylight codes.
+0 (default) keeps the full hemisphere (pure physical model).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1444,7 +1522,7 @@ emissivity. Typical clear-sky values range 1.5 - 2.0; larger k increases zenith-
 
 
 <h3 id="urbansolarcarver.sky_patches.compute_EPW_based_weights" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">compute_EPW_based_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">epw_path</span><span class="p">,</span> <span class="n">hoys</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">ground_reflectance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">compute_EPW_based_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">epw_path</span><span class="p">,</span> <span class="n">hoys</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">include_harm</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">usefulness</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.sky_patches.compute_EPW_based_weights" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1497,17 +1575,30 @@ corresponding Tregenza sky patch for a chosen metric:</p>
   diffuse.</p>
 <ul>
 <li>
-<p>benefit — Uses Ladybug's heating-benefit framework
-  implemented in 'SkyMatrix.from_components_benefit', whereby only
-  solar gains occurring when Tₐ &lt; T_bal - ΔT are credited:</p>
+<p>benefit — Heating-benefit filter: only solar gains occurring in
+  hours cold enough to offset heating demand are credited,</p>
 <p>wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) · H( T_bal - ΔT - Tₐₜ )</p>
 </li>
 </ul>
-<p>with Heaviside switch H. 'balance_temperature'
-  (T_bal) and 'balance_offset' (ΔT) loosely represent the
-  building's heating set-point and internal gains.
-  A Grasshopper/Ladybug simple E+ workflow is included. It
-  can be used to derive project-specific balance temperatures.</p>
+<p>with Heaviside switch H.  Implemented by selecting the cold hours
+  from the EPW dry-bulb series and building a plain cumulative
+  irradiance SkyMatrix over exactly those hours, so the formula
+  above IS the implementation (period-stable: warm hours in the
+  analysis period contribute nothing).
+  With <code>include_harm=True</code> (opt-in, experimental) the weights
+  instead reproduce Ladybug's composite radiation-benefit concept:
+  hot-hour (Tₐ &gt; T_bal + ΔT) radiation is subtracted per patch and
+  the result clipped at zero,</p>
+<div class="highlight"><pre><span></span><code>  wᵢ = max( Σ_cold E − Σ_hot E , 0 )
+</code></pre></div>
+<p>Results then depend on how much of the warm season the analysis
+  period includes, and a patch's weight erodes only to zero, never
+  below — shading value cannot be a carving force.
+  'balance_temperature' (T_bal) is the building's free-running
+  balance point — derive project-specific values with the
+  Honeybee/E+ balance-point workflow; 'balance_offset' (ΔT) is the
+  dead-band around it (hours inside the band count for neither
+  side).</p>
 </details>
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1562,7 +1653,9 @@ corresponding Tregenza sky patch for a chosen metric:</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Hour-of-year indices to sample.</p>
+                <p>Hour-of-year indices to sample.  For <em>benefit</em>, a full-year
+period is safe and natural: the balance filter selects the
+beneficial hours by itself.</p>
               </div>
             </td>
             <td>
@@ -1587,22 +1680,6 @@ corresponding Tregenza sky patch for a chosen metric:</p>
           </tr>
           <tr class="doc-section-item">
             <td>
-                <code>ground_reflectance</code>
-            </td>
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Lambertian ground albedo used by Perez model.</p>
-              </div>
-            </td>
-            <td>
-                  <code>0.2</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
                 <code>balance_temperature</code>
             </td>
             <td>
@@ -1610,7 +1687,7 @@ corresponding Tregenza sky patch for a chosen metric:</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Base-temperature for the heating-benefit filter.</p>
+                <p>Free-running balance-point temperature for the benefit filter.</p>
               </div>
             </td>
             <td>
@@ -1626,7 +1703,7 @@ corresponding Tregenza sky patch for a chosen metric:</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Dead-band between comfort set-point and base temperature.</p>
+                <p>Dead-band below the balance point.</p>
               </div>
             </td>
             <td>
@@ -1685,9 +1762,9 @@ carving results.</p>
   <em>Solar Energy</em> 44(5): 271-289.</li>
 <li>Darula, S. &amp; Kittler, R. 2002. "CIE general sky standard defining
   luminance distributions." <em>Proceedings eSim</em> 11: 13.</li>
-<li>Ladybug Tools. "SkyMatrix.from_components_benefit" — heating-benefit
-  sky matrix filtering hours by balance-point temperature.
-  https://www.ladybug.tools/ladybug/docs/ladybug.skymatrix.html</li>
+<li>Ladybug Tools. "SkyMatrix" — cumulative Radiance sky matrix
+  (gendaymtx / Perez all-weather).
+  https://www.ladybug.tools/ladybug-radiance/docs/</li>
 </ul>
 </details>
 

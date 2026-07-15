@@ -459,6 +459,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -545,6 +572,8 @@
       
         
       
+        
+      
     
     
     
@@ -558,7 +587,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -580,14 +609,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -782,6 +811,34 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
   
 
     
@@ -1041,6 +1098,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.carver_cli.warmup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        warmup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.carver_cli.usefulness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        usefulness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.carver_cli.validate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1210,6 +1289,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.carver_cli.warmup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        warmup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.carver_cli.usefulness" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        usefulness
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.carver_cli.validate" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1299,12 +1400,15 @@
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="c1"># Override any config value on the fly</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>urbansolarcarver<span class="w"> </span>preprocessing<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w"> </span>-o<span class="w"> </span><span class="nv">voxel_size</span><span class="o">=</span><span class="m">0</span>.5<span class="w"> </span>-o<span class="w"> </span><span class="nv">mode</span><span class="o">=</span>irradiance
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Inspect the full config schema</span>
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>urbansolarcarver<span class="w"> </span>schema
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># Generate simulated benefit weights (writes solar_usefulness.json + .png preview)</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>urbansolarcarver<span class="w"> </span>usefulness<span class="w"> </span>-e<span class="w"> </span>weather.epw<span class="w"> </span>-a<span class="w"> </span>configs/archetype_example.yaml
 <a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># Daemon lifecycle</span>
-<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>urbansolarcarver<span class="w"> </span>daemon<span class="w"> </span>start
-<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>urbansolarcarver<span class="w"> </span>daemon<span class="w"> </span>stop
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># Inspect the full config schema</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>urbansolarcarver<span class="w"> </span>schema
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="c1"># Daemon lifecycle</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>urbansolarcarver<span class="w"> </span>daemon<span class="w"> </span>start
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>urbansolarcarver<span class="w"> </span>daemon<span class="w"> </span>stop
 </code></pre></div>
 
 
@@ -1457,7 +1561,52 @@ recomputing scores.</p>
 <p>Reads the thresholding manifest (<code>-f</code>) to locate <code>mask.npy</code>,
 prunes small disconnected clusters, reconstructs a triangle mesh
 (cubic faces or SDF-smoothed marching cubes), and writes
-<code>carved_mesh.ply</code>.</p>
+<code>export.&lt;format&gt;</code> (format from <code>final_mesh_format</code>, default ply).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.carver_cli.warmup" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">warmup</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="s1">&#39;auto&#39;</span><span class="p">,</span> <span class="s1">&#39;--device&#39;</span><span class="p">,</span> <span class="s1">&#39;-d&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s2">&quot;Target device: &#39;auto&#39;, &#39;cpu&#39;, or &#39;cuda&#39;&quot;</span><span class="p">))</span></code>
+
+<a href="#urbansolarcarver.carver_cli.warmup" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compile the Warp compute kernels ahead of time.</p>
+<p>Warp JIT-compiles kernels on first use — a one-time ~3-10 s cost per
+machine and per code version, cached on disk afterwards.  Run this once
+after installation or after updating UrbanSolarCarver so your first
+carving run reflects real compute time.  (<code>setup_env.py</code> and the
+daemon do this automatically.)</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.carver_cli.usefulness" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">usefulness</span><span class="p">(</span><span class="n">epw</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s1">&#39;-e&#39;</span><span class="p">,</span> <span class="s1">&#39;--epw&#39;</span><span class="p">,</span> <span class="n">exists</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">readable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;EPW weather file&#39;</span><span class="p">),</span> <span class="n">archetype</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s1">&#39;-a&#39;</span><span class="p">,</span> <span class="s1">&#39;--archetype&#39;</span><span class="p">,</span> <span class="n">exists</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">readable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Archetype YAML (see configs/archetype_example.yaml)&#39;</span><span class="p">),</span> <span class="n">out</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="n">Path</span><span class="p">(</span><span class="s1">&#39;solar_usefulness.json&#39;</span><span class="p">),</span> <span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="s1">&#39;--out&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Output artifact path&#39;</span><span class="p">),</span> <span class="n">eps</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="s1">&#39;--eps&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Perturbation size in W (central differences)&#39;</span><span class="p">))</span></code>
+
+<a href="#urbansolarcarver.carver_cli.usefulness" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Hourly marginal solar usefulness (benefit + harm) from the
+ISO 13790 Annex C simple hourly model (5R1C), by perturbation.</p>
+<p>The artifact feeds benefit mode's <code>usefulness_path</code> config key,
+replacing the balance-point Heaviside hour filter with physics-derived
+hourly weights. See design/solar-usefulness.md.</p>
 
 
     </div>

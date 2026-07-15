@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -547,6 +574,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,7 +589,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -582,14 +611,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -796,17 +825,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.carving.carve_directional" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        carve_directional
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#urbansolarcarver.carving.carve_above_columns" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -958,6 +976,34 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
   
 
     
@@ -1245,17 +1291,6 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.carving.carve_directional" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        carve_directional
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#urbansolarcarver.carving.carve_above_columns" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1322,16 +1357,16 @@
 through a voxelized envelope, and remove the voxels they visit. Supports:</p>
 <p>• Time-based solar carving (sun vectors from EPW for specific datetimes)
 • Sky-patch-weighted carving (Tregenza patches + mode-specific weights)
-• Tilted-plane daylight carving (single or per-octant plane angle)
-• Simple directional carving (global vector, per-point normals, or +Z)</p>
+• Tilted-plane daylight carving (single or per-octant plane angle)</p>
 </details>
 
 <details class="raytracing-contract" open>
   <summary>Raytracing contract</summary>
-  <p>All carving is executed via <code>trace_multi_hit_grid</code>, which:
-  • samples at cell centers: distances = (0.5 + k) * voxel_size
-  • maps world → grid with floor(), not round()
-This avoids lattice aliasing, especially for the plane method.</p>
+  <p>All carving is executed via <code>trace_multi_hit_grid</code>, which guarantees each
+(ray, voxel) pair is reported at most once.  The Warp DDA backend traverses
+voxels exactly; the PyTorch fallback samples at cell centers
+(distances = (0.5 + k) * voxel_size) and maps world → grid with floor(),
+not round(), to avoid lattice aliasing (especially for the plane method).</p>
 </details>
 
 <details class="coordinate/scale-conventions" open>
@@ -1383,6 +1418,9 @@ The tracer receives <code>scale = grid_extent</code> and a per-ray step of <code
 
 
         <p>Return type for :func:<code>carve_with_sky_patch_rays</code>.</p>
+<p><code>ray_origins</code> / <code>ray_directions</code> are None unless the carver was
+called with <code>return_rays=True</code> — transferring the full ray set to
+host memory costs hundreds of MB at typical ray counts.</p>
 
 
 
@@ -1572,7 +1610,7 @@ The tracer receives <code>scale = grid_extent</code> and a per-ray step of <code
 
 
 <h3 id="urbansolarcarver.carving.carve_with_sun_rays" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">carve_with_sun_rays</span><span class="p">(</span><span class="n">voxel_grid</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">grid_extent</span><span class="p">,</span> <span class="n">grid_resolution</span><span class="p">,</span> <span class="n">sample_points</span><span class="p">,</span> <span class="n">sample_normals</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">datetimes</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">carve_with_sun_rays</span><span class="p">(</span><span class="n">voxel_grid</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">grid_extent</span><span class="p">,</span> <span class="n">grid_resolution</span><span class="p">,</span> <span class="n">sample_points</span><span class="p">,</span> <span class="n">sample_normals</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">datetimes</span><span class="p">,</span> <span class="n">return_counts</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">return_rays</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.carving.carve_with_sun_rays" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1589,10 +1627,9 @@ removed.</p>
      by minimum altitude.
   2. For each surface sample point with outward normal, build rays toward the sun
      directions that lie in its visible hemisphere (facing-mask from normals).
-  3. March points along each ray in fixed steps equal to <code>voxel_size</code> up to
-     <code>ray_length</code>.
-  4. Map sampled world positions to grid indices and zero all intersected voxels.
-  5. Return the carved grid and the full set of ray origins and directions.</p>
+  3. Trace each ray through the grid (exact Warp DDA when available),
+     counting hits per voxel.
+  4. Remove every voxel visited by at least one ray.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1755,6 +1792,24 @@ removed.</p>
                   <code>False</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>return_rays</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, return the full ray set as host numpy arrays.  Off by
+default: at millions of rays this is hundreds of MB of
+device→host transfer that the pipeline never uses.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1780,21 +1835,21 @@ removed.</p>
           </tr>
           <tr class="doc-section-item">
 <td><code>ray_origins</code></td>            <td>
-                  <code>(<span title="numpy.ndarray">ndarray</span>, <span title="shape">shape</span>(<span title="N">N</span>, 3))</code>
+                  <code>np.ndarray, shape (N, 3), or None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>World-space starting points for all emitted rays after facing cull.</p>
+                <p>World-space ray start points (None unless <em>return_rays</em> is True).</p>
               </div>
             </td>
           </tr>
           <tr class="doc-section-item">
 <td><code>ray_directions</code></td>            <td>
-                  <code>(<span title="numpy.ndarray">ndarray</span>, <span title="shape">shape</span>(<span title="N">N</span>, 3))</code>
+                  <code>np.ndarray, shape (N, 3), or None</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Unit direction vectors for the emitted rays.</p>
+                <p>Unit ray directions (None unless <em>return_rays</em> is True).</p>
               </div>
             </td>
           </tr>
@@ -1820,7 +1875,7 @@ removed.</p>
 
 
 <h3 id="urbansolarcarver.carving.carve_with_sky_patch_rays" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">carve_with_sky_patch_rays</span><span class="p">(</span><span class="n">voxel_grid</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">grid_extent</span><span class="p">,</span> <span class="n">grid_resolution</span><span class="p">,</span> <span class="n">sample_points</span><span class="p">,</span> <span class="n">sample_normals</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">hoys</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">carve_with_sky_patch_rays</span><span class="p">(</span><span class="n">voxel_grid</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">grid_extent</span><span class="p">,</span> <span class="n">grid_resolution</span><span class="p">,</span> <span class="n">sample_points</span><span class="p">,</span> <span class="n">sample_normals</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">hoys</span><span class="p">,</span> <span class="n">return_rays</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.carving.carve_with_sky_patch_rays" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1989,6 +2044,43 @@ modes draw weights from:
                 <em>required</em>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>return_rays</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If True, include the full ray set (host numpy arrays) in the
+result.  Off by default: at millions of rays this is hundreds of
+MB of device→host transfer that the pipeline never uses.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_weights</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span>(<span title="R">R</span>)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-sample-point design weights in [0, 1] (edge_taper): each ray's
+contribution is patch_weight × point_weight, and zero-weight rays
+are dropped before tracing.  None (default) = all points count
+fully.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2009,8 +2101,8 @@ modes draw weights from:
             <td>
               <div class="doc-md-description">
                 <p>NamedTuple with fields:
-- ray_origins (N, 3): world-space ray start points.
-- ray_directions (N, 3): unit ray vectors.
+- ray_origins (N, 3): ray start points, or None unless return_rays.
+- ray_directions (N, 3): unit ray vectors, or None unless return_rays.
 - raw_voxel_scores (X<em>Y</em>Z,): accumulated patch weights per voxel.
 - patch_weights (P,): weight per Tregenza sky patch.</p>
               </div>
@@ -2236,131 +2328,9 @@ or an 8-element list [N, NE, E, SE, S, SW, W, NW] for octant lookup.</p>
 
 <details class="note" open>
   <summary>Notes</summary>
-  <p>• The underlying tracer uses half-voxel steps and floor indexing to
-  avoid checkerboarding on regular planar lattices.</p>
-</details>
-
-    </div>
-
-</div>
-
-<div class="doc doc-object doc-function">
-
-
-<h3 id="urbansolarcarver.carving.carve_directional" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">carve_directional</span><span class="p">(</span><span class="n">voxel_grid</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">grid_extent</span><span class="p">,</span> <span class="n">grid_resolution</span><span class="p">,</span> <span class="n">sample_points</span><span class="p">,</span> <span class="n">sample_normals</span><span class="p">,</span> <span class="n">config</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;vector&#39;</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
-
-<a href="#urbansolarcarver.carving.carve_directional" class="headerlink" title="Permanent link">&para;</a></h3>
-
-
-    <div class="doc doc-contents ">
-
-        <p>Simple directional carving primitive (geometry-only, no scoring).</p>
-<p>March rays from <code>sample_points</code> and delete all visited voxels.
-Unlike :func:<code>carve_with_sun_rays</code> and :func:<code>carve_with_planes</code>,
-<code>return_counts</code> is not supported here because this mode produces
-a binary mask without score accumulation.</p>
-<p>Direction can be:
-  • "vector"     — one global world-space vector for all points
-  • "normals"    — the per-point surface normal
-  • "positive_z" — +Z for all points (vertical clearance)</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>mode</code>
-            </td>
-            <td>
-                  <code><span title="typing.Literal">Literal</span>[&#39;vector&#39;, &#39;normals&#39;, &#39;positive_z&#39;]</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Direction policy.</p>
-              </div>
-            </td>
-            <td>
-                  <code>&#39;vector&#39;</code>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>direction</code>
-            </td>
-            <td>
-                  <code><span title="tuple">tuple</span>[<span title="float">float</span>, <span title="float">float</span>, <span title="float">float</span>] | None</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Required when <code>mode=="vector"</code>. Ignored otherwise.</p>
-              </div>
-            </td>
-            <td>
-                  <code>None</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-<th>Name</th>          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-<td><code>carved_grid</code></td>            <td>
-                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="D">D</span>, <span title="D">D</span>, <span title="D">D</span>))</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-<td><code>ray_origins</code></td>            <td>
-                  <code>(<span title="numpy.ndarray">ndarray</span>, <span title="shape">shape</span>(<span title="N">N</span>, 3))</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                
-              </div>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-<td><code>ray_directions</code></td>            <td>
-                  <code>(<span title="numpy.ndarray">ndarray</span>, <span title="shape">shape</span>(<span title="N">N</span>, 3))</code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-<details class="note" open>
-  <summary>Notes</summary>
-  <p>• This is geometry-only; it ignores EPW and weights.
-• Useful for vertical setbacks ("positive_z") or view corridors
-  along a fixed vector.</p>
+  <p>• The underlying tracer samples at cell centers with floor indexing to
+  avoid checkerboarding on regular planar lattices (see
+  :func:<code>~urbansolarcarver.raytracer.trace_multi_hit_grid</code>).</p>
 </details>
 
     </div>

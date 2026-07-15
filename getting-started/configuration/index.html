@@ -585,6 +585,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -669,6 +696,8 @@
       
         
       
+        
+      
     
     
     
@@ -684,7 +713,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_6" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -706,14 +735,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -908,6 +937,34 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
   
 
     
@@ -1394,12 +1451,22 @@
 <tr>
 <td><code>balance_temperature</code></td>
 <td><code>benefit</code></td>
-<td>Free-running balance-point temperature (C)</td>
+<td>Free-running balance-point temperature (C); unused when <code>usefulness_path</code> is set</td>
 </tr>
 <tr>
 <td><code>balance_offset</code></td>
 <td><code>benefit</code></td>
-<td>Dead-band offset (C)</td>
+<td>Dead-band offset (C); unused when <code>usefulness_path</code> is set</td>
+</tr>
+<tr>
+<td><code>usefulness_path</code></td>
+<td><code>benefit</code></td>
+<td>Path to a <code>solar_usefulness.json</code> artifact (<code>usc usefulness</code>): simulated hourly weights replace the balance-point rule (<a href="../../modes/#simulated-weights">details</a>)</td>
+</tr>
+<tr>
+<td><code>include_harm</code></td>
+<td><code>benefit</code></td>
+<td>Experimental: subtract summer-overheating contributions per sky patch</td>
 </tr>
 <tr>
 <td><code>tilted_plane_angle_deg</code></td>

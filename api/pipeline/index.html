@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../grasshopper/" class="md-nav__link">
         
   
@@ -547,6 +574,8 @@
       
         
       
+        
+      
     
     
     
@@ -560,7 +589,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -582,14 +611,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="">
+              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_6">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1020,6 +1049,34 @@
     
   
     Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../usefulness/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Solar Usefulness
   
 
     
@@ -1843,17 +1900,18 @@ which voxels to <em>retain</em> in the final envelope (<code>True</code> = keep,
 <code>False</code> = carve away).</p>
 <p>For <code>violation_count</code> scores (time-based / tilted_plane modes),
 a numeric threshold from the config is applied directly.</p>
-<p>Threshold strategies (set via <code>cfg.threshold</code>):</p>
+<p>Threshold strategies (set via <code>cfg.threshold</code>; the config layer
+normalizes every accepted spelling into a <code>ThresholdSpec</code>):</p>
 <ul>
-<li>Numeric value -- a literal float cutoff; voxels with
-  <code>score &lt;= threshold</code> are kept.</li>
-<li><code>"headtail"</code> -- Head/tail breaks (Jiang 2013): iteratively splits the
+<li><code>cutoff</code> (shorthand: a bare number) -- a literal cutoff; voxels with
+  <code>score &lt;= value</code> are kept.</li>
+<li><code>headtail</code> -- Head/tail breaks (Jiang 2013): iteratively splits the
   distribution at the arithmetic mean until the head proportion falls
   below 40 %, targeting heavy-tailed score distributions common in
   urban solar access studies.</li>
-<li><code>"carve_fraction"</code> (default) -- cumulative-score cutoff: sorts voxels
-  by descending score and finds the cutoff that accounts for
-  <code>cfg.carve_fraction</code> of the total score mass.</li>
+<li><code>carve_fraction</code> (default) -- cumulative-score cutoff: sorts voxels
+  by descending score and finds the cutoff that accounts for the given
+  fraction of the total score mass.</li>
 </ul>
 <p>Score smoothing (<code>cfg.score_smoothing</code>):</p>
 <p>Before thresholding, a Gaussian blur can be applied to the continuous
@@ -1932,7 +1990,8 @@ stage, or a path to its output directory / <code>manifest.json</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Root output directory; a <code>thresholding/</code> subdirectory is created.</p>
+                <p>Output directory for this stage; created if it does not exist.
+All artifacts are written directly into it.</p>
               </div>
             </td>
             <td>
@@ -2107,15 +2166,16 @@ occupancy grid persisted during :func:<code>preprocessing</code>, combines them
 (logical AND), and converts the resulting carved voxel field into a
 triangle mesh suitable for downstream CAD / BIM / visualisation workflows.</p>
 <p>Mesh extraction proceeds through :func:<code>~urbansolarcarver.grid.finalize_mesh</code>,
-which supports two strategies (selected by <code>cfg.mesh_method</code>):</p>
+which supports two strategies (selected by <code>cfg.apply_smoothing</code>):</p>
 <ul>
-<li><strong>cubic</strong> -- axis-aligned cuboid faces are emitted for every occupied
-  voxel; fast but produces staircase geometry.</li>
-<li><strong>sdf</strong> (default) -- the binary field is converted to a signed-distance
-  field, optionally smoothed (Gaussian sigma controlled by
-  <code>cfg.sdf_smooth</code>), and iso-surfaced with Marching Cubes, yielding a
-  smoother envelope.  Small disconnected fragments below
-  <code>cfg.min_component_fraction</code> of the largest component are removed.</li>
+<li><strong>cubic</strong> (<code>apply_smoothing=False</code>, default) -- axis-aligned cuboid
+  faces are emitted for every occupied voxel; fast, produces the classic
+  voxel look.</li>
+<li><strong>smoothed</strong> (<code>apply_smoothing=True</code>) -- the binary field is converted
+  to a signed-distance field, smoothed, and iso-surfaced with Marching
+  Cubes, then optionally polished with up to <code>cfg.smooth_iters</code> Taubin
+  passes.  Voxel clusters below <code>cfg.min_voxels</code> and mesh fragments
+  below <code>cfg.min_face_count</code> faces are removed on both paths.</li>
 </ul>
 
 
@@ -2176,7 +2236,8 @@ path to its output directory / <code>manifest.json</code>.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Root output directory; an <code>exporting/</code> subdirectory is created.</p>
+                <p>Output directory for this stage; created if it does not exist.
+All artifacts are written directly into it.</p>
               </div>
             </td>
             <td>
