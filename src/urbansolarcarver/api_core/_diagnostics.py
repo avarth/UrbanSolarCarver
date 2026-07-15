@@ -329,7 +329,7 @@ def save_sky_patch_comparison(
     how the *share* of credited sky moved between the two runs per patch
     (diverging colors: red = ``B`` weights that direction more than ``A``).
     Useful for comparing benefit formulations, analysis periods, or
-    usefulness archetypes on otherwise identical runs.
+    weight archetypes on otherwise identical runs.
 
     Parameters
     ----------

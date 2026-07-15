@@ -1,13 +1,13 @@
-"""Physics-derived solar usefulness for benefit mode (ISO 13790 5R1C).
+"""Simulated benefit weights for benefit mode (ISO 13790 5R1C).
 
 Implements the ISO 13790 Annex C simple hourly method ("5R1C" — five
 conductances, one capacitance) and derives, by perturbation, the marginal
-usefulness of solar gain at every hour of the year:
+benefit and harm of solar gain at every hour of the year:
 
     benefit[t] = -dQ_heating / dPhi_sol(t)   in [0, 1]
     harm[t]    = +dQ_cooling / dPhi_sol(t)   in [0, 1]
 
-The two series are written to a ``solar_usefulness.json`` artifact that
+The two series are written to a ``simulated_weights.json`` artifact that
 benefit mode can consume in place of its balance-point Heaviside filter.
 
 Provenance: this is an independent implementation written directly from
@@ -20,8 +20,8 @@ Golden TMY3 EPW: annual heating/cooling demand totals to ~1 Wh/year plus
 hourly air/mass temperatures and demands at sampled hours, with the
 oracle's derived conductances fed in directly so the hourly recurrence is
 what is compared. Reference data: ``tests/data/oracle_5r1c_reference.json``;
-regression: ``tests/test_usefulness.py``. Design, coefficient provenance,
-and declared limitations: ``design/solar-usefulness.md``; user-level
+regression: ``tests/test_simulated_weights.py``. Design, coefficient provenance,
+and declared limitations: ``design/simulated-weights.md``; user-level
 documentation: ``docs/simulated-weights.md``.
 
 This module is deliberately NumPy-only at import time (no torch, no
@@ -275,10 +275,10 @@ def simulate(p: ZoneParams, t_out, phi_int, phi_sol,
     )
 
 
-def solar_usefulness(p: ZoneParams, t_out, phi_int, phi_sol,
+def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
                      eps: float = 1.0,
                      t_m_init: float = 20.0) -> Tuple[np.ndarray, np.ndarray]:
-    """Marginal hourly solar usefulness by central-difference perturbation.
+    """Marginal hourly benefit/harm of solar gain by central-difference perturbation.
 
     Returns ``(benefit, harm)``, each (8760,) in [0, 1]:
     the fraction of one extra watt-hour of solar gain at hour t that
@@ -303,7 +303,7 @@ def solar_usefulness(p: ZoneParams, t_out, phi_int, phi_sol,
         low, high = float(arr.min()), float(arr.max())
         if low < -tol or high > 1.0 + tol:
             warnings.warn(
-                f"solar_usefulness: {name} outside [0, 1] beyond switching "
+                f"attribute_solar_gains: {name} outside [0, 1] beyond switching "
                 f"tolerance (min {low:.3f}, max {high:.3f}) — check inputs.",
                 stacklevel=2,
             )
@@ -335,14 +335,14 @@ def transmitted_solar_from_epw(
 
 
 # ---------------------------------------------------------------------------
-# Artifact I/O — solar_usefulness.json (schema_version 1)
+# Artifact I/O — simulated_weights.json (schema_version 1)
 # ---------------------------------------------------------------------------
 
 SCHEMA_VERSION = 1
 
 
-def write_usefulness(path, benefit, harm, meta: dict) -> Path:
-    """Write the solar_usefulness.json artifact (schema in the design note)."""
+def write_simulated_weights(path, benefit, harm, meta: dict) -> Path:
+    """Write the simulated_weights.json artifact (schema in the design note)."""
     benefit = np.asarray(benefit, dtype=np.float64)
     harm = np.asarray(harm, dtype=np.float64)
     _validate_series("benefit", benefit)
@@ -360,8 +360,8 @@ def write_usefulness(path, benefit, harm, meta: dict) -> Path:
     return path
 
 
-def read_usefulness(path) -> Tuple[np.ndarray, np.ndarray, dict]:
-    """Read and validate a solar_usefulness.json artifact.
+def read_simulated_weights(path) -> Tuple[np.ndarray, np.ndarray, dict]:
+    """Read and validate a simulated_weights.json artifact.
 
     Returns (benefit, harm, meta).
     """
@@ -369,11 +369,11 @@ def read_usefulness(path) -> Tuple[np.ndarray, np.ndarray, dict]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ValueError(f"Cannot read usefulness artifact {path}: {exc}") from exc
+        raise ValueError(f"Cannot read simulated-weights artifact {path}: {exc}") from exc
     version = payload.get("schema_version")
     if version != SCHEMA_VERSION:
         raise ValueError(
-            f"{path}: unsupported usefulness schema_version {version!r} "
+            f"{path}: unsupported simulated-weights schema_version {version!r} "
             f"(expected {SCHEMA_VERSION})"
         )
     hourly = payload.get("hourly") or {}
@@ -512,14 +512,14 @@ def _save_heatmaps(benefit: np.ndarray, harm: np.ndarray, path) -> "Path | None"
     return path
 
 
-def generate_usefulness(
+def generate_simulated_weights(
     epw_path: str,
     archetype: dict,
     out_path,
     internal_gains_w_m2: "float | Sequence[float]" = 5.0,
     eps: float = 1.0,
 ) -> Path:
-    """Run the full 5R1C usefulness pipeline: EPW + archetype → artifact.
+    """Run the full 5R1C weights pipeline: EPW + archetype → artifact.
 
     ``archetype`` holds the :meth:`ZoneParams.from_archetype` keyword
     arguments plus ``windows``: a list of [azimuth_deg, area_m2, g_value].
@@ -552,7 +552,7 @@ def generate_usefulness(
             f"daily profile, got shape {gains.shape}"
         )
 
-    benefit, harm = solar_usefulness(params, t_out, phi_int, phi_sol, eps=eps)
+    benefit, harm = attribute_solar_gains(params, t_out, phi_int, phi_sol, eps=eps)
 
     from datetime import datetime, timezone
     gains_meta = (float(gains) if gains.ndim == 0
@@ -564,13 +564,10 @@ def generate_usefulness(
                       "internal_gains_w_m2": gains_meta},
         "eps_w": eps,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "generator": "usc usefulness (iso13790-5r1c)",
+        "generator": "usc simulate-weights (iso13790-5r1c)",
     }
-    artifact = write_usefulness(out_path, benefit, harm, meta)
+    artifact = write_simulated_weights(out_path, benefit, harm, meta)
     # Companion preview so users can inspect the weights without writing code.
     _save_heatmaps(benefit, harm, artifact.with_suffix(".png"))
     return artifact
 
-
-# Backwards-compatible alias (original internal name)
-generate_tier15 = generate_usefulness

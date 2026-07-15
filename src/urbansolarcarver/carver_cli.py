@@ -426,26 +426,26 @@ def warmup(
 # ---------------------------------------------------------------------------
 # validate — quick config check without loading heavy deps
 # ---------------------------------------------------------------------------
-@app.command(help="Generate a solar-usefulness artifact (ISO 13790 5R1C) for benefit mode")
-def usefulness(
+@app.command(name="simulate-weights", help="Generate a simulated-weights artifact (ISO 13790 5R1C) for benefit mode")
+def simulate_weights(
     epw: Path = Option(..., "-e", "--epw", exists=True, readable=True,
                        help="EPW weather file"),
     archetype: Path = Option(..., "-a", "--archetype", exists=True, readable=True,
                              help="Archetype YAML (see configs/archetype_example.yaml)"),
-    out: Path = Option(Path("solar_usefulness.json"), "-o", "--out",
+    out: Path = Option(Path("simulated_weights.json"), "-o", "--out",
                        help="Output artifact path"),
     eps: float = Option(1.0, "--eps",
                         help="Perturbation size in W (central differences)"),
 ):
-    """Hourly marginal solar usefulness (benefit + harm) from the
+    """Simulated benefit weights: hourly marginal benefit + harm of solar gain from the
     ISO 13790 Annex C simple hourly model (5R1C), by perturbation.
 
-    The artifact feeds benefit mode's ``usefulness_path`` config key,
+    The artifact feeds benefit mode's ``simulated_weights_path`` config key,
     replacing the balance-point Heaviside hour filter with physics-derived
-    hourly weights. See design/solar-usefulness.md.
+    hourly weights. See design/simulated-weights.md.
     """
     import yaml
-    from urbansolarcarver.usefulness import generate_usefulness
+    from urbansolarcarver.simulated_weights import generate_simulated_weights
 
     arch = yaml.safe_load(archetype.read_text(encoding="utf-8"))
     if not isinstance(arch, dict):
@@ -461,7 +461,7 @@ def usefulness(
         flat if flat is not None else 5.0)
     typer.echo(f"  Running 5R1C perturbation attribution ({epw.name}) ...")
     try:
-        path = generate_usefulness(str(epw), arch, out,
+        path = generate_simulated_weights(str(epw), arch, out,
                                    internal_gains_w_m2=internal, eps=eps)
     except (ValueError, TypeError) as exc:
         typer.secho(f"  {exc}", fg="red")

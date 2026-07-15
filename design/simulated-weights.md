@@ -1,6 +1,6 @@
-# Design note — Simulated solar-usefulness weights for benefit mode
+# Design note — Simulated benefit weights
 
-**Status:** implemented and shipped (`usc usefulness`, `usefulness_path`).
+**Status:** implemented and shipped (`usc simulate-weights`, `simulated_weights_path`).
 The engine's Annex C recurrence is regression-tested against the ETH
 RC_BuildingSimulator source (MIT, Jayathissa et al.) to ~1 Wh/year on three
 archetypes, plus steady-state closure against an independent network
@@ -40,7 +40,7 @@ memory, and its only role beside the hourly model is as a comparison
 baseline. An EnergyPlus generator is not planned; the 5R1C model provides
 a solid basis for a massing tool.
 
-All generators emit the same artifact (§5); `usefulness_path` in benefit
+All generators emit the same artifact (§5); `simulated_weights_path` in benefit
 mode consumes it (§6), so a future generator is a drop-in.
 
 ## 2. The 5R1C network (ISO 13790 Annex C)
@@ -165,7 +165,7 @@ hours near a control-regime switch yield subgradients (central differences
 smooth this); strict [0,1] bounds hold up to switching noise and are
 clamped with a tolerance check rather than asserted exactly.
 
-## 5. Artifact — `solar_usefulness.json`
+## 5. Artifact — `simulated_weights.json`
 
 ```json
 {
@@ -175,7 +175,7 @@ clamped with a tolerance check rather than asserted exactly.
     "epw": "<path/name as given>",
     "archetype": { "...all §3 inputs, expanded form..." },
     "generated": "<iso timestamp>",
-    "generator": "usc usefulness (iso13790-5r1c)"
+    "generator": "usc simulate-weights (iso13790-5r1c)"
   },
   "hourly": {
     "benefit": [8760 floats in [0,1]],
@@ -185,18 +185,17 @@ clamped with a tolerance check rather than asserted exactly.
 ```
 
 8760 hourly values (TMY, non-leap), index = hour of year, timestep 1.
-The generator (`generate_usefulness`; `generate_tier15` kept as a
-backwards-compatible alias) also writes a `.png` companion next to the
+The generator (`generate_simulated_weights`) also writes a `.png` companion next to the
 artifact: benefit and harm as day × hour heatmaps, so the schedule can be
 inspected without writing code.
 
 ## 6. USC hook
 
-Optional benefit-mode key `usefulness_path`. When set:
+Optional benefit-mode key `simulated_weights_path`. When set:
 
 - the Heaviside filter is replaced: each hour's DNI/DHI in the Wea is
   scaled by `benefit[t]` before the cumulative SkyMatrix — the sky
-  integration distributes usefulness onto exactly the patches each hour's
+  integration distributes the weights onto exactly the patches each hour's
   sun and sky occupied (the simple cold-hours filter is the binary special
   case of this mechanism);
 - `include_harm: true` additionally subtracts the `harm[t]`-scaled matrix,
@@ -214,7 +213,7 @@ Optional benefit-mode key `usefulness_path`. When set:
 
 ## 7. Validation status
 
-Engine (all passing in `tests/test_usefulness.py`): steady-state closure
+Engine (all passing in `tests/test_simulated_weights.py`): steady-state closure
 (demand = Σ H·ΔT − gains, air held at set-point, verified against an
 independent series/parallel network reduction); heavier `C_m` flattens
 hour-to-hour `θ_m` variance; regression against RC_BuildingSimulator on
@@ -232,7 +231,7 @@ machine-specific and need adjusting before re-capture).
 
 Attribution (passing): winter benefit high with zero harm; summer-afternoon
 harm high with benefit ≈ 0; winter-noon benefit stays high (lag credit);
-heavier mass class ⇒ flatter diurnal usefulness. The monthly-η correlation
+heavier mass class ⇒ flatter diurnal weights. The monthly-η correlation
 check is deferred together with the monthly generator itself.
 
 Hook (passing, `tests/test_modes.py` / `test_pipeline.py`): an all-ones
@@ -251,14 +250,14 @@ thermal-lag signature); with `include_harm` the redistribution reaches
 
 ## 8. Declared limitations
 
-Single zone, lumped mass: same-hour usefulness is facade-independent by
+Single zone, lumped mass: same-hour weighting is facade-independent by
 construction (time-of-day carries the direction signal; perimeter-zone
 effects are out of scope for a massing tool). Ideal convective conditioning
 at the air node; continuous operation, no setback. Fixed ACH — no night
 flushing or operable shading, so cooling harm is overestimated
 (conservative for the opt-in harm channel; a schedulable H_ve is the first
 extension slot). Flat internal gains. TMY weather. Marginal linearization
-at the archetype operating point. Usefulness derived unshaded while USC
+at the archetype operating point. Weights derived unshaded while USC
 creates shading context (first-order acceptable; one-iteration robustness
 check possible). The correlation constants and coupling coefficients carry
 the standard's residential-European calibration provenance.

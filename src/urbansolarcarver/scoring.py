@@ -30,7 +30,7 @@ def get_weights(
     north_deg: float = 0.0,
     min_sky_elevation_deg: float = 0.0,
     include_harm: bool = False,
-    usefulness_path: str = None,
+    simulated_weights_path: str = None,
 ) -> torch.Tensor:
     """
     Build a vector of weights for each sky patch, according to a chosen analysis mode.
@@ -88,11 +88,11 @@ def get_weights(
             raise ValueError(
                 f"get_weights: epw_file and hoys list are required for mode '{mode}'"
             )
-        usefulness = None
-        if usefulness_path and mode_key == 'benefit':
-            from .usefulness import read_usefulness
-            benefit_series, harm_series, _meta = read_usefulness(usefulness_path)
-            usefulness = (benefit_series, harm_series)
+        sim_weights = None
+        if simulated_weights_path and mode_key == 'benefit':
+            from .simulated_weights import read_simulated_weights
+            benefit_series, harm_series, _meta = read_simulated_weights(simulated_weights_path)
+            sim_weights = (benefit_series, harm_series)
         return compute_EPW_based_weights(
             mode_key,
             epw_file,
@@ -102,7 +102,7 @@ def get_weights(
             balance_offset,
             north=north_deg,
             include_harm=include_harm,
-            usefulness=usefulness,
+            simulated_weights=sim_weights,
         )
 
     # Raise error for unsupported modes

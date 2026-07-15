@@ -9,21 +9,21 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Solar-usefulness generator (simulated benefit weights)** — `usc usefulness` and the
-  `urbansolarcarver.usefulness` module: an ISO 13790 Annex C simple hourly
+- **Simulated-weights generator (benefit mode)** — `usc simulate-weights` and the
+  `urbansolarcarver.simulated_weights` module: an ISO 13790 Annex C simple hourly
   ("5R1C") thermal model plus batched central-difference perturbation,
-  producing hourly *marginal* solar usefulness — `benefit[t]` (fraction of
+  producing the hourly *marginal* benefit/harm of solar gain — `benefit[t]` (fraction of
   a marginal joule of solar gain that offsets heating over the year) and
   `harm[t]` (fraction that becomes cooling load) — written to a
-  `solar_usefulness.json` artifact with full provenance metadata. Inputs:
+  `simulated_weights.json` artifact with full provenance metadata. Inputs:
   one EPW plus ~10 archetype parameters (`configs/archetype_example.yaml`;
   neutral values, no national defaults). The engine is validated against
   ETH's RC_BuildingSimulator on three archetypes under the bundled Golden
   TMY3 weather (annual demands and hourly node states; driving arrays
   stored verbatim in `tests/data/`), plus steady-state closure against an
   independent network reduction. Design, tier ladder, and declared
-  limitations: `design/solar-usefulness.md`.
-- **`usefulness_path`** (benefit mode): consume a solar-usefulness artifact
+  limitations: `design/simulated-weights.md`.
+- **`simulated_weights_path`** (benefit mode): consume a simulated-weights artifact
   in place of the balance-point hour filter — each hour's DNI/DHI is scaled
   by `benefit[t]` before the cumulative sky matrix (the balance filter is
   the binary special case of this mechanism), and `include_harm: true`
@@ -38,11 +38,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ratio), `g_value`, and optional `orientation` — floor area, volume,
   per-facade window areas, `area_window`, and `area_opaque` (opaque walls +
   roof) are derived. `configs/archetype_example.yaml` shows both forms.
-- **Weights preview**: `usc usefulness` / `generate_usefulness` write a
+- **Weights preview**: `usc simulate-weights` / `generate_simulated_weights` write a
   `.png` companion next to the artifact — benefit and harm as day x hour
   heatmaps — so the schedule can be inspected without writing code.
 - **Sky-weight comparison in diagnostics**: a benefit run that consumes a
-  usefulness artifact (with `diagnostic_plots: true`) also records a
+  simulated-weights artifact (with `diagnostic_plots: true`) also records a
   difference dome versus the simple balance-point rule for the same config
   (`sky_patch_comparison_image` + redistribution stats in
   `diagnostic.json`).
@@ -78,8 +78,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - User-facing terminology for the two benefit weightings: "simple weights"
   (balance-point rule) vs "simulated weights" (5R1C hourly simulation);
   the internal "Tier 1.5" label no longer appears in docs, CLI, or configs.
-  `generate_tier15` is renamed `generate_usefulness` (old name kept as a
-  compatible alias).
+  the module and all public names use the `simulated_weights` family
+  (`generate_simulated_weights`, `simulated_weights_path`,
+  `usc simulate-weights`, `simulated_weights.json`); no aliases are kept
+  since the feature is unreleased.
 - Benefit mode warns loudly and returns all-zero weights when the analysis
   period contains no beneficial hours (previously this fell through toward a
   degenerate carve with only a generic downstream warning; an empty hour

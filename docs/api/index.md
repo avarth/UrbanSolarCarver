@@ -30,7 +30,7 @@ Sky hemisphere weighting and solar position computation.
 | [Sky Patches](sky-patches.md) | Tregenza 145-patch geometry, `compute_EPW_based_weights()` (Perez / benefit / CIE), `compute_radiative_cooling_weights()` (Martin-Berdahl) |
 | [Sun Vectors](sun.md) | `get_sun_vectors()` -- solar positions from EPW via Ladybug sunpath, altitude filtering |
 | [Scoring](scoring.md) | `get_weights()` (mode dispatch), `normalize_scores()`, `otsu_threshold()`, `headtail_threshold()` |
-| [Solar Usefulness](usefulness.md) | Simulated benefit weights: `generate_usefulness()`, `ZoneParams`, `solar_usefulness()` (5R1C + perturbation), `expand_shoebox()`, artifact I/O |
+| [Simulated Weights](simulated-weights.md) | Simulated benefit weights: `generate_simulated_weights()`, `ZoneParams`, `attribute_solar_gains()` (5R1C + perturbation), `expand_shoebox()`, artifact I/O |
 
 ## Configuration
 

@@ -21,7 +21,7 @@ Attributing against the annual totals is what captures **thermal lag**: a noon g
 
 ## Origin and validation
 
-The engine is an **independent implementation**, written directly from the ISO 13790 Annex C equation set in pure NumPy (`urbansolarcarver/usefulness.py`, ~450 lines). It is **not** a fork, port, or adaptation of an existing simulator.
+The engine is an **independent implementation**, written directly from the ISO 13790 Annex C equation set in pure NumPy (`urbansolarcarver/simulated_weights.py`, ~450 lines). It is **not** a fork, port, or adaptation of an existing simulator.
 
 It is **cross-validated against [RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator)**, the ETH Zurich Architecture & Building Systems group's MIT-licensed implementation of the same annex (Jayathissa et al., "Optimising building net energy demand with dynamic BIPV shading", *Applied Energy* 202, 2017). The validation setup:
 
@@ -29,11 +29,11 @@ It is **cross-validated against [RC_BuildingSimulator](https://github.com/archit
 - **Weather**: the bundled Golden, CO TMY3 EPW (dry-bulb direct; transmitted solar from Ladybug's directional irradiance on each scenario's glazing, g = 0.6).
 - **Compared quantities**: annual heating and cooling demand totals (agreement to roughly 1 Wh/year, relative tolerance 1e-6), mean annual air temperature, and hourly air-temperature, mass-temperature, and heating/cooling-demand values at sampled hours across the year.
 - **Method**: the oracle's own derived conductances are fed into USC's engine directly, so the comparison isolates the hourly recurrence itself rather than parameter-derivation conventions (the two implementations intentionally differ on one of those: RC_BuildingSimulator uses `U·A` directly for the opaque-envelope conductance, USC applies the standard's serial split).
-- **Artifacts**: the oracle's driving arrays and reference outputs are committed verbatim in `tests/data/oracle_5r1c_reference.json`; the regression runs in the test suite on every change (`tests/test_usefulness.py`), deterministically, with no weather generation at test time.
+- **Artifacts**: the oracle's driving arrays and reference outputs are committed verbatim in `tests/data/oracle_5r1c_reference.json`; the regression runs in the test suite on every change (`tests/test_simulated_weights.py`), deterministically, with no weather generation at test time.
 
 Beyond the oracle comparison, the engine is checked for **steady-state energy-balance closure** against an independent hand-derived network reduction (constant outdoor temperature, no gains: demand converges to conductance × ΔT with the air node held at setpoint), and for the physical property that heavier mass classes flatten hour-to-hour mass-temperature variation.
 
-Full derivation notes and the coefficient provenance live in the repository at `design/solar-usefulness.md`.
+Full derivation notes and the coefficient provenance live in the repository at `design/simulated-weights.md`.
 
 ## What you supply: the archetype
 
@@ -58,7 +58,7 @@ The shipped example values are deliberately **neutral, with no national defaults
 
 The weights are a *marginal, single-zone, schedule-free* physics signal. That is a large step past the binary balance-point rule (thermal lag, mass state, gain saturation), but the following simplifications are declared and deliberate:
 
-- **Single zone, lumped mass**: usefulness is facade-independent within an hour; time-of-day carries the directional signal. Perimeter-zone effects are out of scope for a massing tool.
+- **Single zone, lumped mass**: the weights are facade-independent within an hour; time-of-day carries the directional signal. Perimeter-zone effects are out of scope for a massing tool.
 - **Ideal, unlimited conditioning** at the air node; continuous operation, no setback or occupancy schedules.
 - **Fixed air-change rates**: no night flushing and no operable shading. Consequently the `harm` channel is **overstated**, since real buildings have cheap defenses against summer sun that they lack for missing winter sun. This is why `include_harm` is opt-in and marked experimental.
 - **Flat (or simple daily-profile) internal gains.**
@@ -77,4 +77,4 @@ Every artifact records its full provenance (`meta`: method, EPW, the complete ex
 
 - [Carving Modes -- benefit](modes.md#simulated-weights) for the user-level workflow
 - Tutorial 5 (`examples/5_benefit_5r1c.ipynb`) for an end-to-end walkthrough
-- [API reference](api/usefulness.md) for `generate_usefulness()`, `ZoneParams`, and the artifact I/O
+- [API reference](api/simulated-weights.md) for `generate_simulated_weights()`, `ZoneParams`, and the artifact I/O

@@ -11,8 +11,8 @@ urbansolarcarver exporting     -c config.yaml -f outputs/thresholding/manifest.j
 # Override any config value on the fly
 urbansolarcarver preprocessing -c config.yaml -o voxel_size=0.5 -o mode=irradiance
 
-# Generate simulated benefit weights (writes solar_usefulness.json + .png preview)
-urbansolarcarver usefulness -e weather.epw -a configs/archetype_example.yaml
+# Generate simulated benefit weights (writes simulated_weights.json + .png preview)
+urbansolarcarver simulate-weights -e weather.epw -a configs/archetype_example.yaml
 
 # Inspect the full config schema
 urbansolarcarver schema

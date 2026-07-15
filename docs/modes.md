@@ -74,14 +74,14 @@ Instead of the binary cold-hour rule, benefit mode can consume hourly weights de
 Generate the weights once from an EPW and a building **archetype** (roughly ten numbers describing a typical building; the easiest form is a shoebox with per-facade window-to-wall ratios, see `configs/archetype_example.yaml`):
 
 ```bash
-urbansolarcarver usefulness -e weather.epw -a configs/archetype_example.yaml
+urbansolarcarver simulate-weights -e weather.epw -a configs/archetype_example.yaml
 ```
 
-This writes `solar_usefulness.json` (the weights plus full provenance) and a `.png` preview of the weights next to it. Then point a benefit config at the artifact:
+This writes `simulated_weights.json` (the weights plus full provenance) and a `.png` preview of the weights next to it. Then point a benefit config at the artifact:
 
 ```yaml
 mode: benefit
-usefulness_path: solar_usefulness.json
+simulated_weights_path: simulated_weights.json
 # include_harm: true   # experimental: also subtract summer-overheating contributions
 ```
 
@@ -89,7 +89,7 @@ A full-year `analysis_period` is the natural choice with simulated weights, sinc
 
 **Use case**: benefit envelopes that respond to the thermal mass, insulation, and glazing of the building stock being protected.
 
-**Key parameters**: `usefulness_path`, `include_harm` (experimental; the model has no operable shading or night ventilation, so harm is overstated -- treat it as a bracketing scenario).
+**Key parameters**: `simulated_weights_path`, `include_harm` (experimental; the model has no operable shading or night ventilation, so harm is overstated -- treat it as a bracketing scenario).
 
 See [Simulated Benefit Weights](simulated-weights.md) for the engine's documentation -- what it implements, how it was validated against RC_BuildingSimulator, the archetype inputs, and the declared limitations -- and Tutorial 5 (`examples/5_benefit_5r1c.ipynb`) for an end-to-end walkthrough.
 

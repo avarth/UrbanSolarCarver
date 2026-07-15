@@ -29,11 +29,11 @@ balance_temperature: 15.0   # °C — free-running balance point (Ladybug defaul
                             # older poorly insulated stock). Derive project-specific
                             # values with the Honeybee/E+ balance-point workflow.
 balance_offset:       2.0   # °C — dead-band below the balance point (>= 0)
-# usefulness_path: solar_usefulness.json
+# simulated_weights_path: simulated_weights.json
 #                           # SIMULATED weights: replaces the simple balance-
 #                           # point rule above with hourly weights from a
 #                           # building simulation (ISO 13790 5R1C: thermal
-#                           # lag, mass state). Generate with `usc usefulness
+#                           # lag, mass state). Generate with `usc simulate-weights
 #                           # -e weather.epw -a configs/archetype_example.yaml`.
 #                           # balance_* are then unused.
 # include_harm: false       # EXPERIMENTAL. true = Ladybug's composite concept:
