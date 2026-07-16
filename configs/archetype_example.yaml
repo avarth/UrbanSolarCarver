@@ -41,3 +41,12 @@ internal_gains_w_m2: 5.0 # W per m² floor area, flat schedule
 # OR a 24-value daily occupancy profile (W/m² per hour of day, tiled over
 # the year); specify one of the two, not both:
 # internal_gains_profile_w_m2: [2,2,2,2,2,2,3,5, 8,8,8,8,8,8,8,8, 8,8,6,5,4,3,2,2]
+
+# --- Shading coefficients (declared multipliers; no device geometry) ---
+# Transmission factors in [0, 1]: 1 = no shading. A scalar applies to all
+# facades; a mapping sets them per facade. shading_hot stacks on top of
+# shading_permanent during hot_months only (awnings, tents, seasonal
+# vegetation) and makes the harm channel far less overstated.
+# shading_permanent: 0.9              # or {south: 0.8, west: 0.9}
+# shading_hot: 0.5                    # requires hot_months
+# hot_months: [6, 7, 8, 9]

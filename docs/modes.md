@@ -89,7 +89,7 @@ A full-year `analysis_period` is the natural choice with simulated weights, sinc
 
 **Use case**: benefit envelopes that respond to the thermal mass, insulation, and glazing of the building stock being protected.
 
-**Key parameters**: `simulated_weights_path`, `include_harm` (experimental; the model has no operable shading or night ventilation, so harm is overstated -- treat it as a bracketing scenario).
+**Key parameters**: `simulated_weights_path`, `include_harm` (experimental; without declared seasonal shading (`shading_hot` in the archetype) harm is overstated -- treat it as a bracketing scenario).
 
 See [Simulated Benefit Weights](simulated-weights.md) for the engine's documentation -- what it implements, how it was validated against RC_BuildingSimulator, the archetype inputs, and the declared limitations -- and Tutorial 5 (`examples/5_benefit_5r1c.ipynb`) for an end-to-end walkthrough.
 

@@ -52,6 +52,16 @@ The archetype describes a *typical* building in about ten numbers. Two equivalen
 
 **Both forms** additionally take: `u_opaque`, `u_window` (W/m²K), `ach_vent`, `ach_infiltration` (1/h), `heat_recovery` (0-1), `mass_class` (`very_light` … `very_heavy`, ISO 13790 Table 12), `t_set_heating`, `t_set_cooling` (°C), and internal gains as either a flat `internal_gains_w_m2` or a 24-value daily profile.
 
+**Shading coefficients** (optional, declared multipliers -- no device geometry is modelled):
+
+| Key | Meaning |
+|-----|---------|
+| `shading_permanent` | year-round solar transmission multiplier in [0, 1] (fins, context obstructions); 1 = no shading |
+| `shading_hot` | additional multiplier applied only during `hot_months` (awnings, tents, seasonal vegetation); stacks with the permanent factor |
+| `hot_months` | calendar months (1-12) when `shading_hot` is deployed, e.g. `[6, 7, 8, 9]` |
+
+Each coefficient accepts a scalar (all facades) or a per-facade mapping (`{south: 0.8, west: 0.9}`); windows are assigned to their nearest cardinal facade. The perturbation attribution is attenuated by the same factors, so the weights correctly describe a marginal joule of *exterior* solar: a July joule arriving while the awning is out counts for little. The declared coefficients are recorded in the artifact's provenance. Note that a fixed overhang's blocking is concentrated in high-sun hours, so its effect is usually best expressed through `shading_hot` rather than `shading_permanent`.
+
 The shipped example values are deliberately **neutral, with no national defaults**. For real projects, source values from [TABULA](https://episcope.eu/building-typology/) (EU building-stock typologies), DOE prototype buildings (US), or your national code tables.
 
 The `usc archetype` command builds and validates the file for you, printing the derived floor area, volume, and per-facade window areas so mistakes surface before any simulation runs:
@@ -69,14 +79,14 @@ The weights are a *marginal, single-zone, schedule-free* physics signal. That is
 
 - **Single zone, lumped mass**: the weights are facade-independent within an hour; time-of-day carries the directional signal. Perimeter-zone effects are out of scope for a massing tool.
 - **Ideal, unlimited conditioning** at the air node; continuous operation, no setback or occupancy schedules.
-- **Fixed air-change rates**: no night flushing and no operable shading. Consequently the `harm` channel is **overstated**, since real buildings have cheap defenses against summer sun that they lack for missing winter sun. This is why `include_harm` is opt-in and marked experimental.
+- **Fixed air-change rates**: no night flushing, and no *adaptive* shading control. Without a declared `shading_hot` coefficient the `harm` channel is **overstated**, since real buildings have cheap defenses against summer sun that they lack for missing winter sun; declaring seasonal shading in the archetype makes harm a defensible estimate instead of a worst case. `include_harm` remains opt-in.
 - **Flat (or simple daily-profile) internal gains.**
 - **Marginal linearization**: the weights describe one *extra* watt at the archetype's operating point; window sizes and g-values in the archetype set where gains saturate, and are recorded in the artifact's provenance metadata.
 - **Unshaded derivation**: the weights are computed for an unshaded archetype while the carve itself creates shading context; a first-order acceptable inconsistency for massing studies.
 - **TMY weather**; the ISO coupling coefficients carry the standard's residential-European calibration provenance.
 
 !!! warning "Treat `include_harm` as a bracketing scenario"
-    Because harm is conservatively overstated (no shading, no night ventilation), the benefit-only weighting is the recommended default; enable the harm subtraction to bracket overheating-critical projects, not as the standard mode.
+    Without declared seasonal shading, harm is conservatively overstated (no night ventilation is modelled either), so the benefit-only weighting is the recommended default. Declaring `shading_hot` + `hot_months` in the archetype makes the harm channel a defensible estimate; even then, enable the subtraction deliberately for overheating-critical projects rather than as the standard mode.
 
 ## Traceability
 

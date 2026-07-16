@@ -77,6 +77,17 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `internal_gains_w_m2` / `internal_gains_profile_w_m2` keys when the
   argument is omitted, so CLI, daemon, and Grasshopper pass archetypes
   through unmodified.
+- **Shading coefficients** (archetype keys, declared multipliers — no
+  device geometry): `shading_permanent` (year-round transmission factor
+  for fins/context) and `shading_hot` (additional factor deployed during
+  the user-declared `hot_months`; awnings, tents, seasonal vegetation).
+  Each accepts a scalar or a per-facade mapping (windows bin to their
+  nearest cardinal). The attribution is attenuated by the same effective
+  hourly transmission, preserving the artifact's exterior-joule semantics,
+  and declared values land in the artifact provenance. Declaring seasonal
+  shading makes the `harm` channel a defensible estimate instead of a
+  conservative worst case. Supported in `usc archetype` (-s overrides)
+  and on the USC_Archetype Grasshopper component (scalars).
 
 ### Changed
 

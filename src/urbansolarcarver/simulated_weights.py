@@ -317,21 +317,110 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
 def transmitted_solar_from_epw(
     epw_path: str,
     windows: Sequence[Tuple[float, float, float]],
+    hourly_factors: "Sequence[np.ndarray] | None" = None,
 ) -> np.ndarray:
     """Hourly transmitted solar gain [W] for a set of vertical windows.
 
     ``windows``: sequence of (azimuth_deg, area_m2, g_value); azimuth in
     Ladybug convention (0 = N, 90 = E, 180 = S, 270 = W). Irradiance from
     the EPW via Ladybug's isotropic directional model.
+
+    ``hourly_factors``: optional per-window hourly transmission multipliers
+    (one (8760,) array per window, e.g. shading coefficients); default 1.
     """
     from ladybug.wea import Wea
     wea = Wea.from_epw_file(str(epw_path))
     total = np.zeros(HOURS)
-    for azimuth, area, g in windows:
+    for i, (azimuth, area, g) in enumerate(windows):
         irr, *_ = wea.directional_irradiance(0, float(azimuth))
-        total += float(area) * float(g) * np.asarray(irr.values,
-                                                     dtype=np.float64)
+        contribution = float(area) * float(g) * np.asarray(
+            irr.values, dtype=np.float64)
+        if hourly_factors is not None:
+            contribution = contribution * hourly_factors[i]
+        total += contribution
     return total
+
+
+# ---------------------------------------------------------------------------
+# Shading coefficients (declared multipliers — no device geometry is modelled)
+# ---------------------------------------------------------------------------
+
+# Cumulative day-of-year at the start of each month (non-leap TMY).
+_MONTH_START_DAY = np.cumsum([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30])
+
+_CARDINALS = ("north", "east", "south", "west")
+
+
+def _nearest_cardinal(azimuth_deg: float) -> str:
+    """Bin an azimuth to the nearest cardinal facade name."""
+    a = float(azimuth_deg) % 360.0
+    return _CARDINALS[int(((a + 45.0) % 360.0) // 90.0)]
+
+
+def _normalize_shading(value, name: str) -> dict:
+    """Normalize a shading coefficient (scalar or per-facade mapping).
+
+    Returns a full {north/east/south/west: float} mapping; facades absent
+    from a mapping default to 1.0 (no shading). Values are transmission
+    multipliers in [0, 1].
+    """
+    if isinstance(value, dict):
+        unknown = set(value) - set(_CARDINALS)
+        if unknown:
+            raise ValueError(f"{name}: facade keys must be one of "
+                             f"{list(_CARDINALS)}, got {sorted(unknown)}")
+        out = {side: float(value.get(side, 1.0)) for side in _CARDINALS}
+    else:
+        out = {side: float(value) for side in _CARDINALS}
+    for side, v in out.items():
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"{name}[{side}] must be a transmission "
+                             f"multiplier in [0, 1], got {v}")
+    return out
+
+
+def _hot_months_mask(hot_months: Sequence[int]) -> np.ndarray:
+    """(8760,) bool mask: True during the given calendar months (1-12)."""
+    months = sorted({int(m) for m in hot_months})
+    if not months or not all(1 <= m <= 12 for m in months):
+        raise ValueError(f"hot_months must be month numbers 1-12, "
+                         f"got {list(hot_months)}")
+    day_of_year = np.arange(HOURS) // 24
+    month_of_day = np.searchsorted(_MONTH_START_DAY[1:], day_of_year,
+                                   side="right") + 1
+    return np.isin(month_of_day, months)
+
+
+def _shading_factors(windows, shading_permanent, shading_hot, hot_months):
+    """Per-window hourly transmission factors from the declared coefficients.
+
+    Each window is binned to its nearest cardinal facade. The permanent
+    factor applies to all hours; during ``hot_months`` the hot factor
+    multiplies on top of it. Returns a list of (8760,) arrays, or None
+    when no shading is declared.
+    """
+    if shading_hot is not None and hot_months is None:
+        raise ValueError("shading_hot requires hot_months (the calendar "
+                         "months when the seasonal shading is deployed)")
+    if hot_months is not None and shading_hot is None:
+        raise ValueError("hot_months has no effect without shading_hot")
+    if shading_permanent is None and shading_hot is None:
+        return None
+
+    permanent = _normalize_shading(
+        shading_permanent if shading_permanent is not None else 1.0,
+        "shading_permanent")
+    factors = []
+    hot_mask = _hot_months_mask(hot_months) if shading_hot is not None else None
+    hot = (_normalize_shading(shading_hot, "shading_hot")
+           if shading_hot is not None else None)
+    for azimuth, _area, _g in windows:
+        side = _nearest_cardinal(azimuth)
+        series = np.full(HOURS, permanent[side])
+        if hot is not None:
+            series = np.where(hot_mask, series * hot[side], series)
+        factors.append(series)
+    return factors
 
 
 # ---------------------------------------------------------------------------
@@ -546,18 +635,31 @@ def generate_simulated_weights(
             )
         internal_gains_w_m2 = (profile if profile is not None
                                else flat if flat is not None else 5.0)
+    shading_permanent = arch.pop("shading_permanent", None)
+    shading_hot = arch.pop("shading_hot", None)
+    hot_months = arch.pop("hot_months", None)
     windows = arch.pop("windows", None)
     if not windows:
         raise ValueError(
             "archetype must define 'windows' ([azimuth_deg, area_m2, g_value] "
             "entries) or shoebox geometry (width/length/height/wwr)"
         )
+    shading = _shading_factors(windows, shading_permanent, shading_hot,
+                               hot_months)
     params = ZoneParams.from_archetype(**arch)
 
     from ladybug.epw import EPW  # lazy
     epw = EPW(str(epw_path))
     t_out = np.asarray(epw.dry_bulb_temperature.values, dtype=np.float64)
-    phi_sol = transmitted_solar_from_epw(epw_path, windows)
+    phi_sol = transmitted_solar_from_epw(epw_path, windows,
+                                         hourly_factors=shading)
+    if shading is not None:
+        # Effective exterior-to-transmitted factor per hour: the weights
+        # describe a marginal joule of EXTERIOR solar, so the attribution
+        # must be attenuated by the same shading the building applies.
+        unshaded = transmitted_solar_from_epw(epw_path, windows)
+        f_eff = np.divide(phi_sol, unshaded,
+                          out=np.ones(HOURS), where=unshaded > 0.0)
 
     gains = np.asarray(internal_gains_w_m2, dtype=np.float64)
     if gains.ndim == 0:
@@ -571,15 +673,27 @@ def generate_simulated_weights(
         )
 
     benefit, harm = attribute_solar_gains(params, t_out, phi_int, phi_sol, eps=eps)
+    if shading is not None:
+        # A marginal exterior joule is attenuated before it becomes a
+        # transmitted joule; scale the attribution accordingly (f_eff <= 1,
+        # so the [0, 1] bounds are preserved).
+        benefit = benefit * f_eff
+        harm = harm * f_eff
 
     from datetime import datetime, timezone
     gains_meta = (float(gains) if gains.ndim == 0
                   else [float(v) for v in gains])
+    arch_meta = {**arch, "windows": [list(w) for w in windows],
+                 "internal_gains_w_m2": gains_meta}
+    if shading_permanent is not None:
+        arch_meta["shading_permanent"] = shading_permanent
+    if shading_hot is not None:
+        arch_meta["shading_hot"] = shading_hot
+        arch_meta["hot_months"] = [int(m) for m in hot_months]
     meta = {
         "method": "iso13790-5r1c-perturbation",
         "epw": str(epw_path),
-        "archetype": {**arch, "windows": [list(w) for w in windows],
-                      "internal_gains_w_m2": gains_meta},
+        "archetype": arch_meta,
         "eps_w": eps,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "generator": "usc simulate-weights (iso13790-5r1c)",

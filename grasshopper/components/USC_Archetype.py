@@ -41,6 +41,14 @@ t_set_cooling : float, optional
     Cooling setpoint, deg C. Default: 26
 internal_gains : float, optional
     Flat internal gains, W per m2 floor area. Default: 5.0
+shading_permanent : float, optional
+    Year-round transmission multiplier, 0-1 (fins, context obstructions).
+    Default: none (1.0). Per-facade values are possible in YAML archetypes.
+shading_hot : float, optional
+    Additional transmission multiplier during hot_months (awnings, tents).
+    Requires hot_months. Default: none (1.0).
+hot_months : str or list, optional
+    Calendar months when shading_hot is deployed, e.g. "6,7,8,9".
 
 Outputs
 -------
@@ -91,6 +99,9 @@ try:
         ("t_set_heating", "Heating setpoint, deg C. Default: 20"),
         ("t_set_cooling", "Cooling setpoint, deg C. Default: 26"),
         ("internal_gains", "Flat internal gains (occupants, equipment, lighting), W per m2 of floor area. Default: 5.0"),
+        ("shading_permanent", "Year-round solar transmission multiplier in [0, 1] for fixed local shading (fins, context obstructions): 1 = none, 0.85 = 15% of solar blocked. No device geometry is modelled — this is a declared coefficient. Per-facade values are possible in YAML archetypes."),
+        ("shading_hot", "Additional transmission multiplier in [0, 1] applied only during hot_months (awnings, tents, seasonal vegetation). Stacks with shading_permanent. Requires hot_months. Declaring this makes the harm channel far less overstated."),
+        ("hot_months", "Calendar months when shading_hot is deployed, as text like '6,7,8,9' (or a list of integers 1-12)."),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d
@@ -154,7 +165,33 @@ else:
         data.pop("orientation")
     gains = globals().get("internal_gains")
     data["internal_gains_w_m2"] = float(gains) if gains is not None else 5.0
-    archetype = USCArchetype(data)
-    lines = [f"{k}: {data[k]}" for k in sorted(data)]
-    lines.append(f"derived floor area: {data['width'] * data['length']:.1f} m2")
-    summary = "\n".join(lines)
+
+    # Declared shading coefficients (validated fully in the backend).
+    _perm = globals().get("shading_permanent")
+    _hot = globals().get("shading_hot")
+    _months = globals().get("hot_months")
+    if _perm is not None:
+        data["shading_permanent"] = float(_perm)
+    if _hot is not None:
+        data["shading_hot"] = float(_hot)
+    if _months is not None:
+        if isinstance(_months, str):
+            _months = [int(m) for m in _months.split(",") if m.strip()]
+        else:
+            try:
+                _months = [int(m) for m in _months]
+            except TypeError:
+                _months = [int(_months)]
+        data["hot_months"] = _months
+    if _hot is not None and _months is None:
+        summary = _add_error("shading_hot requires hot_months "
+                             "(e.g. '6,7,8,9')")
+    if _months is not None and _hot is None:
+        summary = _add_error("hot_months has no effect without shading_hot")
+
+    if not summary:
+        archetype = USCArchetype(data)
+        lines = [f"{k}: {data[k]}" for k in sorted(data)]
+        lines.append(
+            f"derived floor area: {data['width'] * data['length']:.1f} m2")
+        summary = "\n".join(lines)

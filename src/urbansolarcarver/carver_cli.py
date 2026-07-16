@@ -488,6 +488,16 @@ mass_class: {mass_class}       # very_light | light | medium | heavy | very_heav
 t_set_heating: {t_set_heating}      # deg C
 t_set_cooling: {t_set_cooling}      # deg C
 internal_gains_w_m2: {internal_gains_w_m2} # W per m2 floor area, flat schedule
+{shading_block}"""
+
+_SHADING_TEMPLATE = """\
+
+# --- Shading coefficients (declared multipliers; no device geometry) ---
+# Transmission factors in [0, 1]: 1 = no shading. Scalar applies to all
+# facades; a mapping (north/east/south/west) sets them per facade.
+{shading_permanent_line}
+{shading_hot_line}
+{hot_months_line}
 """
 
 _ARCHETYPE_DEFAULTS = {
@@ -501,6 +511,8 @@ _ARCHETYPE_DEFAULTS = {
     "internal_gains_w_m2": 5.0,
 }
 _WWR_SIDES = ("north", "east", "south", "west")
+# Optional keys with no default (absent = feature off).
+_ARCHETYPE_OPTIONAL = ("shading_permanent", "shading_hot", "hot_months")
 
 
 @app.command(help="Create and validate a shoebox archetype YAML for simulate-weights")
@@ -546,7 +558,8 @@ def archetype(
                         "only shoebox-form archetypes can be edited here — "
                         "edit that YAML directly instead", fg="red")
             raise typer.Exit(1)
-        unknown = set(base) - set(_ARCHETYPE_DEFAULTS) - {"wwr"}
+        unknown = (set(base) - set(_ARCHETYPE_DEFAULTS) - {"wwr"}
+                   - set(_ARCHETYPE_OPTIONAL))
         if unknown:
             typer.secho(f"  Unknown archetype keys in --from file: "
                         f"{sorted(unknown)}", fg="red")
@@ -572,6 +585,12 @@ def archetype(
                 raise typer.Exit(1)
             values["wwr"][side] = float(raw)
             continue
+        if key == "hot_months":
+            values[key] = [int(m) for m in raw.split(",") if m.strip()]
+            continue
+        if key in ("shading_permanent", "shading_hot"):
+            values[key] = float(raw)
+            continue
         if key not in _ARCHETYPE_DEFAULTS or key == "wwr":
             typer.secho(f"  Unknown archetype key {key!r}", fg="red")
             raise typer.Exit(1)
@@ -585,12 +604,18 @@ def archetype(
 
     # Validate through the generator's own code path and derive quantities.
     arch = {k: v for k, v in values.items()
-            if k not in ("internal_gains_w_m2",)
+            if k not in ("internal_gains_w_m2",) + _ARCHETYPE_OPTIONAL
             and not (k == "orientation" and not v)}
     try:
         expanded = expand_shoebox(arch)
         windows = expanded.pop("windows")
         ZoneParams.from_archetype(**expanded)
+        if any(k in values for k in _ARCHETYPE_OPTIONAL):
+            from urbansolarcarver.simulated_weights import _shading_factors
+            _shading_factors(windows,
+                             values.get("shading_permanent"),
+                             values.get("shading_hot"),
+                             values.get("hot_months"))
     except (ValueError, TypeError) as exc:
         typer.secho(f"  INVALID archetype: {exc}", fg="red")
         raise typer.Exit(1)
@@ -606,10 +631,26 @@ def archetype(
         if values.get("orientation") else
         "# orientation: 0.0       # deg, rotate the box clockwise from north"
     )
+    shading_block = _SHADING_TEMPLATE.format(
+        shading_permanent_line=(
+            f"shading_permanent: {values['shading_permanent']}"
+            if "shading_permanent" in values else
+            "# shading_permanent: 0.9"),
+        shading_hot_line=(
+            f"shading_hot: {values['shading_hot']}"
+            if "shading_hot" in values else
+            "# shading_hot: 0.5"),
+        hot_months_line=(
+            f"hot_months: {values['hot_months']}"
+            if "hot_months" in values else
+            "# hot_months: [6, 7, 8, 9]"),
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(_ARCHETYPE_TEMPLATE.format(
         wwr_block=wwr_block, orientation_line=orientation_line,
-        **{k: v for k, v in values.items() if k not in ("wwr", "orientation")},
+        shading_block=shading_block,
+        **{k: v for k, v in values.items()
+           if k not in ("wwr", "orientation") + _ARCHETYPE_OPTIONAL},
     ), encoding="utf-8")
 
     typer.secho(f"  Wrote {out}", fg="green", bold=True)

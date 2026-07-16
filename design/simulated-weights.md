@@ -136,6 +136,17 @@ Both forms additionally take ACH (vent + infiltration), heat-recovery
 η_hr, mass class, set-points (default 20/26 °C), and flat internal gains
 [W/m²] or a 24-value daily profile.
 
+Shading (optional, declared coefficients — deliberately no device
+geometry): `shading_permanent` (year-round transmission multiplier) and
+`shading_hot` (additional multiplier active during the user-declared
+`hot_months`). Each accepts a scalar or a per-facade mapping
+(north/east/south/west; windows bin to their nearest cardinal). The
+factors multiply `Φ_sol` per window, AND the attribution derivatives are
+scaled by the effective hourly transmission `f_eff(t) = Φ_shaded/Φ_unshaded`
+so the artifact keeps its exterior-joule semantics: a July joule arriving
+behind a deployed awning earns proportionally less harm and benefit.
+Declared values are recorded in the artifact provenance.
+
 Climate: one EPW. Hourly transmitted solar
 `Φ_sol(t) = Σ_orient A_w·g·I_orient(t)` with `I_orient` from the EPW via
 Ladybug's directional-irradiance transposition. Only the *weighting* of
@@ -254,10 +265,13 @@ Single zone, lumped mass: same-hour weighting is facade-independent by
 construction (time-of-day carries the direction signal; perimeter-zone
 effects are out of scope for a massing tool). Ideal convective conditioning
 at the air node; continuous operation, no setback. Fixed ACH — no night
-flushing or operable shading, so cooling harm is overestimated
-(conservative for the opt-in harm channel; a schedulable H_ve is the first
-extension slot). Flat internal gains. TMY weather. Marginal linearization
-at the archetype operating point. Weights derived unshaded while USC
-creates shading context (first-order acceptable; one-iteration robustness
-check possible). The correlation constants and coupling coefficients carry
-the standard's residential-European calibration provenance.
+flushing (a schedulable H_ve remains the first extension slot). Shading is
+declared, not adaptive: the fixed-calendar `shading_hot` coefficient stands
+in for occupant-operated devices; without it, cooling harm is overestimated
+(conservative for the opt-in harm channel), and even with it there is no
+response to same-day conditions. Flat internal gains. TMY weather. Marginal
+linearization at the archetype operating point. Weights derived without the
+carve's own shading context (first-order acceptable; one-iteration
+robustness check possible). The correlation constants and coupling
+coefficients carry the standard's residential-European calibration
+provenance.
