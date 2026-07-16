@@ -1,54 +1,25 @@
-"""USC Archetype — Describe a typical building for simulated weights.
+"""USC Archetype — Assemble a typical building for simulated weights.
 
-Builds a single-zone shoebox archetype for USC_SimulateWeights: give the
-zone's dimensions and per-facade window-to-wall ratios; floor area,
-volume, facade and window areas are derived by the backend. The values
-describe a *typical* building of the surrounding stock, not any one
-design — source real numbers from TABULA (EU), DOE prototypes (US), or
-national code tables. Every input is optional; the defaults are the
-neutral example shipped with USC.
+Collects the five parameter families into one archetype handle for
+USC_SimulateWeights. Wire in only the families you want to customise:
+every input is optional, and anything not provided keeps USC's neutral
+defaults (a 10 x 10 x 3 m medium-mass shoebox with wwr south 0.35 /
+east 0.15 / west 0.15). The archetype describes a *typical* building of
+the surrounding stock, not any one design — source real numbers from
+TABULA (EU), DOE prototypes (US), or national code tables.
 
 Inputs
 ------
-width : float, optional
-    Zone east-west dimension (m). Default: 10.0
-length : float, optional
-    Zone north-south dimension (m). Default: 10.0
-height : float, optional
-    Storey height (m). Default: 3.0
-wwr_south, wwr_east, wwr_west, wwr_north : float, optional
-    Window-to-wall ratio per facade, 0-1. Defaults: 0.35 / 0.15 / 0.15 / 0
-g_value : float, optional
-    Glazing solar transmittance. Default: 0.6
-orientation : float, optional
-    Rotate the whole box clockwise from north (deg). Default: 0
-u_opaque : float, optional
-    Opaque envelope U-value, W/m2K. Default: 0.6
-u_window : float, optional
-    Glazing U-value, W/m2K. Default: 1.6
-ach_vent : float, optional
-    Ventilation air changes per hour. Default: 0.8
-ach_infiltration : float, optional
-    Infiltration air changes per hour. Default: 0.3
-heat_recovery : float, optional
-    Ventilation heat-recovery efficiency, 0-1. Default: 0
-mass_class : str, optional
-    Thermal mass per ISO 13790 Table 12: very_light | light | medium |
-    heavy | very_heavy. Default: medium
-t_set_heating : float, optional
-    Heating setpoint, deg C. Default: 20
-t_set_cooling : float, optional
-    Cooling setpoint, deg C. Default: 26
-internal_gains : float, optional
-    Flat internal gains, W per m2 floor area. Default: 5.0
-shading_permanent : float, optional
-    Year-round transmission multiplier, 0-1 (fins, context obstructions).
-    Default: none (1.0). Per-facade values are possible in YAML archetypes.
-shading_hot : float, optional
-    Additional transmission multiplier during hot_months (awnings, tents).
-    Requires hot_months. Default: none (1.0).
-hot_months : str or list, optional
-    Calendar months when shading_hot is deployed, e.g. "6,7,8,9".
+geometry : USCZoneParams, optional
+    From USC_ZoneGeometry: dimensions, orientation, per-facade WWR.
+fabric : USCZoneParams, optional
+    From USC_ZoneFabric: U-values, g-value, thermal mass class.
+ventilation : USCZoneParams, optional
+    From USC_ZoneVentilation: air-change rates, heat recovery.
+operation : USCZoneParams, optional
+    From USC_ZoneOperation: setpoints, internal gains.
+shading : USCZoneParams, optional
+    From USC_ZoneShading: declared shading coefficients.
 
 Outputs
 -------
@@ -77,31 +48,15 @@ class USCArchetype:
 try:
     ghenv.Component.Name = "USC Archetype"
     ghenv.Component.NickName = "USC_Archetype"
-    ghenv.Component.Description = "Describes a typical building of the surrounding stock as a single-zone shoebox (dimensions, per-facade window-to-wall ratios, fabric, thermal mass, setpoints). Feed to USC_SimulateWeights to derive when solar gain is thermally useful for that kind of building. All inputs optional — defaults are USC's neutral example; source real values from TABULA / DOE prototypes / national code tables."
+    ghenv.Component.Description = "Assembles a typical building of the surrounding stock from the five parameter families (geometry, fabric, ventilation, operation, shading). Feed to USC_SimulateWeights to derive when solar gain is thermally useful for that kind of building. All inputs optional — defaults are USC's neutral example; source real values from TABULA / DOE prototypes / national code tables."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
-        ("width", "Zone east-west dimension in metres. Default: 10.0"),
-        ("length", "Zone north-south dimension in metres. Default: 10.0"),
-        ("height", "Storey height in metres. Default: 3.0"),
-        ("wwr_south", "South facade window-to-wall ratio, 0-1. Default: 0.35"),
-        ("wwr_east", "East facade window-to-wall ratio, 0-1. Default: 0.15"),
-        ("wwr_west", "West facade window-to-wall ratio, 0-1. Default: 0.15"),
-        ("wwr_north", "North facade window-to-wall ratio, 0-1. Default: 0 (no windows)"),
-        ("g_value", "Glazing solar transmittance (g-value / SHGC), applies to all windows. Default: 0.6"),
-        ("orientation", "Rotate the whole box clockwise from north, degrees. Default: 0"),
-        ("u_opaque", "Area-weighted opaque envelope U-value (walls + roof), W/m2K. Default: 0.6"),
-        ("u_window", "Glazing U-value, W/m2K. Default: 1.6"),
-        ("ach_vent", "Intentional ventilation air changes per hour. Default: 0.8"),
-        ("ach_infiltration", "Infiltration (leakage) air changes per hour. Default: 0.3"),
-        ("heat_recovery", "Ventilation heat-recovery efficiency, 0-1 (infiltration is never recovered). Default: 0"),
-        ("mass_class", "Thermal mass class per ISO 13790 Table 12: very_light | light | medium | heavy | very_heavy. Heavier mass stores gains across more hours and flattens the day/night weight contrast. Default: medium"),
-        ("t_set_heating", "Heating setpoint, deg C. Default: 20"),
-        ("t_set_cooling", "Cooling setpoint, deg C. Default: 26"),
-        ("internal_gains", "Flat internal gains (occupants, equipment, lighting), W per m2 of floor area. Default: 5.0"),
-        ("shading_permanent", "Year-round solar transmission multiplier in [0, 1] for fixed local shading (fins, context obstructions): 1 = none, 0.85 = 15% of solar blocked. No device geometry is modelled — this is a declared coefficient. Per-facade values are possible in YAML archetypes."),
-        ("shading_hot", "Additional transmission multiplier in [0, 1] applied only during hot_months (awnings, tents, seasonal vegetation). Stacks with shading_permanent. Requires hot_months. Declaring this makes the harm channel far less overstated."),
-        ("hot_months", "Calendar months when shading_hot is deployed, as text like '6,7,8,9' (or a list of integers 1-12)."),
+        ("geometry", "Geometry family from USC_ZoneGeometry: shoebox dimensions, orientation, per-facade window-to-wall ratios. Optional."),
+        ("fabric", "Fabric family from USC_ZoneFabric: opaque and glazing U-values, g-value, ISO 13790 thermal mass class. Optional."),
+        ("ventilation", "Ventilation family from USC_ZoneVentilation: intentional and infiltration air-change rates, heat-recovery efficiency. Optional."),
+        ("operation", "Operation family from USC_ZoneOperation: heating/cooling setpoints and flat internal gains. Optional."),
+        ("shading", "Shading family from USC_ZoneShading: declared permanent and hot-months transmission multipliers. Optional (no shading by default)."),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d
@@ -122,74 +77,53 @@ def _add_error(msg):
     return msg
 
 
+# Neutral defaults — the single source of truth for unwired families.
 _DEFAULTS = {
     "width": 10.0, "length": 10.0, "height": 3.0,
-    "g_value": 0.6, "orientation": 0.0,
+    "g_value": 0.6,
     "u_opaque": 0.6, "u_window": 1.6,
     "ach_vent": 0.8, "ach_infiltration": 0.3, "heat_recovery": 0.0,
     "mass_class": "medium",
     "t_set_heating": 20.0, "t_set_cooling": 26.0,
+    "internal_gains_w_m2": 5.0,
 }
 _WWR_DEFAULTS = {"south": 0.35, "east": 0.15, "west": 0.15, "north": 0.0}
-_MASS_CLASSES = ("very_light", "light", "medium", "heavy", "very_heavy")
+_FAMILIES = ("geometry", "fabric", "ventilation", "operation", "shading")
 
 archetype = None
 summary = ""
 
-data = {}
-for key, default in _DEFAULTS.items():
-    value = globals().get(key)
-    if value is None:
-        value = default
-    data[key] = str(value).strip() if key == "mass_class" else float(value)
+data = dict(_DEFAULTS)
+wwr = dict(_WWR_DEFAULTS)
+for name in _FAMILIES:
+    handle = globals().get(name)
+    if handle is None:
+        continue
+    family = getattr(handle, "data", None)
+    kind = getattr(handle, "kind", None)
+    if family is None or kind is None:
+        summary = _add_error(
+            f"'{name}' input expects the matching USC_Zone* component "
+            f"(got {type(handle).__name__})")
+        break
+    if kind != name:
+        summary = _add_error(
+            f"'{name}' input received a {kind} family — wire the matching "
+            "USC_Zone* component instead")
+        break
+    family = dict(family)
+    wwr.update(family.pop("wwr", {}))
+    data.update(family)
 
-wwr = {}
-for side, default in _WWR_DEFAULTS.items():
-    value = globals().get("wwr_" + side)
-    ratio = float(value) if value is not None else default
-    if not 0.0 <= ratio < 1.0:
-        summary = _add_error(f"wwr_{side} must be in [0, 1), got {ratio}")
-        ratio = 0.0
-    if ratio > 0.0:
-        wwr[side] = ratio
-
-if data["mass_class"] not in _MASS_CLASSES:
-    summary = _add_error(
-        "mass_class must be one of: " + " | ".join(_MASS_CLASSES))
-elif not wwr:
-    summary = _add_error("All WWR inputs are zero — the archetype needs at "
-                         "least one window for solar gains to exist.")
-else:
-    data["wwr"] = wwr
-    if not data["orientation"]:
-        data.pop("orientation")
-    gains = globals().get("internal_gains")
-    data["internal_gains_w_m2"] = float(gains) if gains is not None else 5.0
-
-    # Declared shading coefficients (validated fully in the backend).
-    _perm = globals().get("shading_permanent")
-    _hot = globals().get("shading_hot")
-    _months = globals().get("hot_months")
-    if _perm is not None:
-        data["shading_permanent"] = float(_perm)
-    if _hot is not None:
-        data["shading_hot"] = float(_hot)
-    if _months is not None:
-        if isinstance(_months, str):
-            _months = [int(m) for m in _months.split(",") if m.strip()]
-        else:
-            try:
-                _months = [int(m) for m in _months]
-            except TypeError:
-                _months = [int(_months)]
-        data["hot_months"] = _months
-    if _hot is not None and _months is None:
-        summary = _add_error("shading_hot requires hot_months "
-                             "(e.g. '6,7,8,9')")
-    if _months is not None and _hot is None:
-        summary = _add_error("hot_months has no effect without shading_hot")
-
-    if not summary:
+if not summary:
+    wwr = {side: v for side, v in wwr.items() if v > 0.0}
+    if not wwr:
+        summary = _add_error("All WWR values are zero — the archetype needs "
+                             "at least one window for solar gains to exist.")
+    else:
+        data["wwr"] = wwr
+        if not data.get("orientation"):
+            data.pop("orientation", None)
         archetype = USCArchetype(data)
         lines = [f"{k}: {data[k]}" for k in sorted(data)]
         lines.append(

@@ -51,7 +51,7 @@ https://github.com/user-attachments/assets/7fb20820-bd24-4ccd-86f5-4f4f868b372a
 
 - **GPU-accelerated** ray tracing via NVIDIA Warp, with CPU fallback
 - **Simulated benefit weights**: a built-in ISO 13790 (5R1C) hourly building simulation derives when a marginal joule of solar gain is actually useful (thermal lag, mass state, gain saturation), independently implemented and validated against ETH's [RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator)
-- **Grasshopper plugin** for Rhino 3D with 19 components and persistent GPU daemon
+- **Grasshopper plugin** for Rhino 3D with 24 components and persistent GPU daemon
 - **3-stage pipeline** (preprocessing, thresholding, exporting), each re-runnable independently
 - **YAML configuration** with CLI overrides (`-o voxel_size=0.5 -o mode=irradiance`) and mode-specific templates
 - **Smooth or cubic meshes**: marching cubes + Taubin smoothing, or axis-aligned voxels

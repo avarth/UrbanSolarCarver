@@ -1,6 +1,6 @@
 # Grasshopper Plugin (Rhino 3D)
 
-USC provides 19 custom Grasshopper components for visual parametric workflows in Rhino.
+USC provides 24 custom Grasshopper components for visual parametric workflows in Rhino.
 
 ## Installation
 
@@ -33,7 +33,8 @@ All components are prefixed with `USC_`:
 - **USC_GridSettings**  -- voxel size, ray length, surface sampling
 - **USC_RaySettings**  -- ray batch size, altitude limits
 - **USC_BenefitParams**  -- benefit-mode hour weighting: balance temperature and offset (simple weights), or a `simulated_weights.json` artifact plus the experimental `include_harm` toggle (simulated weights)
-- **USC_Archetype**  -- describe a typical building as a single-zone shoebox (dimensions, per-facade window-to-wall ratios, fabric, thermal mass) for the simulated weights
+- **USC_Archetype**  -- assemble a typical building for the simulated weights from the five parameter families below; every input optional (neutral defaults)
+- **USC_ZoneGeometry / USC_ZoneFabric / USC_ZoneVentilation / USC_ZoneOperation / USC_ZoneShading**  -- Honeybee-style family feeders for USC_Archetype: shoebox dimensions + per-facade WWR, envelope U-values + g-value + mass class, air-change rates + heat recovery, setpoints + internal gains, and declared shading coefficients. Each family is one wire into USC_Archetype.
 - **USC_SimulateWeights**  -- run the ISO 13790 5R1C simulation through the daemon; outputs the `simulated_weights.json` path (wire into USC_BenefitParams) and a heatmap preview image
 - **USC_TiltedPlane**  -- fixed-angle envelope parameters
 - **USC_RadCool**  -- radiative cooling parameters (dew point, Bliss constant)

@@ -66,9 +66,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   weights artifacts on request (archetype as inline mapping or YAML path),
   so Grasshopper avoids a cold Python start per generation.
 - **Grasshopper components for simulated weights**: new `USC_Archetype`
-  (canvas-native shoebox builder: dimensions, per-facade WWR, fabric,
-  mass class, setpoints) and `USC_SimulateWeights` (runs the simulation
-  through the daemon; outputs the artifact path and the heatmap preview).
+  assembles a typical building from five Honeybee-style family feeders
+  (`USC_ZoneGeometry`, `USC_ZoneFabric`, `USC_ZoneVentilation`,
+  `USC_ZoneOperation`, `USC_ZoneShading` — one wire per family, all
+  optional with neutral defaults), and `USC_SimulateWeights` runs the
+  simulation through the daemon (outputs the artifact path and the
+  heatmap preview).
   `USC_BenefitParams` gains `simulated_weights_path` and `include_harm`
   inputs (with an on-canvas remark when balance settings are wired but
   unused), and `USC_Preprocess` surfaces the sky-weight comparison dome
