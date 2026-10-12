@@ -19,6 +19,7 @@ venv/
 .eggs/
 dist/
 build/
+*.whl
 pip-wheel-metadata/
 constraints.txt
 
