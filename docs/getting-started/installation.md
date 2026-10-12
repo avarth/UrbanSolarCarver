@@ -8,11 +8,12 @@ cd UrbanSolarCarver
 python setup_env.py
 ```
 
-This creates a virtual environment, auto-detects your NVIDIA GPU, installs the matching PyTorch wheels, and installs USC in editable mode.
+This creates a virtual environment (`.venv/` in the repository; on Windows it falls back to `~/.usc-venv` when the repository path is too long for the 260-character path limit), reads the CUDA version from your NVIDIA driver, installs the matching PyTorch wheels, installs USC in editable mode, and precompiles the Warp kernels.
 
 ```bash
-python setup_env.py --cpu      # force CPU-only (no CUDA)
-python setup_env.py --dry-run  # show what would be installed
+python setup_env.py --cpu             # force CPU-only (no CUDA)
+python setup_env.py --dry-run         # show what would be installed
+python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
 ```
 
 ## Manual installation
@@ -28,7 +29,7 @@ pip install -e .[dev]
 
 ## Requirements
 
-- Python >= 3.9
+- Python >= 3.10
 - NVIDIA GPU + CUDA driver (recommended; CPU mode available but significantly slower)
 
 ## Verifying the installation

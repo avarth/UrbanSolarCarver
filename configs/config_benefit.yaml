@@ -1,6 +1,7 @@
-﻿# UrbanSolarCarver — Benefit mode
-# Carves voxels based on passive solar heating benefit (Ladybug benefit sky).
-# Solar gains are only credited when outdoor temperature is below the balance point.
+﻿# UrbanSolarCarver: Benefit mode
+# Carves voxels based on passive solar heating benefit: sky-patch irradiance
+# of the hours when the outdoor temperature is below balance_temperature -
+# balance_offset.
 # Typical use: heating-season envelope for cold/temperate climates.
 
 # --- Required paths ---
@@ -24,11 +25,11 @@ analysis_period:
   end_hour:  19
 
 # Benefit parameters
-balance_temperature: 15.0   # °C — free-running balance point (Ladybug default;
+balance_temperature: 15.0   # °C, free-running balance point (Ladybug default;
                             # typ. ~12 commercial to ~18 residential, higher for
                             # older poorly insulated stock). Derive project-specific
                             # values with the Honeybee/E+ balance-point workflow.
-balance_offset:       2.0   # °C — dead-band below the balance point (>= 0)
+balance_offset:       2.0   # °C, dead-band below the balance point (>= 0)
 # simulated_weights_path: simulated_weights.json
 #                           # SIMULATED weights: replaces the simple balance-
 #                           # point rule above with hourly weights from a
@@ -50,14 +51,13 @@ voxel_size: 1.0
 threshold: carve_fraction
 carve_fraction: 0.7
 
-# -- Defaults you may want to override ----------------------------------------
+# --- Defaults you may want to override --------------------------------------
 # score_smoothing: null  # Gaussian blur radius (m) on scores before thresholding. null = auto (1.1× voxel_size). 0 = off. Try 1.0-1.2× voxel_size.
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)
 # grid_step:       1.0    # test-surface sampling spacing in metres
 # ray_length:      300.0  # max ray distance in metres
 # carve_fraction:  0.7    # fraction of obstruction weight to remove (0-1)
 # threshold:       'carve_fraction'   # or 'headtail', or a numeric value
-# min_altitude:    5.0    # ignore sun below this elevation (degrees)
 # apply_smoothing: false  # true = SDF smooth + marching cubes
 # device:          'auto' # 'auto', 'cpu', or 'cuda'
 # See REFERENCE_all_options.yaml for the complete parameter list.

@@ -20,6 +20,8 @@ By default the updates come from the installed user objects (Grasshopper's User 
 
 The `.ghuser` files are generated from the sources in `grasshopper/components/`; edit the `.py`, never the `.ghuser`. Each source declares its own ports: names and descriptions in its "GH UI" block, order and types in the numpydoc `Inputs` / `Outputs` docstring. `grasshopper/components.json` holds the ribbon subcategory and the stable user-object GUID; icons are `grasshopper/icons/<source name>.png` (24x24).
 
+Code shared by several components (daemon calls, PLY reading and writing, mesh conversion, override parsing) lives in `grasshopper/usc_gh.py`. The components load it at run time from `<carver_root>/grasshopper/`, where `carver_root` is the repository folder given to USC_Session, so editing it takes effect on the next solve without rebuilding any `.ghuser`. It uses only the standard library, RhinoCommon and the Grasshopper SDK, because the component scripts run in Rhino's own Python, not in the USC environment.
+
 ```bash
 pip install -e .[ghbuild]                       # pythonnet
 python grasshopper/build_ghuser.py              # rebuild into USC_GHplugin/
@@ -32,7 +34,7 @@ A component already placed on a saved canvas keeps the code it was placed with; 
 
 ## Daemon
 
-The plugin communicates with a persistent daemon process that keeps the CUDA context warm for sub-second response times:
+The components send their work to a persistent daemon process that keeps the CUDA context and compiled kernels loaded, so repeated runs skip the start-up cost:
 
 ```bash
 urbansolarcarver daemon start       # start GPU daemon
@@ -40,43 +42,48 @@ urbansolarcarver daemon start       # start GPU daemon
 urbansolarcarver daemon stop        # stop when done
 ```
 
-The daemon binds to localhost only and uses a random authkey for authentication.
+The daemon binds to localhost only. Clients authenticate with a random key that the daemon generates on first start and stores in `~/.urbansolarcarver/.daemon_authkey`.
 
 ## Components
 
-All components are prefixed with `USC_`:
+The ribbon shows each component as `USC <Name>` (for example *USC Session*). Below they are listed by their source file name in `grasshopper/components/`, grouped by ribbon tab.
 
-**Session management**
+**Session** (`0::Session`)
 
-- **USC_Session**  -- daemon lifecycle and CUDA initialization. Wire a Boolean `True` to the `start_daemon` input to launch the daemon; leaving it unconnected keeps the component idle.
-- **USC_SyncCanvas**  -- update the USC components on the canvas to the installed versions (see [Updating components on existing canvases](#updating-components-on-existing-canvases))
+- **USC_Session**: finds the USC Python environment and starts or checks the daemon. Wire a Boolean `True` to `start_daemon` to launch the daemon; when the input is unconnected or `False`, the component only reports whether a daemon is running.
+- **USC_SyncCanvas**: updates the USC components on the canvas to the installed versions (see [Updating components on existing canvases](#updating-components-on-existing-canvases))
 
-**Configuration (Tier 1)**
+**Configuration** (`1::Config`)
 
-- **USC_Config**  -- build a pipeline configuration from visual parameters
-- **USC_AnalysisPeriod**  -- define the analysis date/time range
-- **USC_GridSettings**  -- voxel size, ray length, surface sampling
-- **USC_RaySettings**  -- ray batch size, altitude limits
-- **USC_BenefitParams**  -- benefit-mode hour weighting: balance temperature and offset (simple weights), or a `simulated_weights.json` artifact plus the experimental `include_harm` toggle (simulated weights)
-- **USC_Archetype**  -- assemble a typical building for the simulated weights from the five parameter families below; every input optional (neutral defaults)
-- **USC_ZoneGeometry / USC_ZoneFabric / USC_ZoneVentilation / USC_ZoneOperation / USC_ZoneShading**  -- Honeybee-style family feeders for USC_Archetype: shoebox dimensions + per-facade WWR, envelope U-values + g-value + mass class, air-change rates + heat recovery, setpoints + internal gains, and declared shading coefficients. Each family is one wire into USC_Archetype.
-- **USC_SimulateWeights**  -- run the ISO 13790 5R1C simulation through the daemon; outputs the `simulated_weights.json` path (wire into USC_BenefitParams) and a heatmap preview image
-- **USC_TiltedPlane**  -- fixed-angle envelope parameters
-- **USC_RadCool**  -- radiative cooling parameters (dew point, Bliss constant)
-- **USC_Threshold**  -- thresholding strategy, score smoothing, and column carve-above post-processing. Connect output to **USC_ThresholdStage**'s `threshold_overrides` input (not Config) so threshold changes only re-run thresholding.
-- **USC_PostProcess**  -- smoothing and cleanup settings. Connect output to **USC_Export**'s `postprocess_overrides` input (not Config) so mesh cleanup changes only re-run export.
-- **USC_Diagnostics**  -- enable/disable diagnostic exports
+- **USC_Config**: builds a pipeline configuration from a mode, an EPW path, an output folder, an optional base YAML and the override strings of the parameter components below
+- **USC_Mode**: selects the carving mode by number and outputs its name for USC_Config's `mode` input
+- **USC_EPW** (*USC EPW Path*): passes the EPW file path
+- **USC_AnalysisPeriod**: defines the analysis date/time range
+- **USC_GridSettings**: voxel size, surface sampling spacing (`grid_step`), grid padding (`margin_frac`)
+- **USC_RaySettings**: ray length, minimum sun altitude, north direction (`north_deg`)
+- **USC_BenefitParams**: benefit-mode hour weighting: balance temperature and offset (simple weights), or a `simulated_weights.json` artifact plus the experimental `include_harm` toggle (simulated weights)
+- **USC_TiltedPlane**: fixed-angle envelope parameters
+- **USC_RadCooling** (*USC Radiative Cooling*): radiative cooling parameters (dew point, Bliss constant)
+- **USC_Threshold**: thresholding strategy, score smoothing, and column carve-above post-processing. Connect its output to **USC_ThresholdStage**'s `threshold_overrides` input (not Config) so threshold changes only re-run thresholding.
+- **USC_Postprocess**: smoothing and cleanup settings. Connect its output to **USC_Export**'s `postprocess_overrides` input (not Config) so mesh cleanup changes only re-run export.
+- **USC_Diagnostics**: detailed score statistics and diagnostic plot images
 
-**Pipeline execution (Tier 2)**
+**Pipeline execution** (`2::Main`)
 
-- **USC_RunPipeline**  -- run all three stages in one go (quick prototyping)
-- **USC_Preprocess**  -- run preprocessing only (ray tracing + scoring). Errors turn the component red.
-- **USC_ThresholdStage**  -- run thresholding only. Accepts `threshold_overrides` directly. Errors turn the component red.
-- **USC_Export**  -- run exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
+- **USC_RunPipeline**: runs all three stages in one go (quick prototyping)
+- **USC_Preprocess**: runs preprocessing only (ray tracing + scoring). Errors turn the component red.
+- **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. Errors turn the component red.
+- **USC_Export**: runs exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
+
+**Simulated weights** (`3::Weights`)
+
+- **USC_Archetype**: assembles a typical building for the simulated weights from the five parameter families below; every input is optional (neutral defaults)
+- **USC_ZoneGeometry / USC_ZoneFabric / USC_ZoneVent / USC_ZoneOperation / USC_ZoneShading**: Honeybee-style family feeders for USC_Archetype: shoebox dimensions + per-facade window-to-wall ratio, envelope U-values + g-value + mass class, air-change rates + heat recovery, setpoints + internal gains, and declared shading coefficients. Each family is one wire into USC_Archetype.
+- **USC_SimulateWeights**: runs the ISO 13790 5R1C simulation through the daemon; outputs the `simulated_weights.json` path (wire into USC_BenefitParams) and a heatmap preview image
 
 ## Input geometry
 
-Test surfaces must be **individual flat panels**. If you are using extruded block boundaries or any joined polysurface, explode it into its constituent faces before connecting to USC_Preprocess  -- otherwise the planarity check will reject the combined surface and preprocessing will fail with a "No points sampled" error.
+Test surfaces must be **individual flat panels**. If you are using extruded block boundaries or any joined polysurface, explode it into its faces before connecting it to USC_Preprocess. Otherwise the planarity check rejects the combined surface and preprocessing fails with a "No points sampled" error.
 
 ## Recommended workflow
 

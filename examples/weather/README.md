@@ -1,6 +1,6 @@
 # Bundled weather data
 
-`USA_CO_Golden-NREL.724666_TMY3.epw` — Denver Centennial / Golden, Colorado
+`USA_CO_Golden-NREL.724666_TMY3.epw`: Denver Centennial / Golden, Colorado
 (NREL site), WMO #724666.
 
 - **Source dataset:** NREL TMY3 (Typical Meteorological Year 3, 2008 release),
@@ -14,5 +14,5 @@
 This file exists so that the tutorials and the test suite run out of the box.
 For real projects, download an EPW for your site (e.g. via Ladybug Tools'
 `ladybug.epw` / epwmap, or <https://climate.onebuilding.org>) and set
-`epw_path` in your config — or point the `USC_EPW_PATH` environment variable
-at it for the test suite.
+`epw_path` in your config. For the test suite, point the `USC_EPW_PATH`
+environment variable at it.

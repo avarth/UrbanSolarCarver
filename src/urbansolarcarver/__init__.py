@@ -1,10 +1,10 @@
 """
-UrbanSolarCarver — GPU-accelerated solar envelope generation.
+UrbanSolarCarver: GPU-accelerated solar envelope generation.
 
 Public API is exposed lazily: ``from urbansolarcarver import run_pipeline``
 triggers the heavy imports (torch, warp, api_core) on first access, but
 ``import urbansolarcarver`` alone does not. This keeps CLI commands like
-``urbansolarcarver --help`` and ``urbansolarcarver schema`` instant.
+``urbansolarcarver --help`` and ``urbansolarcarver schema`` fast.
 """
 
 __all__ = [
@@ -39,10 +39,12 @@ _api_names = {}
 
 
 def _ensure_api():
+    """Import ``.api`` (and with it torch, warp and api_core) on first use."""
     global _api_loaded, _api_names
     if _api_loaded:
         return
-    # This triggers torch, warp, api_core
+    # Check for torch first so a missing install gets install instructions
+    # instead of an ImportError from deep inside api_core.
     try:
         import torch as _torch  # noqa: F401
     except ImportError as _e:

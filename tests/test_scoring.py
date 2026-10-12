@@ -7,11 +7,11 @@ from urbansolarcarver.scoring import carve_fraction_threshold, headtail_threshol
 # --- Carve-fraction threshold ---
 
 def _reference_argsort_threshold(flat, fraction):
-    """The original O(N log N) implementation, kept as the test oracle.
+    """Reference O(N log N) implementation (sort, then cumulative sum), used
+    as the test oracle for the histogram method.
 
-    Accumulates in float64 (the original accumulated the sorted float32
-    values directly, which drifts on large arrays — the histogram method
-    is exact, so the oracle must be too).
+    It accumulates in float64: a float32 running sum drifts on large arrays,
+    while the histogram method is exact, so the oracle must be exact too.
     """
     if flat.size == 0 or float(flat.max()) == 0.0:
         return 0.0
@@ -60,7 +60,7 @@ class TestCarveFractionThreshold:
 
     def test_all_equal_scores(self):
         """With a single distinct value, carving is all-or-nothing; both
-        implementations resolve the threshold TO that value, carving
+        implementations resolve the threshold to that value, carving
         nothing (mask semantics are strictly-above)."""
         flat = np.full(1000, 5.0, dtype=np.float32)
         thr = carve_fraction_threshold(flat, 0.5)
@@ -160,6 +160,18 @@ def test_headtail_heavy_tail():
     scores = np.concatenate([bulk, tail])
     thr = headtail_threshold(scores)
     assert thr > np.median(scores), "Head-tail should split above median for heavy-tailed data"
+
+
+def test_headtail_returns_deepest_minority_break():
+    """Jiang (2013): keep splitting while the head is a minority."""
+    scores = np.array([1.0] * 80 + [10.0] * 16 + [100.0] * 4)
+    assert headtail_threshold(scores) == pytest.approx(28.0)  # breaks 6.4, 28
+
+
+def test_headtail_no_heavy_tail_returns_mean():
+    """A majority head at the first split means no tail to isolate."""
+    scores = np.arange(100, dtype=float)
+    assert headtail_threshold(scores) == pytest.approx(49.5)
 
 
 def test_headtail_all_equal():

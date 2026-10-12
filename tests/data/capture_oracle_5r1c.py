@@ -3,33 +3,41 @@
 5R1C engine regression tests.
 
 Weather: the bundled public-domain NREL TMY3 EPW (Golden, CO). Dry-bulb
-and per-scenario transmitted solar are computed here ONCE (Ladybug EPW
+and per-scenario transmitted solar are computed here once (Ladybug EPW
 parsing + isotropic directional irradiance on the scenario's glazing) and
 stored verbatim in the reference JSON, so the engine tests replay the
 exact driving arrays with no weather generation and no EPW dependency.
 
 We record the zone's *derived* conductances (including its
-h_tr_em = U*A convention) so USC's engine is fed identical H values —
-comparing the Annex C recurrence, not parameter derivation.
+h_tr_em = U*A convention) so USC's engine is fed identical H values; the
+tests then compare the ISO 13790 Annex C hourly recurrence, not the
+derivation of the parameters.
 DirectHeater/DirectCooler + AirConditioning emission keep demand == load
 (no COP layer, all HC power to the air node).
+
+Usage: set USC_ORACLE_DIR to a checkout of RC_BuildingSimulator's
+``rc_simulator`` folder, then run this file in the USC environment. It
+overwrites tests/data/oracle_5r1c_reference.json.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
 import numpy as np
 
-ORACLE = Path(r"C:\Users\arisv\usc_oracle\rc_simulator")
+if "USC_ORACLE_DIR" not in os.environ:
+    sys.exit("Set USC_ORACLE_DIR to RC_BuildingSimulator's rc_simulator folder.")
+ORACLE = Path(os.environ["USC_ORACLE_DIR"])
 sys.path.insert(0, str(ORACLE))
 
 import supply_system
 import emission_system
 from building_physics import Zone
 
-REPO = Path(r"C:\Users\arisv\RESEARCH_CENTER\ACTIVE_PROJECTS\RSBenvelope_generation\UrbanSolarCarver_clean")
+REPO = Path(__file__).resolve().parents[2]
 EPW_PATH = REPO / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
-OUT = Path(__file__).parent / "oracle_reference.json"
+OUT = Path(__file__).parent / "oracle_5r1c_reference.json"
 
 # ---- Real weather: dry bulb + facade irradiance from the bundled EPW ----
 from ladybug.epw import EPW
@@ -90,7 +98,7 @@ result = {
                    "sky) on vertical facades; g = 0.6.",
         "note": "h_tr_em uses the oracle's U*A convention; USC engine is fed "
                 "these derived H values directly in tests. Driving arrays are "
-                "stored verbatim below — tests replay them, never regenerate.",
+                "stored verbatim below; tests replay them, never regenerate.",
     },
     "driving": {
         "t_out": [round(float(v), 3) for v in t_out],

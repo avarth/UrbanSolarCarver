@@ -46,5 +46,5 @@ def example_epw_path():
     from _epw import resolve_epw
     epw = resolve_epw()
     if not epw:
-        pytest.skip("No EPW file found — set USC_EPW_PATH env var to enable integration tests")
+        pytest.skip("No EPW file found; set USC_EPW_PATH env var to enable integration tests")
     return Path(epw)

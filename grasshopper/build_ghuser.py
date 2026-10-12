@@ -1,19 +1,25 @@
 """Build the Grasshopper user objects (.ghuser) from the component sources.
 
     python grasshopper/build_ghuser.py            # rebuild all into USC_GHplugin/
-    python grasshopper/build_ghuser.py --check    # fail if any .ghuser is stale
+    python grasshopper/build_ghuser.py --check    # fail if any .ghuser is stale or orphaned
+    python grasshopper/build_ghuser.py --dry-run  # parse sources, print ports, write nothing
 
 Each component is described by its own source file:
 
 - port names and descriptions: the "GH UI" block (executed against a mock
   ghenv, so what the canvas shows at runtime is exactly what is packaged)
 - port order and types: the numpydoc ``Inputs`` / ``Outputs`` docstring
-  sections (types mapped to Grasshopper type hints by ``_TYPE_RULES``)
+  sections (types mapped to Grasshopper type hints by ``_TYPE_RULES``);
+  the port names must match the GH UI block in the same order
 - the code itself: embedded verbatim
 
-``components.json`` holds the rest: ribbon subcategory, the stable user
-object GUID (keeps the ribbon slot and canvas identity across rebuilds),
-and the preview flag.
+``components.json`` holds the rest.  Every entry needs the ribbon
+``subcategory`` and the stable user object ``guid`` (keeps the ribbon slot
+and canvas identity across rebuilds).  Optional keys: ``icon`` (file in
+icons/, default <source name>.png), ``exposure`` (ribbon section, default
+2), ``preview_off`` (default true), ``hidden_outputs`` (output names whose
+preview is off) and ``types`` (per-input type hint overrides such as
+"float list").
 
 Writes Rhino 8 "Python 3 Script" components, field-for-field like the ones
 the Rhino 8 script editor saves. Needs ``pythonnet`` and Grasshopper's
@@ -66,8 +72,11 @@ _TYPE_RULES = [
     (r"^list of (\d+ )?floats?$", ("float", True)),
     (r"^list of str$", ("str", True)),
     (r"^list of point3d$", ("object", True)),
-    (r"^mesh or brep \(list\)$", ("mesh", True)),
-    (r"^(rhino\.geometry\.)?mesh( or brep)?$", ("mesh", False)),
+    # Breps must reach the script unconverted: a mesh hint makes Grasshopper
+    # mesh them with its coarse default settings first.
+    (r"^mesh or brep \(list\)$", ("object", True)),
+    (r"^mesh or brep$", ("object", False)),
+    (r"^(rhino\.geometry\.)?mesh$", ("mesh", False)),
     (r"^str or list$", ("object", True)),
     (r"^float$", ("float", False)),
     (r"^int( \(\d+-\d+\))?$", ("int", False)),
@@ -88,6 +97,8 @@ class _Param:
 
 
 class _Component:
+    # n port slots per side, more than any component uses; read_ui stops at
+    # the first slot whose Name was never set.
     def __init__(self, n=64):
         self.Name = self.NickName = self.Description = None
         self.Params = types.SimpleNamespace(
@@ -148,6 +159,7 @@ def read_doc_ports(src: str) -> dict[str, list[tuple[str, str]]]:
 
 
 def map_type(doc_type: str) -> tuple[str, bool]:
+    """Docstring type -> (TYPE_HINTS key, list access); raises ValueError if no rule matches."""
     t = re.sub(r",\s*optional$", "", doc_type.strip().lower())
     for pattern, result in _TYPE_RULES:
         if re.match(pattern, t):
@@ -157,6 +169,11 @@ def map_type(doc_type: str) -> tuple[str, bool]:
 
 
 def describe(src_path: Path, entry: dict) -> dict:
+    """Everything needed to build one .ghuser: names, ports with type hints, and code.
+
+    *entry* is the component's components.json entry.  Raises ValueError
+    when the GH UI block and the docstring list different ports.
+    """
     src = src_path.read_text(encoding="utf-8")
     ui = read_ui(src, str(src_path))
     doc = read_doc_ports(src)

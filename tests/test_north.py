@@ -17,7 +17,7 @@ from _epw import resolve_epw
 _EPW = resolve_epw()
 _SKIP_EPW = pytest.mark.skipif(
     not _EPW,
-    reason="EPW file not available — set USC_EPW_PATH env var to enable",
+    reason="EPW file not available; set USC_EPW_PATH env var to enable",
 )
 
 

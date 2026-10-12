@@ -1,29 +1,33 @@
 """
-UrbanSolarCarver Scoring Module
+UrbanSolarCarver scoring module
 
-Provides sky-patch weight computation and threshold selection for voxel carving.
+Sky-patch weight computation and threshold selection for voxel carving.
 
 1. get_weights(mode, device, epw_file, hoys, …) → torch.Tensor
    Per-patch weight vector for the specified mode.  Delegates to
-   compute_EPW_based_weights (sky_patches.py) for climate-based modes
-   and compute_radiative_cooling_weights for radiative_cooling.
+   compute_EPW_based_weights (sky_patches.py) for irradiance, benefit and
+   daylight, and to compute_radiative_cooling_weights for radiative_cooling.
 
-2. headtail_threshold(scores) → float
-   Head/tail breaks (Jiang 2013): iteratively partitions right-skewed
-   score distributions at the arithmetic mean.  Well-suited for solar
-   obstruction scores which are typically heavy-tailed.
+2. carve_fraction_threshold(scores, fraction) → float
+   Score cutoff above which the highest-scoring voxels hold *fraction* of
+   the total score.
+
+3. headtail_threshold(scores) → float
+   Head/tail breaks (Jiang 2013): repeatedly splits a right-skewed score
+   distribution at its arithmetic mean.  Suited to obstruction scores,
+   which are usually heavy-tailed.
 """
 import numpy as np
 import torch
-from .sky_patches import fetch_tregenza_patch_directions, compute_EPW_based_weights, compute_radiative_cooling_weights
+from .sky_patches import compute_EPW_based_weights, compute_radiative_cooling_weights
 from typing import Sequence
 
 def get_weights(
     mode: str,
-    device: torch.device = torch.device('cuda'),
+    device: "torch.device | str | None" = None,
     epw_file: str = None,
     hoys: Sequence[int] = None,
-    dew_point_celsius: float = 10.0,
+    dew_point_celsius: float = 14.0,
     bliss_k: float = 1.8,
     balance_temperature: float = 15.0,
     balance_offset: float = 2.0,
@@ -33,44 +37,79 @@ def get_weights(
     simulated_weights_path: str = None,
 ) -> torch.Tensor:
     """
-    Build a vector of weights for each sky patch, according to a chosen analysis mode.
+    Return one weight per Tregenza sky patch for the given analysis mode.
 
-    Explanation:
-    - We represent the sky as discrete patches. This function assigns a numeric weight to each patch.
-    - Modes include simple uniform weighting, solar irradiance, passive solar benefit, daylighting and radiative cooling.
-    - Solar irradiance uses EPW data, Passive solar benefit uses Ladybug's method that employs a balance temp and offset.
-    - Daylight uses CIE overcast approximation. Radiative cooling uses dew point temperature to estimate cooling potential of a night sky.
-    Args:
-      mode: Analysis type (e.g., 'time-based', 'irradiance', 'benefit', 'daylight', 'radiative_cooling').
-      device: Compute device identifier (e.g., 'cuda' or 'cpu').
-      epw_file: Path to weather data file; required for certain modes.
-      hoys : Hour-of-year indices for EPW sampling.
-      dew_point_celsius: Parameter for radiative cooling estimation.
-      bliss_k: Angular-attenuation constant for radiative cooling.
-      balance_temperature: Free-running balance-point temperature for benefit mode.
-      balance_offset: Dead-band below the balance point for benefit mode.
+    - irradiance: cumulative direct + diffuse irradiance per patch over the
+      hours in *hoys* (kWh/m²), from the EPW via a Ladybug sky matrix.
+    - benefit: the same, counted only in hours below the heating balance
+      point (*balance_temperature* minus *balance_offset*); with
+      *include_harm*, irradiance in hours above *balance_temperature* plus
+      *balance_offset* is subtracted (clipped at 0).
+    - daylight: CIE standard overcast sky luminance; needs no EPW.
+    - radiative_cooling: long-wave cooling potential from the dew point
+      (Martin-Berdahl emissivity, Bliss angular law), normalized to sum to 1.
 
-    Returns:
-      Tensor of length V (number of sky patches) with the computed weight for each patch.
+    'time-based' and 'tilted_plane' do not use sky-patch weights and raise
+    ValueError here.
+
+    Parameters
+    ----------
+    mode : str
+        One of 'irradiance', 'benefit', 'daylight', 'radiative_cooling'
+        (case and surrounding spaces are ignored).
+    device : torch.device or str, optional
+        Device of the returned tensor; default CUDA if available, else CPU.
+    epw_file : str, optional
+        EPW weather file; required for irradiance and benefit.
+    hoys : Sequence[int], optional
+        Hour-of-year indices (0..8759); required for irradiance and benefit.
+    dew_point_celsius : float, default 14.0
+        Dew-point temperature for radiative_cooling (°C).
+    bliss_k : float, default 1.8
+        Bliss angular-attenuation constant for radiative_cooling.
+    balance_temperature : float, default 15.0
+        Free-running balance-point temperature for benefit (°C).
+    balance_offset : float, default 2.0
+        Dead band around the balance point for benefit (°C).
+    north_deg : float, default 0.0
+        Model north, degrees clockwise from +Y (irradiance, benefit, daylight).
+    min_sky_elevation_deg : float, default 0.0
+        radiative_cooling only: patches below this elevation get weight 0.
+    include_harm : bool, default False
+        benefit only: subtract hot-hour irradiance, as described above.
+    simulated_weights_path : str, optional
+        benefit only: file of simulated hourly benefit/harm weights, read
+        with :func:`read_simulated_weights`; each hour's irradiance is
+        scaled by its weight instead of the 0/1 temperature filter.
+
+    Returns
+    -------
+    torch.Tensor
+        Shape (P,), one non-negative weight per sky patch (P = 145).
+
+    Raises
+    ------
+    TypeError
+        If *mode* is not a non-empty string.
+    ValueError
+        If *mode* is not supported, or *epw_file* / *hoys* are missing for
+        irradiance or benefit.
+    FileNotFoundError
+        If *epw_file* is given but does not exist (irradiance, benefit).
     """
     if not isinstance(mode, str) or not mode.strip():
         raise TypeError(f"get_weights: mode must be a non-empty string, got {mode!r}")
     mode_key = mode.strip().lower()
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    # Radiative cooling mode uses dew point to compute cooling potential per patch.
     if mode_key == 'radiative_cooling':
         return compute_radiative_cooling_weights(
             dew_point_celsius, bliss_k, torch.device(device),
             min_elevation_deg=min_sky_elevation_deg,
         )
 
-    # Time-based mode: assign a weight of 1 to every patch (uniform importance). Carving based on user-defined HOYs.
-    if mode_key == 'time-based':
-        sky_dirs = fetch_tregenza_patch_directions(torch.device(device))
-        count_patches = sky_dirs.shape[0]
-        return torch.ones(count_patches, dtype=torch.float32, device=device)
-
-    # Daylight mode: CIE overcast sky — geometry only, no EPW needed.
+    # Daylight: the CIE overcast sky depends only on patch geometry, so no EPW.
     if mode_key == 'daylight':
         return compute_EPW_based_weights(
             mode_key,
@@ -82,9 +121,8 @@ def get_weights(
             north=north_deg,
         )
 
-    # Modes requiring weather data: irradiance, benefit
     if mode_key in {'irradiance', 'benefit'}:
-        if not epw_file or not hoys:
+        if not epw_file or hoys is None or len(hoys) == 0:
             raise ValueError(
                 f"get_weights: epw_file and hoys list are required for mode '{mode}'"
             )
@@ -105,7 +143,6 @@ def get_weights(
             simulated_weights=sim_weights,
         )
 
-    # Raise error for unsupported modes
     raise ValueError(f"get_weights: unsupported mode '{mode}'")
 
 
@@ -116,9 +153,9 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
     account for *fraction* of the total score mass.
 
     Equivalent to sorting all scores descending and walking the cumulative
-    sum until it reaches ``fraction * total`` — but a full argsort of a
-    large grid is O(N log N) with a heavy constant (seconds to minutes at
-    300³+).  This implementation makes two O(N) passes instead:
+    sum until it reaches ``fraction * total``.  A full sort of a large grid
+    is O(N log N) and takes seconds to minutes at 300³ voxels and above, so
+    this implementation makes two O(N) passes instead:
 
     1. A weighted histogram locates the bin containing the cutoff.
     2. Only the scores inside that single bin (N / n_bins expected) are
@@ -141,7 +178,7 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
         return 0.0
     finite = np.isfinite(flat)
     if not finite.all():
-        # Non-finite scores (NaN/Inf) are always carved by the downstream
+        # NaN and +Inf scores are always carved by the downstream
         # `score <= threshold` comparison, so exclude them from the mass
         # calculation instead of letting max()/np.histogram raise on a
         # non-finite range.
@@ -191,40 +228,33 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
 
 def headtail_threshold(
     scores: np.ndarray,
-    max_iterations: int = 10
+    max_iterations: int = 50,
+    head_limit: float = 0.40,
 ) -> float:
-    """
-    Head-tail breaks (Jiang, 2013): iteratively partition scores into 'head'
-    (above mean) and 'tail' (below mean). Each iteration re-computes the mean
-    of the head subset. The process stops when the head mean drops below the
-    overall mean, indicating the distribution's heavy tail has been isolated.
-    This is well-suited for right-skewed score distributions typical of solar
-    exposure data.
+    """Head/tail breaks cutoff (Jiang, 2013).
 
-    Parameters
-    ----------
-    scores : np.ndarray
-        1-D array of non-negative voxel scores.
-    max_iterations : int
-        Safety cap on recursion depth.
+    Split the scores at their mean.  If the part above the mean (the head)
+    is a minority (at most *head_limit* of the values), the mean is a valid
+    break; split the head again at its own mean, and so on.  Stop when the
+    head is no longer a minority (or is empty).
 
-    Returns
-    -------
-    float
-        Threshold value (the last computed mean).
+    Returns the last valid break, so only the heaviest obstructors score
+    above it.  If even the first split has a majority head (no heavy tail),
+    the overall mean is returned.
+
+    Example: 80 values of 1, 16 of 10 and 4 of 100 give breaks 6.4 (head
+    20 %) and 28 (head 20 %), then an empty head: the cutoff is 28.
     """
-    if scores.size == 0:
+    current = np.asarray(scores, dtype=np.float64).ravel()
+    current = current[np.isfinite(current)]
+    if current.size == 0:
         return 0.0
-    current_set = scores.ravel()
+    threshold = float(current.mean())
     for _ in range(max_iterations):
-        mean_val = float(current_set.mean())
-        head_set = current_set[current_set > mean_val]
-        if head_set.size == 0:
-            return mean_val
-        # Jiang (2013): stop when the head proportion drops below 40%,
-        # meaning the heavy tail has been isolated from the bulk.
-        head_pct = head_set.size / current_set.size
-        if head_pct <= 0.40:
-            return mean_val
-        current_set = head_set
-    return float(current_set.mean())
+        mean_val = float(current.mean())
+        head = current[current > mean_val]
+        if head.size == 0 or head.size / current.size > head_limit:
+            break
+        threshold = mean_val
+        current = head
+    return threshold

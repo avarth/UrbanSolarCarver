@@ -1,6 +1,6 @@
 # Simulated Benefit Weights
 
-Benefit mode's optional simulated weighting embeds a small building-simulation engine inside USC. Because a simulation engine carries physics assumptions that a geometric tool otherwise would not, this page documents the engine, its origin, how it was validated, what the user supplies, and where its limits are.
+Benefit mode's optional simulated weighting runs a small building simulation inside USC. A simulation brings physical assumptions that the geometric parts of USC do not have, so this page documents the engine, its origin, how it was validated, what the user supplies, and where its limits are.
 
 ## The engine
 
@@ -17,11 +17,11 @@ On top of the simulation sits **perturbation attribution**: for every hour of th
 | `benefit[t]` | fraction of a marginal joule of solar gain at hour *t* that offsets heating over the year |
 | `harm[t]` | fraction that becomes cooling load |
 
-Attributing against the annual totals is what captures **thermal lag**: a noon gain stored in the mass and released into the cold evening still earns heating credit. All 17,521 perturbed year-simulations run as one vectorized NumPy batch, in seconds.
+Attributing against the annual totals captures **thermal lag**: a noon gain stored in the mass and released into the cold evening still earns heating credit. All 17,521 year-simulations (the base run plus two per hour) run as one vectorized NumPy batch, in seconds.
 
 ## Origin and validation
 
-The engine is an **independent implementation**, written directly from the ISO 13790 Annex C equation set in pure NumPy (`urbansolarcarver/simulated_weights.py`, ~450 lines). It is **not** a fork, port, or adaptation of an existing simulator.
+The engine is an **independent implementation**, written directly from the ISO 13790 Annex C equation set in NumPy (`urbansolarcarver/simulated_weights.py`). It is **not** a fork, port, or adaptation of an existing simulator.
 
 It is **cross-validated against [RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator)**, the ETH Zurich Architecture & Building Systems group's MIT-licensed implementation of the same annex (Jayathissa et al., "Optimising building net energy demand with dynamic BIPV shading", *Applied Energy* 202, 2017). The validation setup:
 
@@ -50,9 +50,9 @@ The archetype describes a *typical* building in about ten numbers. Two equivalen
 
 **Explicit form**: `floor_area`, `volume`, `area_opaque`, `area_window`, and a `windows` list of `[azimuth_deg, area_m2, g_value]`.
 
-**Both forms** additionally take: `u_opaque`, `u_window` (W/m²K), `ach_vent`, `ach_infiltration` (1/h), `heat_recovery` (0-1), `mass_class` (`very_light` … `very_heavy`, ISO 13790 Table 12), `t_set_heating`, `t_set_cooling` (°C), and internal gains as either a flat `internal_gains_w_m2` or a 24-value daily profile.
+**Both forms** additionally take: `u_opaque`, `u_window` (W/m²K), `ach_vent`, `ach_infiltration` (1/h), `heat_recovery` (0-1), `mass_class` (`very_light` … `very_heavy`, ISO 13790 Table 12), `t_set_heating`, `t_set_cooling` (°C), and internal gains as either a flat `internal_gains_w_m2` (W/m², default 5) or a 24-value daily profile `internal_gains_profile_w_m2`.
 
-**Shading coefficients** (optional, declared multipliers -- no device geometry is modelled):
+**Shading coefficients** (optional, declared multipliers; no device geometry is modelled):
 
 | Key | Meaning |
 |-----|---------|
@@ -60,7 +60,7 @@ The archetype describes a *typical* building in about ten numbers. Two equivalen
 | `shading_hot` | additional multiplier applied only during `hot_months` (awnings, tents, seasonal vegetation); stacks with the permanent factor |
 | `hot_months` | calendar months (1-12) when `shading_hot` is deployed, e.g. `[6, 7, 8, 9]` |
 
-Each coefficient accepts a scalar (all facades) or a per-facade mapping (`{south: 0.8, west: 0.9}`); windows are assigned to their nearest cardinal facade. The perturbation attribution is attenuated by the same factors, so the weights correctly describe a marginal joule of *exterior* solar: a July joule arriving while the awning is out counts for little. The declared coefficients are recorded in the artifact's provenance. Note that a fixed overhang's blocking is concentrated in high-sun hours, so its effect is usually best expressed through `shading_hot` rather than `shading_permanent`.
+Each coefficient accepts a scalar (all facades) or a per-facade mapping (`{south: 0.8, west: 0.9}`); windows are assigned to their nearest cardinal facade. The perturbation attribution is attenuated by the same factors, so the weights describe a marginal joule of *exterior* solar: a July joule arriving while the awning is out counts for little. The declared coefficients are recorded in the artifact's provenance. Note that a fixed overhang's blocking is concentrated in high-sun hours, so its effect is usually best expressed through `shading_hot` rather than `shading_permanent`.
 
 The shipped example values are deliberately **neutral, with no national defaults**. For real projects, source values from [TABULA](https://episcope.eu/building-typology/) (EU building-stock typologies), DOE prototype buildings (US), or your national code tables.
 
@@ -75,12 +75,12 @@ In Grasshopper, **USC_Archetype** assembles the archetype from five family feede
 
 ## Limitations
 
-The weights are a *marginal, single-zone, schedule-free* physics signal. That is a large step past the binary balance-point rule (thermal lag, mass state, gain saturation), but the following simplifications are declared and deliberate:
+The weights are a *marginal, single-zone, schedule-free* physical signal. They capture effects the binary balance-point rule cannot (thermal lag, mass state, gain saturation), but the model makes the following simplifications on purpose:
 
 - **Single zone, lumped mass**: the weights are facade-independent within an hour; time-of-day carries the directional signal. Perimeter-zone effects are out of scope for a massing tool.
 - **Ideal, unlimited conditioning** at the air node; continuous operation, no setback or occupancy schedules.
 - **Fixed air-change rates**: no night flushing, and no *adaptive* shading control. Without a declared `shading_hot` coefficient the `harm` channel is **overstated**, since real buildings have cheap defenses against summer sun that they lack for missing winter sun; declaring seasonal shading in the archetype makes harm a defensible estimate instead of a worst case. `include_harm` remains opt-in.
-- **Flat (or simple daily-profile) internal gains.**
+- **Flat internal gains, or one 24-hour profile repeated every day.**
 - **Marginal linearization**: the weights describe one *extra* watt at the archetype's operating point; window sizes and g-values in the archetype set where gains saturate, and are recorded in the artifact's provenance metadata.
 - **Unshaded derivation**: the weights are computed for an unshaded archetype while the carve itself creates shading context; a first-order acceptable inconsistency for massing studies.
 - **TMY weather**; the ISO coupling coefficients carry the standard's residential-European calibration provenance.
@@ -90,10 +90,10 @@ The weights are a *marginal, single-zone, schedule-free* physics signal. That is
 
 ## Traceability
 
-Every artifact records its full provenance (`meta`: method, EPW, the complete expanded archetype, perturbation size, timestamp), and every carve that consumes one records that provenance in its preprocessing diagnostics. The sky-weight cache keys on the artifact's *content*, so regenerating it with a different archetype can never yield stale results. With `diagnostic_plots: true`, the run also writes a comparison dome quantifying how the simulated weights shifted the sky relative to the simple rule under the same configuration.
+Every artifact records its full provenance (`meta`: method, EPW, the complete expanded archetype, perturbation size, timestamp), and every carve that consumes one records that provenance in its preprocessing diagnostics. The artifact file is read again on every preprocessing run, so a regenerated artifact takes effect on the next run. With `diagnostic_plots: true`, the run also writes a comparison dome quantifying how the simulated weights shifted the sky relative to the simple rule under the same configuration.
 
 ## See also
 
-- [Carving Modes -- benefit](modes.md#simulated-weights) for the user-level workflow
+- [Carving Modes: benefit](modes.md#simulated-weights) for the user-level workflow
 - Tutorial 5 (`examples/5_benefit_5r1c.ipynb`) for an end-to-end walkthrough
 - [API reference](api/simulated-weights.md) for `generate_simulated_weights()`, `ZoneParams`, and the artifact I/O

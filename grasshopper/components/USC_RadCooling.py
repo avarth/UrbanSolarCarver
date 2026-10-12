@@ -1,23 +1,24 @@
-"""USC Radiative Cooling — Parameters for experimental radiative cooling mode.
+"""USC Radiative Cooling: parameters for the experimental radiative cooling mode.
 
-[EXPERIMENTAL] This mode estimates the directional cooling potential
-of the night sky using Martin-Berdahl (1984) emissivity and Bliss (1961)
+This experimental mode estimates the directional cooling potential of
+the night sky using the Martin-Berdahl (1984) emissivity and Bliss (1961)
 angular attenuation models.
 
-Also requires: USC_AnalysisPeriod (to define the nighttime hours)
-               and an EPW file (connected via USC_Config).
+Uses a single representative night-time dew point; it reads no weather
+file or analysis period.
 
 Inputs
 ------
 dew_point : float, optional
-    Night-time dew point temperature in Celsius. Default: 14.0
+    Night-time dew point temperature in Celsius (passed on as
+    dew_point_celsius). Default: 14.0
 bliss_k : float, optional
     Bliss angular attenuation constant. Default: 1.8
 
 Outputs
 -------
-overrides : list of str
-    Key=value pairs for radiative cooling parameters.
+overrides : str
+    Semicolon-joined key=value pairs for the connected inputs.
 """
 
 try:
@@ -27,7 +28,7 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
-        ("dew_point", "Night-time dew point temperature in deg C. Controls the atmospheric emissivity in the Martin-Berdahl (1984) clear-sky model. Higher dew point = more humid air = less radiative cooling potential. Typical values: -5 to 20 deg C. Check your EPW for local values."),
+        ("dew_point", "Night-time dew point temperature in deg C. Controls the atmospheric emissivity in the Martin-Berdahl (1984) clear-sky model. Higher dew point = more humid air = less radiative cooling potential. Typical values: -5 to 20 deg C; take a typical night-time value from local weather data. Default: 14."),
         ("bliss_k", "Angular attenuation constant from the Bliss (1961) model. Controls how quickly radiative cooling drops off away from zenith. Default: 1.8. Higher values = cooling concentrated near zenith. Rarely needs adjustment."),
     ]):
         if i < len(ii):

@@ -1,4 +1,4 @@
-"""USC Zone Ventilation — Air change rates and heat recovery.
+"""USC Zone Ventilation: air change rates and heat recovery.
 
 Feeder for USC_Archetype's 'ventilation' input. Only wired inputs are
 passed on; anything left unconnected keeps the archetype's neutral

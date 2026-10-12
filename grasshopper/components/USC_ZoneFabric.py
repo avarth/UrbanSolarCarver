@@ -1,4 +1,4 @@
-"""USC Zone Fabric — Envelope and glazing properties.
+"""USC Zone Fabric: envelope and glazing properties.
 
 Feeder for USC_Archetype's 'fabric' input. Only wired inputs are passed
 on; anything left unconnected keeps the archetype's neutral default.

@@ -1,4 +1,5 @@
-﻿"""Invariant tests for grid operations — mathematical constraints that must hold."""
+﻿"""Invariant tests for grid operations: voxelization, meshing, surface sampling,
+edge taper and smoothing."""
 import pytest
 import numpy as np
 import torch
@@ -48,7 +49,13 @@ class TestCoplanarityCheck:
     """Tests for discretize_surface_with_normals coplanarity filtering."""
 
     def _make_planar_mesh(self, normal_spread_deg=0.0):
-        """Create a mesh with controlled face-normal spread."""
+        """Create a two-triangle unit quad, optionally bent.
+
+        Raising vertex 2 (shared by both triangles) by tan(normal_spread_deg)
+        tilts the two triangles in different directions. Each face normal then
+        sits about 0.7 x normal_spread_deg from the mean normal, which is the
+        angle the coplanarity check compares with its tolerance.
+        """
         import trimesh
         # Base: flat quad on XY plane
         verts = np.array([
@@ -57,7 +64,6 @@ class TestCoplanarityCheck:
         faces = np.array([[0, 1, 2], [0, 2, 3]], dtype=np.int32)
 
         if normal_spread_deg > 0:
-            # Tilt second triangle by raising one vertex
             tilt_height = np.tan(np.radians(normal_spread_deg))
             verts[2, 2] = tilt_height
 
@@ -82,7 +88,7 @@ class TestCoplanarityCheck:
         assert pts.shape[0] == 0, "10° spread should fail 5° tolerance"
 
     def test_single_triangle_always_passes(self):
-        """A single-face mesh has zero spread — always planar."""
+        """A single-face mesh has zero spread, so it is always planar."""
         import trimesh
         from urbansolarcarver.grid import discretize_surface_with_normals
         verts = np.array([[0, 0, 0], [2, 0, 0], [1, 2, 0]], dtype=np.float64)
@@ -131,7 +137,7 @@ class TestCoplanarityCheck:
         from urbansolarcarver.grid import discretize_surface_with_normals
         mesh = self._make_planar_mesh(normal_spread_deg=0.0)  # 1x1 quad
         pts, norms, analysis_mesh, _w, _ts = discretize_surface_with_normals(mesh, sample_step=10.0)
-        # Either returns 0 points (face too small) or a few points — must not crash
+        # Either 0 points (face too small) or a few points; it must not raise
         assert pts.shape[1] == 3
 
 
@@ -163,9 +169,8 @@ class TestEdgeSampling:
             bp = boundary.interpolate(d)
             dists = np.linalg.norm(pts_2d - np.array([bp.x, bp.y]), axis=1)
             max_gap = max(max_gap, dists.min())
-        # Corners have slightly larger gaps due to inward offset; allow up
-        # to 1.2 * step (still much better than the pre-fix worst case of
-        # ~1.0 * step with no edge points at all).
+        # Corners have slightly larger gaps because edge points are offset
+        # inward; allow up to 1.2 * step.
         assert max_gap < step * 1.2, (
             f"Largest gap from boundary to nearest sample: {max_gap:.3f} "
             f"(should be < {step * 1.2:.3f})"
@@ -175,7 +180,6 @@ class TestEdgeSampling:
         """Edge points should not be too close to interior grid points."""
         from urbansolarcarver.grid import sample_planar_surface, _sample_boundary_edges
         from shapely.geometry import Polygon
-        # Build a polygon and grid the same way the function does
         mesh = self._make_flat_quad(2.0, 2.0)
         step = 0.4
         pts, _, _, _, _w = sample_planar_surface(mesh, sample_step=step)
@@ -202,7 +206,7 @@ class TestEdgeSampling:
     def test_thin_rectangle_gets_edge_points(self):
         """A rectangle thinner than sample_step should still get edge points."""
         from urbansolarcarver.grid import sample_planar_surface
-        # Width 0.1, height 3.0, step 0.5 — too thin for interior grid points
+        # Width 0.1, height 3.0, step 0.5: too thin for interior grid points
         mesh = self._make_flat_quad(0.1, 3.0)
         pts, norms, qv, qf, _w = sample_planar_surface(mesh, sample_step=0.5)
         assert len(pts) >= 2, (
@@ -306,7 +310,7 @@ class TestSmoothedMeshPath:
         from urbansolarcarver.grid import mesh_from_voxels_smoothed
         mesh = mesh_from_voxels_smoothed(self._cube_voxels(), np.zeros(3), 1.0)
         frac = np.abs(mesh.vertices - np.round(mesh.vertices))
-        assert (frac > 0.05).any(), "all vertices on lattice — SDF was binarized"
+        assert (frac > 0.05).any(), "all vertices on lattice; SDF was binarized"
 
     def test_world_alignment(self):
         """Voxel [4:20) at voxel_size=1 spans world [4, 20] (+/- smoothing)."""
@@ -349,7 +353,7 @@ class TestPMDiffusion:
     """Tests for Perona-Malik anisotropic diffusion."""
 
     def test_uniform_field_unchanged(self):
-        """A uniform field has zero gradients -- diffusion should be a no-op."""
+        """A uniform field has zero gradients, so diffusion should be a no-op."""
         from urbansolarcarver.grid import _pm_anisotropic_diffuse
         field = np.full((20, 20, 20), 5.0, dtype=np.float32)
         result = _pm_anisotropic_diffuse(field, iters=16, k=1.0, tau=0.15)
@@ -398,8 +402,8 @@ class TestVoxelizeFillSkip:
 
     def test_watertight_mesh_no_cavities(self, tiny_cube_mesh, caplog):
         """A simple watertight cube should be fully filled by trimesh's
-        orthographic fill — no interior cavities means binary_fill_holes
-        is skipped."""
+        orthographic fill; with no interior cavities, binary_fill_holes
+        is skipped and a debug message says so."""
         import logging
         from urbansolarcarver.grid import voxelize_mesh
         with caplog.at_level(logging.DEBUG, logger="urbansolarcarver.grid"):
@@ -465,7 +469,7 @@ class TestEdgeTaper:
         verts = np.array([
             # panel A: [0,5]x[0,10]
             [0, 0, 0], [5, 0, 0], [5, 10, 0], [0, 10, 0],
-            # panel B: [5,10]x[0,10] — seam vertices duplicated
+            # panel B: [5,10]x[0,10], seam vertices duplicated
             [5, 0, 0], [10, 0, 0], [10, 10, 0], [5, 10, 0],
         ], dtype=np.float64)
         faces = np.array([[0, 1, 2], [0, 2, 3], [4, 5, 6], [4, 6, 7]],
@@ -476,7 +480,7 @@ class TestEdgeTaper:
         pts, _n, _m, w, _s = discretize_surface_with_normals(
             mesh, sample_step=0.5, edge_taper=1.0)
         # Points on the seam line (x≈5) but deep inside the outline must have
-        # full weight — a phantom seam boundary would drag them to ~0.
+        # full weight; a phantom seam boundary would drag them to ~0.
         on_seam = (np.abs(pts[:, 0] - 5.0) < 0.3) & (np.abs(pts[:, 1] - 5.0) < 2.0)
         assert on_seam.any(), "expected samples near the seam"
         assert w[on_seam].min() > 0.99
@@ -531,3 +535,77 @@ class TestEdgeTaper:
         leg_b = (np.abs(pts[:, 0] - 2.0) < 0.3) & (np.abs(pts[:, 1] - 7.0) < 0.3)
         assert w[leg_a].min() > 0.99
         assert w[leg_b].min() > 0.99
+
+
+# ---------------------------------------------------------------------------
+# Degenerate input and fallback paths: warnings, empty results, EPW cache
+# ---------------------------------------------------------------------------
+
+def _sampling_config():
+    from urbansolarcarver.load_config import user_config
+    return user_config(max_volume_path="x", test_surface_path="x", out_dir="x",
+                       mode="tilted_plane", tilted_plane_angle_deg=45,
+                       grid_step=1.0, voxel_size=1.0)
+
+
+def test_zero_area_face_does_not_drop_panel_and_bent_panel_warns():
+    import trimesh
+    from urbansolarcarver.grid import sample_surface
+    rect = trimesh.Trimesh([[0, 0, 0], [4, 0, 0], [4, 0, 3], [0, 0, 3], [4, 0, 3]],
+                           [[0, 1, 2], [0, 2, 3], [1, 2, 4]], process=False)  # last face: zero area
+    bent = trimesh.Trimesh([[10, 0, 0], [14, 0, 0], [14, 1, 3], [10, 0, 3]],
+                           [[0, 1, 2], [0, 2, 3]], process=False)
+    with pytest.warns(UserWarning, match="1 non-planar"):
+        pts, *_ = sample_surface(trimesh.util.concatenate([rect, bent]), _sampling_config())
+    assert len(pts) > 0 and pts[:, 0].max() <= 4.0  # the rectangle is sampled, the bent panel is not
+
+
+def test_taubin_polish_preserves_volume():
+    from urbansolarcarver.grid import mesh_from_voxels_smoothed, polish_mesh_taubin
+    g = np.zeros((16, 16, 16), bool)
+    g[3:13, 3:13, 3:13] = True
+    base = mesh_from_voxels_smoothed(torch.from_numpy(g), np.zeros(3), 1.0)
+    polished = polish_mesh_taubin(base.copy(), iters=6)
+    assert polished.volume == pytest.approx(base.volume, rel=0.01)
+
+
+def test_smoothed_mesh_of_empty_grid_is_empty():
+    from urbansolarcarver.grid import mesh_from_voxels_smoothed
+    mesh = mesh_from_voxels_smoothed(torch.zeros((8, 8, 8), dtype=torch.bool), np.zeros(3), 1.0)
+    assert len(mesh.faces) == 0
+
+
+def test_cleanup_keeps_largest_part_when_none_pass():
+    import trimesh
+    from urbansolarcarver.grid import cleanup_mesh
+    a = trimesh.creation.box((1, 1, 1))
+    b = trimesh.creation.icosphere(subdivisions=2)
+    b.apply_translation((5, 0, 0))
+    with pytest.warns(UserWarning, match="keeping only the largest"):
+        out = cleanup_mesh(trimesh.util.concatenate([a, b]), min_face_count=10**6, light=True)
+    assert len(out.faces) == len(b.faces)
+
+
+def test_epw_cache_rereads_a_replaced_file(tmp_path):
+    import os
+    import shutil
+    from _epw import resolve_epw
+    from urbansolarcarver.sun import _load_epw
+    src = resolve_epw()
+    if not src:
+        pytest.skip("No EPW available")
+    path = tmp_path / "w.epw"
+    shutil.copy(src, path)
+    first = _load_epw(str(path))
+    text = path.read_text(encoding="utf-8", errors="replace").splitlines(True)
+    text[0] = text[0].replace(text[0].split(",")[1], "Renamed City", 1)
+    path.write_text("".join(text), encoding="utf-8")
+    os.utime(path, ns=(first_mtime := os.stat(path).st_mtime_ns, first_mtime + 10**9))
+    assert _load_epw(str(path)).location.city == "Renamed City"
+
+
+def test_volume_matched_threshold_keeps_exactly_target_cells():
+    from urbansolarcarver.grid import _volume_matched_threshold
+    sdf = np.array([[-1.0, 0.5, 2.0]], dtype=np.float32)
+    kept = [int((sdf >= _volume_matched_threshold(sdf, t)).sum()) for t in range(4)]
+    assert kept == [0, 1, 2, 3]

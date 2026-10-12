@@ -69,7 +69,7 @@ def draw_case(seed: int, device: str) -> tuple:
     elif mode == "time-based":
         over.update(_random_period(rng))
         over["sun_steps_per_hour"] = int(rng.choice([4, 6, 12]))
-        over["threshold"] = float(rng.choice([0.0, 0.0, 0.0, 0.5]))
+        over["threshold"] = float(rng.choice([0.0, 0.0, 0.0, 2.0]))
     else:
         if mode != "daylight":
             over.update(_random_period(rng))
@@ -106,13 +106,19 @@ def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
         must = oracle.column_above(oracle.tilted_hits(run))
     elif mode == "time-based":
         steps = run.cfg["sun_steps_per_hour"]
-        hours = oracle.time_based_hours(run, epw, minutes=60 // steps)
-        must = hours > run.cfg["threshold"] + 1e-6
+        shading = oracle.time_based_shading(run, epw, minutes=60 // steps)
+        must = shading > run.cfg["threshold"] + 1e-6
     else:
         must = None
     if must is not None:
         kept_bad = int((run.occ & run.mask & must).sum())
-        unexplained, carved = oracle.unexplained_carving(run, must)
+        explained = must
+        if run.cfg.get("carve_above"):
+            # mask.npy includes carve_above: apply it to the reference too.
+            from urbansolarcarver.carving import carve_above_columns
+            expected = carve_above_columns(occ & ~must, occ, run.cfg.get("carve_above_min_consecutive", 1))
+            explained = must | (occ & ~expected)
+        unexplained, carved = oracle.unexplained_carving(run, explained)
         metrics.update(must_carve_kept=kept_bad, unexplained=unexplained, carved=carved)
         if kept_bad:
             failed.append("soundness")
@@ -157,8 +163,7 @@ def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
             failed.append("floating_mass")
         if metrics["refilled"]:
             failed.append("carve_above_refill")
-        exp_removed = run.diag("exp")["carve_above_extra_voxels_removed"]
-        if exp_removed != int((run.mask & ~kept).sum()):
+        if run.diag("thr")["carve_above_applied"] is not True:
             failed.append("diag_carve_above")
 
     # 5. diagnostics agree across stages

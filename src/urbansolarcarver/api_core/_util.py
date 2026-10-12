@@ -1,7 +1,8 @@
 """Shared utilities for the three pipeline stages (preprocessing, thresholding, exporting).
 
-Provides config resolution, output-directory setup, device detection,
-and diagnostics I/O helpers (JSON writing, directory creation).
+Provides config resolution, output-directory setup, device selection,
+occupancy-grid loading, and diagnostics I/O helpers (JSON writing,
+directory creation, config snapshot).
 
 Visualization helpers live in ``_diagnostics``, reporting in ``_reporting``.
 """
@@ -26,7 +27,6 @@ def _ensure_out_dir(out_dir: Union[str, Path], stage: str) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
 
-# Lean diagnostics helpers. Keep all tiny and local.
 def ensure_diag(base_out_dir: Union[str, Path]) -> Path:
     """Return <base_out_dir>/diagnostics/ path and ensure it exists."""
     p = Path(base_out_dir) / "diagnostics"
@@ -42,7 +42,11 @@ def write_json(dirpath: Union[str, Path], filename: str, obj: dict) -> Path:
     return p
 
 def resolve_device(device_str: str = "auto"):
-    """Resolve a device string to a torch.device with proper CUDA checks."""
+    """Turn 'auto', 'cpu' or 'cuda' into a torch.device.
+
+    'auto' picks CUDA when available, else CPU.  Raises RuntimeError if
+    'cuda' is requested but not available.
+    """
     import torch
     pref = device_str.lower() if isinstance(device_str, str) else "auto"
     if pref == "auto":
@@ -64,10 +68,12 @@ def device_summary(device) -> str:
     return "CPU"
 
 def load_occupancy(pre_manifest, conf: user_config):
-    """Boolean occupancy grid (numpy) of a preprocessing run.
+    """Return the boolean occupancy grid (numpy) of a preprocessing run.
 
-    Reuses the persisted ``voxel_grid.npy``; re-voxelizes the max volume
-    only for manifests written before that file existed.
+    Loads the persisted ``voxel_grid.npy``.  If the manifest has no
+    ``voxel_grid_path`` or the file is gone, the max volume is voxelized
+    again with the manifest's ``voxel_size`` and *conf*'s ``margin_frac``.  Raises
+    ValueError if the grid shape differs from the manifest's.
     """
     import numpy as np
     vg_path = pre_manifest.voxel_grid_path
@@ -80,12 +86,13 @@ def load_occupancy(pre_manifest, conf: user_config):
         env_mesh, _ = load_meshes(conf)
         env_mesh = env_mesh.copy()  # same local frame as preprocessing
         env_mesh.vertices = np.round(env_mesh.vertices - env_mesh.bounds[0], 6)
-        vg, *_ = voxelize(env_mesh, conf, device=torch.device("cpu"))
+        same_grid = conf.model_copy(update={"voxel_size": pre_manifest.voxel_size})
+        vg, *_ = voxelize(env_mesh, same_grid, device=torch.device("cpu"))
         occ = vg.cpu().numpy().astype(bool)
     if tuple(occ.shape) != tuple(pre_manifest.shape):
         raise ValueError(
             f"Voxel grid shape {tuple(occ.shape)} does not match the grid shape "
-            f"{tuple(pre_manifest.shape)} recorded in the preprocessing manifest — "
+            f"{tuple(pre_manifest.shape)} recorded in the preprocessing manifest; "
             f"the occupancy grid is from a different run (check voxel_size / "
             f"margin_frac consistency)."
         )

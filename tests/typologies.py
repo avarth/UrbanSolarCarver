@@ -1,7 +1,7 @@
 """Procedural urban-block scenes for end-to-end carving tests.
 
-Every scene is one plot (max volume) with four edge neighbours across
-streets. Protected test surfaces are the neighbour facades facing the plot
+Every scene is one plot (max volume) with, unless ``neighbours`` is False,
+four edge neighbours across streets. Protected test surfaces are the neighbour facades facing the plot
 and, optionally, the plot's own lower floors (0..own_h). Each protected
 panel is a separate inset quad: USC rejects joined non-planar components.
 

@@ -1,34 +1,46 @@
 """
-UrbanSolarCarver — Carving utilities
-====================================
+UrbanSolarCarver: carving utilities
+===================================
 
 Purpose
 -------
-Convert point/normal samples on analysis surfaces into ray sets, march those
-through a voxelized envelope, and remove the voxels they visit. Supports:
+Convert point/normal samples on analysis surfaces into ray sets, trace those
+through a voxelized envelope, and count or score the voxels they visit.
+Supports:
 
-• Time-based solar carving (sun vectors from EPW for specific datetimes)
-• Sky-patch-weighted carving (Tregenza patches + mode-specific weights)
-• Tilted-plane daylight carving (single or per-octant plane angle)
+• Time-based solar carving (sun vectors from the EPW for specific datetimes):
+  every visited voxel is removed.
+• Sky-patch-weighted carving (Tregenza patches + mode-specific weights):
+  returns per-voxel scores; the threshold is applied later, in
+  api_core/thresholding.py.
+• Tilted-plane daylight carving (single or per-octant plane angle): every
+  voxel at or above a visited voxel in its column is removed.
 
 Raytracing contract
 -------------------
-All carving is executed via `trace_multi_hit_grid`, which guarantees each
-(ray, voxel) pair is reported at most once.  The Warp DDA backend traverses
-voxels exactly; the PyTorch fallback samples at cell centers
-(distances = (0.5 + k) * voxel_size) and maps world → grid with floor(),
-not round(), to avoid lattice aliasing (especially for the plane method).
+With Warp installed, rays are traced by the fused DDA kernels in
+raytracer.py, which visit every voxel a ray crosses exactly once and
+accumulate counts or scores in place.  Without Warp, `trace_multi_hit_grid`
+lists the (ray, voxel) pairs with a fixed-step PyTorch march (each pair at
+most once) and the scores are accumulated here with torch; that path is
+slower and can miss voxels that oblique rays only clip.  Both paths drop
+voxels behind the surface a ray starts from (see `_front_of_surface`).
 
 Coordinate/scale conventions
 ----------------------------
 `grid_origin` is the world-space min corner for grid index [0,0,0].
-`grid_extent` is the physical cube size (meters). `grid_resolution` is D.
-The tracer receives `scale = grid_extent` and a per-ray step of `voxel_size`.
+`grid_extent` is the physical cube size (meters). `grid_resolution` is D, the
+number of voxels per side, so one voxel is `grid_extent / D` meters wide.
+The tracers receive `scale = grid_extent`; the fixed-step fallback also uses
+`voxel_size` as its step length.
 
 Determinism and batching
 ------------------------
-Given a fixed config, carving is deterministic. Rays are processed in batches
-(`config.ray_batch_size`) on the device of the input voxel grid.
+Given a fixed config, hit counts are deterministic. Float scores are summed
+with atomic adds on the GPU, so the order of additions, and therefore the last
+bits of a score, can differ between runs. Rays are processed in batches of
+`config.ray_batch_size` (0 = sized from free GPU memory) on the device of the
+input voxel grid.
 """
 
 import warnings
@@ -40,15 +52,12 @@ from .scoring import get_weights
 from .load_config import user_config
 from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
-from urbansolarcarver.session import get_active_session
-import hashlib
-import json
 from .sun import get_sun_vectors
 from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
     trace_and_count_dda, auto_batch_size, dda_backend_available,
 )
-# Fused kernel import (conditional -- only available when Warp is installed)
+# The fused score kernel exists only when Warp is installed.
 try:
     from .raytracer import trace_and_score_dda as _fused_dda
 except ImportError:
@@ -60,15 +69,14 @@ class SkyPatchCarvingResult(NamedTuple):
     """Return type for :func:`carve_with_sky_patch_rays`.
 
     ``ray_origins`` / ``ray_directions`` are None unless the carver was
-    called with ``return_rays=True`` — transferring the full ray set to
-    host memory costs hundreds of MB at typical ray counts.
+    called with ``return_rays=True``: copying the full ray set to host
+    memory costs hundreds of MB at typical ray counts.
     """
     ray_origins: "np.ndarray | None"      # (N, 3) ray start points, or None
     ray_directions: "np.ndarray | None"   # (N, 3) ray unit vectors, or None
-    raw_voxel_scores: np.ndarray          # (X*Y*Z,) per-voxel weighted scores
+    raw_voxel_scores: np.ndarray          # (X*Y*Z,) float32 per-voxel weighted scores
     patch_weights: np.ndarray             # (P,) weight per Tregenza sky patch
 
-# High-level helpers migrated from api_core
 import os
 from ladybug.analysisperiod import AnalysisPeriod
 from .io import load_mesh
@@ -77,7 +85,7 @@ def _resolve_batch_size(config, resolution: int, device) -> int:
     """Return the effective ray batch size, auto-tuning if requested.
 
     If ``config.ray_batch_size`` is 0 the batch size is computed from
-    available GPU memory via :func:`auto_batch_size`.
+    free GPU memory via :func:`auto_batch_size` (a fixed default on CPU).
     """
     if config.ray_batch_size > 0:
         return int(config.ray_batch_size)
@@ -91,7 +99,8 @@ def validate_inputs(config: user_config):
     Raises
     ------
     FileNotFoundError
-        If any required input file is missing.
+        If the max-volume or test-surface mesh is missing, or the EPW file is
+        missing for a mode that needs one.
     ValueError
         If `config.mode` is not one of:
         {'time-based','irradiance','benefit','daylight','radiative_cooling','tilted_plane'}.
@@ -116,10 +125,10 @@ def sample_period(config: user_config, steps_per_hour: int = 1):
     Returns
     -------
     datetimes : list[datetime.datetime]
-        Start→end (inclusive) at ``1/steps_per_hour``-hour steps.
+        Start to end (inclusive) at ``1/steps_per_hour``-hour steps.
     hoys : list[int]
-        Hour-of-year indices (1..8760) of the period, always hourly: they
-        index EPW records, which are hourly.
+        Hour-of-year indices (0..8759, 0 = 1 January 00:00) of the period,
+        always hourly: they index EPW records, which are hourly.
     """
     def _ap(timestep):
         return AnalysisPeriod(
@@ -136,6 +145,9 @@ def load_meshes(config: user_config):
     """
     Load the maximum envelope mesh and the insolation sampling surface.
 
+    Warns when a PLY file stores large (georeferenced) coordinates as float32,
+    because that rounding happened on disk and cannot be undone here.
+
     Returns
     -------
     envelope_mesh : trimesh.Trimesh
@@ -150,6 +162,7 @@ def load_meshes(config: user_config):
 
 
 def _stores_float32_vertices(path: str) -> bool:
+    """True if *path* is a PLY file whose header declares float32 x coordinates."""
     if not str(path).lower().endswith(".ply"):
         return False
     with open(path, "rb") as fh:
@@ -159,7 +172,11 @@ def _stores_float32_vertices(path: str) -> bool:
 
 
 def _warn_float32_input(path: str, mesh, voxel_size: float) -> None:
-    """Georeferenced coordinates in a float32 PLY are already rounded on disk."""
+    """Warn if the file's float32 vertices are rounded by more than 1 % of a voxel.
+
+    Large (georeferenced) coordinates stored as float32 lose precision when
+    the file is written, so the rounding cannot be recovered on load.
+    """
     from .io import float32_resolution
     res = float32_resolution(mesh.vertices)
     if res > 0.01 * float(voxel_size) and _stores_float32_vertices(path):
@@ -203,29 +220,69 @@ def _validate_cubic_resolution(grid_resolution, func_name: str):
     )
 
       
-#--- Defs for time-based or weighted carving -------------------------------------------------------------------
+#--- Ray tracing and carving -----------------------------------------------------------------------------------
 
 def _front_of_surface(min_corner, cell, voxel_idx, origins, normals) -> torch.Tensor:
     """Mask of hits whose voxel centre lies in front of the ray's source surface.
 
     A test surface sits inside the boundary voxels of its own mass; those
     voxels are the building, not an obstruction of it.  Same rule as the
-    Warp kernels' ``_in_front``, for the buffered / fixed-step fallbacks.
+    Warp kernels' ``_in_front``, applied here for the fixed-step fallback.
     """
     corner = torch.tensor(min_corner, dtype=torch.float32, device=voxel_idx.device)
     centre = corner + (voxel_idx.float() + 0.5) * cell
     return ((centre - origins) * normals).sum(dim=1) > 0.0
 
 
+_CPU_BUFFER_BUDGET_BYTES = 1 << 30  # 1 GiB cap on the per-thread accumulation buffers
+
+
+def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
+    """Call ``launch(start, end, buffer)`` for every batch, accumulating into *out*.
+
+    On CPU, Warp kernel launches release the GIL, so a few threads can run
+    batches on separate cores. Warp's CPU ``atomic_add`` is a plain
+    read-modify-write, not atomic across threads, so each thread writes its
+    own buffer and the buffers are summed at the end. The first batch runs
+    alone because it triggers Warp's one-time module compile.
+    """
+    if not parallel or device.type != "cpu" or len(batch_ranges) < 2:
+        for start, end in batch_ranges:
+            launch(start, end, out)
+        return
+
+    launch(*batch_ranges[0], out)
+    rest = batch_ranges[1:]
+    buffer_bytes = out.numel() * out.element_size()
+    n_workers = min(4, os.cpu_count() or 1, len(rest),
+                    max(1, _CPU_BUFFER_BUDGET_BYTES // max(buffer_bytes, 1)))
+    if n_workers < 2:
+        for start, end in rest:
+            launch(start, end, out)
+        return
+
+    from concurrent.futures import ThreadPoolExecutor
+    buffers = [torch.zeros_like(out) for _ in range(n_workers)]
+    chunks = [rest[i::n_workers] for i in range(n_workers)]
+
+    def _work(i):
+        for start, end in chunks[i]:
+            launch(start, end, buffers[i])
+
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        list(pool.map(_work, range(n_workers)))  # list() re-raises worker exceptions
+    for buf in buffers:
+        out += buf
+
+
 def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, config,
                     point_ids, surface_normals):
     """Count how many rays visit each voxel; returns a flat int32 tensor.
 
-    Uses the fused Warp count kernel when available (no hit buffers, no
-    overflow-retry re-tracing); otherwise falls back to the buffered
-    :func:`trace_multi_hit_grid` path.  Both count each (ray, voxel) pair
-    at most once, and skip voxels behind the ray's source surface
-    (*point_ids* maps rays to rows of *surface_normals*).
+    Uses the fused Warp count kernel when available; otherwise the
+    fixed-step :func:`trace_multi_hit_grid` fallback.  Both count each
+    (ray, voxel) pair at most once, and skip voxels behind the ray's source
+    surface (*point_ids* maps rays to rows of *surface_normals*).
     """
     device = voxel_grid.device
     counts = torch.zeros(voxel_grid.numel(), dtype=torch.int32, device=device)
@@ -238,29 +295,15 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
             for start in range(0, origins.shape[0], batch_size)
         ]
 
-        def _count_batch(start, end):
+        def _count_batch(start, end, buf):
             trace_and_count_dda(
                 min_corner, scale, res,
                 origins[start:end], directions[start:end],
-                counts, float(config.ray_length),
+                buf, float(config.ray_length),
                 point_ids=point_ids[start:end], surface_normals=surface_normals,
             )
 
-        if device.type == "cpu" and len(batch_ranges) > 1:
-            # Same dispatch as the fused score path: Warp CPU launches are
-            # single-threaded and release the GIL, so a small thread pool
-            # runs batches on multiple cores.  Integer wp.atomic_add keeps
-            # the shared counts buffer exact.  The first batch runs
-            # synchronously so Warp's lazy JIT compile happens once.
-            from concurrent.futures import ThreadPoolExecutor
-            _count_batch(*batch_ranges[0])
-            n_workers = min(4, os.cpu_count() or 1, len(batch_ranges) - 1)
-            with ThreadPoolExecutor(max_workers=n_workers) as pool:
-                # list() drains the iterator so worker exceptions propagate
-                list(pool.map(lambda rng: _count_batch(*rng), batch_ranges[1:]))
-        else:
-            for start, end in batch_ranges:
-                _count_batch(start, end)
+        _run_batches(batch_ranges, _count_batch, counts, device, parallel=True)
         # Warp launches run on Warp's own CUDA stream; the counts buffer is
         # shared zero-copy with torch, so synchronize before torch reads it.
         if device.type == "cuda":
@@ -270,7 +313,7 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
     for i in range(0, origins.shape[0], batch_size):
         o_batch = origins[i: i + batch_size]
         d_batch = directions[i: i + batch_size]
-        # tracer requires per-ray patch ids; unused for counting
+        # The tracer requires per-ray patch ids; they are unused for counting.
         patch_ids_stub = torch.zeros((o_batch.shape[0],), dtype=torch.long, device=device)
         ray_idx, _, voxel_idx = trace_multi_hit_grid(
             min_corner=min_corner,
@@ -312,20 +355,20 @@ def carve_with_sun_rays(
     return_rays: bool = False,
 ):
     """
-    Perform time-based carving of a voxel grid using time-based sun vectors.
+    Time-based carving of a voxel grid with sun vectors for explicit datetimes.
 
-    This function constructs a classical solar envelope (or fan) by tracing rays for a set of
-    sun directions derived from weather data and explicit datetimes. No scoring,
-    normalization, or thresholding is applied. Any voxel intersected by any ray is
-    removed.
+    This builds a classical solar envelope by tracing rays toward the sun
+    positions computed from the EPW location for the given datetimes. No
+    scoring, normalization, or thresholding is applied here: any voxel
+    visited by any ray is removed from the returned grid.
 
     Core procedure
-      1. Compute sun vectors for the provided datetimes from the EPW file, then filter
-         by minimum altitude.
-      2. For each surface sample point with outward normal, build rays toward the sun
-         directions that lie in its visible hemisphere (facing-mask from normals).
+      1. Compute sun vectors for the provided datetimes from the EPW file and
+         drop those below ``config.min_altitude``.
+      2. For each surface sample point, build rays toward the sun directions
+         on the outward side of its normal (dot product > 0).
       3. Trace each ray through the grid (exact Warp DDA when available),
-         counting hits per voxel.
+         counting hits per voxel and skipping voxels behind the source surface.
       4. Remove every voxel visited by at least one ray.
 
     Parameters
@@ -346,9 +389,10 @@ def carve_with_sun_rays(
         Configuration containing:
           - epw_path: path to EPW file used for sun positions.
           - min_altitude: degrees above horizon for filtering sun vectors.
-          - voxel_size: step size for the marcher.
+          - north_deg: model north, degrees clockwise from +Y.
+          - voxel_size: step length of the fixed-step fallback tracer.
           - ray_length: maximum traced distance along each ray.
-          - ray_batch_size: rays processed per batch.
+          - ray_batch_size: rays processed per batch (0 = automatic).
     datetimes : Sequence[datetime.datetime]
         Wall-clock timestamps for which sun vectors are generated.
     return_counts : bool, default False
@@ -356,7 +400,7 @@ def carve_with_sun_rays(
     return_rays : bool, default False
         If True, return the full ray set as host numpy arrays.  Off by
         default: at millions of rays this is hundreds of MB of
-        device→host transfer that the pipeline never uses.
+        device-to-host transfer that the pipeline never uses.
 
     Returns
     -------
@@ -366,13 +410,13 @@ def carve_with_sun_rays(
         World-space ray start points (None unless *return_rays* is True).
     ray_directions : np.ndarray, shape (N, 3), or None
         Unit ray directions (None unless *return_rays* is True).
-    counts : np.ndarray, shape (V,), optional
+    counts : np.ndarray, shape (X*Y*Z,), int32, optional
         Per-voxel hit counts (flat).  Only returned when *return_counts* is True.
     """
     _validate_cubic_resolution(grid_resolution, "carve_with_sun_rays")
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
 
-    # sun directions on device (rotated to model coordinates via north_deg)
+    # Sun directions in model coordinates (rotated by north_deg).
     sun_dirs = get_sun_vectors(
         config.epw_path, datetimes, config.min_altitude,
         north_deg=config.north_deg,
@@ -383,20 +427,18 @@ def carve_with_sun_rays(
         sun_arr = torch.as_tensor(sun_dirs, dtype=torch.float32, device=voxel_grid.device)
     if sun_arr.numel() == 0:
         warnings.warn(
-            "carve_with_sun_rays: no sun vectors above min_altitude — "
-            "grid will be returned unmodified.",
+            "carve_with_sun_rays: no sun vectors above min_altitude; "
+            "the grid is returned unmodified.",
             stacklevel=2,
         )
         empty = np.empty((0, 3), dtype=np.float32) if return_rays else None
         if return_counts:
             return voxel_grid.clone(), empty, empty, np.zeros(voxel_grid.numel(), dtype=np.int32)
         return voxel_grid.clone(), empty, empty
-    # 1e-9 epsilon prevents division by zero for degenerate sun vectors
-    # (e.g. sun exactly at horizon). Float32 machine epsilon is ~1.2e-7,
-    # so 1e-9 is safely below it.
+    # The 1e-9 guards against division by zero for a zero-length vector. It is
+    # far below float32 precision (~1.2e-7), so unit vectors are unchanged.
     sun_arr = sun_arr / (sun_arr.norm(dim=1, keepdim=True) + 1e-9)
 
-    # build rays
     normals_np = (sample_normals.detach().cpu().numpy()
                   if isinstance(sample_normals, torch.Tensor) else np.asarray(sample_normals))
     points_np = (sample_points.detach().cpu().numpy()
@@ -434,52 +476,61 @@ def carve_with_sky_patch_rays(
     point_weights: "np.ndarray | None" = None,
     ):
     """
-    Perform sky-patch-weighted carving of a voxel grid using mode-specific weight metrics.
+    Score each voxel by the sky-patch weight of the rays that cross it.
 
-    This function assigns a weight to each Tregenza sky patch according to the selected mode. Available
-    modes draw weights from:
-      • Global horizontal + diffuse irradiance data.
-      • Passive solar benefit indices (e.g. from Ladybug).
-      • Daylighting metrics under a CIE overcast sky.
-      • Radiative cooling potential (Bliss-K anisotropy and dew-point adjustment).
+    Each Tregenza sky patch gets a weight according to ``config.mode``:
+      • irradiance: cumulative direct + diffuse irradiance per patch (kWh/m²)
+        from the EPW over the analysis hours (Ladybug sky matrix).
+      • benefit: the same, counted only in hours cold enough for solar gains
+        to offset heating (kWh/m²), optionally minus hot-hour irradiance
+        (``include_harm``).
+      • daylight: relative luminance of the CIE standard overcast sky times
+        the patch solid angle.
+      • radiative_cooling: long-wave cooling potential from the dew point and
+        the Bliss angular law, normalized to sum to 1.
 
-    Core procedure (identical across modes):
-      1. Subdivide the hemisphere into angular bins (Tregenza patches).
-      2. Cast rays from each sample point p with outward normal n toward each patch center.
-      3. Trace rays through the voxel volume, accumulating per-voxel weights based on patch assignments.
-      4. Normalize the raw score distribution if requested (linear or percentile scaling).
-      5. Select a threshold via fixed value, head/tail breaks, or carve_fraction
-      6. Apply binary mask to remove voxels above the threshold, yielding the carved grid.
+    Procedure:
+      1. Take the 145 Tregenza patch directions.
+      2. Cast a ray from each sample point toward every patch on the outward
+         side of its normal.
+      3. Trace the rays through the voxel volume and add each ray's patch
+         weight (times its point weight, if given) to every voxel it visits
+         in front of its source surface.
+
+    No voxel is removed here: thresholding the scores into a keep/carve mask
+    happens in ``api_core.thresholding``.
 
     Parameters
     ----------
     voxel_grid : torch.Tensor, shape (X, Y, Z)
-        Input occupancy or density values for each grid cell.
+        Occupancy grid; only its shape and device are used.
     grid_origin : array_like, shape (3,)
         Minimum corner of the voxel volume in world coordinates.
     grid_extent : float
-        Physical span of each grid axis (meters).
+        Physical span of the cubic grid (meters).
     grid_resolution : int or (3,)
-        Number of voxels along each axis (uniform or per-axis).
-    sample_points : torch.Tensor, shape (R, 3)
+        Number of voxels along each axis (must represent a cube).
+    sample_points : np.ndarray, shape (R, 3)
         Coordinates of R surface evaluation points.
-    sample_normals : torch.Tensor, shape (R, 3)
+    sample_normals : np.ndarray, shape (R, 3)
         Outward-facing unit normals at each sample point.
     config : user_config
         Configuration containing:
           - mode: weight mode selector.
-          - epw_path: EPW file for irradiance/weather.
-          - dew_point_celsius: dew-point temperature for cooling mode.
-          - bliss_k: anisotropy scaling for cooling.
-          - balance_temperature, balance_offset: tuning for energy-balance modes.
-          - ray_batch_size: rays processed per batch.
-          - voxel_size, ray_length: tracer resolution and extent.
+          - epw_path: EPW file (irradiance and benefit).
+          - dew_point_celsius, bliss_k, min_sky_elevation_deg: radiative_cooling.
+          - balance_temperature, balance_offset, include_harm,
+            simulated_weights_path: benefit.
+          - north_deg: model north, degrees clockwise from +Y.
+          - ray_batch_size: rays processed per batch (0 = automatic).
+          - voxel_size, ray_length: fallback step length and maximum ray length.
     hoys : Sequence[int]
-        Hours-of-year indices mapping to EPW or other time-series input.
+        Hour-of-year indices (0..8759) of the analysis period, used by the
+        EPW-based modes.
     return_rays : bool, default False
         If True, include the full ray set (host numpy arrays) in the
         result.  Off by default: at millions of rays this is hundreds of
-        MB of device→host transfer that the pipeline never uses.
+        MB of device-to-host transfer that the pipeline never uses.
     point_weights : np.ndarray (R,), optional
         Per-sample-point design weights in [0, 1] (edge_taper): each ray's
         contribution is patch_weight × point_weight, and zero-weight rays
@@ -492,22 +543,26 @@ def carve_with_sky_patch_rays(
         NamedTuple with fields:
         - ray_origins (N, 3): ray start points, or None unless return_rays.
         - ray_directions (N, 3): unit ray vectors, or None unless return_rays.
-        - raw_voxel_scores (X*Y*Z,): accumulated patch weights per voxel.
+        - raw_voxel_scores (X*Y*Z,): accumulated weights per voxel (float32).
         - patch_weights (P,): weight per Tregenza sky patch.
+
+    Raises
+    ------
+    ValueError
+        If *point_weights* does not have one entry per sample point.
     """
 
     # --- 0) Setup ----------------------------------------------------------
-    device = voxel_grid.device  # Determine compute device (CPU or CUDA)
-    _validate_cubic_resolution(grid_resolution, 'carve_with_sky_patch_rays')  # Ensure grid is cubic
+    device = voxel_grid.device
+    _validate_cubic_resolution(grid_resolution, 'carve_with_sky_patch_rays')
 
     # --- 1) Sky patch directions ------------------------------------------
-    sky_dirs = fetch_tregenza_patch_directions(device=device)  # Unit vectors to each patch center
+    sky_dirs = fetch_tregenza_patch_directions(device)  # (P, 3) unit vectors to patch centres
 
     # --- 2) Ray generation ------------------------------------------------
-    # Generate rays: sample_points (R×3), sample_normals (R×3), sky_dirs (P×3)
-    # point_idx maps each ray back to its source sample point — needed when
-    # per-point design weights (edge_taper) are active.
-    ray_origins, ray_directions, patch_ids, _normals_per_ray, point_idx = (
+    # point_idx maps each ray back to its source sample point, for the
+    # behind-surface test and the per-point design weights (edge_taper).
+    ray_origins, ray_directions, patch_ids, point_idx = (
         generate_sky_patch_rays(
             sample_points,
             sample_normals,
@@ -537,86 +592,54 @@ def carve_with_sky_patch_rays(
             point_idx = point_idx[keep]
     ray_point_ids = point_idx.to(torch.int32)
 
-    total_rays = ray_origins.size(0)  # Total number of rays (R * P)
+    total_rays = ray_origins.size(0)  # after facing and zero-weight filtering
 
-    # --- 3) Load patch weights ---------------------------------------------
-    # patch_weights: tensor of length P, weight per sky patch for chosen mode
-    # --- NEW: cache in CarverSession if one is active ---------------------
-    sess = get_active_session(device)
-
-    def _compute_weights():
-        return get_weights(
-            mode=config.mode,
-            device=device,
-            epw_file=config.epw_path,
-            hoys=hoys,
-            dew_point_celsius=config.dew_point_celsius,
-            bliss_k=config.bliss_k,
-            balance_temperature=config.balance_temperature,
-            balance_offset=config.balance_offset,
-            north_deg=config.north_deg,
-            min_sky_elevation_deg=config.min_sky_elevation_deg,
-            include_harm=config.include_harm,
-            simulated_weights_path=config.simulated_weights_path,
-        )
-
-    if sess:
-        # Build a reproducible key from mode + key parameters
-        key_payload = {
-            "mode": config.mode,
-            "epw": config.epw_path,
-            "hoys": list(hoys),
-            "dew": config.dew_point_celsius,
-            "bliss": config.bliss_k,
-            "balance_T": config.balance_temperature,
-            "balance_off": config.balance_offset,
-            "north": config.north_deg,
-            "min_elev": config.min_sky_elevation_deg,
-            "incl_harm": config.include_harm,
-        }
-        if config.simulated_weights_path:
-            # Cache on artifact CONTENT, not path: regenerating the file
-            # must invalidate cached patch weights.
-            with open(config.simulated_weights_path, "rb") as f:
-                key_payload["simulated_weights"] = hashlib.md5(f.read()).hexdigest()
-        cache_key = "patch_weights:" + hashlib.md5(
-            json.dumps(key_payload, sort_keys=True).encode()
-        ).hexdigest()
-        patch_weights = sess.get_tensor(cache_key, _compute_weights)
-    else:
-        patch_weights = _compute_weights()
+    # --- 3) Patch weights: one value per sky patch for the chosen mode -----
+    patch_weights = get_weights(
+        mode=config.mode,
+        device=device,
+        epw_file=config.epw_path,
+        hoys=hoys,
+        dew_point_celsius=config.dew_point_celsius,
+        bliss_k=config.bliss_k,
+        balance_temperature=config.balance_temperature,
+        balance_offset=config.balance_offset,
+        north_deg=config.north_deg,
+        min_sky_elevation_deg=config.min_sky_elevation_deg,
+        include_harm=config.include_harm,
+        simulated_weights_path=config.simulated_weights_path,
+    )
 
     # --- 4) Initialize score accumulation ---------------------------------
-    num_voxels = voxel_grid.numel()     # Total voxels = X*Y*Z
-    scores = torch.zeros(num_voxels, device=device)  # Accumulator for voxel scores
-    grid_extent_m = float(grid_extent)  # Full world-space extent of the cubic voxel grid (meters)
+    num_voxels = voxel_grid.numel()
+    scores = torch.zeros(num_voxels, device=device)  # float32, flat X*Y*Z
+    grid_extent_m = float(grid_extent)
 
     # --- 5) Batch ray tracing & weighting ----------------------------------
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
     batch_size = _resolve_batch_size(config, res, device)
     use_fused = (_fused_dda is not None and dda_backend_available(device))
 
-    def _score_batch(start: int, end: int) -> None:
+    def _score_batch(start: int, end: int, buf) -> None:
         origins_batch = ray_origins[start:end]
         directions_batch = ray_directions[start:end]
         patches_batch = patch_ids[start:end]
 
         if use_fused:
-            # Fused DDA: traverse + score in a single Warp kernel.
-            # No output buffer, no post-processing. Modifies scores in-place.
+            # Trace and accumulate in one Warp kernel, writing into buf.
             _fused_dda(
-                grid_origin, float(grid_extent_m), grid_resolution,
+                grid_origin, float(grid_extent_m), res,
                 origins_batch, directions_batch, patches_batch,
-                patch_weights, scores, config.ray_length,
+                patch_weights, buf, config.ray_length,
                 point_ids=ray_point_ids[start:end],
                 point_weights=pw_t,
                 surface_normals=surface_normals,
             )
             return
 
-        # Legacy path: trace then accumulate on host
+        # Fallback without Warp: trace, then accumulate with torch.
         hit_ray_ids, hit_patch_ids, hit_voxel_idxs = trace_multi_hit_grid(
-            grid_origin, grid_extent_m, grid_resolution,
+            grid_origin, grid_extent_m, res,
             origins_batch, directions_batch, patches_batch,
             config.voxel_size, config.ray_length,
         )
@@ -646,59 +669,24 @@ def carve_with_sky_patch_rays(
                 point_idx[start:end][hit_ray_ids]
             ]
 
-        # Guard: filter out-of-bounds indices
-        if (idx_flat < 0).any() or (idx_flat >= num_voxels).any():
-            warnings.warn(
-                "trace_multi_hit_grid returned out-of-bounds voxel indices.",
-                stacklevel=2,
-            )
-            valid = (idx_flat >= 0) & (idx_flat < num_voxels)
-            idx_flat = idx_flat[valid]
-            weights_for_hits = weights_for_hits[valid]
-
-        if idx_flat.numel() == 0:
-            return
-
-        scores.scatter_add_(0, idx_flat, weights_for_hits)
+        buf.scatter_add_(0, idx_flat, weights_for_hits)
 
     batch_ranges = [
         (start, min(start + batch_size, total_rays))
         for start in range(0, total_rays, batch_size)
     ]
     with torch.no_grad():
-        if use_fused and device.type == "cpu" and len(batch_ranges) > 1:
-            # Warp executes CPU kernel launches single-threaded, and the
-            # launches release the GIL, so dispatching batches from a small
-            # thread pool runs them on multiple cores (~2x measured; gains
-            # taper beyond a few workers — the kernel is memory-bound).
-            # The shared score buffer stays correct because the kernel
-            # accumulates with atomic adds.  Note: like on CUDA, atomic
-            # float addition order varies, so scores can differ by
-            # float-rounding noise between runs.
-            from concurrent.futures import ThreadPoolExecutor
-            n_workers = min(4, os.cpu_count() or 1, len(batch_ranges))
-            # Run the first batch synchronously: it triggers Warp's lazy
-            # module load/JIT compile exactly once, single-threaded.
-            # Concurrent first launches from the pool would race the
-            # module build (Warp does not document it as thread-safe).
-            _score_batch(*batch_ranges[0])
-            with ThreadPoolExecutor(max_workers=n_workers) as pool:
-                # list() drains the iterator so worker exceptions propagate
-                list(pool.map(lambda rng: _score_batch(*rng), batch_ranges[1:]))
-        else:
-            for start, end in batch_ranges:
-                _score_batch(start, end)
+        _run_batches(batch_ranges, _score_batch, scores, device, parallel=use_fused)
 
-    # Synchronize GPU before reading scores
+    # Warp launches run on Warp's own CUDA stream; wait for them before
+    # torch reads the shared scores buffer.
     if device.type == "cuda":
         torch.cuda.synchronize()
 
-    raw_voxel_scores = scores.cpu().numpy()  # Move accumulated scores to CPU NumPy
+    raw_voxel_scores = scores.cpu().numpy()
 
-    # Return raw scores, patch weights, and (only on request) ray geometry.
-    # Thresholding and mask creation are handled exclusively by
-    # api_core.thresholding — keeping them separate avoids duplication
-    # and lets users re-threshold without re-tracing rays.
+    # Thresholding lives in api_core.thresholding, so users can re-threshold
+    # without re-tracing rays.
     return SkyPatchCarvingResult(
         ray_origins=ray_origins.cpu().numpy() if return_rays else None,
         ray_directions=ray_directions.cpu().numpy() if return_rays else None,
@@ -720,11 +708,11 @@ def carve_with_planes(
     """
     Tilted-plane daylight carving.
 
-    For each sample:
-      1) Project the surface normal to the XY plane → n_xy
-      2) Select angle α (single value or per-octant table)
-      3) Form d = cos(α)·n_xy + sin(α)·ẑ and march this direction
-    Every voxel at or above a visited voxel in its (x, y) column is deleted:
+    One ray per sample point:
+      1) Project the surface normal onto the XY plane to get n_xy.
+      2) Select the tilt angle α (single value or per-octant table).
+      3) Form d = cos(α)·n_xy + sin(α)·ẑ and trace a ray along it.
+    Every voxel at or above a visited cell in its (x, y) column is deleted:
     the ray traces the plane's section through that column, and everything
     above the plane is forbidden, not only the cells the ray crosses.
 
@@ -734,8 +722,10 @@ def carve_with_planes(
     sample_points, sample_normals :
         See :func:`carve_with_sun_rays` for shared parameter descriptions.
     config : user_config
-        Must contain ``tilted_plane_angle_deg`` — a single angle in degrees,
-        or an 8-element list [N, NE, E, SE, S, SW, W, NW] for octant lookup.
+        Must contain ``tilted_plane_angle_deg``: a single angle in degrees
+        above the horizon, or an 8-element list [N, NE, E, SE, S, SW, W, NW]
+        looked up by the compass direction the surface faces (which uses
+        ``north_deg``).
     return_counts : bool, default False
         If True, return a 4th element: per-voxel counts, propagated up each
         column (a voxel's count is the largest ray count at or below it).
@@ -743,35 +733,50 @@ def carve_with_planes(
     Returns
     -------
     carved_grid : torch.Tensor, shape (D, D, D)
-    ray_origins : np.ndarray, shape (N, 3)
-    ray_directions : np.ndarray, shape (N, 3)
-    counts : np.ndarray, shape (V,), optional
+    ray_origins : np.ndarray, shape (R, 3)
+        The sample points (one ray each).
+    ray_directions : np.ndarray, shape (R, 3)
+    counts : np.ndarray, shape (D*D*D,), int32, optional
         Only returned when *return_counts* is True.
+
+    Raises
+    ------
+    ValueError
+        If ``tilted_plane_angle_deg`` is neither a number nor 8 values.
     """
     _validate_cubic_resolution(grid_resolution, "carve_tilted_plane")
     side_len = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
 
     device = voxel_grid.device
 
-    # sample points
     if isinstance(sample_points, torch.Tensor):
         pts_np = sample_points.detach().cpu().numpy().astype(np.float32)
     else:
         pts_np = np.asarray(sample_points, dtype=np.float32)
 
-    # sample_normals
     if isinstance(sample_normals, torch.Tensor):
         norms_np = sample_normals.detach().cpu().numpy().astype(np.float32)
     else:
         norms_np = np.asarray(sample_normals, dtype=np.float32)
 
-    # Project surface normals onto the XY (horizontal) plane.
-    # This gives the outward-facing horizontal direction of each test surface,
-    # which determines which octant it faces (N, NE, E, ...).
-    # Z is zeroed because the tilt angle is measured FROM horizontal.
+    # Project surface normals onto the XY (horizontal) plane: the result is
+    # the horizontal direction each test surface faces, which the tilt angle
+    # is measured up from and which selects the octant (N, NE, E, ...).
     n_xy = norms_np.copy()
     n_xy[:, 2] = 0.0
     lens = np.linalg.norm(n_xy[:, :2], axis=1, keepdims=True)
+    # A horizontal component below 0.05 means the normal is within about 3°
+    # of vertical (roofs, courtyard floors): no usable facade direction.
+    flat = lens[:, 0] < 0.05
+    if flat.any():
+        warnings.warn(
+            f"tilted_plane: {int(flat.sum())} of {len(lens)} sample points lie on "
+            f"(nearly) horizontal test surfaces, which have no reliable facing "
+            f"direction for a tilted plane. On exactly horizontal surfaces the ray "
+            f"goes straight up and protects only the sky directly above; on nearly "
+            f"horizontal ones it follows the small horizontal tilt of the normal.",
+            stacklevel=2,
+        )
     np.maximum(lens, 1e-9, out=lens)
     n_xy[:, :2] /= lens
 
@@ -793,18 +798,16 @@ def carve_with_planes(
         # the true compass azimuth of each surface normal.
         north_deg = float(config.north_deg)
         phi = (np.degrees(np.arctan2(n_xy[:, 0], n_xy[:, 1])) - north_deg + 360.0) % 360.0
-        # 22.5° = 360° / (8 × 2) — half-octant offset so bin centers align with
-        # cardinal/intercardinal directions (N=0°, NE=45°, E=90°, ...)
-        # 45° = 360° / 8 — angular width of each octant bin
+        # Octant bins are 45° wide (360° / 8). Adding half a bin (22.5°)
+        # centres each bin on its direction (N = 0°, NE = 45°, E = 90°, ...),
+        # so N covers 337.5° to 22.5°.
         idx = np.floor(((phi + 22.5) % 360.0) / 45.0).astype(np.int64)
         alpha_deg = table[idx]
 
     alpha_rad = np.radians(alpha_deg).astype(np.float32)
 
-    # Construct ray direction: d = cos(a)*n_xy + sin(a)*z_hat
-    # Interpolates between horizontal (a=0) and vertical (a=90 deg).
-    # At a=45 deg the ray tilts 45 deg above the horizon, outward
-    # in the direction the surface faces.
+    # Ray direction d = cos(a)*n_xy + sin(a)*z_hat: horizontal and outward
+    # at a = 0, vertical at a = 90 deg, a deg above the horizon in between.
     dirs_np = (
         np.cos(alpha_rad)[:, None] * n_xy
         + np.sin(alpha_rad)[:, None] * np.array([[0.0, 0.0, 1.0]], dtype=np.float32)
@@ -812,7 +815,6 @@ def carve_with_planes(
     dirs_np /= np.maximum(np.linalg.norm(dirs_np, axis=1, keepdims=True), 1e-9)
     dirs_np = dirs_np.astype(np.float32)
 
-    # carve via tracer
     origins_tensor = torch.from_numpy(pts_np).to(device, non_blocking=True)
     dirs_tensor = torch.from_numpy(dirs_np).to(device, non_blocking=True)
 
@@ -823,8 +825,9 @@ def carve_with_planes(
         torch.arange(pts_np.shape[0], device=device),
         torch.from_numpy(norms_np).to(device),
     )
-    # Hits include empty cells: a ray passing over a low roof still bounds
-    # the mass above that roof.
+    # Propagate counts up each (x, y) column (running maximum along z), so
+    # every cell at or above a visited cell is carved. Visits to empty cells
+    # count too: a ray passing over a low roof still bounds the mass above it.
     counts = torch.cummax(counts.view(side_len, side_len, side_len), dim=2).values.reshape(-1)
     carved_grid = _carve_by_counts(voxel_grid, counts)
 
@@ -856,13 +859,14 @@ def carve_above_columns(
         Thresholding mask.  True = keep, False = carved.  Not mutated.
     voxel_grid : ndarray (D, D, D) bool
         Original envelope occupancy.  True = occupied.
-    min_consecutive : int
+    min_consecutive : int, default 1
         Minimum consecutive carved voxels to trigger carve-above.
 
     Returns
     -------
     ndarray (D, D, D) bool
-        Modified mask with voxels above qualifying runs carved.
+        A copy of *mask* with the occupied voxels above qualifying runs
+        set to False.
     """
     out = np.ascontiguousarray(mask.astype(bool, copy=True))
     occ = np.ascontiguousarray(voxel_grid.astype(bool, copy=False))
@@ -872,7 +876,7 @@ def carve_above_columns(
 
 @njit(cache=True)
 def _carve_above_kernel(out, voxel_grid, min_consecutive):
-    """Numba kernel for :func:`carve_above_columns` — mutates *out* in place.
+    """Numba kernel for :func:`carve_above_columns`; mutates *out* in place.
 
     Scans each column bottom-to-top: the first run of >= min_consecutive
     carved voxels triggers carve-above for all occupied voxels higher in
@@ -894,8 +898,8 @@ def _carve_above_kernel(out, voxel_grid, min_consecutive):
                     if z - run_start >= min_consecutive:
                         trigger_top = z - 1
                         break
-                    # Short run: too small to trigger, but it stays carved —
-                    # refilling would undo the solar constraint.
+                    # Short run: too small to trigger, but it stays carved;
+                    # refilling it would undo the solar constraint.
                 else:
                     z += 1
 

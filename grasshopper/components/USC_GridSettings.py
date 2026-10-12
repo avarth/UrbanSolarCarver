@@ -1,18 +1,20 @@
-"""USC Grid Settings — Control voxel grid resolution and padding.
+"""USC Grid Settings: control voxel grid resolution and padding.
 
 Inputs
 ------
 voxel_size : float, optional
     Voxel edge length in meters. Smaller = finer but slower. Default: 1.0
 grid_step : float, optional
-    Surface sampling spacing in meters. Default: 1.0
+    Surface sampling spacing in meters; must not exceed voxel_size.
+    Default: 1.0
 margin_frac : float, optional
-    Padding fraction around geometry bounding box. Default: 0.01
+    Padding on each side of the grid, as a fraction of the longest side
+    of the max volume's bounding box. Default: 0.01
 
 Outputs
 -------
-overrides : list of str
-    Key=value pairs for grid parameters.
+overrides : str
+    Semicolon-joined key=value pairs for the connected inputs.
 """
 
 try:
@@ -22,9 +24,9 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
-        ("voxel_size", "Edge length of each voxel cube in meters. Smaller values = finer resolution but slower computation. Start with 2.0 for testing, use 1.0 or 0.5 for final results. Typical range: 0.5 to 5.0 m."),
-        ("grid_step", "Spacing between sample points on the test surfaces, in meters. Controls how densely rays are cast. Should be similar to or smaller than voxel_size. Typical: 1.0 m."),
-        ("margin_frac", "Padding added around the geometry as a fraction of the bounding box. Prevents edge artifacts. Default 0.01 (1%). Increase to 0.05 if you see clipping at boundaries."),
+        ("voxel_size", "Edge length of each voxel cube in meters. Smaller values = finer resolution but slower computation. Start with 2.0 for testing, use 1.0 or 0.5 for final results. Typical range: 0.5 to 5.0 m. grid_step must not exceed voxel_size, so lower grid_step too when going below 1.0."),
+        ("grid_step", "Spacing between sample points on the test surfaces, in meters. Rays are cast from each point, so this controls how densely rays are cast. Must be less than or equal to voxel_size (the config rejects a larger value). Typical: 1.0 m."),
+        ("margin_frac", "Empty padding added on each side of the voxel grid, as a fraction of the longest side of the max volume's bounding box. Default 0.01 (1%). Increase to 0.05 if you see clipping at boundaries."),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d

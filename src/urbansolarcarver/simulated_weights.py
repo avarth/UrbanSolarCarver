@@ -1,14 +1,17 @@
 """Simulated benefit weights for benefit mode (ISO 13790 5R1C).
 
-Implements the ISO 13790 Annex C simple hourly method ("5R1C" — five
-conductances, one capacitance) and derives, by perturbation, the marginal
-benefit and harm of solar gain at every hour of the year:
+Implements the ISO 13790 Annex C simple hourly method ("5R1C": five
+thermal conductances and one heat capacity, as an electrical-circuit
+analogue of a single building zone) and derives, by perturbation, the
+marginal benefit and harm of solar gain at every hour of the year:
 
     benefit[t] = -dQ_heating / dPhi_sol(t)   in [0, 1]
     harm[t]    = +dQ_cooling / dPhi_sol(t)   in [0, 1]
 
-The two series are written to a ``simulated_weights.json`` artifact that
-benefit mode can consume in place of its balance-point Heaviside filter.
+Q_heating and Q_cooling are the annual demands [Wh] and Phi_sol(t) is the
+solar gain entering the zone in hour t [W].  The two series are written to
+a ``simulated_weights.json`` artifact that benefit mode can use in place of
+its balance-point Heaviside filter.
 
 Provenance: this is an independent implementation written directly from
 the ISO 13790 Annex C equation set (not a fork or port of an existing
@@ -16,10 +19,11 @@ simulator). It is cross-validated against ETH Zurich's RC_BuildingSimulator
 (MIT, https://github.com/architecture-building-systems/RC_BuildingSimulator;
 Jayathissa et al., Applied Energy 202, 2017) on three archetype scenarios
 (medium office, heavy masonry, light insulated) driven by the bundled
-Golden TMY3 EPW: annual heating/cooling demand totals to ~1 Wh/year plus
-hourly air/mass temperatures and demands at sampled hours, with the
-oracle's derived conductances fed in directly so the hourly recurrence is
-what is compared. Reference data: ``tests/data/oracle_5r1c_reference.json``;
+Golden TMY3 EPW.  The reference simulator's derived conductances are fed
+in directly, so the comparison tests the hourly recurrence: annual heating
+and cooling demands agree within 1 Wh (or a relative 1e-6), and hourly air
+and mass temperatures and demands agree at sampled hours.
+Reference data: ``tests/data/oracle_5r1c_reference.json``;
 regression: ``tests/test_simulated_weights.py``. Design, coefficient provenance,
 and declared limitations: ``design/simulated-weights.md``; user-level
 documentation: ``docs/simulated-weights.md``.
@@ -41,11 +45,13 @@ import numpy as np
 HOURS = 8760
 
 # ISO 13790 fixed coupling coefficients (§7.2.2.2, §12.2.2)
-H_IS = 3.45      # W/m²K — air ↔ surface node
-H_MS = 9.1       # W/m²K — surface ↔ mass node
-LAMBDA_AT = 4.5  # A_tot = LAMBDA_AT * floor_area
+H_IS = 3.45      # W/m²K, air node to internal-surface node
+H_MS = 9.1       # W/m²K, internal-surface node to mass node
+LAMBDA_AT = 4.5  # A_tot = LAMBDA_AT * floor_area (area of all internal surfaces)
 
-# ISO 13790 Table 12 — lumped mass classes per m² of floor area
+# ISO 13790 Table 12 mass classes: (A_m per m² floor area [m²/m²],
+# C_m per m² floor area [J/(m²K)]), where A_m is the effective mass area and
+# C_m the internal heat capacity.
 MASS_CLASSES = {
     "very_light": (2.5, 80_000.0),
     "light":      (2.5, 110_000.0),
@@ -57,11 +63,15 @@ MASS_CLASSES = {
 
 @dataclass(frozen=True)
 class ZoneParams:
-    """5R1C parameters, all conductances in W/K, capacitance in J/K.
+    """5R1C parameters: conductances (``h_*``) in W/K, ``c_m`` in J/K,
+    areas (``floor_area``, ``a_m``, ``a_t``) in m², set-points in °C.
+
+    ``h_tr_em`` is exterior to mass, ``h_tr_w`` windows, ``h_tr_is`` air to
+    internal surfaces, ``h_tr_ms`` surfaces to mass, ``h_ve`` ventilation.
 
     Use :meth:`from_archetype` to derive them from physical archetype
     inputs per the standard; tests may also construct directly from
-    known conductances (e.g. oracle-derived values).
+    known conductances (e.g. values from the reference simulator).
     """
     floor_area: float
     h_tr_em: float
@@ -96,9 +106,19 @@ class ZoneParams:
         - A_tot = 4.5 · A_f;  H_tr,is = 3.45 · A_tot
         - (A_m, C_m) from the Table-12 mass class
         - H_tr,ms = 9.1 · A_m
+        - H_tr,op = U_opaque · A_opaque;  H_tr,w = U_window · A_window
         - H_tr,em = 1 / (1/H_tr,op − 1/H_tr,ms)   (§12.2.2 serial split)
-        - H_ve = 1200 · b_ek · V · ACH_tot/3600, with the heat-recovery
+        - H_ve = 1200 · b_ek · V · ACH_tot/3600, with 1200 J/(m³K) the
+          volumetric heat capacity of air and the heat-recovery
           adjustment b_ek = 1 − (ACH_vent/ACH_tot) · η_hr (Annex E).
+
+        Units: areas in m², ``volume`` in m³, U-values in W/(m²K), air
+        change rates in 1/h, ``heat_recovery`` (η_hr) as a fraction 0-1,
+        set-points in °C.
+
+        Raises ValueError for an unknown ``mass_class``, when
+        H_tr,op >= H_tr,ms (the serial split would be negative or
+        infinite), or when the total air change rate is not positive.
         """
         if mass_class not in MASS_CLASSES:
             raise ValueError(
@@ -115,7 +135,7 @@ class ZoneParams:
             raise ValueError(
                 f"Opaque conductance H_tr,op = {h_tr_op:g} W/K must be "
                 f"below H_tr,ms = {h_tr_ms:g} W/K for the serial split "
-                f"(§12.2.2) — check U-values/areas or pick a heavier "
+                f"(§12.2.2). Check U-values/areas or pick a heavier "
                 f"mass class."
             )
         h_tr_em = 1.0 / (1.0 / h_tr_op - 1.0 / h_tr_ms)
@@ -142,15 +162,19 @@ class ZoneParams:
 @dataclass
 class SimulationResult:
     """Annual outcome of :func:`simulate` (single trajectory)."""
-    q_heating_wh: float
-    q_cooling_wh: float
-    t_air: np.ndarray      # (8760,) final air temperature per hour
-    t_m: np.ndarray        # (8760,) mass temperature after each hour
-    demand_w: np.ndarray   # (8760,) signed Phi_HC (heating +, cooling −)
+    q_heating_wh: float    # annual heating demand [Wh]
+    q_cooling_wh: float    # annual cooling demand [Wh]
+    t_air: np.ndarray      # (8760,) air temperature with heating/cooling applied [°C]
+    t_m: np.ndarray        # (8760,) mass temperature at the end of each hour [°C]
+    demand_w: np.ndarray   # (8760,) signed Phi_HC [W] (heating +, cooling −)
 
 
 def _hourly_constants(p: ZoneParams):
-    """Precompute state-independent quantities of the C.4–C.11 chain."""
+    """Precompute the state-independent quantities of equations C.2-C.11.
+
+    Returns (H_tr,1, H_tr,2, H_tr,3, A_m/A_t, the surface-node share of the
+    gains from C.2, and the two coefficients of the mass update C.4).
+    """
     h1 = 1.0 / (1.0 / p.h_ve + 1.0 / p.h_tr_is)          # C.6
     h2 = h1 + p.h_tr_w                                    # C.7
     h3 = 1.0 / (1.0 / h2 + 1.0 / p.h_tr_ms)               # C.8
@@ -163,17 +187,21 @@ def _hourly_constants(p: ZoneParams):
 
 
 def _air_temperature(p, consts, t_m_prev, t_e, phi_int, phi_sol, phi_hc):
-    """One evaluation of the Annex C chain for a given HC power.
+    """One evaluation of the Annex C chain for a given heating/cooling power.
 
-    Returns (theta_air, theta_m_next). All arguments broadcast; the
-    heating/cooling power enters the air node (standard base case).
+    Temperatures in °C, powers in W: ``t_m_prev`` is the mass temperature
+    at the start of the hour, ``t_e`` the outdoor temperature, ``phi_int``
+    the internal gains, ``phi_sol`` the solar gains and ``phi_hc`` the
+    heating (+) or cooling (−) power.  Returns (theta_air, theta_m_next).
+    All arguments broadcast; the heating/cooling power enters the air node
+    (the standard's base case).
     """
     h1, h2, h3, m_frac, st_frac, denom_m, coef_prev = consts
     gains = 0.5 * phi_int + phi_sol
     phi_ia = 0.5 * phi_int + phi_hc                       # C.1 (+ HC to air)
     phi_st = st_frac * gains                              # C.2
     phi_m = m_frac * gains                                # C.3
-    # C.5 — t_supply = t_e (no preheating)
+    # C.5, with supply-air temperature = t_e (no preheating)
     phi_m_tot = phi_m + p.h_tr_em * t_e + h3 * (
         phi_st + p.h_tr_w * t_e + h1 * (phi_ia / p.h_ve + t_e)
     ) / h2
@@ -191,12 +219,19 @@ def _air_temperature(p, consts, t_m_prev, t_e, phi_int, phi_sol, phi_hc):
 
 def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
            t_m_init: float = 20.0, record_series: bool = False):
-    """March the year. Vectorized over trajectories.
+    """Step through the 8760 hours of the year, vectorized over trajectories.
 
-    With ``deltas=None`` runs a single trajectory. With ``deltas=eps``
-    runs 1 + 2·8760 trajectories: the base, then for each hour t a pair
-    with ``phi_sol[t] ± eps`` (central differences for attribution)
-    without materializing an (N, 8760) gain matrix.
+    With ``deltas=None`` runs a single trajectory. With ``deltas=eps`` [W]
+    runs 1 + 2·8760 trajectories: row 0 is the base case, and for each
+    hour t row 1 + 2t has ``phi_sol[t] + eps`` and row 2 + 2t has
+    ``phi_sol[t] - eps`` (central differences for attribution).  The
+    perturbed gains are built one hour at a time, so no (N, 8760) gain
+    matrix is stored.
+
+    Returns (q_h, q_c, series_air, series_tm, series_demand): annual
+    heating and cooling demand [Wh] per trajectory (shape (N,)), and,
+    when ``record_series`` is true, hourly air temperature, mass
+    temperature and signed demand of row 0 (otherwise None).
     """
     consts = _hourly_constants(p)
     phi_10 = 10.0 * p.floor_area  # C.4.2 test load
@@ -229,6 +264,7 @@ def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
 
         # Step 2: 10 W/m² test load and linear interpolation to set-point.
         # The system is affine in phi_hc, so the interpolation is exact.
+        # Heating and cooling power is unlimited (no maximum-capacity check).
         t_air_10, _ = _air_temperature(p, consts, t_m, t_e, p_int, phi_sol,
                                        phi_10)
         slope = t_air_10 - t_air_0
@@ -254,8 +290,10 @@ def simulate(p: ZoneParams, t_out, phi_int, phi_sol,
              t_m_init: float = 20.0) -> SimulationResult:
     """Annual 5R1C simulation of a single zone (Wh demands, °C series).
 
-    Parameters are hourly arrays of length 8760: outdoor dry-bulb [°C],
-    internal gains [W], transmitted solar gains [W].
+    ``t_out``, ``phi_int`` and ``phi_sol`` are hourly arrays of length
+    8760: outdoor dry-bulb [°C], internal gains [W], transmitted solar
+    gains [W].  ``t_m_init`` is the mass temperature at the start of the
+    year [°C].  Raises ValueError if an array does not have shape (8760,).
     """
     t_out = np.asarray(t_out, dtype=np.float64)
     phi_int = np.asarray(phi_int, dtype=np.float64)
@@ -283,11 +321,15 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
     Returns ``(benefit, harm)``, each (8760,) in [0, 1]:
     the fraction of one extra watt-hour of solar gain at hour t that
     offsets heating demand / becomes cooling load over the year.
+    ``eps`` is the perturbation size [W]; the other arguments are as in
+    :func:`simulate`.
 
-    Values are marginal at this archetype's operating point; hours at a
-    control-regime switch produce subgradients (smoothed by the central
-    difference). Small out-of-range values from switching noise are
-    clipped; gross violations warn.
+    Values are marginal at this archetype's operating point.  At hours
+    where the control switches between heating, free-floating and
+    cooling, the derivative is not defined and the central difference
+    gives an average of the one-sided slopes.  Out-of-range values up to
+    0.02 from such switching are clipped silently; larger ones are also
+    clipped but trigger a warning.
     """
     t_out = np.asarray(t_out, dtype=np.float64)
     phi_int = np.asarray(phi_int, dtype=np.float64)
@@ -304,7 +346,7 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
         if low < -tol or high > 1.0 + tol:
             warnings.warn(
                 f"attribute_solar_gains: {name} outside [0, 1] beyond switching "
-                f"tolerance (min {low:.3f}, max {high:.3f}) — check inputs.",
+                f"tolerance (min {low:.3f}, max {high:.3f}); check inputs.",
                 stacklevel=2,
             )
     return np.clip(benefit, 0.0, 1.0), np.clip(harm, 0.0, 1.0)
@@ -322,11 +364,17 @@ def transmitted_solar_from_epw(
     """Hourly transmitted solar gain [W] for a set of vertical windows.
 
     ``windows``: sequence of (azimuth_deg, area_m2, g_value); azimuth in
-    Ladybug convention (0 = N, 90 = E, 180 = S, 270 = W). Irradiance from
-    the EPW via Ladybug's isotropic directional model.
+    Ladybug convention (0 = N, 90 = E, 180 = S, 270 = W); g_value is the
+    glazing's total solar energy transmittance (0-1).  The irradiance on
+    each window plane [W/m²] comes from Ladybug's
+    ``Wea.directional_irradiance`` for a vertical surface (isotropic sky,
+    ground reflectance 0.2, no obstructions); it is multiplied by
+    area and g_value.
 
     ``hourly_factors``: optional per-window hourly transmission multipliers
     (one (8760,) array per window, e.g. shading coefficients); default 1.
+
+    Returns an (8760,) array of the summed gain over all windows [W].
     """
     from ladybug.wea import Wea
     wea = Wea.from_epw_file(str(epw_path))
@@ -342,10 +390,10 @@ def transmitted_solar_from_epw(
 
 
 # ---------------------------------------------------------------------------
-# Shading coefficients (declared multipliers — no device geometry is modelled)
+# Shading coefficients (declared multipliers; no shading-device geometry is modelled)
 # ---------------------------------------------------------------------------
 
-# Cumulative day-of-year at the start of each month (non-leap TMY).
+# Zero-based day of year on which each month starts (non-leap TMY year).
 _MONTH_START_DAY = np.cumsum([0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30])
 
 _CARDINALS = ("north", "east", "south", "west")
@@ -424,14 +472,19 @@ def _shading_factors(windows, shading_permanent, shading_hot, hot_months):
 
 
 # ---------------------------------------------------------------------------
-# Artifact I/O — simulated_weights.json (schema_version 1)
+# Artifact I/O: simulated_weights.json (schema_version 1)
 # ---------------------------------------------------------------------------
 
 SCHEMA_VERSION = 1
 
 
 def write_simulated_weights(path, benefit, harm, meta: dict) -> Path:
-    """Write the simulated_weights.json artifact (schema in the design note)."""
+    """Write the simulated_weights.json artifact and return its path.
+
+    The schema is described in ``design/simulated-weights.md``.  Values are
+    rounded to 6 decimals.  Raises ValueError if either series is not 8760
+    finite values in [0, 1].
+    """
     benefit = np.asarray(benefit, dtype=np.float64)
     harm = np.asarray(harm, dtype=np.float64)
     _validate_series("benefit", benefit)
@@ -445,6 +498,7 @@ def write_simulated_weights(path, benefit, harm, meta: dict) -> Path:
         },
     }
     path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 
@@ -452,7 +506,9 @@ def write_simulated_weights(path, benefit, harm, meta: dict) -> Path:
 def read_simulated_weights(path) -> Tuple[np.ndarray, np.ndarray, dict]:
     """Read and validate a simulated_weights.json artifact.
 
-    Returns (benefit, harm, meta).
+    Returns (benefit, harm, meta): two (8760,) float64 arrays and the
+    metadata dict.  Raises ValueError if the file cannot be read or parsed,
+    has an unsupported schema_version, or holds invalid series.
     """
     path = Path(path)
     try:
@@ -505,22 +561,27 @@ def expand_shoebox(archetype: dict) -> dict:
     Instead of ``floor_area`` / ``volume`` / ``area_opaque`` / ``area_window``
     / ``windows``, an archetype may describe a rectangular single-zone box:
 
-    - ``width``  — east-west dimension (m)
-    - ``length`` — north-south dimension (m)
-    - ``height`` — storey height (m)
-    - ``wwr``    — window-to-wall ratio per facade, keyed by cardinal name
-      (``north`` / ``east`` / ``south`` / ``west``); omitted sides get none
-    - ``g_value`` — glazing solar transmittance for all windows (default 0.6)
-    - ``orientation`` — degrees to rotate the box clockwise from north
+    - ``width``: east-west dimension (m)
+    - ``length``: north-south dimension (m)
+    - ``height``: storey height (m)
+    - ``wwr``: window-to-wall ratio per facade in [0, 1), keyed by cardinal
+      name (``north`` / ``east`` / ``south`` / ``west``); omitted sides get
+      no window
+    - ``g_value``: glazing solar transmittance for all windows (default 0.6)
+    - ``orientation``: degrees to rotate the box clockwise from north
       (optional, default 0)
 
     Derived: floor area = width x length; volume = floor area x height;
     per-facade window areas = wwr x facade area; ``area_opaque`` = opaque
     walls + roof (ground slab excluded); ``area_window`` = sum of windows.
-    Archetypes without shoebox keys pass through unchanged.
+    Archetypes without any of the shoebox keys above are returned as an
+    unchanged copy.
+
+    Raises ValueError if the shoebox keys are incomplete, mixed with
+    explicit-area keys, non-positive, or define no window.
     """
     keys = set(archetype)
-    if not keys & _SHOEBOX_KEYS:
+    if not keys & (_SHOEBOX_KEYS | {"wwr", "g_value", "orientation"}):
         return dict(archetype)
     if not keys >= _SHOEBOX_KEYS:
         missing = sorted(_SHOEBOX_KEYS - keys)
@@ -616,13 +677,21 @@ def generate_simulated_weights(
 
     ``archetype`` holds the :meth:`ZoneParams.from_archetype` keyword
     arguments plus ``windows``: a list of [azimuth_deg, area_m2, g_value]
-    (or the shoebox geometry shorthand).
+    (or the shoebox geometry shorthand, see :func:`expand_shoebox`).
+    Optional keys: ``shading_permanent``, ``shading_hot`` and
+    ``hot_months`` (transmission multipliers, see :func:`_shading_factors`),
+    and the internal-gain keys below.
 
     Internal gains are either a single flat value [W/m²] or a 24-value
     daily occupancy profile [W/m² per hour of day], tiled over the year.
     They may come from the ``internal_gains_w_m2`` /
     ``internal_gains_profile_w_m2`` archetype keys, or be passed as the
     ``internal_gains_w_m2`` argument (which takes precedence). Default 5.0.
+
+    ``eps`` is the solar-gain perturbation [W] used by
+    :func:`attribute_solar_gains`.  Writes the JSON artifact to
+    ``out_path`` and, if matplotlib is installed, a heatmap PNG next to it
+    with the same name; returns the artifact path.
     """
     arch = expand_shoebox(archetype)
     profile = arch.pop("internal_gains_profile_w_m2", None)
@@ -654,9 +723,9 @@ def generate_simulated_weights(
     phi_sol = transmitted_solar_from_epw(epw_path, windows,
                                          hourly_factors=shading)
     if shading is not None:
-        # Effective exterior-to-transmitted factor per hour: the weights
-        # describe a marginal joule of EXTERIOR solar, so the attribution
-        # must be attenuated by the same shading the building applies.
+        # Effective shading factor per hour (shaded / unshaded gain).  Benefit
+        # mode applies the weights to unshaded sky irradiance, so the weight
+        # per transmitted watt-hour must be reduced by the same shading.
         unshaded = transmitted_solar_from_epw(epw_path, windows)
         f_eff = np.divide(phi_sol, unshaded,
                           out=np.ones(HOURS), where=unshaded > 0.0)
@@ -674,9 +743,9 @@ def generate_simulated_weights(
 
     benefit, harm = attribute_solar_gains(params, t_out, phi_int, phi_sol, eps=eps)
     if shading is not None:
-        # A marginal exterior joule is attenuated before it becomes a
-        # transmitted joule; scale the attribution accordingly (f_eff <= 1,
-        # so the [0, 1] bounds are preserved).
+        # Only the fraction f_eff of an extra unshaded watt-hour reaches the
+        # zone; scale the attribution accordingly (f_eff <= 1, so the
+        # [0, 1] bounds are preserved).
         benefit = benefit * f_eff
         harm = harm * f_eff
 

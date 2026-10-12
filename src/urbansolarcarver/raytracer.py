@@ -1,24 +1,26 @@
 """
-UrbanSolarCarver -- Ray Generation & Voxel Grid Traversal
+UrbanSolarCarver: ray generation and voxel grid traversal
 =========================================================
 
-This module provides ray generation (face-culled sky-patch and sun-vector
-rays) and voxel-grid traversal for the carving pipeline.
+This module builds rays (sample point to sky patch, or sample point to sun,
+keeping only directions the surface faces), traces them through the voxel
+grid for the carving pipeline, and solid-voxelizes meshes with Warp.
 
 Two traversal backends are available:
 
-* DDA (Amanatides & Woo 1987) -- a Warp kernel that launches one
-  thread per ray and walks through voxels using the standard 3-D DDA
-  algorithm. Each voxel is visited exactly once per ray, eliminating
-  duplicate hits and reducing VRAM usage by ~10x compared to the
-  broadcasting approach. This is the default whenever Warp is available
-  (both CUDA and CPU devices).
+* DDA (digital differential analyzer, Amanatides & Woo 1987): Warp kernels
+  that run one thread per ray and step from voxel to voxel, visiting every
+  voxel the ray crosses exactly once.  The fused kernels
+  (:func:`trace_and_score_dda`, :func:`trace_and_count_dda`) add each
+  ray's weight or a count of 1 directly into a per-voxel volume, so no
+  list of hits is stored.  Used whenever Warp can run on the device
+  (CUDA or Warp's CPU backend).
 
-* Fixed-step (legacy) -- pure-PyTorch tensor broadcasting.
-  Materializes the full R x S x 3 sample-point tensor in memory.
-  Kept as a last-resort fallback when Warp is not installed.  Note that
-  fixed stepping is approximate: oblique rays can skip voxels whose
-  intersection segment is shorter than the step, under-counting hits.
+* Fixed-step fallback (:func:`trace_multi_hit_grid`): pure PyTorch, used
+  only when Warp is unavailable.  It samples each ray at regular
+  distances and returns the list of (ray, voxel) pairs.  It is
+  approximate: an oblique ray can cross a voxel corner between two
+  samples, so that voxel is missed.
 
 References
 ----------
@@ -27,9 +29,11 @@ Ray Tracing." Eurographics '87, pp. 3-10.
 
 Coordinate conventions
 ----------------------
-* World-to-grid:  grid_idx = floor((world_pt - origin) / cell_size)
+* World to grid:  grid_idx = floor((world_pt - origin) / cell_size)
 * Cell size:      cell_size = scale / resolution   (meters per voxel)
-* Floor (not round) avoids checkerboard aliasing on planar lattices.
+* Flat index:     x * resolution**2 + y * resolution + z (row-major, C order)
+* floor maps a point to the voxel that contains it; rounding would shift
+  every index by half a voxel.
 """
 
 import math
@@ -37,7 +41,6 @@ import math
 import torch
 import numpy as np
 from typing import Tuple
-from urbansolarcarver.session import session_cache
 import logging
 
 log = logging.getLogger(__name__)
@@ -46,14 +49,18 @@ log = logging.getLogger(__name__)
 # Warp DDA kernel (compiled lazily on first use)
 # ---------------------------------------------------------------------------
 _warp_available = False
-_warp_fallback_warned = False
 _warp_cpu_ok_cache: "bool | None" = None
 try:
     import warp as wp
     wp.init()
     _warp_available = True
+except ImportError:
+    log.debug("Warp is not installed; using the PyTorch fallback tracer")
 except Exception as _warp_err:
-    log.debug("Warp unavailable: %s", _warp_err)
+    # Installed but unusable (driver, CUDA or compiler problem): say why,
+    # since every result then comes from the slower fallback paths.
+    log.warning("Warp failed to initialise (%s); using the PyTorch fallback "
+                "tracer and the trimesh voxelizer", _warp_err)
 
 
 def _warp_cpu_ok() -> bool:
@@ -68,16 +75,15 @@ def _warp_cpu_ok() -> bool:
 
 
 def warmup_kernels(device=None) -> bool:
-    """Eagerly compile (or load from the on-disk cache) this module's Warp
-    kernels for *device*.
+    """Compile (or load from the on-disk cache) this module's Warp kernels
+    for *device* now instead of on first use.
 
-    Warp JIT-compiles all kernels in a module on the first launch — a
-    one-time ~3-10 s cost per machine, per device, per code version, after
-    which the compiled binaries are served from Warp's disk cache in
-    milliseconds.  Calling this during installation (``setup_env.py``),
-    daemon startup, or via ``usc warmup`` moves that cost to a moment
-    where the user already expects to wait, so the first carving run is
-    not misleadingly slow.
+    Warp compiles all kernels in a module on the first launch.  This costs
+    roughly 3-10 s once per machine, device and code version; afterwards
+    the compiled binaries load from Warp's disk cache in milliseconds.
+    Calling this during installation (``setup_env.py``), at daemon startup,
+    or via ``usc warmup`` moves that cost to a moment where the user
+    already expects to wait, so the first carving run is not slowed by it.
 
     Parameters
     ----------
@@ -89,8 +95,9 @@ def warmup_kernels(device=None) -> bool:
     -------
     bool
         True if the kernels are ready on the device (compiled or cached);
-        False if Warp is unavailable or compilation failed (the pipeline
-        still works — kernels compile lazily on first use).
+        False if Warp is unavailable or compilation failed.  The pipeline
+        still works in that case: kernels compile on first use, or the
+        fallback tracer is used.
     """
     if not _warp_available:
         return False
@@ -106,8 +113,8 @@ def warmup_kernels(device=None) -> bool:
         wp.load_module(module=sys.modules[__name__], device=device_str)
         return True
     except Exception as exc:
-        log.warning("Warp kernel warmup failed (%s) — kernels will compile "
-                    "lazily on first use instead.", exc)
+        log.warning("Warp kernel warmup failed (%s); kernels will compile "
+                    "on first use instead.", exc)
         return False
 
 
@@ -123,13 +130,18 @@ def dda_backend_available(device) -> bool:
 
 if _warp_available:
     # ===================================================================
-    # SHARED DDA TRAVERSAL
-    # The three DDA kernels below (trace / fused score / fused count)
+    # Shared DDA traversal
+    # The three DDA kernels below (score, point-weighted score, count)
     # differ only in what they do at each visited voxel.  The traversal
-    # itself — ray-AABB entry test, DDA state setup, per-voxel advance —
-    # lives in the _dda_init/_dda_step device functions, so any change
-    # to it (EPS, clamping, step logic, bounds checks) is made in ONE
-    # place and applies to all three kernels.
+    # itself (ray/box entry test, DDA state setup, step to the next voxel)
+    # lives in the _dda_init and _dda_step device functions, so a change
+    # to it applies to all three kernels.
+    #
+    # Accumulation uses wp.atomic_add.  On CUDA this is atomic.  On the
+    # Warp CPU backend a launch runs its threads one after another, so
+    # one launch is safe, but atomic_add is not atomic across launches
+    # running in parallel OS threads; carving._run_batches therefore
+    # gives each worker thread its own output array.
     # ===================================================================
 
     @wp.struct
@@ -157,16 +169,17 @@ if _warp_available:
         resolution: int,
         max_t: float,
     ) -> _DDAState:
-        """Ray-AABB intersection + Amanatides & Woo DDA state setup.
+        """Intersect the ray with the grid's bounding box and set up the
+        Amanatides & Woo DDA state.
 
         Returns a state with ``active == 0`` when the ray misses the grid
-        entirely; otherwise the state points at the (clamped, in-bounds)
-        entry voxel with per-axis step/t_max/t_delta initialised.
+        within *max_t*; otherwise the state points at the entry voxel
+        (clamped into the grid) with per-axis step, t_max and t_delta set.
         """
         s = _DDAState()
         s.active = 0
 
-        # --- Ray-AABB intersection to find entry/exit t -----------------
+        # --- Ray/box (slab) intersection: entry and exit distance t ------
         # Grid spans [grid_origin, grid_origin + resolution * cell_size]
         t_near = 0.0
         t_far = max_t
@@ -176,7 +189,8 @@ if _warp_available:
             lo = grid_origin[axis]
             hi = lo + float(resolution) * cell_size
             if wp.abs(d_a) < 1.0e-12:
-                # Ray parallel to slab -- miss if origin outside
+                # Ray parallel to this pair of faces: it misses unless its
+                # origin is already between them.
                 if o_a < lo or o_a >= hi:
                     return s
             else:
@@ -194,7 +208,7 @@ if _warp_available:
                 if t_near > t_far:
                     return s
         if t_near < 0.0:
-            t_near = 0.0
+            t_near = 0.0  # origin inside the grid: start at the origin
 
         # --- Initialise DDA at entry point ------------------------------
         inv_cell = 1.0 / cell_size
@@ -207,7 +221,8 @@ if _warp_available:
         vy = int(wp.floor((entry[1] - grid_origin[1]) * inv_cell))
         vz = int(wp.floor((entry[2] - grid_origin[2]) * inv_cell))
 
-        # Clamp to valid range (entry point may land exactly on far boundary)
+        # Clamp to the grid: an entry point exactly on the far face, or a
+        # float32 rounding error, can give an index one outside the range.
         if vx >= resolution:
             vx = resolution - 1
         if vy >= resolution:
@@ -235,12 +250,13 @@ if _warp_available:
         if d[2] < 0.0:
             s.step_z = -1
 
-        # t_max: t value at which the ray crosses the next cell boundary
-        # t_delta: t increment to traverse one full cell along this axis
+        # t_max: distance t at which the ray crosses the next cell boundary
+        # t_delta: increase in t to cross one full cell along this axis
         #
-        # EPS: threshold to treat a direction component as zero (ray parallel
-        # to that axis).  Set far below float32 machine epsilon (~1e-7) so that
-        # any ray with a nonzero component is handled by the DDA stepper.
+        # EPS: a direction component at or below this is treated as zero
+        # (ray parallel to that axis; t_max and t_delta set to 1e30 so the
+        # axis never steps).  It is far below float32 machine epsilon
+        # (~1e-7), so every ray with a nonzero component steps normally.
         EPS = 1.0e-20
 
         abs_dx = wp.abs(d[0])
@@ -282,10 +298,10 @@ if _warp_available:
 
     @wp.func
     def _dda_step(s: _DDAState, resolution: int, max_t: float) -> _DDAState:
-        """Advance to the next voxel (smallest t_max wins).
+        """Advance to the next voxel along the axis with the smallest t_max.
 
-        Clears ``active`` when the ray would exceed *max_t* or leaves the
-        grid; callers loop while ``s.active == 1``.
+        Clears ``active`` when that boundary lies beyond *max_t* or the new
+        voxel is outside the grid; callers loop while ``s.active == 1``.
         """
         if s.t_max_x < s.t_max_y:
             if s.t_max_x < s.t_max_z:
@@ -314,7 +330,6 @@ if _warp_available:
                 s.vz = s.vz + s.step_z
                 s.t_max_z = s.t_max_z + s.t_delta_z
 
-        # Out of grid → done
         if (s.vx < 0 or s.vx >= resolution or s.vy < 0 or s.vy >= resolution
                 or s.vz < 0 or s.vz >= resolution):
             s.active = 0
@@ -323,11 +338,11 @@ if _warp_available:
     @wp.func
     def _in_front(s: _DDAState, grid_origin: wp.vec3, cell_size: float,
                   o: wp.vec3, n: wp.vec3) -> int:
-        """1 if the current voxel's centre lies in front of the ray's source
-        surface (plane through *o* with normal *n*).
+        """1 if the current voxel's centre lies strictly in front of the ray's
+        source surface (the plane through *o* with normal *n*), else 0.
 
         A test surface sits inside the boundary voxels of its own mass; those
-        voxels are the building, not an obstruction of it.
+        voxels are the building itself, not something that shades it.
         """
         c = wp.vec3(
             grid_origin[0] + (float(s.vx) + 0.5) * cell_size,
@@ -337,51 +352,6 @@ if _warp_available:
         if wp.dot(n, c - o) > 0.0:
             return 1
         return 0
-
-    @wp.kernel
-    def _dda_trace_kernel(
-        # Ray data (one thread per ray)
-        ray_origins: wp.array(dtype=wp.vec3),
-        ray_dirs: wp.array(dtype=wp.vec3),
-        # Grid parameters
-        grid_origin: wp.vec3,
-        cell_size: float,       # meters per voxel = scale / resolution
-        resolution: int,
-        max_t: float,           # ray_length in meters
-        # Output buffers (pre-allocated to max possible hits)
-        out_ray_ids: wp.array(dtype=int),
-        out_voxel_x: wp.array(dtype=int),
-        out_voxel_y: wp.array(dtype=int),
-        out_voxel_z: wp.array(dtype=int),
-        hit_counter: wp.array(dtype=int),   # single-element atomic counter
-        max_hits: int,
-    ):
-        """Amanatides & Woo DDA: one GPU thread per ray.
-
-        Traversal is shared via ``_dda_init``/``_dda_step``; this kernel
-        records each visited voxel to flat output arrays using an atomic
-        counter to avoid collisions between threads.
-        """
-        tid = wp.tid()
-        s = _dda_init(ray_origins[tid], ray_dirs[tid], grid_origin,
-                      cell_size, resolution, max_t)
-
-        # Safety bound: a ray can cross at most 3 * resolution voxels
-        max_steps = 3 * resolution
-        for _step in range(max_steps):
-            if s.active == 0:
-                return
-            # Record this voxel
-            if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
-                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution):
-                idx = wp.atomic_add(hit_counter, 0, 1)
-                if idx < max_hits:
-                    out_ray_ids[idx] = tid
-                    out_voxel_x[idx] = s.vx
-                    out_voxel_y[idx] = s.vy
-                    out_voxel_z[idx] = s.vz
-            s = _dda_step(s, resolution, max_t)
-
 
     @wp.kernel
     def _dda_fused_score_kernel(
@@ -397,31 +367,31 @@ if _warp_available:
         cell_size: float,
         resolution: int,
         max_t: float,
-        # Scoring arrays (modified in-place via atomic_add)
+        # Scoring arrays (modified in place via atomic_add)
         scores: wp.array(dtype=float),         # flat score volume [res^3]
         patch_weights: wp.array(dtype=float),   # weight per patch [num_patches]
     ):
-        """Fused DDA + scoring: traverse grid and accumulate weights in-place.
+        """Trace one ray per thread and add its sky patch weight to every
+        voxel it visits.
 
-        Combines voxel traversal and score accumulation into a single kernel.
-        No output buffer is needed -- each thread atomically adds the patch
-        weight to the score volume for every voxel it visits.
-
-        This eliminates:
-        - Output buffer allocation (was O(rays * hits_per_ray))
-        - Host-side scatter_add_ post-processing
-        - Deduplication (DDA visits each voxel exactly once per ray)
+        The DDA visits each voxel at most once per ray, so a voxel's score
+        is the sum of the weights of the rays that cross it.  See the note
+        above _DDAState on atomic_add with the CPU backend.
         """
         tid = wp.tid()
         pid = ray_patch_ids[tid]
         w = patch_weights[pid]
         o = ray_origins[tid]
-        n = point_normals[ray_point_ids[tid]]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:  # the normals array is a 1-element placeholder otherwise
+            n = point_normals[ray_point_ids[tid]]
         res_sq = resolution * resolution
         s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)
 
         # --- Walk and score ---
+        # A ray crosses at most 3 * resolution - 2 voxels of a cubic grid,
+        # so this loop bound never cuts a ray short.
         max_steps = 3 * resolution
         for _step in range(max_steps):
             if s.active == 0:
@@ -429,7 +399,7 @@ if _warp_available:
             if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
                     and s.vy < resolution and s.vz >= 0 and s.vz < resolution
                     and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
-                # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
+                # 3D to flat index in row-major (C) order: x*res^2 + y*res + z
                 flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
                 wp.atomic_add(scores, flat_idx, w)
             s = _dda_step(s, resolution, max_t)
@@ -448,22 +418,25 @@ if _warp_available:
         cell_size: float,
         resolution: int,
         max_t: float,
-        # Scoring arrays (modified in-place via atomic_add)
+        # Scoring arrays (modified in place via atomic_add)
         scores: wp.array(dtype=float),          # flat score volume [res^3]
         patch_weights: wp.array(dtype=float),   # weight per patch [num_patches]
         point_weights: wp.array(dtype=float),   # weight per sample point [num_points]
     ):
-        """Point-weighted fused score kernel: per-ray weight is
-        patch_weight × sample-point weight (edge_taper design constraint).
+        """Same as _dda_fused_score_kernel, but each ray's weight is
+        patch weight × sample-point weight (used by the edge_taper design
+        constraint).
 
-        A separate kernel so the unweighted hot path skips the extra
-        per-ray weight gather.
+        Kept as a separate kernel so the unweighted case does not read a
+        point weight for every ray.
         """
         tid = wp.tid()
         pt = ray_point_ids[tid]
         w = patch_weights[ray_patch_ids[tid]] * point_weights[pt]
         o = ray_origins[tid]
-        n = point_normals[pt]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:  # the normals array is a 1-element placeholder otherwise
+            n = point_normals[pt]
         res_sq = resolution * resolution
         s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)
@@ -493,20 +466,20 @@ if _warp_available:
         cell_size: float,
         resolution: int,
         max_t: float,
-        # Hit counter per voxel (modified in-place via atomic_add)
+        # Hit counter per voxel (modified in place via atomic_add)
         counts: wp.array(dtype=wp.int32),   # flat count volume [res^3]
     ):
-        """Fused DDA + hit counting: traverse the grid and increment each
-        visited voxel's counter in-place.
+        """Trace one ray per thread and add 1 to the counter of every voxel
+        it visits.
 
         Used by the binary carving modes (time-based, tilted_plane), where
-        the count is the number of violating rays per voxel.  Like the
-        fused score kernel, this needs no output buffer — which also means
-        no overflow-retry re-tracing.
+        a voxel's count is the number of rays that cross it.
         """
         tid = wp.tid()
         o = ray_origins[tid]
-        n = point_normals[ray_point_ids[tid]]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:  # the normals array is a 1-element placeholder otherwise
+            n = point_normals[ray_point_ids[tid]]
         res_sq = resolution * resolution
         s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)
@@ -533,13 +506,15 @@ if _warp_available:
         votes: wp.array(dtype=wp.int32),    # +1 per axis whose parity sees the voxel inside
         surface: wp.array(dtype=wp.int32),  # 1 where a ray/mesh hit falls in the voxel
     ):
-        """Solid voxelization by parity ray casting: one thread per grid
-        column.  The ray starts below the grid and walks successive
-        mesh intersections; voxels whose CENTERS lie between an odd and
-        even crossing get an inside-vote, and every crossing marks the
-        voxel containing the hit point as surface.  Columns are exclusive
-        per thread and per-axis launches are serialized, so no atomics
-        are needed.
+        """Solid voxelization by parity ray casting, one thread per grid
+        column along *axis*.
+
+        The ray starts one cell before the grid on the marching axis and
+        finds successive mesh crossings (at most 256).  Voxels whose centres
+        lie between an odd crossing and the next even one get one inside
+        vote, and every crossing marks the voxel that contains it as
+        surface.  Each thread owns its column and the three per-axis
+        launches run one after another, so no atomics are needed.
         """
         tid = wp.tid()
         i = tid // resolution   # index along axis (axis+1) % 3
@@ -634,15 +609,26 @@ def voxelize_solid_warp(
     resolution: int,
     device,
 ) -> "np.ndarray | None":
-    """Solid-voxelize a triangle mesh via 3-axis parity ray casting on the
-    Warp BVH.  Returns a (res, res, res) bool occupancy array, or None when
-    the Warp backend is unavailable on *device*.
+    """Solid-voxelize a triangle mesh by parity ray casting along x, y and z
+    against a Warp BVH (bounding volume hierarchy).
 
-    A voxel is occupied when at least 2 of the 3 axis parities agree that
-    its center is inside (majority vote — the same robustness idea as
-    trimesh's orthographic fill), or when the surface passes through it.
-    Runs on CUDA or the Warp CPU device; both are far faster than the
-    trimesh rasterize-and-fill path.
+    A voxel is occupied when at least 2 of the 3 axis parity tests find its
+    centre inside (a majority vote, so one axis confused by a small hole or
+    a grazing ray does not decide the result; trimesh's orthographic fill
+    uses the same idea), or when the mesh surface passes through it.  Runs
+    on CUDA or the Warp CPU device; grid.py falls back to trimesh's slower
+    rasterize-and-fill when this returns None or raises.
+
+    Returns
+    -------
+    np.ndarray | None
+        (resolution, resolution, resolution) bool occupancy array, or None
+        when the Warp backend is unavailable on *device*.
+
+    Raises
+    ------
+    ValueError
+        If the mesh has no vertices or no faces.
     """
     if not dda_backend_available(device):
         return None
@@ -676,7 +662,12 @@ def voxelize_solid_warp(
 
 
 def _surface_args(num_rays, point_ids, surface_normals, device_str, who):
-    """Warp inputs for the behind-surface voxel filter (ids, normals, flag)."""
+    """Warp inputs for the behind-surface voxel filter.
+
+    Returns ``(point_ids, normals, front_test)``.  Without *surface_normals*
+    the normals are a 1-element placeholder and ``front_test`` is 0, so the
+    kernels skip the filter; missing *point_ids* become zeros.
+    """
     if surface_normals is not None and point_ids is None:
         raise ValueError(f"{who}: surface_normals and point_ids must be provided together")
     ids = (wp.from_torch(point_ids.contiguous().int()) if point_ids is not None
@@ -700,18 +691,19 @@ def trace_and_score_dda(
     point_weights: "torch.Tensor | None" = None,
     surface_normals: "torch.Tensor | None" = None,
 ) -> None:
-    """Fused DDA traversal + score accumulation (Warp GPU kernel).
+    """Trace rays with the Warp DDA kernel and add each ray's weight to every
+    voxel it visits, directly into ``scores``.
 
-    Atomically adds patch weights to the score volume for every voxel
-    each ray visits. No output buffer, no post-processing. Modifies
-    ``scores`` in-place.
+    Runs on CUDA or the Warp CPU backend.  On CPU, do not let parallel
+    calls write into the same ``scores`` tensor (see the note above
+    ``_DDAState``).
 
     Parameters
     ----------
     min_corner : tuple of float
-        Grid origin in world space.
+        World-space (x, y, z) of the grid's lower corner.
     scale : float
-        Grid extent in meters.
+        Edge length of the cubic grid in meters.
     resolution : int
         Voxels per axis.
     origins, ray_dirs : torch.Tensor, shape (R, 3)
@@ -720,10 +712,11 @@ def trace_and_score_dda(
         Sky patch index per ray.
     patch_weights : torch.Tensor, shape (P,)
         Weight per sky patch.
-    scores : torch.Tensor, shape (N,)
-        Flat score volume, modified in-place.
+    scores : torch.Tensor, shape (resolution**3,)
+        Flat contiguous float32 score volume, modified in place.
     ray_length : float
-        Maximum march distance.
+        Maximum distance traced along each ray, in meters (directions must
+        be unit length for this to be a distance).
     point_ids : torch.Tensor, shape (R,), optional
         Sample-point index per ray; required by ``point_weights`` and
         ``surface_normals``.
@@ -734,6 +727,14 @@ def trace_and_score_dda(
         Normal of each ray's source surface.  When given, voxels whose
         centre lies behind that surface (the surface's own mass) are not
         scored.
+
+    Raises
+    ------
+    ValueError
+        If ``scores`` is not a contiguous float32 tensor (Warp would then
+        write into a copy), if ``point_ids`` is given with neither
+        ``point_weights`` nor ``surface_normals``, or if either of those
+        is given without ``point_ids``.
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
@@ -803,21 +804,26 @@ def trace_and_count_dda(
     point_ids: "torch.Tensor | None" = None,
     surface_normals: "torch.Tensor | None" = None,
 ) -> None:
-    """Fused DDA traversal + per-voxel hit counting (Warp kernel).
+    """Trace rays with the Warp DDA kernel and add 1 to ``counts`` for every
+    voxel each ray visits, in place.
 
-    Atomically increments ``counts`` for every voxel each ray visits.
-    No output buffer and no overflow-retry re-tracing (unlike the
-    buffered :func:`trace_multi_hit_grid` path).  Modifies ``counts``
-    in-place.
+    The grid and ray arguments are the same as in
+    :func:`trace_and_score_dda`, including the note on parallel CPU calls.
 
     Parameters
     ----------
     counts : torch.Tensor, shape (resolution**3,)
-        Flat int32 hit-count volume, modified in-place.
+        Flat contiguous int32 hit-count volume, modified in place.
     point_ids, surface_normals : optional
-        Per-ray sample-point index and per-point surface normal; when given,
-        voxels behind the ray's source surface are not counted (see
-        :func:`trace_and_score_dda`).
+        Per-ray sample-point index and per-point surface normal; when both
+        are given, voxels behind the ray's source surface are not counted.
+        ``point_ids`` alone is accepted and ignored.
+
+    Raises
+    ------
+    ValueError
+        If ``counts`` is not a contiguous int32 tensor, or
+        ``surface_normals`` is given without ``point_ids``.
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
@@ -849,166 +855,43 @@ def trace_and_count_dda(
     )
 
 
-def _trace_dda_warp(
-    min_corner: Tuple[float, float, float],
-    scale: float,
-    resolution: int,
-    origins: torch.Tensor,
-    ray_dirs: torch.Tensor,
-    sky_patch_ids: torch.Tensor,
-    voxel_size: float,
-    ray_length: float,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """DDA traversal via Warp kernel -- zero-copy interop with PyTorch.
-
-    Starts with a conservative buffer estimate (20 hits/ray), launches
-    the kernel, then retries with a larger buffer if overflow occurs.
-    Typically only one launch is needed.
-    """
-    num_rays = origins.shape[0]
-    # Warp requires explicit device index (e.g. "cuda:0", not just "cuda")
-    device_str = f"cuda:{origins.device.index or 0}" if origins.is_cuda else "cpu"
-    cell_size = scale / resolution
-
-    wp_origins = wp.from_torch(origins.contiguous().float(), dtype=wp.vec3)
-    wp_dirs = wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3)
-    grid_origin_wp = wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2]))
-
-    # Initial buffer size per ray for DDA output arrays.  Most rays
-    # traverse 10–30 voxels in typical urban grids, but large urban scenes
-    # with fine voxel grids can produce 100–300 hits/ray.  The kernel retries
-    # with a 2× buffer on each overflow, up to 6 attempts
-    # (20 → 40 → 80 → 160 → 320 → 640 hits/ray).
-    est_hits_per_ray = 20
-    for attempt in range(6):
-        max_hits = num_rays * est_hits_per_ray
-
-        out_ray_ids = wp.zeros(max_hits, dtype=int, device=device_str)
-        out_vx = wp.zeros(max_hits, dtype=int, device=device_str)
-        out_vy = wp.zeros(max_hits, dtype=int, device=device_str)
-        out_vz = wp.zeros(max_hits, dtype=int, device=device_str)
-        hit_counter = wp.zeros(1, dtype=int, device=device_str)
-
-        wp.launch(
-            _dda_trace_kernel,
-            dim=num_rays,
-            inputs=[
-                wp_origins, wp_dirs,
-                grid_origin_wp,
-                float(cell_size), int(resolution), float(ray_length),
-                out_ray_ids, out_vx, out_vy, out_vz,
-                hit_counter, int(max_hits),
-            ],
-            device=device_str,
-        )
-        wp.synchronize()
-
-        actual_count = int(hit_counter.numpy()[0])
-        if actual_count <= max_hits:
-            break
-        # Overflow: double the estimate and retry
-        import warnings
-        warnings.warn(
-            f"DDA buffer overflow ({actual_count} > {max_hits}), "
-            f"retrying with {est_hits_per_ray * 2}/ray",
-            stacklevel=2,
-        )
-        est_hits_per_ray *= 2
-
-    actual_hits = min(actual_count, max_hits)
-    if actual_count > max_hits:
-        import warnings
-        warnings.warn(
-            f"DDA trace truncated: {actual_count - max_hits} hits lost after 6 retries "
-            f"({max_hits} recorded / {actual_count} actual)",
-            stacklevel=2,
-        )
-    if actual_hits == 0:
-        empty1 = torch.empty((0,), dtype=torch.long, device=origins.device)
-        empty3 = torch.empty((0, 3), dtype=torch.long, device=origins.device)
-        return empty1, empty1, empty3
-
-    # Convert Warp → PyTorch (zero-copy on CUDA)
-    ray_ids_t = wp.to_torch(out_ray_ids)[:actual_hits].long()
-    vx_t = wp.to_torch(out_vx)[:actual_hits].long()
-    vy_t = wp.to_torch(out_vy)[:actual_hits].long()
-    vz_t = wp.to_torch(out_vz)[:actual_hits].long()
-
-    voxel_indices = torch.stack([vx_t, vy_t, vz_t], dim=1)
-    patch_ids = sky_patch_ids.to(origins.device)[ray_ids_t]
-
-    return ray_ids_t, patch_ids, voxel_indices
-
 def generate_sky_patch_rays(
-    pts: np.ndarray,           # List of 3D coordinates where rays originate (shape Px3).
-    norms: np.ndarray,         # Surface normals at each point (shape Px3).
-    patch_dirs: torch.Tensor,  # Unit vectors representing directions of sky patches (shape Vx3).
-    device: torch.device,       # Compute device (CPU or GPU).
-    *,
-    include_normals: bool = False,
-    ray_id: str | None = None,
-    session: "CarverSession | None" = None,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, "torch.Tensor | None", torch.Tensor]:
+    pts: np.ndarray,
+    norms: np.ndarray,
+    patch_dirs: torch.Tensor,
+    device: torch.device,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """One ray per (sample point, sky patch) pair whose patch the surface faces.
+
+    Parameters
+    ----------
+    pts, norms : np.ndarray (P, 3)
+        Sample points and their outward unit normals.
+    patch_dirs : torch.Tensor (V, 3)
+        Unit directions of the sky patches.
+    device : torch.device
+        Device for the returned tensors.
+
+    A ray is kept only where dot(normal, patch direction) > 0.
+
+    Returns
+    -------
+    origins : (R, 3)      ray start points (the sample points)
+    ray_dirs : (R, 3)     unit ray directions
+    patch_ids : (R,)      sky patch index of each ray
+    point_idx : (R,)      sample point index of each ray
     """
-    Build rays for each sample point and sky patch direction.
-    1. We have P sample locations on a surface and V directions in the sky (divided into patches).
-    2. For each surface point, we want to know which sky patches are 'visible' (face-culling) by checking if the normal faces that patch.
-    3. We then record an origin (the point) and a direction (the sky patch) for each valid combination.
-
-    ``include_normals`` gates the per-ray normal gather: it is an (R, 3)
-    tensor nobody in the pipeline consumes — hundreds of MB of VRAM at
-    typical ray counts — so it is only materialized on request.
-
-    Returns:
-      origins           : Tensor of 3D positions where rays start (one per valid combination).
-      ray_dirs          : Tensor of unit vectors indicating ray directions.
-      sky_patch_ids     : Integer index for which sky patch each ray corresponds to.
-      normals_per_ray   : Surface normal per ray, or None unless include_normals=True.
-      point_idx         : Integer index mapping each ray back to its source sample point.
-    """
-
-    if pts.ndim!=2 or pts.shape[1]!=3:
+    if pts.ndim != 2 or pts.shape[1] != 3:
         raise ValueError(f"pts must be Nx3, got {pts.shape}")
     if norms.shape != pts.shape:
         raise ValueError(f"norms shape {norms.shape} must match pts shape {pts.shape}")
 
-    # --- Session cache (keyed on array identity, not just shape) -----------
-    # id(pts) is unique per array object within a session generation.
-    # bump() clears the cache between runs, so id reuse is not a concern.
-    from urbansolarcarver.session import get_active_session
-    sess = session or get_active_session()
-    if sess is not None:
-        cache_key = (
-            f"patch_rays:{pts.shape[0]}:{patch_dirs.shape[0]}:{id(pts)}"
-            f":n{int(include_normals)}"
-        )
-        cached = sess.tensors.get(f"{cache_key}|g{sess._gen}")
-        if cached is not None:
-            return cached
+    point_coords = torch.from_numpy(pts.astype(np.float32)).to(device)
+    normal_vecs = torch.from_numpy(norms.astype(np.float32)).to(device)
+    sky_vectors = patch_dirs.to(dtype=torch.float32, device=device)
 
-    # Convert input data into PyTorch tensors and move to the chosen compute device.
-    point_coords  = torch.from_numpy(pts.astype(np.float32)).to(device)    # (P,3)
-    normal_vecs   = torch.from_numpy(norms.astype(np.float32)).to(device)  # (P,3)
-    sky_vectors   = patch_dirs.to(dtype=torch.float32, device=device)      # (V,3)
-
-    # Compute a matrix of dot products between each surface normal and each sky patch vector.
-    dot_products = normal_vecs @ sky_vectors.t()  # Results in PxV matrix.
-
-    # Identify all combinations where the dot product is greater than zero.
-    point_idx, vector_idx = torch.nonzero(dot_products > 0, as_tuple=True)
-
-    origins         = point_coords[point_idx]  # (R,3) where R is number of valid rays.
-    ray_dirs        = sky_vectors[vector_idx]   # (R,3)
-    sky_patch_ids   = vector_idx                # (R,)
-    normals_per_ray = normal_vecs[point_idx] if include_normals else None  # (R,3)
-
-    result = (origins, ray_dirs, sky_patch_ids, normals_per_ray, point_idx)
-
-    # Store in session cache
-    if sess is not None:
-        sess.tensors[f"{cache_key}|g{sess._gen}"] = result
-
-    return result
+    point_idx, patch_ids = torch.nonzero(normal_vecs @ sky_vectors.t() > 0, as_tuple=True)
+    return point_coords[point_idx], sky_vectors[patch_ids], patch_ids, point_idx
 
 def generate_sun_rays(
     points_3d: np.ndarray,
@@ -1018,28 +901,27 @@ def generate_sun_rays(
     return_point_idx: bool = False,
 ):
     """
-    Build ray origins and directions for direct-beam sampling.
-
-    Steps:
-      1) Convert the input arrays (points, normals, sun vectors) to float32 Torch
-         tensors on the specified device.
-      2) Compute a (P x S) dot-product matrix between each normal and each sun vector.
-      3) Mask for entries where dot(normal, sun_direction) > 0 -- these are the facets
-         actually facing the sun.
-      4) Extract the (point_idx, sun_idx) pairs that satisfy the facing test.
-      5) Gather and return the corresponding origin points and direction vectors.
+    Build one ray per (sample point, sun direction) pair that the surface
+    faces, i.e. where dot(normal, sun direction) > 0.
 
     Args:
       points_3d:    (P,3) NumPy array of sample points on the surface.
       point_normals:(P,3) NumPy array of normals at each sample point.
-      sun_directions:(S,3) NumPy array of sun direction vectors (should be unit length).
-      device:       Torch device (e.g. `torch.device('cuda')`).
+      sun_directions:(S,3) NumPy array of unit vectors pointing toward the
+                     sun.  They are used as ray directions unchanged, so
+                     they must be unit length for ray_length to be a distance.
+      device:       Torch device for the returned tensors.
+      return_point_idx: also return the source sample-point index per ray.
 
     Returns:
       ray_origins:   (R,3) float32 tensor of ray start points.
       ray_directions:(R,3) float32 tensor of ray direction vectors.
-      point_idx:     (R,) source sample-point index per ray, only when
+      point_idx:     (R,) int64 source sample-point index per ray, only when
                      return_point_idx is True.
+
+    Raises:
+      ValueError: if the arrays are not (N,3) or the normals do not match
+                  the points.
     """
     if points_3d.ndim != 2 or points_3d.shape[1] != 3:
         raise ValueError(f"points_3d must be Nx3, got {points_3d.shape}")
@@ -1047,21 +929,16 @@ def generate_sun_rays(
         raise ValueError(f"point_normals shape {point_normals.shape} must match points_3d shape {points_3d.shape}")
     if sun_directions.ndim != 2 or sun_directions.shape[1] != 3:
         raise ValueError(f"sun_directions must be Sx3, got {sun_directions.shape}")
-    # 1) To‐device tensor conversion
     pts_tensor   = torch.from_numpy(points_3d.astype(np.float32)).to(device)
     norms_tensor = torch.from_numpy(point_normals.astype(np.float32)).to(device)
     suns_tensor  = torch.from_numpy(sun_directions.astype(np.float32)).to(device)
 
-    # 2) Dot product per (point, sun) → shape (P, S)
-    dot_ps = norms_tensor @ suns_tensor.t()
+    dot_ps = norms_tensor @ suns_tensor.t()  # (P, S)
 
-    # 3) Facing mask (only keep normal*sun > 0)
     facing_mask = dot_ps > 0.0
 
-    # 4) Indices of valid rays
     idx_pts, idx_suns = torch.nonzero(facing_mask, as_tuple=True)
 
-    # 5) Gather origins and directions
     ray_origins    = pts_tensor[idx_pts]    # (R,3)
     ray_directions = suns_tensor[idx_suns]  # (R,3)
 
@@ -1071,7 +948,7 @@ def generate_sun_rays(
 
 def trace_multi_hit_grid(
     min_corner: Tuple[float, float, float],
-    scale: "float | torch.Tensor",
+    scale: float,
     resolution: int,
     origins: torch.Tensor,
     ray_dirs: torch.Tensor,
@@ -1079,89 +956,35 @@ def trace_multi_hit_grid(
     voxel_size: float,
     ray_length: float,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Trace rays through a uniform voxel grid, recording every voxel hit.
+    """Fallback tracer for when Warp cannot run: list the voxels each ray visits.
 
-    Dispatches to the Warp DDA kernel on CUDA (Amanatides & Woo 1987) or
-    falls back to fixed-step PyTorch broadcasting on CPU.  Both backends
-    guarantee that each (ray, voxel) pair appears at most once in the
-    output, so callers can accumulate hits without deduplicating.
-
-    Parameters
-    ----------
-    min_corner : tuple of float
-        World-space (x, y, z) of the grid's lower corner.
-    scale : torch.Tensor or float
-        Full spatial extent of the grid in meters (grid_extent).
-    resolution : int
-        Number of voxels per axis (grid is resolution³).
-    origins : torch.Tensor, shape (R, 3)
-        Ray start points.
-    ray_dirs : torch.Tensor, shape (R, 3)
-        Unit direction vectors.
-    sky_patch_ids : torch.Tensor, shape (R,)
-        Sky patch index per ray.
-    voxel_size : float
-        Physical edge length of one voxel (meters).
-    ray_length : float
-        Maximum march distance (meters).
+    Fixed-step PyTorch marching (see :func:`_trace_fixed_step` for the
+    parameters); when Warp is available the pipeline uses the exact fused
+    DDA kernels instead.  Each (ray, voxel) pair appears at most once.
+    Every call with at least one ray emits a UserWarning.
 
     Returns
     -------
-    ray_ids : torch.Tensor, shape (H,)
-        Which ray produced each hit.
-    patch_ids : torch.Tensor, shape (H,)
-        Sky patch index for each hit.
-    voxel_indices : torch.Tensor, shape (H, 3)
-        3-D grid coordinate of each visited voxel.
+    ray_ids : (H,)        index of the ray that made each hit
+    patch_ids : (H,)      sky patch of that ray
+    voxel_indices : (H, 3) grid index of each visited voxel
     """
-    num_rays = origins.shape[0]
-    if num_rays == 0:
+    if origins.shape[0] == 0:
         empty1 = torch.empty((0,), dtype=torch.long, device=origins.device)
-        empty3 = torch.empty((0, 3), dtype=torch.long, device=origins.device)
-        return empty1, empty1, empty3
-
-    # Extract a single float from scale, which may arrive as:
-    #   - a plain int/float (normal case)
-    #   - a scalar tensor, e.g. torch.tensor(100.0)
-    #   - a 1D/3D tensor, e.g. torch.full((3,), extent)  [legacy callers]
-    # The voxel grid is always cubic, so all elements are identical.
-    if isinstance(scale, (int, float)):
-        scale_f = float(scale)
-    elif hasattr(scale, 'item'):
-        scale_f = float(scale.ravel()[0].item())
-    else:
-        scale_f = float(scale)
-
-    # --- DDA backend (Warp, CUDA or CPU) ---
-    if dda_backend_available(origins.device):
-        return _trace_dda_warp(
-            min_corner, scale_f, resolution,
-            origins, ray_dirs, sky_patch_ids,
-            voxel_size, ray_length,
-        )
-
-    # --- Legacy fixed-step fallback (Warp not available) ---
-    global _warp_fallback_warned
-    if not _warp_fallback_warned:
-        import warnings
-        warnings.warn(
-            "Warp DDA backend is not available — using the fixed-step ray "
-            "marcher, which is slower and can miss voxels on oblique rays. "
-            "Install NVIDIA Warp for exact DDA tracing.",
-            stacklevel=2,
-        )
-        _warp_fallback_warned = True
-    return _trace_fixed_step(
-        min_corner, scale_f, resolution,
-        origins, ray_dirs, sky_patch_ids,
-        voxel_size, ray_length,
+        return empty1, empty1, torch.empty((0, 3), dtype=torch.long, device=origins.device)
+    import warnings
+    warnings.warn(
+        "Warp is not available: using the fixed-step ray marcher, which is "
+        "slower and can miss voxels that oblique rays only clip.",
+        stacklevel=2,
     )
+    return _trace_fixed_step(min_corner, float(scale), resolution, origins, ray_dirs,
+                             sky_patch_ids, voxel_size, ray_length)
 
 
-# Peak memory budget for the fixed-step tracer's sample-point tensor.
-# The (R, S, 3) float32 tensor is the dominant allocation; this caps the
-# number of rays processed per internal chunk so peak memory stays bounded.
-# Default 512 MB -- override in tests via module attribute.
+# Memory budget that sets how many rays _trace_fixed_step processes per
+# chunk (R rays x S steps per chunk).  Tests lower it by assigning to this
+# module attribute.
 _FIXED_STEP_BUDGET_BYTES: int = 512 * 1024 * 1024
 
 
@@ -1170,29 +993,28 @@ def _trace_fixed_step(
     origins, ray_dirs, sky_patch_ids,
     voxel_size, ray_length,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Legacy fixed-step ray marcher (pure PyTorch, CPU fallback).
+    """Fixed-step ray marcher in pure PyTorch (runs on any torch device).
 
-    Traces rays through a uniform voxel grid by sampling at cell-center
-    offsets ``(k + 0.5) * voxel_size`` and recording every in-bounds voxel
-    hit.  Each (ray, voxel) pair is reported at most once, matching the
-    DDA backend's contract.  Used when the Warp DDA kernel is unavailable
-    (no GPU or Warp not installed).
+    Samples each ray at distances ``(k + 0.5) * voxel_size`` for
+    ``k = 0 .. ceil(ray_length / voxel_size) - 1`` and records the voxel
+    containing each in-bounds sample.  Each (ray, voxel) pair is reported
+    at most once, as with the DDA kernels.  Used only when Warp is not
+    installed or cannot run on the device.
 
-    Note: with a step of one voxel, oblique rays can skip voxels whose
-    intersection segment is short.  The Warp DDA backend is exact; prefer
-    it when Warp is installed.
+    With a step of one voxel, an oblique ray can cross a voxel corner
+    between two samples and miss that voxel; the Warp DDA kernels do not
+    have this problem.
 
-    To avoid materializing a single massive ``(R, S, 3)`` tensor that can
-    exceed available memory, rays are processed in sub-batches whose size
-    is derived from ``_FIXED_STEP_BUDGET_BYTES`` (default 512 MB).  The
-    caller sees identical output regardless of chunk size.
+    Rays are processed in chunks sized from ``_FIXED_STEP_BUDGET_BYTES``
+    (512 MB by default) so the ``(R, S, 3)`` sample tensor never covers
+    all rays at once.  The output is identical for any chunk size.
 
     Parameters
     ----------
     min_corner : tuple of float
         World-space (x, y, z) of the grid's lower corner.
     scale : float
-        Full spatial extent of the cubic grid in meters.
+        Edge length of the cubic grid in meters.
     resolution : int
         Number of voxels per axis.
     origins : (R, 3) torch.Tensor
@@ -1202,7 +1024,8 @@ def _trace_fixed_step(
     sky_patch_ids : (R,) torch.Tensor
         Sky-patch index per ray.
     voxel_size : float
-        Physical edge length of one voxel (meters).
+        Step length along the ray (meters); callers pass the voxel edge
+        length.  Must be positive.
     ray_length : float
         Maximum march distance (meters).
 
@@ -1214,6 +1037,11 @@ def _trace_fixed_step(
         Sky-patch index for each hit.
     voxel_indices : (H, 3) torch.Tensor
         3-D grid coordinates of each visited voxel.
+
+    Raises
+    ------
+    ValueError
+        If ``voxel_size`` is not positive.
     """
     device = origins.device
     num_rays = origins.shape[0]
@@ -1228,20 +1056,19 @@ def _trace_fixed_step(
         empty3 = torch.empty((0, 3), dtype=torch.long, device=device)
         return empty1, empty1, empty3
 
-    # Determine chunk size: each ray needs (num_steps * 3 * 4) bytes for
-    # the sample-point tensor, plus roughly the same for voxel indices.
-    bytes_per_ray = num_steps * 3 * 4 * 2  # sample_pts + voxel_idxs
+    # Chunk size from the tensors held per sample: sample_pts and voxel_rel
+    # (3 x float32 each, 24 bytes), voxel_idxs (3 x int64, 24 bytes) and
+    # in_bounds (1 byte) make 49 bytes; 64 leaves room for the selections.
+    bytes_per_ray = num_steps * 64
     budget = _FIXED_STEP_BUDGET_BYTES
     chunk_size = max(budget // max(bytes_per_ray, 1), 1)
 
-    # Pre-compute values shared across all chunks
     distances = (
         (torch.arange(num_steps, dtype=torch.float32, device=device) + 0.5)
         * voxel_size
     )
     grid_origin = torch.tensor(min_corner, dtype=torch.float32, device=device)
 
-    # Accumulate sparse hit results from each chunk
     all_ray_ids = []
     all_patch_ids = []
     all_voxel_indices = []
@@ -1252,7 +1079,6 @@ def _trace_fixed_step(
         d = ray_dirs[start:end]            # (C, 3)
         c = end - start
 
-        # Materialize sample points for this chunk only
         sample_pts = o[:, None, :] + d[:, None, :] * distances[None, :, None]
         voxel_rel = (sample_pts - grid_origin) / scale * resolution
         voxel_idxs = torch.floor(voxel_rel).long()
@@ -1268,13 +1094,11 @@ def _trace_fixed_step(
         chunk_voxels = voxel_idxs[in_bounds]
 
         if chunk_ray_ids.numel() > 0:
-            # Deduplicate (ray, voxel) pairs: discrete stepping can sample
-            # the same voxel more than once per ray, which would inflate
-            # scores and violation counts downstream.  The DDA backend
-            # visits each voxel exactly once per ray; enforce the same
-            # contract here.  Duplicates only arise within a single ray,
-            # and a ray is never split across chunks, so per-chunk dedup
-            # is exact.  torch.unique sorts keys, making the output order
+            # Deduplicate (ray, voxel) pairs: two samples of one ray can fall
+            # in the same voxel, which would count that ray twice for the
+            # voxel.  Duplicates only arise within a single ray, and a ray
+            # is never split across chunks, so per-chunk deduplication is
+            # exact.  torch.unique sorts the keys, so the output order is
             # deterministic and independent of chunk size.
             res_sq = resolution * resolution
             n_vox = res_sq * resolution
@@ -1294,7 +1118,7 @@ def _trace_fixed_step(
             all_patch_ids.append(sky_patch_ids[uray])
             all_voxel_indices.append(uvox)
 
-        # Free chunk tensors eagerly (matters on GPU)
+        # Free this chunk's tensors before the next chunk allocates its own.
         del sample_pts, voxel_rel, voxel_idxs, in_bounds
 
     if not all_ray_ids:
@@ -1316,22 +1140,23 @@ def auto_batch_size(
     vram_fraction: float = 0.6,
     fallback: int = 300_000,
 ) -> int:
-    """Compute an optimal ray batch size based on available GPU memory.
+    """Choose a ray batch size from the free GPU memory.
 
-    For the DDA backend, each ray needs ~4 output ints (ray_id, vx, vy, vz)
-    times an estimated hits-per-ray. We size the batch so that output
-    buffers fit within ``vram_fraction`` of free VRAM.
+    The budget is ``vram_fraction`` of free VRAM (video memory).  With Warp,
+    the fused DDA kernels accumulate into the voxel grid and keep no hit
+    lists, so a batch only adds its slice of the ray inputs: 96 bytes per
+    ray (see the comment in the code).  Without Warp, the fixed-step tracer
+    returns one hit record of 40 bytes per visited voxel, estimated as
+    ``max(resolution, 50)`` per ray; its sample points are already limited
+    by ``_FIXED_STEP_BUDGET_BYTES``.  The result is at least 10,000 and at
+    most 5,000,000 rays.
 
-    For the legacy fixed-step backend, the dominant cost is the R x S x 3
-    sample-point tensor (12 bytes per element at float32). We size the
-    batch so this tensor fits within the VRAM budget.
-
-    Falls back to ``fallback`` on CPU or if VRAM cannot be queried.
+    Returns ``fallback`` on CPU or if VRAM cannot be queried.
 
     Parameters
     ----------
     resolution : int
-        Voxel grid resolution (used to estimate hits-per-ray).
+        Voxel grid resolution (used only for the no-Warp step estimate).
     device : torch.device
         Target compute device.
     vram_fraction : float
@@ -1355,17 +1180,18 @@ def auto_batch_size(
     budget_bytes = int(free * vram_fraction)
 
     if _warp_available:
-        # DDA: output = 4 int arrays x est_hits_per_ray per ray x 4 bytes
-        est_hits = 20  # modest initial; kernel retries on overflow
-        bytes_per_ray = 4 * est_hits * 4  # 4 arrays, 4 bytes per int
-        batch = max(budget_bytes // max(bytes_per_ray, 1), 10_000)
+        # Per ray: origin and direction (2 x 12 bytes), patch id and point
+        # id (2 x 8 bytes, int64) = 40 bytes, rounded up to 48; doubled for
+        # the copies made when a slice is not contiguous or needs int32 ids.
+        bytes_per_ray = 96
+        batch = max(budget_bytes // bytes_per_ray, 10_000)
     else:
-        # Fixed-step: R x S x 3 x 4 bytes (float32)
-        num_steps = max(resolution, 50)  # rough estimate
-        bytes_per_ray = num_steps * 3 * 4
-        batch = max(budget_bytes // max(bytes_per_ray, 1), 10_000)
+        # Hit records: ray id, patch id (int64) and voxel index (3 x int64)
+        # = 40 bytes per visited voxel.
+        num_steps = max(resolution, 50)  # rough estimate of voxels per ray
+        bytes_per_ray = num_steps * 40
+        batch = max(budget_bytes // bytes_per_ray, 10_000)
 
-    # Cap at 5M rays (diminishing returns beyond this)
     batch = min(batch, 5_000_000)
 
     log.info("auto_batch_size: free=%.0f MB, budget=%.0f MB, batch=%d",

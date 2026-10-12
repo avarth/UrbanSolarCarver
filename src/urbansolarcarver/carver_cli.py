@@ -3,10 +3,13 @@
 
 Exposes the three-stage pipeline (preprocessing -> thresholding -> exporting)
 as individual subcommands, plus a one-shot ``run`` that chains all three.
-Performance evaluation is out of scope — use Ladybug/Honeybee/Radiance on the
+Performance evaluation is out of scope: use Ladybug/Honeybee/Radiance on the
 exported mesh.
 
 Utility commands:
+  - ``warmup``:   precompile the Warp kernels once so the first run is not slow.
+  - ``simulate-weights``: build a simulated-weights file for benefit mode.
+  - ``archetype``: write and check a shoebox archetype YAML for ``simulate-weights``.
   - ``validate``: load and validate a YAML config without running anything.
   - ``schema``:   print a filterable parameter reference (by mode or keyword).
   - ``daemon``:   start / stop / status of the persistent GPU daemon used by
@@ -16,7 +19,7 @@ Design decisions
 ~~~~~~~~~~~~~~~~
 All heavy imports (torch, warp, api_core) are deferred to function bodies so
 that lightweight commands (``--help``, ``schema``, ``validate``, ``daemon``)
-start instantly (~0.3 s) without initialising CUDA or compiling Warp kernels.
+start quickly without initialising CUDA or compiling Warp kernels.
 The ``_api()`` helper loads ``urbansolarcarver.api`` lazily on first access.
 
 The ``--daemon`` flag on each pipeline command sends the job to a running
@@ -25,25 +28,25 @@ RPC mechanism used by the Grasshopper plugin.
 """
 from __future__ import annotations
 
-import json
 import os
 import platform
 import subprocess
 import sys
 import time
+from multiprocessing import AuthenticationError
 from pathlib import Path
 from typing import List, Optional
 
 import typer
 from typer import Option
 
-# Light imports only — no torch, no warp, no api_core at module level.
+# Light imports only: no torch, warp or api_core at module level.
 from .load_config import load_config, user_config
 
-# Windows consoles may use legacy code pages (cp1252/cp125x); when output is
-# piped or redirected, printing schema descriptions containing ≥ / ° / —
-# would raise UnicodeEncodeError.  Degrade unencodable characters to '?'
-# instead of crashing.
+# Windows consoles may use legacy code pages (cp1252 and similar); when output
+# is piped or redirected, printing schema descriptions that contain characters
+# such as "≥" or "°" would raise UnicodeEncodeError. Replace unencodable
+# characters with '?' instead of crashing.
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         try:
@@ -52,7 +55,8 @@ for _stream in (sys.stdout, sys.stderr):
             pass
 
 # ---------------------------------------------------------------------------
-# Version — read from installed package metadata; fall back to hardcoded.
+# Version: read from installed package metadata; the fallback is used when
+# the package is run from source without being installed.
 # ---------------------------------------------------------------------------
 try:
     from importlib.metadata import version as _pkg_version
@@ -98,7 +102,8 @@ def _daemon_send(payload: dict) -> dict:
     """Send an RPC command to the daemon and return its response.
 
     Uses ``multiprocessing.connection.Client`` over localhost TCP.
-    Raises ``ConnectionRefusedError`` if the daemon is not running.
+    Raises ``ConnectionRefusedError`` if the daemon is not running and
+    ``multiprocessing.AuthenticationError`` if the authkeys do not match.
     """
     from multiprocessing.connection import Client
     conn = Client((daemon_host, daemon_port), authkey=_daemon_authkey())
@@ -107,6 +112,66 @@ def _daemon_send(payload: dict) -> dict:
         return conn.recv()
     finally:
         conn.close()
+
+
+def _absolute_overrides(overrides: List[str]) -> List[str]:
+    """Make path-valued ``key=value`` overrides absolute (against the CWD).
+
+    The daemon may run in another working directory, and ``load_config``
+    leaves relative override paths relative to the current directory, so
+    they are resolved here, where the user typed them.
+    """
+    from .load_config import PATH_FIELDS
+    out = []
+    for item in overrides:
+        key, sep, value = item.partition("=")
+        value = value.strip()
+        if sep and key.strip() in PATH_FIELDS and value and value.lower() not in ("null", "none"):
+            item = f"{key.strip()}={Path(value).resolve()}"
+        out.append(item)
+    return out
+
+
+def _run_on_daemon(payload: dict, quiet: bool) -> None:
+    """Send *payload* to the daemon, report the reply, exit 1 on failure."""
+    try:
+        resp = _daemon_send(payload)
+    except (ConnectionRefusedError, ConnectionResetError) as exc:
+        typer.secho(f"  No daemon on {daemon_host}:{daemon_port} ({exc}). "
+                    "Start one with: urbansolarcarver daemon start", fg="red")
+        raise typer.Exit(1)
+    except AuthenticationError:
+        typer.secho(f"  The daemon on {daemon_host}:{daemon_port} rejected this client's "
+                    "authkey (~/.urbansolarcarver/.daemon_authkey changed after it started). "
+                    "End the daemon process and start it again.", fg="red")
+        raise typer.Exit(1)
+    if resp.get("status") != "ok":
+        typer.secho(f"  Daemon error: {resp.get('error', resp)}", fg="red")
+        raise typer.Exit(1)
+    if not quiet:
+        _echo_result(f"{payload['cmd']} (daemon)",
+                     {k: v for k, v in resp.items() if k != "status"})
+
+
+def _find_manifest(cfg, out_dir: Path, upstream: str, quiet: bool) -> Path:
+    """Locate the upstream stage's ``manifest.json`` when ``-f`` is not given.
+
+    Looks in ``<cfg.out_dir>/<upstream>/`` and then in a sibling
+    ``<upstream>/`` folder next to *out_dir*; exits with code 1 if neither exists.
+    """
+    candidates = [Path(cfg.out_dir) / upstream / "manifest.json",
+                  out_dir.parent / upstream / "manifest.json"]
+    for candidate in candidates:
+        if candidate.is_file():
+            if not quiet:
+                typer.secho(f"  Auto-detected manifest: {candidate}", fg="cyan")
+            return candidate
+    typer.secho(
+        f"  No -f/--from given and no {upstream}/manifest.json found in "
+        f"{candidates[0].parent.parent}. Use -f to point at the manifest.",
+        fg="red",
+    )
+    raise typer.Exit(1)
 
 
 def _echo_result(label: str, key_fields: dict):
@@ -118,7 +183,7 @@ def _echo_result(label: str, key_fields: dict):
 
 
 # ---------------------------------------------------------------------------
-# App — Typer instance with no shell-completion overhead.
+# App: Typer instance without the shell-completion install options.
 # ---------------------------------------------------------------------------
 app = typer.Typer(
     add_completion=False,
@@ -156,7 +221,7 @@ def main(
 
 
 # ---------------------------------------------------------------------------
-# run — one-shot full pipeline
+# run: one-shot full pipeline
 # ---------------------------------------------------------------------------
 @app.command(help="Run the full pipeline (preprocessing + thresholding + exporting)")
 def run(
@@ -168,19 +233,20 @@ def run(
 ):
     """Chain all three stages and write the final carved mesh.
 
-    This is the simplest entry point — equivalent to calling preprocessing,
-    thresholding, and exporting in sequence.  For iterating on threshold
-    parameters without re-computing scores, use the individual stage commands.
+    This is the simplest entry point, equivalent to running preprocessing,
+    thresholding, and exporting in sequence into ``<out>/preprocessing``,
+    ``<out>/thresholding`` and ``<out>/exporting``.  To iterate on threshold
+    parameters without recomputing scores, use the individual stage commands.
     """
+    cfg = load_config(str(config), override)
     if daemon:
-        resp = _daemon_send({
-            "cmd": "run_pipeline", "config": str(config),
-            "overrides": override, "out_dir": str(out_dir) if out_dir else None,
-        })
-        typer.echo(json.dumps(resp, indent=2))
+        _run_on_daemon({
+            "cmd": "run_pipeline", "config": str(config.resolve()),
+            "overrides": _absolute_overrides(override),
+            "out_dir": str(out_dir.resolve()) if out_dir else None,
+        }, quiet)
         return
 
-    cfg = load_config(str(config), override)
     out = out_dir or Path(cfg.out_dir)
 
     if not quiet:
@@ -208,9 +274,11 @@ def run(
 # Individual stage commands
 #
 # Each stage can run standalone:
-#   - preprocessing: reads config + meshes, writes scores.npy + manifest
+#   - preprocessing: reads config + meshes, writes scores.npy, voxel_grid.npy
+#                    and manifest.json
 #   - thresholding:  reads preprocessing manifest, writes mask.npy + manifest
-#   - exporting:     reads thresholding manifest, writes carved_mesh.ply
+#   - exporting:     reads thresholding manifest, writes export.<format>
+#                    (format from final_mesh_format, default ply)
 #
 # The --daemon flag sends the job to the GPU daemon over localhost RPC,
 # sharing the warm CUDA context.  Without --daemon, the stage runs in-process.
@@ -229,14 +297,6 @@ def cmd_preprocessing(
     Outputs ``scores.npy``, ``voxel_grid.npy``, and ``manifest.json`` into
     the output directory.  The manifest is consumed by the thresholding stage.
     """
-    if daemon:
-        resp = _daemon_send({
-            "cmd": "preprocessing", "config": str(config),
-            "overrides": override, "out_dir": str(out_dir) if out_dir else None,
-        })
-        typer.echo(json.dumps(resp, indent=2))
-        return
-
     cfg = load_config(str(config), override)
     out_dir = out_dir or (Path(cfg.out_dir) / "preprocessing")
 
@@ -253,6 +313,13 @@ def cmd_preprocessing(
             typer.secho(f"    Grid size looks reasonable", fg="green")
         typer.echo()
         raise typer.Exit(0)
+
+    if daemon:
+        _run_on_daemon({
+            "cmd": "preprocessing", "config": str(config.resolve()),
+            "overrides": _absolute_overrides(override), "out_dir": str(out_dir.resolve()),
+        }, quiet)
+        return
 
     if not quiet:
         typer.secho(f"  Preprocessing [{cfg.mode}] -> {out_dir}", fg="yellow")
@@ -279,41 +346,28 @@ def cmd_thresholding(
     daemon: bool = Option(False, "--daemon", help="Send to running daemon"),
     quiet: bool = Option(False, "-q", "--quiet", help="Minimal output"),
 ):
-    """Normalize scores and apply the selected thresholding strategy.
+    """Apply the configured threshold to the preprocessing scores.
 
     Reads the preprocessing manifest (``-f``) to locate ``scores.npy``,
-    applies the threshold from the config, and writes ``mask.npy``.
+    applies the threshold from the config to the occupied voxels, and writes
+    ``mask.npy`` (True = voxel kept).
 
-    This is the cheapest stage — designed for rapid iteration.  Re-run with
+    This is the cheapest stage and is meant for quick iteration.  Re-run with
     different ``-o threshold=...`` or ``-o carve_fraction=...`` values without
     recomputing scores.
     """
-    if daemon:
-        resp = _daemon_send({
-            "cmd": "thresholding", "from": str(from_manifest),
-            "config": str(config), "overrides": override,
-            "out_dir": str(out_dir) if out_dir else None,
-        })
-        typer.echo(json.dumps(resp, indent=2))
-        return
-
     cfg = load_config(str(config), override)
     out_dir = out_dir or (Path(cfg.out_dir) / "thresholding")
-
     if from_manifest is None:
-        parent = out_dir.parent if out_dir.name == "thresholding" else out_dir
-        candidate = parent / "preprocessing" / "manifest.json"
-        if candidate.is_file():
-            from_manifest = candidate
-            if not quiet:
-                typer.secho(f"  Auto-detected manifest: {candidate}", fg="cyan")
-        else:
-            typer.secho(
-                "  No -f/--from given and no preprocessing/manifest.json found in the default layout. "
-                "Use -f to specify the manifest path, or use the default output directory structure.",
-                fg="red",
-            )
-            raise typer.Exit(1)
+        from_manifest = _find_manifest(cfg, out_dir, "preprocessing", quiet)
+
+    if daemon:
+        _run_on_daemon({
+            "cmd": "thresholding", "from": str(from_manifest.resolve()),
+            "config": str(config.resolve()), "overrides": _absolute_overrides(override),
+            "out_dir": str(out_dir.resolve()),
+        }, quiet)
+        return
 
     if not quiet:
         typer.secho(f"  Thresholding [{cfg.threshold}] -> {out_dir}", fg="yellow")
@@ -331,7 +385,7 @@ def cmd_thresholding(
     })
 
 
-@app.command("exporting", help="Stage 3: reconstruct mesh from mask -> PLY")
+@app.command("exporting", help="Stage 3: reconstruct mesh from mask -> mesh file (PLY by default)")
 def cmd_exporting(
     from_manifest: Optional[Path] = Option(None, "-f", "--from", help="Path to thresholding manifest.json (auto-detected if omitted)"),
     config: Path = Option(..., "-c", "--config", exists=True, readable=True, help="YAML config path"),
@@ -347,32 +401,18 @@ def cmd_exporting(
     (cubic faces or SDF-smoothed marching cubes), and writes
     ``export.<format>`` (format from ``final_mesh_format``, default ply).
     """
-    if daemon:
-        resp = _daemon_send({
-            "cmd": "exporting", "from": str(from_manifest),
-            "config": str(config), "overrides": override,
-            "out_dir": str(out_dir) if out_dir else None,
-        })
-        typer.echo(json.dumps(resp, indent=2))
-        return
-
     cfg = load_config(str(config), override)
     out_dir = out_dir or (Path(cfg.out_dir) / "exporting")
-
     if from_manifest is None:
-        parent = out_dir.parent if out_dir.name == "exporting" else out_dir
-        candidate = parent / "thresholding" / "manifest.json"
-        if candidate.is_file():
-            from_manifest = candidate
-            if not quiet:
-                typer.secho(f"  Auto-detected manifest: {candidate}", fg="cyan")
-        else:
-            typer.secho(
-                "  No -f/--from given and no thresholding/manifest.json found in the default layout. "
-                "Use -f to specify the manifest path, or use the default output directory structure.",
-                fg="red",
-            )
-            raise typer.Exit(1)
+        from_manifest = _find_manifest(cfg, out_dir, "thresholding", quiet)
+
+    if daemon:
+        _run_on_daemon({
+            "cmd": "exporting", "from": str(from_manifest.resolve()),
+            "config": str(config.resolve()), "overrides": _absolute_overrides(override),
+            "out_dir": str(out_dir.resolve()),
+        }, quiet)
+        return
 
     if not quiet:
         typer.secho(f"  Exporting -> {out_dir}", fg="yellow")
@@ -390,7 +430,7 @@ def cmd_exporting(
 
 
 # ---------------------------------------------------------------------------
-# warmup — precompile Warp kernels so the first run isn't misleadingly slow
+# warmup: precompile Warp kernels so the first run is not misleadingly slow
 # ---------------------------------------------------------------------------
 @app.command(help="Precompile GPU/CPU compute kernels (one-time, cached on disk)")
 def warmup(
@@ -398,14 +438,15 @@ def warmup(
 ):
     """Compile the Warp compute kernels ahead of time.
 
-    Warp JIT-compiles kernels on first use — a one-time ~3-10 s cost per
-    machine and per code version, cached on disk afterwards.  Run this once
-    after installation or after updating UrbanSolarCarver so your first
-    carving run reflects real compute time.  (``setup_env.py`` and the
-    daemon do this automatically.)
+    Warp compiles kernels just in time on first use, a one-time cost of
+    roughly 3-10 s per machine, device and code version that is cached on
+    disk afterwards.  Run this once after installing or updating
+    UrbanSolarCarver so the first carving run reflects real compute time.
+    (``setup_env.py`` and the daemon do this automatically.)  Exits with
+    code 1 if the Warp backend is not available on the device.
     """
     if device not in ("auto", "cpu", "cuda"):
-        typer.secho(f"  Invalid device {device!r} — use 'auto', 'cpu', or 'cuda'", fg="red")
+        typer.secho(f"  Invalid device {device!r}: use 'auto', 'cpu', or 'cuda'", fg="red")
         raise typer.Exit(1)
 
     typer.secho(f"  Compiling Warp kernels (device={device})...", fg="yellow")
@@ -417,14 +458,14 @@ def warmup(
         typer.secho(f"  Kernels ready in {elapsed:.1f}s (cached on disk for future runs)", fg="green")
     else:
         typer.secho(
-            "  Warp backend not available on the requested device — "
+            "  Warp backend not available on the requested device; "
             "kernels will compile lazily on first use.", fg="yellow",
         )
         raise typer.Exit(1)
 
 
 # ---------------------------------------------------------------------------
-# validate — quick config check without loading heavy deps
+# simulate-weights and archetype: simulated benefit weights for benefit mode
 # ---------------------------------------------------------------------------
 @app.command(name="simulate-weights", help="Generate a simulated-weights artifact (ISO 13790 5R1C) for benefit mode")
 def simulate_weights(
@@ -437,11 +478,15 @@ def simulate_weights(
     eps: float = Option(1.0, "--eps",
                         help="Perturbation size in W (central differences)"),
 ):
-    """Simulated benefit weights: hourly marginal benefit + harm of solar gain from the
-    ISO 13790 Annex C simple hourly model (5R1C), by perturbation.
+    """Write a simulated-weights file for benefit mode.
 
-    The artifact feeds benefit mode's ``simulated_weights_path`` config key,
-    replacing the balance-point Heaviside hour filter with physics-derived
+    Runs the ISO 13790 Annex C simple hourly model (5R1C: five resistances,
+    one capacitance) for the archetype and weather file, perturbs the solar
+    gain by +/- ``eps`` W each hour, and records the hourly marginal benefit
+    and harm of solar gain (central differences).
+
+    The file is read through benefit mode's ``simulated_weights_path`` config
+    key, where it replaces the balance-point on/off hour filter with these
     hourly weights. See design/simulated-weights.md.
     """
     import yaml
@@ -463,13 +508,14 @@ def simulate_weights(
         typer.echo(f"  Weights preview: {preview}")
 
 
-# Shoebox archetype template written by `usc archetype`. Values are the
-# neutral example set; -s overrides replace them before writing.
+# Shoebox archetype template written by `usc archetype`. The values come from
+# _ARCHETYPE_DEFAULTS (or the --from file) with any -s overrides applied.
 _ARCHETYPE_TEMPLATE = """\
 # Building archetype for `usc simulate-weights` (simulated benefit weights).
 # Shoebox form: floor area, volume, facade and window areas are derived.
-# NEUTRAL EXAMPLE VALUES: source real ones from TABULA (EU), DOE prototypes
-# (US), or your national code tables. See design/simulated-weights.md.
+# The default values are neutral examples: take real ones from TABULA (EU),
+# DOE prototypes (US), or your national code tables.
+# See design/simulated-weights.md.
 
 # --- Geometry ---
 width: {width}              # m, east-west dimension
@@ -555,7 +601,7 @@ def archetype(
                     "windows"} & base.keys()
         if explicit:
             typer.secho(f"  --from file uses explicit areas {sorted(explicit)}; "
-                        "only shoebox-form archetypes can be edited here — "
+                        "only shoebox-form archetypes can be edited here; "
                         "edit that YAML directly instead", fg="red")
             raise typer.Exit(1)
         unknown = (set(base) - set(_ARCHETYPE_DEFAULTS) - {"wwr"}
@@ -603,6 +649,9 @@ def archetype(
     values["wwr"] = {s: v for s, v in values["wwr"].items() if v > 0.0}
 
     # Validate through the generator's own code path and derive quantities.
+    # ZoneParams.from_archetype takes no internal_gains_w_m2 or shading
+    # arguments, so those keys are left out here (shading is checked
+    # separately below); a zero orientation is the default and is dropped.
     arch = {k: v for k, v in values.items()
             if k not in ("internal_gains_w_m2",) + _ARCHETYPE_OPTIONAL
             and not (k == "orientation" and not v)}
@@ -621,7 +670,7 @@ def archetype(
         raise typer.Exit(1)
 
     if out.exists() and not force:
-        typer.secho(f"  {out} exists — use --force to overwrite", fg="red")
+        typer.secho(f"  {out} exists; use --force to overwrite", fg="red")
         raise typer.Exit(1)
 
     wwr_block = "".join(f"  {side}: {values['wwr'][side]}\n"
@@ -671,8 +720,10 @@ def validate(
 ):
     """Parse and validate the YAML config through Pydantic.
 
-    Checks schema validity, value bounds, and that referenced file paths
-    (meshes, EPW) exist on disk.  Does not initialise CUDA or import torch.
+    Exits with code 1 if the config fails schema or value checks.  Missing
+    mesh, EPW and simulated-weights files, and a simulated-weights file that
+    cannot be read, are printed as warnings only (exit code 0).  Does not
+    initialise CUDA or import torch.
     """
     try:
         cfg = load_config(str(config), override)
@@ -687,7 +738,7 @@ def validate(
     typer.echo(f"    device:     {cfg.device}")
     typer.echo(f"    out_dir:    {cfg.out_dir}")
 
-    # Warn about missing file paths (non-fatal — user may fix before running)
+    # Missing files are warnings, not errors: the user may add them before running.
     problems = []
     if cfg.max_volume_path and not Path(cfg.max_volume_path).exists():
         problems.append(f"max_volume_path not found: {cfg.max_volume_path}")
@@ -714,7 +765,7 @@ def validate(
 
 
 # ---------------------------------------------------------------------------
-# schema — filterable parameter reference printed to terminal
+# schema: filterable parameter reference printed to the terminal
 # ---------------------------------------------------------------------------
 @app.command(help="Show config parameters (optionally filtered by --mode or --search)")
 def schema(
@@ -723,7 +774,7 @@ def schema(
 ):
     """Print the full ``UserConfig`` parameter table.
 
-    Reads field metadata from the Pydantic schema — no heavy imports needed.
+    Reads field metadata from the Pydantic schema, so no heavy imports are needed.
     Filter by mode (``--mode benefit``) to see only the parameters that mode
     uses, or search by keyword (``--search threshold``).
     """
@@ -731,12 +782,9 @@ def schema(
     import textwrap
 
     from .mode_registry import MODES
-    # Derive per-mode parameter sets from the registry.
+    # A mode uses every field except the ones the registry ties to other modes.
     MODE_PARAMS = {name: set(spec.extra_params) for name, spec in MODES.items()}
-    # Parameters shared by all modes.
-    COMMON = {"max_volume_path", "test_surface_path", "out_dir", "mode", "voxel_size", "grid_step",
-              "ray_length", "ray_batch_size", "threshold", "carve_fraction", "apply_smoothing",
-              "min_voxels", "device", "diagnostics", "edge_taper"}
+    mode_specific = set().union(*MODE_PARAMS.values())
 
     if mode and mode not in MODE_PARAMS:
         typer.secho(f"  Unknown mode {mode!r}. Valid modes: {', '.join(sorted(MODE_PARAMS))}", fg="red")
@@ -745,8 +793,7 @@ def schema(
     rows = []
     for name, fld in user_config.model_fields.items():
         if mode:
-            allowed = COMMON | MODE_PARAMS[mode]
-            if name not in allowed:
+            if name in mode_specific and name not in MODE_PARAMS[mode]:
                 continue
 
         typ = fld.annotation
@@ -788,10 +835,12 @@ def schema(
 # ---------------------------------------------------------------------------
 # Daemon management
 #
-# The daemon keeps a CarverSession alive (warm CUDA context + compiled Warp
-# kernels) so that consecutive pipeline calls avoid the ~2 s cold-start.
-# Used by: Grasshopper plugin (via USC_Session component) and CLI --daemon.
-# Binds to localhost only; authenticated with a random authkey.
+# The daemon keeps a CarverSession alive (initialised CUDA context, loaded
+# torch/Warp and compiled Warp kernels) so that consecutive pipeline calls
+# skip that start-up cost.
+# Used by: Grasshopper plugin (via the USC_Session component) and CLI --daemon.
+# Binds to localhost only; clients authenticate with the random key stored in
+# ~/.urbansolarcarver/.daemon_authkey.
 # ---------------------------------------------------------------------------
 daemon_app = typer.Typer(help="Control the persistent Warp/CUDA daemon")
 app.add_typer(daemon_app, name="daemon")
@@ -804,52 +853,59 @@ def daemon_start(
 ):
     """Start the GPU daemon as a detached background process.
 
-    On Windows, uses ``pythonw.exe`` by default to avoid a visible console
-    window.  Use ``-F`` to run in the foreground (useful for debugging).
-    Polls until the daemon accepts connections, then prints a confirmation.
+    Does nothing if a daemon already answers on the port.  Detached runs use
+    ``pythonw.exe`` on Windows (no console window, unless ``--python`` is
+    given) and write their output to ``~/.urbansolarcarver/daemon.log``,
+    which is overwritten on each start.  ``-F`` runs in this console instead,
+    which is useful for debugging.  A detached start polls once per second,
+    for up to 30 s, until the daemon answers a ping, and exits with code 1 if
+    it does not.
     """
-    if python is not None:
-        py = python
-    else:
-        # On Windows, prefer pythonw.exe (no console window) for background.
-        if platform.system() == "Windows":
-            exe = Path(sys.executable)
-            py = exe.with_name("pythonw.exe") if exe.name.lower().endswith("python.exe") else exe
-        else:
-            py = Path(sys.executable)
+    try:
+        if _daemon_send({"cmd": "ping"}).get("status") == "ok":
+            typer.secho(f"  A daemon is already running on {daemon_host}:{daemon_port}", fg="yellow")
+            return
+    except OSError:
+        pass
 
-    daemon_py = Path(__file__).with_name("daemon.py")
-    cmd = [str(py), str(daemon_py), "--host", daemon_host, "--port", str(daemon_port)]
+    py = Path(python) if python is not None else Path(sys.executable)
+    if (python is None and not foreground and platform.system() == "Windows"
+            and py.name.lower() == "python.exe"):
+        py = py.with_name("pythonw.exe")
+    cmd = [str(py), "-m", "urbansolarcarver.daemon",
+           "--host", daemon_host, "--port", str(daemon_port)]
 
     if foreground:
-        subprocess.call(cmd)
-    else:
-        # Launch detached subprocess.
+        raise typer.Exit(subprocess.call(cmd))
+
+    log_path = Path.home() / ".urbansolarcarver" / "daemon.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "w", encoding="utf-8") as log_file:
         if platform.system() == "Windows":
             flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
+            proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, creationflags=flags)
         else:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setpgrp)
+            proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, preexec_fn=os.setpgrp)
 
-        # Poll until daemon responds to a ping (up to 30 s).
-        typer.echo("  Starting daemon...")
-        interval = 1.0
-        max_retries = 30
-        for attempt in range(max_retries):
-            try:
-                resp = _daemon_send({"cmd": "ping"})
-                if resp.get("status") == "ok":
-                    break
-            except (ConnectionRefusedError, OSError):
-                pass
-            time.sleep(interval)
-        else:
-            typer.secho(f"  Daemon did not become ready after {max_retries}s", fg="red")
+    typer.echo("  Starting daemon...")
+    max_wait_s = 30
+    for _ in range(max_wait_s):
+        if proc.poll() is not None:
+            typer.secho(f"  Daemon exited during startup (code {proc.returncode}); see {log_path}", fg="red")
             raise typer.Exit(1)
-        typer.secho(f"  Daemon ready on {daemon_host}:{daemon_port}", fg="green")
+        try:
+            if _daemon_send({"cmd": "ping"}).get("status") == "ok":
+                break
+        except OSError:
+            pass
+        time.sleep(1.0)
+    else:
+        typer.secho(f"  Daemon did not become ready after {max_wait_s} s; see {log_path}", fg="red")
+        raise typer.Exit(1)
+    typer.secho(f"  Daemon ready on {daemon_host}:{daemon_port} (log: {log_path})", fg="green")
 
 
-@daemon_app.command("stop", help="Shutdown the running daemon")
+@daemon_app.command("stop", help="Shut down the running daemon")
 def daemon_stop():
     """Send a shutdown command to the running daemon."""
     try:
@@ -862,15 +918,17 @@ def daemon_stop():
 
 @daemon_app.command("status", help="Check if the daemon is running")
 def daemon_status():
-    """Probe the daemon with a ping to check if it's alive and accepting commands."""
+    """Ping the daemon and print its pid; exit with code 1 if it does not answer."""
     try:
         resp = _daemon_send({"cmd": "ping"})
         pid = resp.get("pid", "?")
         typer.secho(f"  Daemon running on {daemon_host}:{daemon_port} (pid={pid})", fg="green")
-    except (ConnectionRefusedError, OSError):
+    except OSError:
         typer.secho("  Daemon not running", fg="yellow")
+        raise typer.Exit(1)
     except Exception as e:
         typer.secho(f"  Error: {e}", fg="red")
+        raise typer.Exit(1)
 
 
 # ---------------------------------------------------------------------------

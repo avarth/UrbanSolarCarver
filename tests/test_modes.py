@@ -1,4 +1,5 @@
-"""Smoke tests: every carving mode runs without crashing on a tiny mesh."""
+"""Smoke tests that the tilted_plane, time-based, irradiance, benefit and daylight
+modes run end to end on a tiny mesh, plus checks of the benefit-mode weight formula."""
 import numpy as np
 import pytest
 import yaml
@@ -58,7 +59,7 @@ def test_smoke_tilted_plane(tmp_path, tmp_mesh_files):
 # --- EPW-dependent modes ---
 
 # Weighted modes use the relative carve_fraction threshold: a raw numeric
-# cutoff like 0.5 is meaningless against cumulative Wh/m² scores (it would
+# cutoff like 0.5 is meaningless against cumulative kWh/m² scores (it would
 # carve every voxel any ray touched, producing an empty envelope).
 @pytest.mark.parametrize("mode,extra", [
     ("time-based", {}),
@@ -83,8 +84,8 @@ def test_smoke_epw_modes(tmp_path, tmp_mesh_files, example_epw_path, mode, extra
 class TestBenefitWeights:
     def test_benefit_equals_irradiance_over_cold_hours(self, example_epw_path):
         """The benefit weights must equal a plain irradiance matrix computed
-        over exactly the hours below balance_temperature - balance_offset —
-        the documented formula, with no hidden harm subtraction."""
+        over exactly the hours below balance_temperature - balance_offset
+        (the documented formula, with no hidden harm subtraction)."""
         import torch
         from ladybug.epw import EPW
         from urbansolarcarver.sky_patches import compute_EPW_based_weights
@@ -107,9 +108,9 @@ class TestBenefitWeights:
         torch.testing.assert_close(w_benefit, w_cold_irr, rtol=1e-5, atol=1e-3)
 
     def test_no_cold_hours_warns_and_returns_zeros(self, example_epw_path):
-        """An analysis period with no beneficial hours must warn loudly and
-        return all-zero weights — NOT fall through to Ladybug, which treats
-        an empty hoy list as the whole year."""
+        """An analysis period with no beneficial hours must warn and return
+        all-zero weights. It must not pass the empty hour-of-year list to
+        Ladybug, which treats an empty list as the whole year."""
         import torch
         from urbansolarcarver.sky_patches import compute_EPW_based_weights
 
@@ -155,8 +156,8 @@ class TestBenefitWeights:
 
     def test_simulated_weights_all_ones_equals_irradiance(self, example_epw_path):
         """An all-ones weight schedule must reproduce plain irradiance
-        weights over the same hours — the artifact path is a pure hourly
-        re-weighting of the same sky integration."""
+        weights over the same hours, because the simulated-weights path is a
+        pure hourly re-weighting of the same sky integration."""
         import torch
         from urbansolarcarver.sky_patches import compute_EPW_based_weights
 
@@ -174,7 +175,7 @@ class TestBenefitWeights:
 
     def test_simulated_weights_binary_schedule_equals_heaviside(self, example_epw_path):
         """A 0/1 schedule built from the balance filter must reproduce the
-        default benefit weights — the Heaviside is the binary special case."""
+        default benefit weights: the Heaviside step is the binary special case."""
         import torch
         from ladybug.epw import EPW
         from urbansolarcarver.sky_patches import compute_EPW_based_weights
@@ -194,7 +195,7 @@ class TestBenefitWeights:
         torch.testing.assert_close(w_sched, w_default, rtol=1e-3, atol=1e-2)
 
     def test_simulated_weights_harm_composite(self, example_epw_path):
-        """With include_harm, the artifact path must equal
+        """With include_harm, the simulated-weights path must equal
         clip(benefit-scaled − harm-scaled, 0)."""
         import torch
         from urbansolarcarver.sky_patches import compute_EPW_based_weights

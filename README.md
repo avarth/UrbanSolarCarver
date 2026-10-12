@@ -27,9 +27,9 @@ The tool is scale-agnostic and works on any voxelizable geometry. Surface normal
 | **tilted_plane** | Cuts voxels above a fixed angle from each test surface, uniform or varying by orientation octant. Suitable for daylight access envelopes and quick regulatory checks. No weather data required. |
 | **time-based** | Solar envelope: traces actual sun paths for specific dates and hours, carving any voxel that casts a shadow on protected surfaces during those times. |
 | **irradiance** | Weights sky directions by cumulative solar energy over an analysis period (direct + diffuse, Perez all-weather model). |
-| **benefit** | Like irradiance, but filtered by a heating-benefit criterion: only hours when outdoor temperature falls below the building's balance-point temperature contribute, focusing carving on periods when solar gain is thermally useful. Optionally consumes **simulated weights** from a built-in hourly building simulation (ISO 13790 5R1C) that captures thermal lag and mass state; see [Simulated Weights](https://avarth.github.io/UrbanSolarCarver/simulated-weights/). |
+| **benefit** | Like irradiance, but filtered by a heating-benefit criterion: only hours when the outdoor temperature is below the building's balance-point temperature minus a dead-band (`balance_offset`) contribute, so carving protects the sun of hours when solar gain reduces heating. Optionally consumes **simulated weights** from a built-in hourly building simulation (ISO 13790 5R1C) that captures thermal lag and mass state; see [Simulated Weights](https://avarth.github.io/UrbanSolarCarver/simulated-weights/). |
 | **daylight** | Weights sky patches by CIE overcast luminance for diffuse daylight access. |
-| **radiative_cooling** | Preserves sky-dome access for passive nighttime cooling using Martin-Berdahl emissivity. Works inversely (rays cast from surfaces to sky). Horizontal surfaces only (experimental). |
+| **radiative_cooling** | Preserves sky-dome access for passive nighttime cooling, weighting sky patches with the Martin-Berdahl sky emissivity for a single night-time dew point (no weather file needed). Valid for horizontal surfaces only (experimental). |
 
 ## Thresholding
 
@@ -41,7 +41,7 @@ After scoring, a threshold determines which voxels to carve and which to keep. T
 | **Head-tail breaks** | `threshold: headtail` | Heavy-tailed distributions. Biased toward removing only the worst obstructors, preserving more buildable volume when most voxels have low scores. |
 | **Manual** | `threshold: 0.35` | Expert use. Carves all voxels with score above this value. Inspect the score histogram (`diagnostics: true`) first. |
 
-The strategies above apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`). The two binary modes have fixed semantics: **`tilted_plane`** has no threshold (voxels above the cut plane are always removed); **`time-based`** uses the violation duration in hours (`threshold: 0` = remove any voxel that casts a shadow at any sampled moment, `threshold: 1` = tolerate up to one hour, etc.; the sun is sampled every 5 minutes by default, see `sun_steps_per_hour`).
+The strategies above apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`). The two binary modes have fixed semantics: **`tilted_plane`** has no threshold (voxels above the cut plane are always removed); **`time-based`** scores the shading a voxel causes in m²·h, shaded protected area times duration (`threshold: 0` = remove any voxel that casts a shadow at any sampled moment, `threshold: 5` = tolerate up to 5 m²·h; the sun is sampled every 5 minutes by default, see `sun_steps_per_hour`).
 
 The **decomposed pipeline** is designed for threshold exploration: compute scores once (the expensive step), then re-run thresholding with different values instantly.
 
@@ -124,7 +124,7 @@ Tutorial notebooks are in [`examples/`](examples/).
 
 ## Research Context
 
-USC extends the lineage of voxel-based solar form-finding, from Knowles' solar envelope through iso-solar surfaces and solar ordinance methods, into a unified, climate-aware, GPU-accelerated framework.
+USC builds on earlier solar form-finding methods (Knowles' solar envelope, iso-solar surfaces, solar ordinance methods) and combines them with climate-based sky weighting and GPU voxel ray tracing in one tool.
 
 ## Citation
 

@@ -2,7 +2,7 @@
 UrbanSolarCarver Sky Patch Weighting Module
 
 Generates sky-patch direction vectors, solid angles, and per-patch weight
-distributions for the voxel carving pipeline.
+distributions for the voxel carving pipeline. P = 145 Tregenza patches.
 
 Core Functions
 --------------
@@ -13,16 +13,20 @@ Core Functions
 2. fetch_tregenza_patch_solid_angles(device) → torch.Tensor
    Returns a length-P tensor of solid angles (steradians) per patch.
 
-3. compute_EPW_based_weights(mode, epw_file, hoys, device, ...) → torch.Tensor
-   Climate-based weights via Ladybug SkyMatrix (Perez all-weather model).
-   Supports modes: irradiance, benefit, daylight.
+3. compute_EPW_based_weights(mode, epw_path, hoys, device, ...) → torch.Tensor
+   Per-patch weights for the modes time-based (uniform), daylight (CIE
+   overcast sky), irradiance and benefit (climate-based, from a Ladybug
+   SkyMatrix built with the Perez all-weather model; units kWh/m²).
 
-4. compute_radiative_cooling_weights(dew_point, bliss_k, device) → torch.Tensor
-   Theoretical radiative cooling potential per patch (Martin-Berdahl +
-   Bliss angular attenuation).  Assumes horizontal analysis surface.
-Compute_weights yields all the sky-patch coefficients necessary to
-accumulate per-voxel exposure scores. Tregenza vectors and solid angles
-are also available for diagnostics or custom weighting schemes.
+4. compute_radiative_cooling_weights(dewpoint_celsius, bliss_k, device,
+   min_elevation_deg) → torch.Tensor
+   Theoretical long-wave radiative cooling potential per patch
+   (Martin-Berdahl sky emissivity with Bliss angular variation).
+   Assumes a horizontal analysis surface.
+
+The weights are combined with per-voxel sky-patch visibility to accumulate
+exposure scores. The Tregenza vectors and solid angles are also usable on
+their own for diagnostics or custom weighting schemes.
 """
 
 import numpy as np
@@ -31,14 +35,14 @@ from typing import List, Sequence
 import math
 from urbansolarcarver.session import session_cache
 
-# Lazy-loaded shared instances for efficiency
-_view_sphere = None  # caches sky dome geometry
-_sky_matrix_cls = None  # caches sky irradiance calculator class
+# Ladybug objects are imported on first use, so importing this module does
+# not require Ladybug, and are then kept for reuse.
+_view_sphere = None  # cached ladybug ViewSphere (sky dome geometry)
+_sky_matrix_cls = None  # cached ladybug_radiance SkyMatrix class
 
 def _load_view_sphere() -> "ViewSphere":
     """
-    Internal loader for the sky dome sample directions
-    Ensures only one ViewSphere instance is created
+    Return the shared Ladybug ViewSphere, creating it on first call.
     """
     global _view_sphere
     if _view_sphere is None:
@@ -48,8 +52,7 @@ def _load_view_sphere() -> "ViewSphere":
 
 def _load_sky_matrix() -> type:
     """
-    Internal loader for the sky irradiance model
-    Avoids repeated imports of SkyMatrix class
+    Return the ladybug_radiance SkyMatrix class, importing it on first call.
     """
     global _sky_matrix_cls
     if _sky_matrix_cls is None:
@@ -57,47 +60,57 @@ def _load_sky_matrix() -> type:
         _sky_matrix_cls = SkyMatrix
     return _sky_matrix_cls
 
-# -----------------------------------------------------------------
-#  Cache Tregenza directions once per live CarverSession.
-# -----------------------------------------------------------------
-@session_cache("tregenza_dirs")               # one-liner decorator
+@session_cache("{args[0]}")
 def fetch_tregenza_patch_directions(
     device: torch.device  # compute device for the output tensor
 ) -> torch.Tensor:
     """
-    Returns the 145 unit direction vectors of the Tregenza hemisphere
+    Return the 145 unit direction vectors of the Tregenza hemisphere
     subdivision (Tregenza, 1987). The dome divides the sky hemisphere
     into 145 patches of approximately equal solid angle, organized in
-    7 altitude rings plus a zenith cap.
+    7 altitude rings (30, 30, 24, 24, 18, 12 and 6 patches) plus a
+    zenith cap.
 
-    Returns tensor [P, 3] of unit vectors for each Tregenza sky patch.
-    Uses ladybug ViewSphere internally.
+    Returns a float32 tensor of shape [P, 3] (P = 145) on ``device``, one
+    unit vector (x, y, z) per patch centre, with z pointing up (z = cos of
+    the zenith angle). Uses Ladybug's ViewSphere; the result is cached
+    per device for the session.
     """
     sphere = _load_view_sphere()
-    vecs = sphere.tregenza_dome_vectors             # list of Vector3 (x,y,z)
-    # convert to NumPy then tensor for GPU/CPU transfer
+    vecs = sphere.tregenza_dome_vectors             # 145 ladybug Vector3D
     coords = np.array([[v.x, v.y, v.z] for v in vecs], dtype=np.float32)
     return torch.from_numpy(coords).to(device)
 
-# -----------------------------------------------------------------
-#  Cache solid angles the same way.
-# -----------------------------------------------------------------
-@session_cache("tregenza_solid_angles")
+def tregenza_solid_angles() -> np.ndarray:
+    """Solid angle of each of the 145 Tregenza patches in steradians (float64).
+
+    Built from Ladybug's per-band constants rather than its
+    ``ViewSphere.tregenza_solid_angles`` property, which (ladybug-core
+    0.44) caches its result in the Reinhart attribute and so returns the
+    Reinhart list once ``reinhart_solid_angles`` has been read.
+    """
+    from ladybug.viewsphere import ViewSphere
+    counts = ViewSphere.TREGENZA_PATCHES_PER_ROW + (1,)  # + zenith patch
+    return np.repeat(np.asarray(ViewSphere.TREGENZA_COEFFICIENTS, dtype=np.float64),
+                     counts)
+
+
+@session_cache("{args[0]}")
 def fetch_tregenza_patch_solid_angles(
     device: torch.device  # compute device for the output tensor
 ) -> torch.Tensor:
     """
-    Returns tensor [P] of solid angles (in steradians) per tregenza sky patch.
-    Uses ladybug viewsphere
+    Return a float32 tensor of shape [P] (P = 145) with the solid angle of
+    each Tregenza sky patch in steradians, in the same order as
+    :func:`fetch_tregenza_patch_directions` (see :func:`tregenza_solid_angles`).
+    The result is cached per device for the session.
     """
-    sphere = _load_view_sphere()
-    angles = sphere.tregenza_solid_angles           # list of floats
-    arr = np.array(angles, dtype=np.float32)
+    arr = tregenza_solid_angles().astype(np.float32)
     return torch.from_numpy(arr).to(device)
 
 def compute_radiative_cooling_weights(
-    dewpoint_celsius: float,   # ambient dew point in °C for emissivity fit
-    bliss_k: float,            # empirical angular‐attenuation constant (Bliss 1961)
+    dewpoint_celsius: float,   # outdoor dew point in °C (input to Eq. 1)
+    bliss_k: float,            # Bliss (1961) angular constant k (Eq. 2)
     device: torch.device,      # compute device for output tensor
     min_elevation_deg: float = 0.0,  # protection-cone cutoff (design constraint)
 ) -> torch.Tensor:
@@ -107,76 +120,90 @@ def compute_radiative_cooling_weights(
 
     Scientific background
     ---------------------
-    • Sky (hemispherical) emissivity, εₛky  
-      The clear-sky emissivity in the 8-13 µm thermal-IR window can be
+    • Sky (hemispherical) emissivity, εₛky
+      The clear-sky emissivity, integrated over the whole long-wave
+      (thermal infrared) spectrum and the whole hemisphere, can be
       estimated from near-surface water-vapour content.  Martin & Berdahl
-      (1984) fit a quadratic in relative dew-point x = T_dp / 100 °C
-      to a wide range of radiometer measurements:
+      (1984) fit a quadratic in x = T_dp / 100, with the dew point T_dp
+      in °C, to radiometer measurements of clear skies:
 
           εₛky(x) = 0.758 + 0.521 x + 0.625 x²                (Eq. 1)
 
       A larger εₛky means the sky behaves more like a blackbody,
-      emitting and absorbing more long-wave radiation and therefore
-      offering less potential cooling for a hot surface.
+      sending more long-wave radiation back to the surface and therefore
+      offering less cooling potential.
 
     • Directional emissivity (ε_dir)
-      Long-wave exchange also depends on zenith angle θ: the drier,
-      higher-altitude air seen near the zenith is usually "blacker" than
-      the humid boundary layer near the horizon.  Bliss (1961) proposed
-      an exponential attenuation law that relates the hemispherical
-      value in Eq. 1 to a direction-dependent value:
+      Sky emissivity also depends on the zenith angle θ.  Looking up,
+      the line of sight crosses the thinnest layer of atmosphere, so the
+      zenith has the lowest emissivity.  Towards the horizon the path
+      through the humid lower air grows like 1/cos θ and the emissivity
+      approaches 1 (a blackbody).  Bliss (1961) relates the hemispherical
+      value of Eq. 1 to a direction-dependent value:
 
           ε_dir(θ) = 1 - (1 - εₛky)^(1 /(k · cos θ))          (Eq. 2)
 
-      with k ≈ 1.8 for clear nocturnal skies.  The code clamps
-      cos θ to `1e-3` to avoid division by zero at the horizon.
+      with k ≈ 1.8 for clear night skies.  The code clamps cos θ to at
+      least 1e-3 to avoid division by zero at the horizon (the lowest
+      Tregenza patch centre is at 6° elevation, so the clamp does not
+      change the result in practice).
 
-    • Radiative cooling potential  
-      A surface "sees" the sky patch through its solid angle Ω_p.
-      Assuming the surface itself is nearly black in the long-wave,
-      its net radiative heat *loss* in direction *p* is proportional to
+    • Radiative cooling potential
+      Take a horizontal surface that is nearly black in the long wave and
+      at about the air temperature.  Its net long-wave loss towards
+      patch p is proportional to the view factor of the patch times the
+      emissivity deficit of that patch:
 
-          (1 - ε_dir) · Ω_p                                 (Eq. 3)
+          w_p ∝ (cos θ_p / π) · Ω_p · (1 - ε_dir(θ_p))      (Eq. 3)
 
-      because (1 - ε_dir) is the fraction of the surface's own emission
-      not returned by the sky (i.e. the deficit in sky emission).
+      (cos θ_p / π) · Ω_p is the view factor from the horizontal surface
+      to a small patch of solid angle Ω_p.  (1 - ε_dir) is the part of
+      the surface's own emission that the sky does not return.
 
 
     Parameters
     ----------
     dewpoint_celsius : float
         Outdoor dew-point temperature [°C].  Acts as a proxy for
-        absolute humidity in Eq. 1.
-    bliss_k : float, default=1.8
-        Empirical constant from Bliss (1961) governing angular variation of atmospheric
-        emissivity. Typical clear-sky values range 1.5 - 2.0; larger k increases zenith-horizon contrast.
+        absolute humidity in Eq. 1.  A warning is issued outside
+        [-15, 25] °C, the range treated as valid for the fit.
+    bliss_k : float
+        Empirical constant k from Bliss (1961) in Eq. 2.  Must be
+        positive; 1.8 is typical for clear skies, and values usually lie
+        between 1.5 and 2.0.  A larger k lowers the emissivity near the
+        zenith, which increases the zenith-to-horizon contrast.
     device : torch.device
         Target compute device for the returned tensor.
     min_elevation_deg : float, default=0.0
-        Design-constraint protection cone: sky patches whose center
+        Design-constraint protection cone: sky patches whose centre
         elevation is below this angle are excluded (weight 0) and the
-        remaining weights renormalized.  This is NOT part of the physical
-        model — it declares which portion of the sky dome the design
-        defends, analogous to obstruction-angle rules in daylight codes.
+        remaining weights renormalized.  This is not part of the physical
+        model.  It declares which portion of the sky dome the design
+        protects, similar to obstruction-angle rules in daylight codes.
         0 (default) keeps the full hemisphere (pure physical model).
 
     Returns
     -------
-    torch.Tensor  (length = P sky patches, dtype =float32)
-        cooling weights wᵢ ≥ 0,  Σ wᵢ = 1.
+    torch.Tensor  (shape [P], P = 145 sky patches, dtype float32)
+        Cooling weights wᵢ ≥ 0 with Σ wᵢ = 1.
+
+    Raises
+    ------
+    ValueError
+        If ``bliss_k`` is not positive, or if ``min_elevation_deg``
+        excludes every sky patch.
 
     Notes
     -----
-    * **Assumes horizontal analysis surface** (flat roof).  The view-factor
-      weighting cos(θ)/π used in Eq. 3 is only correct for an upward-facing
-      horizontal surface.  For tilted or vertical surfaces the angular
-      integration bounds change significantly; applying these weights to
-      non-horizontal surfaces will over-weight the zenith and under-weight
-      low-altitude patches.
+    * **Assumes a horizontal analysis surface** (flat roof).  The view
+      factor cos(θ)/π in Eq. 3 is only correct for an upward-facing
+      horizontal surface.  For tilted or vertical surfaces the cosine is
+      taken to the surface normal instead, so applying these weights to
+      them over-weights the zenith and under-weights low-altitude patches.
     * Valid for clear nights; clouds would raise εₛky toward unity and
       flatten the weight distribution.
-    * Units cancel, so the weights are dimensionless fractions that can
-      multiply any radiative-heat-transfer coefficient in further
+    * The weights are normalized, dimensionless fractions; they can
+      multiply any radiative heat-transfer quantity in further
       calculations.
 
     References
@@ -191,9 +218,8 @@ def compute_radiative_cooling_weights(
         raise ValueError(
             f"bliss_k must be positive (typical range 1.5–2.0), got {bliss_k}"
         )
-    # Martin-Berdahl (1984) quadratic fit for clear-sky emissivity.
-    # Validated for dew points roughly −10 °C to +10 °C; extrapolation outside
-    # [−15, 25] °C is unreliable — warn but don't crash.
+    # The Martin-Berdahl fit (Eq. 1) is treated as valid for dew points from
+    # -15 to +25 °C; outside that range warn, but still compute the weights.
     if dewpoint_celsius < -15.0 or dewpoint_celsius > 25.0:
         import warnings
         warnings.warn(
@@ -201,9 +227,8 @@ def compute_radiative_cooling_weights(
             f"range [−15, 25] °C; radiative cooling weights may be inaccurate.",
             stacklevel=2,
         )
-    # Martin-Berdahl (1984) empirical fit for clear-sky hemispherical
-    # emissivity: ε_sky = 0.758 + 0.521·x + 0.625·x²  (see docstring Eq. 1)
-    # where x = T_dp / 100 °C.  Valid for dew points roughly −15 to +25 °C.
+    # Eq. 1: clear-sky hemispherical emissivity, x = T_dp / 100 with T_dp in °C.
+    # The upper clamp keeps (1 - eps_global) positive for the power in Eq. 2.
     x = torch.as_tensor(dewpoint_celsius / 100.0, dtype=torch.float32, device=device)
     eps_global = 0.758 + 0.521 * x + 0.625 * x * x
     eps_global = torch.clamp(eps_global, min=0.0, max=0.999)
@@ -211,25 +236,23 @@ def compute_radiative_cooling_weights(
     solid_angles = fetch_tregenza_patch_solid_angles(device)  # [145]
     cos_zen = dirs[:, 2].clamp(min=1e-3)               # avoid zero division
 
-    # Directional emissivity per Bliss (1961).  The parameter k controls
-    # how strongly emissivity drops near the horizon (atmospheric path length).
+    # Eq. 2, directional emissivity per Bliss (1961):
     #   eps_dir(theta) = 1 - (1 - eps_global)^(1 / (k * cos_zen))
-    # Patches near the zenith (cos_zen ~ 1) see nearly the full hemispherical
-    # emissivity; patches near the horizon see much less sky emission.
+    # Near the zenith (cos_zen ~ 1) eps_dir is below the hemispherical value;
+    # towards the horizon the exponent grows and eps_dir approaches 1, so
+    # low patches emit almost like a blackbody and offer little cooling.
     eps_dir = 1.0 - torch.pow((1.0 - eps_global), 1.0 / (bliss_k * cos_zen))
 
-    # View factor for a horizontal Lambertian surface: cos(theta) / pi.
-    # Weights each patch by how much of the surface "sees" it.
-    # NOTE: assumes horizontal analysis surface.
+    # Eq. 3: (cos(theta) / pi) * solid_angle is the view factor from a
+    # horizontal surface to the patch (horizontal surface assumed);
+    # (1 - eps_dir) is the emissivity deficit: the less the atmosphere
+    # emits in a direction, the more heat the surface loses towards it.
     view_factor = cos_zen / math.pi                     # [145]
-    # Cooling weight = view_factor * (1 - eps_dir) * solid_angle.
-    # (1 - eps_dir) is the emissivity deficit: patches where the atmosphere
-    # emits less radiation allow more heat to radiate to deep space.
     raw = view_factor * (1.0 - eps_dir) * solid_angles
 
     # Design-constraint protection cone: exclude patches below the declared
-    # elevation.  Applied AFTER the physical weights so the null case
-    # (min_elevation_deg=0) is exactly the unmodified physical model.
+    # elevation.  Applied after the physical weights so that
+    # min_elevation_deg=0 gives exactly the unmodified physical model.
     if min_elevation_deg > 0.0:
         elevation_deg = torch.rad2deg(torch.asin(dirs[:, 2].clamp(-1.0, 1.0)))
         raw = torch.where(elevation_deg >= min_elevation_deg, raw,
@@ -237,25 +260,30 @@ def compute_radiative_cooling_weights(
         if not (raw > 0.0).any():
             raise ValueError(
                 f"min_sky_elevation_deg={min_elevation_deg:g} excludes every "
-                f"sky patch (highest Tregenza patch center is at 90°) — "
-                f"lower the cutoff."
+                f"sky patch (highest Tregenza patch center is at 90°). "
+                f"Lower the cutoff."
             )
 
     total = raw.sum()
     if total <= 0.0:
-        # No net cooling (e.g., very humid climate). Fall back to uniform.
+        # Guard only: eps_global <= 0.999 keeps the zenith patch's deficit
+        # positive, so this is not expected to run.  Fall back to uniform.
         return torch.full_like(raw, fill_value=1.0 / raw.numel())
     return (raw / total).to(torch.float32)
 
 def _scaled_cumulative_matrix(epw_path: str, hourly_weights, lb_north: float,
                               expected_patches: int) -> np.ndarray:
-    """Cumulative Tregenza sky matrix with each hour's DNI/DHI scaled by
-    ``hourly_weights`` (length 8760, non-negative).
+    """Cumulative Tregenza sky matrix with each hour's direct normal (DNI)
+    and diffuse horizontal (DHI) irradiance scaled by ``hourly_weights``
+    (length 8760, non-negative).
 
-    Zero-weighted hours contribute nothing, so out-of-period hours are
-    handled by zeroing their weight; the wea keeps its full-year duration
-    (Ladybug's average→cumulative conversion is duration-consistent either
-    way).
+    Hours outside the analysis period are excluded by giving them weight
+    0, so the Wea (Ladybug weather object) keeps its full-year length
+    instead of being filtered by hour.
+
+    Returns a float64 array of shape (expected_patches,) with the
+    weighted cumulative direct + diffuse irradiance per patch [kWh/m²].
+    Raises RuntimeError if Ladybug returns a different patch count.
     """
     from ladybug.wea import Wea
 
@@ -293,106 +321,148 @@ def compute_EPW_based_weights(
     simulated_weights: "tuple | None" = None,               # benefit only: (benefit[8760], harm[8760]) hourly weights
 ) -> torch.Tensor:
     """
-    Return a vector of sky-patch weights (length P) derived from
-    Energy-Plus Weather (EPW) data or CIE overcast sky (for daylight).
+    Return a vector of sky-patch weights (length P = 145) derived from
+    EnergyPlus Weather (EPW) data, or from the CIE overcast sky (daylight)
+    or a uniform sky (time-based).
     Each weight expresses the relative importance of the
     corresponding Tregenza sky patch for a chosen metric:
 
         ┌──────────────┬──────────────────────────────────────────────┐
         │ mode         │ physical meaning of the weight wᵢ            │
         ├──────────────┼──────────────────────────────────────────────┤
-        │ time-based   │ uniform probability 1/P                      │
+        │ time-based   │ uniform weight 1 for every patch             │
         │ daylight     │ CIE overcast luminance Ω·(1+2 cos θ)/3       │
-        │ irradiance   │ solar short-wave power (direct+diffuse)      │
+        │ irradiance   │ cumulative solar energy (direct+diffuse)     │
         │ benefit      │ net *heating benefit* of solar gains         │
         └──────────────┴──────────────────────────────────────────────┘
 
     Scientific background
     ---------------------
-    * Sky patch geometry — Tregenza subdivides the hemisphere into
-      145 quasi-equal solid-angle patches.
-      `fetch_tregenza_patch_` returns Ωᵢ and view vector
-      d̂ᵢ = (lᵢ, mᵢ, nᵢ)** with nᵢ = cos θ*.
+    * Sky patch geometry: Tregenza subdivides the hemisphere into
+      145 patches of nearly equal solid angle.
+      `fetch_tregenza_patch_directions` returns the unit vectors
+      d̂ᵢ = (xᵢ, yᵢ, zᵢ) with zᵢ = cos θᵢ (θ = zenith angle);
+      `fetch_tregenza_patch_solid_angles` returns the solid angles Ωᵢ.
 
-    * time-based — Baseline uninformative prior:  
-      wᵢ = 1/P. 
-      For time-based carving using traditional time-based solar envelope methods.
+    * time-based: uninformative baseline, wᵢ = 1 for every patch.
+      Used for carving with traditional time-based solar envelope
+      methods, where every unobstructed sun or sky direction counts
+      equally.
 
-    * daylight — The CIE Standard Overcast Sky (Darula & Kittler 2002)
-      prescribes relative luminance  
-      L(θ) ∝ (1 + 2 cos θ)/3.  
+    * daylight: the CIE Standard Overcast Sky (see Darula & Kittler
+      2002) prescribes a relative luminance L(θ) ∝ (1 + 2 cos θ)/3,
+      three times brighter at the zenith than at the horizon.  The
+      weight is that luminance times the patch solid angle Ωᵢ.
 
-    * irradiance — 'SkyMatrix.from_epw' (Ladybug Tools) builds a
-      Perez All-Weather sky for every time step, then integrates the
-      selected hours ('hoys') to obtain cumulative short-wave
-      energy per patch:
+    * irradiance: 'SkyMatrix.from_epw' (Ladybug Tools) builds a
+      Perez all-weather sky for every hour, then sums the selected
+      hours ('hoys') to obtain the cumulative short-wave energy per
+      patch:
 
-          wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) [J m⁻²]
+          wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) [kWh m⁻²]
 
-      where E_dirᵢₜ is direct beam contribution and E_difᵢₜ
-      diffuse.
+      where E_dirᵢₜ is the direct-beam contribution and E_difᵢₜ the
+      diffuse sky contribution of patch i in hour t.
 
-    * benefit — Heating-benefit filter: only solar gains occurring in
-      hours cold enough to offset heating demand are credited,
+    * benefit: heating-benefit filter.  Only solar gains in hours cold
+      enough to offset heating demand are credited,
 
           wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) · H( T_bal - ΔT - Tₐₜ )
 
-      with Heaviside switch H.  Implemented by selecting the cold hours
-      from the EPW dry-bulb series and building a plain cumulative
-      irradiance SkyMatrix over exactly those hours, so the formula
-      above IS the implementation (period-stable: warm hours in the
-      analysis period contribute nothing).
+      with the Heaviside step H (1 for a positive argument, else 0) and
+      Tₐₜ the outdoor dry-bulb temperature.  The code selects the cold
+      hours from the EPW dry-bulb series and builds a plain cumulative
+      irradiance SkyMatrix over exactly those hours, so the formula above
+      is what is computed.  Warm hours in the analysis period contribute
+      nothing, so a longer period does not dilute the result.
       With ``include_harm=True`` (opt-in, experimental) the weights
-      instead reproduce Ladybug's composite radiation-benefit concept:
+      instead follow Ladybug's composite radiation-benefit concept:
       hot-hour (Tₐ > T_bal + ΔT) radiation is subtracted per patch and
       the result clipped at zero,
 
           wᵢ = max( Σ_cold E − Σ_hot E , 0 )
 
       Results then depend on how much of the warm season the analysis
-      period includes, and a patch's weight erodes only to zero, never
-      below — shading value cannot be a carving force.
+      period includes.  A patch's weight can drop to zero but not below,
+      because a negative weight (the value of shade) cannot be expressed
+      as a carving force.
       'balance_temperature' (T_bal) is the building's free-running
-      balance point — derive project-specific values with the
-      Honeybee/E+ balance-point workflow; 'balance_offset' (ΔT) is the
-      dead-band around it (hours inside the band count for neither
-      side).
+      balance point; derive project-specific values with the
+      Honeybee/EnergyPlus balance-point workflow.  'balance_offset' (ΔT)
+      is the half-width of the dead band around it (hours inside the band
+      count for neither side).
+      With ``simulated_weights`` the Heaviside step is replaced by hourly
+      weights in [0, 1] from an ISO 13790 zone model (see
+      :mod:`urbansolarcarver.simulated_weights`): each hour's irradiance
+      is scaled by benefit[t] (and, with ``include_harm``, harm[t] is
+      subtracted the same way) before the sky matrix is summed.
 
     Parameters
     ----------
     mode : {'time-based', 'daylight', 'irradiance', 'benefit'}
-        Weighting strategy (see table above).
+        Weighting strategy (see table above).  Case and surrounding
+        whitespace are ignored.
     epw_path : str
         Path to an EPW file.  Required for *irradiance* and *benefit*.
     hoys : Sequence[float]
-        Hour-of-year indices to sample.  For *benefit*, a full-year
-        period is safe and natural: the balance filter selects the
-        beneficial hours by itself.
+        Hour-of-year indices (0 to 8759) to sample.  Required and
+        non-empty for *irradiance* and *benefit*; ignored otherwise.  For
+        *benefit*, a full-year period is a sensible default: the balance
+        filter selects the beneficial hours by itself.
     device : torch.device, default 'cuda' if available else 'cpu'
         Compute device for the returned tensor.
     balance_temperature : float, default 15 °C
-        Free-running balance-point temperature for the benefit filter.
+        Free-running balance-point temperature T_bal for the benefit
+        filter.
     balance_offset : float, default 2 °C
-        Dead-band below the balance point.
+        Dead-band half-width ΔT: cold hours are below T_bal - ΔT; with
+        ``include_harm``, hot hours are above T_bal + ΔT.
+    north : float, default 0
+        North direction in degrees clockwise from +Y (USC convention).
+        Converted to Ladybug's counterclockwise convention internally.
+    include_harm : bool, default False
+        Benefit mode only.  Subtract hot-hour radiation per patch and
+        clip at zero (experimental, see above).
+    simulated_weights : tuple of two arrays, optional
+        Benefit mode only.  ``(benefit, harm)`` hourly series of length
+        8760 with values in [0, 1] (the first two items returned by
+        :func:`urbansolarcarver.simulated_weights.read_simulated_weights`).
+        When given, they replace the balance-point filter and
+        ``balance_temperature`` / ``balance_offset`` are not used.
 
     Returns
     -------
     torch.Tensor
-        Shape (P,), dtype float32, residing on device.
-        Weights are non-negative.  Only ``radiative_cooling`` normalises
-        to Σwᵢ = 1.  Other modes preserve the physical scale returned
-        by Ladybug (Wh/m² for irradiance/benefit) or the CIE luminance
-        distribution (daylight).  Threshold methods (carve_fraction,
-        headtail) are scale-invariant, so the difference does not affect
-        carving results.
+        Shape (P,), dtype float32, on ``device``.
+        Weights are non-negative and not normalized (unlike
+        :func:`compute_radiative_cooling_weights`, whose weights sum to
+        1).  They keep the physical scale returned by Ladybug (kWh/m² for
+        irradiance/benefit) or the CIE luminance distribution (daylight).
+        The threshold methods (carve_fraction, headtail) are
+        scale-invariant, so the scale does not affect carving results.
+        In benefit mode an all-zero vector is returned, with a warning,
+        when no hour in the period qualifies.
+
+    Raises
+    ------
+    TypeError
+        If ``mode`` is not a non-empty string.
+    FileNotFoundError
+        If *irradiance* or *benefit* is requested without an existing
+        EPW file.
+    ValueError
+        If ``hoys`` is empty or outside 0 to 8759 for those modes, or if
+        ``mode`` is not supported.
+    RuntimeError
+        If Ladybug's SkyMatrix does not return P patches.
 
     Notes
     -----
     * The EPW-driven modes assume typical meteorology; rare events
       (e.g. > 99th percentile irradiance) may be under-represented.
-    * For benefit mode the heating-balance filter is purely
-      temperature-based; construction, occupancy and HVAC control logic are not
-      considered.
+    * Without ``simulated_weights``, the benefit filter is purely
+      temperature-based; construction, occupancy and HVAC control logic
+      are not considered.
 
     References
     ----------
@@ -401,7 +471,7 @@ def compute_EPW_based_weights(
       *Solar Energy* 44(5): 271-289.
     * Darula, S. & Kittler, R. 2002. "CIE general sky standard defining
       luminance distributions." *Proceedings eSim* 11: 13.
-    * Ladybug Tools. "SkyMatrix" — cumulative Radiance sky matrix
+    * Ladybug Tools. "SkyMatrix": cumulative Radiance sky matrix
       (gendaymtx / Perez all-weather).
       https://www.ladybug.tools/ladybug-radiance/docs/
     """
@@ -419,13 +489,12 @@ def compute_EPW_based_weights(
     lb_north = -float(north)
 
     key = mode.strip().lower()
-    P = fetch_tregenza_patch_directions(device).shape[0]  # [145]
+    P = fetch_tregenza_patch_directions(device).shape[0]  # 145 patches
 
 
     # --- 2. mode selection ------------------------------------------------------
 
     if key == 'time-based':
-        # uniform weights
         return torch.ones(P, device=device)
 
     if key == 'daylight':
@@ -434,7 +503,7 @@ def compute_EPW_based_weights(
         cosz = dirs[:, 2].clamp(min=0.0)
         return angles * (1.0 + 2.0 * cosz) / 3.0  # Ωᵢ · (1 + 2 cos θᵢ) / 3 (CIE overcast luminance)
     
-    # Modes that need EPW + hoys — validate before expensive I/O.
+    # Modes that need an EPW file and hoys: validate before the slow file I/O.
     if key in ('irradiance', 'benefit'):
         import os as _os
         if not epw_path or not _os.path.isfile(epw_path):
@@ -445,17 +514,15 @@ def compute_EPW_based_weights(
         hoys_list = list(hoys) if hoys is not None else []
         if not hoys_list:
             raise ValueError(f"mode '{key}' requires a non-empty hoys sequence")
-        if not all(0 <= idx <= 8783 for idx in hoys_list):
-            raise ValueError(
-                "Hour-of-year indices must lie between 0 and 8783 "
-                "(inclusive, allowing leap years)."
-            )
+        # EPW files hold 8760 hours; leap-year periods are not supported.
+        if not all(0 <= idx <= 8759 for idx in hoys_list):
+            raise ValueError("Hour-of-year indices must lie between 0 and 8759.")
 
     if key == 'irradiance':
         SkyMatrix = _load_sky_matrix()
 
         # Ladybug's SkyMatrix already integrates solid angles into the
-        # Wh/m² values it returns, so we do NOT multiply by Ωᵢ here
+        # kWh/m² values it returns, so we do not multiply by Ωᵢ here
         # (unlike daylight mode, which builds weights from raw CIE
         # luminance and must apply solid angles explicitly).
         sky = SkyMatrix.from_epw(
@@ -477,12 +544,13 @@ def compute_EPW_based_weights(
         from ladybug.epw import EPW
 
         if simulated_weights is not None:
-            # Physics-derived hourly weights (simulated_weights_path artifact):
-            # scale each hour's DNI/DHI by benefit[t] before the cumulative
-            # sky matrix — the sky integration then distributes the weights
-            # onto exactly the patches each hour's sun and sky occupied.
-            # The balance-point filter below is the binary special case of
-            # this mechanism.
+            # Hourly weights from the zone model (simulated_weights_path
+            # artifact): scale each hour's DNI/DHI by benefit[t] before
+            # building the cumulative sky matrix.  The sky model then assigns
+            # each hour's weight to the patches its sun and sky occupied.
+            # The balance-point filter below is the special case where every
+            # hourly weight is 0 or 1.  Hours outside the analysis period get
+            # weight 0 through period_mask.
             benefit_series, harm_series = simulated_weights
             benefit_series = np.asarray(benefit_series, dtype=np.float64)
             harm_series = np.asarray(harm_series, dtype=np.float64)
@@ -496,7 +564,7 @@ def compute_EPW_based_weights(
                 import warnings
                 warnings.warn(
                     "benefit mode (simulated_weights_path): the artifact's benefit "
-                    "weights are zero everywhere in the analysis period — "
+                    "weights are zero everywhere in the analysis period, so "
                     "all patch weights are zero and the carve will be "
                     "degenerate. Widen the period or check the artifact.",
                     stacklevel=2,
@@ -517,7 +585,7 @@ def compute_EPW_based_weights(
                         import warnings
                         warnings.warn(
                             "benefit mode (simulated_weights_path, include_harm): "
-                            "harm exceeds benefit for every sky patch — all "
+                            "harm exceeds benefit for every sky patch, so all "
                             "weights are zero and the carve will be "
                             "degenerate.",
                             stacklevel=2,
@@ -525,15 +593,14 @@ def compute_EPW_based_weights(
             return torch.from_numpy(
                 weights_np.astype(np.float32)).to(device)
 
-        # Heating-benefit filter — this IS the documented formula:
+        # Heating-benefit filter, computed exactly as documented:
         #     wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) · H(T_bal − ΔT − Tₐₜ)
-        # The hour selection happens here (dry-bulb from the EPW); the sky
-        # matrix is then a plain cumulative irradiance matrix over exactly
-        # those cold hours.  Harmful (hot-hour) radiation does not enter
-        # the weights at all: shading value cannot be expressed as a
-        # carving force without producing physically meaningless "shade
-        # volumes" — evaluate it as a separate irradiance analysis over
-        # hot hours instead.
+        # The cold hours are selected here from the EPW dry-bulb series; the
+        # sky matrix is then a plain cumulative irradiance matrix over those
+        # hours.  By default, hot-hour radiation does not enter the weights:
+        # a carving force cannot express the value of shade without
+        # producing physically meaningless "shade volumes".  Evaluate it as
+        # a separate irradiance analysis over hot hours instead.
         weather = EPW(epw_path)
         dry_bulb = weather.dry_bulb_temperature.values  # hourly °C, len 8760
         t_cutoff = float(balance_temperature) - float(balance_offset)
@@ -542,8 +609,8 @@ def compute_EPW_based_weights(
             if int(h) < len(dry_bulb) and dry_bulb[int(h)] < t_cutoff
         ]
         if not cold_hoys:
-            # IMPORTANT: do not fall through to Ladybug with an empty hoy
-            # list — SkyMatrix treats [] as "the whole year".
+            # Return here: passing an empty hoys list to Ladybug would not
+            # give zeros, because SkyMatrix treats [] as the whole year.
             import warnings
             warnings.warn(
                 f"benefit mode: no hours in the analysis period are below "
@@ -559,7 +626,7 @@ def compute_EPW_based_weights(
 
         def _cumulative_patch_matrix(sel_hoys):
             # Ladybug's SkyMatrix already includes solid angles in the
-            # Wh/m² values — no Ωᵢ multiply needed (same as irradiance).
+            # kWh/m² values, no Ωᵢ multiply needed (same as irradiance).
             # Clip guards against small negative values from gendaymtx
             # numerical noise; all physical values are non-negative here.
             sky = SkyMatrix.from_epw(
@@ -579,17 +646,17 @@ def compute_EPW_based_weights(
         if include_harm:
             # Opt-in composite (Ladybug's radiation-benefit concept):
             # subtract hot-hour radiation per patch and clip at zero.
-            # EXPERIMENTAL semantics, declared in the config docs:
+            # Experimental, as stated in the config docs:
             #   * results depend on how much of the warm season the
             #     analysis period includes;
-            #   * harm erodes a patch's weight only to zero, never below
-            #     (shading value cannot be a carving force — see above).
+            #   * harm lowers a patch's weight to zero at most, never below
+            #     (the value of shade cannot be a carving force, see above).
             t_hot = float(balance_temperature) + float(balance_offset)
             hot_hoys = [
                 h for h in hoys_list
                 if int(h) < len(dry_bulb) and dry_bulb[int(h)] > t_hot
             ]
-            if hot_hoys:  # empty list must never reach Ladybug (= full year)
+            if hot_hoys:  # Ladybug would read an empty list as the full year
                 weights_np = np.clip(
                     weights_np - _cumulative_patch_matrix(hot_hoys), 0.0, None
                 )
@@ -597,7 +664,7 @@ def compute_EPW_based_weights(
                     import warnings
                     warnings.warn(
                         "benefit mode (include_harm=true): hot-hour harm "
-                        "exceeds cold-hour benefit for every sky patch — all "
+                        "exceeds cold-hour benefit for every sky patch, so all "
                         "weights are zero and the carve will be degenerate. "
                         "Narrow the analysis period or use "
                         "include_harm=false.",

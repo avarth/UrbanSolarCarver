@@ -1,4 +1,5 @@
-"""Validation guard tests for Pydantic schemas and grid bounds."""
+"""Validation tests for the Pydantic config schema, the voxel grid resolution cap,
+and load_config overrides and relative paths."""
 import os
 import pytest
 import numpy as np
@@ -13,13 +14,14 @@ def _make_config(**overrides):
         "test_surface_path": "dummy_srf.ply",
         "out_dir": "out",
         "mode": "tilted_plane",
-        "tilted_plane_angle_deg": 45.0,
         "voxel_size": 2.0,
         "grid_step": 2.0,
         "ray_length": 50.0,
         "device": "cpu",
     }
     base.update(overrides)
+    if base["mode"] == "tilted_plane":
+        base.setdefault("tilted_plane_angle_deg", 45.0)
     return UserConfig(**base)
 
 
@@ -71,7 +73,7 @@ class TestGridStepValidation:
 
 class TestResolutionCap:
     def test_resolution_exceeds_cap(self):
-        """voxelize_mesh should reject resolution > 2048."""
+        """voxelize_mesh should reject a per-axis resolution above 4096."""
         import trimesh
         from urbansolarcarver.grid import voxelize_mesh
         # 100m cube / 0.01m voxel = 10000 resolution → should fail
@@ -242,7 +244,7 @@ class TestThresholdValidation:
         assert cfg.threshold.value == 0.0
 
     def test_otsu_rejected(self):
-        """Otsu was removed — should no longer be accepted."""
+        """'otsu' is not a valid threshold method and must be rejected."""
         with pytest.raises(ValidationError):
             self._benefit_base(threshold="otsu")
 
@@ -330,7 +332,7 @@ class TestDesignConstraintFields:
 
 class TestDaylightMode:
     def test_daylight_no_epw_required(self):
-        """Daylight mode uses CIE overcast sky — should not require EPW."""
+        """Daylight mode uses the CIE overcast sky, so it should not require an EPW."""
         cfg = _make_config(
             mode="daylight",
             tilted_plane_angle_deg=None,
@@ -374,8 +376,8 @@ class TestNorthDegAndGroundReflectance:
             _make_config(north_deg=360.0)
 
     def test_ground_reflectance_removed(self):
-        """ground_reflectance never affected results and was removed; the
-        strict schema (extra='forbid') must reject configs that carry it."""
+        """ground_reflectance is not a config field; the strict schema
+        (extra='forbid') must reject configs that carry it."""
         with pytest.raises(ValidationError, match="ground_reflectance"):
             _make_config(ground_reflectance=0.2)
 
@@ -425,7 +427,8 @@ class TestEnvVarFallback:
     def test_garbage_ray_batch_env(self, monkeypatch):
         monkeypatch.setenv("USC_MAX_RAY_BATCH", "not_a_number")
         cfg = _make_config(ray_batch_size=999999999)
-        # Should clamp to default 2M, not crash
+        # An unparseable env value falls back to the 2,000,000 cap; the
+        # oversized batch is clamped to it instead of raising.
         assert cfg.ray_batch_size == 2_000_000
 
 
@@ -458,3 +461,38 @@ class TestCarveAboveConfig:
     def test_min_consecutive_must_be_int(self):
         cfg = _make_config(carve_above_min_consecutive=2)
         assert cfg.carve_above_min_consecutive == 2
+
+
+class TestLoadConfigOverridesAndPaths:
+    _YAML = (
+        "max_volume_path: v.ply\n"
+        "test_surface_path: s.ply\n"
+        "out_dir: out\n"
+        "mode: time-based\n"
+        "epw_path: w.epw\n"
+        "analysis_period: {st_month: 12, st_day: 21, st_hour: 10,"
+        " end_month: 12, end_day: 21, end_hour: 14}\n"
+    )
+
+    def _write(self, tmp_path):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        path = sub / "cfg.yaml"
+        path.write_text(self._YAML, encoding="utf-8")
+        return path
+
+    def test_flat_period_overrides_win_over_yaml_block(self, tmp_path):
+        """Grasshopper's Period component sends flat start_*/end_* overrides."""
+        from urbansolarcarver.load_config import load_config
+        cfg = load_config(str(self._write(tmp_path)), ["start_month=11", "end_hour=15"])
+        assert (cfg.start_month, cfg.end_hour, cfg.end_month) == (11, 15, 12)
+
+    def test_relative_yaml_paths_resolve_against_yaml_folder(self, tmp_path, monkeypatch):
+        from pathlib import Path
+        from urbansolarcarver.load_config import load_config
+        path = self._write(tmp_path)
+        monkeypatch.chdir(tmp_path)  # a different working directory
+        cfg = load_config(str(path))
+        assert Path(cfg.out_dir) == path.parent / "out"
+        assert Path(cfg.max_volume_path) == path.parent / "v.ply"
+        assert Path(cfg.epw_path) == path.parent / "w.epw"

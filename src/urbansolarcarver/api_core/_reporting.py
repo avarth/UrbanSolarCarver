@@ -1,6 +1,7 @@
 """Run-report generation and grid memory estimation.
 
-Used by the exporting stage and the CLI ``estimate`` command.
+Used by the exporting stage (run report) and by
+``urbansolarcarver preprocessing --dry-run`` (memory estimate).
 """
 from pathlib import Path
 from typing import Union
@@ -17,7 +18,7 @@ def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float =
     """Estimate voxel grid dimensions and memory without running the full pipeline.
 
     Mirrors :func:`~urbansolarcarver.grid.voxelize_mesh`, which always builds
-    a CUBIC grid sized to the largest bounding-box side plus margin.
+    a cubic grid sized to the largest bounding-box side plus margin.
 
     Returns dict with keys: grid_dims, total_voxels, memory_mb, warning.
     """
@@ -30,13 +31,13 @@ def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float =
     resolution = int(np.ceil(side / voxel_size))
     dims = (resolution, resolution, resolution)
     total = resolution ** 3
-    # float32 scores + bool grid + overhead ≈ 5 bytes/voxel
+    # 4 bytes (float32 score) + 1 byte (uint8 occupancy) per voxel
     mem_mb = total * 5 / (1024**2)
     warning = None
     if total > 500_000_000:
         warning = (
             f"Grid would contain {total:,} voxels ({mem_mb:,.0f} MB). "
-            f"This will likely exhaust memory. Consider increasing voxel_size "
+            f"Preprocessing refuses grids above 500,000,000 voxels. Increase voxel_size "
             f"(currently {voxel_size}m) or reducing the mesh bounding box."
         )
     elif total > 50_000_000:
@@ -56,16 +57,16 @@ def generate_run_report(
 ) -> Path:
     """Compile a human-readable run report from all three stage diagnostics.
 
-    Reads ``diagnostics/summary.json`` and ``diagnostics/timings.json`` from
-    each stage directory, plus the config snapshot, and writes a single
-    ``run_report.md`` into *out_dir*.
+    Reads ``diagnostics/diagnostic.json`` from each stage directory (a
+    missing file leaves that section empty), takes the configuration table
+    from *conf*, and writes a single ``run_report.md`` into *out_dir*.
 
     Returns the path to the written report.
     """
     from datetime import datetime
 
     lines = []
-    lines.append("# UrbanSolarCarver — Run Report")
+    lines.append("# UrbanSolarCarver run report")
     lines.append(f"\n*Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n")
 
     # --- Configuration overview ---
@@ -107,12 +108,9 @@ def generate_run_report(
         return {}
 
     def _load_diag(stage_dir):
-        """Load consolidated diagnostic.json, falling back to legacy split files."""
+        """Return (diagnostics, timings) for one stage; empty dicts if missing."""
         diag = _load(stage_dir, "diagnostics/diagnostic.json")
-        if diag:
-            return diag, diag.get("timings", {})
-        # Legacy fallback: separate summary.json + timings.json
-        return _load(stage_dir, "diagnostics/summary.json"), _load(stage_dir, "diagnostics/timings.json")
+        return diag, diag.get("timings", {})
 
     # --- Preprocessing ---
     pre_summary, pre_timing = _load_diag(pre_dir)
@@ -171,8 +169,8 @@ def generate_run_report(
     if exp_summary:
         _mesh_path = exp_summary.get('mesh_path', '\u2014')
         lines.append(f"- **Output mesh:** `{_mesh_path}`")
-        lines.append(f"- **Vertices:** {exp_summary.get('vertices', 0):,}")
-        lines.append(f"- **Triangles:** {exp_summary.get('triangles', 0):,}")
+        lines.append(f"- **Vertices:** {exp_summary.get('vertices') or 0:,}")
+        lines.append(f"- **Triangles:** {exp_summary.get('triangles') or 0:,}")
         vol = exp_summary.get("mesh_volume_m3")
         if vol is not None:
             lines.append(f"- **Mesh volume:** {vol:,.1f} m\u00b3")

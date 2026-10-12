@@ -1,4 +1,4 @@
-"""USC Sync Canvas — Update the USC components on this canvas.
+"""USC Sync Canvas: update the USC components on this canvas.
 
 Compares every USC component on the canvas with the installed USC user
 objects (.ghuser) and brings outdated ones up to date. With update
@@ -65,7 +65,11 @@ _ERROR_KEY = "usc_sync_error_{}".format(ghenv.Component.InstanceGuid)
 
 
 def _installed(folder):
-    """{component name: GH_UserObject} for the USC .ghuser files found."""
+    """({component name: GH_UserObject}, [paths of duplicates]) for the USC .ghuser files.
+
+    Searches *folder*, or the Grasshopper User Objects folders when it is
+    None. For a repeated component name the first file found is used.
+    """
     roots = [folder] if folder else list(Grasshopper.Folders.UserObjectFolders)
     found, dupes = {}, []
     for root in roots:
@@ -105,6 +109,7 @@ def _signature(obj):
 
 
 def _sync_group(doc, obj):
+    """The red group an earlier sync put *obj* in, or None."""
     for g in doc.Objects:
         if isinstance(g, GH_Group) and str(g.NickName).startswith(GROUP_TAG) \
                 and obj.InstanceGuid in g.ObjectIDs:
@@ -113,7 +118,12 @@ def _sync_group(doc, obj):
 
 
 def _plan(doc, installed, me):
-    """Classify every USC component on the canvas."""
+    """Classify every USC component on the canvas except this one (*me*).
+
+    Components whose code or ports differ from the installed version go to
+    "replace" when the port names match, else to "beside" (or "pending"
+    if an earlier sync already placed the new version beside it).
+    """
     plan = {"current": [], "replace": [], "beside": [], "pending": [], "unknown": []}
     for obj in list(doc.Objects):
         if not isinstance(obj, Grasshopper.Kernel.IGH_Component) or obj.InstanceGuid == me:
@@ -142,6 +152,7 @@ def _plan(doc, installed, me):
 
 
 def _port_diff(old_sig, new_sig):
+    """Short text naming the added, removed or reordered ports."""
     parts = []
     for label, o, n in (("inputs", old_sig[1], new_sig[1]), ("outputs", old_sig[2], new_sig[2])):
         on, nn = [p[0] for p in o], [p[0] for p in n]
@@ -157,6 +168,7 @@ def _port_diff(old_sig, new_sig):
 
 
 def _copy_param_state(src, dst):
+    """Copy data mapping, reverse/simplify flags and internalised values."""
     dst.DataMapping = src.DataMapping
     dst.Reverse = src.Reverse
     dst.Simplify = src.Simplify
@@ -226,7 +238,11 @@ def _merged(records):
 
 
 def _apply(doc, plan, comp):
-    """Runs between solutions. All or nothing: a failure rolls back."""
+    """Apply *plan*; scheduled to run between solutions.
+
+    All or nothing: on a failure the actions done so far are undone and the
+    traceback is stored in sc.sticky for the next solution to report.
+    """
     records = []
     try:
         try:
@@ -299,4 +315,4 @@ elif _doc is not None:
             ghenv.Component.AddRuntimeMessage(
                 GH_RuntimeMessageLevel.Error,
                 "Update failed and was rolled back; the canvas is unchanged. See report.")
-            report = "UPDATE FAILED, rolled back:\n{}\n{}".format(_last_error, report)
+            report = "Update failed and was rolled back:\n{}\n{}".format(_last_error, report)

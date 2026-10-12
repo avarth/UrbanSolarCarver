@@ -1,8 +1,9 @@
-"""Exporting stage — convert a carved binary mask into a triangle mesh.
+"""Exporting stage: convert a carved binary mask into a triangle mesh.
 
-Reads the thresholding manifest, reconstructs a smoothed mesh from the
-binary voxel field, and writes it to disk (PLY/OBJ/STL/GLB).  This is
-the final pipeline stage.
+Reads the thresholding manifest, builds a mesh from the binary voxel field
+(voxel cubes, or a smoothed surface with ``apply_smoothing``), and writes it
+to disk (PLY/OBJ/STL/GLB) together with a run report.  This is the final
+pipeline stage.
 """
 from __future__ import annotations
 
@@ -27,10 +28,10 @@ import time
 class ExportingResult:
     """Immutable record returned by :func:`exporting`.
 
-    Holds the filesystem path to the exported triangle mesh and mesh
-    statistics (retention percentage, volume, vertex/face counts).
+    Holds the filesystem path to the exported triangle mesh, the voxel
+    retention percentage, and mesh statistics (volume, vertex/face counts).
     Implements ``__fspath__`` so the result can be used directly as a
-    path-like pointing to the export directory.
+    path-like pointing to the exported mesh file.
     """
     out_dir: Path
     export_path: Path
@@ -61,14 +62,17 @@ def exporting(
     Mesh extraction proceeds through :func:`~urbansolarcarver.grid.finalize_mesh`,
     which supports two strategies (selected by ``cfg.apply_smoothing``):
 
-    * **cubic** (``apply_smoothing=False``, default) -- axis-aligned cuboid
-      faces are emitted for every occupied voxel; fast, produces the classic
-      voxel look.
-    * **smoothed** (``apply_smoothing=True``) -- the binary field is converted
+    * **cubic** (``apply_smoothing=False``, default): a 3x3x3 neighbour
+      filter first drops isolated voxels, then the exposed faces of the
+      occupied voxels are emitted; fast, produces the classic voxel look.
+    * **smoothed** (``apply_smoothing=True``): the binary field is converted
       to a signed-distance field, smoothed, and iso-surfaced with Marching
-      Cubes, then optionally polished with up to ``cfg.smooth_iters`` Taubin
-      passes.  Voxel clusters below ``cfg.min_voxels`` and mesh fragments
-      below ``cfg.min_face_count`` faces are removed on both paths.
+      Cubes, then polished with ``cfg.smooth_iters`` Taubin passes (0-6).
+
+    On both paths, connected voxel clusters smaller than ``cfg.min_voxels``
+    and mesh fragments with fewer than ``cfg.min_face_count`` faces are
+    removed.  The mesh uses the voxel size and origin recorded by
+    preprocessing, not the config's ``voxel_size``.
 
     Parameters
     ----------
@@ -90,12 +94,22 @@ def exporting(
     -------------------
     ``export.{ply,obj,stl,glb}``
         Triangle mesh in the format specified by ``cfg.final_mesh_format``
-        (default ``ply``).
-    ``diagnostics/``
+        (default ``ply``), in world coordinates.
+    ``diagnostics/diagnostic.json``
         Mesh statistics (vertex/face counts, watertightness, volume, bounding
         box), voxel retention percentage, and wall/CPU timings.
+    ``run_report.md``
+        Markdown summary of all three stages, written to the parent folder
+        when *out_dir* is named ``exporting``, otherwise into *out_dir*.
+
+    Raises
+    ------
+    ValueError
+        If a manifest cannot be read or the mask does not match the grid
+        shape.
+    FileNotFoundError
+        If the mask file named in the thresholding manifest is missing.
     """
-    # Start timers.
     _t0_wall = time.perf_counter()
     _t0_cpu = time.process_time()
     conf = _resolve_cfg(cfg)
@@ -134,7 +148,7 @@ def exporting(
     elif tuple(mask.shape) != grid_shape:
         raise ValueError(
             f"Mask shape {tuple(mask.shape)} does not match the grid shape "
-            f"{grid_shape} recorded in {upstream_path} — the mask and manifest "
+            f"{grid_shape} recorded in {upstream_path}; the mask and manifest "
             f"are from different runs."
         )
 
@@ -143,30 +157,26 @@ def exporting(
     mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
     voxel_grid = torch.as_tensor(load_occupancy(pre_manifest, conf), device=resolved_device)
-
-    # Column post-processing: carve occupied voxels above carved runs.
-    _carve_above_extra = 0
-    if conf.carve_above:
-        from ..carving import carve_above_columns
-        vg_np = voxel_grid.cpu().numpy().astype(bool)
-        mask_before_count = int(mask.sum())
-        mask = carve_above_columns(
-            mask, vg_np,
-            min_consecutive=conf.carve_above_min_consecutive,
-        )
-        _carve_above_extra = mask_before_count - int(mask.sum())
-        mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
-
     carve_grid = (voxel_grid.bool() & mask_tensor)
     origin = np.array(pre_manifest.origin, dtype=np.float64)
+
+    # The grid's voxel size is a fact of the preprocessing run, not a setting
+    # of this stage: re-exporting with a different config must not rescale it.
+    if pre_manifest.voxel_size and pre_manifest.voxel_size != conf.voxel_size:
+        import warnings
+        warnings.warn(
+            f"Config voxel_size={conf.voxel_size:g} differs from the preprocessing "
+            f"run's {pre_manifest.voxel_size:g}; meshing with "
+            f"{pre_manifest.voxel_size:g}.",
+            stacklevel=2,
+        )
+        conf = conf.model_copy(update={"voxel_size": pre_manifest.voxel_size})
 
     # Mesh at the grid's own origin, then place it in float64: the mesh
     # builders emit float32 vertices, which cannot hold georeferenced
     # coordinates to better than ~0.5 m.
-    cleaned_voxels, mesh_pre, final_mesh = finalize_mesh(carve_grid, np.zeros(3), conf)
-    for m in (mesh_pre, final_mesh):
-        if m is not None and hasattr(m, "apply_translation"):
-            m.apply_translation(origin)
+    cleaned_voxels, _, final_mesh = finalize_mesh(carve_grid, np.zeros(3), conf)
+    final_mesh.apply_translation(origin)
 
     ext = conf.final_mesh_format
     export_path = out_path / f"export.{ext}"
@@ -193,8 +203,10 @@ def exporting(
         log.warning("Could not compute mesh bounds: %s", exc)
         bbox = None
     bbox_dims = [float(bbox[1][i] - bbox[0][i]) for i in range(3)] if bbox is not None else None
-    # Voxel retention, over occupied voxels (same basis as thresholding).
-    retained_voxels = int(carve_grid.sum().item())
+    # Voxel retention over occupied voxels, counted on the voxels that were
+    # actually meshed (after small clusters and isolated voxels are removed).
+    kept_by_mask = int(carve_grid.sum().item())
+    retained_voxels = int(cleaned_voxels.sum().item())
     original_voxels = int(voxel_grid.sum().item())
     retention_pct = round(100.0 * retained_voxels / max(original_voxels, 1), 2)
 
@@ -209,12 +221,10 @@ def exporting(
         "voxels_original": original_voxels,
         "voxels_retained": retained_voxels,
         "voxels_removed": original_voxels - retained_voxels,
+        "voxels_removed_by_cleanup": kept_by_mask - retained_voxels,
         "voxel_retention_pct": retention_pct,
-        "carve_above_applied": conf.carve_above,
-        "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
-        "carve_above_extra_voxels_removed": _carve_above_extra,
     }
-    # Consolidated diagnostic — one file per stage.
+    # One diagnostic file per stage.
     diagnostic["timings"] = {
         "wall_seconds": float(time.perf_counter() - _t0_wall),
         "cpu_seconds": float(time.process_time() - _t0_cpu),
@@ -224,8 +234,11 @@ def exporting(
     # Generate consolidated run report from all three stages.
     pre_dir = Path(thr_manifest.upstream_manifest).parent
     thr_dir = thr_path.parent
-    # Write report to the common parent of all stages (or exporting dir).
-    report_root = out_path.parent if out_path.parent != out_path else out_path
+    # The report goes to the run folder in the standard <run>/exporting
+    # layout, otherwise next to the export. An old report is removed first
+    # so a failed regeneration cannot leave stale numbers behind.
+    report_root = out_path.parent if out_path.name == "exporting" else out_path
+    (report_root / "run_report.md").unlink(missing_ok=True)
     try:
         generate_run_report(report_root, pre_dir, thr_dir, out_path, conf)
     except Exception as exc:

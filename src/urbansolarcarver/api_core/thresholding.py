@@ -14,6 +14,7 @@ from ..pydantic_schemas import (
     schema_to_json,
 )
 from ..scoring import carve_fraction_threshold, headtail_threshold
+from ..carving import carve_above_columns
 from ..mode_registry import MODES
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy
 from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
@@ -22,9 +23,10 @@ from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
 class ThresholdingResult:
     """Immutable record returned by :func:`thresholding`.
 
-    Stores the path to the binary mask and the provenance chain back to the
-    upstream preprocessing run (via ``upstream`` hash and
-    ``upstream_manifest`` path).  Implements ``__fspath__`` so it can be
+    Stores the path to the binary mask, the provenance chain back to the
+    upstream preprocessing run (``upstream`` hash and ``upstream_manifest``
+    path), the resolved threshold, and voxel counts over occupied voxels.
+    Implements ``__fspath__`` (returning the manifest path) so it can be
     passed directly as a path-like to :func:`exporting`.
     """
     out_dir: Path
@@ -51,14 +53,18 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     violation-count modes (time-based, tilted_plane) are left untouched.
 
     With an occupancy grid *occ*, the blur is a normalized convolution over
-    occupied voxels only: G*(s·occ) / G*occ.  Empty cells carry the scores of
-    every ray crossing the street or courtyard in front of a facade; a plain
-    blur would leak that air into the building's boundary voxels.
+    occupied voxels only: G*(s·occ) / G*occ, and empty cells are set to 0.
+    Empty cells carry the scores of every ray crossing the street or
+    courtyard in front of a facade; a plain blur would leak that air into
+    the building's boundary voxels.
 
-    ``score_smoothing`` semantics: None → auto (1.1 × voxel_size);
-    0 → disabled; > 0 → explicit radius in meters.
+    ``score_smoothing``: None means auto (1.1 × voxel_size), 0 disables
+    smoothing, and a positive value is the radius in meters.  The radius is
+    used as the Gaussian sigma and clipped to 0.5-8 voxels (with a warning).
+    Smoothing is skipped with a warning if *voxel_size* is missing.
 
-    Returns (scores, applied, radius_m, sigma_voxels).
+    Returns (scores, applied, radius_m, sigma_voxels), where radius_m is the
+    radius after clipping.
     """
     if kind != "weighted_sum":
         return raw, False, 0.0, 0.0
@@ -75,14 +81,23 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
         import warnings
         warnings.warn(
             "score_smoothing requested but the preprocessing manifest has no "
-            "voxel_size — cannot convert meters to voxels, skipping smoothing. "
+            "voxel_size, so meters cannot be converted to voxels; skipping smoothing. "
             "Re-run preprocessing to regenerate the manifest.",
             stacklevel=3,
         )
         return raw, False, 0.0, 0.0
 
     from scipy.ndimage import gaussian_filter
-    sigma_voxels = float(np.clip(radius_m / voxel_size, 0.5, 8.0))
+    requested = radius_m / voxel_size
+    sigma_voxels = float(np.clip(requested, 0.5, 8.0))
+    if sigma_voxels != requested:
+        import warnings
+        warnings.warn(
+            f"score_smoothing={radius_m:g} m is {requested:.2g} voxels; clipped to "
+            f"{sigma_voxels:g} voxels ({sigma_voxels * voxel_size:g} m).",
+            stacklevel=3,
+        )
+        radius_m = sigma_voxels * voxel_size
     if occ is None:
         smoothed = gaussian_filter(raw.astype(np.float32), sigma=sigma_voxels)
         return smoothed, True, radius_m, sigma_voxels
@@ -97,11 +112,10 @@ def _resolve_threshold(scores, spec):
     """Resolve a validated :class:`ThresholdSpec` into a numeric cutoff.
 
     The config layer guarantees the spec is complete and valid for the
-    mode (see ``UserConfig._resolve_threshold_spec``), so this is a pure
-    dispatch: ``cutoff`` is the value itself; ``headtail`` (Jiang 2013
-    head/tail breaks) and ``carve_fraction`` (score-mass cutoff — NOT a
-    percentile: it weights by obstruction severity) compute it from the
-    score distribution.
+    mode (see ``UserConfig._resolve_threshold_spec``), so this only
+    dispatches: ``cutoff`` is the value itself; ``headtail`` (Jiang 2013
+    head/tail breaks) and ``carve_fraction`` (a score-mass cutoff, not a
+    percentile of voxel counts) compute it from *scores*.
     """
     if spec.method == "cutoff":
         return float(spec.value)
@@ -129,24 +143,28 @@ def thresholding(
     which voxels to *retain* in the final envelope (``True`` = keep,
     ``False`` = carve away).
 
-    For ``violation_count`` scores (time-based / tilted_plane modes),
-    a numeric threshold from the config is applied directly.
+    For ``violation_count`` scores (time-based / tilted_plane modes), only
+    a numeric threshold (``cutoff``) is accepted and applied directly.
 
     Threshold strategies (set via ``cfg.threshold``; the config layer
     normalizes every accepted spelling into a ``ThresholdSpec``):
 
-    * ``cutoff`` (shorthand: a bare number) -- a literal cutoff; voxels with
+    * ``cutoff`` (shorthand: a bare number): a literal cutoff; voxels with
       ``score <= value`` are kept.
-    * ``headtail`` -- Head/tail breaks (Jiang 2013): iteratively splits the
-      distribution at the arithmetic mean until the head proportion falls
-      below 40 %, targeting heavy-tailed score distributions common in
-      urban solar access studies.
-    * ``carve_fraction`` (default) -- cumulative-score cutoff: sorts the
-      occupied voxels by descending score and finds the cutoff that accounts
-      for the given fraction of the building's total score mass.
+    * ``headtail``: head/tail breaks (Jiang 2013).  The scores are split at
+      their mean; while the part above the mean (the head) holds at most
+      40 % of the values, the head is split again at its own mean.  The
+      last such mean is the cutoff.  Suited to the heavy-tailed score
+      distributions common in urban solar access studies.
+    * ``carve_fraction`` (default for weighted modes): cumulative-score
+      cutoff.  Sorting the occupied voxels by descending score, it finds the
+      cutoff above which the voxels hold the given fraction of the
+      building's total score mass.
 
     All threshold statistics, retention counts and smoothing use occupied
-    voxels only; the mask is False on empty cells.
+    voxels only; the mask is False on empty cells.  With ``carve_above``
+    (the default), occupied voxels above a carved run in their column are
+    removed as well, so ``mask.npy`` is the final mask that gets exported.
 
     Score smoothing (``cfg.score_smoothing``):
 
@@ -154,20 +172,19 @@ def thresholding(
     score volume to smooth resolution-dependent noise.  This produces a
     cleaner binary mask (and carved mesh) at fine voxel sizes.
 
-    * ``None`` (default) -- auto: ``1.1 × voxel_size`` metres.
-    * ``0`` -- disabled, no smoothing.
-    * Positive float -- explicit radius in metres.  Rule of thumb: keep
-      close to ``voxel_size`` (1.0–1.2×).  Values above 2× ``voxel_size``
-      over-smooth and round features.
+    * ``None`` (default): auto, ``1.1 × voxel_size`` metres.
+    * ``0``: disabled, no smoothing.
+    * Positive float: explicit radius (Gaussian sigma) in metres.  Rule of
+      thumb: keep close to ``voxel_size`` (1.0–1.2×).  Values above 2×
+      ``voxel_size`` over-smooth and round features.
 
     Only applied to weighted-score modes (irradiance, benefit, daylight,
     radiative_cooling).  Violation-count modes (time-based, tilted_plane)
     are unaffected.
 
-    Future: target-based thresholding (binary search on carve_fraction to
-    achieve a physical performance target in kWh/m²/year) requires iterative
-    re-simulation and is not yet implemented.  Use the performance metrics in
-    diagnostics/summary.json to manually iterate on carve_fraction.
+    To tune ``carve_fraction`` against a performance target, compare
+    ``obstruction_fraction_carved`` in ``diagnostics/diagnostic.json``
+    across runs.
 
     Parameters
     ----------
@@ -188,19 +205,30 @@ def thresholding(
     Persisted artifacts
     -------------------
     ``mask.npy``
-        3-D Boolean array (same shape as the voxel grid).
+        3-D Boolean array (same shape as the voxel grid), True = keep.
     ``manifest.json``
-        ``ThresholdingManifest`` recording the resolved threshold value,
-        upstream hash, and file paths.
+        ``ThresholdingManifest`` recording the stage hash, the mask path and
+        the path of the upstream preprocessing manifest.
     ``diagnostics/``
-        Score histogram with threshold line overlay, voxel retention
-        statistics, and wall/CPU timings.
+        ``diagnostic.json`` (resolved threshold, voxel retention, smoothing
+        and carve_above statistics, wall/CPU timings) and, with
+        ``cfg.diagnostic_plots``, a score histogram with the threshold line.
+
+    Raises
+    ------
+    ValueError
+        If the preprocessing manifest cannot be read, the scores do not
+        match its grid shape, the config's mode differs from the
+        preprocessing run's, or a non-numeric threshold is used with
+        violation-count scores.
+    FileNotFoundError
+        If the scores file named in the manifest is missing.
     """
-    # Timers start.
     t0_wall = time.perf_counter()
     t0_cpu = time.process_time()
     conf = _resolve_cfg(cfg)
     out_path = _ensure_out_dir(out_dir, "thresholding")
+    (out_path / "manifest.json").unlink(missing_ok=True)  # written last; see preprocessing
 
     # Resolve upstream manifest.
     if isinstance(volume, (str, Path)):
@@ -219,7 +247,7 @@ def thresholding(
     grid_shape = tuple(pre_manifest.shape)
     kind = pre_manifest.scores_kind
 
-    # Load scores — validate against the manifest so a stale or mismatched
+    # Load scores and check them against the manifest so a stale or mismatched
     # artifact fails here with a clear message instead of deep in numpy.
     if not scores_path.is_file():
         raise FileNotFoundError(
@@ -232,14 +260,14 @@ def thresholding(
     elif tuple(raw.shape) != grid_shape:
         raise ValueError(
             f"Scores array shape {tuple(raw.shape)} does not match the grid shape "
-            f"{grid_shape} recorded in {pre_manifest_path} — the scores file and "
+            f"{grid_shape} recorded in {pre_manifest_path}; the scores file and "
             f"manifest are from different runs."
         )
 
     # Guard the consumer side too: thresholding can run standalone (CLI,
     # daemon, Grasshopper) on a scores.npy that never went through this
     # process's preprocessing, and `score <= thr` silently carves every
-    # non-finite voxel.
+    # NaN voxel.
     warn_score_anomalies(raw, context="thresholding")
 
     # Only occupied voxels can be kept or carved. Empty cells still hold
@@ -256,15 +284,21 @@ def thresholding(
     scores = raw.astype(np.float32, copy=False)
     occ_scores = scores[occ]
     spec = conf.threshold
-    # Cross-check config vs manifest: standalone re-thresholding can pair a
-    # weighted-mode config with violation-count scores (or vice versa) —
-    # the config-time validation only saw the config's own mode.
+    # Standalone re-thresholding (CLI, daemon, Grasshopper) can pair a config
+    # with scores from a run in another mode; the threshold defaults and
+    # units differ per mode, so refuse instead of carving with the wrong rule.
+    if pre_manifest.mode and pre_manifest.mode != conf.mode:
+        raise ValueError(
+            f"The scores in {scores_path} come from a '{pre_manifest.mode}' run, but "
+            f"the config's mode is '{conf.mode}'. Re-run preprocessing or use a "
+            f"config with mode '{pre_manifest.mode}'."
+        )
     if kind == "violation_count" and spec.method != "cutoff":
         raise ValueError(
             f"Scores in {scores_path} are violation counts (preprocessing mode "
             f"'{pre_manifest.mode}'), but the config requests threshold method "
-            f"'{spec.method}'. Use a numeric threshold (tolerated violation "
-            f"count) or match the config mode to the preprocessing run."
+            f"'{spec.method}'. Use a numeric threshold (a raw-score cutoff) "
+            f"or match the config mode to the preprocessing run."
         )
     thr_val = _resolve_threshold(occ_scores, spec)
 
@@ -284,6 +318,14 @@ def thresholding(
             f"Threshold value {thr_val:.4g} may be too low.",
             stacklevel=2,
         )
+    # Column post-processing belongs to the mask, so that mask.npy and the
+    # retention reported below describe the envelope that gets exported.
+    carve_above_removed = 0
+    if conf.carve_above:
+        kept_before = int(mask.sum())
+        mask = carve_above_columns(mask, occ, min_consecutive=conf.carve_above_min_consecutive)
+        carve_above_removed = kept_before - int(mask.sum())
+
     mask_path = out_path / "mask.npy"
     np.save(mask_path, mask, allow_pickle=False)
 
@@ -293,6 +335,8 @@ def thresholding(
         "threshold_method": spec.method,
         "threshold_value": spec.value,
         "score_smoothing": conf.score_smoothing,
+        "carve_above": conf.carve_above,
+        "carve_above_min_consecutive": conf.carve_above_min_consecutive,
     }
     stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
 
@@ -321,12 +365,17 @@ def thresholding(
         "retention_pct": round(100.0 * kept / max(occupied, 1), 2),
         "mask_shape": [int(x) for x in grid_shape],
         "upstream_hash": upstream_hash,
+        "carve_above_applied": conf.carve_above,
+        "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
+        "carve_above_extra_voxels_removed": carve_above_removed,
         "score_smooth_applied": _smooth_applied,
         "score_smoothing_m": _smooth_radius_m,
         "score_smoothing_sigma_voxels": _sigma_voxels,
-        "normalized_score_stats": score_statistics(nn, detailed=conf.diagnostics),
+        # Scores the threshold was compared with: occupied voxels only, after
+        # score smoothing when it is applied.
+        "occupied_score_stats": score_statistics(nn, detailed=conf.diagnostics),
     }
-    # Performance reporting — physical units from mode registry
+    # Performance reporting, with the score unit from the mode registry
     mode_name = pre_manifest.mode or "unknown"
     mode_spec = MODES.get(mode_name)
     weight_unit = mode_spec.weight_unit if mode_spec else "dimensionless"
@@ -345,22 +394,22 @@ def thresholding(
         if score_mass_total > 0:
             summary["obstruction_fraction_carved"] = round(score_mass_carved / score_mass_total, 4)
         if n_samples and n_samples > 0:
-            # Mean score per sample point gives avg obstruction per point
+            # Score mass divided by the number of sample points
             summary["mean_obstruction_per_sample"] = round(score_mass_total / n_samples, 2)
             summary["mean_obstruction_carved_per_sample"] = round(score_mass_carved / n_samples, 2)
             summary["sample_point_count"] = n_samples
 
-    # Histogram with threshold line — only when diagnostic plots are enabled.
+    # Histogram with threshold line, only when diagnostic plots are enabled.
     if conf.diagnostic_plots:
         summary["threshold_histogram"] = str(diag_dir / "threshold_histogram.png")
         save_histogram(
             nn, diag_dir, "threshold_histogram.png",
             threshold_line=thr_val,
-            title=f"Voxel Scores — threshold={thr_val:.4g} ({threshold_method})",
+            title=f"Voxel scores, threshold={thr_val:.4g} ({threshold_method})",
             xlabel=weight_unit,
         )
 
-    # Consolidated diagnostic — one file per stage.
+    # One diagnostic file per stage.
     summary["timings"] = {
         "wall_seconds": float(time.perf_counter() - t0_wall),
         "cpu_seconds": float(time.process_time() - t0_cpu),

@@ -1,10 +1,10 @@
 # Configuration
 
-USC uses YAML configuration files. Mode-specific templates are in `configs/`.
+USC uses YAML configuration files. Mode-specific templates are in `configs/`. Relative paths inside a config file (meshes, EPW, `out_dir`, `simulated_weights_path`) are resolved against the folder that contains the YAML file.
 
 ## Minimal configs by mode
 
-Required parameters vary by mode. Every config needs at minimum `max_volume_path`, `test_surface_path`, `mode`, and `out_dir`. Weather-dependent modes also require `epw_path` and an analysis period.
+Required parameters vary by mode. Every config needs `max_volume_path`, `test_surface_path`, and `out_dir`; `mode` defaults to `time-based`. The weather-dependent modes (`time-based`, `irradiance`, `benefit`) also require `epw_path` and an analysis period. `daylight`, `tilted_plane` and `radiative_cooling` need neither, and USC warns if you set settings the chosen mode does not use.
 
 === "tilted_plane"
 
@@ -82,12 +82,6 @@ Required parameters vary by mode. Every config needs at minimum `max_volume_path
     out_dir: "outputs"
     mode: "daylight"
     voxel_size: 1.0
-    start_month: 1
-    start_day: 1
-    start_hour: 8
-    end_month: 12
-    end_day: 31
-    end_hour: 18
     threshold: "carve_fraction"
     carve_fraction: 0.7
     ```
@@ -97,100 +91,102 @@ Required parameters vary by mode. Every config needs at minimum `max_volume_path
     ```yaml
     max_volume_path: "path/to/maxVolume.ply"
     test_surface_path: "path/to/testSurfaces.ply"
-    epw_path: "path/to/weather.epw"
     out_dir: "outputs"
     mode: "radiative_cooling"
     voxel_size: 1.0
-    start_month: 6
-    start_day: 1
-    start_hour: 20
-    end_month: 8
-    end_day: 31
-    end_hour: 6
-    dew_point_celsius: 15.0
-    bliss_k: 1.22
+    dew_point_celsius: 14.0
+    bliss_k: 1.8
     threshold: "carve_fraction"
-    carve_fraction: 0.6
+    carve_fraction: 0.35   # cooling scores are diffuse; 0.7 over-carves
     ```
 
 ## Key parameters
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `mode` | -- | Carving mode (see [Modes](../modes.md)) |
-| `voxel_size` | 1.0 | Grid resolution in meters (0.01 -- 100) |
+| `mode` | `"time-based"` | Carving mode (see [Modes](../modes.md)) |
+| `voxel_size` | 1.0 | Voxel edge length in meters (0.01-100) |
 | `grid_step` | 1.0 | Surface sampling spacing in meters (must be <= voxel_size) |
 | `ray_length` | 300.0 | Maximum ray cast distance in meters |
-| `min_altitude` | 5.0 | Minimum sun altitude in degrees |
-| `threshold` | `"carve_fraction"` | See [Thresholding strategies](#thresholding-strategies) below |
-| `carve_fraction` | 0.7 | Solar protection slider: 0.7 = aggressive (remove 70% obstruction), 0.3 = conservative |
+| `threshold` | mode default | `carve_fraction` for weighted modes, `0` for `time-based`, unset for `tilted_plane`. See [Thresholding strategies](#thresholding-strategies) below |
+| `carve_fraction` | 0.7 | Solar protection slider: 0.7 = aggressive (remove 70% of the obstruction weight), 0.3 = conservative |
+| `score_smoothing` | `null` | Gaussian blur radius (m) on the scores before thresholding; `null` = 1.1 x voxel_size, 0 = off. Weighted modes only |
 | `carve_above` | true | Carve all occupied voxels above the lowest carved region in each column, so the result is a buildable height field without floating mass (empty cells such as a ground-floor passage never trigger it). `false` keeps mass that floats above carved zones but casts no violating shadow |
 | `carve_above_min_consecutive` | 1 | Min consecutive carved voxels to trigger carve_above (2-3 avoid column removal from stray single voxels; shorter runs stay carved) |
 | `apply_smoothing` | false | SDF smoothing + marching cubes instead of cubic mesh |
-| `min_voxels` | 300 | Remove connected components smaller than this |
+| `min_voxels` | 300 | Remove connected voxel clusters smaller than this |
+| `final_mesh_format` | `"ply"` | Exported mesh format: `ply`, `obj`, `stl`, or `glb` |
 | `device` | `"auto"` | `"auto"`, `"cpu"`, or `"cuda"` |
-| `diagnostics` | true | Write score histograms and diagnostic JSON |
+| `diagnostics` | false | Add detailed score statistics (median, std, percentiles) to the diagnostics JSON. Basic statistics and timings are always written |
+| `diagnostic_plots` | false | Write plot images (score histograms, sky-patch weight plots, threshold histogram) |
 
 ## Mode-specific parameters
 
 | Parameter | Modes | Description |
 |-----------|-------|-------------|
-| `epw_path` | all except `tilted_plane`, `daylight` | Path to EPW weather file |
-| `start_month` .. `end_hour` | all except `tilted_plane`, `daylight` | Analysis period |
+| `epw_path` | `time-based`, `irradiance`, `benefit` | Path to EPW weather file |
+| `start_month` .. `end_hour` | `time-based`, `irradiance`, `benefit` | Analysis period (or one `analysis_period:` mapping with Ladybug `AnalysisPeriod.to_dict()` keys) |
 | `sun_steps_per_hour` | `time-based` | Sun positions per hour (default 12 = every 5 min; Ladybug timesteps 1-60) |
-| `balance_temperature` | `benefit` | Free-running balance-point temperature (C); unused when `simulated_weights_path` is set |
-| `balance_offset` | `benefit` | Dead-band offset (C); unused when `simulated_weights_path` is set |
+| `min_altitude` | `time-based` | Ignore sun positions below this altitude in degrees (default 5.0) |
+| `balance_temperature` | `benefit` | Free-running balance-point temperature (°C, default 15); unused when `simulated_weights_path` is set |
+| `balance_offset` | `benefit` | Dead-band below the balance point (°C, default 2); unused when `simulated_weights_path` is set |
 | `simulated_weights_path` | `benefit` | Path to a `simulated_weights.json` artifact (`usc simulate-weights`): simulated hourly weights replace the balance-point rule ([details](../modes.md#simulated-weights)) |
 | `include_harm` | `benefit` | Experimental: subtract summer-overheating contributions per sky patch |
 | `tilted_plane_angle_deg` | `tilted_plane` | Cut angle in degrees (float or list of 8 for octants) |
-| `dew_point_celsius` | `radiative_cooling` | Night-time dew point (C) |
-| `bliss_k` | `radiative_cooling` | Bliss angular-attenuation constant |
+| `dew_point_celsius` | `radiative_cooling` | Night-time dew point (°C, default 14) |
+| `bliss_k` | `radiative_cooling` | Bliss angular-attenuation constant (default 1.8) |
+| `min_sky_elevation_deg` | `radiative_cooling` | Ignore sky patches below this elevation in degrees (default 0 = full hemisphere) |
+| `edge_taper` | weighted modes | Sample points closer than this (m) to their surface's edge count proportionally less (default 0 = off) |
 
 ## Thresholding strategies
 
-After preprocessing computes per-voxel obstruction scores, thresholding decides which voxels to remove. This is the primary design lever -- it controls the trade-off between solar protection and buildable volume.
+After preprocessing computes per-voxel obstruction scores, thresholding decides which voxels to remove. This is the main design control: it sets the trade-off between solar protection and buildable volume.
 
 !!! note "Mode-specific threshold semantics"
     The strategies below apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`) whose scores are continuous values.
 
-    **`tilted_plane`** is strictly binary -- a voxel either protrudes above the cut plane (removed) or it does not (kept). Do not set `threshold`; leave it unset (`None`). Setting a string method or a value > 0 raises a validation error.
+    **`tilted_plane`** is strictly binary: a voxel either protrudes above the cut plane (removed) or it does not (kept). Do not set `threshold`; leave it unset (`None`). Setting a string method or a value > 0 raises a validation error.
 
-    **`time-based`** scores are **violation durations in hours** (how long the voxel shadows a test surface during the period, at `sun_steps_per_hour` resolution). Use a non-negative number: `threshold: 0` removes any voxel that shadows at any sampled moment (strict, default); `threshold: 1` tolerates up to one hour; and so on. See [Modes -- violation-count thresholds](../modes.md#for-violation-count-modes-time-based-tilted_plane) for details.
+    **`time-based`** scores are **shaded area x duration in m²·h** (how much protected surface the voxel shades, and for how long, during the period). Use a non-negative number: `threshold: 0` removes any voxel that shadows at any sampled moment (strict, default); `threshold: 5` tolerates up to 5 m²·h; and so on. See [Modes: violation-count thresholds](../modes.md#for-violation-count-modes-time-based-tilted_plane) for details.
 
 **`carve_fraction`** (recommended for weighted modes)
-:   Removes a percentage of total obstruction weight. Set `carve_fraction: 0.7` to remove 70% of obstruction (aggressive -- taller, slimmer result with better solar access). Set `carve_fraction: 0.3` for a conservative result (bulkier volume, more floor area). This is the most intuitive option: a **solar protection slider**.
+:   Removes a fraction of the total obstruction weight of the building's voxels. Set `carve_fraction: 0.7` to remove 70% of the obstruction (aggressive: taller, slimmer result with better solar access). Set `carve_fraction: 0.3` for a conservative result (bulkier volume, more floor area). It works as a **solar protection slider**.
 
 **`headtail`**
-:   Jiang (2013) head/tail breaks: iteratively splits the distribution at the mean. Designed for heavy-tailed score distributions where most voxels have low scores and a few have very high scores. Biased toward removing only the worst obstructors.
+:   Jiang (2013) head/tail breaks: splits the scores at their mean and keeps splitting the upper part while it holds at most 40% of the values. Designed for heavy-tailed score distributions where most voxels have low scores and a few have very high scores. Biased toward removing only the worst obstructors.
 
 **Numeric value** (e.g., `threshold: 0.35`)
-:   Manual threshold on normalized scores. Carves all voxels scoring above this value. Enable `diagnostics: true` to inspect the score histogram and pick a value by eye. For `time-based`, use an integer (e.g., `threshold: 2` = allow up to 2 shadow steps).
+:   Manual cutoff on the raw scores. Carves all voxels scoring above this value. Set `diagnostic_plots: true` to get the score histogram and pick a value from it. For `time-based`, the value is the tolerated shading in m²·h (see above).
 
 !!! tip
-    The **decomposed pipeline** is designed for threshold exploration. Compute scores once (`preprocessing`), then re-run `thresholding` with different parameters -- it's nearly instant since the expensive ray tracing is already done.
+    The **decomposed pipeline** is designed for threshold exploration. Compute scores once (`preprocessing`), then re-run `thresholding` with different parameters; it takes seconds because the ray tracing is already done.
 
 ## CLI overrides
 
 Any config value can be overridden from the command line:
 
 ```bash
-urbansolarcarver preprocessing -c config.yaml \
-    -o voxel_size=0.5 \
-    -o mode=irradiance \
-    -o threshold=carve_fraction
+urbansolarcarver preprocessing -c config.yaml     -o voxel_size=0.5     -o mode=irradiance     -o threshold=carve_fraction
 ```
 
+Relative paths given in overrides are resolved against the current directory, not the YAML's folder.
+
 ## Output structure
+
+With the default output folders (`<out_dir>/preprocessing`, `<out_dir>/thresholding`, `<out_dir>/exporting`):
 
 ```
 outputs/
   preprocessing/
-    scores.npy, voxel_grid.npy, manifest.json, diagnostics/
+    scores.npy, voxel_grid.npy, test_points.npy, test_normals.npy, manifest.json, diagnostics/
   thresholding/
     mask.npy, manifest.json, diagnostics/
   exporting/
-    carved_mesh.ply, manifest.json, diagnostics/
+    export.ply (or .obj/.stl/.glb), diagnostics/
+  run_report.md
 ```
+
+Weighted modes also write `preprocessing/patch_weights.npy`.
 
 ## Full reference
 

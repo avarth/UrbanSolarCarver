@@ -148,7 +148,7 @@ def test_carve_above_keeps_bridge_over_existing_passage(tmp_path, epw):
                     tmp_path, epw, "tilted_plane", carve_above=True)
     assert run.mask[run.occ].all()
     assert np.array_equal(oracle.kept_grid(run), run.occ)
-    assert run.diag("exp")["carve_above_extra_voxels_removed"] == 0
+    assert run.diag("thr")["carve_above_extra_voxels_removed"] == 0
 
 
 # ----------------------------------------------------------------- invariances
@@ -179,6 +179,25 @@ def test_cpu_cuda_parity(tmp_path, epw, mode):
         np.testing.assert_allclose(gpu.scores, cpu.scores, rtol=1e-4, atol=1e-3)
 
 
+@pytest.mark.parametrize("mode", ["daylight", "time-based"])
+def test_threaded_cpu_accumulation_matches_sequential(tmp_path, epw, mode, monkeypatch):
+    """Warp's CPU atomic_add is not atomic across threads: threaded batches
+    must not share an accumulation buffer (lost updates, run-to-run noise)."""
+    import urbansolarcarver.carving as C
+
+    scene = build(SceneSpec("courtyard"))
+    over = dict(ray_batch_size=4000)
+    threaded = cases.run(scene, tmp_path / "t", epw, mode, **over)
+    run_batches = C._run_batches
+    monkeypatch.setattr(C, "_run_batches",
+                        lambda b, launch, out, device, parallel: run_batches(b, launch, out, device, False))
+    sequential = cases.run(scene, tmp_path / "s", epw, mode, **over)
+    if mode == "time-based":
+        assert np.array_equal(threaded.scores, sequential.scores)
+    else:
+        np.testing.assert_allclose(threaded.scores, sequential.scores, rtol=1e-5, atol=1e-6)
+
+
 # ----------------------------------------------------------------- diagnostics
 @pytest.mark.parametrize("mode", ["tilted_plane", "benefit"])
 def test_diagnostics_agree_across_stages(tmp_path, epw, mode):
@@ -188,9 +207,8 @@ def test_diagnostics_agree_across_stages(tmp_path, epw, mode):
     assert pre["voxels_filled"] == thr["voxels_occupied"] == exp["voxels_original"] == occupied
     assert thr["voxels_kept"] == int(run.mask.sum())
     assert thr["voxels_kept"] + thr["voxels_removed"] == occupied
-    # min_voxels=1 and no carve_above: export keeps exactly the thresholded voxels
-    assert exp["voxels_retained"] == thr["voxels_kept"]
+    # Export meshes the thresholded voxels minus the small-fragment cleanup.
+    assert exp["voxels_retained"] + exp["voxels_removed_by_cleanup"] == thr["voxels_kept"]
     assert exp["voxels_retained"] + exp["voxels_removed"] == occupied
-    assert exp["voxel_retention_pct"] == thr["retention_pct"]
     if exp["mesh_volume_m3"] is not None:
         assert exp["mesh_volume_m3"] == pytest.approx(exp["voxels_retained"] * run.vs ** 3, rel=1e-3)
