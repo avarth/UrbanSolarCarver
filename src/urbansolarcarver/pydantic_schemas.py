@@ -226,7 +226,19 @@ class UserConfig(BaseModel):
             "(already enforced by sampling)."
         ),
     )
-    ray_length:    float = Field(300.0, gt=0, description="Max ray cast distance (m)")
+    sun_steps_per_hour: int = Field(
+        12,
+        description=(
+            "time-based only: sun positions sampled per hour of the analysis "
+            "period (Ladybug timestep: 1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60). "
+            "The sun moves ~15° of azimuth per hour, so sparse sampling leaves "
+            "gaps between ray sheets where mass survives while still shading "
+            "the protected surface between samples. 12 (5 min) closes the gaps "
+            "for 1 m voxels at ~40 m; ray count grows linearly with this value. "
+            "Violation scores are in hours regardless of it."
+        ),
+    )
+    ray_length:    float = Field(300.0, gt=0,description="Max ray cast distance (m)")
     min_altitude:  float = Field(5.0, ge=0, le=90, description="Minimum sun altitude (°)")
     margin_frac:   float = Field(0.01, ge=0, le=1.0, description="Padding fraction around geometry")
     ray_batch_size: int   = Field(0, ge=0, description="Rays per GPU batch. 0 = auto-tune based on available VRAM")
@@ -254,20 +266,23 @@ class UserConfig(BaseModel):
 
     # column post-processing
     carve_above: bool = Field(
-        False,
+        True,
         description=(
-            "If True, carve all occupied voxels above the lowest sufficiently-carved "
-            "region in each (x, y) column. Removes structurally implausible floating "
-            "mass above already-carved zones. Use carve_above_min_consecutive to "
-            "control sensitivity."
+            "Carve all occupied voxels above the lowest sufficiently-carved region "
+            "in each (x, y) column, so the envelope is a buildable height field "
+            "(the classical solar-envelope definition) instead of keeping mass that "
+            "floats above carved zones. Set False to keep floating mass that casts "
+            "no violating shadow. Use carve_above_min_consecutive to control "
+            "sensitivity."
         ),
     )
     carve_above_min_consecutive: int = Field(
         1, ge=1,
         description=(
-            "Minimum number of consecutive carved (empty) voxels in a column before "
+            "Minimum number of consecutive carved voxels in a column before "
             "carve_above activates for that column. Higher values (2-3) prevent stray "
-            "single-voxel carvings from triggering aggressive column removal."
+            "single-voxel carvings from triggering aggressive column removal; "
+            "shorter runs stay carved but do not trigger."
         ),
     )
 
@@ -393,6 +408,13 @@ class UserConfig(BaseModel):
                 UrbanSolarCarverWarning,
                 stacklevel=2,
             )
+        return v
+
+    @field_validator('sun_steps_per_hour')
+    def _validate_sun_steps(cls, v: int) -> int:
+        allowed = (1, 2, 3, 4, 5, 6, 10, 12, 15, 20, 30, 60)
+        if v not in allowed:
+            raise ValueError(f"sun_steps_per_hour must be one of {allowed} (Ladybug timesteps)")
         return v
 
     @field_validator('device')

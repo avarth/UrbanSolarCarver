@@ -1,0 +1,108 @@
+{
+  "category": "USC",
+  "components": {
+    "USC_AnalysisPeriod.py": {
+      "subcategory": "1:: Config",
+      "guid": "6b8deeef-c684-476e-9ebb-9a15b415cf9d"
+    },
+    "USC_Archetype.py": {
+      "subcategory": "3::Weights",
+      "guid": "71cd4b72-a0d1-47ff-8196-c4f09e30adfa"
+    },
+    "USC_BenefitParams.py": {
+      "subcategory": "1:: Config",
+      "guid": "f0b73548-ec6a-4efd-a6be-cd06c082a8cb"
+    },
+    "USC_Config.py": {
+      "subcategory": "1:: Config",
+      "guid": "a23d18ef-0ef9-453a-8300-9d83659ff033"
+    },
+    "USC_Diagnostics.py": {
+      "subcategory": "1:: Config",
+      "guid": "f82aef5c-f19b-4337-a720-d41ef76dec0f"
+    },
+    "USC_EPW.py": {
+      "subcategory": "1:: Config",
+      "guid": "fecc64c7-8b1d-40e3-8a3d-e2c89be297c9"
+    },
+    "USC_Export.py": {
+      "subcategory": "2::Main",
+      "guid": "3938d879-0c2f-4856-b850-2baea9b64eb0"
+    },
+    "USC_GridSettings.py": {
+      "subcategory": "1:: Config",
+      "guid": "078249e4-632b-46d5-a243-2996e0a7f3a1"
+    },
+    "USC_Mode.py": {
+      "subcategory": "1:: Config",
+      "guid": "ad3de535-fb51-4023-aea3-ddc58d444f05"
+    },
+    "USC_Postprocess.py": {
+      "subcategory": "1:: Config",
+      "guid": "7a2eccd9-1f8f-4ff3-961f-1ebc001cfd19"
+    },
+    "USC_Preprocess.py": {
+      "subcategory": "2::Main",
+      "guid": "b346c1f3-2b4f-4b3d-9f70-9736531635c5",
+      "hidden_outputs": [
+        "test_points"
+      ]
+    },
+    "USC_RadCooling.py": {
+      "subcategory": "1:: Config",
+      "guid": "fb2a8d15-93bb-4d77-ba8a-3ffc1f2b05ef"
+    },
+    "USC_RaySettings.py": {
+      "subcategory": "1:: Config",
+      "guid": "3fe443b0-37cb-4de4-989d-aa92824df09b"
+    },
+    "USC_RunPipeline.py": {
+      "subcategory": "2::Main",
+      "guid": "62ee7ea3-50f3-4318-be28-6b208d40868c"
+    },
+    "USC_Session.py": {
+      "subcategory": "0::Session",
+      "guid": "a9e45a71-d530-4a08-8c7f-dc3666f93734"
+    },
+    "USC_SimulateWeights.py": {
+      "subcategory": "3::Weights",
+      "guid": "5018fe46-bbbe-473e-92e6-70ca79507953"
+    },
+    "USC_SyncCanvas.py": {
+      "subcategory": "0::Session",
+      "guid": "fc2048dc-9b52-443b-b118-eb6b1ceb7385"
+    },
+    "USC_Threshold.py": {
+      "subcategory": "1:: Config",
+      "guid": "5fda284e-0574-43eb-a2a1-6c9f097291b8"
+    },
+    "USC_ThresholdStage.py": {
+      "subcategory": "2::Main",
+      "guid": "275c169e-b1e2-4e41-b520-2f59ed361181"
+    },
+    "USC_TiltedPlane.py": {
+      "subcategory": "1:: Config",
+      "guid": "40c702cd-ada3-47d1-8982-b375417c8513"
+    },
+    "USC_ZoneFabric.py": {
+      "subcategory": "3::Weights",
+      "guid": "17ff0bd1-6ef0-4077-8fac-1a3029a57c18"
+    },
+    "USC_ZoneGeometry.py": {
+      "subcategory": "3::Weights",
+      "guid": "9a4b7777-a5c2-4b62-b82f-b9c01bd9e82e"
+    },
+    "USC_ZoneOperation.py": {
+      "subcategory": "3::Weights",
+      "guid": "7de6bb91-04d4-4bbb-9f5b-af92ed7b294f"
+    },
+    "USC_ZoneShading.py": {
+      "subcategory": "3::Weights",
+      "guid": "1b2b39e7-ff44-416f-a33e-667c30e74086"
+    },
+    "USC_ZoneVent.py": {
+      "subcategory": "3::Weights",
+      "guid": "bce845f4-ee04-4c35-b781-960d4481f472"
+    }
+  }
+}

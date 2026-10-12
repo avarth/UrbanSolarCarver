@@ -149,7 +149,7 @@ else:
                 diag_lines.append(f"Method: {data.get('threshold_method', '?')}")
                 diag_lines.append(f"Threshold: {threshold_value}")
                 diag_lines.append(f"Kept: {data.get('retention_pct', '?')}%")
-                diag_lines.append(f"Voxels kept: {data.get('voxels_kept', '?')} / {data.get('voxels_total', '?')}")
+                diag_lines.append(f"Voxels kept: {data.get('voxels_kept', '?')} / {data.get('voxels_occupied', '?')}")
                 # Collect histogram path for LB Image Viewer
                 hist = data.get("threshold_histogram")
                 if hist and os.path.isfile(hist):

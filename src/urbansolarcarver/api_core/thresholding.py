@@ -15,7 +15,7 @@ from ..pydantic_schemas import (
 )
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..mode_registry import MODES
-from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json
+from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy
 from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
 
 @dataclass(frozen=True)
@@ -43,12 +43,17 @@ class ThresholdingResult:
     def __fspath__(self) -> str:
         return str(self.manifest_path)
 
-def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing):
+def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     """Gaussian-blur the continuous score volume before thresholding.
 
     Smooths resolution-dependent noise so the binary mask (and carved mesh)
     is cleaner at fine voxel sizes.  Only applied to weighted-score modes;
     violation-count modes (time-based, tilted_plane) are left untouched.
+
+    With an occupancy grid *occ*, the blur is a normalized convolution over
+    occupied voxels only: G*(s·occ) / G*occ.  Empty cells carry the scores of
+    every ray crossing the street or courtyard in front of a facade; a plain
+    blur would leak that air into the building's boundary voxels.
 
     ``score_smoothing`` semantics: None → auto (1.1 × voxel_size);
     0 → disabled; > 0 → explicit radius in meters.
@@ -78,7 +83,13 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing):
 
     from scipy.ndimage import gaussian_filter
     sigma_voxels = float(np.clip(radius_m / voxel_size, 0.5, 8.0))
-    smoothed = gaussian_filter(raw.astype(np.float32), sigma=sigma_voxels)
+    if occ is None:
+        smoothed = gaussian_filter(raw.astype(np.float32), sigma=sigma_voxels)
+        return smoothed, True, radius_m, sigma_voxels
+    w = occ.astype(np.float32)
+    num = gaussian_filter(np.where(occ, raw, 0.0).astype(np.float32), sigma=sigma_voxels)
+    den = gaussian_filter(w, sigma=sigma_voxels)
+    smoothed = np.where(occ, num / np.maximum(den, 1e-12), 0.0).astype(np.float32)
     return smoothed, True, radius_m, sigma_voxels
 
 
@@ -130,9 +141,12 @@ def thresholding(
       distribution at the arithmetic mean until the head proportion falls
       below 40 %, targeting heavy-tailed score distributions common in
       urban solar access studies.
-    * ``carve_fraction`` (default) -- cumulative-score cutoff: sorts voxels
-      by descending score and finds the cutoff that accounts for the given
-      fraction of the total score mass.
+    * ``carve_fraction`` (default) -- cumulative-score cutoff: sorts the
+      occupied voxels by descending score and finds the cutoff that accounts
+      for the given fraction of the building's total score mass.
+
+    All threshold statistics, retention counts and smoothing use occupied
+    voxels only; the mask is False on empty cells.
 
     Score smoothing (``cfg.score_smoothing``):
 
@@ -228,11 +242,19 @@ def thresholding(
     # non-finite voxel.
     warn_score_anomalies(raw, context="thresholding")
 
+    # Only occupied voxels can be kept or carved. Empty cells still hold
+    # score (rays cross streets and courtyards), and 60-80% of the total
+    # score mass can sit there, so every statistic below is taken over the
+    # building alone; otherwise carve_fraction/headtail would depend on how
+    # much air the grid happens to contain.
+    occ = load_occupancy(pre_manifest, conf)
+
     raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
-        raw, kind, pre_manifest.voxel_size, conf.score_smoothing
+        raw, kind, pre_manifest.voxel_size, conf.score_smoothing, occ=occ
     )
 
     scores = raw.astype(np.float32, copy=False)
+    occ_scores = scores[occ]
     spec = conf.threshold
     # Cross-check config vs manifest: standalone re-thresholding can pair a
     # weighted-mode config with violation-count scores (or vice versa) —
@@ -244,11 +266,11 @@ def thresholding(
             f"'{spec.method}'. Use a numeric threshold (tolerated violation "
             f"count) or match the config mode to the preprocessing run."
         )
-    thr_val = _resolve_threshold(scores, spec)
+    thr_val = _resolve_threshold(occ_scores, spec)
 
-    # Threshold to mask.
-    mask = (scores <= thr_val).reshape(grid_shape)
-    if mask.all():
+    # Threshold to mask. Empty cells are False: there is nothing to keep.
+    mask = occ & (scores <= thr_val).reshape(grid_shape)
+    if mask.sum() == occ.sum():
         import warnings
         warnings.warn(
             f"Thresholding produced an all-True mask (nothing carved). "
@@ -284,18 +306,19 @@ def thresholding(
 
     # Per-stage diagnostics
     diag_dir = ensure_diag(out_path)
-    nn = np.asarray(scores).ravel()
-    total_voxels = int(nn.size)
+    nn = occ_scores
+    occupied = int(occ.sum())
     kept = int(mask.sum())
-    removed = total_voxels - kept
+    removed = occupied - kept
     threshold_method = spec.method
     summary = {
         "threshold_method": threshold_method,
         "threshold_value": float(thr_val),
-        "voxels_total": total_voxels,
+        "voxels_grid": int(np.prod(grid_shape)),
+        "voxels_occupied": occupied,
         "voxels_kept": kept,
         "voxels_removed": removed,
-        "retention_pct": round(100.0 * kept / max(total_voxels, 1), 2),
+        "retention_pct": round(100.0 * kept / max(occupied, 1), 2),
         "mask_shape": [int(x) for x in grid_shape],
         "upstream_hash": upstream_hash,
         "score_smooth_applied": _smooth_applied,
@@ -315,8 +338,8 @@ def thresholding(
         total_weight = float(patch_weights.sum())
         summary["total_patch_weight"] = total_weight
         summary["weight_unit"] = weight_unit
-        # Obstruction removed: sum of scores of carved voxels / total score mass
-        carved_mask = ~mask.ravel()  # True = carved away
+        # Obstruction removed: score mass of carved voxels / building score mass
+        carved_mask = ~mask[occ]  # aligned with nn (occupied voxels)
         score_mass_carved = float(nn[carved_mask].sum())
         score_mass_total = float(nn.sum())
         if score_mass_total > 0:
@@ -354,5 +377,5 @@ def thresholding(
         threshold_value=float(thr_val),
         voxels_kept=kept,
         voxels_removed=removed,
-        retention_pct=round(100.0 * kept / max(total_voxels, 1), 2),
+        retention_pct=round(100.0 * kept / max(occupied, 1), 2),
     )

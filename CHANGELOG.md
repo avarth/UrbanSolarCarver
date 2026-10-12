@@ -91,8 +91,42 @@ versioning follows [Semantic Versioning](https://semver.org/).
   shading makes the `harm` channel a defensible estimate instead of a
   conservative worst case. Supported in `usc archetype` (-s overrides)
   and on the USC_Archetype Grasshopper component (scalars).
+- **`grasshopper/build_ghuser.py`**: builds the `.ghuser` user objects
+  from the component sources (port names/descriptions from each GH UI
+  block, port order and type hints from the numpydoc docstring, ribbon
+  placement and stable GUIDs from `grasshopper/components.json`), using
+  Grasshopper's `GH_IO.dll` without running Rhino. Byte-reproducible;
+  `--check` flags stale files. `pip install -e .[ghbuild]` adds pythonnet.
+  `tests/test_gh_components.py` keeps sources and docstrings in sync.
+  Serialization adapted from the MIT-licensed GHPython Componentizer.
+- **USC_SyncCanvas Grasshopper component**: updates the USC components
+  on an open canvas to the installed versions. Unchanged inputs/outputs:
+  replaced in place with wires, internalised values, data mappings,
+  enabled/preview state and group membership kept. Changed inputs/outputs:
+  the new version is placed beside the old one in a red group naming the
+  new/removed ports, for manual rewiring. Report-only unless `update` is
+  True; one undo step; a failed update rolls back.
+- **End-to-end carving tests on urban typologies** (`tests/typologies.py`,
+  `tests/oracle.py`, `tests/test_typologies.py`): eight procedural block
+  types (courtyard, towers, rows, freeform, L-block, podium, random
+  polygon, ground-floor passage) run through the full pipeline and
+  checked against an independent CPU reference marcher, plus invariants
+  (no floating mass, empty-cell independence, carve_fraction nesting,
+  georeferenced translation, CPU/CUDA parity, cross-stage diagnostics).
+  `tests/montecarlo.py` draws random scenes and settings from a seed and
+  runs the same checks; any failing case is reproducible from its seed.
 
 ### Changed
+
+- **All Grasshopper `.ghuser` files rebuilt from source.** The packaged
+  files had drifted from `grasshopper/components/` (e.g. the USC_Session
+  `python_path.txt` lookup and the PLY-loader hang fix were never
+  packaged); the seven simulated-weights components (USC_Archetype, the
+  five USC_Zone* feeders, USC_SimulateWeights) are packaged for the first
+  time, in a new `3::Weights` ribbon group, with icons. Inputs now carry
+  the type hints their docstrings declare (`bool`, `float`, `int`, `str`
+  instead of untyped), so text panels convert as expected (e.g. `"False"`
+  into a `run` or `include_harm` input is false, not a truthy string).
 
 - **Benefit mode now implements its documented formula exactly (by
   default)**: patch weights are a plain cumulative irradiance matrix over
@@ -134,6 +168,69 @@ versioning follows [Semantic Versioning](https://semver.org/).
   the key now fail validation with a clear message; remove the line. The
   USC_RaySettings Grasshopper component no longer emits it (old canvases
   keep the input; it is ignored).
+
+### Fixed (carving correctness — results change)
+
+Found with a new end-to-end harness (procedural urban typologies checked
+against an independent CPU reference marcher, plus Monte Carlo runs).
+
+- **Protected surfaces obstructed themselves.** Rays started inside the
+  boundary voxels of the mass a test surface belongs to, and those voxels
+  were counted as obstructions: protected lower floors lost a voxel-thick
+  skin on roughly half their facades (every facade on curved footprints),
+  and with `carve_above` the whole column above went with it. Weighted modes
+  gave those voxels the highest scores. The DDA kernels now skip voxels
+  whose centre lies behind the ray's source surface (exact rule, per-ray
+  surface normal; no origin offset, which would shift rays sideways).
+- **`tilted_plane` carved a band, not the half-space above the plane.** Only
+  voxels crossed by each sample's ray were removed, so mass above the band
+  swept by a facade survived as floating slabs. Every voxel at or above a
+  ray in its column is now removed.
+- **Thresholds were resolved over empty cells.** `carve_fraction`,
+  `headtail`, score smoothing and the reported retention used every grid
+  cell; streets, courtyards and the grid margin hold 60-80% of the score
+  mass, so `carve_fraction: 0.8` removed 79-86% of the building's own
+  obstruction depending on the scene, and results changed with
+  `margin_frac`. Everything now uses occupied voxels only (smoothing is a
+  normalized convolution over the building); the mask is False on empty
+  cells.
+- **`carve_above` treated empty cells as carved mass.** Air the mask marked
+  False (a passage under a bridge, the margin) could trigger removal of
+  everything above it. Runs are now made of carved occupied voxels only.
+- **Time-based sampled the sun hourly.** The sun moves ~15° of azimuth per
+  hour; mass between consecutive hourly ray sheets survived while shading
+  the protected surface between samples (58-322 voxels per scene at 1 m).
+  New `sun_steps_per_hour` (default 12 = every 5 min). Violation scores
+  are now in **hours**, so a numeric threshold keeps meaning "tolerated
+  shadow duration" at any sampling density.
+- **Georeferenced coordinates lost precision.** Voxelization, sampling and
+  tracing ran in float32 world coordinates (~0.5 m resolution at UTM
+  northings). Preprocessing now works in a local frame (coordinates rounded
+  to 1 µm, so the same scene placed anywhere samples and carves
+  bit-identically) and persists world coordinates in float64; surface
+  sampling no longer drops or keeps a panel's edge row at random when the
+  sampling lattice coincides with that edge. The exported mesh is placed in float64 and PLY
+  exports switch to double-precision vertices when float32 would round by
+  more than 1 mm. A warning names float32 PLY inputs whose coordinates are
+  already rounded on disk by more than 1% of a voxel. The Grasshopper
+  components now write their input geometry with double-precision vertices
+  (previously float32: a Brep box at UTM coordinates reached USC 0.21 m off;
+  verified exact in Rhino 8.35), and their PLY readers accept
+  double-precision files and build double-precision Rhino meshes.
+- **`carve_above` defaults to `true`** (was `false`). Time-based and
+  weighted carving otherwise return mass floating above carved zones
+  (8k-24k voxels on the ReSBE demo scenes): physically it casts no
+  violating shadow, but the classical solar envelope is a height field and
+  floating mass cannot be built. Set `carve_above: false` to keep it.
+- **`carve_above` no longer refills short carved runs.** Runs shorter than
+  `carve_above_min_consecutive` were patched back to kept, reinstating
+  voxels the solar constraint had removed (up to ~100 per scene). They now
+  stay carved and simply do not trigger; carve_above only ever removes.
+- **Diagnostics.** Exporting reported the retained voxel count as
+  `voxels_carved`; it is now `voxels_retained`, with `voxels_removed`
+  added. Thresholding reports `voxels_occupied` (replacing `voxels_total`,
+  which counted the whole grid) and retention over occupied voxels, so both
+  stages report the same retention.
 
 ### Added
 

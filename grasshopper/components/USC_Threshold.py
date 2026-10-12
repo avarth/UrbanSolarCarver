@@ -29,13 +29,13 @@ score_smoothing : float, optional
 carve_above : bool, optional
     If True, carve all occupied voxels above the lowest
     sufficiently-carved region in each (x, y) column.  Removes
-    structurally implausible floating mass above carved zones.
-    Default: False.
+    floating mass above carved zones (buildable height field).
+    Default: True.
 carve_above_min : int, optional
     Minimum consecutive carved voxels in a column before carve_above
     activates for that column.  Higher values (2-3) prevent stray
-    single-voxel carvings from triggering aggressive removal.
-    Default: 1.
+    single-voxel carvings from triggering aggressive removal;
+    shorter runs stay carved.  Default: 1.
 
 Outputs
 -------
@@ -83,13 +83,14 @@ try:
         )),
         ("carve_above", (
             "If True, carve all occupied voxels above the lowest sufficiently-carved "
-            "region in each (x, y) column. Removes structurally implausible floating mass "
-            "above already-carved zones. Default: False (disabled)."
+            "region in each (x, y) column, so the envelope is a buildable height field "
+            "without floating mass. Default: True."
         )),
         ("carve_above_min", (
             "Minimum number of consecutive carved (empty) voxels in a column before "
             "carve_above activates for that column. Higher values (2-3) prevent stray "
-            "single-voxel carvings from triggering aggressive column removal. Default: 1."
+            "single-voxel carvings from triggering aggressive column removal; shorter "
+            "runs stay carved. Default: 1."
         )),
     ]):
         if i < len(ii):

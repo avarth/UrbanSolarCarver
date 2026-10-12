@@ -11,7 +11,7 @@ Inputs
 ------
 config : USCConfig
     Config handle from USC Config.
-max_volume : Mesh or Brep
+max_volume : Mesh or Brep (list)
     Maximum volume envelope geometry.
 test_surfaces : Mesh or Brep (list)
     Insolation test surfaces.
@@ -46,8 +46,8 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config. Contains all settings for the full pipeline."
-    ii[1].Name, ii[1].Description = "max_volume", "Maximum building envelope geometry (Mesh or Brep). Set input to List Access for multiple objects."
-    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces requiring solar access (Mesh or Brep). Set input to List Access."
+    ii[1].Name, ii[1].Description = "max_volume", "Maximum building envelope geometry (Mesh or Brep). Multiple objects accepted."
+    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces requiring solar access (Mesh or Brep), one or many."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle. True to run the complete pipeline (preprocessing + thresholding + exporting) in one step."
     oo[0].Name, oo[0].Description = "mesh", "The carved envelope as a Rhino Mesh. Displayed directly in the viewport."
     oo[1].Name, oo[1].Description = "export_path", "Full path to the exported mesh file on disk."
@@ -125,10 +125,10 @@ def _flatten_geometry(items):
 def _export_mesh_to_ply(mesh, path, include_normals=True):
     """Write a triangulated Rhino Mesh to binary PLY (little-endian).
 
-    Uses .NET bulk array operations (ToFloatArray + Buffer.BlockCopy) to
-    bypass per-vertex Python loops.  GhPython loops are significantly slower
-    than C++/.NET bulk paths; this eliminates the vertex serialization
-    bottleneck for large meshes.
+    Vertex positions are written as doubles: float32 keeps ~7 significant
+    digits, i.e. ~0.5 m at UTM northings (~4.5e6 m), which is half a typical
+    voxel.  ToPoint3dArray() returns Rhino's double-precision vertices when
+    the mesh has them (meshes from Breps do).  Normals stay float32.
 
     Parameters
     ----------
@@ -140,7 +140,6 @@ def _export_mesh_to_ply(mesh, path, include_normals=True):
         (produces hollow shell instead of solid fill).
     """
     import struct
-    import System
 
     mesh.Faces.ConvertQuadsToTriangles()
     mesh.Normals.ComputeNormals()
@@ -149,7 +148,7 @@ def _export_mesh_to_ply(mesh, path, include_normals=True):
 
     with open(path, "wb") as f:
         # -- Header --------------------------------------------------------
-        props = "property float x\nproperty float y\nproperty float z\n"
+        props = "property double x\nproperty double y\nproperty double z\n"
         if include_normals:
             props += (
                 "property float nx\nproperty float ny\nproperty float nz\n"
@@ -164,40 +163,18 @@ def _export_mesh_to_ply(mesh, path, include_normals=True):
         )
         f.write(header.encode("ascii"))
 
-        # -- Vertices (bulk .NET path) -------------------------------------
-        # ToFloatArray() is a single C++ call returning float[nv*3]
-        pos = mesh.Vertices.ToFloatArray()
-
+        # -- Vertices ------------------------------------------------------
+        pts = mesh.Vertices.ToPoint3dArray()
         if include_normals:
-            # Bulk normal extraction; fall back to per-element if the method
-            # is unavailable in this Rhino version.
-            try:
-                nrm = mesh.Normals.ToFloatArray()
-            except (AttributeError, TypeError):
-                nrm = System.Array.CreateInstance(System.Single, nv * 3)
-                norms_list = mesh.Normals
-                for i in range(nv):
-                    n = norms_list[i]
-                    nrm[i * 3] = n.X
-                    nrm[i * 3 + 1] = n.Y
-                    nrm[i * 3 + 2] = n.Z
-
-            # Interleave [x,y,z, nx,ny,nz] per vertex via .NET Array.Copy
-            combined = System.Array.CreateInstance(System.Single, nv * 6)
+            nrm = mesh.Normals
+            vbuf = bytearray(nv * 36)  # 3 doubles + 3 floats
             for i in range(nv):
-                System.Array.Copy(pos, i * 3, combined, i * 6, 3)
-                System.Array.Copy(nrm, i * 3, combined, i * 6 + 3, 3)
-
-            nbytes = nv * 24
-            vbuf = System.Array.CreateInstance(System.Byte, nbytes)
-            System.Buffer.BlockCopy(combined, 0, vbuf, 0, nbytes)
-            f.write(bytes(bytearray(vbuf)))
+                p = pts[i]
+                n = nrm[i]
+                struct.pack_into("<dddfff", vbuf, i * 36, p.X, p.Y, p.Z, n.X, n.Y, n.Z)
         else:
-            # Zero Python loops: bulk extract → byte copy → write
-            nbytes = nv * 12
-            vbuf = System.Array.CreateInstance(System.Byte, nbytes)
-            System.Buffer.BlockCopy(pos, 0, vbuf, 0, nbytes)
-            f.write(bytes(bytearray(vbuf)))
+            vbuf = struct.pack(f"<{nv * 3}d", *[c for p in pts for c in (p.X, p.Y, p.Z)])
+        f.write(vbuf)
 
         # -- Faces (all triangles after ConvertQuadsToTriangles) -----------
         faces = mesh.Faces
@@ -282,20 +259,23 @@ def _load_ply_to_rhino(path):
         xo = xyz_off.get("x", 0)
         yo = xyz_off.get("y", 4)
         zo = xyz_off.get("z", 8)
+        # USC writes double-precision vertices for georeferenced exports.
+        xyz_size = dict(vertex_props).get("x", 4)
+        xyz_fmt = "d" if xyz_size == 8 else "f"
 
         if is_binary_le:
             raw = f.read(nv * stride)
-            if stride == 12 and xo == 0 and yo == 4 and zo == 8:
+            if stride == 3 * xyz_size and xo == 0 and yo == xyz_size and zo == 2 * xyz_size:
                 # Fast path: xyz-only layout (trimesh default, no normals)
-                verts = struct.unpack(f"<{nv * 3}f", raw)
+                verts = struct.unpack(f"<{nv * 3}{xyz_fmt}", raw)
             else:
                 # General path: extract x/y/z at their actual byte offsets
                 verts = []
                 for i in range(nv):
                     base = i * stride
-                    verts.append(struct.unpack_from("<f", raw, base + xo)[0])
-                    verts.append(struct.unpack_from("<f", raw, base + yo)[0])
-                    verts.append(struct.unpack_from("<f", raw, base + zo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + xo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + yo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + zo)[0])
             # Bulk-read all face data at once (avoids 2×nf individual reads)
             face_data = f.read()
             faces = []
@@ -326,6 +306,8 @@ def _load_ply_to_rhino(path):
                 faces.append(tuple(int(x) for x in p[1:c + 1]))
 
     mesh_out = rg.Mesh()
+    # Rhino stores mesh vertices as float32 by default (~0.5 m at UTM northings).
+    mesh_out.Vertices.UseDoublePrecisionVertices = True
 
     pt_arr = System.Array.CreateInstance(rg.Point3d, nv)
     for i in range(nv):

@@ -21,6 +21,10 @@ analysis_period:
   end_month: 4
   end_day:   15
   end_hour:  19
+# time-based only: sun positions sampled per hour of the period (Ladybug
+# timestep). 12 = every 5 min; hourly sampling leaves gaps in which mass
+# survives while still shading the protected surfaces between samples.
+sun_steps_per_hour: 12
 # The six flat keys remain valid as well:
 # start_month: 10
 # start_day:   15
@@ -59,9 +63,11 @@ smooth_iters:   2     # number of smoothing iterations
 
 # Column post-processing (applied after thresholding, before mesh export)
 # Carves all occupied voxels above the lowest sufficiently-carved region
-# in each (x, y) column.  Removes structurally implausible floating mass.
-carve_above: false                # Enable column carve-above post-processing
-carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-3 recommended)
+# in each (x, y) column, so the envelope is a buildable height field.
+# false keeps mass that floats above carved zones (it casts no violating
+# shadow, but cannot be built).
+carve_above: true                 # Column carve-above post-processing (default on)
+carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-3 ignore stray single voxels; they stay carved)
 
 # Score smoothing (pre-threshold Gaussian blur on the score volume)
 # Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes.
@@ -80,7 +86,7 @@ score_smoothing: null
 #   threshold: carve_fraction   # value taken from the carve_fraction key below
 #   threshold: headtail         # automatic split, no value
 #   threshold: 0.35             # bare number = raw-score cutoff
-#                               # (for time-based/tilted_plane: tolerated violation count)
+#                               # (for time-based: tolerated shadow duration in hours)
 # Unset = mode default (carve_fraction for weighted modes, 0 for count modes).
 threshold: 'carve_fraction'
 carve_fraction: 0.7

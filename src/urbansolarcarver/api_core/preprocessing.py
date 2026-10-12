@@ -86,7 +86,8 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
             f"Unknown mode '{mode}' — not registered in mode_registry.MODES"
         )
     if mode in MODES_NEEDING_PERIOD:
-        datetimes, hoys = sample_period(conf)
+        steps = conf.sun_steps_per_hour if mode == "time-based" else 1
+        datetimes, hoys = sample_period(conf, steps_per_hour=steps)
     else:
         datetimes, hoys = [], []
 
@@ -99,6 +100,9 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
                 voxel_grid, origin, extent, resolution, pts, norms, conf,
                 datetimes, return_counts=True,
             )
+            # Violation counts in hours, so a numeric threshold means the same
+            # tolerated duration whatever the sun sampling density.
+            counts = counts / float(conf.sun_steps_per_hour)
         elif mode == "tilted_plane":
             _carved, _ro, _rd, counts = carve_with_planes(
                 voxel_grid, origin, extent, resolution, pts, norms, conf,
@@ -199,6 +203,19 @@ def preprocessing(
     _mark("config_and_device")
 
     mesh_env, mesh_insol = load_meshes(conf)
+    # Work in a local frame anchored at the max volume's min corner.  Rays,
+    # voxelization and sampling run in float32; georeferenced coordinates
+    # (UTM northings ~4.5e6 m) leave float32 a resolution of ~0.5 m.  Every
+    # persisted coordinate is shifted back to world space below.
+    # Local coordinates are rounded to 1 µm: subtracting a large frame leaves
+    # ~1e-9 m of rounding noise, enough to flip sampling decisions for points
+    # that lie exactly on panel edges, so the same scene placed elsewhere
+    # would sample (and carve) slightly differently.
+    frame = np.asarray(mesh_env.bounds[0], dtype=np.float64)
+    mesh_env = mesh_env.copy()
+    mesh_env.vertices = np.round(mesh_env.vertices - frame, 6)
+    mesh_insol = mesh_insol.copy()
+    mesh_insol.vertices = np.round(mesh_insol.vertices - frame, 6)
     _mark("load_meshes")
 
     voxel_grid, origin, extent, resolution = voxelize(mesh_env, conf, device=resolved_device)
@@ -247,6 +264,9 @@ def preprocessing(
     scores_path = out_path / "scores.npy"
     np.save(scores_path, raw_scores, allow_pickle=False)
 
+    # Back to world coordinates for everything persisted.
+    world_origin = np.asarray(origin, dtype=np.float64) + frame
+
     # Persist patch weights for downstream performance reporting
     if patch_weights is not None:
         pw_path = out_path / "patch_weights.npy"
@@ -258,7 +278,7 @@ def preprocessing(
     # Persist test points and normals for diagnostics and GH visualization
     test_points_path = out_path / "test_points.npy"
     test_normals_path = out_path / "test_normals.npy"
-    np.save(test_points_path, pts, allow_pickle=False)
+    np.save(test_points_path, pts.astype(np.float64) + frame, allow_pickle=False)
     np.save(test_normals_path, norms, allow_pickle=False)
 
     # Persist voxel grid so exporting can reuse it without re-voxelizing
@@ -268,6 +288,7 @@ def preprocessing(
 
     # Persist analysis mesh for downstream visualization and diagnostics
     if analysis_mesh is not None:
+        analysis_mesh.vertices = analysis_mesh.vertices + frame
         analysis_mesh_path = out_path / "analysis_mesh.json"
         analysis_mesh_path.write_text(
             json.dumps(analysis_mesh.to_dict()), encoding="utf-8"
@@ -281,7 +302,7 @@ def preprocessing(
         scores_path=str(scores_path),
         scores_kind=scores_kind,
         shape=tuple(voxel_grid.shape),
-        origin=tuple(map(float, origin)),
+        origin=tuple(map(float, world_origin)),
         suggested_threshold=suggested_threshold,
         voxel_grid_path=str(voxel_grid_path),
         voxel_size=float(conf.voxel_size),
@@ -299,7 +320,7 @@ def preprocessing(
         "scores_kind": scores_kind,
         "voxel_size": float(conf.voxel_size),
         "grid_shape": [int(x) for x in voxel_grid.shape],
-        "grid_origin": [float(o) for o in origin],
+        "grid_origin": [float(o) for o in world_origin],
         "grid_extent": float(extent),
         "grid_resolution": int(resolution),
         "voxels_total": int(np.prod(voxel_grid.shape)),

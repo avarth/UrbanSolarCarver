@@ -124,8 +124,8 @@ Required parameters vary by mode. Every config needs at minimum `max_volume_path
 | `min_altitude` | 5.0 | Minimum sun altitude in degrees |
 | `threshold` | `"carve_fraction"` | See [Thresholding strategies](#thresholding-strategies) below |
 | `carve_fraction` | 0.7 | Solar protection slider: 0.7 = aggressive (remove 70% obstruction), 0.3 = conservative |
-| `carve_above` | false | Carve all occupied voxels above the lowest carved region in each column |
-| `carve_above_min_consecutive` | 1 | Min consecutive carved voxels to trigger carve_above (2-3 recommended) |
+| `carve_above` | true | Carve all occupied voxels above the lowest carved region in each column, so the result is a buildable height field without floating mass (empty cells such as a ground-floor passage never trigger it). `false` keeps mass that floats above carved zones but casts no violating shadow |
+| `carve_above_min_consecutive` | 1 | Min consecutive carved voxels to trigger carve_above (2-3 avoid column removal from stray single voxels; shorter runs stay carved) |
 | `apply_smoothing` | false | SDF smoothing + marching cubes instead of cubic mesh |
 | `min_voxels` | 300 | Remove connected components smaller than this |
 | `device` | `"auto"` | `"auto"`, `"cpu"`, or `"cuda"` |
@@ -137,6 +137,7 @@ Required parameters vary by mode. Every config needs at minimum `max_volume_path
 |-----------|-------|-------------|
 | `epw_path` | all except `tilted_plane`, `daylight` | Path to EPW weather file |
 | `start_month` .. `end_hour` | all except `tilted_plane`, `daylight` | Analysis period |
+| `sun_steps_per_hour` | `time-based` | Sun positions per hour (default 12 = every 5 min; Ladybug timesteps 1-60) |
 | `balance_temperature` | `benefit` | Free-running balance-point temperature (C); unused when `simulated_weights_path` is set |
 | `balance_offset` | `benefit` | Dead-band offset (C); unused when `simulated_weights_path` is set |
 | `simulated_weights_path` | `benefit` | Path to a `simulated_weights.json` artifact (`usc simulate-weights`): simulated hourly weights replace the balance-point rule ([details](../modes.md#simulated-weights)) |
@@ -154,7 +155,7 @@ After preprocessing computes per-voxel obstruction scores, thresholding decides 
 
     **`tilted_plane`** is strictly binary -- a voxel either protrudes above the cut plane (removed) or it does not (kept). Do not set `threshold`; leave it unset (`None`). Setting a string method or a value > 0 raises a validation error.
 
-    **`time-based`** scores are **integer violation counts** (how many sun-position time steps the voxel shadows a test surface). Use a non-negative integer: `threshold: 0` removes any voxel that shadows even once (strict, default); `threshold: 1` allows one time step of shadowing; and so on. See [Modes -- violation-count thresholds](../modes.md#for-violation-count-modes-time-based-tilted_plane) for details.
+    **`time-based`** scores are **violation durations in hours** (how long the voxel shadows a test surface during the period, at `sun_steps_per_hour` resolution). Use a non-negative number: `threshold: 0` removes any voxel that shadows at any sampled moment (strict, default); `threshold: 1` tolerates up to one hour; and so on. See [Modes -- violation-count thresholds](../modes.md#for-violation-count-modes-time-based-tilted_plane) for details.
 
 **`carve_fraction`** (recommended for weighted modes)
 :   Removes a percentage of total obstruction weight. Set `carve_fraction: 0.7` to remove 70% of obstruction (aggressive -- taller, slimmer result with better solar access). Set `carve_fraction: 0.3` for a conservative result (bulkier volume, more floor area). This is the most intuitive option: a **solar protection slider**.

@@ -10,7 +10,7 @@ Inputs
 ------
 config : USCConfig
     Config handle from USC Config.
-max_volume : Mesh or Brep
+max_volume : Mesh or Brep (list)
     Maximum volume envelope geometry.
 test_surfaces : Mesh or Brep (list)
     Insolation test surfaces.
@@ -47,8 +47,8 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config. Contains mode, file paths, and all parameter overrides."
-    ii[1].Name, ii[1].Description = "max_volume", "The maximum building envelope -- the largest volume the building could occupy before solar carving. Provide as Rhino Mesh or Brep. Multiple objects accepted (set input to List Access)."
-    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces that need solar access (neighbouring facades, public spaces, parks). Rays are cast FROM these surfaces THROUGH the max volume. Provide as Rhino Mesh or Brep. Set input to List Access. Surfaces are subsampled into a uniform point grid at grid_step spacing (set in USC_GridSettings) — each sample point generates rays, so smaller grid_step = more points = finer results but slower. IMPORTANT: each surface must be a single flat panel — explode polysurfaces (e.g. extruded block boundaries) into individual faces before connecting, otherwise preprocessing will fail with a planarity error."
+    ii[1].Name, ii[1].Description = "max_volume", "The maximum building envelope -- the largest volume the building could occupy before solar carving. Provide as Rhino Mesh or Brep. Multiple objects accepted."
+    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces that need solar access (neighbouring facades, public spaces, parks). Rays are cast FROM these surfaces THROUGH the max volume. Provide as Rhino Mesh or Brep (one or many). Surfaces are subsampled into a uniform point grid at grid_step spacing (set in USC_GridSettings) — each sample point generates rays, so smaller grid_step = more points = finer results but slower. IMPORTANT: each surface must be a single flat panel — explode polysurfaces (e.g. extruded block boundaries) into individual faces before connecting, otherwise preprocessing will fail with a planarity error."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle to execute. Set True to run preprocessing. Set False to prevent computation (useful while adjusting parameters)."
     oo[0].Name, oo[0].Description = "pre_result", "Path to the preprocessing manifest file. Connect this to USC_ThresholdStage's 'pre_result' input to continue the pipeline."
     oo[1].Name, oo[1].Description = "diagnostics", "Text summary: grid dimensions, filled voxels, score range, timing. Check this to verify the preprocessing ran correctly."
@@ -137,10 +137,10 @@ def _flatten_geometry(items):
 def _export_mesh_to_ply(mesh, path, include_normals=True):
     """Write a triangulated Rhino Mesh to binary PLY (little-endian).
 
-    Uses .NET bulk array operations (ToFloatArray + Buffer.BlockCopy) to
-    bypass per-vertex Python loops.  GhPython loops are significantly slower
-    than C++/.NET bulk paths; this eliminates the vertex serialization
-    bottleneck for large meshes.
+    Vertex positions are written as doubles: float32 keeps ~7 significant
+    digits, i.e. ~0.5 m at UTM northings (~4.5e6 m), which is half a typical
+    voxel.  ToPoint3dArray() returns Rhino's double-precision vertices when
+    the mesh has them (meshes from Breps do).  Normals stay float32.
 
     Parameters
     ----------
@@ -152,7 +152,6 @@ def _export_mesh_to_ply(mesh, path, include_normals=True):
         (produces hollow shell instead of solid fill).
     """
     import struct
-    import System
 
     mesh.Faces.ConvertQuadsToTriangles()
     mesh.Normals.ComputeNormals()
@@ -161,7 +160,7 @@ def _export_mesh_to_ply(mesh, path, include_normals=True):
 
     with open(path, "wb") as f:
         # -- Header --------------------------------------------------------
-        props = "property float x\nproperty float y\nproperty float z\n"
+        props = "property double x\nproperty double y\nproperty double z\n"
         if include_normals:
             props += (
                 "property float nx\nproperty float ny\nproperty float nz\n"
@@ -176,40 +175,18 @@ def _export_mesh_to_ply(mesh, path, include_normals=True):
         )
         f.write(header.encode("ascii"))
 
-        # -- Vertices (bulk .NET path) -------------------------------------
-        # ToFloatArray() is a single C++ call returning float[nv*3]
-        pos = mesh.Vertices.ToFloatArray()
-
+        # -- Vertices ------------------------------------------------------
+        pts = mesh.Vertices.ToPoint3dArray()
         if include_normals:
-            # Bulk normal extraction; fall back to per-element if the method
-            # is unavailable in this Rhino version.
-            try:
-                nrm = mesh.Normals.ToFloatArray()
-            except (AttributeError, TypeError):
-                nrm = System.Array.CreateInstance(System.Single, nv * 3)
-                norms_list = mesh.Normals
-                for i in range(nv):
-                    n = norms_list[i]
-                    nrm[i * 3] = n.X
-                    nrm[i * 3 + 1] = n.Y
-                    nrm[i * 3 + 2] = n.Z
-
-            # Interleave [x,y,z, nx,ny,nz] per vertex via .NET Array.Copy
-            combined = System.Array.CreateInstance(System.Single, nv * 6)
+            nrm = mesh.Normals
+            vbuf = bytearray(nv * 36)  # 3 doubles + 3 floats
             for i in range(nv):
-                System.Array.Copy(pos, i * 3, combined, i * 6, 3)
-                System.Array.Copy(nrm, i * 3, combined, i * 6 + 3, 3)
-
-            nbytes = nv * 24
-            vbuf = System.Array.CreateInstance(System.Byte, nbytes)
-            System.Buffer.BlockCopy(combined, 0, vbuf, 0, nbytes)
-            f.write(bytes(bytearray(vbuf)))
+                p = pts[i]
+                n = nrm[i]
+                struct.pack_into("<dddfff", vbuf, i * 36, p.X, p.Y, p.Z, n.X, n.Y, n.Z)
         else:
-            # Zero Python loops: bulk extract → byte copy → write
-            nbytes = nv * 12
-            vbuf = System.Array.CreateInstance(System.Byte, nbytes)
-            System.Buffer.BlockCopy(pos, 0, vbuf, 0, nbytes)
-            f.write(bytes(bytearray(vbuf)))
+            vbuf = struct.pack(f"<{nv * 3}d", *[c for p in pts for c in (p.X, p.Y, p.Z)])
+        f.write(vbuf)
 
         # -- Faces (all triangles after ConvertQuadsToTriangles) -----------
         faces = mesh.Faces

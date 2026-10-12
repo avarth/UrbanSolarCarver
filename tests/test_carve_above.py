@@ -37,6 +37,9 @@ def _col_grid(columns: dict, height: int) -> tuple[np.ndarray, np.ndarray]:
             elif ch == '#':
                 mask[x, y, z] = True         # kept
                 voxel_grid[x, y, z] = True   # occupied
+            elif ch == 'o':
+                mask[x, y, z] = False        # empty, but the mask says carved
+                voxel_grid[x, y, z] = False  # (thresholding marks air False)
             else:
                 raise ValueError(f"Unknown char '{ch}' in column ({x},{y})")
     return mask, voxel_grid
@@ -53,7 +56,7 @@ class TestCarveAboveColumns:
             ###       (top-to-bottom strings)
             ##x
             x#x       A bottom-up: #,x,x,x,#,# — 3 consec >= 2 → carve 2 above
-            xx#       B bottom-up: #,#,x,#,#,# — 1 consec < 2  → patched
+            xx#       B bottom-up: #,#,x,#,#,# — 1 consec < 2  → no trigger, x stays carved
             x##       C bottom-up: #,#,#,x,x,# — 2 consec >= 2 → carve 1 above
             ###
         """
@@ -72,8 +75,8 @@ class TestCarveAboveColumns:
         assert result[0, 0, 5] == False  # was #, now carved
         assert result[0, 0, 0] == True   # bottom # unchanged
 
-        # B: run of 1 at z2, below threshold → patched back to kept
-        assert result[1, 0, 2] == True   # x patched back to #
+        # B: run of 1 at z2, below threshold → no trigger; the x stays carved
+        assert result[1, 0, 2] == False  # never refilled (would undo the constraint)
         assert result[1, 0, 3] == True
         assert result[1, 0, 4] == True
         assert result[1, 0, 5] == True
@@ -118,6 +121,25 @@ class TestCarveAboveColumns:
         assert result[0, 0, 3] == True   # . — not occupied, unchanged
         assert result[0, 0, 4] == False  # # — occupied, carved
 
+    def test_empty_cells_never_trigger(self):
+        """Air below a mass (a passage, the grid margin) is not carved mass,
+        whatever the mask says about it."""
+        from urbansolarcarver.carving import carve_above_columns
+
+        # bottom-up: o, o, o, #, #  — bridge over a passage the mask marks False
+        mask, vg = _col_grid({(0, 0): "##ooo"}, height=5)
+        result = carve_above_columns(mask, vg, min_consecutive=1)
+        assert result[0, 0, 3] and result[0, 0, 4]
+
+    def test_empty_cells_break_runs(self):
+        """x, o, x is two runs of one, not a run of three."""
+        from urbansolarcarver.carving import carve_above_columns
+
+        # bottom-up: #, x, o, x, #
+        mask, vg = _col_grid({(0, 0): "#xox#"}, height=5)
+        result = carve_above_columns(mask, vg, min_consecutive=2)
+        assert result[0, 0, 4]  # not triggered: no run reaches 2
+
     def test_does_not_mutate_input(self):
         """Input mask array must not be modified."""
         from urbansolarcarver.carving import carve_above_columns
@@ -135,19 +157,18 @@ class TestCarveAboveColumns:
         result = carve_above_columns(mask, vg, min_consecutive=1)
         assert not result[0, 0, :].any()
 
-    def test_short_runs_patched(self):
-        """Carved runs shorter than min_consecutive are patched back."""
+    def test_short_runs_do_not_trigger_and_stay_carved(self):
+        """Carved runs shorter than min_consecutive neither trigger nor refill."""
         from urbansolarcarver.carving import carve_above_columns
 
         # bottom-up: #, #, x, #, #  — single carved voxel, min=2
         mask, vg = _col_grid({(0, 0): "##x##"}, height=5)
         result = carve_above_columns(mask, vg, min_consecutive=2)
 
-        # The lone x should be patched back to #
-        assert result[0, 0, :].all()  # all kept
+        np.testing.assert_array_equal(result, mask)
 
-    def test_short_run_patched_before_long_run_triggers(self):
-        """A short run below a qualifying run is patched, then carve-above fires."""
+    def test_short_run_below_long_run_stays_carved(self):
+        """A short run below a qualifying run stays carved; carve-above fires."""
         from urbansolarcarver.carving import carve_above_columns
 
         # bottom-up: #, x, #, x, x, #, #  — run of 1 at z1, run of 2 at z3-z4
@@ -155,7 +176,7 @@ class TestCarveAboveColumns:
         result = carve_above_columns(mask, vg, min_consecutive=2)
 
         assert result[0, 0, 0] == True   # bottom #
-        assert result[0, 0, 1] == True   # x patched (run of 1 < 2)
+        assert result[0, 0, 1] == False  # x stays carved (run of 1 < 2)
         assert result[0, 0, 2] == True   # #
         assert result[0, 0, 3] == False  # x (part of qualifying run)
         assert result[0, 0, 4] == False  # x (part of qualifying run)
@@ -168,7 +189,7 @@ class TestCarveAboveColumns:
 
         mask, vg = _col_grid({
             (0, 0): "##xx#",  # 2 consecutive → carve above
-            (1, 0): "#x###",  # 1 consecutive → patched (min=2)
+            (1, 0): "#x###",  # 1 consecutive → no trigger (min=2)
         }, height=5)
         result = carve_above_columns(mask, vg, min_consecutive=2)
 
@@ -176,6 +197,6 @@ class TestCarveAboveColumns:
         assert result[0, 0, 3] == False
         assert result[0, 0, 4] == False
 
-        # Column (1,0): bottom-up #,#,#,x,# → x patched back to #
-        assert result[1, 0, 3] == True   # was x, now patched
+        # Column (1,0): bottom-up #,#,#,x,# → x stays carved, top not triggered
+        assert result[1, 0, 3] == False
         assert result[1, 0, 4] == True

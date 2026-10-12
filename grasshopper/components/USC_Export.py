@@ -132,21 +132,24 @@ def _load_ply_to_rhino(path):
         xo = xyz_off.get("x", 0)
         yo = xyz_off.get("y", 4)
         zo = xyz_off.get("z", 8)
+        # USC writes double-precision vertices for georeferenced exports.
+        xyz_size = dict(vertex_props).get("x", 4)
+        xyz_fmt = "d" if xyz_size == 8 else "f"
 
         # Read raw data
         if is_binary_le:
             raw = f.read(nv * stride)
-            if stride == 12 and xo == 0 and yo == 4 and zo == 8:
+            if stride == 3 * xyz_size and xo == 0 and yo == xyz_size and zo == 2 * xyz_size:
                 # Fast path: xyz-only layout (trimesh default, no normals)
-                verts = struct.unpack(f"<{nv * 3}f", raw)
+                verts = struct.unpack(f"<{nv * 3}{xyz_fmt}", raw)
             else:
                 # General path: extract x/y/z at their actual byte offsets
                 verts = []
                 for i in range(nv):
                     base = i * stride
-                    verts.append(struct.unpack_from("<f", raw, base + xo)[0])
-                    verts.append(struct.unpack_from("<f", raw, base + yo)[0])
-                    verts.append(struct.unpack_from("<f", raw, base + zo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + xo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + yo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + zo)[0])
             # Bulk-read all face data at once (avoids 2×nf individual reads)
             face_data = f.read()
             faces = []
@@ -178,6 +181,8 @@ def _load_ply_to_rhino(path):
 
     # Batch-build Rhino mesh
     mesh_out = rg.Mesh()
+    # Rhino stores mesh vertices as float32 by default (~0.5 m at UTM northings).
+    mesh_out.Vertices.UseDoublePrecisionVertices = True
 
     # Vertices: .NET array of Point3f → single AddVertices call
     pt_arr = System.Array.CreateInstance(rg.Point3d, nv)

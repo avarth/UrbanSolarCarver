@@ -1,10 +1,34 @@
 # Grasshopper Plugin (Rhino 3D)
 
-USC provides 24 custom Grasshopper components for visual parametric workflows in Rhino.
+USC provides 25 custom Grasshopper components for visual parametric workflows in Rhino.
 
 ## Installation
 
-Copy all `.ghuser` files from `grasshopper/USC_GHplugin/` to your Grasshopper User Objects folder, or drag them onto the Grasshopper canvas.
+Copy all `.ghuser` files from `grasshopper/USC_GHplugin/` to your Grasshopper User Objects folder, or drag them onto the Grasshopper canvas. Requires Rhino 8 (the components are Python 3 script components).
+
+## Updating components on existing canvases
+
+Components already placed on a canvas keep the code they were placed with. After installing new `.ghuser` files, drop **USC_SyncCanvas** (ribbon: *Session*) on the canvas:
+
+1. Leave `update` unconnected and read `report`: it lists which USC components are up to date and which would change. Components whose code you edited by hand count as outdated and would be overwritten.
+2. Connect a Button to `update` and click it. Components whose inputs and outputs are unchanged are replaced in place, keeping position, wires, internalised values (*Set One String*), graft/flatten/simplify settings, enabled/preview state and group membership. Components whose inputs or outputs changed are placed beside the old one inside a red group that names the new or removed ports: rewire the new component, then delete the old one and the group.
+3. The whole update is one undo step (Ctrl+Z). If anything fails mid-update, the canvas is rolled back and the error appears in `report`.
+
+By default the updates come from the installed user objects (Grasshopper's User Objects folders); wire a folder path into `folder` to update from elsewhere, e.g. `grasshopper/USC_GHplugin` in a checkout.
+
+## Rebuilding the components
+
+The `.ghuser` files are generated from the sources in `grasshopper/components/`; edit the `.py`, never the `.ghuser`. Each source declares its own ports: names and descriptions in its "GH UI" block, order and types in the numpydoc `Inputs` / `Outputs` docstring. `grasshopper/components.json` holds the ribbon subcategory and the stable user-object GUID; icons are `grasshopper/icons/<source name>.png` (24x24).
+
+```bash
+pip install -e .[ghbuild]                       # pythonnet
+python grasshopper/build_ghuser.py              # rebuild into USC_GHplugin/
+python grasshopper/build_ghuser.py --check      # exit 1 if any .ghuser is stale
+```
+
+The builder uses `GH_IO.dll` from the Rhino 8 install (`--ghio <folder>` to point elsewhere); Rhino does not need to be running. Rebuilds are byte-for-byte reproducible, so an unchanged source leaves its `.ghuser` untouched. `tests/test_gh_components.py` checks that every source's UI block matches its docstring and that every docstring type maps to a Grasshopper type hint.
+
+A component already placed on a saved canvas keeps the code it was placed with; USC_SyncCanvas updates it (see above).
 
 ## Daemon
 
@@ -25,6 +49,7 @@ All components are prefixed with `USC_`:
 **Session management**
 
 - **USC_Session**  -- daemon lifecycle and CUDA initialization. Wire a Boolean `True` to the `start_daemon` input to launch the daemon; leaving it unconnected keeps the component idle.
+- **USC_SyncCanvas**  -- update the USC components on the canvas to the installed versions (see [Updating components on existing canvases](#updating-components-on-existing-canvases))
 
 **Configuration (Tier 1)**
 

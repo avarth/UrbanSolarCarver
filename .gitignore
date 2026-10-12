@@ -57,6 +57,9 @@ legacy/
 # Example outputs (generated, contain absolute paths)
 examples/test_outputs/
 
+# Local run outputs (Monte Carlo reports: tests/montecarlo.py)
+runs/
+
 # Grasshopper dev/test canvases and build scripts (plugin .ghuser files are tracked separately)
 grasshopper/*.gh
 grasshopper/*.ghx
