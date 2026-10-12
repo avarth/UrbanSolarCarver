@@ -212,9 +212,11 @@ against an independent CPU reference marcher, plus Monte Carlo runs).
   sampling lattice coincides with that edge. The exported mesh is placed in float64 and PLY
   exports switch to double-precision vertices when float32 would round by
   more than 1 mm. A warning names float32 PLY inputs whose coordinates are
-  already rounded on disk by more than 1% of a voxel. The Grasshopper PLY
-  readers accept double-precision files and build double-precision Rhino
-  meshes.
+  already rounded on disk by more than 1% of a voxel. The Grasshopper
+  components now write their input geometry with double-precision vertices
+  (previously float32: a Brep box at UTM coordinates reached USC 0.21 m off;
+  verified exact in Rhino 8.35), and their PLY readers accept
+  double-precision files and build double-precision Rhino meshes.
 - **`carve_above` defaults to `true`** (was `false`). Time-based and
   weighted carving otherwise return mass floating above carved zones
   (8k-24k voxels on the ReSBE demo scenes): physically it casts no
