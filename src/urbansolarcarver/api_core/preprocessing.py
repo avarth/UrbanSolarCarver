@@ -322,12 +322,12 @@ def preprocessing(
         }
     if conf.mode == "radiative_cooling" and conf.min_sky_elevation_deg > 0.0:
         summary["min_sky_elevation_deg"] = float(conf.min_sky_elevation_deg)
-    if conf.mode == "benefit" and conf.usefulness_path:
+    if conf.mode == "benefit" and conf.simulated_weights_path:
         # Provenance: which physics-derived schedule weighted this carve.
-        from ..usefulness import read_usefulness
-        _b, _h, u_meta = read_usefulness(conf.usefulness_path)
-        summary["usefulness"] = {
-            "path": str(conf.usefulness_path),
+        from ..simulated_weights import read_simulated_weights
+        _b, _h, u_meta = read_simulated_weights(conf.simulated_weights_path)
+        summary["simulated_weights"] = {
+            "path": str(conf.simulated_weights_path),
             "method": u_meta.get("method"),
             "generated": u_meta.get("generated"),
             "archetype": u_meta.get("archetype"),
@@ -345,7 +345,7 @@ def preprocessing(
                 str(diag_dir / "sky_patch_weights_intensity.png"),
             ]
             save_sky_patch_weights(patch_weights, diag_dir, weight_unit=xlabel)
-            if conf.mode == "benefit" and conf.usefulness_path:
+            if conf.mode == "benefit" and conf.simulated_weights_path:
                 # How the simulated weights shifted the sky relative to the
                 # simple balance-point rule under the same config.
                 import torch

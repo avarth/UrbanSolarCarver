@@ -290,7 +290,7 @@ def compute_EPW_based_weights(
     balance_offset: float = 2.0,                            # benefit model +/- offset (°C)
     north: float = 0.0,                                     # north direction (degrees CW from +Y, USC convention)
     include_harm: bool = False,                             # benefit only: subtract hot-hour radiation (clipped at 0)
-    usefulness: "tuple | None" = None,                      # benefit only: (benefit[8760], harm[8760]) hourly weights
+    simulated_weights: "tuple | None" = None,               # benefit only: (benefit[8760], harm[8760]) hourly weights
 ) -> torch.Tensor:
     """
     Return a vector of sky-patch weights (length P) derived from
@@ -476,14 +476,14 @@ def compute_EPW_based_weights(
     if key == 'benefit':
         from ladybug.epw import EPW
 
-        if usefulness is not None:
-            # Physics-derived hourly weights (usefulness_path artifact):
+        if simulated_weights is not None:
+            # Physics-derived hourly weights (simulated_weights_path artifact):
             # scale each hour's DNI/DHI by benefit[t] before the cumulative
-            # sky matrix — the sky integration then distributes usefulness
+            # sky matrix — the sky integration then distributes the weights
             # onto exactly the patches each hour's sun and sky occupied.
             # The balance-point filter below is the binary special case of
             # this mechanism.
-            benefit_series, harm_series = usefulness
+            benefit_series, harm_series = simulated_weights
             benefit_series = np.asarray(benefit_series, dtype=np.float64)
             harm_series = np.asarray(harm_series, dtype=np.float64)
             period_mask = np.zeros(8760)
@@ -495,7 +495,7 @@ def compute_EPW_based_weights(
             if not w_ben.any():
                 import warnings
                 warnings.warn(
-                    "benefit mode (usefulness_path): the artifact's benefit "
+                    "benefit mode (simulated_weights_path): the artifact's benefit "
                     "weights are zero everywhere in the analysis period — "
                     "all patch weights are zero and the carve will be "
                     "degenerate. Widen the period or check the artifact.",
@@ -516,7 +516,7 @@ def compute_EPW_based_weights(
                     if not weights_np.any():
                         import warnings
                         warnings.warn(
-                            "benefit mode (usefulness_path, include_harm): "
+                            "benefit mode (simulated_weights_path, include_harm): "
                             "harm exceeds benefit for every sky patch — all "
                             "weights are zero and the carve will be "
                             "degenerate.",

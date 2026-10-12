@@ -153,8 +153,8 @@ class TestBenefitWeights:
         assert (w_composite <= w_default + 1e-6).all()
         assert float(w_composite.sum()) < float(w_default.sum())
 
-    def test_usefulness_all_ones_equals_irradiance(self, example_epw_path):
-        """An all-ones usefulness schedule must reproduce plain irradiance
+    def test_simulated_weights_all_ones_equals_irradiance(self, example_epw_path):
+        """An all-ones weight schedule must reproduce plain irradiance
         weights over the same hours — the artifact path is a pure hourly
         re-weighting of the same sky integration."""
         import torch
@@ -165,14 +165,14 @@ class TestBenefitWeights:
         zeros = np.zeros(8760)
         w_sched = compute_EPW_based_weights(
             "benefit", str(example_epw_path), hoys, torch.device("cpu"),
-            usefulness=(ones, zeros),
+            simulated_weights=(ones, zeros),
         )
         w_irr = compute_EPW_based_weights(
             "irradiance", str(example_epw_path), hoys, torch.device("cpu"),
         )
         torch.testing.assert_close(w_sched, w_irr, rtol=1e-3, atol=1e-2)
 
-    def test_usefulness_binary_schedule_equals_heaviside(self, example_epw_path):
+    def test_simulated_weights_binary_schedule_equals_heaviside(self, example_epw_path):
         """A 0/1 schedule built from the balance filter must reproduce the
         default benefit weights — the Heaviside is the binary special case."""
         import torch
@@ -185,7 +185,7 @@ class TestBenefitWeights:
         schedule = (dbt < bal - off).astype(np.float64)
         w_sched = compute_EPW_based_weights(
             "benefit", str(example_epw_path), hoys, torch.device("cpu"),
-            usefulness=(schedule, np.zeros(8760)),
+            simulated_weights=(schedule, np.zeros(8760)),
         )
         w_default = compute_EPW_based_weights(
             "benefit", str(example_epw_path), hoys, torch.device("cpu"),
@@ -193,7 +193,7 @@ class TestBenefitWeights:
         )
         torch.testing.assert_close(w_sched, w_default, rtol=1e-3, atol=1e-2)
 
-    def test_usefulness_harm_composite(self, example_epw_path):
+    def test_simulated_weights_harm_composite(self, example_epw_path):
         """With include_harm, the artifact path must equal
         clip(benefit-scaled − harm-scaled, 0)."""
         import torch
@@ -205,20 +205,20 @@ class TestBenefitWeights:
         harm = rng.uniform(0.0, 0.9, 8760)
         w_ben_only = compute_EPW_based_weights(
             "benefit", str(example_epw_path), hoys, torch.device("cpu"),
-            usefulness=(benefit, np.zeros(8760)),
+            simulated_weights=(benefit, np.zeros(8760)),
         )
         w_harm_only = compute_EPW_based_weights(
             "benefit", str(example_epw_path), hoys, torch.device("cpu"),
-            usefulness=(harm, np.zeros(8760)),
+            simulated_weights=(harm, np.zeros(8760)),
         )
         w_composite = compute_EPW_based_weights(
             "benefit", str(example_epw_path), hoys, torch.device("cpu"),
-            usefulness=(benefit, harm), include_harm=True,
+            simulated_weights=(benefit, harm), include_harm=True,
         )
         expected = torch.clamp(w_ben_only - w_harm_only, min=0.0)
         torch.testing.assert_close(w_composite, expected, rtol=1e-3, atol=1e-2)
 
-    def test_usefulness_zero_in_period_warns(self, example_epw_path):
+    def test_simulated_weights_zero_in_period_warns(self, example_epw_path):
         import torch
         from urbansolarcarver.sky_patches import compute_EPW_based_weights
 
@@ -228,7 +228,7 @@ class TestBenefitWeights:
         with pytest.warns(UserWarning, match="zero everywhere"):
             w = compute_EPW_based_weights(
                 "benefit", str(example_epw_path), hoys, torch.device("cpu"),
-                usefulness=(schedule, np.zeros(8760)),
+                simulated_weights=(schedule, np.zeros(8760)),
             )
         assert float(w.sum()) == 0.0
 

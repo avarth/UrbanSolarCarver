@@ -57,7 +57,7 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "session", "Session handle from the USC_Session component. Drag a wire from USC_Session's 'session' output to here."
-    ii[1].Name, ii[1].Description = "mode", "Carving algorithm. Options: 'benefit' (heating/cooling balance-point envelope), 'time-based' (shadow-hour envelope), 'irradiance' (total solar radiation envelope), 'daylight' (CIE overcast daylight envelope), 'tilted_plane' (geometric daylight access angle), 'radiative_cooling' (experimental night-sky cooling)."
+    ii[1].Name, ii[1].Description = "mode", "Carving algorithm. Options: 'benefit' (heating-benefit envelope; hour weighting via balance point or, with USC_SimulateWeights, a 5R1C building simulation), 'time-based' (shadow-hour envelope), 'irradiance' (total solar radiation envelope), 'daylight' (CIE overcast daylight envelope), 'tilted_plane' (geometric daylight access angle), 'radiative_cooling' (experimental night-sky cooling)."
     ii[2].Name, ii[2].Description = "epw_path", "Full path to an EnergyPlus Weather (.epw) file for your location. Required for all modes except 'tilted_plane' and 'daylight'. Download from climate.onebuilding.org or ladybug.tools."
     ii[3].Name, ii[3].Description = "out_dir", "Folder where all results will be saved. A subfolder structure (preprocessing/, thresholding/, exporting/) is created automatically. Tip: use a fresh folder for each experiment."
     ii[4].Name, ii[4].Description = "config_yaml", "Optional. Path to a base YAML configuration file. If omitted, the tool picks a sensible default for your chosen mode. Only needed for advanced customisation."

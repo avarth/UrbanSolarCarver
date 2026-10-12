@@ -426,43 +426,34 @@ def warmup(
 # ---------------------------------------------------------------------------
 # validate — quick config check without loading heavy deps
 # ---------------------------------------------------------------------------
-@app.command(help="Generate a solar-usefulness artifact (ISO 13790 5R1C) for benefit mode")
-def usefulness(
+@app.command(name="simulate-weights", help="Generate a simulated-weights artifact (ISO 13790 5R1C) for benefit mode")
+def simulate_weights(
     epw: Path = Option(..., "-e", "--epw", exists=True, readable=True,
                        help="EPW weather file"),
     archetype: Path = Option(..., "-a", "--archetype", exists=True, readable=True,
                              help="Archetype YAML (see configs/archetype_example.yaml)"),
-    out: Path = Option(Path("solar_usefulness.json"), "-o", "--out",
+    out: Path = Option(Path("simulated_weights.json"), "-o", "--out",
                        help="Output artifact path"),
     eps: float = Option(1.0, "--eps",
                         help="Perturbation size in W (central differences)"),
 ):
-    """Hourly marginal solar usefulness (benefit + harm) from the
+    """Simulated benefit weights: hourly marginal benefit + harm of solar gain from the
     ISO 13790 Annex C simple hourly model (5R1C), by perturbation.
 
-    The artifact feeds benefit mode's ``usefulness_path`` config key,
+    The artifact feeds benefit mode's ``simulated_weights_path`` config key,
     replacing the balance-point Heaviside hour filter with physics-derived
-    hourly weights. See design/solar-usefulness.md.
+    hourly weights. See design/simulated-weights.md.
     """
     import yaml
-    from urbansolarcarver.usefulness import generate_usefulness
+    from urbansolarcarver.simulated_weights import generate_simulated_weights
 
     arch = yaml.safe_load(archetype.read_text(encoding="utf-8"))
     if not isinstance(arch, dict):
         typer.secho("  Archetype file must be a YAML mapping", fg="red")
         raise typer.Exit(1)
-    profile = arch.pop("internal_gains_profile_w_m2", None)
-    flat = arch.pop("internal_gains_w_m2", None)
-    if profile is not None and flat is not None:
-        typer.secho("  Specify either internal_gains_w_m2 or "
-                    "internal_gains_profile_w_m2, not both", fg="red")
-        raise typer.Exit(1)
-    internal = profile if profile is not None else (
-        flat if flat is not None else 5.0)
     typer.echo(f"  Running 5R1C perturbation attribution ({epw.name}) ...")
     try:
-        path = generate_usefulness(str(epw), arch, out,
-                                   internal_gains_w_m2=internal, eps=eps)
+        path = generate_simulated_weights(str(epw), arch, out, eps=eps)
     except (ValueError, TypeError) as exc:
         typer.secho(f"  {exc}", fg="red")
         raise typer.Exit(1)
@@ -470,6 +461,207 @@ def usefulness(
     preview = path.with_suffix(".png")
     if preview.exists():
         typer.echo(f"  Weights preview: {preview}")
+
+
+# Shoebox archetype template written by `usc archetype`. Values are the
+# neutral example set; -s overrides replace them before writing.
+_ARCHETYPE_TEMPLATE = """\
+# Building archetype for `usc simulate-weights` (simulated benefit weights).
+# Shoebox form: floor area, volume, facade and window areas are derived.
+# NEUTRAL EXAMPLE VALUES: source real ones from TABULA (EU), DOE prototypes
+# (US), or your national code tables. See design/simulated-weights.md.
+
+# --- Geometry ---
+width: {width}              # m, east-west dimension
+length: {length}             # m, north-south dimension
+height: {height}             # m, storey height
+wwr:                     # window-to-wall ratio per facade (omit = no windows)
+{wwr_block}g_value: {g_value}             # glazing solar transmittance
+{orientation_line}
+# --- Fabric and systems ---
+u_opaque: {u_opaque}            # W/m2K, area-weighted opaque envelope U-value
+u_window: {u_window}            # W/m2K, glazing U-value
+ach_vent: {ach_vent}            # 1/h intentional ventilation
+ach_infiltration: {ach_infiltration}    # 1/h infiltration
+heat_recovery: {heat_recovery}       # 0-1 ventilation heat-recovery efficiency
+mass_class: {mass_class}       # very_light | light | medium | heavy | very_heavy
+t_set_heating: {t_set_heating}      # deg C
+t_set_cooling: {t_set_cooling}      # deg C
+internal_gains_w_m2: {internal_gains_w_m2} # W per m2 floor area, flat schedule
+{shading_block}"""
+
+_SHADING_TEMPLATE = """\
+
+# --- Shading coefficients (declared multipliers; no device geometry) ---
+# Transmission factors in [0, 1]: 1 = no shading. Scalar applies to all
+# facades; a mapping (north/east/south/west) sets them per facade.
+{shading_permanent_line}
+{shading_hot_line}
+{hot_months_line}
+"""
+
+_ARCHETYPE_DEFAULTS = {
+    "width": 10.0, "length": 10.0, "height": 3.0,
+    "wwr": {"south": 0.35, "east": 0.15, "west": 0.15},
+    "g_value": 0.6, "orientation": 0.0,
+    "u_opaque": 0.6, "u_window": 1.6,
+    "ach_vent": 0.8, "ach_infiltration": 0.3, "heat_recovery": 0.0,
+    "mass_class": "medium",
+    "t_set_heating": 20.0, "t_set_cooling": 26.0,
+    "internal_gains_w_m2": 5.0,
+}
+_WWR_SIDES = ("north", "east", "south", "west")
+# Optional keys with no default (absent = feature off).
+_ARCHETYPE_OPTIONAL = ("shading_permanent", "shading_hot", "hot_months")
+
+
+@app.command(help="Create and validate a shoebox archetype YAML for simulate-weights")
+def archetype(
+    out: Path = Option(Path("archetype.yaml"), "-o", "--out",
+                       help="Output archetype YAML path"),
+    set_: List[str] = Option([], "-s", "--set",
+                             help="Override a field, e.g. -s width=12 "
+                                  "-s wwr_south=0.4 -s mass_class=heavy"),
+    from_: Optional[Path] = Option(None, "--from",
+                                   help="Start from an existing shoebox "
+                                        "archetype YAML instead of defaults"),
+    force: bool = Option(False, "--force",
+                         help="Overwrite the output file if it exists"),
+):
+    """Build a shoebox archetype, validate it, and report derived quantities.
+
+    The file is validated through the same code path the generator uses
+    (``expand_shoebox`` + ``ZoneParams.from_archetype``) before writing, and
+    the derived floor area, volume, and per-facade window areas are printed
+    so mistakes surface here rather than inside a simulation.
+
+    Only the shoebox form is built by this command; explicit-area archetypes
+    are edited directly in YAML (see configs/archetype_example.yaml).
+    """
+    import yaml
+    from urbansolarcarver.simulated_weights import (
+        ZoneParams, expand_shoebox,
+    )
+
+    values = dict(_ARCHETYPE_DEFAULTS)
+    values["wwr"] = dict(values["wwr"])
+
+    if from_ is not None:
+        base = yaml.safe_load(from_.read_text(encoding="utf-8"))
+        if not isinstance(base, dict):
+            typer.secho("  --from file must be a YAML mapping", fg="red")
+            raise typer.Exit(1)
+        explicit = {"floor_area", "volume", "area_opaque", "area_window",
+                    "windows"} & base.keys()
+        if explicit:
+            typer.secho(f"  --from file uses explicit areas {sorted(explicit)}; "
+                        "only shoebox-form archetypes can be edited here — "
+                        "edit that YAML directly instead", fg="red")
+            raise typer.Exit(1)
+        unknown = (set(base) - set(_ARCHETYPE_DEFAULTS) - {"wwr"}
+                   - set(_ARCHETYPE_OPTIONAL))
+        if unknown:
+            typer.secho(f"  Unknown archetype keys in --from file: "
+                        f"{sorted(unknown)}", fg="red")
+            raise typer.Exit(1)
+        wwr = base.pop("wwr", None)
+        values.update(base)
+        if wwr is not None:
+            values["wwr"] = dict(wwr)
+
+    for item in set_:
+        if "=" not in item:
+            typer.secho(f"  Bad -s override {item!r}: expected KEY=VALUE",
+                        fg="red")
+            raise typer.Exit(1)
+        key, _, raw = item.partition("=")
+        key = key.strip()
+        raw = raw.strip()
+        if key.startswith("wwr_"):
+            side = key[4:]
+            if side not in _WWR_SIDES:
+                typer.secho(f"  Unknown facade {side!r}: use wwr_north / "
+                            "wwr_east / wwr_south / wwr_west", fg="red")
+                raise typer.Exit(1)
+            values["wwr"][side] = float(raw)
+            continue
+        if key == "hot_months":
+            values[key] = [int(m) for m in raw.split(",") if m.strip()]
+            continue
+        if key in ("shading_permanent", "shading_hot"):
+            values[key] = float(raw)
+            continue
+        if key not in _ARCHETYPE_DEFAULTS or key == "wwr":
+            typer.secho(f"  Unknown archetype key {key!r}", fg="red")
+            raise typer.Exit(1)
+        if key == "mass_class":
+            values[key] = raw
+        else:
+            values[key] = float(raw)
+
+    # Drop zero-WWR facades so the written file stays minimal.
+    values["wwr"] = {s: v for s, v in values["wwr"].items() if v > 0.0}
+
+    # Validate through the generator's own code path and derive quantities.
+    arch = {k: v for k, v in values.items()
+            if k not in ("internal_gains_w_m2",) + _ARCHETYPE_OPTIONAL
+            and not (k == "orientation" and not v)}
+    try:
+        expanded = expand_shoebox(arch)
+        windows = expanded.pop("windows")
+        ZoneParams.from_archetype(**expanded)
+        if any(k in values for k in _ARCHETYPE_OPTIONAL):
+            from urbansolarcarver.simulated_weights import _shading_factors
+            _shading_factors(windows,
+                             values.get("shading_permanent"),
+                             values.get("shading_hot"),
+                             values.get("hot_months"))
+    except (ValueError, TypeError) as exc:
+        typer.secho(f"  INVALID archetype: {exc}", fg="red")
+        raise typer.Exit(1)
+
+    if out.exists() and not force:
+        typer.secho(f"  {out} exists — use --force to overwrite", fg="red")
+        raise typer.Exit(1)
+
+    wwr_block = "".join(f"  {side}: {values['wwr'][side]}\n"
+                        for side in _WWR_SIDES if side in values["wwr"])
+    orientation_line = (
+        f"orientation: {values['orientation']}        # deg, rotate the box clockwise from north"
+        if values.get("orientation") else
+        "# orientation: 0.0       # deg, rotate the box clockwise from north"
+    )
+    shading_block = _SHADING_TEMPLATE.format(
+        shading_permanent_line=(
+            f"shading_permanent: {values['shading_permanent']}"
+            if "shading_permanent" in values else
+            "# shading_permanent: 0.9"),
+        shading_hot_line=(
+            f"shading_hot: {values['shading_hot']}"
+            if "shading_hot" in values else
+            "# shading_hot: 0.5"),
+        hot_months_line=(
+            f"hot_months: {values['hot_months']}"
+            if "hot_months" in values else
+            "# hot_months: [6, 7, 8, 9]"),
+    )
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(_ARCHETYPE_TEMPLATE.format(
+        wwr_block=wwr_block, orientation_line=orientation_line,
+        shading_block=shading_block,
+        **{k: v for k, v in values.items()
+           if k not in ("wwr", "orientation") + _ARCHETYPE_OPTIONAL},
+    ), encoding="utf-8")
+
+    typer.secho(f"  Wrote {out}", fg="green", bold=True)
+    typer.echo("  Derived from the shoebox geometry:")
+    typer.echo(f"    floor_area:  {expanded['floor_area']:.1f} m2")
+    typer.echo(f"    volume:      {expanded['volume']:.1f} m3")
+    typer.echo(f"    area_opaque: {expanded['area_opaque']:.1f} m2 (opaque walls + roof)")
+    typer.echo(f"    area_window: {expanded['area_window']:.1f} m2")
+    for az, area, g in windows:
+        typer.echo(f"      window: azimuth {az:5.1f} deg, {area:.1f} m2, g={g}")
+    typer.echo(f"  Next: usc simulate-weights -e <weather.epw> -a {out}")
 
 
 @app.command(help="Validate a config file without running the pipeline")
@@ -503,6 +695,16 @@ def validate(
         problems.append(f"test_surface_path not found: {cfg.test_surface_path}")
     if cfg.epw_path and not Path(cfg.epw_path).exists():
         problems.append(f"epw_path not found: {cfg.epw_path}")
+    if getattr(cfg, "simulated_weights_path", None):
+        # Validate the artifact itself, not just the path: a wrong-schema
+        # or truncated file should fail here, not mid-preprocessing.
+        try:
+            from urbansolarcarver.simulated_weights import read_simulated_weights
+            _b, _h, meta = read_simulated_weights(cfg.simulated_weights_path)
+            typer.echo(f"    weights:    {cfg.simulated_weights_path} "
+                       f"({meta.get('method', 'unknown method')})")
+        except (ValueError, OSError) as exc:
+            problems.append(f"simulated_weights_path invalid: {exc}")
 
     if problems:
         typer.echo()

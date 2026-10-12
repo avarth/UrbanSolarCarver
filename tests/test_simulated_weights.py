@@ -1,4 +1,4 @@
-"""Tests for the Tier 1.5 solar-usefulness generator (ISO 13790 5R1C).
+"""Tests for the simulated-weights generator (ISO 13790 5R1C).
 
 The oracle regression replays the exact driving arrays stored in
 tests/data/oracle_5r1c_reference.json (captured from ETH's
@@ -12,14 +12,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from urbansolarcarver.usefulness import (
+from urbansolarcarver.simulated_weights import (
     HOURS,
     MASS_CLASSES,
     ZoneParams,
-    read_usefulness,
+    read_simulated_weights,
     simulate,
-    solar_usefulness,
-    write_usefulness,
+    attribute_solar_gains,
+    write_simulated_weights,
 )
 
 _REF_PATH = Path(__file__).parent / "data" / "oracle_5r1c_reference.json"
@@ -167,24 +167,24 @@ class TestFromArchetype:
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(scope="module")
-def usefulness():
+def weight_series():
     """One full attribution run (17 521 trajectories), shared by tests."""
     name = "medium_office"
     params = _params_from_reference(name)
-    return solar_usefulness(params, *_driving(name))
+    return attribute_solar_gains(params, *_driving(name))
 
 
-class TestSolarUsefulness:
-    def test_bounds_and_shape(self, usefulness):
-        benefit, harm = usefulness
+class TestAttribution:
+    def test_bounds_and_shape(self, weight_series):
+        benefit, harm = weight_series
         assert benefit.shape == harm.shape == (HOURS,)
         assert benefit.min() >= 0.0 and benefit.max() <= 1.0
         assert harm.min() >= 0.0 and harm.max() <= 1.0
 
-    def test_seasonal_structure(self, usefulness):
+    def test_seasonal_structure(self, weight_series):
         """Winter gains must be mostly beneficial, summer gains mostly
         harmful — under Golden CO weather and the office archetype."""
-        benefit, harm = usefulness
+        benefit, harm = weight_series
         jan = slice(0, 31 * 24)
         jul = slice(181 * 24, 212 * 24)
         assert benefit[jan].mean() > 0.5
@@ -192,11 +192,11 @@ class TestSolarUsefulness:
         assert harm[jul].mean() > harm[jan].mean()
         assert harm[jan].mean() < 0.2
 
-    def test_lag_is_captured(self, usefulness):
-        """Usefulness must extend beyond the hour of arrival: midday winter
+    def test_lag_is_captured(self, weight_series):
+        """Credit must extend beyond the hour of arrival: midday winter
         gains (arriving when the zone may be gain-rich) still show high
         benefit because the mass releases them into the cold night."""
-        benefit, _harm = usefulness
+        benefit, _harm = weight_series
         jan_noon = benefit[12:31 * 24:24]
         assert jan_noon.mean() > 0.5
 
@@ -205,11 +205,11 @@ class TestSolarUsefulness:
 # End-to-end generator (EPW + archetype YAML → artifact)
 # ---------------------------------------------------------------------------
 
-class TestGenerateTier15:
+class TestGenerateSimulatedWeights:
     def test_example_archetype_end_to_end(self, tmp_path):
         import yaml
         from _epw import resolve_epw
-        from urbansolarcarver.usefulness import generate_tier15
+        from urbansolarcarver.simulated_weights import generate_simulated_weights
 
         epw = resolve_epw()
         if not epw:
@@ -219,9 +219,9 @@ class TestGenerateTier15:
         arch = yaml.safe_load(arch_path.read_text(encoding="utf-8"))
         internal = arch.pop("internal_gains_w_m2")
 
-        out = generate_tier15(epw, arch, tmp_path / "u.json",
+        out = generate_simulated_weights(epw, arch, tmp_path / "u.json",
                               internal_gains_w_m2=internal)
-        benefit, harm, meta = read_usefulness(out)
+        benefit, harm, meta = read_simulated_weights(out)
         assert meta["method"] == "iso13790-5r1c-perturbation"
         assert meta["archetype"]["mass_class"] == "medium"
         jan = slice(0, 31 * 24)
@@ -230,9 +230,9 @@ class TestGenerateTier15:
         assert harm[jul].mean() > harm[jan].mean()
 
     def test_missing_windows_raises(self, tmp_path):
-        from urbansolarcarver.usefulness import generate_tier15
+        from urbansolarcarver.simulated_weights import generate_simulated_weights
         with pytest.raises(ValueError, match="windows"):
-            generate_tier15("dummy.epw", {"floor_area": 10.0},
+            generate_simulated_weights("dummy.epw", {"floor_area": 10.0},
                             tmp_path / "u.json")
 
     def test_daily_occupancy_profile(self, tmp_path):
@@ -240,7 +240,7 @@ class TestGenerateTier15:
         wrong lengths are rejected."""
         import yaml
         from _epw import resolve_epw
-        from urbansolarcarver.usefulness import generate_tier15
+        from urbansolarcarver.simulated_weights import generate_simulated_weights
 
         epw = resolve_epw()
         if not epw:
@@ -250,13 +250,13 @@ class TestGenerateTier15:
         arch = yaml.safe_load(arch_path.read_text(encoding="utf-8"))
         arch.pop("internal_gains_w_m2")
         profile = [2.0] * 8 + [10.0] * 12 + [2.0] * 4  # office-like day
-        out = generate_tier15(epw, arch, tmp_path / "u.json",
+        out = generate_simulated_weights(epw, arch, tmp_path / "u.json",
                               internal_gains_w_m2=profile)
-        _b, _h, meta = read_usefulness(out)
+        _b, _h, meta = read_simulated_weights(out)
         assert meta["archetype"]["internal_gains_w_m2"] == profile
 
         with pytest.raises(ValueError, match="24-value"):
-            generate_tier15(epw, arch, tmp_path / "u2.json",
+            generate_simulated_weights(epw, arch, tmp_path / "u2.json",
                             internal_gains_w_m2=[1.0, 2.0, 3.0])
 
 
@@ -269,8 +269,8 @@ class TestArtifactIO:
         benefit = np.linspace(0, 1, HOURS)
         harm = np.linspace(1, 0, HOURS)
         meta = {"method": "test", "epw": "x.epw"}
-        path = write_usefulness(tmp_path / "u.json", benefit, harm, meta)
-        b2, h2, m2 = read_usefulness(path)
+        path = write_simulated_weights(tmp_path / "u.json", benefit, harm, meta)
+        b2, h2, m2 = read_simulated_weights(path)
         np.testing.assert_allclose(b2, benefit, atol=1e-6)
         np.testing.assert_allclose(h2, harm, atol=1e-6)
         assert m2["method"] == "test"
@@ -278,16 +278,16 @@ class TestArtifactIO:
     def test_validation_rejects_bad_series(self, tmp_path):
         good = np.zeros(HOURS)
         with pytest.raises(ValueError, match="8760"):
-            write_usefulness(tmp_path / "u.json", np.zeros(10), good, {})
+            write_simulated_weights(tmp_path / "u.json", np.zeros(10), good, {})
         with pytest.raises(ValueError, match=r"\[0, 1\]"):
-            write_usefulness(tmp_path / "u.json", good - 0.5, good, {})
+            write_simulated_weights(tmp_path / "u.json", good - 0.5, good, {})
 
     def test_read_rejects_wrong_schema(self, tmp_path):
         p = tmp_path / "u.json"
         p.write_text(json.dumps({"schema_version": 99, "hourly": {}}),
                      encoding="utf-8")
         with pytest.raises(ValueError, match="schema_version"):
-            read_usefulness(p)
+            read_simulated_weights(p)
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +304,7 @@ class TestExpandShoebox:
     }
 
     def test_derived_areas(self):
-        from urbansolarcarver.usefulness import expand_shoebox
+        from urbansolarcarver.simulated_weights import expand_shoebox
         arch = expand_shoebox(self.BASE)
         assert arch["floor_area"] == pytest.approx(80.0)
         assert arch["volume"] == pytest.approx(240.0)
@@ -320,32 +320,149 @@ class TestExpandShoebox:
         assert "width" not in arch and "wwr" not in arch
 
     def test_orientation_rotates_azimuths(self):
-        from urbansolarcarver.usefulness import expand_shoebox
+        from urbansolarcarver.simulated_weights import expand_shoebox
         arch = expand_shoebox({**self.BASE, "orientation": 30.0})
         azimuths = sorted(az for az, _, _ in arch["windows"])
         assert azimuths == [pytest.approx(120.0), pytest.approx(210.0)]
 
     def test_passthrough_without_shoebox_keys(self):
-        from urbansolarcarver.usefulness import expand_shoebox
+        from urbansolarcarver.simulated_weights import expand_shoebox
         explicit = {"floor_area": 100.0, "windows": [[180, 10, 0.6]]}
         assert expand_shoebox(explicit) == explicit
 
     def test_rejects_mixed_forms(self):
-        from urbansolarcarver.usefulness import expand_shoebox
+        from urbansolarcarver.simulated_weights import expand_shoebox
         with pytest.raises(ValueError, match="not both"):
             expand_shoebox({**self.BASE, "floor_area": 100.0})
 
     def test_rejects_incomplete_geometry(self):
-        from urbansolarcarver.usefulness import expand_shoebox
+        from urbansolarcarver.simulated_weights import expand_shoebox
         bad = {k: v for k, v in self.BASE.items() if k != "height"}
         with pytest.raises(ValueError, match="height"):
             expand_shoebox(bad)
 
     def test_rejects_bad_wwr(self):
-        from urbansolarcarver.usefulness import expand_shoebox
+        from urbansolarcarver.simulated_weights import expand_shoebox
         with pytest.raises(ValueError, match="wwr keys"):
             expand_shoebox({**self.BASE, "wwr": {"southeast": 0.3}})
         with pytest.raises(ValueError, match=r"\[0, 1\)"):
             expand_shoebox({**self.BASE, "wwr": {"south": 1.0}})
         with pytest.raises(ValueError, match="no windows"):
             expand_shoebox({**self.BASE, "wwr": {}})
+
+
+class TestGainsFromArchetype:
+    """generate_simulated_weights reads internal gains from the archetype."""
+
+    def _epw(self):
+        from tests._epw import resolve_epw
+        return resolve_epw() or None
+
+    def test_gains_key_inside_archetype(self, tmp_path):
+        epw = self._epw()
+        if epw is None:
+            pytest.skip("no EPW available")
+        from urbansolarcarver.simulated_weights import (
+            generate_simulated_weights, read_simulated_weights,
+        )
+        arch = dict(TestExpandShoebox.BASE)
+        arch["internal_gains_w_m2"] = 7.5
+        out = generate_simulated_weights(epw, arch, tmp_path / "w.json")
+        _b, _h, meta = read_simulated_weights(out)
+        assert meta["archetype"]["internal_gains_w_m2"] == pytest.approx(7.5)
+
+    def test_both_gains_keys_raise(self, tmp_path):
+        epw = self._epw()
+        if epw is None:
+            pytest.skip("no EPW available")
+        from urbansolarcarver.simulated_weights import generate_simulated_weights
+        arch = dict(TestExpandShoebox.BASE)
+        arch["internal_gains_w_m2"] = 5.0
+        arch["internal_gains_profile_w_m2"] = [5.0] * 24
+        with pytest.raises(ValueError, match="not both"):
+            generate_simulated_weights(epw, arch, tmp_path / "w.json")
+
+
+class TestShadingCoefficients:
+    """Declared shading multipliers: permanent + hot-period, scalar or per-facade."""
+
+    def test_normalize_scalar_and_mapping(self):
+        from urbansolarcarver.simulated_weights import _normalize_shading
+        assert _normalize_shading(0.8, "x") == {
+            "north": 0.8, "east": 0.8, "south": 0.8, "west": 0.8}
+        out = _normalize_shading({"south": 0.5}, "x")
+        assert out["south"] == 0.5 and out["north"] == 1.0
+
+    def test_normalize_rejects_bad_values(self):
+        from urbansolarcarver.simulated_weights import _normalize_shading
+        with pytest.raises(ValueError, match="facade keys"):
+            _normalize_shading({"southeast": 0.5}, "x")
+        with pytest.raises(ValueError, match=r"\[0, 1\]"):
+            _normalize_shading(1.5, "x")
+
+    def test_hot_months_mask(self):
+        from urbansolarcarver.simulated_weights import _hot_months_mask
+        mask = _hot_months_mask([6, 7, 8, 9])
+        assert mask.sum() == (30 + 31 + 31 + 30) * 24
+        assert not mask[0]                      # Jan 1
+        assert mask[(31+28+31+30+31) * 24]      # Jun 1, hour 0
+        with pytest.raises(ValueError, match="1-12"):
+            _hot_months_mask([0, 13])
+
+    def test_nearest_cardinal_binning(self):
+        from urbansolarcarver.simulated_weights import _nearest_cardinal
+        assert _nearest_cardinal(350) == "north"
+        assert _nearest_cardinal(44) == "north"
+        assert _nearest_cardinal(46) == "east"
+        assert _nearest_cardinal(180) == "south"
+        assert _nearest_cardinal(225) == "west"
+
+    def test_hot_requires_months_and_vice_versa(self):
+        from urbansolarcarver.simulated_weights import _shading_factors
+        windows = [[180.0, 10.0, 0.6]]
+        with pytest.raises(ValueError, match="requires hot_months"):
+            _shading_factors(windows, None, 0.5, None)
+        with pytest.raises(ValueError, match="no effect"):
+            _shading_factors(windows, None, None, [7])
+
+    def test_hot_only_leaves_cold_season_untouched(self, tmp_path):
+        from tests._epw import resolve_epw
+        epw = resolve_epw()
+        if not epw:
+            pytest.skip("no EPW available")
+        from urbansolarcarver.simulated_weights import (
+            generate_simulated_weights, read_simulated_weights,
+        )
+        arch = dict(TestExpandShoebox.BASE)
+        plain = read_simulated_weights(
+            generate_simulated_weights(epw, dict(arch), tmp_path / "p.json"))
+        arch.update(shading_hot=0.3, hot_months=[7, 8])
+        shaded = read_simulated_weights(
+            generate_simulated_weights(epw, arch, tmp_path / "s.json"))
+        b_plain, h_plain = plain[0].reshape(365, 24), plain[1].reshape(365, 24)
+        b_shad, h_shad = shaded[0].reshape(365, 24), shaded[1].reshape(365, 24)
+        # January identical (no permanent factor, hot shading inactive)
+        np.testing.assert_allclose(b_shad[:31], b_plain[:31], atol=1e-6)
+        # July harm strictly reduced
+        assert h_shad[181:212].mean() < 0.6 * h_plain[181:212].mean()
+        # provenance recorded
+        assert shaded[2]["archetype"]["hot_months"] == [7, 8]
+
+    def test_scalar_equals_uniform_mapping(self, tmp_path):
+        from tests._epw import resolve_epw
+        epw = resolve_epw()
+        if not epw:
+            pytest.skip("no EPW available")
+        from urbansolarcarver.simulated_weights import (
+            generate_simulated_weights, read_simulated_weights,
+        )
+        arch = dict(TestExpandShoebox.BASE)
+        arch["shading_permanent"] = 0.8
+        a = read_simulated_weights(generate_simulated_weights(
+            epw, dict(arch), tmp_path / "a.json"))
+        arch["shading_permanent"] = {
+            "north": 0.8, "east": 0.8, "south": 0.8, "west": 0.8}
+        b = read_simulated_weights(generate_simulated_weights(
+            epw, arch, tmp_path / "b.json"))
+        np.testing.assert_allclose(a[0], b[0], atol=1e-6)
+        np.testing.assert_allclose(a[1], b[1], atol=1e-6)

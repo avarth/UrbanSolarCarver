@@ -21,7 +21,7 @@ Attributing against the annual totals is what captures **thermal lag**: a noon g
 
 ## Origin and validation
 
-The engine is an **independent implementation**, written directly from the ISO 13790 Annex C equation set in pure NumPy (`urbansolarcarver/usefulness.py`, ~450 lines). It is **not** a fork, port, or adaptation of an existing simulator.
+The engine is an **independent implementation**, written directly from the ISO 13790 Annex C equation set in pure NumPy (`urbansolarcarver/simulated_weights.py`, ~450 lines). It is **not** a fork, port, or adaptation of an existing simulator.
 
 It is **cross-validated against [RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator)**, the ETH Zurich Architecture & Building Systems group's MIT-licensed implementation of the same annex (Jayathissa et al., "Optimising building net energy demand with dynamic BIPV shading", *Applied Energy* 202, 2017). The validation setup:
 
@@ -29,11 +29,11 @@ It is **cross-validated against [RC_BuildingSimulator](https://github.com/archit
 - **Weather**: the bundled Golden, CO TMY3 EPW (dry-bulb direct; transmitted solar from Ladybug's directional irradiance on each scenario's glazing, g = 0.6).
 - **Compared quantities**: annual heating and cooling demand totals (agreement to roughly 1 Wh/year, relative tolerance 1e-6), mean annual air temperature, and hourly air-temperature, mass-temperature, and heating/cooling-demand values at sampled hours across the year.
 - **Method**: the oracle's own derived conductances are fed into USC's engine directly, so the comparison isolates the hourly recurrence itself rather than parameter-derivation conventions (the two implementations intentionally differ on one of those: RC_BuildingSimulator uses `U·A` directly for the opaque-envelope conductance, USC applies the standard's serial split).
-- **Artifacts**: the oracle's driving arrays and reference outputs are committed verbatim in `tests/data/oracle_5r1c_reference.json`; the regression runs in the test suite on every change (`tests/test_usefulness.py`), deterministically, with no weather generation at test time.
+- **Artifacts**: the oracle's driving arrays and reference outputs are committed verbatim in `tests/data/oracle_5r1c_reference.json`; the regression runs in the test suite on every change (`tests/test_simulated_weights.py`), deterministically, with no weather generation at test time.
 
 Beyond the oracle comparison, the engine is checked for **steady-state energy-balance closure** against an independent hand-derived network reduction (constant outdoor temperature, no gains: demand converges to conductance × ΔT with the air node held at setpoint), and for the physical property that heavier mass classes flatten hour-to-hour mass-temperature variation.
 
-Full derivation notes and the coefficient provenance live in the repository at `design/solar-usefulness.md`.
+Full derivation notes and the coefficient provenance live in the repository at `design/simulated-weights.md`.
 
 ## What you supply: the archetype
 
@@ -52,22 +52,41 @@ The archetype describes a *typical* building in about ten numbers. Two equivalen
 
 **Both forms** additionally take: `u_opaque`, `u_window` (W/m²K), `ach_vent`, `ach_infiltration` (1/h), `heat_recovery` (0-1), `mass_class` (`very_light` … `very_heavy`, ISO 13790 Table 12), `t_set_heating`, `t_set_cooling` (°C), and internal gains as either a flat `internal_gains_w_m2` or a 24-value daily profile.
 
+**Shading coefficients** (optional, declared multipliers -- no device geometry is modelled):
+
+| Key | Meaning |
+|-----|---------|
+| `shading_permanent` | year-round solar transmission multiplier in [0, 1] (fins, context obstructions); 1 = no shading |
+| `shading_hot` | additional multiplier applied only during `hot_months` (awnings, tents, seasonal vegetation); stacks with the permanent factor |
+| `hot_months` | calendar months (1-12) when `shading_hot` is deployed, e.g. `[6, 7, 8, 9]` |
+
+Each coefficient accepts a scalar (all facades) or a per-facade mapping (`{south: 0.8, west: 0.9}`); windows are assigned to their nearest cardinal facade. The perturbation attribution is attenuated by the same factors, so the weights correctly describe a marginal joule of *exterior* solar: a July joule arriving while the awning is out counts for little. The declared coefficients are recorded in the artifact's provenance. Note that a fixed overhang's blocking is concentrated in high-sun hours, so its effect is usually best expressed through `shading_hot` rather than `shading_permanent`.
+
 The shipped example values are deliberately **neutral, with no national defaults**. For real projects, source values from [TABULA](https://episcope.eu/building-typology/) (EU building-stock typologies), DOE prototype buildings (US), or your national code tables.
+
+The `usc archetype` command builds and validates the file for you, printing the derived floor area, volume, and per-facade window areas so mistakes surface before any simulation runs:
+
+```bash
+usc archetype -o my_building.yaml -s width=12 -s wwr_south=0.4 -s mass_class=heavy
+usc archetype --from my_building.yaml -o variant.yaml -s mass_class=light   # derive a variant
+```
+
+In Grasshopper, **USC_Archetype** assembles the archetype from five family feeder components (USC_ZoneGeometry / Fabric / Ventilation / Operation / Shading, one wire each), feeding **USC_SimulateWeights**, whose output path wires into **USC_BenefitParams**.
 
 ## Limitations
 
 The weights are a *marginal, single-zone, schedule-free* physics signal. That is a large step past the binary balance-point rule (thermal lag, mass state, gain saturation), but the following simplifications are declared and deliberate:
 
-- **Single zone, lumped mass**: usefulness is facade-independent within an hour; time-of-day carries the directional signal. Perimeter-zone effects are out of scope for a massing tool.
+- **Single zone, lumped mass**: the weights are facade-independent within an hour; time-of-day carries the directional signal. Perimeter-zone effects are out of scope for a massing tool.
 - **Ideal, unlimited conditioning** at the air node; continuous operation, no setback or occupancy schedules.
-- **Fixed air-change rates**: no night flushing and no operable shading. Consequently the `harm` channel is **overstated**, since real buildings have cheap defenses against summer sun that they lack for missing winter sun. This is why `include_harm` is opt-in and marked experimental.
+- **Fixed air-change rates**: no night flushing, and no *adaptive* shading control. Without a declared `shading_hot` coefficient the `harm` channel is **overstated**, since real buildings have cheap defenses against summer sun that they lack for missing winter sun; declaring seasonal shading in the archetype makes harm a defensible estimate instead of a worst case. `include_harm` remains opt-in.
 - **Flat (or simple daily-profile) internal gains.**
 - **Marginal linearization**: the weights describe one *extra* watt at the archetype's operating point; window sizes and g-values in the archetype set where gains saturate, and are recorded in the artifact's provenance metadata.
 - **Unshaded derivation**: the weights are computed for an unshaded archetype while the carve itself creates shading context; a first-order acceptable inconsistency for massing studies.
 - **TMY weather**; the ISO coupling coefficients carry the standard's residential-European calibration provenance.
 
 !!! warning "Treat `include_harm` as a bracketing scenario"
-    Because harm is conservatively overstated (no shading, no night ventilation), the benefit-only weighting is the recommended default; enable the harm subtraction to bracket overheating-critical projects, not as the standard mode.
+    Without declared seasonal shading, harm is conservatively overstated (no night ventilation is modelled either), so the benefit-only weighting is the recommended default. Declaring `shading_hot` + `hot_months` in the archetype makes the harm channel a defensible estimate; even then, enable the subtraction deliberately for overheating-critical projects rather than as the standard mode.
 
 ## Traceability
 
@@ -77,4 +96,4 @@ Every artifact records its full provenance (`meta`: method, EPW, the complete ex
 
 - [Carving Modes -- benefit](modes.md#simulated-weights) for the user-level workflow
 - Tutorial 5 (`examples/5_benefit_5r1c.ipynb`) for an end-to-end walkthrough
-- [API reference](api/usefulness.md) for `generate_usefulness()`, `ZoneParams`, and the artifact I/O
+- [API reference](api/simulated-weights.md) for `generate_simulated_weights()`, `ZoneParams`, and the artifact I/O

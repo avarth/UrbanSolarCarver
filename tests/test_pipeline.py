@@ -215,25 +215,25 @@ class TestOverrideParsing:
 
 
 # ---------------------------------------------------------------------------
-# usefulness_path end-to-end (benefit mode + artifact)
+# simulated_weights_path end-to-end (benefit mode + artifact)
 # ---------------------------------------------------------------------------
 
 @_SKIP_EPW
-def test_benefit_with_usefulness_artifact(tmp_path, tiny_cube_mesh,
+def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
                                           tiny_surface_mesh):
-    """Full benefit preprocessing consuming a usefulness artifact: runs
+    """Full benefit preprocessing consuming a simulated-weights artifact: runs
     green and records the artifact's provenance in the diagnostics."""
     import numpy as _np
     from urbansolarcarver import preprocessing
     from urbansolarcarver.load_config import user_config
-    from urbansolarcarver.usefulness import write_usefulness
+    from urbansolarcarver.simulated_weights import write_simulated_weights
 
     vol_path = tmp_path / "vol.ply"
     srf_path = tmp_path / "srf.ply"
     tiny_cube_mesh.export(str(vol_path))
     tiny_surface_mesh.export(str(srf_path))
 
-    artifact = write_usefulness(
+    artifact = write_simulated_weights(
         tmp_path / "u.json",
         _np.full(8760, 0.8), _np.zeros(8760),
         {"method": "test-schedule", "generated": "2026",
@@ -246,15 +246,15 @@ def test_benefit_with_usefulness_artifact(tmp_path, tiny_cube_mesh,
         end_month=1, end_day=5, end_hour=16,
         voxel_size=2.0, grid_step=2.0, ray_length=50.0,
         min_voxels=1, min_face_count=1, device="cpu",
-        usefulness_path=str(artifact),
+        simulated_weights_path=str(artifact),
     )
     result = preprocessing(cfg, tmp_path / "out")
     scores = np.load(result.volume_path)
     assert scores.sum() > 0, "artifact-weighted carve produced no scores"
     diag = json.loads(
         (result.out_dir / "diagnostics" / "diagnostic.json").read_text())
-    assert diag["usefulness"]["method"] == "test-schedule"
-    assert diag["usefulness"]["archetype"]["mass_class"] == "medium"
+    assert diag["simulated_weights"]["method"] == "test-schedule"
+    assert diag["simulated_weights"]["archetype"]["mass_class"] == "medium"
 
 
 # ---------------------------------------------------------------------------

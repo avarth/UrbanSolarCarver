@@ -58,7 +58,7 @@ MODES: Dict[str, ModeSpec] = {
         weight_unit="Wh/m² (heating benefit)",
         extra_params=_EPW_AND_PERIOD | {"min_altitude", "balance_temperature",
                                         "balance_offset", "include_harm",
-                                        "usefulness_path"},
+                                        "simulated_weights_path"},
     ),
     "daylight": ModeSpec(
         name="daylight",

@@ -336,6 +336,19 @@ else:
                     for p in data.get("sky_patch_images", []):
                         if os.path.isfile(p):
                             diag_images.append(p)
+                    # Simulated-weights runs also record how the weights
+                    # shifted the sky vs the simple balance-point rule.
+                    cmp_img = data.get("sky_patch_comparison_image")
+                    if cmp_img and os.path.isfile(cmp_img):
+                        diag_images.append(cmp_img)
+                    cmp_stats = data.get("sky_patch_comparison_stats")
+                    if cmp_stats:
+                        diag_lines.append(
+                            "Simulated vs simple weights: "
+                            f"{cmp_stats.get('mass_redistributed_pct', 0):.1f}% "
+                            "of sky-weight mass redistributed "
+                            f"({cmp_stats.get('patches_over_20pct', 0)} of 145 "
+                            "patches changed by >20%)")
                 diagnostics = "\n".join(diag_lines)
                 # Load test points for GH output
                 tp_path = Path(pre_out) / "test_points.npy"

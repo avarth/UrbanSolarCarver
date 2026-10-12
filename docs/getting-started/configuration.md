@@ -137,9 +137,9 @@ Required parameters vary by mode. Every config needs at minimum `max_volume_path
 |-----------|-------|-------------|
 | `epw_path` | all except `tilted_plane`, `daylight` | Path to EPW weather file |
 | `start_month` .. `end_hour` | all except `tilted_plane`, `daylight` | Analysis period |
-| `balance_temperature` | `benefit` | Free-running balance-point temperature (C); unused when `usefulness_path` is set |
-| `balance_offset` | `benefit` | Dead-band offset (C); unused when `usefulness_path` is set |
-| `usefulness_path` | `benefit` | Path to a `solar_usefulness.json` artifact (`usc usefulness`): simulated hourly weights replace the balance-point rule ([details](../modes.md#simulated-weights)) |
+| `balance_temperature` | `benefit` | Free-running balance-point temperature (C); unused when `simulated_weights_path` is set |
+| `balance_offset` | `benefit` | Dead-band offset (C); unused when `simulated_weights_path` is set |
+| `simulated_weights_path` | `benefit` | Path to a `simulated_weights.json` artifact (`usc simulate-weights`): simulated hourly weights replace the balance-point rule ([details](../modes.md#simulated-weights)) |
 | `include_harm` | `benefit` | Experimental: subtract summer-overheating contributions per sky patch |
 | `tilted_plane_angle_deg` | `tilted_plane` | Cut angle in degrees (float or list of 8 for octants) |
 | `dew_point_celsius` | `radiative_cooling` | Night-time dew point (C) |

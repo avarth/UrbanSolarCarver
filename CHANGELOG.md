@@ -9,21 +9,21 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Solar-usefulness generator (simulated benefit weights)** — `usc usefulness` and the
-  `urbansolarcarver.usefulness` module: an ISO 13790 Annex C simple hourly
+- **Simulated-weights generator (benefit mode)** — `usc simulate-weights` and the
+  `urbansolarcarver.simulated_weights` module: an ISO 13790 Annex C simple hourly
   ("5R1C") thermal model plus batched central-difference perturbation,
-  producing hourly *marginal* solar usefulness — `benefit[t]` (fraction of
+  producing the hourly *marginal* benefit/harm of solar gain — `benefit[t]` (fraction of
   a marginal joule of solar gain that offsets heating over the year) and
   `harm[t]` (fraction that becomes cooling load) — written to a
-  `solar_usefulness.json` artifact with full provenance metadata. Inputs:
+  `simulated_weights.json` artifact with full provenance metadata. Inputs:
   one EPW plus ~10 archetype parameters (`configs/archetype_example.yaml`;
   neutral values, no national defaults). The engine is validated against
   ETH's RC_BuildingSimulator on three archetypes under the bundled Golden
   TMY3 weather (annual demands and hourly node states; driving arrays
   stored verbatim in `tests/data/`), plus steady-state closure against an
   independent network reduction. Design, tier ladder, and declared
-  limitations: `design/solar-usefulness.md`.
-- **`usefulness_path`** (benefit mode): consume a solar-usefulness artifact
+  limitations: `design/simulated-weights.md`.
+- **`simulated_weights_path`** (benefit mode): consume a simulated-weights artifact
   in place of the balance-point hour filter — each hour's DNI/DHI is scaled
   by `benefit[t]` before the cumulative sky matrix (the balance filter is
   the binary special case of this mechanism), and `include_harm: true`
@@ -38,11 +38,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ratio), `g_value`, and optional `orientation` — floor area, volume,
   per-facade window areas, `area_window`, and `area_opaque` (opaque walls +
   roof) are derived. `configs/archetype_example.yaml` shows both forms.
-- **Weights preview**: `usc usefulness` / `generate_usefulness` write a
+- **Weights preview**: `usc simulate-weights` / `generate_simulated_weights` write a
   `.png` companion next to the artifact — benefit and harm as day x hour
   heatmaps — so the schedule can be inspected without writing code.
 - **Sky-weight comparison in diagnostics**: a benefit run that consumes a
-  usefulness artifact (with `diagnostic_plots: true`) also records a
+  simulated-weights artifact (with `diagnostic_plots: true`) also records a
   difference dome versus the simple balance-point rule for the same config
   (`sky_patch_comparison_image` + redistribution stats in
   `diagnostic.json`).
@@ -52,6 +52,45 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - The sample Golden CO TMY3 EPW is now actually committed
   (`.gitignore` exception) — the tutorials and EPW-dependent tests run
   out of the box as documented.
+- **`usc archetype`**: builds a shoebox archetype YAML from defaults or an
+  existing file (`--from`), with `-s key=value` overrides (`wwr_south=0.4`
+  style for the per-facade ratios). The file is validated through the
+  generator's own code path before writing, and the derived floor area,
+  volume, and per-facade window areas are printed — mistakes surface here,
+  not inside a simulation.
+- **`usc validate` checks the weights artifact**: when
+  `simulated_weights_path` is set, the artifact itself is read and
+  validated (existence, schema, 8760 bounded values) at validate time
+  instead of failing mid-preprocessing.
+- **Daemon `simulate_weights` RPC**: the persistent daemon generates
+  weights artifacts on request (archetype as inline mapping or YAML path),
+  so Grasshopper avoids a cold Python start per generation.
+- **Grasshopper components for simulated weights**: new `USC_Archetype`
+  assembles a typical building from five Honeybee-style family feeders
+  (`USC_ZoneGeometry`, `USC_ZoneFabric`, `USC_ZoneVentilation`,
+  `USC_ZoneOperation`, `USC_ZoneShading` — one wire per family, all
+  optional with neutral defaults), and `USC_SimulateWeights` runs the
+  simulation through the daemon (outputs the artifact path and the
+  heatmap preview).
+  `USC_BenefitParams` gains `simulated_weights_path` and `include_harm`
+  inputs (with an on-canvas remark when balance settings are wired but
+  unused), and `USC_Preprocess` surfaces the sky-weight comparison dome
+  and redistribution stats in its diagnostics outputs.
+- `generate_simulated_weights` reads internal gains from the archetype's
+  `internal_gains_w_m2` / `internal_gains_profile_w_m2` keys when the
+  argument is omitted, so CLI, daemon, and Grasshopper pass archetypes
+  through unmodified.
+- **Shading coefficients** (archetype keys, declared multipliers — no
+  device geometry): `shading_permanent` (year-round transmission factor
+  for fins/context) and `shading_hot` (additional factor deployed during
+  the user-declared `hot_months`; awnings, tents, seasonal vegetation).
+  Each accepts a scalar or a per-facade mapping (windows bin to their
+  nearest cardinal). The attribution is attenuated by the same effective
+  hourly transmission, preserving the artifact's exterior-joule semantics,
+  and declared values land in the artifact provenance. Declaring seasonal
+  shading makes the `harm` channel a defensible estimate instead of a
+  conservative worst case. Supported in `usc archetype` (-s overrides)
+  and on the USC_Archetype Grasshopper component (scalars).
 
 ### Changed
 
@@ -78,8 +117,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - User-facing terminology for the two benefit weightings: "simple weights"
   (balance-point rule) vs "simulated weights" (5R1C hourly simulation);
   the internal "Tier 1.5" label no longer appears in docs, CLI, or configs.
-  `generate_tier15` is renamed `generate_usefulness` (old name kept as a
-  compatible alias).
+  the module and all public names use the `simulated_weights` family
+  (`generate_simulated_weights`, `simulated_weights_path`,
+  `usc simulate-weights`, `simulated_weights.json`); no aliases are kept
+  since the feature is unreleased.
 - Benefit mode warns loudly and returns all-zero weights when the analysis
   period contains no beneficial hours (previously this fell through toward a
   degenerate carve with only a generic downstream warning; an empty hour
