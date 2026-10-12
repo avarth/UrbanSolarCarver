@@ -122,6 +122,9 @@ else:
         if "protected_patch_count" in data:
             lines.append("Protected: {} sky patches, {:.1%} of the sky weight".format(
                 data["protected_patch_count"], data.get("protected_weight_share", 0.0)))
+        if data.get("max_slope_deg") is not None:
+            lines.append("Slope limit: {:g} deg (removed {} voxels)".format(
+                data["max_slope_deg"], data.get("slope_limit_extra_voxels_removed", 0)))
         lines.append("Kept: {}%".format(data.get("retention_pct", "?")))
         lines.append("Voxels kept: {} / {}".format(data.get("voxels_kept", "?"),
                                                    data.get("voxels_occupied", "?")))

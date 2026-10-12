@@ -160,6 +160,24 @@ def test_tilted_angle_monotone(tmp_path, epw):
 
 
 # ----------------------------------------------------------------- carve_above
+@pytest.mark.parametrize("typology", ["courtyard", "freeform", "rows"])
+def test_carve_fraction_with_carve_above_leaves_no_spires(tmp_path, epw, typology):
+    """With a 45 degree slope limit (one voxel of rise per voxel), no kept
+    column stands 4 or more voxels above the median of its 5 x 5
+    neighbourhood. (At 2 m voxels the default 75 degrees allows about 3.7
+    voxels per column, too much for this criterion.)"""
+    from numpy.lib.stride_tricks import sliding_window_view
+    run = cases.run(build(SceneSpec(typology, seed=7)), tmp_path, epw, "benefit",
+                    carve_fraction=0.4, carve_above=True, max_slope_deg=45.0)
+    z = np.arange(run.shape[2])
+    kept = run.mask.any(axis=2)
+    h = np.where(kept, (run.mask * (z + 1)).max(axis=2), np.nan)
+    med = np.nanmedian(sliding_window_view(np.pad(h, 2, constant_values=np.nan), (5, 5)),
+                       axis=(-2, -1))
+    assert run.diag("thr")["max_slope_deg"] == 45.0
+    assert not ((h - med) >= 4)[kept].any()
+
+
 @pytest.mark.parametrize("min_run", [1, 3])
 @pytest.mark.parametrize("mode", ["time-based", "benefit", "benefit-protect"])
 def test_carve_above_leaves_no_floating_mass(tmp_path, epw, mode, min_run):

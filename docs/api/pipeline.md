@@ -36,7 +36,7 @@ Voxelizes the max volume, samples the test surfaces, generates rays toward sky p
 
 ## Thresholding
 
-Converts the preprocessing output into a binary carving mask, then applies `carve_above`, and writes `mask.npy`. With `protect_share` (the default for weighted modes), the share is turned into a number of protected sky patches and every voxel whose patch rank is below it is carved; the scores are not used, so re-thresholding stays instant and score smoothing does not apply. The diagnostics record `protected_patch_count`, `protected_patches` and `protected_weight_share`. With `carve_fraction`, head/tail breaks, or a numeric cutoff, optional score smoothing is applied and the cutoff is taken over the occupied voxels.
+Converts the preprocessing output into a binary carving mask, then applies `carve_above` and the slope limit, and writes `mask.npy`. With `carve_fraction` (the default for weighted modes), head/tail breaks, or a numeric cutoff, optional score smoothing is applied and the cutoff is taken over the occupied voxels; the slope limit (`max_slope_deg`, 75 degrees unless set) then cuts columns that rise too steeply above their neighbours, and the diagnostics record `slope_limit_extra_voxels_removed`. With `protect_share`, the share is turned into a number of protected sky patches and every voxel whose patch rank is below it is carved; the scores are not used, and the diagnostics record `protected_patch_count`, `protected_patches` and `protected_weight_share`.
 
 ::: urbansolarcarver.api_core.thresholding
     options:

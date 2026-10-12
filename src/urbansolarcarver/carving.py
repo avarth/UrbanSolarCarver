@@ -997,3 +997,95 @@ def _carve_above_kernel(out, voxel_grid, min_consecutive):
                 for z_above in range(trigger_top + 1, nz):
                     if voxel_grid[x, y, z_above]:
                         out[x, y, z_above] = False
+
+
+def limit_column_slope(mask, occupancy, max_slope_deg: float, median_size: int = 5):
+    """Lower columns that rise too steeply above their neighbours.
+
+    Each building column's kept height (one above its highest kept voxel,
+    0 if nothing is kept) is capped so that it rises at most
+    ``tan(max_slope_deg)`` voxels per voxel of horizontal distance above a
+    reference height map, counting the reference at the column itself as
+    one voxel away; every kept voxel above the cap is removed.  The result
+    only ever removes voxels.
+
+    The reference is the kept height map after a ``median_size`` x
+    ``median_size`` median filter over the building's columns, so features
+    one or two columns wide are ignored: a single tall column (a spire) is
+    measured against its surroundings and ends at most one slope step above
+    them, and a single low column (a stub left at a curved edge) or a
+    narrow slot does not pull its neighbours down.  Wider differences in
+    height, including next to areas carved to the ground, become ramps of
+    the given slope, cut from the taller side.  Columns outside the
+    building (no occupied voxel) take no part.
+
+    The cap never rises when the input loses voxels, so carving more before
+    this step never keeps more after it (a carve_fraction slider stays
+    nested).
+
+    Parameters
+    ----------
+    mask : ndarray (X, Y, Z) bool
+        Kept voxels (True), normally after carve_above.  Not mutated.
+    occupancy : ndarray (X, Y, Z) bool
+        The building's voxels before carving; decides which columns count.
+    max_slope_deg : float
+        Steepest allowed rise between neighbouring columns, in degrees
+        above horizontal (0 < angle < 90; voxels are cubes, so the slope is
+        the same in metres).
+    median_size : int, default 5
+        Width in voxels of the median filter that builds the reference.
+
+    Returns
+    -------
+    ndarray (X, Y, Z) bool
+        A copy of *mask* with the voxels above each column's cap removed.
+    """
+    from numpy.lib.stride_tricks import sliding_window_view
+    if not 0.0 < max_slope_deg < 90.0:
+        raise ValueError(f"max_slope_deg must be between 0 and 90, got {max_slope_deg}")
+    z = np.arange(mask.shape[2])
+    building = np.asarray(occupancy, dtype=bool).any(axis=2)
+    top = np.where(mask.any(axis=2), (mask * (z + 1)).max(axis=2), 0).astype(np.float64)
+    half = median_size // 2
+    with np.errstate(all="ignore"), warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)  # windows with no building column
+        windows = sliding_window_view(
+            np.pad(np.where(building, top, np.nan), half, constant_values=np.nan),
+            (median_size, median_size))
+        reference = np.where(building, np.nanmedian(windows, axis=(-2, -1)), 0.0)
+    rise = float(np.tan(np.radians(max_slope_deg)))
+    cap = _slope_envelope(np.ascontiguousarray(reference), building, rise, rise * np.sqrt(2.0))
+    cap = np.minimum(top, cap + rise)
+    return mask & (z[None, None, :] < np.floor(cap + 1e-9)[:, :, None])
+
+
+@njit(cache=True)
+def _slope_envelope(h, valid, rise_axis, rise_diag):
+    """Lower *h* (in place) to min over neighbours q of h[q] + rise * distance.
+
+    Two raster passes over the 8-neighbourhood (forward, then backward)
+    give the chamfer approximation of the Euclidean distance: axis steps
+    cost *rise_axis*, diagonal steps *rise_diag*.  Only cells with
+    ``valid`` True take part.  Returns *h*.
+    """
+    nx, ny = h.shape
+    for i in range(nx):
+        for j in range(ny):
+            if not valid[i, j]:
+                continue
+            for di, dj, r in ((-1, 0, rise_axis), (0, -1, rise_axis),
+                              (-1, -1, rise_diag), (-1, 1, rise_diag)):
+                a, b = i + di, j + dj
+                if 0 <= a < nx and 0 <= b < ny and valid[a, b] and h[a, b] + r < h[i, j]:
+                    h[i, j] = h[a, b] + r
+    for i in range(nx - 1, -1, -1):
+        for j in range(ny - 1, -1, -1):
+            if not valid[i, j]:
+                continue
+            for di, dj, r in ((1, 0, rise_axis), (0, 1, rise_axis),
+                              (1, 1, rise_diag), (1, -1, rise_diag)):
+                a, b = i + di, j + dj
+                if 0 <= a < nx and 0 <= b < ny and valid[a, b] and h[a, b] + r < h[i, j]:
+                    h[i, j] = h[a, b] + r
+    return h

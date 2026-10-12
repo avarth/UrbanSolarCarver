@@ -69,35 +69,30 @@ smooth_iters:   2     # Taubin polish passes, 0-6 (only with apply_smoothing)
 carve_above: true                 # Column carve-above post-processing (default on)
 carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-3 ignore stray single voxels; they stay carved)
 
-# Score smoothing (pre-threshold Gaussian blur on the score volume)
-# Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes.
-# null (default) = auto: 1.1× voxel_size, recommended for most runs.
-# 0    = disabled (no smoothing).
-# >0   = explicit radius in meters. Rule of thumb: 1.0–1.2× voxel_size.
-#         Over-smoothing (>2× voxel_size) rounds features excessively.
-# Only affects weighted-score modes (irradiance, benefit, daylight, radiative_cooling).
-# Violation-count modes (time-based, tilted_plane) are unaffected.
-score_smoothing: null
-
-# Thresholding for weighted carving.
-# Canonical form is a mapping:
-#   threshold: {method: protect_share, value: 0.1}
-#   methods: protect_share | carve_fraction | headtail | cutoff
-# Shorthands are accepted and normalized:
-#   threshold: protect_share    # keep the highest-weight sky patches holding this
-#                               # share of the total weight visible from every test
-#                               # point; value from the protect_share key below
-#   threshold: carve_fraction   # carve the voxels holding this fraction of the
-#                               # obstruction score; value from carve_fraction
-#                               # (with carve_above it can leave cliffs and spires)
-#   threshold: headtail         # automatic split of the scores, no value
-#   threshold: 0.35             # bare number = raw-score cutoff
-#                               # (for time-based: tolerated shading in m²·h, area x duration)
-# Unset = protect_share for weighted modes (carve_fraction if only carve_fraction
-# is set), 0 for time-based and tilted_plane.
-threshold: protect_share
-protect_share: 0.1
+# How much to carve (see docs/modes.md)
+# Sky modes (irradiance, benefit, daylight, radiative_cooling): fraction (0-1)
+# of the building's obstruction score to remove. 0.7 = aggressive, 0.3 =
+# conservative.
 carve_fraction: 0.7
+# Slope limit after carve_above: columns may rise at most this steeply above
+# their neighbours (degrees), so cliffs and spires become ramps. null = 75 for
+# the score-cutoff methods of the sky modes, off otherwise; 90 = off.
+max_slope_deg: null
+# time-based: tolerated shading in m²·h (shaded area x duration), 0 = none.
+# tilted_plane: leave threshold unset; tilted_plane_angle_deg decides.
+# threshold: 0
+
+# Other methods for the sky modes (set threshold to choose one):
+#   threshold: protect_share    # keep the rays from every test point to the
+#                               # top sky patches clear; value from protect_share
+#   threshold: headtail         # automatic split of the scores, no value
+#   threshold: 0.35             # raw-score cutoff
+#   threshold: {method: carve_fraction, value: 0.7}   # canonical mapping form
+# protect_share: 0.1
+#
+# score_smoothing (score-cutoff methods only): Gaussian blur radius (m) of the
+# scores before the cutoff. null = auto (1.1x voxel_size), 0 = off.
+score_smoothing: null
 
 # Benefit mode settings (used when mode: benefit)
 balance_temperature: 15.0      # °C, free-running balance point; gains credited when outdoor T < balance - offset.
