@@ -416,7 +416,9 @@ if _warp_available:
         pid = ray_patch_ids[tid]
         w = patch_weights[pid]
         o = ray_origins[tid]
-        n = point_normals[ray_point_ids[tid]]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:  # the normals array is a 1-element placeholder otherwise
+            n = point_normals[ray_point_ids[tid]]
         res_sq = resolution * resolution
         s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)
@@ -463,7 +465,9 @@ if _warp_available:
         pt = ray_point_ids[tid]
         w = patch_weights[ray_patch_ids[tid]] * point_weights[pt]
         o = ray_origins[tid]
-        n = point_normals[pt]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:  # the normals array is a 1-element placeholder otherwise
+            n = point_normals[pt]
         res_sq = resolution * resolution
         s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)
@@ -506,7 +510,9 @@ if _warp_available:
         """
         tid = wp.tid()
         o = ray_origins[tid]
-        n = point_normals[ray_point_ids[tid]]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:  # the normals array is a 1-element placeholder otherwise
+            n = point_normals[ray_point_ids[tid]]
         res_sq = resolution * resolution
         s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)

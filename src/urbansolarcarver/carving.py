@@ -217,6 +217,47 @@ def _front_of_surface(min_corner, cell, voxel_idx, origins, normals) -> torch.Te
     return ((centre - origins) * normals).sum(dim=1) > 0.0
 
 
+_CPU_BUFFER_BUDGET_BYTES = 1 << 30  # extra per-thread accumulation buffers
+
+
+def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
+    """Call ``launch(start, end, buffer)`` for every batch, accumulating into *out*.
+
+    On CPU, Warp kernel launches release the GIL, so a few threads can run
+    batches on separate cores. Warp's CPU ``atomic_add`` is a plain
+    read-modify-write, not atomic across threads, so each thread writes its
+    own buffer and the buffers are summed at the end. The first batch runs
+    alone because it triggers Warp's one-time module compile.
+    """
+    if not parallel or device.type != "cpu" or len(batch_ranges) < 2:
+        for start, end in batch_ranges:
+            launch(start, end, out)
+        return
+
+    launch(*batch_ranges[0], out)
+    rest = batch_ranges[1:]
+    buffer_bytes = out.numel() * out.element_size()
+    n_workers = min(4, os.cpu_count() or 1, len(rest),
+                    max(1, _CPU_BUFFER_BUDGET_BYTES // max(buffer_bytes, 1)))
+    if n_workers < 2:
+        for start, end in rest:
+            launch(start, end, out)
+        return
+
+    from concurrent.futures import ThreadPoolExecutor
+    buffers = [torch.zeros_like(out) for _ in range(n_workers)]
+    chunks = [rest[i::n_workers] for i in range(n_workers)]
+
+    def _work(i):
+        for start, end in chunks[i]:
+            launch(start, end, buffers[i])
+
+    with ThreadPoolExecutor(max_workers=n_workers) as pool:
+        list(pool.map(_work, range(n_workers)))  # list() re-raises worker exceptions
+    for buf in buffers:
+        out += buf
+
+
 def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, config,
                     point_ids, surface_normals):
     """Count how many rays visit each voxel; returns a flat int32 tensor.
@@ -238,29 +279,15 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
             for start in range(0, origins.shape[0], batch_size)
         ]
 
-        def _count_batch(start, end):
+        def _count_batch(start, end, buf):
             trace_and_count_dda(
                 min_corner, scale, res,
                 origins[start:end], directions[start:end],
-                counts, float(config.ray_length),
+                buf, float(config.ray_length),
                 point_ids=point_ids[start:end], surface_normals=surface_normals,
             )
 
-        if device.type == "cpu" and len(batch_ranges) > 1:
-            # Same dispatch as the fused score path: Warp CPU launches are
-            # single-threaded and release the GIL, so a small thread pool
-            # runs batches on multiple cores.  Integer wp.atomic_add keeps
-            # the shared counts buffer exact.  The first batch runs
-            # synchronously so Warp's lazy JIT compile happens once.
-            from concurrent.futures import ThreadPoolExecutor
-            _count_batch(*batch_ranges[0])
-            n_workers = min(4, os.cpu_count() or 1, len(batch_ranges) - 1)
-            with ThreadPoolExecutor(max_workers=n_workers) as pool:
-                # list() drains the iterator so worker exceptions propagate
-                list(pool.map(lambda rng: _count_batch(*rng), batch_ranges[1:]))
-        else:
-            for start, end in batch_ranges:
-                _count_batch(start, end)
+        _run_batches(batch_ranges, _count_batch, counts, device, parallel=True)
         # Warp launches run on Warp's own CUDA stream; the counts buffer is
         # shared zero-copy with torch, so synchronize before torch reads it.
         if device.type == "cuda":
@@ -596,27 +623,26 @@ def carve_with_sky_patch_rays(
     batch_size = _resolve_batch_size(config, res, device)
     use_fused = (_fused_dda is not None and dda_backend_available(device))
 
-    def _score_batch(start: int, end: int) -> None:
+    def _score_batch(start: int, end: int, buf) -> None:
         origins_batch = ray_origins[start:end]
         directions_batch = ray_directions[start:end]
         patches_batch = patch_ids[start:end]
 
         if use_fused:
-            # Fused DDA: traverse + score in a single Warp kernel.
-            # No output buffer, no post-processing. Modifies scores in-place.
+            # Trace and accumulate in one Warp kernel, writing into buf.
             _fused_dda(
-                grid_origin, float(grid_extent_m), grid_resolution,
+                grid_origin, float(grid_extent_m), res,
                 origins_batch, directions_batch, patches_batch,
-                patch_weights, scores, config.ray_length,
+                patch_weights, buf, config.ray_length,
                 point_ids=ray_point_ids[start:end],
                 point_weights=pw_t,
                 surface_normals=surface_normals,
             )
             return
 
-        # Legacy path: trace then accumulate on host
+        # Fallback without Warp: trace, then accumulate with torch.
         hit_ray_ids, hit_patch_ids, hit_voxel_idxs = trace_multi_hit_grid(
-            grid_origin, grid_extent_m, grid_resolution,
+            grid_origin, grid_extent_m, res,
             origins_batch, directions_batch, patches_batch,
             config.voxel_size, config.ray_length,
         )
@@ -646,48 +672,14 @@ def carve_with_sky_patch_rays(
                 point_idx[start:end][hit_ray_ids]
             ]
 
-        # Guard: filter out-of-bounds indices
-        if (idx_flat < 0).any() or (idx_flat >= num_voxels).any():
-            warnings.warn(
-                "trace_multi_hit_grid returned out-of-bounds voxel indices.",
-                stacklevel=2,
-            )
-            valid = (idx_flat >= 0) & (idx_flat < num_voxels)
-            idx_flat = idx_flat[valid]
-            weights_for_hits = weights_for_hits[valid]
-
-        if idx_flat.numel() == 0:
-            return
-
-        scores.scatter_add_(0, idx_flat, weights_for_hits)
+        buf.scatter_add_(0, idx_flat, weights_for_hits)
 
     batch_ranges = [
         (start, min(start + batch_size, total_rays))
         for start in range(0, total_rays, batch_size)
     ]
     with torch.no_grad():
-        if use_fused and device.type == "cpu" and len(batch_ranges) > 1:
-            # Warp executes CPU kernel launches single-threaded, and the
-            # launches release the GIL, so dispatching batches from a small
-            # thread pool runs them on multiple cores (~2x measured; gains
-            # taper beyond a few workers — the kernel is memory-bound).
-            # The shared score buffer stays correct because the kernel
-            # accumulates with atomic adds.  Note: like on CUDA, atomic
-            # float addition order varies, so scores can differ by
-            # float-rounding noise between runs.
-            from concurrent.futures import ThreadPoolExecutor
-            n_workers = min(4, os.cpu_count() or 1, len(batch_ranges))
-            # Run the first batch synchronously: it triggers Warp's lazy
-            # module load/JIT compile exactly once, single-threaded.
-            # Concurrent first launches from the pool would race the
-            # module build (Warp does not document it as thread-safe).
-            _score_batch(*batch_ranges[0])
-            with ThreadPoolExecutor(max_workers=n_workers) as pool:
-                # list() drains the iterator so worker exceptions propagate
-                list(pool.map(lambda rng: _score_batch(*rng), batch_ranges[1:]))
-        else:
-            for start, end in batch_ranges:
-                _score_batch(start, end)
+        _run_batches(batch_ranges, _score_batch, scores, device, parallel=use_fused)
 
     # Synchronize GPU before reading scores
     if device.type == "cuda":

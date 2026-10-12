@@ -86,7 +86,7 @@ score_smoothing: null
 #   threshold: carve_fraction   # value taken from the carve_fraction key below
 #   threshold: headtail         # automatic split, no value
 #   threshold: 0.35             # bare number = raw-score cutoff
-#                               # (for time-based: tolerated shadow duration in hours)
+#                               # (for time-based: tolerated shading in m²·h, area x duration)
 # Unset = mode default (carve_fraction for weighted modes, 0 for count modes).
 threshold: 'carve_fraction'
 carve_fraction: 0.7

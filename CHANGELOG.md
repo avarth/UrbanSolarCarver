@@ -169,6 +169,32 @@ versioning follows [Semantic Versioning](https://semver.org/).
   USC_RaySettings Grasshopper component no longer emits it (old canvases
   keep the input; it is ignored).
 
+### Fixed (code review)
+
+- **CPU runs lost score updates.** Warp's CPU `atomic_add` is a plain
+  read-modify-write, and CPU batches ran from a thread pool on one shared
+  buffer: about 6e-5 of the score mass was lost per run, by a different
+  amount each time. Each thread now accumulates into its own buffer.
+- **The daemon could be stopped by a client.** A wrong authkey, a client
+  that disconnected before its reply, or an unreadable message ended the
+  server loop. Each connection is now handled in isolation; errors reply
+  with the exception type, and GPU memory is released after every run.
+  The unusable `--authkey` option is removed.
+- **`carve_above` from the Grasshopper Threshold component had no
+  effect.** It was applied in exporting, which never received the
+  threshold overrides. It now runs in thresholding, so `mask.npy` and
+  the reported retention describe the exported envelope.
+- **USC_Mode could not be wired to anything that worked.** It now outputs
+  `mode_name` for USC_Config's `mode` input.
+- **`headtail` used the inverted stop rule** and returned the plain mean
+  on heavy-tailed scores. It now follows Jiang (2013): keep splitting
+  while the head is a minority, return the deepest such break.
+- **Irradiance and benefit scores were labelled Wh/m²**; Ladybug returns
+  kWh/m².
+- **Exporting** meshed with the config's `voxel_size` instead of the
+  preprocessing run's, and counted retained voxels before the small-
+  fragment cleanup (now reported as `voxels_removed_by_cleanup`).
+
 ### Fixed (carving correctness — results change)
 
 Found with a new end-to-end harness (procedural urban typologies checked
@@ -201,8 +227,10 @@ against an independent CPU reference marcher, plus Monte Carlo runs).
   hour; mass between consecutive hourly ray sheets survived while shading
   the protected surface between samples (58-322 voxels per scene at 1 m).
   New `sun_steps_per_hour` (default 12 = every 5 min). Violation scores
-  are now in **hours**, so a numeric threshold keeps meaning "tolerated
-  shadow duration" at any sampling density.
+  are now shaded area x duration in **m²·h** (they were raw ray counts,
+  which grew with both the sun sampling and the surface sampling density),
+  so a numeric threshold means the same at any `grid_step` and
+  `sun_steps_per_hour`.
 - **Georeferenced coordinates lost precision.** Voxelization, sampling and
   tracing ran in float32 world coordinates (~0.5 m resolution at UTM
   northings). Preprocessing now works in a local frame (coordinates rounded

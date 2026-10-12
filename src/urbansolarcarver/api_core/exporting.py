@@ -143,30 +143,26 @@ def exporting(
     mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
     voxel_grid = torch.as_tensor(load_occupancy(pre_manifest, conf), device=resolved_device)
-
-    # Column post-processing: carve occupied voxels above carved runs.
-    _carve_above_extra = 0
-    if conf.carve_above:
-        from ..carving import carve_above_columns
-        vg_np = voxel_grid.cpu().numpy().astype(bool)
-        mask_before_count = int(mask.sum())
-        mask = carve_above_columns(
-            mask, vg_np,
-            min_consecutive=conf.carve_above_min_consecutive,
-        )
-        _carve_above_extra = mask_before_count - int(mask.sum())
-        mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
-
     carve_grid = (voxel_grid.bool() & mask_tensor)
     origin = np.array(pre_manifest.origin, dtype=np.float64)
+
+    # The grid's voxel size is a fact of the preprocessing run, not a setting
+    # of this stage: re-exporting with a different config must not rescale it.
+    if pre_manifest.voxel_size and pre_manifest.voxel_size != conf.voxel_size:
+        import warnings
+        warnings.warn(
+            f"Config voxel_size={conf.voxel_size:g} differs from the preprocessing "
+            f"run's {pre_manifest.voxel_size:g}; meshing with "
+            f"{pre_manifest.voxel_size:g}.",
+            stacklevel=2,
+        )
+        conf = conf.model_copy(update={"voxel_size": pre_manifest.voxel_size})
 
     # Mesh at the grid's own origin, then place it in float64: the mesh
     # builders emit float32 vertices, which cannot hold georeferenced
     # coordinates to better than ~0.5 m.
-    cleaned_voxels, mesh_pre, final_mesh = finalize_mesh(carve_grid, np.zeros(3), conf)
-    for m in (mesh_pre, final_mesh):
-        if m is not None and hasattr(m, "apply_translation"):
-            m.apply_translation(origin)
+    cleaned_voxels, _, final_mesh = finalize_mesh(carve_grid, np.zeros(3), conf)
+    final_mesh.apply_translation(origin)
 
     ext = conf.final_mesh_format
     export_path = out_path / f"export.{ext}"
@@ -193,8 +189,10 @@ def exporting(
         log.warning("Could not compute mesh bounds: %s", exc)
         bbox = None
     bbox_dims = [float(bbox[1][i] - bbox[0][i]) for i in range(3)] if bbox is not None else None
-    # Voxel retention, over occupied voxels (same basis as thresholding).
-    retained_voxels = int(carve_grid.sum().item())
+    # Voxel retention over occupied voxels, counted on the voxels that were
+    # actually meshed (after small-fragment cleanup).
+    kept_by_mask = int(carve_grid.sum().item())
+    retained_voxels = int(cleaned_voxels.sum().item())
     original_voxels = int(voxel_grid.sum().item())
     retention_pct = round(100.0 * retained_voxels / max(original_voxels, 1), 2)
 
@@ -209,10 +207,8 @@ def exporting(
         "voxels_original": original_voxels,
         "voxels_retained": retained_voxels,
         "voxels_removed": original_voxels - retained_voxels,
+        "voxels_removed_by_cleanup": kept_by_mask - retained_voxels,
         "voxel_retention_pct": retention_pct,
-        "carve_above_applied": conf.carve_above,
-        "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
-        "carve_above_extra_voxels_removed": _carve_above_extra,
     }
     # Consolidated diagnostic — one file per stage.
     diagnostic["timings"] = {

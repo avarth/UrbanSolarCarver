@@ -28,6 +28,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from multiprocessing import AuthenticationError
 from multiprocessing.connection import Listener
 import traceback
 
@@ -105,16 +106,42 @@ def _pick_device(arg: str) -> str:
     except (ImportError, RuntimeError):
         return "cpu"
 
-def _handle_stage_command(cmd, msg, sess):
-    """Dispatch a pipeline RPC command and build the reply dict.
+# Keys each command must carry (besides "cmd").
+_REQUIRED_KEYS = {
+    "preprocessing": ("config",),
+    "thresholding": ("config", "from"),
+    "exporting": ("config", "from"),
+    "run_pipeline": ("config",),
+    "simulate_weights": ("epw", "archetype", "out"),
+    "ping": (),
+    "shutdown": (),
+}
 
-    Raises on failure — the caller converts exceptions into error replies.
-    """
+
+def _error_reply(exc: BaseException) -> dict:
+    return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _reply(conn, obj) -> None:
+    """Send *obj* and close; a client that already left must not stop the server."""
+    try:
+        conn.send(obj)
+    except Exception as exc:
+        print(f"[daemon] could not send reply ({type(exc).__name__}: {exc})", flush=True)
+    finally:
+        try:
+            conn.close()
+        except OSError:
+            pass
+
+
+def _handle_stage_command(cmd, msg, sess):
+    """Run one pipeline command and build the reply dict. Raises on failure."""
     from urbansolarcarver import api
 
     cfg = load_config(msg["config"], msg.get("overrides", []))
     if cmd in ("preprocessing", "run_pipeline"):
-        # New run: invalidate cached tensors (kernel caches persist on disk).
+        # A new run: drop tensors cached from the previous one.
         sess.bump(flush=False)
 
     if cmd == "run_pipeline":
@@ -128,165 +155,114 @@ def _handle_stage_command(cmd, msg, sess):
     if cmd == "thresholding":
         result = api.thresholding(msg["from"], cfg, out_dir)
         return {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
-    if cmd == "exporting":
-        result = api.exporting(msg["from"], cfg, out_dir)
-        return {"status": "ok", "export_path": str(result.export_path)}
-    raise ValueError(f"Unknown command: {cmd!r}")
+    result = api.exporting(msg["from"], cfg, out_dir)
+    return {"status": "ok", "export_path": str(result.export_path)}
+
+
+def _simulate_weights(msg):
+    """Generate a simulated-weights artifact (no config or GPU session needed)."""
+    from urbansolarcarver.simulated_weights import generate_simulated_weights
+
+    arch = msg["archetype"]
+    if isinstance(arch, str):  # a YAML path instead of an inline mapping
+        import yaml
+        arch = yaml.safe_load(Path(arch).read_text(encoding="utf-8"))
+        if not isinstance(arch, dict):
+            raise ValueError(f"archetype file {msg['archetype']!r} does not contain a mapping")
+    path = Path(generate_simulated_weights(
+        msg["epw"], arch, msg["out"],
+        internal_gains_w_m2=msg.get("internal_gains_w_m2"),
+        eps=msg.get("eps", 1.0),
+    ))
+    preview = path.with_suffix(".png")
+    return {"status": "ok", "artifact": str(path),
+            "preview": str(preview) if preview.is_file() else None}
+
+
+def _dispatch(msg, sess) -> dict:
+    """Validate a request and run it. Raises on failure."""
+    if not isinstance(msg, dict):
+        return {"status": "error", "error": "Expected a dict message"}
+    cmd = msg.get("cmd")
+    if cmd not in _REQUIRED_KEYS:
+        return {"status": "error", "error": f"Unknown command: {cmd!r}"}
+    missing = [k for k in _REQUIRED_KEYS[cmd] if k not in msg]
+    if missing:
+        return {"status": "error", "error": f"Missing required keys for {cmd!r}: {missing}"}
+    if cmd == "ping":
+        return {"status": "ok", "pid": os.getpid()}
+    if cmd == "simulate_weights":
+        return _simulate_weights(msg)
+    try:
+        return _handle_stage_command(cmd, msg, sess)
+    finally:
+        # Return GPU memory after every run, successful or not, so the next
+        # run (and the Rhino viewport) does not start from a full allocator.
+        sess.bump(flush=True)
 
 
 def serve(address, authkey, device_arg="auto"):
-    """Start the persistent RPC listener for CUDA/Warp session reuse.
+    """Serve pipeline requests from Grasshopper and the CLI until "shutdown".
 
-    Binds a multiprocessing.connection Listener on (host, port) and dispatches
-    incoming commands to the 3-stage pipeline (preprocessing, thresholding,
-    exporting) or to session management (shutdown). Each pipeline command
-    runs within a CarverSession context that keeps the CUDA context and
-    compiled Warp kernels alive across calls, avoiding the ~5s GPU startup
-    penalty on each invocation from Grasshopper or Revit.
-
-    The session's tensor cache is invalidated between runs (bump()) but
-    kernels persist for the lifetime of the daemon process.
+    Keeps one CarverSession (CUDA context and compiled Warp kernels) alive
+    across requests. Commands: preprocessing, thresholding, exporting,
+    run_pipeline, simulate_weights, ping, shutdown. Requests are handled one
+    at a time; a failing request becomes an error reply and the server keeps
+    running.
     """
-    from multiprocessing.connection import Listener
     device = _pick_device(device_arg)
     with CarverSession(device) as sess:
-        # Bind the port BEFORE the (potentially slow) kernel warmup: clients
-        # polling for readiness connect immediately and their ping simply
-        # blocks until the accept loop below starts.  Binding after warmup
-        # could exceed the pollers' fixed windows (CLI: 30x1s, Grasshopper:
-        # 60x0.5s) on a cold kernel cache, failing the start command while
-        # the daemon later comes up anyway and holds the port.
+        # Bind before the (possibly slow) kernel warmup: clients polling for
+        # readiness can connect at once, and their ping waits for the accept
+        # loop instead of timing out on a cold kernel cache.
         listener = Listener(address, authkey=authkey)
         print(f"[daemon] listening on {address[0]}:{address[1]} "
-              f"(device={device}, pid={os.getpid()}) — warming up...", flush=True)
-        # Precompile the Warp kernels while the client is already waiting
-        # for daemon startup — otherwise the first carving run pays the
-        # one-time JIT cost and looks misleadingly slow.  Served from
-        # Warp's disk cache (milliseconds) on subsequent daemon starts.
+              f"(device={device}, pid={os.getpid()}), warming up...", flush=True)
         try:
             from urbansolarcarver.raytracer import warmup_kernels
-            print(f"[daemon] warming up Warp kernels on {device}...", flush=True)
             warmed = warmup_kernels(device)
             print(f"[daemon] kernel warmup {'done' if warmed else 'skipped (no Warp backend)'}", flush=True)
         except Exception as exc:
-            print(f"[daemon] kernel warmup failed ({exc}) — continuing; "
-                  f"kernels will compile on first use", flush=True)
-        print(f"[daemon] READY — listening on {address[0]}:{address[1]} (device={device}, pid={os.getpid()})", flush=True)
+            print(f"[daemon] kernel warmup failed ({exc}); kernels will compile "
+                  f"on first use", flush=True)
+        print(f"[daemon] READY on {address[0]}:{address[1]} (device={device}, pid={os.getpid()})", flush=True)
         try:
             while True:
                 try:
                     conn = listener.accept()
-                except (ConnectionAbortedError, ConnectionResetError, EOFError, OSError):
-                    # stray or half-open client; ignore and continue
+                except AuthenticationError:
+                    print("[daemon] rejected a client with a wrong authkey", flush=True)
+                    continue
+                except (OSError, EOFError):
+                    # A client that connected and vanished during the handshake.
                     time.sleep(0.05)
                     continue
                 try:
                     msg = conn.recv()
-                except (EOFError, OSError):
-                    conn.close()
+                except Exception as exc:
+                    print(f"[daemon] unreadable request ({type(exc).__name__}: {exc})", flush=True)
+                    _reply(conn, _error_reply(exc))
                     continue
-                if not isinstance(msg, dict):
-                    try:
-                        conn.send({"status": "error", "error": "Expected dict message"})
-                    finally:
-                        conn.close()
-                    continue
-                cmd = msg.get("cmd")
-                _REQUIRED_KEYS = {
-                    "preprocessing": ("config",),
-                    "thresholding": ("config", "from"),
-                    "exporting": ("config", "from"),
-                    "run_pipeline": ("config",),
-                    "simulate_weights": ("epw", "archetype", "out"),
-                    "ping": (),
-                    "shutdown": (),
-                }
-                expected = _REQUIRED_KEYS.get(cmd)
-                if expected is None and cmd not in _REQUIRED_KEYS:
-                    try:
-                        conn.send({"status": "error", "error": f"Unknown command: {cmd!r}"})
-                    finally:
-                        conn.close()
-                    continue
-                missing = [k for k in (expected or ()) if k not in msg]
-                if missing:
-                    try:
-                        conn.send({"status": "error", "error": f"Missing required keys for '{cmd}': {missing}"})
-                    finally:
-                        conn.close()
-                    continue
-
-                if cmd == "ping":
-                    conn.send({"status": "ok", "pid": os.getpid()})
-                    conn.close()
-                    continue
-
-                if cmd == "shutdown":
-                    conn.send({"status": "ok"})
-                    conn.close()
+                if isinstance(msg, dict) and msg.get("cmd") == "shutdown":
+                    _reply(conn, {"status": "ok"})
                     break
-
-                if cmd == "simulate_weights":
-                    # Weights generation needs no config or GPU session —
-                    # handled here so Grasshopper avoids a cold Python start.
-                    try:
-                        from urbansolarcarver.simulated_weights import (
-                            generate_simulated_weights,
-                        )
-                        arch = msg["archetype"]
-                        if isinstance(arch, str):
-                            # A YAML path instead of an inline mapping.
-                            import yaml
-                            arch = yaml.safe_load(
-                                Path(arch).read_text(encoding="utf-8"))
-                        path = generate_simulated_weights(
-                            msg["epw"], arch, msg["out"],
-                            internal_gains_w_m2=msg.get("internal_gains_w_m2"),
-                            eps=msg.get("eps", 1.0),
-                        )
-                        reply = {
-                            "status": "ok",
-                            "artifact": str(path),
-                            "preview": str(Path(path).with_suffix(".png")),
-                        }
-                    except Exception as e:
-                        traceback.print_exc()
-                        reply = {"status": "error", "error": str(e)}
-                    try:
-                        conn.send(reply)
-                    finally:
-                        conn.close()
-                    continue
-
-                # Pipeline commands share one handler; failures become
-                # error replies (full traceback stays server-side only).
                 try:
-                    reply = _handle_stage_command(cmd, msg, sess)
-                except Exception as e:
+                    reply = _dispatch(msg, sess)
+                except Exception as exc:
                     traceback.print_exc()
-                    reply = {"status": "error", "error": str(e)}
-                try:
-                    conn.send(reply)
-                finally:
-                    conn.close()
+                    reply = _error_reply(exc)
+                _reply(conn, reply)
         finally:
             listener.close()
-
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="localhost")
     parser.add_argument("--port", type=int, default=6000)
-    parser.add_argument("--authkey", default=None,
-                        help="Auth key string. If omitted, a random key is "
-                             "generated/read from .daemon_authkey")
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     args = parser.parse_args()
-    if args.authkey:
-        key = args.authkey.encode()
-    else:
-        key = _resolve_authkey()
+    key = _resolve_authkey()
     _validate_localhost(args.host)
     print(f"[daemon] authkey file: {_DEFAULT_KEYFILE}", flush=True)
     print(f"[daemon] starting on {args.host}:{args.port} (device={args.device}) ...", flush=True)

@@ -44,8 +44,8 @@ class ThresholdSpec(BaseModel):
     * ``carve_fraction`` — remove voxels accounting for ``value`` of the
         total score mass (0-1).
     * ``headtail`` — head/tail breaks (Jiang 2013); takes no value.
-    * ``cutoff`` — carve voxels scoring strictly above ``value``; for the
-        violation-count modes this is the tolerated violation count.
+    * ``cutoff`` — carve voxels scoring strictly above ``value``; for
+        time-based this is the tolerated shading in m²·h.
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -235,7 +235,7 @@ class UserConfig(BaseModel):
             "gaps between ray sheets where mass survives while still shading "
             "the protected surface between samples. 12 (5 min) closes the gaps "
             "for 1 m voxels at ~40 m; ray count grows linearly with this value. "
-            "Violation scores are in hours regardless of it."
+            "Violation scores (m²·h) do not depend on it."
         ),
     )
     ray_length:    float = Field(300.0, gt=0,description="Max ray cast distance (m)")
@@ -297,8 +297,8 @@ class UserConfig(BaseModel):
             "'headtail': automatic split biased toward removing only the worst "
             "obstructors. "
             "A bare number (≥ 0): raw-score cutoff — carve voxels scoring above it "
-            "(inspect the score histogram first); for time-based/tilted_plane this "
-            "is the tolerated violation count. "
+            "(inspect the score histogram first); for time-based this is the "
+            "tolerated shading in m²·h (shaded test-surface area x duration). "
             "Unset: mode default (carve_fraction for weighted modes, 0 for "
             "violation-count modes). After validation this field is always a "
             "ThresholdSpec."

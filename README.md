@@ -41,7 +41,7 @@ After scoring, a threshold determines which voxels to carve and which to keep. T
 | **Head-tail breaks** | `threshold: headtail` | Heavy-tailed distributions. Biased toward removing only the worst obstructors, preserving more buildable volume when most voxels have low scores. |
 | **Manual** | `threshold: 0.35` | Expert use. Carves all voxels with score above this value. Inspect the score histogram (`diagnostics: true`) first. |
 
-The strategies above apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`). The two binary modes have fixed semantics: **`tilted_plane`** has no threshold (voxels above the cut plane are always removed); **`time-based`** uses the violation duration in hours (`threshold: 0` = remove any voxel that casts a shadow at any sampled moment, `threshold: 1` = tolerate up to one hour, etc.; the sun is sampled every 5 minutes by default, see `sun_steps_per_hour`).
+The strategies above apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`). The two binary modes have fixed semantics: **`tilted_plane`** has no threshold (voxels above the cut plane are always removed); **`time-based`** scores the shading a voxel causes in m²·h, shaded protected area times duration (`threshold: 0` = remove any voxel that casts a shadow at any sampled moment, `threshold: 5` = tolerate up to 5 m²·h; the sun is sampled every 5 minutes by default, see `sun_steps_per_hour`).
 
 The **decomposed pipeline** is designed for threshold exploration: compute scores once (the expensive step), then re-run thresholding with different values instantly.
 

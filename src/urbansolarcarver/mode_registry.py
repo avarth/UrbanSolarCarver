@@ -39,7 +39,7 @@ MODES: Dict[str, ModeSpec] = {
         needs_epw=True,
         needs_period=True,
         score_kind="violation_count",
-        weight_unit="hours",
+        weight_unit="m²·h (shaded test surface x duration)",
         extra_params=_EPW_AND_PERIOD | {"min_altitude", "sun_steps_per_hour"},
     ),
     "irradiance": ModeSpec(
@@ -47,7 +47,7 @@ MODES: Dict[str, ModeSpec] = {
         needs_epw=True,
         needs_period=True,
         score_kind="weighted_sum",
-        weight_unit="Wh/m²",
+        weight_unit="kWh/m²",
         extra_params=_EPW_AND_PERIOD | {"min_altitude"},
     ),
     "benefit": ModeSpec(
@@ -55,7 +55,7 @@ MODES: Dict[str, ModeSpec] = {
         needs_epw=True,
         needs_period=True,
         score_kind="weighted_sum",
-        weight_unit="Wh/m² (heating benefit)",
+        weight_unit="kWh/m² (heating benefit)",
         extra_params=_EPW_AND_PERIOD | {"min_altitude", "balance_temperature",
                                         "balance_offset", "include_harm",
                                         "simulated_weights_path"},

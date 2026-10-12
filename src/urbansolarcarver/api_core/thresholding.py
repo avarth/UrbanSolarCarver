@@ -14,6 +14,7 @@ from ..pydantic_schemas import (
     schema_to_json,
 )
 from ..scoring import carve_fraction_threshold, headtail_threshold
+from ..carving import carve_above_columns
 from ..mode_registry import MODES
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy
 from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
@@ -146,7 +147,9 @@ def thresholding(
       for the given fraction of the building's total score mass.
 
     All threshold statistics, retention counts and smoothing use occupied
-    voxels only; the mask is False on empty cells.
+    voxels only; the mask is False on empty cells.  With ``carve_above``
+    (the default), occupied voxels above a carved run in their column are
+    removed as well, so ``mask.npy`` is the final mask that gets exported.
 
     Score smoothing (``cfg.score_smoothing``):
 
@@ -284,6 +287,14 @@ def thresholding(
             f"Threshold value {thr_val:.4g} may be too low.",
             stacklevel=2,
         )
+    # Column post-processing belongs to the mask, so that mask.npy and the
+    # retention reported below describe the envelope that gets exported.
+    carve_above_removed = 0
+    if conf.carve_above:
+        kept_before = int(mask.sum())
+        mask = carve_above_columns(mask, occ, min_consecutive=conf.carve_above_min_consecutive)
+        carve_above_removed = kept_before - int(mask.sum())
+
     mask_path = out_path / "mask.npy"
     np.save(mask_path, mask, allow_pickle=False)
 
@@ -293,6 +304,8 @@ def thresholding(
         "threshold_method": spec.method,
         "threshold_value": spec.value,
         "score_smoothing": conf.score_smoothing,
+        "carve_above": conf.carve_above,
+        "carve_above_min_consecutive": conf.carve_above_min_consecutive,
     }
     stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
 
@@ -321,6 +334,9 @@ def thresholding(
         "retention_pct": round(100.0 * kept / max(occupied, 1), 2),
         "mask_shape": [int(x) for x in grid_shape],
         "upstream_hash": upstream_hash,
+        "carve_above_applied": conf.carve_above,
+        "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
+        "carve_above_extra_voxels_removed": carve_above_removed,
         "score_smooth_applied": _smooth_applied,
         "score_smoothing_m": _smooth_radius_m,
         "score_smoothing_sigma_voxels": _sigma_voxels,

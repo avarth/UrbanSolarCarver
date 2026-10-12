@@ -6,7 +6,7 @@ determines how sky-patch weights are computed:
   - time-based:        Traces actual sun-position rays for the selected
                        hours; carves any voxel that shades a test point
                        during those hours. (needs EPW)
-  - irradiance:        Cumulative solar irradiance (Wh/m²) from EPW
+  - irradiance:        Cumulative solar irradiation (kWh/m²) from EPW
                        direct + diffuse. (needs EPW)
   - benefit:           Net heating benefit — irradiance weighted by
                        balance-point temperature. (needs EPW + Benefit Params)
@@ -26,8 +26,8 @@ mode : int
 
 Outputs
 -------
-overrides : str
-    mode=<value> override string for USC_Config.
+mode_name : str
+    Mode name for USC_Config's 'mode' input.
 description : str
     Human-readable summary of the selected mode.
 """
@@ -48,11 +48,11 @@ _DESCRIPTIONS = {
         "point during those hours. Requires EPW + analysis period."
     ),
     "irradiance": (
-        "Cumulative solar irradiance (Wh/m\u00b2). Patches weighted by "
+        "Cumulative solar irradiation (kWh/m\u00b2). Patches weighted by "
         "direct + diffuse radiation from EPW. Requires EPW + analysis period."
     ),
     "benefit": (
-        "Net heating benefit (Wh/m\u00b2). Solar gain weighted by outdoor "
+        "Net heating benefit (kWh/m\u00b2). Solar gain weighted by outdoor "
         "temperature relative to a balance point (simple weights), or by an "
         "ISO 13790 5R1C building simulation via USC_SimulateWeights "
         "(simulated weights). Requires EPW + analysis period + Benefit Params."
@@ -67,7 +67,7 @@ _DESCRIPTIONS = {
         "[Experimental]"
     ),
     "tilted_plane": (
-        "Geometric daylight envelope sweep. Carves voxels below a tilted "
+        "Geometric daylight envelope sweep. Carves every voxel above a tilted "
         "plane at user-defined angles. Not a weighted evaluation \u2014 "
         "produces a binary mask. Requires Tilted Plane params."
     ),
@@ -79,7 +79,7 @@ try:
     ghenv.Component.Description = (
         "Select the carving mode. Determines how sky-patch "
         "weights are computed (irradiance, benefit, daylight, etc.). "
-        "Connect the overrides output to USC_Config."
+        "Connect mode_name to USC_Config's mode input."
     )
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
@@ -89,9 +89,8 @@ try:
         "3=daylight, 4=radiative_cooling, 5=tilted_plane. "
         "Right-click \u2192 'Set Integer' or use a Value List."
     )
-    oo[0].Name, oo[0].Description = "overrides", (
-        "mode=<value> override string. Connect to USC_Config or "
-        "USC_Config overrides input."
+    oo[0].Name, oo[0].Description = "mode_name", (
+        "Mode name. Connect to USC_Config's 'mode' input."
     )
     oo[1].Name, oo[1].Description = "description", (
         "Human-readable summary of the selected mode, including "
@@ -100,7 +99,7 @@ try:
 except Exception:
     pass
 
-overrides = None
+mode_name = None
 description = ""
 
 if mode is None:
@@ -118,5 +117,4 @@ else:
             pass
     else:
         mode_name = _MODES[idx]
-        overrides = "mode={}".format(mode_name)
         description = "{}: {}".format(mode_name, _DESCRIPTIONS[mode_name])

@@ -327,7 +327,7 @@ def compute_EPW_based_weights(
       selected hours ('hoys') to obtain cumulative short-wave
       energy per patch:
 
-          wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) [J m⁻²]
+          wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) [kWh m⁻²]
 
       where E_dirᵢₜ is direct beam contribution and E_difᵢₜ
       diffuse.
@@ -381,7 +381,7 @@ def compute_EPW_based_weights(
         Shape (P,), dtype float32, residing on device.
         Weights are non-negative.  Only ``radiative_cooling`` normalises
         to Σwᵢ = 1.  Other modes preserve the physical scale returned
-        by Ladybug (Wh/m² for irradiance/benefit) or the CIE luminance
+        by Ladybug (kWh/m² for irradiance/benefit) or the CIE luminance
         distribution (daylight).  Threshold methods (carve_fraction,
         headtail) are scale-invariant, so the difference does not affect
         carving results.
@@ -455,7 +455,7 @@ def compute_EPW_based_weights(
         SkyMatrix = _load_sky_matrix()
 
         # Ladybug's SkyMatrix already integrates solid angles into the
-        # Wh/m² values it returns, so we do NOT multiply by Ωᵢ here
+        # kWh/m² values it returns, so we do NOT multiply by Ωᵢ here
         # (unlike daylight mode, which builds weights from raw CIE
         # luminance and must apply solid angles explicitly).
         sky = SkyMatrix.from_epw(
@@ -559,7 +559,7 @@ def compute_EPW_based_weights(
 
         def _cumulative_patch_matrix(sel_hoys):
             # Ladybug's SkyMatrix already includes solid angles in the
-            # Wh/m² values — no Ωᵢ multiply needed (same as irradiance).
+            # kWh/m² values, no Ωᵢ multiply needed (same as irradiance).
             # Clip guards against small negative values from gendaymtx
             # numerical noise; all physical values are non-negative here.
             sky = SkyMatrix.from_epw(

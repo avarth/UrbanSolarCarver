@@ -176,18 +176,19 @@ def column_above(hit: np.ndarray) -> np.ndarray:
     return np.maximum.accumulate(hit, axis=2)
 
 
-def time_based_hours(run: Run, epw: str, minutes: int = 5) -> np.ndarray:
-    """Per-voxel violation duration in hours (one sample = minutes/60 h)."""
+def time_based_shading(run: Run, epw: str, minutes: int = 5) -> np.ndarray:
+    """Per-voxel shading in m²·h: blocked (point, sun) rays x grid_step² x minutes/60."""
     c = run.cfg
     period = {k: c[k] for k in ("start_month", "start_day", "start_hour",
                                 "end_month", "end_day", "end_hour")}
     suns = sun_directions(epw, period, c.get("north_deg", 0.0), c.get("min_altitude", 5.0), minutes)
     o, n, d, _, _ = pairs(run.points, run.normals, suns)
-    return march(run, o, n, d, ray_length=c.get("ray_length", 300.0)) * (minutes / 60.0)
+    area = float(c.get("grid_step", 1.0)) ** 2
+    return march(run, o, n, d, ray_length=c.get("ray_length", 300.0)) * (area * minutes / 60.0)
 
 
 def time_based_hits(run: Run, epw: str, minutes: int = 5) -> np.ndarray:
-    return time_based_hours(run, epw, minutes) > 0
+    return time_based_shading(run, epw, minutes) > 0
 
 
 def tilted_hits(run: Run) -> np.ndarray:

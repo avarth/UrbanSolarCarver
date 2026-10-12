@@ -162,6 +162,18 @@ def test_headtail_heavy_tail():
     assert thr > np.median(scores), "Head-tail should split above median for heavy-tailed data"
 
 
+def test_headtail_returns_deepest_minority_break():
+    """Jiang (2013): keep splitting while the head is a minority."""
+    scores = np.array([1.0] * 80 + [10.0] * 16 + [100.0] * 4)
+    assert headtail_threshold(scores) == pytest.approx(28.0)  # breaks 6.4, 28
+
+
+def test_headtail_no_heavy_tail_returns_mean():
+    """A majority head at the first split means no tail to isolate."""
+    scores = np.arange(100, dtype=float)
+    assert headtail_threshold(scores) == pytest.approx(49.5)
+
+
 def test_headtail_all_equal():
     """All-equal scores should return that value (no head to split)."""
     scores = np.full(200, 5.0)

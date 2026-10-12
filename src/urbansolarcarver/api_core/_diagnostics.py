@@ -263,7 +263,7 @@ def save_sky_patch_weights(
     Parameters
     ----------
     weight_unit : str
-        Physical unit label from mode registry (e.g. "Wh/m²", "CIE
+        Physical unit label from mode registry (e.g. "kWh/m²", "CIE
         overcast sky obstruction score (dimensionless)").  Used in the
         intensity plot colorbar label.
 

@@ -100,9 +100,12 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
                 voxel_grid, origin, extent, resolution, pts, norms, conf,
                 datetimes, return_counts=True,
             )
-            # Violation counts in hours, so a numeric threshold means the same
-            # tolerated duration whatever the sun sampling density.
-            counts = counts / float(conf.sun_steps_per_hour)
+            # Each count is one (sample point, sun position) ray the voxel
+            # blocks. A sample point stands for ~grid_step² of protected
+            # surface and a sun position for 1/sun_steps_per_hour h, so the
+            # score is shaded area x duration (m²·h): a numeric threshold
+            # then means the same at any sampling density.
+            counts = counts * (float(conf.grid_step) ** 2 / float(conf.sun_steps_per_hour))
         elif mode == "tilted_plane":
             _carved, _ro, _rd, counts = carve_with_planes(
                 voxel_grid, origin, extent, resolution, pts, norms, conf,
@@ -147,9 +150,10 @@ def preprocessing(
        accumulates a weight that depends on the mode:
 
        * ``time-based``: sun-position rays for the configured analysis period;
-         scores are integer *violation counts* (number of sun-hours blocked).
-       * ``tilted_plane``: geometric plane-intersection test; scores are also
-         violation counts.
+         a voxel's score is the protected-surface area it shades times the
+         duration, in m²·h (each sample point stands for ~grid_step² m²).
+       * ``tilted_plane``: one ray per sample point at the plane angle; a
+         non-zero score means the voxel lies above at least one plane.
        * sky-patch modes (``irradiance``, ``benefit``, ``daylight``,
          ``radiative_cooling``): rays are
          sampled from a discretised sky hemisphere weighted by radiance or

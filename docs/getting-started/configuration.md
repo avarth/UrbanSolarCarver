@@ -155,7 +155,7 @@ After preprocessing computes per-voxel obstruction scores, thresholding decides 
 
     **`tilted_plane`** is strictly binary -- a voxel either protrudes above the cut plane (removed) or it does not (kept). Do not set `threshold`; leave it unset (`None`). Setting a string method or a value > 0 raises a validation error.
 
-    **`time-based`** scores are **violation durations in hours** (how long the voxel shadows a test surface during the period, at `sun_steps_per_hour` resolution). Use a non-negative number: `threshold: 0` removes any voxel that shadows at any sampled moment (strict, default); `threshold: 1` tolerates up to one hour; and so on. See [Modes -- violation-count thresholds](../modes.md#for-violation-count-modes-time-based-tilted_plane) for details.
+    **`time-based`** scores are **shaded area x duration in m²·h** (how much protected surface the voxel shades, and for how long, during the period). Use a non-negative number: `threshold: 0` removes any voxel that shadows at any sampled moment (strict, default); `threshold: 5` tolerates up to 5 m²·h; and so on. See [Modes -- violation-count thresholds](../modes.md#for-violation-count-modes-time-based-tilted_plane) for details.
 
 **`carve_fraction`** (recommended for weighted modes)
 :   Removes a percentage of total obstruction weight. Set `carve_fraction: 0.7` to remove 70% of obstruction (aggressive -- taller, slimmer result with better solar access). Set `carve_fraction: 0.3` for a conservative result (bulkier volume, more floor area). This is the most intuitive option: a **solar protection slider**.

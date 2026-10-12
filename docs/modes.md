@@ -31,19 +31,18 @@ All three strategies, the score smoothing and the reported retention consider **
 
 ### For violation-count modes (time-based, tilted_plane)
 
-`time-based` scores are **violation durations in hours** -- how long, within the analysis period, each voxel shades a protected surface. These have direct physical meaning:
+`time-based` scores measure **how much protected surface a voxel shades, and for how long**, in m²·h: the shaded test-surface area times the duration, summed over the analysis period. Each sample point stands for about `grid_step`² m² of surface and each sun position for 1/`sun_steps_per_hour` h, so the score does not depend on the sampling density.
 
 | Threshold value | Meaning |
 |---|---|
-| `0` (default) | **Strict** -- remove any voxel that shades a protected surface at any sampled moment |
-| `1` | Tolerate up to one hour of shading |
-| `0.5` | Tolerate up to half an hour, etc. |
+| `0` (default) | **Strict** -- remove any voxel that shades any protected surface at any sampled moment |
+| `5` | Tolerate a voxel that shades up to 5 m²·h, e.g. 5 m² of facade for one hour, or 1 m² for five hours |
 | `None` | Uses the default (0 = strict) |
 
 String strategies (`carve_fraction`, `headtail`) are **not applicable** to violation counts and raise an error. `tilted_plane` is strictly binary (see below).
 
-!!! tip "Violation counts are powerful"
-    Unlike weighted modes, violation-count thresholds have a clear physical interpretation. `threshold: 0` means "zero shadow tolerance during the analysis period." `threshold: 2` means "allow up to 2 hours of shadow." This makes time-based mode the most transparent and controllable carving strategy.
+!!! tip "Physically interpretable thresholds"
+    Unlike weighted modes, the time-based threshold has a direct meaning: `threshold: 0` means zero shadow tolerance during the analysis period; `threshold: 5` lets each voxel cast up to 5 m²·h of shadow on the protected surfaces.
 
 ## time-based
 

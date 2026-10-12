@@ -13,7 +13,7 @@ import montecarlo
 SEEDS = [
     1006,  # tilted_plane, octant table, carve_above, rotated, UTM
     1036,  # time-based, carve_above
-    1001,  # time-based, threshold 0.5 h
+    1001,  # time-based, threshold 2 m²·h
     1017,  # benefit, carve_above, UTM
     1048,  # irradiance, UTM
     1009,  # irradiance, headtail, carve_above

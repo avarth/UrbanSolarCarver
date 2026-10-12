@@ -191,40 +191,33 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
 
 def headtail_threshold(
     scores: np.ndarray,
-    max_iterations: int = 10
+    max_iterations: int = 50,
+    head_limit: float = 0.40,
 ) -> float:
-    """
-    Head-tail breaks (Jiang, 2013): iteratively partition scores into 'head'
-    (above mean) and 'tail' (below mean). Each iteration re-computes the mean
-    of the head subset. The process stops when the head mean drops below the
-    overall mean, indicating the distribution's heavy tail has been isolated.
-    This is well-suited for right-skewed score distributions typical of solar
-    exposure data.
+    """Head/tail breaks cutoff (Jiang, 2013).
 
-    Parameters
-    ----------
-    scores : np.ndarray
-        1-D array of non-negative voxel scores.
-    max_iterations : int
-        Safety cap on recursion depth.
+    Split the scores at their mean.  If the part above the mean (the head)
+    is a minority (at most *head_limit* of the values), the mean is a valid
+    break; split the head again at its own mean, and so on.  Stop when the
+    head is no longer a minority (or is empty).
 
-    Returns
-    -------
-    float
-        Threshold value (the last computed mean).
+    Returns the last valid break, so only the heaviest obstructors score
+    above it.  If even the first split has a majority head (no heavy tail),
+    the overall mean is returned.
+
+    Example: 80 values of 1, 16 of 10 and 4 of 100 give breaks 6.4 (head
+    20 %) and 28 (head 20 %), then an empty head: the cutoff is 28.
     """
-    if scores.size == 0:
+    current = np.asarray(scores, dtype=np.float64).ravel()
+    current = current[np.isfinite(current)]
+    if current.size == 0:
         return 0.0
-    current_set = scores.ravel()
+    threshold = float(current.mean())
     for _ in range(max_iterations):
-        mean_val = float(current_set.mean())
-        head_set = current_set[current_set > mean_val]
-        if head_set.size == 0:
-            return mean_val
-        # Jiang (2013): stop when the head proportion drops below 40%,
-        # meaning the heavy tail has been isolated from the bulk.
-        head_pct = head_set.size / current_set.size
-        if head_pct <= 0.40:
-            return mean_val
-        current_set = head_set
-    return float(current_set.mean())
+        mean_val = float(current.mean())
+        head = current[current > mean_val]
+        if head.size == 0 or head.size / current.size > head_limit:
+            break
+        threshold = mean_val
+        current = head
+    return threshold
