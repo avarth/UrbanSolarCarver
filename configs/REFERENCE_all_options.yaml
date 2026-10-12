@@ -79,16 +79,24 @@ carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-
 # Violation-count modes (time-based, tilted_plane) are unaffected.
 score_smoothing: null
 
-# Thresholding and scoring for weighted carving.
+# Thresholding for weighted carving.
 # Canonical form is a mapping:
-#   threshold: {method: carve_fraction, value: 0.7}   # methods: carve_fraction | headtail | cutoff
+#   threshold: {method: protect_share, value: 0.1}
+#   methods: protect_share | carve_fraction | headtail | cutoff
 # Shorthands are accepted and normalized:
-#   threshold: carve_fraction   # value taken from the carve_fraction key below
-#   threshold: headtail         # automatic split, no value
+#   threshold: protect_share    # keep the highest-weight sky patches holding this
+#                               # share of the total weight visible from every test
+#                               # point; value from the protect_share key below
+#   threshold: carve_fraction   # carve the voxels holding this fraction of the
+#                               # obstruction score; value from carve_fraction
+#                               # (with carve_above it can leave cliffs and spires)
+#   threshold: headtail         # automatic split of the scores, no value
 #   threshold: 0.35             # bare number = raw-score cutoff
 #                               # (for time-based: tolerated shading in m²·h, area x duration)
-# Unset = mode default (carve_fraction for weighted modes, 0 for count modes).
-threshold: 'carve_fraction'
+# Unset = protect_share for weighted modes (carve_fraction if only carve_fraction
+# is set), 0 for time-based and tilted_plane.
+threshold: protect_share
+protect_share: 0.1
 carve_fraction: 0.7
 
 # Benefit mode settings (used when mode: benefit)

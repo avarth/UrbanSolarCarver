@@ -7,19 +7,23 @@ Inputs
 ------
 method : str, optional
     Threshold strategy. One of:
+      "protect_share":  keep the highest-weight sky patches that hold the
+                        given share of the total weight visible from every
+                        test point (whole rays are cleared)
       "carve_fraction": remove the highest-scoring voxels that together
                         hold the given fraction of the total score
       "headtail":       head-tail breaks (for skewed distributions)
       "numeric":        direct raw-score cutoff
-    A number typed here is used as a numeric cutoff. If None, the mode
-    default applies (carve_fraction for weighted modes, cutoff 0 for
-    time-based and tilted_plane).
+    A number typed here is used as a numeric cutoff. If None, the config's
+    threshold applies (protect_share in the shipped configs of weighted
+    modes, cutoff 0 for time-based and tilted_plane).
 value : float, optional
     Meaning depends on method:
+      protect_share  → share of the total sky weight to protect (0-1).
       carve_fraction → fraction of total obstruction to remove (0-1).
       headtail       → ignored (algorithm is automatic).
       numeric        → raw score threshold; voxels above are removed.
-      no method      → used as carve_fraction.
+      no method      → used as protect_share.
 score_smoothing : float, optional
     Gaussian blur radius (meters) applied to the score volume before
     thresholding.  Smooths resolution-dependent noise so the carved
@@ -55,7 +59,10 @@ try:
     ghenv.Component.Description = (
         "Controls how the carving threshold is determined, optional score smoothing, "
         "and column-based carve-above post-processing. "
-        "'carve_fraction' (default for weighted modes) removes a fraction of the total obstruction weight. "
+        "'protect_share' (default for weighted modes) keeps the highest-weight sky patches visible from "
+        "every test point and gives continuous envelopes. "
+        "'carve_fraction' removes a fraction of the total obstruction weight; with carve_above it can leave "
+        "cliffs and spires. "
         "'headtail' uses head-tail breaks for automatic statistical splitting. "
         "'numeric' applies a direct raw-score cutoff. "
         "score_smoothing applies Gaussian blur to scores before thresholding for cleaner results. "
@@ -67,18 +74,24 @@ try:
     for i, (n, d) in enumerate([
         ("method", (
             "How to determine the carving threshold. Options: "
-            "'carve_fraction' (remove a fraction of the total obstruction weight; default for weighted modes), "
+            "'protect_share' (keep the highest-weight sky patches holding a share of the total weight "
+            "visible from every test point; default for weighted modes), "
+            "'carve_fraction' (remove a fraction of the total obstruction weight; can leave cliffs and "
+            "spires with carve_above), "
             "'headtail' (automatic heavy-tail distribution split; value is ignored), "
             "'numeric' (direct raw-score cutoff; set the exact threshold via value). "
-            "Unset: the mode default (carve_fraction, or cutoff 0 for time-based and tilted_plane)."
+            "Unset: the config's threshold (protect_share in the shipped configs of weighted modes, "
+            "cutoff 0 for time-based and tilted_plane)."
         )),
         ("value", (
             "Threshold parameter whose meaning depends on method:\n"
+            "  protect_share → share of the total sky weight to protect (0.0-1.0). "
+            "Small values already carve a lot; start with 0.1.\n"
             "  carve_fraction → fraction to carve (0.0-1.0). "
             "0.7 = remove 70% of obstruction weight. Start with 0.5.\n"
             "  headtail → ignored (automatic).\n"
             "  numeric → raw score cutoff. Voxels scoring above this are removed.\n"
-            "  no method → used as carve_fraction."
+            "  no method → used as protect_share."
         )),
         ("score_smoothing", (
             "Gaussian blur radius in meters applied to the score volume before thresholding. "
@@ -132,22 +145,23 @@ if _m == "numeric":
     else:
         _warn("method='numeric' needs a number in the 'value' input; "
               "no threshold override emitted (the mode default is used).")
-elif _m in ("headtail", "carve_fraction"):
+elif _m in ("protect_share", "carve_fraction", "headtail"):
     _items.append(f"threshold={_m}")
-    # carve_fraction: value is the fraction to carve; headtail ignores value.
-    if _m == "carve_fraction" and value is not None:
-        _items.append(f"carve_fraction={float(value)}")
+    # protect_share and carve_fraction take value as their parameter;
+    # headtail ignores it.
+    if _m != "headtail" and value is not None:
+        _items.append(f"{_m}={float(value)}")
 elif _m is not None:
     # A number typed straight into 'method' is accepted as a numeric threshold.
     try:
         float(_m)
         _items.append(f"threshold={_m}")
     except ValueError:
-        _warn(f"Unknown method {method!r}: use numeric, headtail or carve_fraction. "
+        _warn(f"Unknown method {method!r}: use protect_share, carve_fraction, headtail or numeric. "
               "No threshold override emitted.")
 elif value is not None:
-    # No method connected: value maps to carve_fraction (the mode default).
-    _items.append(f"carve_fraction={float(value)}")
+    # No method connected: value is the parameter of the default method.
+    _items.append(f"protect_share={float(value)}")
 
 if score_smoothing is not None:
     _items.append(f"score_smoothing={float(score_smoothing)}")

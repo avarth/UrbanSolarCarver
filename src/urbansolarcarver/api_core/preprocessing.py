@@ -76,6 +76,10 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
     scores_kind : {"violation_count", "weighted_sum"}
     patch_weights : np.ndarray | torch.Tensor | None
         Per-sky-patch weights (weighted modes only).
+    patch_rank : np.ndarray | None
+        Per-voxel rank of the highest-weight patch blocked, for the
+        protect_share threshold (weighted modes only; see
+        ``carving.rank_blocked_patches``).
     """
     mode = conf.mode
     spec = MODES.get(mode)
@@ -114,14 +118,15 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
                 f"mode '{mode}' declares score_kind='violation_count' but has "
                 f"no carver wired in _compute_raw_scores"
             )
-        return counts.astype(np.float32), spec.score_kind, None
+        return counts.astype(np.float32), spec.score_kind, None, None
 
     # weighted_sum: all sky-patch modes share one carver.
     carve_out = carve_with_sky_patch_rays(
         voxel_grid, origin, extent, resolution, pts, norms, conf, hoys,
-        point_weights=point_weights,
+        point_weights=point_weights, return_patch_rank=True,
     )
-    return carve_out.raw_voxel_scores, spec.score_kind, carve_out.patch_weights
+    return (carve_out.raw_voxel_scores, spec.score_kind, carve_out.patch_weights,
+            carve_out.patch_rank)
 
 
 def preprocessing(
@@ -197,6 +202,10 @@ def preprocessing(
         mesh, for diagnostics and Grasshopper display.
     ``patch_weights.npy``
         Per-sky-patch weights (sky-patch modes only).
+    ``patch_rank.npy``
+        Flat ``int32`` array, per voxel the rank of the highest-weight sky
+        patch it blocks from some test point (sky-patch modes only); read
+        by the protect_share threshold.
     ``manifest.json``
         Machine-readable manifest (``PreprocessingManifest``) recording grid
         shape, world origin, voxel size, mode, score kind, and file paths.
@@ -279,7 +288,7 @@ def preprocessing(
         else:
             point_weights = sample_weights
 
-    raw_scores, scores_kind, patch_weights = _compute_raw_scores(
+    raw_scores, scores_kind, patch_weights, patch_rank = _compute_raw_scores(
         voxel_grid, origin, extent, resolution, pts, norms, conf,
         point_weights=point_weights,
     )
@@ -299,6 +308,12 @@ def preprocessing(
         np.save(pw_path, pw_np, allow_pickle=False)
     else:
         pw_path = None
+    rank_path = out_path / "patch_rank.npy"
+    if patch_rank is not None:
+        np.save(rank_path, patch_rank, allow_pickle=False)
+    else:
+        rank_path.unlink(missing_ok=True)  # from an earlier run in a weighted mode
+        rank_path = None
 
     # Persist test points and normals for diagnostics and GH visualization
     test_points_path = out_path / "test_points.npy"
@@ -333,6 +348,7 @@ def preprocessing(
         voxel_size=float(conf.voxel_size),
         mode=mode,
         patch_weights_path=str(pw_path) if pw_path else None,
+        patch_rank_path=str(rank_path) if rank_path else None,
         sample_point_count=int(pts.shape[0]),
     )
 

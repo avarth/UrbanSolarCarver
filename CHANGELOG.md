@@ -7,6 +7,36 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (weighted modes; results change)
+
+- **New default threshold for weighted modes: `protect_share`.** The
+  highest-weight sky patches are protected in order until they hold
+  `protect_share` (default 0.1) of the total patch weight, and every voxel
+  that blocks a protected patch from any test point is carved. Whole rays
+  are cleared, so the envelope varies continuously, as in time-based
+  carving. Why: with `carve_fraction` and `carve_above`, each column was
+  decided by its single highest-scoring voxel. Weighted scores in a column
+  are hump-shaped (near zero at the base, peaking 20-30 m up), so
+  neighbouring columns whose peaks fell just above or below the cutoff
+  ended 15-30 m apart in height, and score noise left one-voxel spires
+  (31-182 per scene in the ReSBE test blocks at carve_fraction 0.4; none
+  with protect_share 0.1, which kept 33-74% of the volume).
+  - Preprocessing of weighted modes also writes `patch_rank.npy` (per
+    voxel, the rank of the highest-weight patch it blocks), so changing
+    the share only re-runs thresholding. This traces the rays a second
+    time, one patch at a time (about 2.0 s to 2.2-2.5 s in the test scenes).
+  - `carve_fraction` stays available: set `threshold: carve_fraction`, or
+    set only the `carve_fraction` key. Setting both keys without
+    `threshold` is an error. The shipped configs now use protect_share.
+  - Thresholding diagnostics and the run report give the patches actually
+    protected (`protected_patch_count`, `protected_patches`,
+    `protected_weight_share`, which can exceed the request because patches
+    are whole). Score smoothing and edge_taper do not apply to protect_share.
+  - USC_Threshold offers protect_share; a `value` without a method now sets
+    protect_share instead of carve_fraction.
+  - Thresholding a preprocessing run from before this change with
+    protect_share fails with a message to re-run preprocessing.
+
 ### Added
 
 - **Simulated-weights generator (benefit mode)**: `usc simulate-weights` and the

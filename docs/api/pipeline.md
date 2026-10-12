@@ -28,7 +28,7 @@ exp  = exporting(thr, cfg, Path("outputs/exporting"))
 
 ## Preprocessing
 
-Voxelizes the max volume, samples the test surfaces, generates rays toward sky patches (or sun positions, or the tilted-plane direction), traces them through the voxel grid, and writes per-voxel obstruction scores to `scores.npy`.
+Voxelizes the max volume, samples the test surfaces, generates rays toward sky patches (or sun positions, or the tilted-plane direction), traces them through the voxel grid, and writes per-voxel obstruction scores to `scores.npy`. Weighted modes also trace the rays one sky patch at a time and write `patch_rank.npy` (per voxel, the rank of the highest-weight patch it blocks), referenced by the manifest field `patch_rank_path`; this makes their preprocessing somewhat slower.
 
 ::: urbansolarcarver.api_core.preprocessing
     options:
@@ -36,7 +36,7 @@ Voxelizes the max volume, samples the test surfaces, generates rays toward sky p
 
 ## Thresholding
 
-Converts the score array into a binary carving mask: optional score smoothing, then `carve_fraction`, head/tail breaks, or a numeric cutoff over the occupied voxels, then `carve_above`. Writes `mask.npy`.
+Converts the preprocessing output into a binary carving mask, then applies `carve_above`, and writes `mask.npy`. With `protect_share` (the default for weighted modes), the share is turned into a number of protected sky patches and every voxel whose patch rank is below it is carved; the scores are not used, so re-thresholding stays instant and score smoothing does not apply. The diagnostics record `protected_patch_count`, `protected_patches` and `protected_weight_share`. With `carve_fraction`, head/tail breaks, or a numeric cutoff, optional score smoothing is applied and the cutoff is taken over the occupied voxels.
 
 ::: urbansolarcarver.api_core.thresholding
     options:
