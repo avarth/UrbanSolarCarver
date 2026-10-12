@@ -34,10 +34,6 @@ try:
 except Exception:
     pass
 
-# NOTE: ground_reflectance was removed — it never affected USC results (the
-# sky-patch pipeline reads only the 145 sky values; the ground-reflected
-# component is a RadiationStudy concept USC does not run). Old canvases may
-# still show the input; it is intentionally not read here.
 _items = []
 for key, val in [
     ("ray_length", ray_length),

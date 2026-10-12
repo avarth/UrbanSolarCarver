@@ -19,7 +19,7 @@ Voxelization, surface sampling, ray casting, and mesh reconstruction.
 | [Carving](carving.md) | `carve_with_sun_rays()`, `carve_with_sky_patch_rays()`, `carve_with_planes()`, `validate_inputs()`, `load_meshes()`, `sample_period()` |
 | [Ray Tracer](raytracer.md) | `trace_and_score_dda()` (fused DDA kernel), `generate_sky_patch_rays()`, `generate_sun_rays()`, `auto_batch_size()` |
 | [Grid Operations](grid.md) | `voxelize()`, `sample_surface()`, `prune_voxels()`, `mesh_from_voxels()`, `mesh_from_voxels_smoothed()`, `polish_mesh_taubin()` |
-| [I/O](io.md) | `load_mesh()`, `save_mesh()`, `save_pointcloud()`, diagnostic exporters (sun vectors, rays, bounding boxes) |
+| [I/O](io.md) | `load_mesh()`, `save_mesh()` |
 
 ## Sky & Sun Models
 

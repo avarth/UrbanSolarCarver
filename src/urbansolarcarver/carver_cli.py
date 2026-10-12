@@ -751,12 +751,9 @@ def schema(
     import textwrap
 
     from .mode_registry import MODES
-    # Derive per-mode parameter sets from the registry.
+    # A mode uses every field except the ones the registry ties to other modes.
     MODE_PARAMS = {name: set(spec.extra_params) for name, spec in MODES.items()}
-    # Parameters shared by all modes.
-    COMMON = {"max_volume_path", "test_surface_path", "out_dir", "mode", "voxel_size", "grid_step",
-              "ray_length", "ray_batch_size", "threshold", "carve_fraction", "apply_smoothing",
-              "min_voxels", "device", "diagnostics", "edge_taper"}
+    mode_specific = set().union(*MODE_PARAMS.values())
 
     if mode and mode not in MODE_PARAMS:
         typer.secho(f"  Unknown mode {mode!r}. Valid modes: {', '.join(sorted(MODE_PARAMS))}", fg="red")
@@ -765,8 +762,7 @@ def schema(
     rows = []
     for name, fld in user_config.model_fields.items():
         if mode:
-            allowed = COMMON | MODE_PARAMS[mode]
-            if name not in allowed:
+            if name in mode_specific and name not in MODE_PARAMS[mode]:
                 continue
 
         typ = fld.annotation

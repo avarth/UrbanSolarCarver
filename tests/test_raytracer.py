@@ -146,13 +146,14 @@ class TestTraceMultiHitGrid:
         assert voxels.shape == (0, 3)
 
     def test_cpu_path_produces_hits(self):
-        """On CPU, trace_multi_hit_grid should produce valid hits."""
+        """The no-Warp fallback warns that it is approximate and still hits."""
         args = _axis_aligned_ray(
             origin=(-0.5, 0.5, 0.5),
             direction=(1.0, 0.0, 0.0),
             resolution=5, voxel_size=1.0,
         )
-        ray_ids, p_ids, voxels = trace_multi_hit_grid(*args)
+        with pytest.warns(UserWarning, match="fixed-step ray marcher"):
+            ray_ids, p_ids, voxels = trace_multi_hit_grid(*args)
         assert ray_ids.shape[0] > 0
         # All voxel indices should be in [0, 5)
         assert (voxels >= 0).all()
@@ -214,9 +215,14 @@ class TestFusedCountKernel:
         .dda_backend_available(torch.device("cpu")),
         reason="Warp CPU unavailable",
     )
-    def test_matches_buffered_trace_counts(self):
-        """The fused count kernel must produce exactly the same per-voxel
-        hit counts as accumulating the buffered DDA trace output."""
+    def test_matches_fine_step_reference(self):
+        """The fused count kernel visits every voxel a finely sampled ray
+        passes through, and almost nothing else.
+
+        The reference marches each ray in steps of voxel/400, so it can only
+        miss corner clips shorter than that; the exact DDA must count at
+        least what the reference counts and at most a sliver more.
+        """
         from urbansolarcarver.raytracer import trace_and_count_dda
 
         res, scale, voxel, ray_len = 20, 20.0, 1.0, 60.0
@@ -232,13 +238,16 @@ class TestFusedCountKernel:
         trace_and_count_dda((0.0, 0.0, 0.0), scale, res, origins, dirs,
                             counts_fused, ray_len)
 
-        _, _, vox = trace_multi_hit_grid((0.0, 0.0, 0.0), scale, res,
-                                         origins, dirs, pids, voxel, ray_len)
+        _, _, vox = _trace_fixed_step((0.0, 0.0, 0.0), scale, res,
+                                      origins, dirs, pids, voxel / 400, ray_len)
         counts_ref = torch.zeros(res**3, dtype=torch.int32)
         flat = vox[:, 0] * res * res + vox[:, 1] * res + vox[:, 2]
         counts_ref.index_add_(0, flat, torch.ones_like(flat, dtype=torch.int32))
 
-        torch.testing.assert_close(counts_fused, counts_ref)
+        assert (counts_fused >= counts_ref).all()
+        extra = (counts_fused - counts_ref).sum().item()
+        # Measured: 33 extra out of ~28k (0.12 %); 6 at voxel/4000.
+        assert extra <= 0.005 * counts_ref.sum().item()
 
 
 # ---------------------------------------------------------------------------

@@ -594,7 +594,6 @@ class PreprocessingManifest(BaseModel):
     scores_kind: Literal["weighted_sum", "violation_count"]
     shape: Tuple[int, int, int]
     origin: Tuple[float, float, float]
-    suggested_threshold: Optional[float] = None
     voxel_grid_path: Optional[str] = None
     voxel_size: Optional[float] = None
     mode: Optional[str] = None

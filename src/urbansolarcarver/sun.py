@@ -18,11 +18,7 @@ Core Responsibilities
      - Creates a Ladybug Sunpath instance for the site location.
      - Caches the Sunpath to reuse across multiple calls.
 
-3. Cache Pre-Warming
-   • warm_up(epw_file: str) → None
-     - Loads EPW and Sunpath caches on demand to improve the first-call latency.
-
-4. Sun Vector Computation
+3. Sun Vector Computation
    • get_sun_vectors(
          epw_file: str,
          datetimes: Sequence[DateTime],
@@ -132,19 +128,6 @@ def _initialize_sunpath(
     return sunpath_object
 
 # Function to pre-load both EPW and Sunpath caches
-def warm_up(epw_file: str) -> None:
-    """
-    Load weather and sunpath data into memory to reduce latency on first real call.
-    Ensures that subsequent calls to get_sun_vectors are faster.
-    """
-    weather_data = _load_epw(epw_file)
-    location_info = weather_data.location
-    _initialize_sunpath(
-        location_info.latitude,
-        location_info.longitude,
-        location_info.time_zone
-    )
-
 # Main function for users: computes sun direction vectors
 def get_sun_vectors(
     epw_file: str,

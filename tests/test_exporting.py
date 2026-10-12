@@ -26,7 +26,6 @@ def _create_preprocessing_artifacts(tmp_path, grid_shape=(8, 8, 8)):
         "scores_kind": "weighted_sum",
         "shape": list(grid_shape),
         "origin": [0.0, 0.0, 0.0],
-        "suggested_threshold": None,
         "voxel_grid_path": str(pre_dir / "voxel_grid.npy"),
         "mode": "benefit",
     }

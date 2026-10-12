@@ -13,11 +13,13 @@ through a voxelized envelope, and remove the voxels they visit. Supports:
 
 Raytracing contract
 -------------------
-All carving is executed via `trace_multi_hit_grid`, which guarantees each
-(ray, voxel) pair is reported at most once.  The Warp DDA backend traverses
-voxels exactly; the PyTorch fallback samples at cell centers
-(distances = (0.5 + k) * voxel_size) and maps world → grid with floor(),
-not round(), to avoid lattice aliasing (especially for the plane method).
+With Warp installed, rays are traced by the fused DDA kernels in
+raytracer.py, which visit every voxel a ray crosses exactly once and
+accumulate counts or scores in place.  Without Warp, `trace_multi_hit_grid`
+lists the (ray, voxel) pairs with a fixed-step PyTorch march (each pair at
+most once) and the scores are accumulated here with torch; that path is
+slower, can miss voxels that oblique rays only clip, and has no
+behind-surface filter.
 
 Coordinate/scale conventions
 ----------------------------

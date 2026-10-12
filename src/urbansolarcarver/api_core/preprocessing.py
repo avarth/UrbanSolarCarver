@@ -71,11 +71,8 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
 
     Returns
     -------
-    raw_scores : np.ndarray (float32, flat or grid-shaped)
+    raw_scores : np.ndarray (float32, flat)
     scores_kind : {"violation_count", "weighted_sum"}
-    suggested_threshold : float | None
-        0.0 for the binary modes (carve any violation); None for weighted
-        modes, whose threshold is resolved in the thresholding stage.
     patch_weights : np.ndarray | None
         Per-sky-patch weights (weighted modes only).
     """
@@ -116,14 +113,14 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
                 f"mode '{mode}' declares score_kind='violation_count' but has "
                 f"no carver wired in _compute_raw_scores"
             )
-        return counts.astype(np.float32), spec.score_kind, 0.0, None
+        return counts.astype(np.float32), spec.score_kind, None
 
     # weighted_sum: all sky-patch modes share one carver.
     carve_out = carve_with_sky_patch_rays(
         voxel_grid, origin, extent, resolution, pts, norms, conf, hoys,
         point_weights=point_weights,
     )
-    return carve_out.raw_voxel_scores, spec.score_kind, None, carve_out.patch_weights
+    return carve_out.raw_voxel_scores, spec.score_kind, carve_out.patch_weights
 
 
 def preprocessing(
@@ -261,7 +258,7 @@ def preprocessing(
         else:
             point_weights = sample_weights
 
-    raw_scores, scores_kind, suggested_threshold, patch_weights = _compute_raw_scores(
+    raw_scores, scores_kind, patch_weights = _compute_raw_scores(
         voxel_grid, origin, extent, resolution, pts, norms, conf,
         point_weights=point_weights,
     )
@@ -310,7 +307,6 @@ def preprocessing(
         scores_kind=scores_kind,
         shape=tuple(voxel_grid.shape),
         origin=tuple(map(float, world_origin)),
-        suggested_threshold=suggested_threshold,
         voxel_grid_path=str(voxel_grid_path),
         voxel_size=float(conf.voxel_size),
         mode=mode,
@@ -334,6 +330,7 @@ def preprocessing(
         "voxels_filled": int(voxel_grid.sum().item() if hasattr(voxel_grid, 'sum') else np.sum(voxel_grid)),
         "test_surface_points": int(pts.shape[0]),
         "test_points_path": str(test_points_path),
+        "analysis_mesh_path": str(analysis_mesh_path) if analysis_mesh_path else None,
         "test_normals_path": str(test_normals_path),
         "scores_path": str(scores_path),
         "score_stats": score_statistics(rs, detailed=conf.diagnostics),

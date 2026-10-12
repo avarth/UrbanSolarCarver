@@ -56,9 +56,8 @@ def generate_run_report(
 ) -> Path:
     """Compile a human-readable run report from all three stage diagnostics.
 
-    Reads ``diagnostics/summary.json`` and ``diagnostics/timings.json`` from
-    each stage directory, plus the config snapshot, and writes a single
-    ``run_report.md`` into *out_dir*.
+    Reads ``diagnostics/diagnostic.json`` from each stage directory, plus
+    the config snapshot, and writes a single ``run_report.md`` into *out_dir*.
 
     Returns the path to the written report.
     """
@@ -107,12 +106,9 @@ def generate_run_report(
         return {}
 
     def _load_diag(stage_dir):
-        """Load consolidated diagnostic.json, falling back to legacy split files."""
+        """Return (diagnostics, timings) for one stage; empty dicts if missing."""
         diag = _load(stage_dir, "diagnostics/diagnostic.json")
-        if diag:
-            return diag, diag.get("timings", {})
-        # Legacy fallback: separate summary.json + timings.json
-        return _load(stage_dir, "diagnostics/summary.json"), _load(stage_dir, "diagnostics/timings.json")
+        return diag, diag.get("timings", {})
 
     # --- Preprocessing ---
     pre_summary, pre_timing = _load_diag(pre_dir)

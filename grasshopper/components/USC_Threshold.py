@@ -104,37 +104,39 @@ except Exception:
     pass
 
 
+def _warn(text):
+    try:
+        from Grasshopper.Kernel import GH_RuntimeMessageLevel
+        ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, text)
+    except Exception:
+        pass
+
+
 _items = []
 
 _m = str(method).strip().lower() if method is not None else None
 
 if _m == "numeric":
-    # 'numeric' is only a UI label — the pipeline needs the actual number.
+    # 'numeric' is only a UI label: the pipeline needs the actual number.
     # Never emit the bare placeholder (the config schema rejects it).
     if value is not None:
         _items.append(f"threshold={float(value)}")
     else:
-        try:
-            from Grasshopper.Kernel import GH_RuntimeMessageLevel
-            ghenv.Component.AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning,
-                "method='numeric' needs a number in the 'value' input — "
-                "no threshold override emitted (mode default will be used).",
-            )
-        except Exception:
-            pass
+        _warn("method='numeric' needs a number in the 'value' input; "
+              "no threshold override emitted (the mode default is used).")
 elif _m in ("headtail", "carve_fraction"):
     _items.append(f"threshold={_m}")
     # carve_fraction: value is the fraction to carve; headtail ignores value.
     if _m == "carve_fraction" and value is not None:
         _items.append(f"carve_fraction={float(value)}")
 elif _m is not None:
-    # Might be a bare number (legacy shorthand for numeric threshold)
+    # A number typed straight into 'method' is accepted as a numeric threshold.
     try:
         float(_m)
         _items.append(f"threshold={_m}")
     except ValueError:
-        pass  # invalid, ignore
+        _warn(f"Unknown method {method!r}: use numeric, headtail or carve_fraction. "
+              "No threshold override emitted.")
 elif value is not None:
     # No method connected: value maps to carve_fraction (the mode default).
     _items.append(f"carve_fraction={float(value)}")

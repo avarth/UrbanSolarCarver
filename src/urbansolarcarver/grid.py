@@ -620,14 +620,16 @@ def sample_planar_surface(
     return points_3d, point_normals, quad_verts_3d, quad_faces, point_weights
 
 class AnalysisMesh:
-    """Lightweight quad mesh container.  Holds raw numpy arrays and builds
-    a Ladybug ``Mesh3D`` or trimesh ``Trimesh`` on demand.
+    """One quad per sample point: the patch of test surface each point stands for.
+
+    Written to ``analysis_mesh.json`` by preprocessing, for visualising
+    sampling density or per-point results.
 
     Attributes
     ----------
-    vertices : (V, 3) float64 ndarray — quad corner positions.
-    faces    : (N, 4) int32 ndarray   — quad face vertex indices.
-    face_normals : (N, 3) float32 ndarray or None — outward unit normals per face.
+    vertices : (V, 3) float64 array of quad corners
+    faces : (N, 4) int32 array of quad vertex indices, one quad per sample point
+    face_normals : (N, 3) float32 array of outward unit normals, or None
     """
     __slots__ = ("vertices", "faces", "face_normals")
 
@@ -636,8 +638,6 @@ class AnalysisMesh:
         self.vertices = vertices
         self.faces = faces
         self.face_normals = face_normals
-
-    # -- Serialisation helpers (called once, outside the hot path) ----------
 
     def to_dict(self) -> dict:
         """Serialise to a plain dict (vertices + faces as nested lists)."""
@@ -649,42 +649,6 @@ class AnalysisMesh:
         if self.face_normals is not None:
             out["face_normals"] = self.face_normals.tolist()
         return out
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "AnalysisMesh":
-        fn = None
-        if "face_normals" in d:
-            fn = np.asarray(d["face_normals"], dtype=np.float32)
-        return cls(
-            np.asarray(d["vertices"], dtype=np.float64),
-            np.asarray(d["faces"], dtype=np.int32),
-            fn,
-        )
-
-    def to_ladybug_mesh3d(self):
-        """Build a ``ladybug_geometry.geometry3d.mesh.Mesh3D`` (slow, use lazily)."""
-        from ladybug_geometry.geometry3d.pointvector import Point3D
-        from ladybug_geometry.geometry3d.mesh import Mesh3D
-        lb_verts = [Point3D(float(v[0]), float(v[1]), float(v[2])) for v in self.vertices]
-        lb_faces = [tuple(int(i) for i in f) for f in self.faces]
-        return Mesh3D(lb_verts, lb_faces)
-
-    def to_trimesh(self, face_colors=None):
-        """Triangulate quads and return a ``trimesh.Trimesh``."""
-        tri_faces = []
-        tri_colors = [] if face_colors is not None else None
-        for i, f in enumerate(self.faces):
-            tri_faces.append([f[0], f[1], f[2]])
-            tri_faces.append([f[0], f[2], f[3]])
-            if face_colors is not None:
-                tri_colors.append(face_colors[i])
-                tri_colors.append(face_colors[i])
-        kw = {"process": False}
-        if tri_colors is not None:
-            kw["face_colors"] = np.array(tri_colors)
-        return trimesh.Trimesh(
-            vertices=self.vertices, faces=np.array(tri_faces), **kw,
-        )
 
 
 def discretize_surface_with_normals(

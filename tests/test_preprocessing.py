@@ -86,8 +86,7 @@ class TestManifestStructure:
             "scores_kind": "weighted_sum",
             "shape": [10, 10, 10],
             "origin": [0.0, 0.0, 0.0],
-            "suggested_threshold": None,
-            "voxel_grid_path": "voxel_grid.npy",
+                "voxel_grid_path": "voxel_grid.npy",
             "mode": "benefit",
         }
         required_keys = {"hash", "scores_path", "scores_kind", "shape", "origin"}
