@@ -330,16 +330,21 @@ class TestEdgeTaperPipeline:
 
 class TestDefaultThresholdReporting:
     """With threshold unset on weighted scores, the default strategy must be
-    recorded by name ('carve_fraction'), and the stage hash must depend on
+    recorded by name ('protect_share'), and the stage hash must depend on
     the strategy, not on the score-dependent resolved cutoff."""
 
-    def _run_thresholding(self, tmp_path, sub, scores):
+    def _run_thresholding(self, tmp_path, sub, scores, **cfg_extra):
         pre_dir = tmp_path / sub / "preprocessing"
         pre_dir.mkdir(parents=True, exist_ok=True)
         scores_path = pre_dir / "scores.npy"
         np.save(scores_path, scores, allow_pickle=False)
         vg_path = pre_dir / "voxel_grid.npy"
         np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
+        # Patch weights and per-voxel patch ranks, as preprocessing writes them.
+        rng = np.random.default_rng(0)
+        np.save(pre_dir / "patch_weights.npy", rng.uniform(0, 1, 145).astype(np.float32))
+        np.save(pre_dir / "patch_rank.npy",
+                rng.integers(0, 145, scores.size).astype(np.int32))
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
         pm = PreprocessingManifest(
             hash="test1234",
@@ -350,6 +355,8 @@ class TestDefaultThresholdReporting:
             voxel_size=1.0,
             mode="irradiance",
             voxel_grid_path=str(vg_path),
+            patch_weights_path=str(pre_dir / "patch_weights.npy"),
+            patch_rank_path=str(pre_dir / "patch_rank.npy"),
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
@@ -359,15 +366,24 @@ class TestDefaultThresholdReporting:
             out_dir=str(tmp_path / sub), mode="irradiance", epw_path="dummy",
             start_month=1, start_day=1, start_hour=0,
             end_month=12, end_day=31, end_hour=23,
-            # threshold intentionally left unset (None → carve_fraction)
+            **cfg_extra,  # threshold left unset unless given
         )
         from urbansolarcarver.api_core.thresholding import thresholding
         return thresholding(pre_dir, cfg, tmp_path / sub / "thr")
 
-    def test_default_reported_as_carve_fraction(self, tmp_path):
+    def test_default_reported_as_protect_share(self, tmp_path):
         rng = np.random.default_rng(11)
         scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
         result = self._run_thresholding(tmp_path, "a", scores)
+        diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
+        assert diag["threshold_method"] == "protect_share"
+        assert diag["threshold_value"] == 0.1
+        assert diag["protected_weight_share"] >= 0.1
+
+    def test_setting_only_carve_fraction_selects_it(self, tmp_path):
+        rng = np.random.default_rng(11)
+        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
+        result = self._run_thresholding(tmp_path, "cf", scores, carve_fraction=0.4)
         diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
         assert diag["threshold_method"] == "carve_fraction"
 

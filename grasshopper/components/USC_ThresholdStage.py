@@ -26,7 +26,8 @@ Outputs
 thr_result : str
     Path to thresholding manifest.json.  Connect to USC Export.
 threshold_value : float
-    The resolved numeric threshold that was applied.
+    The threshold that was applied: the resolved score cutoff, or the
+    requested share for protect_share.
 diagnostics : str
     Retention stats, method used, timing.
 diag_images : list of str
@@ -50,7 +51,7 @@ try:
     ii[2].Name, ii[2].Description = "threshold_overrides", "Override string from USC_Threshold component. Connect it here, not through Config, so that changing the threshold re-runs only this stage and Export, not the slower Preprocessing step."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle. True to execute thresholding."
     oo[0].Name, oo[0].Description = "thr_result", "Path to the thresholding manifest file. Connect to USC_Export's 'thr_result' input."
-    oo[1].Name, oo[1].Description = "threshold_value", "The numeric threshold that was actually applied. Useful for understanding what the algorithm chose (especially with 'headtail' or 'carve_fraction')."
+    oo[1].Name, oo[1].Description = "threshold_value", "The threshold that was applied: the resolved score cutoff (useful with 'headtail' or 'carve_fraction'), or the requested share for 'protect_share'."
     oo[2].Name, oo[2].Description = "diagnostics", "Text summary: threshold method, value, voxel retention percentage and counts, timing."
     if len(oo) > 3:
         oo[3].Name, oo[3].Description = "diag_images", "Path to the threshold histogram (shows score distribution with the threshold line). Feed to Ladybug Image Viewer. Empty unless plots are enabled (USC_Diagnostics)."
@@ -113,13 +114,18 @@ else:
             raise RuntimeError("the daemon reported success but wrote no manifest at " + thr_result)
         data = gh.read_diagnostics(thr_out)
         threshold_value = data.get("threshold_value")
-        diagnostics = "\n".join([
+        lines = [
             "Thresholding: {:.1f}s".format(time.perf_counter() - t_start),
             "Method: {}".format(data.get("threshold_method", "?")),
             "Threshold: {}".format(threshold_value),
-            "Kept: {}%".format(data.get("retention_pct", "?")),
-            "Voxels kept: {} / {}".format(data.get("voxels_kept", "?"), data.get("voxels_occupied", "?")),
-        ])
+        ]
+        if "protected_patch_count" in data:
+            lines.append("Protected: {} sky patches, {:.1%} of the sky weight".format(
+                data["protected_patch_count"], data.get("protected_weight_share", 0.0)))
+        lines.append("Kept: {}%".format(data.get("retention_pct", "?")))
+        lines.append("Voxels kept: {} / {}".format(data.get("voxels_kept", "?"),
+                                                   data.get("voxels_occupied", "?")))
+        diagnostics = "\n".join(lines)
         diag_images = gh.existing_files(data.get("threshold_histogram"))
     except Exception as e:
         diagnostics = _error(str(e))

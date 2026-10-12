@@ -15,9 +15,17 @@ mode: daylight
 # Grid
 voxel_size: 1.0
 
-# Thresholding
-threshold: carve_fraction
-carve_fraction: 0.7
+# Thresholding: keep the highest-weight sky patches holding protect_share of
+# the total weight fully visible from every test point (whole rays are
+# cleared, so the envelope is continuous). 0.1 already carves a lot.
+threshold: protect_share
+protect_share: 0.1
+
+# Alternative: carve the voxels holding a fraction of the obstruction score.
+# With carve_above it can leave cliffs and spires (each column is decided by
+# its highest-scoring voxel).
+# threshold:       carve_fraction
+# carve_fraction:  0.7    # fraction of the obstruction score to remove (0-1)
 
 # --- Defaults you may want to override --------------------------------------
 # score_smoothing: null  # Gaussian blur radius (m) on scores before thresholding. null = auto (1.1× voxel_size). 0 = off. Try 1.0-1.2× voxel_size.

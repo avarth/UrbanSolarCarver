@@ -37,13 +37,14 @@ After scoring, a threshold determines which voxels to carve and which to keep. T
 
 | Strategy | Config | Recommended for |
 |----------|--------|-----------------|
-| **Carve fraction** | `threshold: carve_fraction`<br>`carve_fraction: 0.7` | Design exploration. Directly controls how much obstruction to remove: 0.7 = aggressive (taller, slimmer volumes, more solar access), 0.3 = conservative (bulkier volumes, more floor area). Think of it as a **solar protection slider**. |
+| **Protect share** (default) | `threshold: protect_share`<br>`protect_share: 0.1` | Design exploration. Protects the highest-weight sky patches that together hold this share of the total sky weight: every voxel that blocks one of them from any test point is carved. Whole rays are cleared, so the envelope varies continuously, as in time-based carving. Small values already carve a lot: on the ReSBE test blocks, 0.1 kept 33-74% of the volume and 0.2 kept 22-41%. |
+| **Carve fraction** | `threshold: carve_fraction`<br>`carve_fraction: 0.7` | Alternative slider over the scores: removes the voxels holding this fraction of the obstruction weight. 0.7 = aggressive (taller, slimmer volumes, more solar access), 0.3 = conservative (bulkier volumes, more floor area). With `carve_above`, each column is decided by its highest-scoring voxel, which can leave height jumps between neighbouring columns and single-voxel spires. |
 | **Head-tail breaks** | `threshold: headtail` | Heavy-tailed distributions. Biased toward removing only the worst obstructors, preserving more buildable volume when most voxels have low scores. |
 | **Manual** | `threshold: 0.35` | Expert use. Carves all voxels with score above this value. Inspect the score histogram (`diagnostics: true`) first. |
 
 The strategies above apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`). The two binary modes have fixed semantics: **`tilted_plane`** has no threshold (voxels above the cut plane are always removed); **`time-based`** scores the shading a voxel causes in m²·h, shaded protected area times duration (`threshold: 0` = remove any voxel that casts a shadow at any sampled moment, `threshold: 5` = tolerate up to 5 m²·h; the sun is sampled every 5 minutes by default, see `sun_steps_per_hour`).
 
-The **decomposed pipeline** is designed for threshold exploration: compute scores once (the expensive step), then re-run thresholding with different values instantly.
+The **decomposed pipeline** is designed for threshold exploration: compute scores once (the expensive step), then re-run thresholding with different values instantly. For `protect_share`, preprocessing also stores the highest-weight sky patch each voxel blocks, so changing the share does not trace rays again.
 
 https://github.com/user-attachments/assets/7fb20820-bd24-4ccd-86f5-4f4f868b372a
 

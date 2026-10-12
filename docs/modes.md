@@ -15,7 +15,7 @@ USC supports six carving modes, each using a different strategy to determine whi
 
 ## Thresholding strategies
 
-USC supports three threshold strategies. The right choice depends on the mode.
+USC supports four threshold strategies. The right choice depends on the mode.
 
 ### For weighted modes (irradiance, benefit, daylight, radiative_cooling)
 
@@ -23,11 +23,18 @@ Scores are continuous **weighted sums**: the total sky-patch weight obstructed b
 
 | Strategy | How it works | When to use |
 |----------|---|---|
-| `carve_fraction` (default) | Ranks the building's voxels by score and removes the highest-scoring ones until the target fraction of the building's total obstruction weight is removed. `0.7` = aggressive (tall, slim volumes). `0.3` = conservative (bulky volumes). | **Recommended.** Works as a slider; no knowledge of the score distribution needed. |
+| `protect_share` (default) | Ranks the 145 Tregenza sky patches by weight and protects the smallest top set that holds the target share of the total positive weight (`protect_share: 0.1` = 10%). Every voxel that blocks one of those patches from any test point, in front of the test surface, is carved. | **Recommended.** Clears whole rays, so the envelope varies continuously, as in time-based carving. Small values already carve a lot (see below). |
+| `carve_fraction` | Ranks the building's voxels by score and removes the highest-scoring ones until the target fraction of the building's total obstruction weight is removed. `0.7` = aggressive (tall, slim volumes). `0.3` = conservative (bulky volumes). | Alternative slider over the scores. With `carve_above` it can leave height jumps (cliffs) and single-voxel spires, see below. |
 | `headtail` | Jiang (2013) head/tail breaks: splits the scores at their mean, then splits the part above the mean again, for as long as that part holds at most 40% of the values. Suited to heavy-tailed distributions. | When you want an automatic, data-driven split without choosing a fraction. |
 | Numeric value | Manual cutoff on raw scores. Voxels scoring above this value are carved. | **Advanced.** Only useful after inspecting the score histogram in `diagnostics/`. The value is mode- and dataset-specific and does not carry over to other runs. |
 
-All three strategies, the score smoothing and the reported retention consider **occupied voxels only**. Rays also cross the empty cells of streets, courtyards and the grid margin, and those cells typically hold 60-80% of the total score mass; including them would make the result depend on how much air the grid contains.
+**How `protect_share` works.** Patches are ranked highest weight first; ties keep patch order, and patches with zero weight are never protected. Because patches are whole, the share actually protected can exceed the requested value. `diagnostics/diagnostic.json` of the thresholding stage reports `protected_patch_count`, `protected_patches` (Tregenza indices) and `protected_weight_share`; the run report and the Grasshopper ThresholdStage summary show them too. `carve_above` still applies afterwards. The method does not use the scores, so `score_smoothing` does not apply, and neither does `edge_taper` (except that sample points with taper weight 0 cast no rays). On the ReSBE test blocks (0.5 m voxels, benefit mode, Thessaloniki heating season), `protect_share: 0.1` kept 33-74% of the volume and `0.2` kept 22-41%.
+
+To keep re-thresholding instant, preprocessing of weighted modes also traces the rays one patch at a time and stores, for each voxel, the rank of the highest-weight patch it blocks (`patch_rank.npy`). Thresholding converts the share into a patch count and carves the voxels whose rank is below it. This extra tracing makes preprocessing somewhat slower (about 2.0 s to 2.2-2.5 s in the test scenes).
+
+**Why `carve_fraction` is no longer the default.** With `carve_above`, each column is decided by its single highest-scoring voxel. Weighted scores in a column are hump-shaped (near zero at the base, highest partway up), so neighbouring columns whose peaks fall just above and just below the cutoff can end up 15-30 m apart in height, and score noise leaves one-voxel spires. On the ReSBE test blocks, `carve_fraction: 0.4` left 31-182 spires per scene; `protect_share: 0.1` left none. `carve_fraction` is used when the config sets `threshold: carve_fraction`, or sets only the `carve_fraction` key without `threshold`; setting both `carve_fraction` and `protect_share` without `threshold` is an error.
+
+The score-based strategies (`carve_fraction`, `headtail`, numeric), the score smoothing and the reported retention consider **occupied voxels only**. Rays also cross the empty cells of streets, courtyards and the grid margin, and those cells typically hold 60-80% of the total score mass; including them would make the result depend on how much air the grid contains.
 
 ### For violation-count modes (time-based, tilted_plane)
 
@@ -39,7 +46,7 @@ All three strategies, the score smoothing and the reported retention consider **
 | `5` | Tolerate a voxel that shades up to 5 m²·h, e.g. 5 m² of facade for one hour, or 1 m² for five hours |
 | `None` | Uses the default (0 = strict) |
 
-String strategies (`carve_fraction`, `headtail`) do **not apply** to violation counts and raise an error. `tilted_plane` is strictly binary (see below).
+String strategies (`protect_share`, `carve_fraction`, `headtail`) do **not apply** to violation counts and raise an error. `tilted_plane` is strictly binary (see below).
 
 !!! tip "Physically interpretable thresholds"
     Unlike weighted modes, the time-based threshold has a direct meaning: `threshold: 0` means zero shadow tolerance during the analysis period; `threshold: 5` lets each voxel cast up to 5 m²·h of shadow on the protected surfaces.

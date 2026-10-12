@@ -8,6 +8,8 @@ The carving module implements the three geometric strategies used to remove voxe
 
 All three take a voxel grid and surface sample points with normals. Sky-patch carving returns per-voxel weighted scores; sun-ray and plane carving return a carved grid and, on request, per-voxel hit counts. The preprocessing stage stores these as `scores.npy` (for `time-based`, the counts are converted to m²·h), and the thresholding stage turns them into a binary carving mask.
 
+With `return_patch_rank=True`, sky-patch carving also returns `patch_rank`, computed by `rank_blocked_patches`: the rays are traced one patch at a time in order of weight, and each voxel gets the rank of the highest-weight patch it blocks from some test point, in front of the test surface (`UNBLOCKED_RANK` where it blocks none). The preprocessing stage stores this as `patch_rank.npy` for the `protect_share` threshold.
+
 The module also holds `carve_above_columns`, the column post-processing behind the `carve_above` setting.
 
 ::: urbansolarcarver.carving

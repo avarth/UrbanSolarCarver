@@ -13,7 +13,9 @@ from ..pydantic_schemas import (
     schema_from_json,
     schema_to_json,
 )
-from ..scoring import carve_fraction_threshold, headtail_threshold
+from ..scoring import (
+    carve_fraction_threshold, headtail_threshold, protected_patch_count, protection_order,
+)
 from ..carving import carve_above_columns
 from ..mode_registry import MODES
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy
@@ -108,6 +110,39 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     return smoothed, True, radius_m, sigma_voxels
 
 
+def _protect_patches(pre_manifest, pre_manifest_path, share):
+    """Carved voxels for the protect_share method, plus diagnostics.
+
+    Returns a dict with ``carved`` (flat bool array: the voxel blocks one of
+    the protected patches) and the diagnostic entries
+    ``protected_patch_count``, ``protected_patches`` (Tregenza indices) and
+    ``protected_weight_share`` (the share actually protected, which can
+    exceed *share* because patches are whole).
+    """
+    rank_path = pre_manifest.patch_rank_path
+    weights_path = pre_manifest.patch_weights_path
+    if not (rank_path and Path(rank_path).is_file() and weights_path
+            and Path(weights_path).is_file()):
+        raise ValueError(
+            f"threshold method protect_share needs patch_rank.npy and "
+            f"patch_weights.npy from preprocessing, and {pre_manifest_path} does not "
+            f"point to them (it was written by an older USC version, or by a mode "
+            f"without sky patches). Re-run preprocessing."
+        )
+    weights = np.load(weights_path, allow_pickle=False)
+    rank = np.load(rank_path, allow_pickle=False)
+    n = protected_patch_count(weights, share)
+    order = protection_order(weights)
+    positive = float(weights[order].sum()) if order.size else 0.0
+    return {
+        "carved": rank < n,
+        "protected_patch_count": n,
+        "protected_patches": [int(i) for i in order[:n]],
+        "protected_weight_share": round(float(weights[order[:n]].sum()) / positive, 4)
+        if positive > 0 else 0.0,
+    }
+
+
 def _resolve_threshold(scores, spec):
     """Resolve a validated :class:`ThresholdSpec` into a numeric cutoff.
 
@@ -156,10 +191,18 @@ def thresholding(
       40 % of the values, the head is split again at its own mean.  The
       last such mean is the cutoff.  Suited to the heavy-tailed score
       distributions common in urban solar access studies.
-    * ``carve_fraction`` (default for weighted modes): cumulative-score
-      cutoff.  Sorting the occupied voxels by descending score, it finds the
-      cutoff above which the voxels hold the given fraction of the
-      building's total score mass.
+    * ``protect_share`` (default for weighted modes): sky-patch
+      protection.  The sky patches are ranked by weight; the top patches
+      holding the given share of the total weight are protected, and every
+      voxel that blocks one of them from some test point is carved.  Uses
+      ``patch_rank.npy`` from preprocessing, so the scores are not used and
+      score smoothing does not apply.  Because whole rays are cleared, the
+      envelope varies continuously, as in time-based carving.
+    * ``carve_fraction``: cumulative-score cutoff.  Sorting the occupied
+      voxels by descending score, it finds the cutoff above which the voxels
+      hold the given fraction of the building's total score mass.  With
+      ``carve_above`` each column is then decided by its highest-scoring
+      voxel, which can leave cliffs and single-voxel spires.
 
     All threshold statistics, retention counts and smoothing use occupied
     voxels only; the mask is False on empty cells.  With ``carve_above``
@@ -219,8 +262,9 @@ def thresholding(
     ValueError
         If the preprocessing manifest cannot be read, the scores do not
         match its grid shape, the config's mode differs from the
-        preprocessing run's, or a non-numeric threshold is used with
-        violation-count scores.
+        preprocessing run's, a non-numeric threshold is used with
+        violation-count scores, or protect_share is used with a
+        preprocessing run that has no ``patch_rank.npy``.
     FileNotFoundError
         If the scores file named in the manifest is missing.
     """
@@ -277,13 +321,18 @@ def thresholding(
     # much air the grid happens to contain.
     occ = load_occupancy(pre_manifest, conf)
 
-    raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
-        raw, kind, pre_manifest.voxel_size, conf.score_smoothing, occ=occ
-    )
+    spec = conf.threshold
+    if spec.method == "protect_share":
+        # The mask comes from patch_rank.npy; smoothing the scores would
+        # change nothing but the statistics below.
+        _smooth_applied, _smooth_radius_m, _sigma_voxels = False, 0.0, 0.0
+    else:
+        raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
+            raw, kind, pre_manifest.voxel_size, conf.score_smoothing, occ=occ
+        )
 
     scores = raw.astype(np.float32, copy=False)
     occ_scores = scores[occ]
-    spec = conf.threshold
     # Standalone re-thresholding (CLI, daemon, Grasshopper) can pair a config
     # with scores from a run in another mode; the threshold defaults and
     # units differ per mode, so refuse instead of carving with the wrong rule.
@@ -300,22 +349,28 @@ def thresholding(
             f"'{spec.method}'. Use a numeric threshold (a raw-score cutoff) "
             f"or match the config mode to the preprocessing run."
         )
-    thr_val = _resolve_threshold(occ_scores, spec)
-
-    # Threshold to mask. Empty cells are False: there is nothing to keep.
-    mask = occ & (scores <= thr_val).reshape(grid_shape)
+    protection = None
+    if spec.method == "protect_share":
+        protection = _protect_patches(pre_manifest, pre_manifest_path, float(spec.value))
+        thr_val = float(spec.value)
+        # Empty cells are False: there is nothing to keep.
+        mask = occ & ~protection.pop("carved").reshape(grid_shape)
+    else:
+        thr_val = _resolve_threshold(occ_scores, spec)
+        # Threshold to mask. Empty cells are False: there is nothing to keep.
+        mask = occ & (scores <= thr_val).reshape(grid_shape)
     if mask.sum() == occ.sum():
         import warnings
         warnings.warn(
             f"Thresholding produced an all-True mask (nothing carved). "
-            f"Threshold value {thr_val:.4g} may be too high.",
+            f"{spec} may be too lenient.",
             stacklevel=2,
         )
     elif not mask.any():
         import warnings
         warnings.warn(
             f"Thresholding produced an all-False mask (everything carved). "
-            f"Threshold value {thr_val:.4g} may be too low.",
+            f"{spec} may be too strict.",
             stacklevel=2,
         )
     # Column post-processing belongs to the mask, so that mask.npy and the
@@ -375,6 +430,8 @@ def thresholding(
         # score smoothing when it is applied.
         "occupied_score_stats": score_statistics(nn, detailed=conf.diagnostics),
     }
+    if protection is not None:
+        summary.update(protection)
     # Performance reporting, with the score unit from the mode registry
     mode_name = pre_manifest.mode or "unknown"
     mode_spec = MODES.get(mode_name)
@@ -404,7 +461,7 @@ def thresholding(
         summary["threshold_histogram"] = str(diag_dir / "threshold_histogram.png")
         save_histogram(
             nn, diag_dir, "threshold_histogram.png",
-            threshold_line=thr_val,
+            threshold_line=None if protection is not None else thr_val,
             title=f"Voxel scores, threshold={thr_val:.4g} ({threshold_method})",
             xlabel=weight_unit,
         )

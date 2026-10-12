@@ -152,6 +152,10 @@ def generate_run_report(
         value = thr_summary.get("threshold_value", 0)
         lines.append(f"- **Method:** {method}")
         lines.append(f"- **Threshold value:** {value:.4g}")
+        if "protected_patch_count" in thr_summary:
+            lines.append(
+                f"- **Protected sky:** {thr_summary['protected_patch_count']} patches, "
+                f"{100 * thr_summary.get('protected_weight_share', 0.0):.1f}% of the patch weight")
         lines.append(f"- **Voxels kept / removed:** {thr_summary.get('voxels_kept', 0):,} / {thr_summary.get('voxels_removed', 0):,}")
         obs = thr_summary.get("obstruction_fraction_carved")
         if obs is not None:
