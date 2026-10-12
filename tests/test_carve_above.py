@@ -202,3 +202,96 @@ class TestCarveAboveColumns:
         # Column (1,0): bottom-up #,#,#,x,# → x stays carved, top not triggered
         assert result[1, 0, 3] == False
         assert result[1, 0, 4] == True
+
+
+# ---------------------------------------------------------------------------
+# Slope limit (limit_column_slope)
+# ---------------------------------------------------------------------------
+
+def _heights(mask):
+    z = np.arange(mask.shape[2])
+    return np.where(mask.any(axis=2), (mask * (z + 1)).max(axis=2), 0)
+
+
+class TestLimitColumnSlope:
+    def test_spire_is_cut_to_one_step_above_its_surroundings(self):
+        from urbansolarcarver.carving import limit_column_slope
+        m = np.zeros((9, 9, 60), bool)
+        m[:, :, :10] = True
+        m[4, 4, :] = True                      # 60-voxel spire on a 10-voxel plateau
+        out = limit_column_slope(m, m.copy(), 45.0)      # one step = 1 voxel
+        assert _heights(out)[4, 4] == 11
+        assert (_heights(out)[_heights(m) == 10] == 10).all()
+
+    def test_cliff_becomes_a_ramp_no_steeper_than_the_limit(self):
+        from urbansolarcarver.carving import limit_column_slope
+        m = np.zeros((70, 6, 60), bool)
+        m[:20, :, :10] = True                  # low part
+        m[20:, :, :60] = True                  # tall part: a 50-voxel cliff
+        out = limit_column_slope(m, m.copy(), 60.0)
+        h = _heights(out)[:, 3].astype(float)
+        rise = np.tan(np.radians(60.0))
+        ramp = h[20:][h[20:] < 60]
+        # Along the ramp the height climbs at the limit's rate (heights are
+        # whole voxels, so single steps vary by one); a column may also stand
+        # one step above its reference, which shows at the foot.
+        assert np.all(np.diff(h) <= 2 * rise + 1.0)
+        assert abs((ramp[-1] - ramp[0]) / (len(ramp) - 1) - rise) < 0.1
+        assert h[-1] == 60                     # far from the cliff: untouched
+
+    def test_only_removes_voxels(self):
+        from urbansolarcarver.carving import limit_column_slope
+        rng = np.random.default_rng(0)
+        h = rng.integers(0, 40, (20, 20))
+        m = np.arange(40)[None, None, :] < h[:, :, None]
+        out = limit_column_slope(m, m.copy(), 70.0)
+        assert not (out & ~m).any()
+
+    def test_narrow_slot_does_not_pull_neighbours_down(self):
+        from urbansolarcarver.carving import limit_column_slope
+        occ = np.ones((20, 20, 30), bool)
+        m = occ.copy()
+        m[9:11, :, :] = False                  # a 2-column slot carved to the ground
+        out = limit_column_slope(m, occ, 45.0)
+        assert np.array_equal(out, m)
+
+    def test_wide_carved_area_gets_a_ramp_beside_it(self):
+        from urbansolarcarver.carving import limit_column_slope
+        occ = np.ones((50, 6, 30), bool)
+        m = occ.copy()
+        m[:10, :, :] = False                   # 10 columns carved to the ground
+        out = limit_column_slope(m, occ, 45.0)
+        h = _heights(out)[:, 3]
+        assert h[10] < 30 and h[-1] == 30      # ramp next to the carved area
+
+    def test_columns_outside_the_building_take_no_part(self):
+        from urbansolarcarver.carving import limit_column_slope
+        occ = np.zeros((20, 20, 30), bool)
+        occ[:, :8, :] = True                   # two blocks across an open street
+        occ[:, 12:, :] = True
+        out = limit_column_slope(occ.copy(), occ, 45.0)
+        assert np.array_equal(out, occ)
+
+    def test_carving_more_never_keeps_more(self):
+        from urbansolarcarver.carving import limit_column_slope
+        rng = np.random.default_rng(1)
+        occ = np.ones((24, 24, 40), bool)
+        h_loose = rng.integers(0, 41, (24, 24))
+        h_tight = np.minimum(h_loose, rng.integers(0, 41, (24, 24)))
+        z = np.arange(40)[None, None, :]
+        loose = limit_column_slope(z < h_loose[:, :, None], occ, 60.0)
+        tight = limit_column_slope(z < h_tight[:, :, None], occ, 60.0)
+        assert not (tight & ~loose).any()
+
+    def test_single_low_stub_does_not_pull_neighbours_down(self):
+        from urbansolarcarver.carving import limit_column_slope
+        m = np.zeros((11, 11, 30), bool)
+        m[:, :, :30] = True
+        m[5, 5, 1:] = False                    # one column cut to a 1-voxel stub
+        out = limit_column_slope(m, m.copy(), 45.0)
+        assert np.array_equal(out, m)
+
+    def test_rejects_angles_outside_0_90(self):
+        from urbansolarcarver.carving import limit_column_slope
+        with pytest.raises(ValueError):
+            limit_column_slope(np.ones((2, 2, 2), bool), np.ones((2, 2, 2), bool), 90.0)

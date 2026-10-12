@@ -16,7 +16,7 @@ from ..pydantic_schemas import (
 from ..scoring import (
     carve_fraction_threshold, headtail_threshold, protected_patch_count, protection_order,
 )
-from ..carving import carve_above_columns
+from ..carving import carve_above_columns, limit_column_slope
 from ..mode_registry import MODES
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy
 from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
@@ -191,23 +191,28 @@ def thresholding(
       40 % of the values, the head is split again at its own mean.  The
       last such mean is the cutoff.  Suited to the heavy-tailed score
       distributions common in urban solar access studies.
-    * ``protect_share`` (default for weighted modes): sky-patch
-      protection.  The sky patches are ranked by weight; the top patches
+    * ``protect_share``: sky-patch protection.  The sky patches are ranked by weight; the top patches
       holding the given share of the total weight are protected, and every
       voxel that blocks one of them from some test point is carved.  Uses
       ``patch_rank.npy`` from preprocessing, so the scores are not used and
       score smoothing does not apply.  Because whole rays are cleared, the
       envelope varies continuously, as in time-based carving.
-    * ``carve_fraction``: cumulative-score cutoff.  Sorting the occupied
-      voxels by descending score, it finds the cutoff above which the voxels
-      hold the given fraction of the building's total score mass.  With
-      ``carve_above`` each column is then decided by its highest-scoring
-      voxel, which can leave cliffs and single-voxel spires.
+    * ``carve_fraction`` (default for weighted modes): cumulative-score
+      cutoff.  Sorting the occupied voxels by descending score, it finds the
+      cutoff above which the voxels hold the given fraction of the
+      building's total score mass.  With ``carve_above`` each column is then
+      decided by its highest-scoring voxel, which can leave cliffs and
+      single-voxel spires; the slope limit (``max_slope_deg``, 75 degrees by
+      default for this method) turns them into ramps.
 
     All threshold statistics, retention counts and smoothing use occupied
     voxels only; the mask is False on empty cells.  With ``carve_above``
     (the default), occupied voxels above a carved run in their column are
-    removed as well, so ``mask.npy`` is the final mask that gets exported.
+    removed as well.  Then, for the score-cutoff methods of the sky modes
+    (or whenever ``max_slope_deg`` is set), columns that rise more steeply
+    than ``max_slope_deg`` above their surroundings are cut down
+    (:func:`~urbansolarcarver.carving.limit_column_slope`).  ``mask.npy`` is
+    the final mask that gets exported.
 
     Score smoothing (``cfg.score_smoothing``):
 
@@ -380,6 +385,13 @@ def thresholding(
         kept_before = int(mask.sum())
         mask = carve_above_columns(mask, occ, min_consecutive=conf.carve_above_min_consecutive)
         carve_above_removed = kept_before - int(mask.sum())
+    # Slope limit: turns cliffs and spires left by per-voxel cutoffs into ramps.
+    max_slope = conf.effective_max_slope_deg()
+    slope_removed = 0
+    if max_slope is not None:
+        kept_before = int(mask.sum())
+        mask = limit_column_slope(mask, occ, max_slope)
+        slope_removed = kept_before - int(mask.sum())
 
     mask_path = out_path / "mask.npy"
     np.save(mask_path, mask, allow_pickle=False)
@@ -392,6 +404,7 @@ def thresholding(
         "score_smoothing": conf.score_smoothing,
         "carve_above": conf.carve_above,
         "carve_above_min_consecutive": conf.carve_above_min_consecutive,
+        "max_slope_deg": max_slope,
     }
     stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
 
@@ -423,6 +436,8 @@ def thresholding(
         "carve_above_applied": conf.carve_above,
         "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
         "carve_above_extra_voxels_removed": carve_above_removed,
+        "max_slope_deg": max_slope,
+        "slope_limit_extra_voxels_removed": slope_removed,
         "score_smooth_applied": _smooth_applied,
         "score_smoothing_m": _smooth_radius_m,
         "score_smoothing_sigma_voxels": _sigma_voxels,

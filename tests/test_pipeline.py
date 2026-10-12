@@ -330,7 +330,7 @@ class TestEdgeTaperPipeline:
 
 class TestDefaultThresholdReporting:
     """With threshold unset on weighted scores, the default strategy must be
-    recorded by name ('protect_share'), and the stage hash must depend on
+    recorded by name ('carve_fraction'), and the stage hash must depend on
     the strategy, not on the score-dependent resolved cutoff."""
 
     def _run_thresholding(self, tmp_path, sub, scores, **cfg_extra):
@@ -371,21 +371,31 @@ class TestDefaultThresholdReporting:
         from urbansolarcarver.api_core.thresholding import thresholding
         return thresholding(pre_dir, cfg, tmp_path / sub / "thr")
 
-    def test_default_reported_as_protect_share(self, tmp_path):
+    def test_default_reported_as_carve_fraction(self, tmp_path):
         rng = np.random.default_rng(11)
         scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
         result = self._run_thresholding(tmp_path, "a", scores)
         diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
-        assert diag["threshold_method"] == "protect_share"
-        assert diag["threshold_value"] == 0.1
-        assert diag["protected_weight_share"] >= 0.1
+        assert diag["threshold_method"] == "carve_fraction"
+        assert diag["max_slope_deg"] == 75.0  # default slope limit for score cutoffs
+        assert diag["slope_limit_extra_voxels_removed"] >= 0
 
-    def test_setting_only_carve_fraction_selects_it(self, tmp_path):
+    def test_setting_only_protect_share_selects_it(self, tmp_path):
         rng = np.random.default_rng(11)
         scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
-        result = self._run_thresholding(tmp_path, "cf", scores, carve_fraction=0.4)
+        result = self._run_thresholding(tmp_path, "ps", scores, protect_share=0.2)
         diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
-        assert diag["threshold_method"] == "carve_fraction"
+        assert diag["threshold_method"] == "protect_share"
+        assert diag["protected_weight_share"] >= 0.2
+        assert diag["max_slope_deg"] is None  # ray-based result: no slope limit
+
+    def test_max_slope_90_turns_the_limit_off(self, tmp_path):
+        rng = np.random.default_rng(11)
+        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
+        result = self._run_thresholding(tmp_path, "off", scores, max_slope_deg=90)
+        diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
+        assert diag["max_slope_deg"] is None
+        assert diag["slope_limit_extra_voxels_removed"] == 0
 
     def test_stage_hash_independent_of_score_data(self, tmp_path):
         """Same config + same upstream hash → same stage hash, even when the

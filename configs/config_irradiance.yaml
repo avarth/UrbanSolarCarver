@@ -23,10 +23,11 @@ analysis_period:
 # Grid
 voxel_size: 1.0
 
-# How much to carve: share of the sky's weight (0-1) to protect. The rays from
-# every test point to the centres of the highest-weight sky patches holding
-# this share are kept clear. Small values already carve a lot; start at 0.1.
-protect_share: 0.1
+# How much to carve: fraction (0-1) of the building's obstruction score to
+# remove. 0.7 = aggressive (slimmer volume, more sky); 0.3 = conservative.
+# Columns are then limited to a 75 degree slope against their neighbours
+# (max_slope_deg), which turns cliffs and spires into ramps.
+carve_fraction: 0.7
 
 # --- Defaults you may want to override --------------------------------------
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)

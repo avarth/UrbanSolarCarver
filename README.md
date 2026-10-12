@@ -33,17 +33,17 @@ The tool is scale-agnostic and works on any voxelizable geometry. Surface normal
 
 ## How much to carve
 
-Each mode has one setting that trades solar protection against buildable volume:
+Each mode has one main setting that trades solar protection against buildable volume:
 
 | Mode | Setting | Meaning |
 |------|---------|---------|
-| `irradiance`, `benefit`, `daylight`, `radiative_cooling` | `protect_share: 0.1` | Share of the sky's weight (0-1) to protect. The highest-weight sky patches holding this share are protected: every voxel on a ray from a test point towards a protected patch's centre is carved. This is the solar-envelope operation of `time-based`, with patch centres chosen by weather-weighted value in place of clock-time sun positions. Small values already carve a lot: on the ReSBE test blocks, 0.1 kept 33-74% of the volume and 0.2 kept 22-41%. |
+| `irradiance`, `benefit`, `daylight`, `radiative_cooling` | `carve_fraction: 0.7` | Fraction (0-1) of the building's obstruction score to remove: the voxels that block the most sky weight go first. 0.7 = aggressive (taller, slimmer volumes, more sky), 0.3 = conservative (bulkier volumes, more floor area). A slope limit (`max_slope_deg`, 75° by default) then turns the cliffs and one-voxel spires that a per-voxel cutoff can leave into ramps. |
 | `time-based` | `threshold: 0` | Tolerated shading in m²·h (shaded protected area x duration). 0 = remove any voxel that casts a shadow at any sampled moment; 5 = tolerate up to 5 m²·h. The sun is sampled every 5 minutes by default (`sun_steps_per_hour`). |
 | `tilted_plane` | `tilted_plane_angle_deg: 45` | Everything above the plane is removed. |
 
-The **decomposed pipeline** is designed for exploring this setting: preprocessing does the ray tracing once, then thresholding re-runs in seconds with other values.
+The sky modes also offer `threshold: protect_share` (keep the rays from every test point to the highest-weight sky patches clear, like a solar envelope over those directions), `threshold: headtail` and a numeric score cutoff; see [Carving Modes](docs/modes.md#how-much-to-carve).
 
-Older configs that use `threshold: carve_fraction`, `threshold: headtail` or a numeric cutoff in the sky modes still run. These legacy methods cut on voxel scores, which does not return a predictable share of the sky and can leave cliffs and spires; see [Carving Modes](docs/modes.md#legacy-score-cutoff-methods-sky-modes).
+The **decomposed pipeline** is designed for exploring this setting: preprocessing does the ray tracing once, then thresholding re-runs in seconds with other values.
 
 https://github.com/user-attachments/assets/7fb20820-bd24-4ccd-86f5-4f4f868b372a
 
