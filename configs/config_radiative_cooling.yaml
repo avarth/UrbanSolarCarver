@@ -22,8 +22,9 @@ bliss_k:            1.8   # angular attenuation constant (Bliss 1961); physical 
 # Grid
 voxel_size: 1.0
 
-# How much to carve: share of the sky's weight (0-1) that stays fully visible
-# from every test point. Small values already carve a lot; start at 0.1.
+# How much to carve: share of the sky's weight (0-1) to protect. The rays from
+# every test point to the centres of the highest-weight sky patches holding
+# this share are kept clear. Small values already carve a lot; start at 0.1.
 protect_share: 0.1
 # Cooling weights are spread over the whole sky (the zenith is highest), so
 # each protected patch adds little share: inspect the result before raising it.

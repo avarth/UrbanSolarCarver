@@ -71,7 +71,8 @@ carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-
 
 # How much to carve (one setting per mode; see docs/modes.md)
 # Sky modes (irradiance, benefit, daylight, radiative_cooling): share (0-1) of
-# the sky's weight that stays fully visible from every test point.
+# the sky's weight to protect. The rays from every test point to the centres
+# of the highest-weight sky patches holding this share are kept clear.
 protect_share: 0.1
 # time-based: tolerated shading in m²·h (shaded area x duration), 0 = none.
 # tilted_plane: leave threshold unset; tilted_plane_angle_deg decides.

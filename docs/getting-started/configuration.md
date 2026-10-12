@@ -104,7 +104,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `voxel_size` | 1.0 | Voxel edge length in meters (0.01-100) |
 | `grid_step` | 1.0 | Surface sampling spacing in meters (must be <= voxel_size) |
 | `ray_length` | 300.0 | Maximum ray cast distance in meters |
-| `protect_share` | 0.1 | Sky modes: share (0-1) of the sky weight that stays visible from every test point. See [How much to carve](#how-much-to-carve) |
+| `protect_share` | 0.1 | Sky modes: share (0-1) of the sky weight to protect; the directions to the protected sky patches stay unobstructed from every test point. See [How much to carve](#how-much-to-carve) |
 | `threshold` | 0 | `time-based`: tolerated shading in m²·h (0 = none). Sky modes use it only to select a [legacy method](../modes.md#legacy-score-cutoff-methods-sky-modes) |
 | `carve_fraction` | 0.7 | Legacy sky-mode method: fraction of the obstruction score to remove |
 | `score_smoothing` | `null` | Legacy sky-mode methods only: Gaussian blur radius (m) on the scores before the cutoff; `null` = 1.1 x voxel_size, 0 = off |
@@ -140,7 +140,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 Each mode has one setting for this; it sets the trade-off between solar protection and buildable volume. Details and limitations: [Carving Modes: How much to carve](../modes.md#how-much-to-carve).
 
 **Sky modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`): `protect_share` (0-1, default 0.1)
-:   The sky patches with the highest weight for the mode, together holding this share of the total, stay fully visible from every test point; every voxel that blocks one of them is carved. Small values already carve a lot: on the ReSBE test blocks, 0.1 kept 33-74% of the volume and 0.2 kept 22-41%. Patches are protected whole, so the share actually protected (reported in the thresholding diagnostics) can be higher than the value set.
+:   The sky patches with the highest weight for the mode, together holding this share of the total, are protected: every voxel on a ray from a test point towards a protected patch's centre is carved (a solar envelope over those directions). Small values already carve a lot: on the ReSBE test blocks, 0.1 kept 33-74% of the volume and 0.2 kept 22-41%. Patches are protected whole, so the share actually protected (reported in the thresholding diagnostics) can be higher than the value set.
 
 **`time-based`**: `threshold` in m²·h (default 0)
 :   The shading a voxel may cause on the protected surfaces (area x duration) before it is carved. `0` removes any voxel that shades at any sampled moment; `5` tolerates up to 5 m²·h.

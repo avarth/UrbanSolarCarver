@@ -19,7 +19,7 @@ Each mode has one setting that decides how much is carved:
 
 | Mode | Setting | Meaning |
 |---|---|---|
-| `irradiance`, `benefit`, `daylight`, `radiative_cooling` (sky modes) | `protect_share` (0-1, default 0.1) | Share of the sky's weight that stays visible from every test point |
+| `irradiance`, `benefit`, `daylight`, `radiative_cooling` (sky modes) | `protect_share` (0-1, default 0.1) | Share of the sky's weight to protect; the directions to the protected sky patches stay unobstructed from every test point |
 | `time-based` | `threshold` (m²·h, default 0) | Shading a voxel may cause before it is carved; 0 = none |
 | `tilted_plane` | `tilted_plane_angle_deg` | Angle of the plane above which everything is carved |
 
@@ -31,7 +31,9 @@ protect_share: 0.1   # keep the sky patches holding 10% of the sky weight visibl
 
 The sky is divided into the 145 Tregenza patches, and each patch has a weight for the mode (for example the heating-season irradiance it delivers in `benefit` mode). USC ranks the patches by weight and protects the smallest group of top patches whose weights add up to `protect_share` of the total. Every voxel that blocks a protected patch from any test point is carved.
 
-**What this guarantees.** A protected patch is fully visible from every test point: no voxel of the envelope stands on a ray between a test point and that patch. So with `protect_share: 0.1`, every protected surface keeps an unobstructed view of the sky patches that together carry at least 10% of the mode's sky weight. Because whole rays are cleared, the envelope varies continuously, like a classic solar envelope from time-based carving.
+**What this guarantees.** Each patch is represented by one direction, the ray to its centre, as in the scoring. For a protected patch, no voxel of the envelope stands on that ray from any test point. So with `protect_share: 0.1`, every protected surface keeps unobstructed lines of sight towards the centres of the patches that together carry at least 10% of the mode's sky weight. Rays towards the rest of a patch (a Tregenza patch spans about 12° x 12°) can still be partly blocked near the envelope's edges.
+
+**Relation to time-based carving.** This is the same operation as a `time-based` solar envelope: pick a set of sky directions and carve every voxel on a ray from a test point towards one of them. `time-based` uses the sun positions of a period you choose; `protect_share` uses the patch centres that deliver the most weight for the mode (including diffuse sky). In a sunny climate the top patches lie on the winter sun path, so the two give similar shapes. `time-based` also offers a tolerance (`threshold` in m²·h); `protect_share` has none.
 
 **Choosing a value.** Small values already carve a lot, because the top patches are usually low winter-sun patches that cross much of the volume. On the ReSBE test blocks (0.5 m voxels, `benefit`, Thessaloniki heating season), `0.1` kept 33-74% of the volume and `0.2` kept 22-41%. Start at 0.1 and adjust in steps of 0.05.
 

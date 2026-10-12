@@ -37,7 +37,7 @@ Each mode has one setting that trades solar protection against buildable volume:
 
 | Mode | Setting | Meaning |
 |------|---------|---------|
-| `irradiance`, `benefit`, `daylight`, `radiative_cooling` | `protect_share: 0.1` | Share of the sky's weight (0-1) that stays fully visible from every test point. The highest-weight sky patches holding this share are protected, and every voxel that blocks one of them is carved. Whole rays are cleared, so the envelope is continuous like a classic solar envelope. Small values already carve a lot: on the ReSBE test blocks, 0.1 kept 33-74% of the volume and 0.2 kept 22-41%. |
+| `irradiance`, `benefit`, `daylight`, `radiative_cooling` | `protect_share: 0.1` | Share of the sky's weight (0-1) to protect. The highest-weight sky patches holding this share are protected: every voxel on a ray from a test point towards a protected patch's centre is carved. This is the solar-envelope operation of `time-based`, with patch centres chosen by weather-weighted value in place of clock-time sun positions. Small values already carve a lot: on the ReSBE test blocks, 0.1 kept 33-74% of the volume and 0.2 kept 22-41%. |
 | `time-based` | `threshold: 0` | Tolerated shading in m²·h (shaded protected area x duration). 0 = remove any voxel that casts a shadow at any sampled moment; 5 = tolerate up to 5 m²·h. The sun is sampled every 5 minutes by default (`sun_steps_per_hour`). |
 | `tilted_plane` | `tilted_plane_angle_deg: 45` | Everything above the plane is removed. |
 

@@ -1,8 +1,9 @@
 """USC Threshold: how much to carve, and the column clean-up.
 
 Sky modes (irradiance, benefit, daylight, radiative_cooling): connect only
-value, the share (0-1) of the sky's weight that stays fully visible from
-every test point (protect_share). time-based: set method to "numeric" and
+value, the share (0-1) of the sky's weight to protect: the rays from every
+test point to the centres of the highest-weight sky patches holding that
+share are kept clear (protect_share). time-based: set method to "numeric" and
 value to the tolerated shading in m²·h. tilted_plane: leave this
 component unconnected (the plane angle decides).
 
@@ -17,8 +18,9 @@ method : str, optional
     which does not return a predictable share of the sky and can leave
     cliffs and spires.
 value : float, optional
-    Sky modes: share of the sky's weight (0-1) that stays visible from
-    every test point. Small values already carve a lot; start at 0.1.
+    Sky modes: share of the sky's weight (0-1) to protect; the rays to the
+    protected sky patches stay clear from every test point. Small values
+    already carve a lot; start at 0.1.
     With method "numeric": the cutoff (time-based: m²·h). With
     "carve_fraction": the fraction to remove.
 score_smoothing : float, optional
@@ -47,7 +49,7 @@ try:
     ghenv.Component.NickName = "USC_Threshold"
     ghenv.Component.Description = (
         "How much to carve. Sky modes: connect only 'value', the share (0-1) of the sky's weight "
-        "that stays fully visible from every test point; start at 0.1. time-based: set method to "
+        "to protect (the rays to the top sky patches stay clear); start at 0.1. time-based: set method to "
         "'numeric' and value to the tolerated shading in m²·h. Also controls carve_above "
         "(removes floating mass above carved zones). Connect the output to ThresholdStage, which "
         "re-runs only thresholding and export."
@@ -62,7 +64,8 @@ try:
             "(value ignored). They cut on voxel scores and can leave cliffs and spires."
         )),
         ("value", (
-            "Sky modes: share of the sky's weight (0-1) that stays visible from every test point. "
+            "Sky modes: share of the sky's weight (0-1) to protect; the rays to the protected sky "
+            "patches stay clear from every test point. "
             "Small values already carve a lot; start at 0.1. "
             "With method 'numeric': the cutoff (time-based: tolerated shading in m²·h). "
             "With 'carve_fraction': the fraction to remove."

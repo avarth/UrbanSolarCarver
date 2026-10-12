@@ -48,9 +48,9 @@ class ThresholdSpec(BaseModel):
 
     Methods
     -------
-    * ``protect_share``: keep the highest-weight sky patches that together
-        hold ``value`` (0-1) of the total patch weight fully visible from
-        every test point: carve every voxel that blocks one of them.
+    * ``protect_share``: protect the highest-weight sky patches that
+        together hold ``value`` (0-1) of the total patch weight: carve every
+        voxel on a ray from a test point towards a protected patch's centre.
     * ``carve_fraction``: carve the highest-scoring voxels that together
         hold ``value`` (0-1) of the total score mass.
     * ``headtail``: head/tail breaks (Jiang 2013); takes no value.
@@ -331,9 +331,9 @@ class UserConfig(BaseModel):
         le=1.0,
         description=(
             "Sky modes (irradiance, benefit, daylight, radiative_cooling): share (0-1) "
-            "of the sky's weight that stays fully visible from every test point. The "
-            "highest-weight sky patches are protected, in order, until they hold this "
-            "share, and every voxel that blocks a protected patch from any test point "
+            "of the sky's weight to protect. The highest-weight sky patches are "
+            "protected, in order, until they hold this share, and every voxel on a ray "
+            "from a test point towards a protected patch's centre "
             "is carved. Patches are whole (145 Tregenza patches), so the share actually "
             "protected is reported in the thresholding diagnostics and can exceed this "
             "value. Small values already carve a lot: 0.1 kept 33-74% of the volume in "
