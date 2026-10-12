@@ -217,6 +217,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
   manifest** pointing at half-overwritten arrays; the run report goes into
   the run folder (not the export folder's parent) and an old one is
   removed before regenerating.
+- **Silent fallbacks now warn.** Skipped test-surface panels (non-planar,
+  degenerate, unsampled) are reported by component index; the Warp to
+  trimesh voxelizer fallback and a Warp installation that fails to
+  initialise are reported; tilted-plane samples on horizontal surfaces
+  are reported; score smoothing clipped to 0.5-8 voxels says so.
+  `smooth_iters` is validated to 0-6 instead of being clamped silently.
+- **One zero-area face no longer drops a whole test-surface panel**, and
+  edge samples no longer depend on vertex numbering (inward side chosen by
+  ring order, not shapely object identity) or on which panel edge is
+  "first" (both edges sampled alike).
+- **Smoothed export:** the Taubin polish shrank the mesh (wrong sign of
+  its inflating step; -10% volume at 6 passes), and an empty grid produced
+  a box around the whole domain. `cleanup_mesh` kept every fragment when
+  none reached `min_face_count`; it now keeps the largest and warns.
+- **An EPW replaced on disk is re-read** by a running daemon (the parse
+  cache now keys on modification time and size).
 - **Exporting** meshed with the config's `voxel_size` instead of the
   preprocessing run's, and counted retained voxels before the small-
   fragment cleanup (now reported as `voxels_removed_by_cleanup`).

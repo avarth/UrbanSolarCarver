@@ -58,18 +58,15 @@ from ladybug.dt import DateTime
 from ladybug.epw import EPW
 from ladybug.sunpath import Sunpath
 
-@lru_cache(maxsize=None)
-#lru_cache accelerates repeated calls in long‐running processes and keeps identical inputs from blowing up memory.
-def _load_epw_file(weather_file_path: str) -> EPW:
-    """
-    Load an EPW weather file from disk and cache it.
+@lru_cache(maxsize=16)
+def _load_epw_file(weather_file_path: str, mtime_ns: int, size: int) -> EPW:
+    """Parse an EPW file (cached).
 
-    Explanation:
-      - EPW files contain location-specific climate data.
-      - Caching avoids reloading the same file repeatedly, saving time.
+    The modification time and size are part of the cache key, so an EPW
+    replaced on disk while the daemon runs is read again.
 
     Args:
-      weather_file_path: Path string pointing to the EPW file.
+      weather_file_path: Normalised absolute path of the EPW file.
 
     Raises:
       ValueError: If the path is empty or not a string.
@@ -101,7 +98,10 @@ def _load_epw(weather_file_path: str) -> EPW:
     if not isinstance(weather_file_path, str) or not weather_file_path:
         raise ValueError(f"_load_epw: invalid path: {weather_file_path!r}")
     canonical = os.path.normpath(os.path.abspath(weather_file_path))
-    return _load_epw_file(canonical)
+    if not os.path.isfile(canonical):
+        raise FileNotFoundError(f"_load_epw: file not found: {weather_file_path}")
+    stat = os.stat(canonical)
+    return _load_epw_file(canonical, stat.st_mtime_ns, stat.st_size)
 
 @lru_cache(maxsize=None)
 def _initialize_sunpath(

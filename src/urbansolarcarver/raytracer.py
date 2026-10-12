@@ -51,8 +51,13 @@ try:
     import warp as wp
     wp.init()
     _warp_available = True
+except ImportError:
+    log.debug("Warp is not installed; using the PyTorch fallback tracer")
 except Exception as _warp_err:
-    log.debug("Warp unavailable: %s", _warp_err)
+    # Installed but unusable (driver, CUDA or compiler problem): say why,
+    # since every result then comes from the slower fallback paths.
+    log.warning("Warp failed to initialise (%s); using the PyTorch fallback "
+                "tracer and the trimesh voxelizer", _warp_err)
 
 
 def _warp_cpu_ok() -> bool:

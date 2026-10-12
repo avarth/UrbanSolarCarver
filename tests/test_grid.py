@@ -531,3 +531,70 @@ class TestEdgeTaper:
         leg_b = (np.abs(pts[:, 0] - 2.0) < 0.3) & (np.abs(pts[:, 1] - 7.0) < 0.3)
         assert w[leg_a].min() > 0.99
         assert w[leg_b].min() > 0.99
+
+
+# ---------------------------------------------------------------------------
+# Silent-fallback regressions (code review)
+# ---------------------------------------------------------------------------
+
+def _sampling_config():
+    from urbansolarcarver.load_config import user_config
+    return user_config(max_volume_path="x", test_surface_path="x", out_dir="x",
+                       mode="tilted_plane", tilted_plane_angle_deg=45,
+                       grid_step=1.0, voxel_size=1.0)
+
+
+def test_zero_area_face_does_not_drop_panel_and_bent_panel_warns():
+    import trimesh
+    from urbansolarcarver.grid import sample_surface
+    rect = trimesh.Trimesh([[0, 0, 0], [4, 0, 0], [4, 0, 3], [0, 0, 3], [4, 0, 3]],
+                           [[0, 1, 2], [0, 2, 3], [1, 2, 4]], process=False)  # last face: zero area
+    bent = trimesh.Trimesh([[10, 0, 0], [14, 0, 0], [14, 1, 3], [10, 0, 3]],
+                           [[0, 1, 2], [0, 2, 3]], process=False)
+    with pytest.warns(UserWarning, match="1 non-planar"):
+        pts, *_ = sample_surface(trimesh.util.concatenate([rect, bent]), _sampling_config())
+    assert len(pts) > 0 and pts[:, 0].max() <= 4.0  # the rectangle is sampled, the bent panel is not
+
+
+def test_taubin_polish_preserves_volume():
+    from urbansolarcarver.grid import mesh_from_voxels_smoothed, polish_mesh_taubin
+    g = np.zeros((16, 16, 16), bool)
+    g[3:13, 3:13, 3:13] = True
+    base = mesh_from_voxels_smoothed(torch.from_numpy(g), np.zeros(3), 1.0)
+    polished = polish_mesh_taubin(base.copy(), iters=6)
+    assert polished.volume == pytest.approx(base.volume, rel=0.01)
+
+
+def test_smoothed_mesh_of_empty_grid_is_empty():
+    from urbansolarcarver.grid import mesh_from_voxels_smoothed
+    mesh = mesh_from_voxels_smoothed(torch.zeros((8, 8, 8), dtype=torch.bool), np.zeros(3), 1.0)
+    assert len(mesh.faces) == 0
+
+
+def test_cleanup_keeps_largest_part_when_none_pass():
+    import trimesh
+    from urbansolarcarver.grid import cleanup_mesh
+    a = trimesh.creation.box((1, 1, 1))
+    b = trimesh.creation.icosphere(subdivisions=2)
+    b.apply_translation((5, 0, 0))
+    with pytest.warns(UserWarning, match="keeping only the largest"):
+        out = cleanup_mesh(trimesh.util.concatenate([a, b]), min_face_count=10**6, light=True)
+    assert len(out.faces) == len(b.faces)
+
+
+def test_epw_cache_rereads_a_replaced_file(tmp_path):
+    import os
+    import shutil
+    from _epw import resolve_epw
+    from urbansolarcarver.sun import _load_epw
+    src = resolve_epw()
+    if not src:
+        pytest.skip("No EPW available")
+    path = tmp_path / "w.epw"
+    shutil.copy(src, path)
+    first = _load_epw(str(path))
+    text = path.read_text(encoding="utf-8", errors="replace").splitlines(True)
+    text[0] = text[0].replace(text[0].split(",")[1], "Renamed City", 1)
+    path.write_text("".join(text), encoding="utf-8")
+    os.utime(path, ns=(first_mtime := os.stat(path).st_mtime_ns, first_mtime + 10**9))
+    assert _load_epw(str(path)).location.city == "Renamed City"

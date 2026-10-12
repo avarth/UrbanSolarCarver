@@ -83,7 +83,16 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
         return raw, False, 0.0, 0.0
 
     from scipy.ndimage import gaussian_filter
-    sigma_voxels = float(np.clip(radius_m / voxel_size, 0.5, 8.0))
+    requested = radius_m / voxel_size
+    sigma_voxels = float(np.clip(requested, 0.5, 8.0))
+    if sigma_voxels != requested:
+        import warnings
+        warnings.warn(
+            f"score_smoothing={radius_m:g} m is {requested:.2g} voxels; clipped to "
+            f"{sigma_voxels:g} voxels ({sigma_voxels * voxel_size:g} m).",
+            stacklevel=3,
+        )
+        radius_m = sigma_voxels * voxel_size
     if occ is None:
         smoothed = gaussian_filter(raw.astype(np.float32), sigma=sigma_voxels)
         return smoothed, True, radius_m, sigma_voxels

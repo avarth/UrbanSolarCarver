@@ -103,6 +103,7 @@ from scipy.ndimage import distance_transform_edt, gaussian_filter
 from scipy.spatial import cKDTree
 
 from shapely.geometry import Polygon, LineString
+from shapely.geometry.polygon import orient
 from shapely import contains_xy
 import trimesh
 from trimesh import repair
@@ -237,7 +238,7 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         raw_mesh.merge_vertices()
         light = bool(raw_mesh.is_watertight)
         filtered_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=light)
-        iters = int(min(max(config.smooth_iters, 0), 6))
+        iters = int(config.smooth_iters)  # 0-6, validated by the config schema
         final_mesh = polish_mesh_taubin(filtered_mesh, iters=iters)
     else:
         # Cubic path: prune + gentle morphology, cubic meshing, then cleanup
@@ -314,9 +315,10 @@ def _sample_boundary_edges(
     test_poly = polygon.buffer(sample_step * 1e-3)
     candidates = []
 
-    rings = [polygon.exterior] + list(polygon.interiors)
-    for ring in rings:
-        is_exterior = ring is polygon.exterior
+    # Exterior counter-clockwise, holes clockwise: the polygon's interior is
+    # then on the left of the direction of travel along every ring.
+    polygon = orient(polygon, sign=1.0)
+    for ring in [polygon.exterior, *polygon.interiors]:
         coords = np.asarray(ring.coords)
         line = LineString(coords)
         length = line.length
@@ -341,11 +343,7 @@ def _sample_boundary_edges(
             tx /= tlen
             ty /= tlen
 
-            # Inward normal: for CCW exterior, left of tangent is inward
-            if is_exterior:
-                nx, ny = -ty, tx
-            else:
-                nx, ny = ty, -tx
+            nx, ny = -ty, tx  # inward: left of the tangent
 
             # Try progressively smaller insets — handles thin polygons where
             # the full inset lands outside the boundary.
@@ -526,14 +524,17 @@ def sample_planar_surface(
     # ground edge when the frame origin is at ground level) gives a remainder
     # of ~0 or ~sample_step depending on rounding noise; snap both to exactly
     # 0 so the edge row is treated the same way on every run and position.
+    tol = sample_step * 1e-6
+
     def _phase(ref, lo):
         r = (ref - lo) % sample_step
-        tol = sample_step * 1e-6
         return 0.0 if (r < tol or r > sample_step - tol) else r
     x0 = xmin + _phase(world_ref_u, xmin)
     y0 = ymin + _phase(world_ref_v, ymin)
-    grid_x = np.arange(x0, xmax, sample_step)
-    grid_y = np.arange(y0, ymax, sample_step)
+    # The upper bound includes a lattice line lying on the far edge, as the
+    # phase snap does for the near edge, so both edges are treated alike.
+    grid_x = np.arange(x0, xmax + tol, sample_step)
+    grid_y = np.arange(y0, ymax + tol, sample_step)
     grid_X, grid_Y = np.meshgrid(grid_x, grid_y)
 
     # 7) Optionally inflate the polygon by a tiny epsilon so that points
@@ -739,20 +740,23 @@ def discretize_surface_with_normals(
     all_quad_verts, all_quad_faces = [], []
     vertex_offset = 0
     taper_stats: list = []
-    component_index = 0
+    skipped = {"degenerate": [], "non-planar": [], "no samples": []}
 
-    for submesh in submeshes:
-        # 1) Planarity check via face normals (area-weighted reference)
-        face_normals = submesh.face_normals  # (F, 3)
-        face_areas = submesh.area_faces       # (F,)
-        mean_normal = (face_normals * face_areas[:, None]).sum(axis=0)
+    for component_index, submesh in enumerate(submeshes):
+        # 1) Planarity check on the faces with real area: a zero-area sliver
+        #    has a (0, 0, 0) normal and must not disqualify the panel.
+        face_areas = submesh.area_faces
+        real = face_areas > 1e-12 * max(float(face_areas.max()), 1e-30)
+        face_normals = submesh.face_normals[real]
+        mean_normal = (face_normals * face_areas[real][:, None]).sum(axis=0)
         norm_len = np.linalg.norm(mean_normal)
         if norm_len < 1e-12:
-            continue  # degenerate component
+            skipped["degenerate"].append(component_index)
+            continue
         mean_normal /= norm_len
-        cos_angles = face_normals @ mean_normal
-        angles = np.degrees(np.arccos(np.clip(cos_angles, -1.0, 1.0)))
+        angles = np.degrees(np.arccos(np.clip(face_normals @ mean_normal, -1.0, 1.0)))
         if angles.max() > coplanarity_tol_deg:
+            skipped["non-planar"].append(component_index)
             continue
 
         # 2) Sample this planar sheet (fast Shapely rasterizer)
@@ -761,6 +765,7 @@ def discretize_surface_with_normals(
         )
 
         if pts3d.size == 0:
+            skipped["no samples"].append(component_index)
             continue
 
         # 2b) Taper transparency: a component that never reaches full
@@ -785,11 +790,9 @@ def discretize_surface_with_normals(
                     f"program.",
                     stacklevel=2,
                 )
-        component_index += 1
 
-        # 3) Ensure normal orientation matches component
-        avg_face_normal = face_normals.mean(axis=0)
-        if np.dot(avg_face_normal, nrm3d[0]) < 0:
+        # 3) Normals follow the component's (area-weighted) face orientation.
+        if np.dot(mean_normal, nrm3d[0]) < 0:
             nrm3d = -nrm3d
 
         all_points.append(pts3d)
@@ -801,6 +804,18 @@ def discretize_surface_with_normals(
             all_quad_verts.append(qv)
             all_quad_faces.append(qf + vertex_offset)
             vertex_offset += qv.shape[0]
+
+    problems = [f"{len(idx)} {why} (components {idx[:10]}{'...' if len(idx) > 10 else ''})"
+                for why, idx in skipped.items() if idx]
+    if problems:
+        import warnings
+        warnings.warn(
+            f"Test surface: {', '.join(problems)} of {len(submeshes)} components "
+            f"were skipped and are NOT protected. Each panel must be a single "
+            f"flat face (coplanarity tolerance {coplanarity_tol_deg:g} deg); "
+            f"explode polysurfaces into planar faces.",
+            stacklevel=2,
+        )
 
     if not all_points:
         return (np.empty((0, 3), dtype=np.float32),
@@ -913,7 +928,12 @@ def voxelize_mesh(
             mesh.vertices, mesh.faces, origin, voxel_size, resolution, device
         )
     except Exception as exc:
-        _log.warning("Warp voxelization failed (%s) — falling back to trimesh", exc)
+        import warnings
+        warnings.warn(
+            f"Warp voxelization failed ({type(exc).__name__}: {exc}); falling back to "
+            f"trimesh's rasterizer, which can classify boundary voxels differently.",
+            stacklevel=2,
+        )
         grid_np = None
 
     if grid_np is None:
@@ -1303,13 +1323,11 @@ def polish_mesh_taubin(mesh: trimesh.Trimesh, iters: int = 2) -> trimesh.Trimesh
     if iters <= 0 or len(mesh.vertices) == 0:
         return mesh
 
-    # Taubin (1995) signal-processing smoothing parameters.
-    # lambda > 0 contracts the mesh (smoothing pass),
-    # nu < 0 inflates it (anti-shrinkage pass).
-    # These standard values ensure volume preservation.
-    # Ref: Taubin, G. 1995. "A Signal Processing Approach to Fair Surface
-    #      Design." SIGGRAPH.
-    lamb, nu = 0.28, -0.31
+    # Taubin (1995): alternate a shrinking step (lambda) and a slightly larger
+    # inflating step (mu = -nu) so the surface is smoothed without shrinking.
+    # trimesh.smoothing.filter_taubin subtracts nu * Laplacian, so the
+    # inflating step needs a POSITIVE nu here.
+    lamb, nu = 0.28, 0.31
 
     # Normalize to avoid scale sensitivity
     V = mesh.vertices.view(np.ndarray)
@@ -1504,6 +1522,8 @@ def mesh_from_voxels_smoothed(
     """
     # Work on CPU ndarray
     occ = voxels.detach().to('cpu').numpy().astype(bool)
+    if not occ.any():
+        return trimesh.Trimesh()  # otherwise the iso-surface outlines the whole grid
     field = _voxel_presmooth(occ)  # smoothed SDF
     # pick iso to match original volume so medium-thick parts don't disappear
     iso = _volume_matched_threshold(field, int(occ.sum()))
@@ -1576,6 +1596,17 @@ def cleanup_mesh(
         mesh.remove_unreferenced_vertices()
     parts = mesh.split(only_watertight=False)
     large = [p for p in parts if len(p.faces) >= min_face_count]
+    if not large and parts:
+        # Every part is below min_face_count: keep the largest one rather
+        # than everything (which would ignore the setting) or nothing.
+        import warnings
+        largest = max(parts, key=lambda p: len(p.faces))
+        warnings.warn(
+            f"cleanup_mesh: no mesh part has min_face_count={min_face_count} faces; "
+            f"keeping only the largest ({len(largest.faces)} faces) of {len(parts)}.",
+            stacklevel=2,
+        )
+        return largest
     return trimesh.util.concatenate(large) if large else mesh
 
 

@@ -730,6 +730,15 @@ def carve_with_planes(
     n_xy = norms_np.copy()
     n_xy[:, 2] = 0.0
     lens = np.linalg.norm(n_xy[:, :2], axis=1, keepdims=True)
+    flat = lens[:, 0] < 0.05  # roofs, courtyard floors: no facade direction
+    if flat.any():
+        warnings.warn(
+            f"tilted_plane: {int(flat.sum())} of {len(lens)} sample points lie on "
+            f"(nearly) horizontal test surfaces, which have no facing direction for "
+            f"a tilted plane; their rays go straight up and protect only the sky "
+            f"directly above them.",
+            stacklevel=2,
+        )
     np.maximum(lens, 1e-9, out=lens)
     n_xy[:, :2] /= lens
 

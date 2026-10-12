@@ -271,7 +271,7 @@ class UserConfig(BaseModel):
     apply_smoothing: bool  = Field(False, description="If True, apply SDF smoothing + marching cubes")
     min_voxels:      int   = Field(300, gt=0, description="Minimum voxel cluster size to keep")
     min_face_count:  int   = Field(100, ge=0, description="Minimum faces to keep mesh fragments")
-    smooth_iters:    int   = Field(2, ge=0, description="Taubin polish passes (only with apply_smoothing)")
+    smooth_iters:    int   = Field(2, ge=0, le=6, description="Taubin polish passes, 0-6 (only with apply_smoothing)")
 
     # column post-processing
     carve_above: bool = Field(
