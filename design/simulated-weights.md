@@ -1,4 +1,4 @@
-# Design note — Simulated benefit weights
+# Design note: simulated benefit weights
 
 **Status:** implemented and shipped (`usc simulate-weights`, `simulated_weights_path`).
 The engine's Annex C recurrence is regression-tested against the ETH
@@ -19,13 +19,13 @@ framing; it appears nowhere in the CLI, configs, docs site, or tutorials.
 ## 1. Problem and approach
 
 USC's benefit mode weights each sky patch by the radiation of *beneficial*
-hours. The simple hour filter is a balance-point Heaviside (hours with
-`T_air < balance_temperature − balance_offset` count fully, others not at
-all): explainable and code-aligned, but blind to thermal lag, mass state,
-and gain saturation.
+hours. The simple hour filter is a balance-point Heaviside step (hours with
+outdoor dry-bulb `T_air < balance_temperature − balance_offset` count
+fully, others not at all): easy to explain and to check in the code, but
+blind to thermal lag, mass state, and gain saturation.
 
-The upgrade path keeps USC untouched at its natural boundary, the hourly
-weighting, and swaps the *generator* of that weighting:
+The rest of USC stays unchanged: it consumes one weight per hour, and only
+the *generator* of those hourly weights is replaced:
 
 | Generator | Resolves | Cost | Status |
 |-----------|----------|------|--------|
@@ -37,8 +37,8 @@ weighting, and swaps the *generator* of that weighting:
 The monthly-η variant is deferred: the cooling-side loss-utilization sign
 conventions (§12.2.1.1) must be transcribed from the standard text, not
 memory, and its only role beside the hourly model is as a comparison
-baseline. An EnergyPlus generator is not planned; the 5R1C model provides
-a solid basis for a massing tool.
+baseline. An EnergyPlus generator is not planned; the 5R1C model is detailed
+enough for a massing tool.
 
 All generators emit the same artifact (§5); `simulated_weights_path` in benefit
 mode consumes it (§6), so a future generator is a drop-in.
@@ -50,13 +50,13 @@ Nodes: outdoor `θ_e`, supply `θ_sup` (= `θ_e`, no preheating), indoor air
 
 Conductances [W/K]:
 
-- `H_ve` — ventilation: `1200 · b_ek · V · (ACH_tot/3600)` with the heat-
+- `H_ve`, ventilation: `1200 · b_ek · V · (ACH_tot/3600)` with the heat-
   recovery adjustment `b_ek = 1 − (ACH_vent/ACH_tot) · η_hr` (ISO Annex E).
 - `H_tr,is = h_is · A_tot`, `h_is = 3.45 W/m²K`, `A_tot = Λ_at · A_f`,
-  `Λ_at = 4.5` — air ↔ surface coupling.
-- `H_tr,w = Σ U_w · A_w` — glazing, massless, `θ_e ↔ θ_s`.
-- `H_tr,ms = h_ms · A_m`, `h_ms = 9.1 W/m²K` — surface ↔ mass.
-- `H_tr,em = 1 / (1/H_tr,op − 1/H_tr,ms)` — opaque envelope remainder,
+  `Λ_at = 4.5`: air ↔ surface coupling.
+- `H_tr,w = Σ U_w · A_w`: glazing, massless, `θ_e ↔ θ_s`.
+- `H_tr,ms = h_ms · A_m`, `h_ms = 9.1 W/m²K`: surface ↔ mass.
+- `H_tr,em = 1 / (1/H_tr,op − 1/H_tr,ms)`: opaque envelope remainder,
   `θ_e ↔ θ_m` (standard §12.2.2). *Note: RC_BuildingSimulator simplifies
   this to `U_op·A_op` directly; oracle comparisons must feed identical H
   values so the recurrence is tested, not the parameter derivation.*
@@ -136,7 +136,7 @@ Both forms additionally take ACH (vent + infiltration), heat-recovery
 η_hr, mass class, set-points (default 20/26 °C), and flat internal gains
 [W/m²] or a 24-value daily profile.
 
-Shading (optional, declared coefficients — deliberately no device
+Shading (optional, declared coefficients; deliberately no device
 geometry): `shading_permanent` (year-round transmission multiplier) and
 `shading_hot` (additional multiplier active during the user-declared
 `hot_months`). Each accepts a scalar or a per-facade mapping
@@ -162,21 +162,22 @@ benefit[t] = −ΔQ_H/(2ε) ∈ [0, 1]   fraction of a marginal joule offsetting
 harm[t]    = +ΔQ_C/(2ε) ∈ [0, 1]   fraction becoming cooling load
 ```
 
-Two series, never pre-scalarized — they map onto benefit mode's default
+Two series, never combined into one: they map onto benefit mode's default
 (benefit only) and `include_harm` (declared composite) semantics.
 
-Implementation: all 8760 perturbed trajectories march as one vectorized
-batch (state per copy is 1 scalar `θ_m`; control branches via masks). A
-perturbation's influence decays within ~5τ, but the full-year batch is
-already O(seconds) — no windowing needed.
+Implementation: all 1 + 2·8760 = 17,521 trajectories (the base run plus a
++ε and a −ε run per hour) march as one vectorized batch (state per copy is
+1 scalar `θ_m`; control branches via masks). A perturbation's influence
+decays within ~5τ, but the full-year batch already runs in seconds, so no
+windowing is needed.
 
 Known behaviors, accepted: values are marginal at the archetype's operating
-point (WWR/g set the saturation level — provenance metadata records them);
+point (WWR/g set the saturation level; provenance metadata records them);
 hours near a control-regime switch yield subgradients (central differences
 smooth this); strict [0,1] bounds hold up to switching noise and are
 clamped with a tolerance check rather than asserted exactly.
 
-## 5. Artifact — `simulated_weights.json`
+## 5. Artifact: `simulated_weights.json`
 
 ```json
 {
@@ -205,16 +206,17 @@ inspected without writing code.
 Optional benefit-mode key `simulated_weights_path`. When set:
 
 - the Heaviside filter is replaced: each hour's DNI/DHI in the Wea is
-  scaled by `benefit[t]` before the cumulative SkyMatrix — the sky
+  scaled by `benefit[t]` before the cumulative SkyMatrix, so the sky
   integration distributes the weights onto exactly the patches each hour's
   sun and sky occupied (the simple cold-hours filter is the binary special
   case of this mechanism);
 - `include_harm: true` additionally subtracts the `harm[t]`-scaled matrix,
-  clipped at zero — same semantics and same rationale (shading value never
+  clipped at zero, with the same semantics and rationale (shading value never
   rewards mass) as the existing composite;
 - balance_temperature / balance_offset are unused → warn if customized;
-- the artifact content hash enters the patch-weight cache key, and the
-  artifact provenance enters the preprocessing diagnostics;
+- the artifact is read again on every preprocessing run (patch weights
+  are not cached between runs), and its provenance enters the
+  preprocessing diagnostics;
 - with `diagnostic_plots: true`, the run's diagnostics additionally record
   a **comparison dome**: the difference between the consumed weights and
   the simple-rule counterfactual for the same config
@@ -235,7 +237,7 @@ glazing, g = 0.6). The exact hourly driving arrays are stored verbatim
 inside `tests/data/oracle_5r1c_reference.json` alongside the oracle's
 derived conductances (its `h_tr,em = U·A` convention is fed to our engine
 as-is, so the recurrence is compared, not the parameter derivation).
-Tests replay the stored arrays — deterministic, no weather generation, no
+Tests replay the stored arrays: deterministic, no weather generation, no
 EPW parsing in the engine layer. Capture provenance:
 `tests/data/capture_oracle_5r1c.py` (note: its oracle/repo paths are
 machine-specific and need adjusting before re-capture).
@@ -264,12 +266,13 @@ thermal-lag signature); with `include_harm` the redistribution reaches
 Single zone, lumped mass: same-hour weighting is facade-independent by
 construction (time-of-day carries the direction signal; perimeter-zone
 effects are out of scope for a massing tool). Ideal convective conditioning
-at the air node; continuous operation, no setback. Fixed ACH — no night
+at the air node; continuous operation, no setback. Fixed ACH: no night
 flushing (a schedulable H_ve remains the first extension slot). Shading is
 declared, not adaptive: the fixed-calendar `shading_hot` coefficient stands
 in for occupant-operated devices; without it, cooling harm is overestimated
 (conservative for the opt-in harm channel), and even with it there is no
-response to same-day conditions. Flat internal gains. TMY weather. Marginal
+response to same-day conditions. Flat internal gains or one repeated daily
+profile. TMY weather. Marginal
 linearization at the archetype operating point. Weights derived without the
 carve's own shading context (first-order acceptable; one-iteration
 robustness check possible). The correlation constants and coupling

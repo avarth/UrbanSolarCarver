@@ -1,4 +1,4 @@
-"""USC Threshold — Control how the score volume is binarized.
+"""USC Threshold: control how the score volume is binarized.
 
 The threshold determines which voxels are "obstructing" (removed) vs
 "kept" (part of the final envelope).
@@ -7,15 +7,19 @@ Inputs
 ------
 method : str, optional
     Threshold strategy. One of:
-      "carve_fraction" — remove voxels accounting for X% of total score
-      "headtail"       — head-tail breaks (for skewed distributions)
-      "numeric"        — direct raw-score cutoff
-    If None, uses the mode default (carve_fraction).
+      "carve_fraction": remove the highest-scoring voxels that together
+                        hold the given fraction of the total score
+      "headtail":       head-tail breaks (for skewed distributions)
+      "numeric":        direct raw-score cutoff
+    A number typed here is used as a numeric cutoff. If None, the mode
+    default applies (carve_fraction for weighted modes, cutoff 0 for
+    time-based and tilted_plane).
 value : float, optional
     Meaning depends on method:
       carve_fraction → fraction of total obstruction to remove (0-1).
       headtail       → ignored (algorithm is automatic).
       numeric        → raw score threshold; voxels above are removed.
+      no method      → used as carve_fraction.
 score_smoothing : float, optional
     Gaussian blur radius (meters) applied to the score volume before
     thresholding.  Smooths resolution-dependent noise so the carved
@@ -40,7 +44,9 @@ carve_above_min : int, optional
 Outputs
 -------
 overrides : str
-    Semicolon-joined key=value string for Config.
+    Semicolon-joined key=value string. Connect to USC Threshold Stage's
+    threshold_overrides (or to Config, which also re-runs Preprocess on
+    every change).
 """
 
 try:
@@ -49,33 +55,35 @@ try:
     ghenv.Component.Description = (
         "Controls how the carving threshold is determined, optional score smoothing, "
         "and column-based carve-above post-processing. "
-        "'carve_fraction' (default) removes a percentage of total obstruction weight — most intuitive. "
+        "'carve_fraction' (default for weighted modes) removes a fraction of the total obstruction weight. "
         "'headtail' uses head-tail breaks for automatic statistical splitting. "
         "'numeric' applies a direct raw-score cutoff. "
         "score_smoothing applies Gaussian blur to scores before thresholding for cleaner results. "
         "carve_above removes floating occupied voxels above carved zones. "
-        "Connect output to Config or directly to ThresholdStage."
+        "Connect the output to ThresholdStage (re-runs only thresholding and export) or to Config."
     )
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
         ("method", (
             "How to determine the carving threshold. Options: "
-            "'carve_fraction' (default, remove a percentage of total obstruction weight — most intuitive), "
-            "'headtail' (automatic heavy-tail distribution split — value is ignored), "
-            "'numeric' (direct raw-score cutoff — set the exact threshold via value)."
+            "'carve_fraction' (remove a fraction of the total obstruction weight; default for weighted modes), "
+            "'headtail' (automatic heavy-tail distribution split; value is ignored), "
+            "'numeric' (direct raw-score cutoff; set the exact threshold via value). "
+            "Unset: the mode default (carve_fraction, or cutoff 0 for time-based and tilted_plane)."
         )),
         ("value", (
             "Threshold parameter whose meaning depends on method:\n"
             "  carve_fraction → fraction to carve (0.0-1.0). "
             "0.7 = remove 70% of obstruction weight. Start with 0.5.\n"
             "  headtail → ignored (automatic).\n"
-            "  numeric → raw score cutoff. Voxels scoring above this are removed."
+            "  numeric → raw score cutoff. Voxels scoring above this are removed.\n"
+            "  no method → used as carve_fraction."
         )),
         ("score_smoothing", (
             "Gaussian blur radius in meters applied to the score volume before thresholding. "
             "Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes. "
-            "Leave empty (default) = auto: 1.1× voxel_size — recommended for most runs. "
+            "Leave empty (default) = auto: 1.1× voxel_size, recommended for most runs. "
             "Set to 0 to disable smoothing entirely. "
             "Positive value = explicit radius in meters. Rule of thumb: 1.0–1.2× voxel_size works well. "
             "Over-smoothing (above 2× voxel_size) rounds features excessively. "
@@ -117,8 +125,8 @@ _items = []
 _m = str(method).strip().lower() if method is not None else None
 
 if _m == "numeric":
-    # 'numeric' is only a UI label: the pipeline needs the actual number.
-    # Never emit the bare placeholder (the config schema rejects it).
+    # 'numeric' is only a UI label: the pipeline needs the actual number,
+    # and the config schema rejects the bare word.
     if value is not None:
         _items.append(f"threshold={float(value)}")
     else:

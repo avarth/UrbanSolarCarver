@@ -1,12 +1,12 @@
-"""USC Threshold Stage — Apply threshold to cached scores (fast, iterative).
+"""USC Threshold Stage: apply a threshold to the saved scores (stage 2 of 3).
 
 Takes the preprocessing result and applies a threshold to create a binary
-mask. This is FAST (<1 second) — adjust the threshold parameters and
-re-run without waiting for ray tracing again.
+mask. It reads the scores saved by preprocessing, so threshold parameters
+can be adjusted and re-run without tracing rays again. Results go to
+<out_dir>/thresholding/.
 
-IMPORTANT: Connect threshold overrides DIRECTLY here (not through Config).
-This way, changing the threshold slider only re-runs this stage + Export,
-not Preprocessing.
+Connect threshold overrides here, not through Config: then changing the
+threshold re-runs only this stage and Export, not Preprocessing.
 
 Inputs
 ------
@@ -16,8 +16,8 @@ pre_result : str
     Preprocessing manifest path from USC Preprocess.
 threshold_overrides : str, optional
     Threshold parameter overrides from USC Threshold component.
-    Merged on top of config overrides — changes here do NOT trigger
-    Preprocessing to re-run.
+    Merged on top of config overrides; changes here do not make
+    Preprocessing re-run.
 run : bool
     True to execute. False to idle.
 
@@ -32,7 +32,7 @@ diagnostics : str
 diag_images : list of str
     Path to threshold histogram image.
     Feed to Ladybug Image Viewer for in-canvas inspection.
-    Empty when diagnostics are disabled.
+    Empty unless plots are enabled (USC_Diagnostics).
 """
 
 import time
@@ -42,18 +42,18 @@ from pathlib import Path
 try:
     ghenv.Component.Name = "USC Threshold Stage"
     ghenv.Component.NickName = "USC_ThrStage"
-    ghenv.Component.Description = "Stage 2/4: Applies a threshold to the score volume, producing a binary mask of voxels to keep. Fast (<1s) — change the threshold without re-running preprocessing."
+    ghenv.Component.Description = "Stage 2/3: Applies a threshold to the score volume, producing a binary mask of voxels to keep. Reuses the saved scores, so the threshold can be changed without re-running preprocessing."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config. Carries base settings and output directory."
     ii[1].Name, ii[1].Description = "pre_result", "Preprocessing manifest path from USC_Preprocess. Contains the score volume and grid metadata."
-    ii[2].Name, ii[2].Description = "threshold_overrides", "Override string from USC_Threshold component. Connect DIRECTLY here (not through Config) so that changing the threshold slider only re-runs this stage and Export -- not the expensive Preprocessing step."
+    ii[2].Name, ii[2].Description = "threshold_overrides", "Override string from USC_Threshold component. Connect it here, not through Config, so that changing the threshold re-runs only this stage and Export, not the slower Preprocessing step."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle. True to execute thresholding."
     oo[0].Name, oo[0].Description = "thr_result", "Path to the thresholding manifest file. Connect to USC_Export's 'thr_result' input."
     oo[1].Name, oo[1].Description = "threshold_value", "The numeric threshold that was actually applied. Useful for understanding what the algorithm chose (especially with 'headtail' or 'carve_fraction')."
-    oo[2].Name, oo[2].Description = "diagnostics", "Text summary: threshold method, value, voxel retention percentage, timing."
+    oo[2].Name, oo[2].Description = "diagnostics", "Text summary: threshold method, value, voxel retention percentage and counts, timing."
     if len(oo) > 3:
-        oo[3].Name, oo[3].Description = "diag_images", "Path to the threshold histogram (shows score distribution with the threshold line). Feed to Ladybug Image Viewer. Empty when diagnostics are disabled."
+        oo[3].Name, oo[3].Description = "diag_images", "Path to the threshold histogram (shows score distribution with the threshold line). Feed to Ladybug Image Viewer. Empty unless plots are enabled (USC_Diagnostics)."
 except Exception:
     pass
 

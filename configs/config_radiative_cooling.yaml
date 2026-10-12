@@ -1,4 +1,4 @@
-# UrbanSolarCarver — Radiative cooling mode [EXPERIMENTAL]
+# UrbanSolarCarver: Radiative cooling mode [EXPERIMENTAL]
 # Carves voxels based on long-wave radiative cooling potential of the night sky.
 # Uses Martin-Berdahl (1984) emissivity and Bliss (1961) angular attenuation.
 # Assumes clear sky, horizontal analysis surfaces (flat roofs).
@@ -17,7 +17,7 @@ mode: radiative_cooling
 # Radiative cooling parameters. The model uses a single representative
 # night-time dew point; it does not read weather data or an analysis period.
 dew_point_celsius: 14.0   # night-time dew-point (C)
-bliss_k:            1.8   # angular attenuation constant (Bliss 1961) — physical constant, leave at 1.8
+bliss_k:            1.8   # angular attenuation constant (Bliss 1961); physical constant, leave at 1.8
 
 # Grid
 voxel_size: 1.0
@@ -29,7 +29,7 @@ voxel_size: 1.0
 threshold: carve_fraction
 carve_fraction: 0.35
 
-# -- Design constraints (declared, not physics — see docs) --------------------
+# --- Design constraints (declared, not physics; see docs) -------------------
 # edge_taper: 1.5             # metres: sample points within this distance of a
 #                             # test-surface edge count proportionally less, so
 #                             # perimeter/corner points don't force carving of
@@ -38,7 +38,7 @@ carve_fraction: 0.35
 #                             # elevation (weights renormalized). Controls how
 #                             # steeply the envelope may rise around surfaces.
 
-# -- Defaults you may want to override ----------------------------------------
+# --- Defaults you may want to override --------------------------------------
 # score_smoothing: null  # Gaussian blur radius (m) on scores before thresholding. null = auto (1.1× voxel_size). 0 = off. Try 1.0-1.2× voxel_size.
 # grid_step:       1.0    # test-surface sampling spacing in metres
 # ray_length:      300.0  # max ray distance in metres

@@ -11,7 +11,7 @@ mode:           'benefit'
 
 # Analysis period (usually heating season for benefit mode, only a handful of
 # hours of a specific day for time-based mode).
-# Canonical form is one mapping with ladybug AnalysisPeriod.to_dict() keys —
+# Canonical form is one mapping with ladybug AnalysisPeriod.to_dict() keys;
 # an AnalysisPeriod from Ladybug Tools can be pasted/passed directly, and
 # extra LB keys (type, timestep, is_leap_year) are ignored:
 analysis_period:
@@ -35,31 +35,31 @@ sun_steps_per_hour: 12
 
 # Radiative cooling settings
 dew_point_celsius: 14.0    # Night-time dew-point in °C for radiative_cooling.
-bliss_k:          1.8      # Angular attenuation constant (Bliss 1961) for radiative_cooling — physical constant, leave at 1.8.
-min_sky_elevation_deg: 0.0 # radiative_cooling only: design-constraint protection cone — exclude sky patches
+bliss_k:          1.8      # Angular attenuation constant (Bliss 1961) for radiative_cooling; physical constant, leave at 1.8.
+min_sky_elevation_deg: 0.0 # radiative_cooling only: design-constraint protection cone; exclude sky patches
                            # below this elevation from the cooling weights (renormalized). 0 = full hemisphere.
 
 # Sky model parameters
 north_deg: 0.0             # North direction in degrees clockwise from Y-axis (0 = Y-up is north)
 
 # Voxel grid and sampling
-voxel_size:     1.0    # length of cube edge
-grid_step:      1.0    # spacing between sample points
+voxel_size:     1.0    # voxel edge length (m), 0.01-100
+grid_step:      1.0    # spacing between test-surface sample points (m), <= voxel_size
 edge_taper:     0.0    # design constraint (m): test-surface sample points within this distance of
                        # their component's edge count proportionally less (0 at the edge → 1 at
                        # edge_taper), so perimeter/corner points don't force carving of directly
                        # adjacent volume. 0 = off. Weighted sky-patch modes only; requires planar
                        # test surfaces (already enforced by sampling).
-ray_length:     300.0  # max ray cast distance
-min_altitude:   5.0    # ignore low sun angles
-margin_frac:    0.01   # extra margin around mesh
+ray_length:     300.0  # max ray cast distance (m)
+min_altitude:   5.0    # time-based only: ignore sun positions below this altitude (deg)
+margin_frac:    0.01   # empty margin around the mesh, as a fraction of its largest side
 ray_batch_size: 0  # 0 = auto-tune based on GPU VRAM
 
 # Cleanup and smoothing
-apply_smoothing: false # apply smoothing? False returns the raw carved mesh
-min_voxels:     300    # drop tiny clusters
-min_face_count: 100    # drop small fragments
-smooth_iters:   2     # number of smoothing iterations
+apply_smoothing: false # true = SDF smoothing + marching cubes; false = cubic voxel mesh
+min_voxels:     300    # drop connected voxel clusters smaller than this
+min_face_count: 100    # drop mesh fragments with fewer faces than this
+smooth_iters:   2     # Taubin polish passes, 0-6 (only with apply_smoothing)
 
 # Column post-processing (applied after thresholding, before mesh export)
 # Carves all occupied voxels above the lowest sufficiently-carved region
@@ -71,7 +71,7 @@ carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-
 
 # Score smoothing (pre-threshold Gaussian blur on the score volume)
 # Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes.
-# null (default) = auto: 1.1× voxel_size — recommended for most runs.
+# null (default) = auto: 1.1× voxel_size, recommended for most runs.
 # 0    = disabled (no smoothing).
 # >0   = explicit radius in meters. Rule of thumb: 1.0–1.2× voxel_size.
 #         Over-smoothing (>2× voxel_size) rounds features excessively.
@@ -92,11 +92,11 @@ threshold: 'carve_fraction'
 carve_fraction: 0.7
 
 # Benefit mode settings (used when mode: benefit)
-balance_temperature: 15.0      # °C — free-running balance point; gains credited when T_air < balance - offset.
+balance_temperature: 15.0      # °C, free-running balance point; gains credited when outdoor T < balance - offset.
                                # Ladybug default 15 (typ. ~12 commercial to ~18 residential; older, poorly
                                # insulated stock can sit higher). Derive per project via the Honeybee/E+
                                # balance-point workflow.
-balance_offset:      2.0       # °C — dead-band below the balance point (>= 0)
+balance_offset:      2.0       # °C, dead-band below the balance point (>= 0)
 include_harm:        false     # EXPERIMENTAL (benefit only). true = Ladybug's composite concept: hot-hour
                                # (T > balance + offset) radiation subtracted per patch, clipped at zero.
                                # Results then depend on how much warm season the period includes.
@@ -109,9 +109,8 @@ simulated_weights_path:     null      # benefit only: path to a simulated_weight
 
 
 # Diagnostics and devices
-diagnostics: true   # write extra exports
+diagnostics: true   # add median/std/percentiles to the diagnostics JSON (default false; basic stats always written)
 diagnostic_plots: false  # Generate diagnostic plot images (histograms, sky patches).
-                         # Rendered in a background thread — does not block the pipeline.
                          # false (default) = JSON diagnostics only, no matplotlib overhead.
 device: 'auto'      # 'auto', 'cpu', or 'cuda'
 

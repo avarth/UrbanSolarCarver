@@ -1,4 +1,5 @@
-"""Tests for api_core/_util.py: histograms, score statistics, Tregenza helpers."""
+"""Tests for api_core/_diagnostics.py (histograms, score statistics) and the
+grid memory estimate in api_core/_reporting.py."""
 import numpy as np
 import pytest
 from pathlib import Path
@@ -100,9 +101,9 @@ class TestSaveHistogram:
     def test_zero_dominant_scores_creates_histogram(self, tmp_path):
         """When most voxels score zero, the histogram should still be created.
 
-        BUG B3: currently the histogram filters to flat > 0, hiding the
-        zero-score population. After fix, the plot should annotate the
-        zero count (e.g., '900 zero-score voxels (90%)').
+        The histogram plots only scores > 0 and annotates the zero count
+        (e.g. '900 zero-score voxels (90%)'); this test checks only that the
+        file is written.
         """
         scores = np.concatenate([np.zeros(900), np.random.rand(100) * 10])
         path = save_histogram(scores, tmp_path, "zero_test.png")
@@ -113,5 +114,5 @@ class TestSaveHistogram:
         """All-identical scores should not crash."""
         scores = np.full(50, 3.14)
         path = save_histogram(scores, tmp_path, "const.png")
-        # May return a histogram or None depending on implementation
-        # Just verify no crash
+        # The function may return a path or None here; the test only checks
+        # that it does not raise.

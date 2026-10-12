@@ -1,4 +1,4 @@
-"""USC Zone Operation — Setpoints and internal gains.
+"""USC Zone Operation: setpoints and internal gains.
 
 Feeder for USC_Archetype's 'operation' input. Only wired inputs are
 passed on; anything left unconnected keeps the archetype's neutral

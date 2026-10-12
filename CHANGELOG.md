@@ -9,12 +9,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
-- **Simulated-weights generator (benefit mode)** — `usc simulate-weights` and the
+- **Simulated-weights generator (benefit mode)**: `usc simulate-weights` and the
   `urbansolarcarver.simulated_weights` module: an ISO 13790 Annex C simple hourly
   ("5R1C") thermal model plus batched central-difference perturbation,
-  producing the hourly *marginal* benefit/harm of solar gain — `benefit[t]` (fraction of
+  producing the hourly *marginal* benefit/harm of solar gain, `benefit[t]` (fraction of
   a marginal joule of solar gain that offsets heating over the year) and
-  `harm[t]` (fraction that becomes cooling load) — written to a
+  `harm[t]` (fraction that becomes cooling load), written to a
   `simulated_weights.json` artifact with full provenance metadata. Inputs:
   one EPW plus ~10 archetype parameters (`configs/archetype_example.yaml`;
   neutral values, no national defaults). The engine is validated against
@@ -24,40 +24,40 @@ versioning follows [Semantic Versioning](https://semver.org/).
   independent network reduction. Design, tier ladder, and declared
   limitations: `design/simulated-weights.md`.
 - **`simulated_weights_path`** (benefit mode): consume a simulated-weights artifact
-  in place of the balance-point hour filter — each hour's DNI/DHI is scaled
+  in place of the balance-point hour filter: each hour's DNI/DHI is scaled
   by `benefit[t]` before the cumulative sky matrix (the balance filter is
   the binary special case of this mechanism), and `include_harm: true`
   subtracts the `harm[t]`-scaled matrix clipped at zero. Analysis-period
   hours outside the period are zero-weighted. `balance_temperature`/
   `balance_offset` are unused (warns if customized); artifact provenance is
-  recorded in preprocessing diagnostics and the patch-weight cache keys on
-  artifact content. Occupancy: archetypes accept a flat internal-gains
+  recorded in preprocessing diagnostics (the artifact is read again on every
+  preprocessing run, so edits to it take effect). Occupancy: archetypes accept a flat internal-gains
   value or a 24-value daily profile.
 - **Shoebox archetype shorthand**: instead of explicit areas, an archetype
   may give `width`/`length`/`height` plus per-facade `wwr` (window-to-wall
-  ratio), `g_value`, and optional `orientation` — floor area, volume,
+  ratio), `g_value`, and optional `orientation`; floor area, volume,
   per-facade window areas, `area_window`, and `area_opaque` (opaque walls +
   roof) are derived. `configs/archetype_example.yaml` shows both forms.
 - **Weights preview**: `usc simulate-weights` / `generate_simulated_weights` write a
-  `.png` companion next to the artifact — benefit and harm as day x hour
-  heatmaps — so the schedule can be inspected without writing code.
+  `.png` companion next to the artifact (benefit and harm as day x hour
+  heatmaps), so the schedule can be inspected without writing code.
 - **Sky-weight comparison in diagnostics**: a benefit run that consumes a
   simulated-weights artifact (with `diagnostic_plots: true`) also records a
   difference dome versus the simple balance-point rule for the same config
   (`sky_patch_comparison_image` + redistribution stats in
   `diagnostic.json`).
 - **Tutorial 5** (`examples/5_benefit_5r1c.ipynb`): simulated benefit
-  weights end-to-end — archetype, weights generation and inspection,
+  weights end-to-end: archetype, weights generation and inspection,
   simple-vs-simulated carve comparison, harm channel, provenance.
 - The sample Golden CO TMY3 EPW is now actually committed
-  (`.gitignore` exception) — the tutorials and EPW-dependent tests run
+  (`.gitignore` exception), so the tutorials and EPW-dependent tests run
   out of the box as documented.
 - **`usc archetype`**: builds a shoebox archetype YAML from defaults or an
   existing file (`--from`), with `-s key=value` overrides (`wwr_south=0.4`
   style for the per-facade ratios). The file is validated through the
   generator's own code path before writing, and the derived floor area,
-  volume, and per-facade window areas are printed — mistakes surface here,
-  not inside a simulation.
+  volume, and per-facade window areas are printed, so mistakes surface here
+  and not inside a simulation.
 - **`usc validate` checks the weights artifact**: when
   `simulated_weights_path` is set, the artifact itself is read and
   validated (existence, schema, 8760 bounded values) at validate time
@@ -68,7 +68,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **Grasshopper components for simulated weights**: new `USC_Archetype`
   assembles a typical building from five Honeybee-style family feeders
   (`USC_ZoneGeometry`, `USC_ZoneFabric`, `USC_ZoneVentilation`,
-  `USC_ZoneOperation`, `USC_ZoneShading` — one wire per family, all
+  `USC_ZoneOperation`, `USC_ZoneShading`; one wire per family, all
   optional with neutral defaults), and `USC_SimulateWeights` runs the
   simulation through the daemon (outputs the artifact path and the
   heatmap preview).
@@ -80,7 +80,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `internal_gains_w_m2` / `internal_gains_profile_w_m2` keys when the
   argument is omitted, so CLI, daemon, and Grasshopper pass archetypes
   through unmodified.
-- **Shading coefficients** (archetype keys, declared multipliers — no
+- **Shading coefficients** (archetype keys, declared multipliers; no
   device geometry): `shading_permanent` (year-round transmission factor
   for fins/context) and `shading_hot` (additional factor deployed during
   the user-declared `hot_months`; awnings, tents, seasonal vegetation).
@@ -135,11 +135,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   benefit−harm net clipped at zero, which silently let hot-hour radiation
   erode winter weights and made results depend on whether the analysis
   period included summer. A full-year analysis period is now safe and
-  natural — the balance filter selects the beneficial hours by itself.
+  natural: the balance filter selects the beneficial hours by itself.
   The composite remains available as a declared, opt-in experiment:
   `include_harm: true` subtracts hot-hour radiation per patch (clipped at
   zero, dead-band hours count for neither side), with its period-dependence
-  documented. Shading value is deliberately never a carving force — with
+  documented. Shading value is deliberately never a carving force: with
   signed retention, every voxel along a hot-hour ray earns shade credit, so
   the "optimal" envelope keeps whole sun-path prisms (cave-like volumes).
 - `balance_temperature` default changed from 20 to **15 °C** (Ladybug's
@@ -147,11 +147,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   older poorly insulated stock). Derive project-specific values via the
   Honeybee/E+ balance-point workflow.
 - `balance_offset` now validates `>= 0` (a negative offset silently inverted
-  the dead-band into inverted hour classification).
+  the dead-band, so the cold-hour and hot-hour ranges overlapped).
 - User-facing terminology for the two benefit weightings: "simple weights"
   (balance-point rule) vs "simulated weights" (5R1C hourly simulation);
   the internal "Tier 1.5" label no longer appears in docs, CLI, or configs.
-  the module and all public names use the `simulated_weights` family
+  The module and all public names use the `simulated_weights` family
   (`generate_simulated_weights`, `simulated_weights_path`,
   `usc simulate-weights`, `simulated_weights.json`); no aliases are kept
   since the feature is unreleased.
@@ -162,7 +162,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
-- **`ground_reflectance` config field** — it never affected results: Ladybug
+- **`ground_reflectance` config field**. It never affected results: Ladybug
   SkyMatrix only stores it as metadata for RadiationStudy, which USC does
   not run, and USC's ray casting targets sky patches only. Configs carrying
   the key now fail validation with a clear message; remove the line. The
@@ -252,8 +252,51 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **Exporting** meshed with the config's `voxel_size` instead of the
   preprocessing run's, and counted retained voxels before the small-
   fragment cleanup (now reported as `voxels_removed_by_cleanup`).
+- **Smaller fixes from the comment and docstring review**:
+  - Re-voxelizing a run whose `voxel_grid.npy` is missing now uses the
+    preprocessing run's voxel size, not the one in the config passed later.
+  - A planar test surface too small for the sampling grid gets its single
+    sample at a point inside the polygon (the vertex centroid can fall
+    outside an L-shaped or ring-shaped surface).
+  - Sample normals and analysis-quad winding follow the area-weighted face
+    normal instead of the first face's, which is zero for a zero-area face.
+  - The iso-level helper of the smoothed mesher had its two edge cases
+    swapped (all cells inside / no cell inside).
+  - Hour-of-year indices are validated as 0 to 8759 (EPW files hold 8760
+    hours; 8760 to 8783 used to pass and were dropped silently).
+  - An archetype with `wwr`, `g_value` or `orientation` but no
+    width/length/height now fails with "shoebox archetype is missing ..."
+    instead of a later TypeError.
+  - The fixed-step tracer (no Warp) sized its chunks for 24 bytes per
+    sample; it holds 49, so it could use about twice its memory budget.
+  - The daemon authkey file is created with owner-only permissions on
+    Linux and macOS from the start, and two processes starting at once
+    no longer write different keys. A CLI call with a mismatched key
+    prints a message instead of a traceback.
+  - Carving looked up the Tregenza patch directions with a keyword
+    argument, which bypassed the session cache.
+  - USC_Config resolves relative `epw_path` / `simulated_weights_path`
+    from USC_EPW and USC_BenefitParams against the .gh file, as it does
+    for its own inputs. USC_Threshold warns about an unknown `method`
+    instead of ignoring it.
+- **Docs and comments**: docstrings, comments, CLI help, config field
+  descriptions, Grasshopper port descriptions and the docs pages were
+  checked against the code and corrected where they disagreed (removed
+  functions, wrong defaults, units, file names, mode requirements).
+- **Tests**: tests that only checked hand-written values (`hashlib`, a
+  literal manifest dict, a copied mode table) now run the real stages or
+  read the mode registry; a new exporting test checks that a model at UTM
+  coordinates keeps its voxel lattice to 1e-6 m end to end.
 
-### Fixed (carving correctness — results change)
+### Removed (code review)
+
+- Unused code: the buffered Warp DDA tracer (replaced by the fused
+  kernels), the point-cloud and diagnostic exporters in `io.py`,
+  `sun.warm_up`, unused `AnalysisMesh` methods, the never-read
+  `suggested_threshold` manifest field, and the report's fallback to the
+  old `summary.json` / `timings.json` files.
+
+### Fixed (carving correctness; results change)
 
 Found with a new end-to-end harness (procedural urban typologies checked
 against an independent CPU reference marcher, plus Monte Carlo runs).
@@ -323,17 +366,17 @@ against an independent CPU reference marcher, plus Monte Carlo runs).
 - **`edge_taper` design constraint** (all weighted sky-patch modes): sample
   points within `edge_taper` meters of their test-surface component's
   boundary count proportionally less (linear ramp), so perimeter/corner
-  points no longer force carving of directly adjacent volume — replacing the
+  points no longer force carving of directly adjacent volume. This replaces the
   manual practice of offsetting test-surface edges. Distances are exact 2D
   distances to the welded component outline (exterior and holes), so
   exploded-but-coincident panels (e.g. street networks) have no phantom
   seams. Zero-weight rays are dropped before tracing. Components narrower
   than ~2× the taper warn loudly and per-component stats are recorded in the
-  preprocessing diagnostics — the taper never silently excludes geometry.
+  preprocessing diagnostics, so the taper never silently excludes geometry.
   Ignored (with a warning) by the binary violation-count modes.
 - **`min_sky_elevation_deg` protection cone** (radiative_cooling): sky
   patches below the declared elevation are excluded from the cooling weights
-  (renormalized) — a declared design constraint analogous to
+  (renormalized): a declared design constraint analogous to
   obstruction-angle daylight rules, controlling how steeply the envelope may
   rise around protected surfaces. Default 0 keeps the pure physical model.
 - The radiative-cooling template now documents both constraints and ships a
@@ -346,7 +389,7 @@ against an independent CPU reference marcher, plus Monte Carlo runs).
   load. Methods: `carve_fraction`, `headtail`, `cutoff`. Mode defaults are
   resolved at load time (weighted modes → `carve_fraction`, count modes →
   `cutoff 0`), and the method is cross-checked against the mode's score
-  kind — misuse fails at load with a precise message. All previous config
+  kind; misuse fails at load with a precise message. All previous config
   spellings keep working.
 - **`analysis_period` mapping**: the analysis period can be given as one
   mapping using Ladybug's `AnalysisPeriod.to_dict()` keys (`st_month` …
@@ -359,21 +402,21 @@ against an independent CPU reference marcher, plus Monte Carlo runs).
 - **`setup_env.py` long-path preflight**: on Windows, the installer now
   predicts the 260-character path failure that torch's wheel triggers under
   deep repo paths, and falls back to a short per-user venv (`~/.usc-venv`)
-  with clear instructions — instead of dying mid-install with WinError 206.
+  with clear instructions, instead of dying mid-install with WinError 206.
   A `--venv-dir` option overrides the location.
 
 ### Removed
 
 - The monolithic `configs/user_config.yaml` starter (superseded by the
   per-mode templates).
-- Dead nested/dotted-key override machinery in `load_config` — the schema is
+- Dead nested/dotted-key override machinery in `load_config`: the schema is
   flat and the advertised `a.b=c` form never validated. Overrides are plain
   `key=value` (JSON lists/objects are parsed as values).
 
 ### Changed
 
 - The thresholding stage hash now derives from `{threshold_method,
-  threshold_value, score_smoothing}` — previously it could embed a
+  threshold_value, score_smoothing}`. Previously it could embed a
   score-dependent resolved cutoff (making identical configs hash
   differently) and an irrelevant `carve_fraction` for non-fraction methods.
   Stage hashes change once across this version boundary.
@@ -433,7 +476,7 @@ Measured on a 306³ grid / 375k sample points (daylight mode, CPU): full
 pipeline 112 s → ~34 s.  Except for the CPU trace dispatch, the gains
 apply equally to CUDA machines.
 
-- **Voxelization**: new Warp parity voxelizer — one BVH ray per grid
+- **Voxelization**: new Warp parity voxelizer: one BVH ray per grid
   column along each axis, majority vote across the three parities plus
   surface-hit marking (the same robustness idea as trimesh's
   orthographic fill).  Runs on CUDA or the Warp CPU device: 10–50×
@@ -456,7 +499,7 @@ apply equally to CUDA machines.
 - **`carve_fraction` thresholding**: the full `argsort` over the score
   volume (O(N log N); ~5 s at 306³ and minutes at 500³) is replaced by an
   exact two-pass weighted-histogram method (O(N)).  Mass accounting now
-  accumulates in float64 — the old float32 cumulative sum drifted
+  accumulates in float64; the old float32 cumulative sum drifted
   measurably on large grids, so thresholds may shift very slightly (the
   new values are the more accurate ones).
 - **Perona–Malik SDF smoothing** (`apply_smoothing=True` exports): the
@@ -486,7 +529,7 @@ apply equally to CUDA machines.
   with long rays).  The buffered path remains for the no-Warp fallback.
   Equivalence with the buffered counts is regression-tested.
 - `generate_sky_patch_rays` no longer materializes per-ray normals
-  (an (R, 3) tensor nobody consumes — hundreds of MB of VRAM);
+  (an (R, 3) tensor nobody consumes, hundreds of MB of VRAM);
   pass `include_normals=True` to get them.
 
 ### Added

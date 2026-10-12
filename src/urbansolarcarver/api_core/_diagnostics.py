@@ -5,8 +5,8 @@ statistics.  Used by preprocessing and thresholding.
 
 If no matplotlib backend has been selected yet, fall back to Agg so
 plots render correctly from background threads (no tkinter dependency).
-An already-chosen backend (e.g. a notebook's inline backend) is kept —
-forcing Agg here would silently break plotting for notebook users.
+An already-chosen backend (e.g. a notebook's inline backend) is kept,
+because forcing Agg here would silently break plotting for notebook users.
 """
 from pathlib import Path
 from typing import List, Union, Optional
@@ -33,7 +33,12 @@ def save_histogram(
     title: str = "Score Distribution",
     xlabel: str = "Score",
 ) -> Optional[Path]:
-    """Save a histogram of values as PNG. Returns path or None if matplotlib missing."""
+    """Save a histogram of the finite values as a PNG.
+
+    Only positive values are binned when there are any; the share of zeros
+    is written on the plot instead.  Returns the PNG path, or None if
+    matplotlib is missing or there are no finite values.
+    """
     try:
         import matplotlib.pyplot as plt
     except ImportError:
@@ -68,12 +73,12 @@ def save_histogram(
 
 
 def warn_score_anomalies(scores: np.ndarray, context: str = "preprocessing") -> dict:
-    """Warn loudly if a score array contains NaN or Inf values.
+    """Emit a warning if a score array contains NaN or Inf values.
 
     Non-finite scores indicate a numerical problem upstream (degenerate
-    geometry, broken weights) and would silently corrupt thresholding —
-    ``NaN <= thr`` is False, so NaN voxels are always carved without any
-    signal to the user.
+    geometry, broken weights) and would silently corrupt thresholding:
+    ``NaN <= thr`` is False, so NaN (and +Inf) voxels are always carved
+    without any other signal to the user.
 
     Returns a dict with ``nan_count`` and ``inf_count`` for diagnostics.
     """
@@ -86,8 +91,8 @@ def warn_score_anomalies(scores: np.ndarray, context: str = "preprocessing") -> 
         warnings.warn(
             f"{context}: scores contain {nan_count} NaN and {inf_count} Inf "
             f"values ({100.0 * (nan_count + inf_count) / max(total, 1):.2f}% "
-            f"of {total} voxels). Check input geometry and weights — "
-            f"non-finite voxels will always be carved.",
+            f"of {total} voxels). Check input geometry and weights; "
+            f"NaN and +Inf voxels will always be carved.",
             stacklevel=2,
         )
     return {"nan_count": nan_count, "inf_count": inf_count}
@@ -99,8 +104,9 @@ def score_statistics(values: np.ndarray, detailed: bool = True) -> dict:
     Basic statistics (count, min, max, mean, nonzero counts) are cheap
     single-pass reductions and are always included.  ``detailed=True``
     adds median, std, and percentiles, which need sorting-like passes
-    over the full array — noticeably slower on large score volumes.
-    The pipeline gates the detailed set behind ``cfg.diagnostics``.
+    over the full array and are noticeably slower on large score volumes.
+    The pipeline computes the detailed set only when ``cfg.diagnostics``
+    is True.  Non-finite values are excluded from all statistics.
     """
     flat = np.asarray(values, dtype=float).ravel()
     finite = flat[np.isfinite(flat)]
@@ -140,7 +146,8 @@ def _plot_tregenza_hemisphere(
     Parameters
     ----------
     w : ndarray, shape (145,)
-        Value per patch (weight, intensity, etc.).
+        Value per patch (weight, intensity, etc.), in Tregenza order from
+        the horizon ring up; the last entry is the zenith patch.
     title : str
         Figure title.
     cbar_label : str
@@ -176,12 +183,15 @@ def _plot_tregenza_hemisphere(
     r_ticks = 1.0 - alt_deg / 90.0
     ax.set_rgrids(r_ticks, labels=[f"{int(a)}\u00b0" for a in alt_deg], angle=22.5)
     ax.set_rlabel_position(22.5)
-    # Faint guides at Tregenza ring elevations
+    # Faint guide circles at the Tregenza band centre altitudes
     tregenza_alt = np.array([6, 18, 30, 42, 54, 66, 78], dtype=float)
     tt = np.linspace(0, 2 * np.pi, 361)
     for rr in 1.0 - tregenza_alt / 90.0:
         ax.plot(tt, np.full_like(tt, rr), linewidth=0.3, alpha=0.3, color="k")
-    # Ring edges from horizon to zenith
+    # Sector boundaries.  These use the band centre altitudes (6°, 18°, ...,
+    # 78°), not the true Tregenza band edges (12°, 24°, ..., 84°): the
+    # horizon ring is drawn 0°-6°, the other rings 6° below their position
+    # on the sky, and the zenith cap from 78°.
     elev = tregenza_alt * np.pi / 180.0
     r_edges = np.concatenate([[1.0], 1.0 - elev / (np.pi / 2)])
     # Draw sectors
@@ -213,9 +223,9 @@ def _plot_tregenza_hemisphere(
     return path
 
 
-# Tregenza solid angles (steradians) for each of the 145 patches.
-# Computed from the standard ViewSphere; cached here so the plotting
-# utility does not need to import torch or ladybug at runtime.
+# Tregenza solid angles (steradians) for each of the 145 patches. Read from
+# ladybug's view sphere on first use and cached; if ladybug is not installed,
+# they are computed from the band geometry instead.
 _TREGENZA_SOLID_ANGLES: Optional[np.ndarray] = None
 
 def _get_tregenza_solid_angles() -> np.ndarray:
@@ -228,7 +238,8 @@ def _get_tregenza_solid_angles() -> np.ndarray:
                 view_sphere.tregenza_solid_angles, dtype=np.float64
             )
         except ImportError:
-            # Fallback: approximate solid angles from ring geometry
+            # Fallback: band solid angle 2π(sin(top) - sin(bottom)), split
+            # evenly over the band's patches; the zenith cap is 84°-90°.
             ring_counts = [30, 30, 24, 24, 18, 12, 6]
             alt_edges = np.radians([0, 12, 24, 36, 48, 60, 72, 84, 90])
             angles = []
@@ -249,23 +260,25 @@ def save_sky_patch_weights(
 ) -> Optional[List[Path]]:
     """Save two hemisphere plots for Tregenza (145) sky patches.
 
-    Plot 1 — **Patch weight** (radiance × solid angle): what the ray
+    Plot 1, **patch weight** (radiance × solid angle): what the ray
     tracer actually uses.  Mid-altitude patches often dominate because
-    they subtend larger solid angles.
+    they subtend larger solid angles.  Saved as *fname*.
 
-    Plot 2 — **Patch intensity** (weight / solid angle = radiance):
-    shows the directional luminance/irradiance pattern.  For CIE
-    overcast the zenith should be brightest; for clear-sky benefit
-    the south horizon ring should dominate.
+    Plot 2, **patch intensity** (weight / solid angle = radiance): the
+    directional luminance/irradiance pattern.  For CIE overcast the
+    zenith should be brightest; for winter benefit in the northern
+    hemisphere the low southern sky usually dominates.  Saved as
+    ``<fname stem>_intensity.<ext>``.
 
-    Falls back to a simple line plot for non-Tregenza patch counts.
+    For a patch count other than 145, only a line plot of weight against
+    patch index is saved.
 
     Parameters
     ----------
     weight_unit : str
-        Physical unit label from mode registry (e.g. "kWh/m²", "CIE
+        Physical unit label from the mode registry (e.g. "kWh/m²", "CIE
         overcast sky obstruction score (dimensionless)").  Used in the
-        intensity plot colorbar label.
+        colorbar and axis labels.
 
     Returns
     -------
@@ -344,11 +357,16 @@ def save_sky_patch_comparison(
 
     Returns
     -------
-    (path, stats) where ``stats`` reports the redistribution in relative
-    terms — ``mass_redistributed_pct`` (share of total weight that moved),
+    (path, stats), or None if matplotlib is unavailable.  ``stats``
+    reports the redistribution in relative terms:
+    ``mass_redistributed_pct`` (share of total weight that moved),
     ``patches_over_20pct`` (patches whose own share changed by more than
-    20 %), ``rel_change_min_pct`` / ``rel_change_max_pct`` (extremes) —
-    or None if matplotlib is unavailable.
+    20 %), and ``rel_change_min_pct`` / ``rel_change_max_pct`` (extremes).
+
+    Raises
+    ------
+    ValueError
+        If either set does not have 145 patches or sums to zero or less.
     """
     try:
         import matplotlib  # noqa: F401

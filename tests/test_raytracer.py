@@ -1,4 +1,5 @@
-"""Tests for raytracer module: fixed-step marcher, DDA, session cache, auto_batch."""
+"""Tests for the raytracer module: fixed-step marcher, Warp DDA kernels, ray
+generation, kernel warmup and auto batch size."""
 import math
 import pytest
 import numpy as np
@@ -48,11 +49,10 @@ class TestFixedStepMarcher:
     def test_diagonal_ray_reaches_far_corner(self):
         """A diagonal ray should reach the far corner of the grid.
 
-        With voxel_size=1.0 and resolution=10, the grid diagonal is
-        10*sqrt(3) ~ 17.32. int(17.32/1.0) = 17 steps — enough with
-        the 0.5-offset to still reach (9,9,9). The truncation bug (A1)
-        manifests at specific grid sizes where the last partial step
-        would land in a new voxel.
+        With voxel_size=1.0 and resolution=10 the grid diagonal is
+        10*sqrt(3) ~ 17.32. The ray length is one voxel longer (~18.32), so
+        the ceil(18.32) = 19 samples at (k + 0.5) * voxel_size reach the
+        corner cell (9, 9, 9).
         """
         resolution = 10
         voxel_size = 1.0
@@ -75,24 +75,23 @@ class TestFixedStepMarcher:
         assert (9, 9, 9) in hit_set, f"Far corner (9,9,9) not reached. Max: {voxel_indices.max(dim=0).values.tolist()}"
 
     def test_truncation_bug_specific_case(self):
-        """Demonstrate the fixed-step truncation: int() vs ceil().
+        """Arithmetic behind the step count of the fixed-step marcher.
 
-        With ray_length=7.5 and voxel_size=1.0, int(7.5)=7 steps.
-        Sample positions at (0.5, 1.5, ..., 6.5)*voxel_size → cells 0-6.
-        Cell 7 (at 7.5) is missed. With ceil(7.5)=8 steps, cell 7 is reached.
+        With ray_length=7.5 and voxel_size=1.0, int(7.5)=7 steps would sample
+        at (0.5, 1.5, ..., 6.5)*voxel_size, i.e. cells 0-6, and miss cell 7.
+        ceil(7.5)=8 steps, which _trace_fixed_step uses, reaches cell 7.
+        This test checks only the arithmetic; it does not call the marcher.
         """
         num_steps_int = int(7.5 / 1.0)    # 7
         num_steps_ceil = math.ceil(7.5 / 1.0)  # 8
         assert num_steps_int == 7
         assert num_steps_ceil == 8
-        # The fixed-step marcher uses int(), losing the last cell
-        # This is a mathematical demonstration of the truncation
 
     def test_no_duplicate_ray_voxel_pairs(self):
-        """Each (ray, voxel) pair must appear at most once — duplicates would
+        """Each (ray, voxel) pair must appear at most once; duplicates would
         inflate scores and violation counts downstream."""
-        # A nearly axis-aligned ray samples some voxels twice per step
-        # without dedup (discrete stepping overshoot).
+        # Fixed-step sampling can put two samples of one ray in the same
+        # voxel; the marcher must report that voxel once.
         origins = torch.tensor([[-0.5, 2.5, 2.5]], dtype=torch.float32)
         dirs = torch.nn.functional.normalize(
             torch.tensor([[1.0, 0.001, 0.001]]), dim=1)
@@ -123,7 +122,7 @@ class TestFixedStepMarcher:
         ray_ids, p_ids, voxel_indices = _trace_fixed_step(
             min_corner, 10.0, 10, origins, dirs, patch_ids, 1.0, 20.0,
         )
-        # Ray starts at (20,20,20) going +X, grid is [0,10]^3 — should miss
+        # Ray starts at (20,20,20) going +X and the grid is [0,10]^3, so it misses
         assert ray_ids.shape[0] == 0
 
 
@@ -366,14 +365,14 @@ class TestFixedStepChunking:
 
         # Run with a very large budget (no chunking)
         saved = getattr(rt, '_FIXED_STEP_BUDGET_BYTES', None)
-        rt._FIXED_STEP_BUDGET_BYTES = 10 * 1024**3  # 10 GB -- effectively no chunking
+        rt._FIXED_STEP_BUDGET_BYTES = 10 * 1024**3  # 10 GB: effectively no chunking
         r1_ray, r1_patch, r1_vox = rt._trace_fixed_step(
             min_corner, scale, resolution,
             origins, dirs, patch_ids,
             voxel_size, ray_length,
         )
         # Run with a tiny budget (forces many chunks)
-        rt._FIXED_STEP_BUDGET_BYTES = 1024  # 1 KB -- extreme chunking
+        rt._FIXED_STEP_BUDGET_BYTES = 1024  # 1 KB: many small chunks
         r2_ray, r2_patch, r2_vox = rt._trace_fixed_step(
             min_corner, scale, resolution,
             origins, dirs, patch_ids,

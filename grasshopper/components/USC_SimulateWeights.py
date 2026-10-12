@@ -1,10 +1,10 @@
-"""USC Simulate Weights — Generate simulated benefit weights.
+"""USC Simulate Weights: generate simulated benefit weights.
 
-Runs USC's ISO 13790 5R1C hourly building simulation (through the GPU
-daemon's Python backend) to derive, for every hour of the year, what
-fraction of a marginal joule of solar gain offsets heating (benefit)
-and what fraction becomes cooling load (harm). Writes a
-simulated_weights.json artifact plus a .png heatmap preview.
+Runs USC's ISO 13790 5R1C hourly building simulation (in the daemon; no
+GPU needed) to derive, for every hour of the year, what fraction of a
+marginal joule of solar gain offsets heating (benefit) and what fraction
+becomes cooling load (harm). Writes a simulated_weights.json artifact
+plus a .png heatmap preview next to it.
 
 Wire the weights_path output into USC_BenefitParams'
 simulated_weights_path input to drive a benefit-mode carve with the
@@ -15,12 +15,14 @@ Inputs
 session : USCSession
     Session handle from USC_Session (daemon must be running).
 epw_path : str
-    Path to the EPW weather file.
+    Path to the EPW weather file. Relative paths (here and below) are
+    taken relative to the saved .gh file.
 archetype : USCArchetype or str
     Archetype handle from USC_Archetype, or a path to an archetype YAML
     (see configs/archetype_example.yaml).
 out_path : str, optional
-    Artifact output path. Default: <session root>/simulated_weights.json
+    Artifact output path. Default: simulated_weights.json next to the
+    saved .gh file.
 eps : float, optional
     Perturbation size in W (central differences). Default: 1.0
 run : bool
@@ -31,8 +33,9 @@ Outputs
 weights_path : str
     Path to simulated_weights.json. Connect to USC_BenefitParams.
 preview : str
-    Path to the .png weights preview (day x hour benefit/harm heatmaps).
-    Feed to Ladybug Image Viewer for in-canvas inspection.
+    Path to the .png weights preview (day x hour benefit/harm heatmaps),
+    or None if no preview was written. Feed to Ladybug Image Viewer for
+    in-canvas inspection.
 summary : str
     Status and artifact provenance.
 """
@@ -44,16 +47,16 @@ from pathlib import Path
 try:
     ghenv.Component.Name = "USC Simulate Weights"
     ghenv.Component.NickName = "USC_SimWeights"
-    ghenv.Component.Description = "Generates simulated benefit weights: an ISO 13790 5R1C hourly simulation of a typical building (USC_Archetype) derives when a marginal joule of solar gain is thermally useful — thermal lag, mass state, gain saturation. Writes simulated_weights.json + a .png preview. Wire weights_path into USC_BenefitParams to drive a benefit carve."
+    ghenv.Component.Description = "Generates simulated benefit weights: an ISO 13790 5R1C hourly simulation of a typical building (USC_Archetype) derives when a marginal joule of solar gain is thermally useful, accounting for thermal lag, mass state and gain saturation. Writes simulated_weights.json + a .png preview. Wire weights_path into USC_BenefitParams to drive a benefit carve."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
         ("session", "Session handle from USC_Session. The daemon must be running (start_daemon=True)."),
-        ("epw_path", "Path to the EPW weather file for the site."),
+        ("epw_path", "Path to the EPW weather file for the site. A relative path is taken relative to the saved .gh file."),
         ("archetype", "Archetype from USC_Archetype, or a path to an archetype YAML file (see configs/archetype_example.yaml)."),
-        ("out_path", "Optional output path for the artifact. Default: simulated_weights.json under the session root. The weights are cached by content downstream, so regenerating with a different archetype never yields stale carves."),
+        ("out_path", "Optional output path for the artifact. Default: simulated_weights.json next to the saved .gh file. The carve reads the artifact again on every run, so overwriting it does not leave stale results."),
         ("eps", "Perturbation size in watts for the central-difference attribution. Default 1.0; rarely needs changing."),
-        ("run", "Boolean toggle to execute. The simulation takes a few seconds (17 521 vectorised year-simulations)."),
+        ("run", "Boolean toggle to execute. The simulation runs 17 521 year-long trajectories at once (1 base + 2 per hour of the year)."),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d
@@ -106,7 +109,7 @@ else:
         epw = gh.resolve_path(ghenv.Component, epw_path) if epw_path else None
         if not epw or not os.path.isfile(epw):
             raise ValueError("Provide a valid epw_path")
-        # An USC_Archetype handle carries the archetype as a dict; a string is a YAML path.
+        # A USC_Archetype handle carries the archetype as a dict; a string is a YAML path.
         arch_payload = getattr(archetype, "data", None)
         if arch_payload is None:
             arch_payload = gh.resolve_path(ghenv.Component, archetype)

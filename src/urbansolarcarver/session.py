@@ -2,8 +2,8 @@
 
 ``CarverSession`` keeps the CUDA context alive (the daemon holds one for its
 whole lifetime) and caches values that are expensive to rebuild, such as
-voxel grids and sky-patch weights.  Compiled Warp kernels are cached by Warp
-itself, on disk.
+voxel grids and the Tregenza patch directions and solid angles.  Compiled Warp kernels are cached
+by Warp itself, on disk.
 
 Cache keys must describe everything the cached value depends on, including
 the device it lives on; ``bump()`` clears the cache between independent runs.
@@ -111,10 +111,15 @@ def session_cache(key: Union[str, Callable[..., str]]):
     """Cache a function's return value in the active session.
 
     *key* is a format string over ``args`` and ``kwargs`` (e.g.
-    ``"tregenza_dirs:{args[0]}"``) or a callable ``key(args, kwargs) -> str``
-    for keys that need computing (e.g. a hash of mesh contents).  The key
-    must cover everything the result depends on, including its device.
-    Without an active session the function simply runs.
+    ``"{args[0]}"`` for a device passed positionally) or a callable
+    ``key(args, kwargs) -> str`` for keys that need computing (e.g. a hash of
+    mesh contents).  The function name is prefixed to the key.  The key must
+    cover everything the result depends on, including its device.
+
+    The wrapped function accepts an extra ``session=`` keyword; otherwise the
+    active session is used.  Without a session the function simply runs, and
+    if the key cannot be formatted from the call's arguments it runs
+    uncached, with a one-time log warning.
     """
     def decorator(fn):
         warned = False

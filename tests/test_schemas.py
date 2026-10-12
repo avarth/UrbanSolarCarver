@@ -1,4 +1,5 @@
-"""Validation guard tests for Pydantic schemas and grid bounds."""
+"""Validation tests for the Pydantic config schema, the voxel grid resolution cap,
+and load_config overrides and relative paths."""
 import os
 import pytest
 import numpy as np
@@ -72,7 +73,7 @@ class TestGridStepValidation:
 
 class TestResolutionCap:
     def test_resolution_exceeds_cap(self):
-        """voxelize_mesh should reject resolution > 2048."""
+        """voxelize_mesh should reject a per-axis resolution above 4096."""
         import trimesh
         from urbansolarcarver.grid import voxelize_mesh
         # 100m cube / 0.01m voxel = 10000 resolution → should fail
@@ -243,7 +244,7 @@ class TestThresholdValidation:
         assert cfg.threshold.value == 0.0
 
     def test_otsu_rejected(self):
-        """Otsu was removed — should no longer be accepted."""
+        """'otsu' is not a valid threshold method and must be rejected."""
         with pytest.raises(ValidationError):
             self._benefit_base(threshold="otsu")
 
@@ -331,7 +332,7 @@ class TestDesignConstraintFields:
 
 class TestDaylightMode:
     def test_daylight_no_epw_required(self):
-        """Daylight mode uses CIE overcast sky — should not require EPW."""
+        """Daylight mode uses the CIE overcast sky, so it should not require an EPW."""
         cfg = _make_config(
             mode="daylight",
             tilted_plane_angle_deg=None,
@@ -375,8 +376,8 @@ class TestNorthDegAndGroundReflectance:
             _make_config(north_deg=360.0)
 
     def test_ground_reflectance_removed(self):
-        """ground_reflectance never affected results and was removed; the
-        strict schema (extra='forbid') must reject configs that carry it."""
+        """ground_reflectance is not a config field; the strict schema
+        (extra='forbid') must reject configs that carry it."""
         with pytest.raises(ValidationError, match="ground_reflectance"):
             _make_config(ground_reflectance=0.2)
 
@@ -426,7 +427,8 @@ class TestEnvVarFallback:
     def test_garbage_ray_batch_env(self, monkeypatch):
         monkeypatch.setenv("USC_MAX_RAY_BATCH", "not_a_number")
         cfg = _make_config(ray_batch_size=999999999)
-        # Should clamp to default 2M, not crash
+        # An unparseable env value falls back to the 2,000,000 cap; the
+        # oversized batch is clamped to it instead of raising.
         assert cfg.ray_batch_size == 2_000_000
 
 

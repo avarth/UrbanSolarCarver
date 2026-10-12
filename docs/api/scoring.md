@@ -1,12 +1,11 @@
 # Scoring
 
-Handles the conversion from raw per-voxel obstruction counts to a binary carving decision:
+Sky-patch weight dispatch and threshold selection:
 
-- **Weight dispatch** (`get_weights`) -- routes to the correct sky-patch weighting function based on the selected mode (Perez irradiance, heating benefit, CIE daylight luminance, or radiative cooling).
-- **Normalization** (`normalize_scores`) -- rescales raw scores to [0, 1] using min-max or other strategies.
-- **Thresholding** -- three automatic methods:
-    - `otsu_threshold` -- minimizes intra-class variance (good general default).
-    - `headtail_threshold` -- iterative head-tail breaks for heavy-tailed score distributions.
-    - `carve_fraction` -- removes a fixed percentage of the scored volume.
+- **Weight dispatch** (`get_weights`): calls the sky-patch weighting function for the selected mode (Perez irradiance, heating benefit, CIE daylight luminance, or radiative cooling).
+- **Thresholds**, applied by the thresholding stage to the raw scores of the occupied voxels:
+    - `carve_fraction_threshold`: the cutoff above which the voxels hold a given fraction of the total score mass.
+    - `headtail_threshold`: Jiang (2013) head/tail breaks for heavy-tailed score distributions.
+    - A numeric cutoff from the config is used as given.
 
 ::: urbansolarcarver.scoring

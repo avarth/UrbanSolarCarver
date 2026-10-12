@@ -1,4 +1,8 @@
-"""Public facade. Re-export the staged API and config helpers."""
+"""Public API: the three pipeline stages, ``run_pipeline``, and config helpers.
+
+Importing this module imports torch, and Warp if it is installed, through
+``api_core``.
+"""
 from __future__ import annotations
 from pathlib import Path
 from typing import Union
@@ -16,8 +20,11 @@ def run_pipeline(
 ) -> ExportingResult:
     """Run the full carving pipeline in one call.
 
-    Convenience wrapper around the three stages. For finer control
-    (e.g. re-thresholding without re-carving), call each stage directly.
+    Runs preprocessing, thresholding and exporting in sequence, writing into
+    ``out_dir/preprocessing``, ``out_dir/thresholding`` and
+    ``out_dir/exporting``. *cfg* may be a validated config or a path to a
+    YAML config file. To re-threshold without recomputing scores, call the
+    stages directly.
 
     Returns the ExportingResult with the final mesh path.
     """

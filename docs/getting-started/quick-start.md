@@ -32,6 +32,8 @@ exp = exporting(thr, cfg, Path("outputs/exporting"))
 
 The decomposed workflow lets you re-run thresholding with different parameters without recomputing scores.
 
+Relative paths inside `config.yaml` are resolved against the YAML file's folder; the `out_dir` arguments above are relative to the current directory.
+
 ## CLI
 
 ```bash
@@ -51,15 +53,15 @@ urbansolarcarver schema
 
 Tutorial notebooks are in `examples/`:
 
-1. **Quick start** -- basic pipeline walkthrough
-2. **Solar envelope** -- time-based solar envelope
-3. **Tilted plane & daylight** -- geometric and CIE overcast envelopes
-4. **Advanced** -- chaining modes, post-processing, decomposed pipeline
-5. **Benefit with simulated weights** -- building-simulation-driven hour weighting (ISO 13790 5R1C)
+1. **Quick start**: basic pipeline walkthrough
+2. **Solar envelope**: time-based solar envelope
+3. **Tilted plane & daylight**: geometric and CIE overcast envelopes
+4. **Advanced**: chaining modes (annual irradiance on roofs, then daylight on windows)
+5. **Benefit with simulated weights**: hour weighting from a building simulation (ISO 13790 5R1C)
 
 ## Input Requirements
 
-- **Max volume mesh**: watertight PLY representing the theoretical maximum buildable volume.
-- **Test surface mesh**: PLY of planar faces whose solar/daylight access is to be protected.
-- **EPW weather file**: hourly climate data for the site location (required for all modes except `tilted_plane`).
+- **Max volume mesh**: watertight mesh (PLY recommended; any format Trimesh reads) representing the theoretical maximum buildable volume.
+- **Test surface mesh**: planar faces whose solar/daylight access is to be protected. Each face must be a flat panel.
+- **EPW weather file**: hourly climate data for the site location (required for `time-based`, `irradiance` and `benefit`; not used by `daylight`, `tilted_plane` or `radiative_cooling`).
 - All meshes must share the same coordinate system and units (meters recommended).

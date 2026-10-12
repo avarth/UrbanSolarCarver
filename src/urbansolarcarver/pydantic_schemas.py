@@ -1,12 +1,14 @@
 """Pydantic schemas for YAML configuration validation and stage manifests.
 
-Defines :class:`user_config` (the main pipeline configuration model),
-two stage manifest schemas (:class:`PreprocessingManifest`,
-:class:`ThresholdingManifest`), and the project-specific warning class
-:class:`UrbanSolarCarverWarning`.
+Defines :class:`UserConfig` (the pipeline configuration model, imported
+elsewhere as ``user_config``), :class:`ThresholdSpec` (the normalized
+threshold setting), two stage manifest schemas
+(:class:`PreprocessingManifest`, :class:`ThresholdingManifest`), and the
+project-specific warning class :class:`UrbanSolarCarverWarning`.
 
-All schemas use ``extra='forbid'`` so that typos in YAML keys are
-caught at load time rather than silently ignored.
+The config schemas use ``extra='forbid'`` so that typos in YAML keys are
+caught at load time rather than silently ignored. The manifest schemas use
+Pydantic's default and ignore unknown keys.
 """
 from __future__ import annotations
 
@@ -46,10 +48,10 @@ class ThresholdSpec(BaseModel):
 
     Methods
     -------
-    * ``carve_fraction`` — remove voxels accounting for ``value`` of the
-        total score mass (0-1).
-    * ``headtail`` — head/tail breaks (Jiang 2013); takes no value.
-    * ``cutoff`` — carve voxels scoring strictly above ``value``; for
+    * ``carve_fraction``: carve the highest-scoring voxels that together
+        hold ``value`` (0-1) of the total score mass.
+    * ``headtail``: head/tail breaks (Jiang 2013); takes no value.
+    * ``cutoff``: carve voxels scoring strictly above ``value``; for
         time-based this is the tolerated shading in m²·h.
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -81,10 +83,11 @@ class ThresholdSpec(BaseModel):
 def _normalize_threshold(v):
     """Accept threshold shorthands and return the canonical form.
 
-    * ``None`` — resolved to the mode default later
-    * number — ``{method: cutoff, value: n}``
-    * ``'headtail'`` / ``'carve_fraction'`` — method name
-    * mapping — validated as :class:`ThresholdSpec` directly
+    * ``None``: left as is; ``UserConfig`` fills in the mode default later.
+    * number: ``{method: cutoff, value: n}``. Booleans are rejected.
+    * ``'headtail'`` / ``'carve_fraction'``: ``{method: <name>}``.
+    * mapping or :class:`ThresholdSpec`: passed on to :class:`ThresholdSpec`
+      validation unchanged.
     """
     if v is None or isinstance(v, ThresholdSpec):
         return v
@@ -96,7 +99,7 @@ def _normalize_threshold(v):
         key = v.strip().lower()
         if key == "numeric":
             raise ValueError(
-                "threshold='numeric' requires an explicit number — set "
+                "threshold='numeric' requires an explicit number: set "
                 "threshold to the raw-score cutoff itself (e.g. threshold: 0.35)."
             )
         if key in ("headtail", "carve_fraction"):
@@ -108,9 +111,9 @@ def _normalize_threshold(v):
     return v
 
 
-# Ladybug-aligned analysis_period mapping: LB AnalysisPeriod.to_dict() keys
+# Keys of an analysis_period mapping: Ladybug's AnalysisPeriod.to_dict() keys
 # map onto the six flat period fields; plain start_*/end_* spellings are
-# accepted too, and LB's bookkeeping extras are tolerated and ignored.
+# accepted too. Ladybug's other keys (type, timestep, is_leap_year) are ignored.
 _PERIOD_KEY_ALIASES = {
     "st_month": "start_month", "st_day": "start_day", "st_hour": "start_hour",
     "start_month": "start_month", "start_day": "start_day", "start_hour": "start_hour",
@@ -125,7 +128,8 @@ def expand_analysis_period(data):
     Canonical form uses Ladybug's ``AnalysisPeriod.to_dict()`` keys
     (``st_month`` ... ``end_hour``), so a Ladybug period can be pasted or
     passed directly; ``start_month``-style keys work as well.  Returns a new
-    dict; raises if the mapping and a flat field in the same dict disagree.
+    dict. Raises ValueError if ``analysis_period`` is not a mapping, has an
+    unknown key, or disagrees with a flat period field in the same dict.
     """
     if not isinstance(data, dict) or "analysis_period" not in data:
         return data
@@ -171,7 +175,7 @@ class UserConfig(BaseModel):
     # file paths
     max_volume_path: str = Field(..., description="Path to the maximum volume mesh (PLY)")
     test_surface_path: str = Field(..., description="Path to the insolation sampling surface mesh (PLY)")
-    epw_path: Optional[str] = Field(None, description="Path to EPW weather file (required for time-based, irradiance, benefit, radiative_cooling)")
+    epw_path: Optional[str] = Field(None, description="Path to EPW weather file (required for time-based, irradiance and benefit)")
     out_dir: str = Field(..., description="Output directory for carved meshes and diagnostics")
     final_mesh_format: str = Field(
         "ply",
@@ -179,9 +183,9 @@ class UserConfig(BaseModel):
         pattern=r"^(ply|obj|stl|glb)$",
     )
 
-    # analysis period (required for sun/sky modes, ignored by tilted_plane).
-    # Can also be given as one `analysis_period:` mapping with ladybug
-    # AnalysisPeriod.to_dict() keys — see _expand_analysis_period above.
+    # analysis period (required for time-based, irradiance and benefit; unused
+    # by the other modes). Can also be given as one `analysis_period:` mapping
+    # with Ladybug AnalysisPeriod.to_dict() keys; see expand_analysis_period.
     start_month: Optional[int] = Field(None, ge=1, le=12, description="Start month (1-12)")
     start_day:   Optional[int] = Field(None, ge=1, le=31, description="Start day of month (1-31)")
     start_hour:  Optional[int] = Field(None, ge=0, le=23, description="Start hour of day (0-23)")
@@ -196,27 +200,27 @@ class UserConfig(BaseModel):
     )
 
     # radiative cooling options
-    dew_point_celsius: float = Field(14.0, description="Night-time dew-point (°C) for radiative_cooling mode")
+    dew_point_celsius: float = Field(14.0, description="Dew-point temperature (°C) used to estimate sky emissivity in radiative_cooling mode")
     bliss_k: float = Field(1.8, gt=0, description=(
         "Bliss (1961) angular-attenuation constant for radiative_cooling. "
-        "A physical constant (atmospheric diffusivity factor, ~1.5-2.0) — "
+        "A physical constant (atmospheric diffusivity factor, ~1.5-2.0); "
         "leave at 1.8 unless you have a reason not to."
     ))
     min_sky_elevation_deg: float = Field(
         0.0, ge=0.0, le=85.0,
         description=(
-            "radiative_cooling only: design-constraint protection cone (degrees). "
-            "Sky patches below this elevation are excluded from the cooling "
-            "weights (renormalized), declaring that only the dome above the "
-            "cutoff is defended — analogous to obstruction-angle rules in "
-            "daylight codes. It shapes how steeply the envelope may rise around "
-            "protected surfaces. 0 (default) = full hemisphere (pure physical "
-            "model)."
+            "radiative_cooling only: lower edge (degrees above the horizon) of "
+            "the protected sky. Sky patches below this elevation are excluded "
+            "from the cooling weights (the rest are renormalized), so only the "
+            "dome above the cutoff is protected, similar to obstruction-angle "
+            "rules in daylight codes. It shapes how steeply the envelope may "
+            "rise around protected surfaces. 0 (default) = full hemisphere "
+            "(pure physical model)."
         ),
     )
 
     # sky model parameters
-    north_deg: float = Field(0.0, ge=0.0, lt=360.0, description="North direction in degrees clockwise from Y-axis (0 = Y-up is north)")
+    north_deg: float = Field(0.0, ge=0.0, lt=360.0, description="North direction in degrees clockwise from the +Y axis (0 = +Y points north)")
 
     # grid & ray parameters
     voxel_size:    float = Field(1.0, ge=0.01, le=100.0, description="Voxel edge length (m), 0.01–100")
@@ -244,33 +248,37 @@ class UserConfig(BaseModel):
             "gaps between ray sheets where mass survives while still shading "
             "the protected surface between samples. 12 (5 min) closes the gaps "
             "for 1 m voxels at ~40 m; ray count grows linearly with this value. "
-            "Violation scores (m²·h) do not depend on it."
+            "Scores are divided by this value, so the m²·h scale (and a numeric "
+            "threshold) does not depend on it."
         ),
     )
     ray_length:    float = Field(300.0, gt=0,description="Max ray cast distance (m)")
     min_altitude:  float = Field(5.0, ge=0, le=90, description="Minimum sun altitude (°)")
-    margin_frac:   float = Field(0.01, ge=0, le=1.0, description="Padding fraction around geometry")
-    ray_batch_size: int   = Field(0, ge=0, description="Rays per GPU batch. 0 = auto-tune based on available VRAM")
+    margin_frac:   float = Field(0.01, ge=0, le=1.0, description="Grid padding on each side, as a fraction of the max volume's largest bounding-box side")
+    ray_batch_size: int   = Field(0, ge=0, description="Rays per batch. 0 = auto: sized from free GPU memory, 300000 on CPU")
 
     # score smoothing (pre-threshold)
     score_smoothing: Optional[float] = Field(
         None, ge=0.0, le=20.0,
         description=(
-            "Gaussian blur radius (meters) applied to the score volume before thresholding. "
-            "Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes. "
-            "None (default) = auto: 1.1 × voxel_size — recommended for most runs. "
+            "Radius (meters) of the Gaussian blur applied to the score volume before "
+            "thresholding; it is used as the Gaussian sigma and averages over occupied "
+            "voxels only. Smooths resolution-dependent noise so the carved mesh is cleaner "
+            "at fine voxel sizes. "
+            "None (default) = auto: 1.1 × voxel_size, recommended for most runs. "
             "0 = disabled (no smoothing). "
             "Positive value = explicit radius in meters (rule of thumb: 1.0–1.2× voxel_size; "
-            "over-smoothing above 2× voxel_size rounds features excessively). "
+            "above 2× voxel_size features get noticeably rounded). The radius is clipped "
+            "to 0.5-8 voxels. "
             "Only affects weighted-score modes (irradiance, benefit, daylight, radiative_cooling). "
             "Violation-count modes (time-based, tilted_plane) are unaffected."
         ),
     )
 
     # postprocessing
-    apply_smoothing: bool  = Field(False, description="If True, apply SDF smoothing + marching cubes")
-    min_voxels:      int   = Field(300, gt=0, description="Minimum voxel cluster size to keep")
-    min_face_count:  int   = Field(100, ge=0, description="Minimum faces to keep mesh fragments")
+    apply_smoothing: bool  = Field(False, description="If True, mesh with a smoothed signed-distance field and marching cubes instead of voxel cubes")
+    min_voxels:      int   = Field(300, gt=0, description="Connected voxel clusters smaller than this are removed before meshing")
+    min_face_count:  int   = Field(100, ge=0, description="Mesh fragments with fewer faces than this are removed")
     smooth_iters:    int   = Field(2, ge=0, le=6, description="Taubin polish passes, 0-6 (only with apply_smoothing)")
 
     # column post-processing
@@ -304,8 +312,8 @@ class UserConfig(BaseModel):
             "'carve_fraction' (recommended): remove a fraction of the obstructing "
             "score mass (value from the carve_fraction parameter unless given). "
             "'headtail': automatic split biased toward removing only the worst "
-            "obstructors. "
-            "A bare number (≥ 0): raw-score cutoff — carve voxels scoring above it "
+            "obstructors. Both are for weighted modes only. "
+            "A bare number (≥ 0): raw-score cutoff; carve voxels scoring above it "
             "(inspect the score histogram first); for time-based this is the "
             "tolerated shading in m²·h (shaded test-surface area x duration). "
             "Unset: mode default (carve_fraction for weighted modes, 0 for "
@@ -318,13 +326,15 @@ class UserConfig(BaseModel):
         ge=0.0,
         le=1.0,
         description=(
-            "How aggressively to carve (0.0-1.0). Controls the fraction of total solar "
-            "obstruction to eliminate — NOT the fraction of voxels removed. Because a few "
+            "How aggressively to carve (0.0-1.0): the fraction of the building's total "
+            "obstruction score to remove, not the fraction of voxels removed. Because a few "
             "highly-obstructing voxels dominate the score distribution, 0.7 typically removes "
             "far fewer than 70% of voxels. "
-            "0.7 = aggressive (protects 70% of solar access, taller/slimmer volumes). "
-            "0.3 = conservative (protects 30%, bulkier volumes, more floor area). "
-            "Only used when threshold='carve_fraction'."
+            "0.7 = aggressive (removes the voxels holding 70% of the obstruction score; "
+            "taller, slimmer volumes). "
+            "0.3 = conservative (removes 30%; bulkier volumes, more floor area). "
+            "Used by the carve_fraction threshold method when the threshold gives no value "
+            "of its own, which includes the default for weighted modes."
         ),
     )
     # benefit parameters
@@ -364,17 +374,17 @@ class UserConfig(BaseModel):
     include_harm: bool = Field(
         False,
         description=(
-            "benefit mode only, EXPERIMENTAL. False (default): weights use "
-            "the documented heating-benefit formula — radiation of cold "
-            "hours only; warm hours in the analysis period contribute "
-            "nothing (period-stable, recommended). True: reproduce "
-            "Ladybug's composite radiation-benefit concept — hot-hour "
-            "(T > balance + offset) radiation is subtracted per sky patch "
-            "and the result clipped at zero. Results then depend on how "
-            "much of the warm season the analysis period includes, and "
+            "benefit mode only, experimental. False (default): weights use "
+            "the heating-benefit formula: radiation of cold hours only; warm "
+            "hours in the analysis period contribute nothing, so the result "
+            "does not depend on how much warm season the period includes "
+            "(recommended). True: follow Ladybug's composite radiation-benefit "
+            "concept: hot-hour (T > balance + offset) radiation is subtracted "
+            "per sky patch and the result clipped at zero. Results then depend "
+            "on how much of the warm season the analysis period includes, and "
             "patches whose summer harm exceeds winter benefit drop to zero "
-            "weight (harm never rewards mass: shading value cannot be a "
-            "carving force)."
+            "weight. Weights never go negative, so the shading value of mass "
+            "in summer never protects it from carving."
         ),
     )
 
@@ -392,8 +402,8 @@ class UserConfig(BaseModel):
         False,
         description=(
             "Generate diagnostic plot images (score histogram, sky patch weight/intensity plots, "
-            "threshold histogram). When False (default), only JSON diagnostics are written — "
-            "no matplotlib overhead."
+            "threshold histogram). When False (default), only JSON diagnostics are written "
+            "and matplotlib is not used."
         ),
     )
     device: str = Field('auto', description="Compute device: 'auto', 'cpu', or 'cuda'")
@@ -402,8 +412,10 @@ class UserConfig(BaseModel):
     tilted_plane_angle_deg: Optional[Union[float, List[float]]] = Field(
         None,
         description=(
-            "Plane-method angle specification. Either a single number (deg) applied to all faces, "
-            "or a list of 8 numbers [N, NE, E, SE, S, SW, W, NW] in degrees."
+            "tilted_plane mode: tilt of the limiting plane above the horizontal, in degrees. "
+            "Either a single number applied to all test surfaces, or a list of 8 numbers "
+            "[N, NE, E, SE, S, SW, W, NW] chosen by the compass direction each test "
+            "surface faces (taking north_deg into account)."
         ),
     )
 
@@ -451,15 +463,16 @@ class UserConfig(BaseModel):
             elif spec.method != "cutoff":
                 raise ValueError(
                     f"threshold method '{spec.method}' is not valid for mode "
-                    f"'{self.mode}': it produces integer violation counts, not "
-                    f"continuous scores. Use a non-negative number (0 = strict, "
-                    f"1 = allow one violation, ...) or leave threshold unset."
+                    f"'{self.mode}': its scores count blocked rays instead of "
+                    f"weighting sky patches. Use a non-negative number (for "
+                    f"time-based, the tolerated shading in m²·h; 0 = none) or "
+                    f"leave threshold unset."
                 )
             if self.mode == "tilted_plane" and spec.value != 0.0:
                 # tilted_plane is binary: a voxel either protrudes above a
-                # plane or it does not — a tolerance has no meaning.
+                # plane or it does not, so a tolerance has no meaning.
                 raise ValueError(
-                    "tilted_plane mode is binary — threshold must be unset or 0. "
+                    "tilted_plane mode is binary: threshold must be unset or 0. "
                     "A voxel either protrudes above the daylight plane (culled) "
                     "or it does not (kept)."
                 )
@@ -522,7 +535,7 @@ class UserConfig(BaseModel):
             if {"balance_temperature", "balance_offset"} & self.model_fields_set:
                 warnings.warn(
                     "balance_temperature/balance_offset are unused when "
-                    "simulated_weights_path is set — the artifact's hourly weights "
+                    "simulated_weights_path is set; the artifact's hourly weights "
                     "replace the balance-point filter.",
                     UrbanSolarCarverWarning,
                     stacklevel=2,
@@ -583,8 +596,8 @@ class UserConfig(BaseModel):
 
 
 # ---------- Stage manifests ----------
-# Only fields that are READ by a downstream stage are kept here.
-# Provenance / diagnostics live in diagnostics/summary.json instead.
+# Manifests hold only the fields a downstream stage reads. Provenance and
+# statistics go to each stage's diagnostics/diagnostic.json instead.
 
 class PreprocessingManifest(BaseModel):
     """Manifest written by preprocessing, read by thresholding and exporting."""

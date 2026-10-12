@@ -3,10 +3,11 @@
 The component scripts run inside Rhino's own Python, not in the USC virtual
 environment, so they cannot import ``urbansolarcarver``.  Code they share
 lives here instead and is loaded at run time from ``<carver_root>/grasshopper``
-(see ``_usc_gh`` in each component).  Editing this file takes effect on the
-next solve; no .ghuser rebuild is needed.
+(see ``_usc_gh`` in the components that use it).  Editing this file takes
+effect on the next solve; no .ghuser rebuild is needed.
 
-Only the standard library and RhinoCommon are used.
+Only the standard library, RhinoCommon and the Grasshopper SDK are used;
+the Rhino imports sit inside the functions that need them.
 """
 
 import json
@@ -21,7 +22,7 @@ PING_TIMEOUT_S = 5
 
 # ---------------------------------------------------------------- messages
 def report(component, message, level="error"):
-    """Show *message* on the component (red for errors) and return it."""
+    """Show *message* on the component at *level* ("error", "warning" or "remark") and return it."""
     from Grasshopper.Kernel import GH_RuntimeMessageLevel
     levels = {"error": GH_RuntimeMessageLevel.Error,
               "warning": GH_RuntimeMessageLevel.Warning,
@@ -38,7 +39,11 @@ class DaemonError(RuntimeError):
 def call_daemon(session, cmd, payload=None, timeout=JOB_TIMEOUT_S):
     """Send one command to the daemon and return its reply (a dict).
 
-    Raises DaemonError with a message meant for the canvas.
+    *session* needs ``host``, ``port`` and ``authkey`` attributes (a
+    USCSession).  Waits up to *timeout* seconds for the reply.  Raises
+    DaemonError, with a message meant for the canvas, when the daemon cannot
+    be reached, does not answer in time, or replies with a status other
+    than "ok".
     """
     from multiprocessing.connection import Client
 
@@ -73,10 +78,13 @@ def ping(session, timeout=PING_TIMEOUT_S):
 
 # ---------------------------------------------------------------- overrides
 def parse_overrides(value):
-    """Turn override input into a dict.
+    """Turn an overrides input into a {key: value} dict of strings.
 
     Accepts None, a "key=value;key=value" string, (nested) lists of such
-    strings (a list-access input) or a Grasshopper DataTree.  Later keys win.
+    strings (a list-access input) or a Grasshopper DataTree.  When a key
+    appears more than once, the last value wins.  Items without "=" or with
+    an empty key are skipped.  Only the first "=" splits, so values may
+    contain "=".
     """
     items = []
 
@@ -104,12 +112,12 @@ def parse_overrides(value):
 
 
 def override_list(overrides):
-    """dict -> ["key=value", ...] as the daemon expects."""
+    """Turn a {key: value} dict into the ["key=value", ...] list the daemon expects."""
     return ["{}={}".format(k, v) for k, v in overrides.items()]
 
 
 def read_diagnostics(stage_dir):
-    """The stage's diagnostics/diagnostic.json as a dict ({} if absent)."""
+    """Return <stage_dir>/diagnostics/diagnostic.json as a dict ({} if the file is missing)."""
     path = Path(stage_dir) / "diagnostics" / "diagnostic.json"
     if not path.is_file():
         return {}
@@ -118,15 +126,16 @@ def read_diagnostics(stage_dir):
 
 
 def existing_files(*paths):
-    """The given paths that exist on disk (for image outputs)."""
+    """Return the given paths that are existing files, as strings; None entries are skipped."""
     return [str(p) for p in paths if p and os.path.isfile(str(p))]
 
 
 def resolve_path(component, path_str):
-    """Absolute path; a relative one is taken relative to the saved .gh file.
+    """Return *path_str* as an absolute path, resolving a relative one against the .gh file.
 
     Rhino and the daemon run in different working directories, so a
-    relative path would name a different place for each of them.
+    relative path would name a different place for each of them.  Raises
+    ValueError for a relative path when the .gh file has not been saved.
     """
     p = Path(str(path_str).strip())
     if p.is_absolute():
@@ -141,13 +150,17 @@ def resolve_path(component, path_str):
 
 # ---------------------------------------------------------------- daemon process
 def daemon_log_path():
+    """Where start_daemon writes the daemon's output when no console is shown."""
     return Path.home() / ".urbansolarcarver" / "daemon.log"
 
 
 def start_daemon(python, root, host, port, visible_console=False):
-    """Launch the daemon as a detached process; returns the Popen object.
+    """Launch the daemon with the *python* interpreter; returns the Popen object.
 
-    Output goes to ~/.urbansolarcarver/daemon.log unless *visible_console*.
+    *root* is the carver root: its ``src`` folder is put on PYTHONPATH and it
+    is the daemon's working directory.  With *visible_console* the daemon
+    gets its own console window; otherwise it runs detached and its output
+    replaces the contents of ~/.urbansolarcarver/daemon.log.
     """
     import subprocess
     cmd = [str(python), "-m", "urbansolarcarver.daemon", "--host", host, "--port", str(port)]
@@ -162,13 +175,14 @@ def start_daemon(python, root, host, port, visible_console=False):
         kwargs["creationflags"] = 0x00000200 | 0x00000008  # NEW_PROCESS_GROUP | DETACHED_PROCESS
     log = daemon_log_path()
     log.parent.mkdir(parents=True, exist_ok=True)
-    with open(log, "w", encoding="utf-8") as log_file:  # the child keeps its own handle
+    # Closing our handle is safe: the child process holds its own copy.
+    with open(log, "w", encoding="utf-8") as log_file:
         return subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, **kwargs)
 
 
 # ---------------------------------------------------------------- geometry in
 def _fine_mesh_params():
-    """Meshing that keeps Brep detail (the default GH meshing is coarse)."""
+    """Meshing parameters that keep Brep detail (Grasshopper's default meshing is coarse)."""
     import Rhino.Geometry as rg
     mp = rg.MeshingParameters()
     mp.MaximumEdgeLength = 0
@@ -185,7 +199,7 @@ def _fine_mesh_params():
 
 
 def _to_rhino_mesh(geom):
-    """A triangulated Rhino Mesh from a Mesh, a Brep or a GH wrapper; None otherwise."""
+    """A triangulated copy of a Mesh, Brep or Extrusion (bare or GH-wrapped); None otherwise."""
     import Rhino.Geometry as rg
     if hasattr(geom, "Value"):  # GH_ObjectWrapper and goo
         geom = geom.Value
@@ -212,7 +226,7 @@ def _to_rhino_mesh(geom):
 
 
 def meshes_from_input(items):
-    """Rhino Meshes from a GH geometry input (one item or a list)."""
+    """Rhino Meshes from a GH geometry input (one item or a list); unusable items are dropped."""
     if items is None:
         return []
     if not isinstance(items, (list, tuple)):
@@ -224,8 +238,10 @@ def meshes_from_input(items):
 def write_input_geometry(max_volume, test_surfaces, folder):
     """Write the max volume and test surfaces as PLY files for the daemon.
 
-    Returns (max_volume_path, test_surface_path).  Raises ValueError when an
-    input holds no usable geometry.
+    Each input's meshes are joined into one mesh and written to *folder* as
+    max_volume.ply and test_surfaces.ply.  Returns (max_volume_path,
+    test_surface_path).  Raises ValueError when an input holds no Mesh or
+    Brep geometry.
     """
     import Rhino.Geometry as rg
 
@@ -249,7 +265,7 @@ def write_input_geometry(max_volume, test_surfaces, folder):
     surfaces = rg.Mesh()
     for m in srf_meshes:
         surfaces.Append(m)
-    # Test surfaces are NOT welded: merging vertices across neighbouring
+    # Test surfaces are not welded: merging vertices across neighbouring
     # panels averages their normals, which flips some panels on reload.
 
     folder = Path(folder)
@@ -263,13 +279,17 @@ def write_input_geometry(max_volume, test_surfaces, folder):
 def export_mesh_to_ply(mesh, path, include_normals=True):
     """Write a Rhino Mesh as binary little-endian PLY with double-precision vertices.
 
-    float32 keeps ~7 significant digits, ~0.5 m at UTM northings, so vertex
-    positions are written as doubles (ToPoint3dArray gives Rhino's double
-    vertices when the mesh has them; meshes from Breps do).
+    float32 keeps about 7 significant digits, which is a 0.5 m step at UTM
+    northings (millions of metres), so vertex positions are written as
+    doubles (ToPoint3dArray gives Rhino's double vertices when the mesh has
+    them; meshes from Breps do).  Normals are written as float32.
 
     include_normals: True for test surfaces (open sheets: the normals tell
     which side faces out); False for the max volume, whose closed winding
     already defines inside and outside and which explicit normals can upset.
+
+    Modifies *mesh* in place: quads are split into triangles and vertex
+    normals are recomputed.
     """
     mesh.Faces.ConvertQuadsToTriangles()
     mesh.Normals.ComputeNormals()
@@ -314,15 +334,17 @@ _PLY_SIZES = {
 def load_ply_to_rhino(path):
     """Read a PLY file (binary little-endian or ASCII) into a Rhino Mesh.
 
-    Handles any vertex property layout (x/y/z need not come first) and float
-    or double coordinates; the mesh keeps double-precision vertices.
+    Binary files may use any vertex property layout (x/y/z need not come
+    first) and float or double coordinates; ASCII files must list x, y, z
+    first.  Faces must be triangles or quads stored as a uchar count plus
+    int32 indices.  The mesh keeps double-precision vertices.
     """
     import System
     import Rhino.Geometry as rg
 
     nv = nf = 0
     binary = False
-    vertex_props = []  # (name, byte size)
+    vertex_props = []  # (name, byte size) in file order
     in_vertex = False
     with open(path, "rb") as f:
         if f.readline().strip() != b"ply":
@@ -374,7 +396,8 @@ def load_ply_to_rhino(path):
                 faces.append(tuple(int(x) for x in parts[1:int(parts[0]) + 1]))
 
     mesh = rg.Mesh()
-    mesh.Vertices.UseDoublePrecisionVertices = True  # else float32: ~0.5 m at UTM
+    # Without this Rhino stores float32 vertices: 0.5 m steps at UTM coordinates.
+    mesh.Vertices.UseDoublePrecisionVertices = True
     pts = System.Array.CreateInstance(rg.Point3d, nv)
     for i in range(nv):
         pts[i] = rg.Point3d(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2])
@@ -389,7 +412,11 @@ def load_ply_to_rhino(path):
 
 
 def read_npy_points(path):
-    """Rhino Point3d list from an (N, 3) float32/float64 .npy file (no numpy needed)."""
+    """Rhino Point3d list from a C-order (N, 3) little-endian float32/float64 .npy file.
+
+    Parses the .npy format directly because numpy may not be installed in
+    Rhino's Python.  Raises ValueError for any other file layout.
+    """
     import ast
     import Rhino.Geometry as rg
 

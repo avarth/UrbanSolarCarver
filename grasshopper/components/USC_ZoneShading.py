@@ -1,7 +1,7 @@
-"""USC Zone Shading — Declared shading coefficients.
+"""USC Zone Shading: declared shading coefficients.
 
 Feeder for USC_Archetype's 'shading' input. Pure transmission
-multipliers, no device geometry is modelled. Leaving everything
+multipliers; no device geometry is modelled. Leaving everything
 unconnected means no shading.
 
 Inputs
@@ -41,11 +41,11 @@ class USCZoneParams:
 try:
     ghenv.Component.Name = "USC Zone Shading"
     ghenv.Component.NickName = "USC_ZoneShade"
-    ghenv.Component.Description = "Declared shading coefficients for USC_Archetype: a year-round transmission multiplier (fins, context) and a hot-months multiplier (awnings, tents). No device geometry is modelled. Declaring seasonal shading makes the harm channel far less overstated."
+    ghenv.Component.Description = "Declared shading coefficients for USC_Archetype: a year-round transmission multiplier (fins, context) and a hot-months multiplier (awnings, tents). No device geometry is modelled. Without declared seasonal shading, include_harm overstates summer harm."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
-        ("shading_permanent", "Year-round solar transmission multiplier in [0, 1] for fixed local shading (fins, context obstructions): 1 = none, 0.85 = 15% of solar blocked. No device geometry is modelled — this is a declared coefficient. Per-facade values are possible in YAML archetypes."),
+        ("shading_permanent", "Year-round solar transmission multiplier in [0, 1] for fixed local shading (fins, context obstructions): 1 = none, 0.85 = 15% of solar blocked. No device geometry is modelled; this is a declared coefficient. Per-facade values are possible in YAML archetypes."),
         ("shading_hot", "Additional transmission multiplier in [0, 1] applied only during hot_months (awnings, tents, seasonal vegetation). Stacks with shading_permanent. Requires hot_months."),
         ("hot_months", "Calendar months when shading_hot is deployed, as text like '6,7,8,9' (or a list of integers 1-12)."),
     ]):

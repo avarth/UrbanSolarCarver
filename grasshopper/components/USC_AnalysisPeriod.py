@@ -1,8 +1,8 @@
-"""USC Analysis Period — Define the time window for sun/sky analysis.
+"""USC Analysis Period: define the time window for sun/sky analysis.
 
-Required for: time-based, irradiance, benefit, radiative_cooling modes.
-Optional for: daylight (CIE overcast is time-invariant; defaults to full year).
-Not used by: tilted_plane.
+Required for: time-based, irradiance, benefit modes.
+Not used by: daylight, radiative_cooling, tilted_plane (the config warns
+that the period is ignored).
 
 Inputs
 ------
@@ -15,14 +15,15 @@ end_hour : int (0-23)
 
 Outputs
 -------
-overrides : list of str
-    Key=value pairs for the analysis period.
+overrides : str
+    Semicolon-joined key=value pairs for the connected inputs (None if
+    none is connected).
 """
 
 try:
     ghenv.Component.Name = "USC Analysis Period"
     ghenv.Component.NickName = "USC_Period"
-    ghenv.Component.Description = "Defines the time window for solar analysis. Required for time-based, irradiance, benefit, and radiative_cooling modes. Optional for daylight (time-invariant). Not needed for tilted_plane."
+    ghenv.Component.Description = "Defines the time window for solar analysis. Required for time-based, irradiance and benefit modes. Not used by daylight, radiative_cooling or tilted_plane."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
@@ -39,7 +40,8 @@ try:
 except Exception:
     pass
 
-# Output a single semicolon-delimited string so GH doesn't iterate
+# One semicolon-joined string, not a list, so Grasshopper passes it on as a
+# single item instead of looping downstream components over each pair.
 _items = []
 for key, val in [
     ("start_month", start_month), ("start_day", start_day),

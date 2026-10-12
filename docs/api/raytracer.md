@@ -1,11 +1,15 @@
 # Ray Tracer
 
-The ray-tracing engine at the core of USC's carving pipeline. Implements a fused DDA (Digital Differential Analyser) kernel that traverses rays through the voxel grid and accumulates per-voxel hit scores in a single pass.
+Ray generation and voxel traversal for the carving pipeline. The main kernels use a DDA (Digital Differential Analyzer) that steps each ray through the voxel grid and adds to a per-voxel volume in a single pass.
 
-- **`trace_and_score_dda`** -- the main workhorse. Traces batches of rays through the grid, incrementing each voxel's score by the ray's weight on every intersection. Runs on GPU via Warp or falls back to CPU.
-- **`generate_sky_patch_rays`** / **`generate_sun_rays`** -- expand sample points × directions into flat ray arrays (origins + directions) ready for batch tracing.
-- **`auto_batch_size`** -- estimates the maximum ray batch that fits in GPU memory given the grid resolution, to avoid OOM errors on large scenes.
+- **`trace_and_score_dda`**: traces a batch of rays and adds each ray's weight to every voxel it crosses (weighted modes). Runs on CUDA or on Warp's CPU backend.
+- **`trace_and_count_dda`**: the same traversal, adding a count of 1 per ray (`time-based` and `tilted_plane`).
+- **`trace_multi_hit_grid`**: fixed-step PyTorch fallback used only when Warp is unavailable; approximate, since an oblique ray can skip a voxel corner between two samples.
+- **`generate_sky_patch_rays`** / **`generate_sun_rays`**: expand sample points × directions into flat ray arrays (origins + directions), keeping only directions the surface faces.
+- **`voxelize_solid_warp`**: the Warp parity voxelizer used by `grid.voxelize_mesh`.
+- **`auto_batch_size`**: picks a ray batch size from the free GPU memory, to avoid out-of-memory errors on large scenes.
+- **`warmup_kernels`**: precompiles the Warp kernels (`urbansolarcarver warmup`).
 
-Rays are processed in batches whose size adapts to available VRAM. The batch loop is the primary computational bottleneck; see [Performance](../getting-started/configuration.md) for tuning guidance.
+Rays are processed in batches. With `ray_batch_size: 0` (the default) the batch size comes from `auto_batch_size`; set a positive value to fix it.
 
 ::: urbansolarcarver.raytracer

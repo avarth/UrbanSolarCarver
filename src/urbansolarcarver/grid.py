@@ -1,5 +1,5 @@
 """
-UrbanSolarCarver — Grid utilities
+UrbanSolarCarver: grid utilities
 
 Tools for sampling nearly planar geometry, converting meshes to voxels,
 cleaning occupancy, and building meshes. Used by the carving pipeline
@@ -10,36 +10,55 @@ Overview
 Two meshing modes are supported:
 
 1) Cubic (apply_smoothing == False)
-   - Clean the binary grid with component pruning and a 3×3×3 majority filter.
+   - Clean the binary grid: drop small connected components, then drop
+     occupied voxels with fewer than 2 occupied neighbours in their 3×3×3
+     neighbourhood.
    - Triangulate with the shared-vertex cubic mesher
      (`_cubic_mesh_from_occupancy`).
 
 2) Smoothed SDF (apply_smoothing == True)
    - Convert occupancy to a signed distance field (SDF) in voxel units.
-   - Light Gaussian blur, then edge-preserving Perona–Malik diffusion
-     applied only near the zero level.
+   - Light Gaussian blur, then edge-preserving Perona–Malik diffusion;
+     the result is kept only within 2 voxels of the zero level.
    - Pick an iso value that preserves the original inside volume.
-   - Extract a surface with marching cubes (trimesh + scikit-image).
-   - Optionally run a tiny Taubin polish (0..6 iters) after cleanup.
+   - Extract a surface with marching cubes (scikit-image).
+   - Optionally run a short Taubin polish (0 to 6 iterations) after cleanup.
+
+Pipeline entry points
+---------------------
+voxelize(envelope_mesh, config, device=None)
+    voxelize_mesh with settings from the config; raises on an empty grid.
+
+sample_surface(insolation_mesh, config)
+    discretize_surface_with_normals with settings from the config; raises
+    when no sample points are produced.
+
+finalize_mesh(carved_grid, grid_origin, config)
+    Clean the carved grid and mesh it with the cubic or smoothed path.
 
 Public API
 ----------
-sample_planar_surface(mesh, sample_step, include_boundary=True)
-    Uniformly sample a strictly planar patch. Returns points, normals, and
-    quad-mesh data (vertices + faces) for the analysis mesh.
+sample_planar_surface(mesh, sample_step=1.0, include_boundary=True, edge_taper=0.0)
+    Sample one planar connected component on a regular grid. Returns points,
+    normals, analysis-mesh quads (vertices + faces), and edge-taper weights.
 
-discretize_surface_with_normals(mesh, sample_step, coplanarity_tol_deg=5.0)
-    Collect point/normal pairs and an analysis mesh from near-planar components.
+discretize_surface_with_normals(mesh, sample_step=1.0, coplanarity_tol_deg=5.0,
+                                edge_taper=0.0)
+    Split the mesh into connected components, sample each planar one, and
+    return points, normals, an AnalysisMesh, weights, and taper statistics.
 
-voxelize_mesh(mesh, voxel_size, margin_frac, device=None)
+AnalysisMesh
+    Quad mesh with one face per sample point; serialised to analysis_mesh.json.
+
+voxelize_mesh(mesh, voxel_size=1.0, margin_frac=0.2, device=None)
     Rasterize a watertight mesh into a padded cubic occupancy grid.
 
 prune_voxels(voxels, min_voxels)
     Remove 26-connected components smaller than min_voxels.
 
 prune_voxels_morph(voxels, min_voxels)
-    Gentle cleanup for the cubic path: component prune, majority filter,
-    single closing. Preserves thin slabs better than erosion/opening.
+    Cleanup for the cubic path: component prune, then the neighbour-count
+    filter described above. Only removes voxels; no erosion or closing.
 
 mesh_from_voxels(voxels, min_corner, voxel_size)
     Build a blocky mesh from the binary grid. Returns an unprocessed Trimesh.
@@ -48,16 +67,23 @@ mesh_from_voxels_smoothed(voxels, min_corner, voxel_size)
     Build a smooth mesh by contouring a smoothed SDF with marching cubes.
     Uses a volume-matched iso to avoid systematic thinning.
 
-cleanup_mesh(mesh, min_face_count=100)
-    Fix winding/normals, weld vertices, drop tiny fragments.
+cleanup_mesh(mesh, min_face_count=100, light=False)
+    Fix winding/normals (unless light), weld vertices, drop small fragments.
 
-polish_mesh_taubin(mesh, iters=0)
-    Optional micro-polish after SDF+MC. Scale-normalized. Safe for 0..6 iters.
+polish_mesh_taubin(mesh, iters=2)
+    Optional Taubin polish after the SDF + marching cubes path, at most
+    6 iterations.
 
 Internal helpers
 ----------------
-plane_frame(normal)
+plane_frame(surface_normal)
     Orthonormal in-plane basis for planar sampling.
+
+_mesh_boundary_loops(mesh), _sample_boundary_edges(polygon, ...)
+    Boundary extraction and extra samples along boundary edges.
+
+_cubic_mesh_from_occupancy(voxels, min_corner, voxel_size)
+    Vertex and face arrays for the cubic mesher.
 
 _voxel_presmooth(field_bool)
     SDF build + Gaussian + narrow-band Perona–Malik diffusion.
@@ -68,7 +94,7 @@ _pm_anisotropic_diffuse(sdf, iters, k, tau)
 _volume_matched_threshold(sdf, target_inside_voxels)
     Iso selection that matches the original inside count.
 
-_median_edge_length(mesh)
+_median_edge_length(m)
     Median of unique edge lengths; used to normalize the Taubin polish.
 
 Data types and units
@@ -76,16 +102,17 @@ Data types and units
 - Points and normals: np.ndarray, shape (N, 3), world units.
 - Voxel grids: torch.Tensor, shape (D, D, D), uint8/bool, 1 = inside.
 - Meshes: trimesh.Trimesh in world coordinates.
-- voxel_size is in world units and is passed to marching cubes as pitch.
+- voxel_size is in world units and is passed to marching cubes as the grid
+  spacing.
 
 Notes
 -----
-- The cubic path aims for stable, interpretable “voxel look” with minimal
-  flicker between runs. No erosion by default to protect thin volumes.
+- The cubic path gives a blocky "voxel look" that is stable between runs.
+  It applies no erosion, so thin volumes are kept.
 - The smoothed path operates in SDF space, not on the triangle mesh. This
   removes terracing while keeping the overall form.
-- The Taubin step is deliberately tiny and optional. Heavy smoothing belongs
-  in SDF space, not post-mesh.
+- The Taubin step is short and optional. Heavy smoothing belongs in SDF
+  space, not on the mesh.
 
 """
 
@@ -109,7 +136,6 @@ import trimesh
 from trimesh import repair
 from urbansolarcarver.session import session_cache
 
-# Helpers migrated from api_core
 from .load_config import user_config
 
 def voxelize(envelope_mesh, config: user_config, device: torch.device | None = None):
@@ -120,7 +146,9 @@ def voxelize(envelope_mesh, config: user_config, device: torch.device | None = N
     ----------
     envelope_mesh : trimesh.Trimesh
     config : user_config
+        Supplies ``voxel_size`` and ``margin_frac``.
     device : torch.device or None
+        Device for the returned grid; None picks CUDA when available.
 
     Returns
     -------
@@ -154,11 +182,18 @@ def sample_surface(insolation_mesh, config: user_config):
     """
     Sample quasi-planar patches to produce point/normal sets for carving.
 
+    Parameters
+    ----------
+    insolation_mesh : trimesh.Trimesh
+        Test surfaces; each connected component should be one flat panel.
+    config : user_config
+        Supplies ``grid_step`` (sample spacing) and ``edge_taper``.
+
     Returns
     -------
-    sample_points : np.ndarray (N, 3)
-    sample_normals : np.ndarray (N, 3)
-    analysis_mesh : ladybug_geometry.geometry3d.mesh.Mesh3D or None
+    sample_points : np.ndarray (N, 3), float32
+    sample_normals : np.ndarray (N, 3), float32
+    analysis_mesh : AnalysisMesh or None
         The analysis mesh whose face centroids are the sample points.
     sample_weights : np.ndarray (N,)
         Edge-taper design weights in [0, 1] (all ones when
@@ -181,10 +216,10 @@ def sample_surface(insolation_mesh, config: user_config):
         n_components = len(insolation_mesh.split(only_watertight=False))
         raise RuntimeError(
             "No points sampled from test surfaces (insolation mesh). "
-            "The mesh has {:d} connected component(s), but none passed the planarity check. "
+            "The mesh has {:d} connected component(s), but none produced sample points. "
             "Most likely cause: test_surfaces is a joined polysurface (e.g. an extruded block "
-            "boundary) whose wall panels share corner edges — the whole block is treated as one "
-            "non-planar component and rejected. "
+            "boundary) whose wall panels share corner edges, so the whole block is treated as "
+            "one non-planar component and rejected. "
             "Fix: explode your polysurfaces into individual flat panels in Grasshopper before "
             "connecting to USC_Preprocess. Also check that grid_step ({:g} m) is smaller than "
             "your smallest surface.".format(n_components, config.grid_step)
@@ -198,12 +233,13 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
     Behavior
     --------
     • If `apply_smoothing` is False:
-        prune small components + gentle morphology (majority + closing),
-        cubic meshing, then `cleanup_mesh`.
+        `prune_voxels_morph` (small-component prune + neighbour-count filter),
+        cubic meshing, then `cleanup_mesh` in light mode.
     • If `apply_smoothing` is True:
-        prune small components,
-        SDF presmooth + marching cubes, then `cleanup_mesh`,
-        optional micro Taubin polish capped to 0..6 iterations.
+        `prune_voxels` (small-component prune),
+        SDF presmooth + marching cubes, vertex weld, then `cleanup_mesh`
+        (light mode when the welded mesh is watertight),
+        then `polish_mesh_taubin` with ``config.smooth_iters`` (0 to 6).
 
     Parameters
     ----------
@@ -212,6 +248,8 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
     grid_origin : np.ndarray(3,)
         World-space min corner for index (0,0,0).
     config : user_config
+        Supplies ``apply_smoothing``, ``min_voxels``, ``voxel_size``,
+        ``min_face_count`` and ``smooth_iters``.
 
     Returns
     -------
@@ -220,7 +258,7 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
     initial_mesh : trimesh.Trimesh
         Mesh directly from the selected meshing path (pre-cleanup copy).
     final_mesh : trimesh.Trimesh
-        Cleaned (and optionally micro-polished) mesh.
+        Cleaned mesh, Taubin-polished on the smoothed path when smooth_iters > 0.
     """
     use_smooth = bool(config.apply_smoothing)
 
@@ -231,17 +269,17 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         initial_mesh = raw_mesh.copy()
         # Marching cubes on the padded SDF yields a watertight, consistently
         # wound mesh; the expensive full repair (fill_holes / fix_winding /
-        # fix_normals) is only needed if that guarantee fails.  Weld
-        # coincident vertices FIRST: MC emits zero-area faces where the iso
-        # passes exactly through lattice nodes, and dropping those before
-        # welding would open pinholes.
+        # fix_normals) is only needed if the welded mesh is not watertight.
+        # Weld coincident vertices first: marching cubes emits zero-area
+        # faces where the iso passes exactly through lattice nodes, and
+        # dropping those before welding would open pinholes.
         raw_mesh.merge_vertices()
         light = bool(raw_mesh.is_watertight)
         filtered_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=light)
         iters = int(config.smooth_iters)  # 0-6, validated by the config schema
         final_mesh = polish_mesh_taubin(filtered_mesh, iters=iters)
     else:
-        # Cubic path: prune + gentle morphology, cubic meshing, then cleanup
+        # Cubic path: prune + neighbour-count filter, cubic meshing, then cleanup
         cleaned_voxels = prune_voxels_morph(carved_grid, config.min_voxels)
         raw_mesh = mesh_from_voxels(cleaned_voxels, grid_origin, config.voxel_size)
         initial_mesh = raw_mesh.copy()
@@ -262,16 +300,23 @@ def plane_frame(surface_normal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     Returns
     -------
     axis_u, axis_v : (3,) np.ndarray
-        Unit vectors forming a right-handed 2D basis in the plane.
+        Unit vectors with cross(axis_u, axis_v) equal to the unit normal, so
+        (axis_u, axis_v, normal) is a right-handed frame.
+
+    Raises
+    ------
+    ValueError
+        If `surface_normal` has near-zero length.
 
     Notes
     -----
     - The normal is normalized internally.
-    - A stable reference axis is chosen to avoid degeneracy when the normal is
-      almost aligned with X.
+    - The reference axis is X, or Y when the normal is within about 26 deg of
+      X, so the cross product never degenerates.
+    - The result depends only on the normal, so panels with the same normal
+      get the same frame (up to the sign of axis_u when the normal is negated).
     - Used by `sample_planar_surface` to build a local 2D sampling frame.
     """
-    # Normalize input normal
     norm_len = np.linalg.norm(surface_normal)
     if norm_len < 1e-12:
         raise ValueError("plane_frame: surface_normal has near-zero length")
@@ -284,10 +329,8 @@ def plane_frame(surface_normal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         ref_axis = np.array([1.0, 0.0, 0.0])
     else:
         ref_axis = np.array([0.0, 1.0, 0.0])
-    # First in-plane axis
     axis_u = np.cross(plane_normal, ref_axis)
     axis_u /= np.linalg.norm(axis_u)
-    # Second in-plane axis
     axis_v = np.cross(plane_normal, axis_u)
     return axis_u, axis_v
 
@@ -301,9 +344,22 @@ def _sample_boundary_edges(
 ) -> np.ndarray:
     """Generate sample points along polygon boundary edges to fill grid gaps.
 
-    Walks each boundary ring (exterior + holes) at *sample_step* intervals,
-    offsets candidates inward, and keeps only those far enough from existing
-    interior grid points.
+    Walks each boundary ring (exterior + holes) at intervals of at most
+    *sample_step*, moves each candidate inward by ``inset_fraction *
+    sample_step`` (or less, for thin polygons), and keeps only candidates
+    farther than ``min_dist_fraction * sample_step`` from every interior
+    grid point and from every other kept candidate.
+
+    Parameters
+    ----------
+    polygon : shapely Polygon
+        Footprint in the local 2D frame.
+    sample_step : float
+        Grid spacing in world units.
+    interior_pts_2d : (M, 2) np.ndarray
+        Grid points already selected inside the polygon.
+    min_dist_fraction, inset_fraction : float
+        Minimum spacing and inward offset, as fractions of sample_step.
 
     Returns an (K, 2) array of accepted edge points in the polygon's local 2D
     coordinate frame, or an empty (0, 2) array if none qualify.
@@ -345,8 +401,8 @@ def _sample_boundary_edges(
 
             nx, ny = -ty, tx  # inward: left of the tangent
 
-            # Try progressively smaller insets — handles thin polygons where
-            # the full inset lands outside the boundary.
+            # Try progressively smaller insets: in thin polygons the full
+            # inset can land outside the boundary.
             placed = False
             for frac in (1.0, 0.5, 0.1):
                 cx = px + nx * inset * frac
@@ -388,11 +444,13 @@ def _sample_boundary_edges(
 def _mesh_boundary_loops(mesh: trimesh.Trimesh) -> "list[list[int]]":
     """Extract the mesh's boundary loops as ordered vertex-index rings.
 
-    Interior edges are shared by exactly 2 faces; boundary edges appear
-    only once.  The boundary edges are chained into closed loops by walking
-    an adjacency graph (greedy Euler-path traversal), consuming edges as
-    they are visited so each loop is extracted once.  Open chains and
-    loops with fewer than 3 vertices are discarded.
+    Interior edges are shared by 2 faces; boundary edges belong to only
+    one.  The boundary edges are chained into loops by a greedy walk over
+    their adjacency graph, removing each edge as it is visited so each
+    loop is extracted once.  A closed loop ends with its start vertex
+    repeated.  A walk that stops before returning to its start (an open
+    chain) is still returned if it has more than 2 entries; shorter walks
+    are discarded.
     """
     faces = mesh.faces                      # (F, 3)
     all_edges = np.vstack([
@@ -440,18 +498,20 @@ def sample_planar_surface(
     sample_step: float = 1.0,
     include_boundary: bool = True,
     edge_taper: float = 0.0,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Uniformly sample points on a strictly planar submesh and return per-point normals.
+    Sample points on a regular grid over one planar submesh.
 
     Parameters
     ----------
     mesh : trimesh.Trimesh
-        Single planar connected component (convex or with holes).
+        Single planar connected component (convex or not, with or without holes).
     sample_step : float, default 1.0
         Spacing of the sampling grid in world units.
     include_boundary : bool, default True
-        If True, include points that fall on polygon boundaries; otherwise drop them.
+        If True, keep grid points that fall on the polygon boundary; otherwise
+        drop them.  Extra points seeded along the boundary edges
+        (`_sample_boundary_edges`) are added in both cases.
     edge_taper : float, default 0.0
         Design-constraint taper distance (world units).  When > 0, each
         sample gets a weight ramping linearly from 0 at the component
@@ -459,10 +519,11 @@ def sample_planar_surface(
 
     Returns
     -------
-    points : (N, 3) np.ndarray
+    points : (N, 3) float64 np.ndarray
         Sample locations in world coordinates.
     normals : (N, 3) np.ndarray
-        Unit normals (constant over the patch, oriented consistently with the mesh).
+        Unit normal, the same for every point, oriented to agree with the
+        area-weighted normal of the mesh faces.
     quad_verts : (4N, 3) float64 np.ndarray
         Corner positions of one analysis-mesh quad per sample point.
     quad_faces : (N, 4) int32 np.ndarray
@@ -474,13 +535,15 @@ def sample_planar_surface(
     -----
     - Builds a local 2D grid in the plane (see `plane_frame`) and rasterizes the
       polygon footprint to select in-polygon grid sites.
+    - If no grid site falls inside the polygon, one point guaranteed to lie
+      inside it (Shapely's ``representative_point``) is used as the single
+      sample.
     - Used by `discretize_surface_with_normals` for planar-only sampling.
     """
-    # 1) Compute centroid and best-fit plane normal via PCA.
-    #    The covariance matrix's eigenvectors span the point cloud's
-    #    principal axes; the eigenvector with the *smallest* eigenvalue
-    #    has the least variance — i.e., it points perpendicular to the
-    #    plane that best fits the vertices.
+    # 1) Compute centroid and best-fit plane normal via principal component
+    #    analysis (PCA).  The eigenvector of the vertex covariance matrix
+    #    with the smallest eigenvalue is the direction of least variance,
+    #    i.e. the normal of the plane that best fits the vertices.
     vertices = mesh.vertices                # (N, 3)
     centroid = vertices.mean(axis=0)        # (3,)
     cov_mat = np.cov((vertices - centroid).T)
@@ -491,14 +554,15 @@ def sample_planar_surface(
     #    All subsequent sampling happens in this 2D coordinate system.
     axis_u, axis_v = plane_frame(plane_normal)
 
-    # 3-4) Extract the mesh's boundary loops (ordered vertex-index rings).
+    # 3) Extract the mesh's boundary loops (ordered vertex-index rings).
     boundary_loops = _mesh_boundary_loops(mesh)
 
-    # 5) Project loops into the local 2D frame and identify exterior/interior.
+    # 4) Project loops into the local 2D frame and identify exterior/interior.
     #    Each 3D vertex is projected to (u, v) by dotting with the plane
-    #    basis vectors.  The loop enclosing the largest absolute area is
-    #    the exterior boundary; all others are holes (interior loops).
-    #    Interior loops are reversed so Shapely treats them as holes.
+    #    basis vectors.  The loop enclosing the largest area is the exterior
+    #    boundary; all others become holes.  Shapely takes holes from the
+    #    `holes` argument regardless of ring direction, so reversing them
+    #    has no effect on the result.
     loops_2d = [
         (vertices[loop_idx] - centroid) @ np.vstack([axis_u, axis_v]).T
         for loop_idx in boundary_loops
@@ -511,12 +575,12 @@ def sample_planar_surface(
     ]
     planar_polygon = Polygon(exterior_loop, holes=[ring[::-1] for ring in interior_loops])
 
-    # 6) Generate a regular 2D sampling grid over the polygon's bounding box.
-    #    The grid is aligned to the *world origin* projected into this face's
-    #    local 2D frame.  Because plane_frame() returns identical (u, v) axes
-    #    for all faces sharing the same normal, this guarantees that coplanar
-    #    submeshes produce grids on the same world-space lattice — eliminating
-    #    phase-shift banding between adjacent panels at coarse grid steps.
+    # 5) Generate a regular 2D sampling grid over the polygon's bounding box.
+    #    The grid is aligned to the world origin projected into this face's
+    #    local 2D frame.  Because plane_frame() returns the same (u, v) axes
+    #    for all faces sharing the same normal, coplanar submeshes get grids
+    #    on the same world-space lattice, which avoids phase-shift banding
+    #    between adjacent panels at coarse grid steps.
     xmin, ymin, xmax, ymax = planar_polygon.bounds
     world_ref_u = -np.dot(centroid, axis_u)  # world origin (0,0,0) in local u
     world_ref_v = -np.dot(centroid, axis_v)  # world origin (0,0,0) in local v
@@ -537,32 +601,31 @@ def sample_planar_surface(
     grid_y = np.arange(y0, ymax + tol, sample_step)
     grid_X, grid_Y = np.meshgrid(grid_x, grid_y)
 
-    # 7) Optionally inflate the polygon by a tiny epsilon so that points
+    # 6) Optionally inflate the polygon by a tiny epsilon so that points
     #    lying exactly on the boundary are included (Shapely's contains_xy
-    #    uses strict interior containment by default).
+    #    is a strict-interior test).
     if include_boundary:
         buffer_epsilon = sample_step * 1e-3
         test_polygon = planar_polygon.buffer(buffer_epsilon)
     else:
         test_polygon = planar_polygon
 
-    # 8) Rasterize: keep only grid points that fall inside the polygon.
+    # 7) Rasterize: keep only grid points that fall inside the polygon.
     inside_mask = contains_xy(test_polygon, grid_X.ravel(), grid_Y.ravel()).reshape(grid_X.shape)
-
-    # 9) Lift valid 2D samples back to 3D world coordinates.
-    #    p_3D = centroid + u·axis_u + v·axis_v  (inverse of the projection).
     points_2d = np.vstack((grid_X[inside_mask], grid_Y[inside_mask])).T  # (M, 2)
 
-    # 9b) Edge seeding: fill gaps along polygon boundary where the grid
-    #     doesn't reach close enough to the edges.
+    # 8) Edge seeding: fill gaps along polygon boundary where the grid
+    #    doesn't reach close enough to the edges.
     edge_pts = _sample_boundary_edges(planar_polygon, sample_step, points_2d)
     if edge_pts.size > 0:
         points_2d = np.vstack([points_2d, edge_pts]) if points_2d.size > 0 else edge_pts
 
-    # Guarantee at least one sample (centroid) when the grid is too coarse
-    # to produce any points inside the polygon.
+    # Fall back to one sample when the grid is too coarse to produce any
+    # points inside the polygon.  representative_point lies inside the
+    # polygon even when it is non-convex (the centroid may not).
     if len(points_2d) == 0 and planar_polygon.area > 0:
-        points_2d = np.array([[0.0, 0.0]])  # centroid in local frame
+        rep = planar_polygon.representative_point()
+        points_2d = np.array([[rep.x, rep.y]])
 
     # Edge-taper design weights: exact 2D distance from each sample to the
     # component outline (exterior ring and holes), ramped linearly over
@@ -580,6 +643,8 @@ def sample_planar_surface(
     else:
         point_weights = np.ones(len(points_2d), dtype=np.float32)
 
+    # 9) Lift the 2D samples back to 3D world coordinates (inverse of the
+    #    projection): p = centroid + u * axis_u + v * axis_v.
     points_3d = (
         centroid
         + points_2d[:, 0:1] * axis_u
@@ -587,20 +652,21 @@ def sample_planar_surface(
     )  # (M, 3)
 
     # 10) Assign normals.  The PCA normal may point either way; flip it
-    #     to match the mesh's face-normal orientation (outward-facing).
-    #     Also fix the local frame so cross(axis_u, axis_v) aligns with
-    #     the outward normal — ensures consistent quad vertex winding for
-    #     correct lighting in Plotly / Rhino viewers.
-    face_normal = mesh.face_normals[0]
+    #     to agree with the area-weighted face normal (a single face may
+    #     have zero area and a zero normal).  Also flip
+    #     axis_v so cross(axis_u, axis_v) stays equal to the normal; the
+    #     quads built below then wind counter-clockwise around it, which
+    #     viewers such as Plotly and Rhino use for front-face lighting.
+    face_normal = (mesh.face_normals * mesh.area_faces[:, None]).sum(axis=0)
     if np.dot(face_normal, plane_normal) < 0:
         plane_normal = -plane_normal
         axis_v = -axis_v  # flip one axis so cross(u,v) matches new normal
     point_normals = np.tile(plane_normal, (len(points_3d), 1))  # (M, 3)
 
-    # 11) Build analysis-mesh quad data.  Each included cell becomes a
-    #     quad face whose centroid == the sample point.  Corners are at
-    #     ±half_step from the cell centre in the plane's (u, v) frame.
-    #     Non-shared vertices (4 per quad) — simple & correct.
+    # 11) Build analysis-mesh quad data.  Each sample point becomes a
+    #     square quad centred on it, with corners at ±sample_step/2 along
+    #     the plane's (u, v) axes.  Quads do not share vertices (4 per
+    #     quad), and quads of edge-seeded points may overlap their neighbours.
     n_pts = len(points_2d)
     if n_pts > 0:
         hs = sample_step / 2.0
@@ -658,12 +724,15 @@ def discretize_surface_with_normals(
     edge_taper: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray, "AnalysisMesh | None", np.ndarray, list]:
     """
-    Sample nearly planar regions of a mesh and return point/normal pairs.
+    Sample the nearly planar connected components of a mesh and return
+    point/normal pairs.
 
-    Uses the fast Shapely-based rasterizer (``sample_planar_surface``) for
-    point/normal generation and builds a quad analysis mesh from the same
-    2D grid.  The mesh has a 1:1 face-to-point mapping suitable for
-    per-face coloring (e.g. "LB Spatial Heatmap" in GH/Rhino).
+    Each connected component whose faces all lie within
+    `coplanarity_tol_deg` of the component's area-weighted mean normal is
+    sampled with ``sample_planar_surface``; other components are skipped
+    with a UserWarning.  The quad analysis mesh has one face per sample
+    point, suitable for per-face colouring (e.g. "LB Spatial Heatmap" in
+    Grasshopper/Rhino).
 
     Parameters
     ----------
@@ -676,8 +745,8 @@ def discretize_surface_with_normals(
     edge_taper : float, default 0.0
         Design-constraint taper distance (meters): sample weights ramp
         from 0 at each component's outline to 1 at ``edge_taper`` inward.
-        Requires planar components (already enforced by the coplanarity
-        check — curved surfaces are not supported by the sampler).
+        Distances are measured in the component's plane, which the
+        coplanarity check guarantees exists.
 
     Returns
     -------
@@ -692,11 +761,11 @@ def discretize_surface_with_normals(
     taper_stats : list of dict
         Per-component taper statistics (empty when edge_taper == 0).
         Components that never reach full weight (narrower than ~2× the
-        taper) additionally emit a UserWarning — a taper must never
-        silently exclude geometry from the protected program.
+        taper) also emit a UserWarning, so the user knows that geometry
+        is partly or wholly excluded from the protected program.
     """
     # repair=False: trimesh's default submesh repair fills small (3-4
-    # vertex) boundary loops, which destroys real openings — a plate with
+    # vertex) boundary loops, which destroys real openings: a plate with
     # a rectangular hole comes back closed, its boundary loops vanish, and
     # the component is rejected.  Sampling needs the true open boundary.
     submeshes = mesh.split(only_watertight=False, repair=False)
@@ -723,7 +792,7 @@ def discretize_surface_with_normals(
             skipped["non-planar"].append(component_index)
             continue
 
-        # 2) Sample this planar sheet (fast Shapely rasterizer)
+        # 2) Sample this planar sheet
         pts3d, nrm3d, qv, qf, wts = sample_planar_surface(
             submesh, sample_step, edge_taper=edge_taper
         )
@@ -732,9 +801,9 @@ def discretize_surface_with_normals(
             skipped["no samples"].append(component_index)
             continue
 
-        # 2b) Taper transparency: a component that never reaches full
-        # weight is narrower than ~2× edge_taper and is partially or
-        # wholly excluded from the protected program — never silently.
+        # 2b) Record taper statistics.  A component that never reaches
+        # full weight is narrower than ~2× edge_taper and is partially or
+        # wholly excluded from the protected program, so warn about it.
         if edge_taper > 0.0:
             max_w = float(wts.max())
             taper_stats.append({
@@ -749,13 +818,14 @@ def discretize_surface_with_normals(
                 warnings.warn(
                     f"edge_taper={edge_taper:g} m: test-surface component "
                     f"{component_index} never reaches full weight "
-                    f"(max {max_w:.2f}) — it is narrower than ~2x edge_taper "
+                    f"(max {max_w:.2f}); it is narrower than ~2x edge_taper "
                     f"and is partially or wholly excluded from the protected "
                     f"program.",
                     stacklevel=2,
                 )
 
-        # 3) Normals follow the component's (area-weighted) face orientation.
+        # 3) Orient normals to agree with the component's area-weighted
+        #    mean face normal (the quad winding from step 2 is not changed).
         if np.dot(mean_normal, nrm3d[0]) < 0:
             nrm3d = -nrm3d
 
@@ -775,7 +845,7 @@ def discretize_surface_with_normals(
         import warnings
         warnings.warn(
             f"Test surface: {', '.join(problems)} of {len(submeshes)} components "
-            f"were skipped and are NOT protected. Each panel must be a single "
+            f"were skipped and are not protected. Each panel must be a single "
             f"flat face (coplanarity tolerance {coplanarity_tol_deg:g} deg); "
             f"explode polysurfaces into planar faces.",
             stacklevel=2,
@@ -790,20 +860,26 @@ def discretize_surface_with_normals(
     normals = np.vstack(all_normals).astype(np.float32)
     weights = np.concatenate(all_weights).astype(np.float32)
 
-    # 5) Build lightweight analysis mesh (numpy only — no Ladybug overhead)
+    # 5) Build the analysis mesh as plain numpy arrays (no Ladybug objects).
     analysis_mesh = None
     if all_quad_verts:
         analysis_mesh = AnalysisMesh(
             np.vstack(all_quad_verts),
             np.vstack(all_quad_faces),
-            normals,  # correct outward-facing normals (1 per face = 1 per point)
+            normals,  # one normal per face, since there is one face per point
         )
 
     return points, normals, analysis_mesh, weights, taper_stats
 
 
 def _voxelize_cache_key(args, kwargs) -> str:
-    """Mesh contents (not trimesh's rotation-invariant identifier) + settings + device."""
+    """Cache key for voxelize_mesh: SHA-1 of the vertex and face arrays, plus
+    voxel_size, margin_frac and device.
+
+    The raw arrays are hashed instead of trimesh's mesh identifier because
+    that identifier is rotation-invariant: rotated copies of a mesh would
+    share a key but need different grids.
+    """
     import hashlib
     mesh = args[0]
     digest = hashlib.sha1(np.ascontiguousarray(mesh.vertices, dtype=np.float64).tobytes()
@@ -827,9 +903,11 @@ def voxelize_mesh(
     voxel_size : float
         Edge length of one voxel in world units.
     margin_frac : float
-        Padding on each side as a fraction of the mesh AABB's max side.
+        Padding on each side as a fraction of the longest side of the mesh's
+        axis-aligned bounding box.
     device : torch.device or None
-        Target device for the returned tensor.
+        Device for the returned tensor and for the Warp voxelizer; None
+        picks CUDA when available, else CPU.
 
     Returns
     -------
@@ -838,18 +916,27 @@ def voxelize_mesh(
     origin : (3,) np.ndarray
         World-space min corner of the grid.
     grid_extent : float
-        Physical size of the cubic domain.
+        Side length of the cubic domain in world units (D * voxel_size).
     resolution : int
         Number of voxels per side (D).
 
+    Raises
+    ------
+    ValueError
+        If voxel_size <= 0, margin_frac < 0, or D exceeds 4096.
+    RuntimeError
+        If the trimesh fallback voxelization fails.
+
     Notes
     -----
-    - Uses trimesh ray-based voxelization and scipy cavity fill.
-    - Grid is axis-aligned and cubic by construction.
-    - No GPU dependency for voxelization itself (runs on CPU via trimesh).
+    - Uses the Warp parity voxelizer (``raytracer.voxelize_solid_warp``,
+      on CUDA or the Warp CPU device); if it is unavailable or fails, falls
+      back to trimesh voxelization plus fill.  Sealed interior cavities are
+      then filled with scipy's binary_fill_holes.
+    - The grid is axis-aligned, cubic, and centred on the mesh bounding box.
+    - Results are cached per session (see `_voxelize_cache_key`).
     """
 
-    # resolve a real device at runtime if none was passed
     if device is None:
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -862,7 +949,7 @@ def voxelize_mesh(
     margin = max_dim * margin_frac
     side = max_dim + 2*margin
     resolution = int(np.ceil(side / voxel_size))
-    _MAX_RES = 4096  # per-axis cap; memory protection is the 500M-voxel guard below
+    _MAX_RES = 4096  # per-axis cap; the 500M-voxel check below only logs a warning
     if resolution > _MAX_RES:
         raise ValueError(
             f"Grid resolution {resolution} exceeds per-axis limit {_MAX_RES} "
@@ -880,11 +967,12 @@ def voxelize_mesh(
     center = (bmin + bmax) / 2.0
     origin = center - grid_extent/2.0
 
-    # --- Rasterize: Warp parity voxelizer first (CUDA or warp-CPU), with
+    # --- Rasterize: Warp parity voxelizer first (CUDA or Warp CPU), with
     # the trimesh rasterize-and-fill path as fallback.  The Warp kernel
-    # casts one ray per grid column along each axis and majority-votes
-    # the parities — far faster than trimesh's CPU rasterizer, and it
-    # avoids the fragile orthographic-fill fallback chain.
+    # casts one ray per grid column along each axis and marks a voxel
+    # inside when at least 2 of the 3 parities agree.  It is much faster
+    # than trimesh's CPU rasterizer and does not need the fill fallbacks
+    # used below.
     grid_np = None
     try:
         from .raytracer import voxelize_solid_warp
@@ -906,9 +994,9 @@ def voxelize_mesh(
         try:
             vox = mesh.voxelized(pitch=voxel_size)
 
-            # Try trimesh's orthographic fill first — it casts rays from all
-            # 6 axis directions and is robust to small gaps in the surface
-            # shell (which binary_fill_holes cannot handle).
+            # Try trimesh's orthographic fill first: it fills a voxel when
+            # the surface blocks it in all 6 axis directions, so it tolerates
+            # small gaps in the surface shell (binary_fill_holes does not).
             try:
                 vox = vox.fill(method='orthographic')
             except Exception as exc:
@@ -942,11 +1030,11 @@ def voxelize_mesh(
         except Exception as e:
             raise RuntimeError(f"voxelize_mesh: trimesh voxelization failed: {e}")
 
-    # --- Cavity fill: skip if orthographic fill left no interior voids ---
-    # The padded grid guarantees corner [0,0,0] is empty exterior.
+    # --- Cavity fill: skip when the grid has no sealed interior voids ---
     # If all empty voxels form a single connected component (6-connectivity),
-    # there are no sealed interior cavities and binary_fill_holes would be
-    # a no-op.  This check is much cheaper than running the full fill.
+    # that component is the exterior, there are no sealed cavities, and
+    # binary_fill_holes would change nothing.  Labelling is much cheaper
+    # than running the full fill.
     surface_count = int(grid_np.sum())
     if surface_count == 0:
         filled = grid_np
@@ -956,16 +1044,12 @@ def voxelize_mesh(
         # connected to the exterior) to count as interior voids.
         _, num_empty_components = ndi.label(empty_space)
         if num_empty_components <= 1:
-            # All empty space is one connected region (the exterior) —
-            # no interior cavities exist, skip the expensive fill.
             _log.debug(
                 "voxelize_mesh: no interior cavities detected "
-                "(single exterior component) — skipping binary_fill_holes"
+                "(single exterior component); skipping binary_fill_holes"
             )
             filled = grid_np
         else:
-            # Multiple empty regions → some are sealed cavities.
-            # Run binary_fill_holes to seal them.
             filled = ndi.binary_fill_holes(grid_np)
             cavities_sealed = int(filled.sum()) - surface_count
             _log.debug(
@@ -975,7 +1059,7 @@ def voxelize_mesh(
             )
 
     _log.info(
-        "voxelize_mesh: watertight=%s surface_voxels=%d filled_voxels=%d "
+        "voxelize_mesh: watertight=%s voxels_before_fill=%d filled_voxels=%d "
         "fill_ratio=%.1fx",
         mesh.is_watertight, surface_count, int(filled.sum()),
         int(filled.sum()) / max(surface_count, 1),
@@ -1020,27 +1104,33 @@ def prune_voxels_morph(
     min_voxels: int,
 ) -> torch.Tensor:
     """
-    Gentle cleanup for the cubic (unsmoothed) path.
+    Light cleanup for the cubic (unsmoothed) path.
 
     Steps
     -----
-    1. Remove tiny connected components (26-connectivity).
-    2. Apply a 3×3×3 majority filter (keeps voxels with ≥3 neighbors) to
-       suppress isolated specks.
+    1. Remove connected components (26-connectivity) with fewer than
+       `min_voxels` voxels.
+    2. Remove occupied voxels whose 3×3×3 neighbourhood (including the
+       voxel itself) holds fewer than 3 occupied voxels, i.e. voxels with
+       0 or 1 occupied neighbours.  This drops isolated specks and
+       one-voxel spurs.
 
-    Only removes voxels, never adds them: re-adding would undo carving.
+    Only removes voxels, never adds them: adding would undo carving.
 
     Parameters
     ----------
     voxels : (D, D, D) uint8/bool torch.Tensor
     min_voxels : int
+        Size threshold; components with fewer voxels are removed.
 
     Returns
     -------
     cleaned : (D, D, D) uint8 torch.Tensor
+        Binary occupancy on the same device as `voxels`.
     """
     arr = voxels.detach().cpu().numpy().astype(bool)
-    # 26-connectivity for component labeling (keep connectivity liberal here)
+    # 26-connectivity: voxels touching only at an edge or corner still
+    # count as one component, so fewer pieces fall below min_voxels.
     struct26 = np.ones((3, 3, 3), dtype=bool)
     labeled, _ = ndi.label(arr, structure=struct26)
     counts = np.bincount(labeled.ravel())
@@ -1049,12 +1139,13 @@ def prune_voxels_morph(
     if small.size:
         arr[np.isin(labeled, small)] = False
 
-    # Gentle denoise: majority in 3×3×3 — only REMOVE noisy voxels,
-    # never ADD new ones (prevents spilling beyond the max volume).
+    # Neighbour-count filter: cnt is the number of occupied voxels in each
+    # 3×3×3 block, including the centre voxel.  An occupied voxel survives
+    # with cnt >= 3 (at least 2 occupied neighbours).  The AND with arr
+    # keeps empty voxels empty, so the result never grows beyond the
+    # carved volume.
     k = np.ones((3, 3, 3), dtype=np.int16)
     cnt = ndi.convolve(arr.astype(np.int16), k, mode="constant", cval=0)
-    # A voxel must have >= 3 filled neighbors (of 27 including self) to survive.
-    # Crucially: only apply to voxels that were already ON. Never turn OFF→ON.
     arr = arr & (cnt >= 3)
 
     return torch.from_numpy(arr.astype(np.uint8)).to(voxels.device)
@@ -1063,8 +1154,8 @@ def prune_voxels_morph(
 def _pm_stencil_step(src, dst, k2, tau):
     """Single Perona-Malik diffusion step (6-neighbor 3D Jacobi stencil).
 
-    Reads from ``src`` and writes interior voxels of ``dst`` — a Jacobi
-    update, which is safe to parallelize (numba ``prange`` over z-slabs)
+    Reads from ``src`` and writes interior voxels of ``dst`` (a Jacobi
+    update).  This is safe to parallelize (numba ``prange`` over z-slabs)
     because no cell reads a value written in the same step.  Operates on
     *padded* arrays: the border ring is left unchanged by this kernel;
     the caller refreshes it after each step to maintain the Neumann
@@ -1079,7 +1170,8 @@ def _pm_stencil_step(src, dst, k2, tau):
     k2 : float
         Squared edge-stopping scale (k^2).
     tau : float
-        Diffusion time step (keep <= 0.18 for stability).
+        Diffusion time step.  The explicit 6-neighbour scheme is stable for
+        tau <= 1/6 (about 0.167).
     """
     nz, ny, nx = src.shape
     for z in prange(1, nz - 1):
@@ -1117,7 +1209,8 @@ def _pm_anisotropic_diffuse(sdf: np.ndarray, iters: int = 16, k: float = 1.0, ta
     k : float
         Edge-stopping scale (larger = more smoothing across gradients).
     tau : float
-        Time step; for a 6-neighbor stencil keep tau <= 0.18 for stability.
+        Time step; the explicit 6-neighbour scheme is stable for
+        tau <= 1/6 (about 0.167).
 
     Returns
     -------
@@ -1127,9 +1220,10 @@ def _pm_anisotropic_diffuse(sdf: np.ndarray, iters: int = 16, k: float = 1.0, ta
     -----
     - Uses a numba-compiled parallel Jacobi stencil: each step reads the
       previous buffer and writes a second one, so z-slabs can run on all
-      cores (~10x over the serial in-place sweep on a 306-cube grid).
-    - Used inside ``_voxel_presmooth``; typically applied only within a narrow
-      band around the zero-level set to avoid volume drift.
+      cores.
+    - The whole field is diffused.  ``_voxel_presmooth`` then keeps the
+      result only within a narrow band around the zero level, to avoid
+      volume drift.
     """
     iters = int(iters)
     if iters <= 0:
@@ -1141,16 +1235,15 @@ def _pm_anisotropic_diffuse(sdf: np.ndarray, iters: int = 16, k: float = 1.0, ta
     tau_f = float(tau)
 
     # Pad with edge values (Neumann boundary: zero normal derivative).
-    # The border ring is never updated by the stencil, so it acts as
-    # a fixed boundary condition throughout all iterations.
+    # The stencil does not write the border ring; it is refreshed from
+    # the adjacent interior after each step below.
     src = np.pad(sdf.astype(np.float32), 1, mode="edge")
     dst = src.copy()
 
     for _ in range(iters):
         _pm_stencil_step(src, dst, k2, tau_f)
-        # Refresh border from interior to maintain Neumann condition
-        # after each step (interior voxels adjacent to the border may
-        # have changed, so the border must reflect the new edge values).
+        # Copy the new edge values into the border so the Neumann
+        # condition holds for the next step.
         dst[0, :, :] = dst[1, :, :]
         dst[-1, :, :] = dst[-2, :, :]
         dst[:, 0, :] = dst[:, 1, :]
@@ -1169,9 +1262,10 @@ def _voxel_presmooth(field_bool: np.ndarray) -> np.ndarray:
     Pipeline
     --------
     1) Compute inside/outside Euclidean distance transforms and form SDF = d_in − d_out.
-    2) Apply a light Gaussian blur (voxel units).
-    3) Run Perona–Malik diffusion in a narrow band |SDF| < ~2 voxels to reduce
-       terracing while preserving edges.
+    2) Apply a light Gaussian blur (sigma 0.3 voxels).
+    3) Run Perona–Malik diffusion and keep its result where the blurred
+       |SDF| < 2 voxels, to reduce terracing while preserving edges.
+       Outside that band the unblurred SDF from step 1 is kept.
 
     Parameters
     ----------
@@ -1180,16 +1274,18 @@ def _voxel_presmooth(field_bool: np.ndarray) -> np.ndarray:
     Returns
     -------
     sdf : (Z, Y, X) float32 np.ndarray
-        Smoothed SDF to be contoured by marching cubes.
+        Smoothed SDF in voxel units (positive inside), to be contoured by
+        marching cubes.
     """
     occ = field_bool.astype(bool)
 
     # Step 1: Build a signed distance field via dual distance transforms.
     # d_in  = Euclidean distance from each occupied voxel to the nearest empty one.
     # d_out = distance from each empty voxel to the nearest occupied one.
-    # SDF = d_in − d_out: positive inside the volume, negative outside,
-    # zero at the boundary.  This gives a proper signed distance with
-    # consistent sign convention for marching cubes.
+    # SDF = d_in − d_out is >= 1 at occupied voxels and <= -1 at empty
+    # ones, so the zero level lies between the last inside and the first
+    # outside voxel centre.  Positive inside is the sign convention the
+    # marching-cubes step expects.
     # The two transforms are independent and scipy releases the GIL, so
     # run them concurrently (~1.9x on large grids).
     from concurrent.futures import ThreadPoolExecutor
@@ -1203,21 +1299,21 @@ def _voxel_presmooth(field_bool: np.ndarray) -> np.ndarray:
     # staircase artifacts without over-diffusing sharp features.
     sdf = gaussian_filter(sdf0, sigma=0.3, mode="nearest")
 
-    # Step 3: Edge-preserving Perona–Malik diffusion, restricted to a narrow
-    # band of |SDF| < 2 voxels around the zero-level isosurface.
-    # Limiting to the band prevents interior volume drift while smoothing
+    # Step 3: Edge-preserving Perona–Malik (PM) diffusion, kept only in a
+    # narrow band of |SDF| < 2 voxels around the zero level.  Limiting the
+    # change to the band prevents interior volume drift while smoothing
     # the terraced surface contour.
     band = np.abs(sdf) < 2.0
     if np.any(band):
         # Set the PM edge-stopping scale k to 1.05× the median gradient
-        # magnitude within the band.  For a true SDF, |∇SDF| ≈ 1 everywhere;
-        # the 5% margin ensures that normal gradients diffuse freely while
-        # sharp transitions (features, corners) are preserved.
+        # magnitude within the band.  A distance field changes by about
+        # 1 per voxel, so neighbour differences of that size still diffuse,
+        # while much larger jumps (features, corners) are damped.
         g = np.gradient(sdf)
         mag = np.sqrt(g[0]**2 + g[1]**2 + g[2]**2)
         k = max(1.05 * float(np.median(mag[band])), 1e-6)
         sdf_band = _pm_anisotropic_diffuse(sdf, iters=16, k=k, tau=0.15)
-        # Restore original SDF outside the band — only the surface zone changes.
+        # Outside the band keep the unblurred SDF from step 1.
         sdf = np.where(band, sdf_band, sdf0)
     else:
         sdf = sdf0
@@ -1225,8 +1321,8 @@ def _voxel_presmooth(field_bool: np.ndarray) -> np.ndarray:
 
 def _volume_matched_threshold(sdf: np.ndarray, target_inside_voxels: int) -> float:
     """
-    Choose an isosurface value so that the number of voxels with SDF > iso
-    matches `target_inside_voxels`.
+    Choose an isosurface value so that the number of voxels with SDF >= iso
+    equals `target_inside_voxels` (exactly, when there are no ties).
 
     Parameters
     ----------
@@ -1249,11 +1345,12 @@ def _volume_matched_threshold(sdf: np.ndarray, target_inside_voxels: int) -> flo
     n = flat.size
     tgt = int(max(0, min(n, target_inside_voxels)))
     idx = n - tgt
-    # guard for degenerate cases
-    if idx <= 0: 
-        return float(np.max(flat))
-    if idx >= n:
+    if idx <= 0:
+        # Every cell inside: the lowest value keeps them all.
         return float(np.min(flat))
+    if idx >= n:
+        # No cell inside: a value just above the highest keeps none.
+        return float(np.nextafter(np.max(flat), flat.dtype.type(np.inf)))
     return float(np.partition(flat, idx)[idx])
 
 def _median_edge_length(m: trimesh.Trimesh) -> float:
@@ -1266,23 +1363,31 @@ def _median_edge_length(m: trimesh.Trimesh) -> float:
 
 def polish_mesh_taubin(mesh: trimesh.Trimesh, iters: int = 2) -> trimesh.Trimesh:
     """
-    Apply a tiny, scale-normalized Taubin pass to knock down micro-ripples.
+    Apply a short Taubin smoothing pass to remove small ripples.
 
     Parameters
     ----------
     mesh : trimesh.Trimesh
+        Modified in place.
     iters : int, default 2
-        Small integer in [0, 6]. If 0, the mesh is returned unchanged.
+        Number of trimesh Taubin steps, capped at 6.  trimesh alternates
+        steps (even steps shrink, odd steps inflate), so even values give
+        complete shrink/inflate pairs.  If 0 or less, the mesh is returned
+        unchanged.
 
     Returns
     -------
     mesh : trimesh.Trimesh
+        The same object, smoothed, with degenerate faces removed.
 
     Notes
     -----
-    - Uses fixed stable parameters (λ≈0.28, ν≈−0.31) and normalizes by the
-      median edge length to avoid scale sensitivity.
-    - Intended only after the SDF+MC path. Keep very small to avoid shape drift.
+    - Uses fixed parameters λ = 0.28 and ν = 0.31 (trimesh's sign
+      convention; μ = −0.31 in Taubin's notation).
+    - Vertices are centred and scaled to unit median edge length during
+      smoothing, then restored.
+    - Intended only after the SDF + marching cubes path.  Keep the
+      iteration count small to avoid shape drift.
     """
     if iters <= 0 or len(mesh.vertices) == 0:
         return mesh
@@ -1290,10 +1395,10 @@ def polish_mesh_taubin(mesh: trimesh.Trimesh, iters: int = 2) -> trimesh.Trimesh
     # Taubin (1995): alternate a shrinking step (lambda) and a slightly larger
     # inflating step (mu = -nu) so the surface is smoothed without shrinking.
     # trimesh.smoothing.filter_taubin subtracts nu * Laplacian, so the
-    # inflating step needs a POSITIVE nu here.
+    # inflating step needs a positive nu here.
     lamb, nu = 0.28, 0.31
 
-    # Normalize to avoid scale sensitivity
+    # Centre and scale in place (V is a plain view of mesh.vertices).
     V = mesh.vertices.view(np.ndarray)
     c = V.mean(axis=0)
     V -= c
@@ -1302,13 +1407,13 @@ def polish_mesh_taubin(mesh: trimesh.Trimesh, iters: int = 2) -> trimesh.Trimesh
         s = 1.0
     V /= s
 
-    # Do the tiny polish
     from trimesh.smoothing import filter_taubin
     filter_taubin(mesh, lamb=lamb, nu=nu, iterations=int(min(iters, 6)))
 
     # Restore original scale and world-space position.
-    # Do NOT call mesh.rezero() — it translates the bbox min to (0,0,0),
-    # stripping the world-space offset set by apply_translation(min_corner).
+    # Do not call mesh.rezero() here: it moves the bounding-box minimum to
+    # (0, 0, 0) and would discard the world-space offset applied in
+    # mesh_from_voxels_smoothed.
     mesh.vertices[:] = mesh.vertices * s + c
     mesh.update_faces(mesh.nondegenerate_faces())
     return mesh
@@ -1348,11 +1453,11 @@ def _cubic_mesh_from_occupancy(
     min_corner: np.ndarray,
     voxel_size: float,
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Emit axis-aligned cuboid faces using a shared vertex grid.
+    """Emit the exposed faces of occupied voxels as triangles on a shared vertex grid.
 
-    Uses a (D+1)³ vertex grid so neighboring faces share vertices — no
-    duplicates. For a D=180 grid this is ~6M vertices vs ~40M+ with the
-    per-quad approach. Face indices reference the shared grid directly.
+    Quad corners are indices into the (D+1)³ lattice of voxel corners, so
+    neighbouring faces share vertices and there are no duplicates.  Only
+    the corners referenced by faces are returned, re-indexed from 0.
 
     Parameters
     ----------
@@ -1378,12 +1483,10 @@ def _cubic_mesh_from_occupancy(
 
     # Shared vertex grid: a D³ voxel grid has (D+1)³ corner vertices.
     # Flat index for corner (i,j,k): i*(D+1)² + j*(D+1) + k  (row-major).
-    # Sharing vertices between adjacent quads avoids duplicates and keeps
-    # the mesh manifold-friendly.
     D1 = D + 1
     D1sq = D1 * D1
 
-    # 6 face definitions — one per axis-aligned direction.
+    # 6 face definitions, one per axis-aligned direction.
     # Each entry: (neighbor offset, 4 corner offsets relative to voxel (i,j,k)).
     # Corner offsets index into the (D+1)³ vertex grid.
     # Winding is counter-clockwise when viewed from outside (outward normal).
@@ -1406,7 +1509,7 @@ def _cubic_mesh_from_occupancy(
 
     for (si, sj, sk), corners in face_defs:
         # Find exposed faces: occupied voxels whose neighbor in (si,sj,sk) is empty.
-        # Using padded array with +1 offset.
+        # Index i in occ is index i+1 in padded, hence the +1 in the slices.
         exposed = occ & ~padded[1+si:D+1+si, 1+sj:D+1+sj, 1+sk:D+1+sk]
         if not exposed.any():
             continue
@@ -1459,7 +1562,7 @@ def mesh_from_voxels_smoothed(
     voxel_size: float
 ) -> trimesh.Trimesh:
     """
-    Construct a smooth mesh by conturing a smoothed SDF with marching cubes.
+    Construct a smooth mesh by contouring a smoothed SDF with marching cubes.
 
     Parameters
     ----------
@@ -1468,12 +1571,13 @@ def mesh_from_voxels_smoothed(
     min_corner : (3,) array_like
         World-space grid origin.
     voxel_size : float
-        World units per voxel (passed as `pitch` to marching cubes).
+        World units per voxel (passed as `spacing` to marching cubes).
 
     Returns
     -------
     mesh : trimesh.Trimesh
-        Triangle mesh positioned in world coordinates.
+        Unprocessed triangle mesh (process=False) in world coordinates;
+        an empty Trimesh if the grid is empty or the field is constant.
 
     Notes
     -----
@@ -1484,7 +1588,6 @@ def mesh_from_voxels_smoothed(
       ``matrix_to_marching_cubes(threshold=...)`` would binarize the field
       first, throwing the smoothing away.)
     """
-    # Work on CPU ndarray
     occ = voxels.detach().to('cpu').numpy().astype(bool)
     if not occ.any():
         return trimesh.Trimesh()  # otherwise the iso-surface outlines the whole grid
@@ -1500,7 +1603,7 @@ def mesh_from_voxels_smoothed(
     # skimage requires the level to lie strictly inside the data range.
     lo, hi = float(padded.min()), float(padded.max())
     if hi <= lo:
-        return trimesh.Trimesh()  # degenerate (constant) field — nothing to mesh
+        return trimesh.Trimesh()  # constant field: nothing to mesh
     iso = float(np.clip(iso, lo + 1e-6 * max(abs(lo), 1.0), hi - 1e-6 * max(abs(hi), 1.0)))
 
     from skimage import measure
@@ -1515,7 +1618,6 @@ def mesh_from_voxels_smoothed(
     # reverse each face so normals face outward (positive enclosed volume).
     faces = faces[:, ::-1]
     mesh = trimesh.Trimesh(vertices=verts, faces=faces, process=False)
-    # Add world-space origin
     mesh.apply_translation(min_corner)
     return mesh
 
@@ -1530,26 +1632,31 @@ def cleanup_mesh(
     Parameters
     ----------
     mesh : trimesh.Trimesh
+        Modified in place.
     min_face_count : int, default 100
         Fragments with fewer faces than this are discarded.
     light : bool, default False
-        If True, skip expensive repair steps (fill_holes, fix_inversion,
-        merge_vertices). Use for cubic meshes which are already watertight
-        with correct winding. ~10x faster on large meshes.
+        If True, skip the repair steps (fix_winding, fix_normals,
+        fix_inversion, fill_holes, merge_vertices).  Use for meshes that
+        already have shared vertices and consistent outward winding: the
+        cubic mesher's output and watertight marching-cubes output.
+        Roughly 10x faster on large meshes.
 
     Returns
     -------
     mesh : trimesh.Trimesh
-        Cleaned mesh (may be a concatenation of surviving components).
+        Concatenation of the components with at least `min_face_count`
+        faces.  If no component is that large, only the largest one is
+        returned and a UserWarning is issued.
     """
     if light:
-        # Cubic mesher produces watertight meshes with consistent winding.
-        # Only remove degenerate/duplicate faces and prune small fragments.
+        # The input already has consistent winding; only remove
+        # degenerate/duplicate faces and prune small fragments.
         mesh.update_faces(mesh.nondegenerate_faces())
         mesh.update_faces(mesh.unique_faces())
         mesh.remove_unreferenced_vertices()
     else:
-        # Full repair for marching-cubes output
+        # Full repair, for marching-cubes output that is not watertight
         repair.fix_winding(mesh)
         repair.fix_normals(mesh, multibody=True)
         repair.fix_inversion(mesh, multibody=True)

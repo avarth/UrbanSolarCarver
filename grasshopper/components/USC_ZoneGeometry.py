@@ -1,4 +1,4 @@
-"""USC Zone Geometry — Shoebox dimensions and glazing ratios.
+"""USC Zone Geometry: shoebox dimensions and glazing ratios.
 
 Feeder for USC_Archetype's 'geometry' input. Only wired inputs are
 passed on; anything left unconnected keeps the archetype's neutral

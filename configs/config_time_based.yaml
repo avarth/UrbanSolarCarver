@@ -1,6 +1,7 @@
-﻿# UrbanSolarCarver — Time-based mode
+﻿# UrbanSolarCarver: Time-based mode
 # Classic solar envelope: carves voxels that cast shadows on test surfaces
-# during the specified hours. Binary carving (shadow / no shadow).
+# during the specified hours. Each voxel's score is the shading it causes
+# (m²·h); by default any shadow at all removes the voxel.
 # Typical use: solar access guarantees for a specific date and time window.
 
 # --- Required paths ---
@@ -11,8 +12,8 @@ out_dir:            "path/to/output"
 
 mode: time-based
 
-# Analysis period — usually a single day or narrow window
-# Example: winter solstice, 10 AM – 2 PM
+# Analysis period: usually a single day or narrow window
+# Example: winter solstice, 10 AM to 2 PM
 # (ladybug AnalysisPeriod.to_dict() can be pasted here)
 analysis_period:
   st_month:  12
@@ -29,17 +30,17 @@ voxel_size: 1.0
 # time-based scores measure the shading a voxel causes on the test surfaces:
 # shaded area x duration over the analysis period, in m²·h. Use a
 # non-negative number:
-#   threshold: 0   strict: keep only voxels that NEVER shadow test surfaces (default)
+#   threshold: 0   strict: keep only voxels that never shadow test surfaces (default)
 #   threshold: 5   tolerate up to 5 m²·h (e.g. 5 m² of facade for one hour)
 # String methods (headtail/carve_fraction) do not apply and raise an error.
 # sun_steps_per_hour: 12   # sun sampled every 5 min (default); hourly leaves gaps
 # threshold: 0    # uncomment to set explicitly; None uses the strict default (0)
 
-# -- Defaults you may want to override ----------------------------------------
+# --- Defaults you may want to override --------------------------------------
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)
 # grid_step:       1.0    # test-surface sampling spacing in metres
 # ray_length:      300.0  # max ray distance in metres
-# threshold:       None   # integer: 0 = strict (no violations), 1 = allow 1, etc.
+# threshold:       None   # tolerated shading in m²·h: 0 = strict (default), 5 = up to 5 m²·h
 # min_altitude:    5.0    # ignore sun below this elevation (degrees)
 # apply_smoothing: false  # true = SDF smooth + marching cubes
 # device:          'auto' # 'auto', 'cpu', or 'cuda'

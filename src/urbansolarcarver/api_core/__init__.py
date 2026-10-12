@@ -1,11 +1,13 @@
 """
-UrbanSolarCarver core package.
+Staged pipeline API of UrbanSolarCarver.
 
-Implementations live in submodules:
- - preprocessing.py
- - thresholding.py
- - exporting.py
-Support helpers live in `urbansolarcarver.grid` and `urbansolarcarver.carving`.
+The three stages live in submodules:
+ - preprocessing.py: voxelize, sample test surfaces, ray-trace scores
+ - thresholding.py: smooth and threshold scores into a mask
+ - exporting.py: mesh the mask and write the run report
+Private helpers for these stages are in `_util`, `_diagnostics` and
+`_reporting`; the geometry and ray-tracing code is in `urbansolarcarver.grid`
+and `urbansolarcarver.carving`.
 """
 
 # Staged API

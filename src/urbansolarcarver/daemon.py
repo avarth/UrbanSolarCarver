@@ -1,21 +1,23 @@
-"""CUDA/Warp session persistence server for IPC (Grasshopper, Revit).
+"""Long-running server that keeps a GPU session alive between pipeline calls.
 
-Keeps the GPU context alive across multiple calls from external
-applications.  Starts a single CarverSession and listens for JSON-like
-RPC messages over a multiprocessing Connection, dispatching each request
-to the appropriate pipeline entry point and returning serialised results.
+Used by the Grasshopper components and the CLI ``--daemon`` flag.  Starts a
+single CarverSession and listens on a ``multiprocessing.connection``
+Listener for request dicts such as ``{"cmd": "preprocessing", "config": ...}``.
+Each request is dispatched to the matching pipeline entry point and a reply
+dict with a ``"status"`` key (``"ok"`` or ``"error"``) is sent back.
 
 Security assumptions
 --------------------
-- **Localhost only** — the daemon binds exclusively to the loopback
-  interface. Non-loopback addresses are rejected at startup.
-- **Authkey** — a random 32-byte token is generated on first start and
-  stored in ``.daemon_authkey``. Clients must present this key.
-- **Pickle IPC** — ``multiprocessing.connection`` uses pickle internally.
+- **Localhost only**: the daemon binds to the loopback interface.
+  Host names that do not resolve to 127.0.0.1 or ::1 are rejected at startup.
+- **Authkey**: 32 random bytes, stored as 64 hex characters in
+  ``~/.urbansolarcarver/.daemon_authkey``, are generated on first use.
+  Clients must present this key.
+- **Pickle IPC**: ``multiprocessing.connection`` uses pickle internally.
   Any process that holds the authkey can execute arbitrary code in the
   daemon's context.  This is acceptable because both endpoints run on the
   same machine under the same user account.
-- **Not designed for multi-tenant or server deployment.** Do not expose
+- **Not designed for multi-user or server deployment.** Do not expose
   the daemon port to a network.
 """
 
@@ -36,25 +38,31 @@ log = logging.getLogger(__name__)
 from urbansolarcarver.session import CarverSession
 from urbansolarcarver.load_config import load_config
 
-# Key file location: user-specific directory (cross-platform).
-# Generated randomly on first daemon start; clients must read this file.
+# Per-user key file shared by the daemon and its clients.
 _DEFAULT_KEYFILE = Path.home() / ".urbansolarcarver" / ".daemon_authkey"
 
 
 def _resolve_authkey(keyfile: Path = _DEFAULT_KEYFILE) -> bytes:
-    """Read or generate a per-install random authkey.
+    """Read the authkey from *keyfile*, creating it if it does not exist.
 
-    On first daemon start the key is generated with 32 bytes of
-    cryptographic randomness and persisted to *keyfile*.  Subsequent
-    starts and all clients reuse the same key.  The file is created
-    with owner-only permissions where the OS supports it.
+    Whichever process calls this first (the daemon or a client) generates
+    the key: 32 bytes from ``secrets``, hex-encoded to 64 ASCII bytes.  All
+    later calls return the same key.  After creating the file, access is
+    restricted to the current user: on Linux and macOS the file is created
+    with mode 0o600; on Windows ``icacls`` is run afterwards, and if that
+    fails a warning is logged and the key is still used.
     """
     if keyfile.is_file():
         return keyfile.read_bytes().strip()
     key = secrets.token_hex(32).encode()
     keyfile.parent.mkdir(parents=True, exist_ok=True)
-    keyfile.write_bytes(key)
-    # Restrict authkey file to current user only.
+    # O_EXCL: if another process created the file in the meantime, use its key.
+    try:
+        fd = os.open(keyfile, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        return keyfile.read_bytes().strip()
+    with os.fdopen(fd, "wb") as f:
+        f.write(key)
     if sys.platform == "win32":
         try:
             subprocess.run(
@@ -64,19 +72,15 @@ def _resolve_authkey(keyfile: Path = _DEFAULT_KEYFILE) -> bytes:
             )
         except (OSError, subprocess.CalledProcessError) as exc:
             log.warning("Could not restrict authkey file permissions (Windows): %s", exc)
-    else:
-        try:
-            keyfile.chmod(0o600)
-        except OSError as exc:
-            log.warning("Could not restrict authkey file permissions: %s", exc)
     return key
 
 
 _LOOPBACK = frozenset({"127.0.0.1", "::1"})
 
 def _validate_localhost(host: str) -> None:
-    """Reject non-loopback bind addresses to prevent network exposure."""
-    # Accept bare IPv6 loopback before any DNS lookup.
+    """Raise ValueError unless *host* is or resolves to a loopback address."""
+    # gethostbyname only returns IPv4 addresses, so "::1" is accepted here
+    # before the lookup.
     if host in _LOOPBACK:
         return
     try:
@@ -91,10 +95,10 @@ def _validate_localhost(host: str) -> None:
 
 
 def _pick_device(arg: str) -> str:
-    """Select the best available compute device.
+    """Turn the ``--device`` argument into ``'cpu'`` or ``'cuda'``.
 
-    Returns 'cuda' if a CUDA GPU is available and PyTorch is installed,
-    otherwise 'cpu'.
+    ``'cpu'`` and ``'cuda'`` are returned as given.  For ``'auto'``, returns
+    ``'cuda'`` if PyTorch is installed and sees a CUDA GPU, otherwise ``'cpu'``.
     """
     if arg == "cpu":
         return "cpu"
@@ -123,7 +127,11 @@ def _error_reply(exc: BaseException) -> dict:
 
 
 def _reply(conn, obj) -> None:
-    """Send *obj* and close; a client that already left must not stop the server."""
+    """Send *obj* and close the connection.
+
+    Send errors are printed, not raised, so a client that has already
+    disconnected does not stop the server.
+    """
     try:
         conn.send(obj)
     except Exception as exc:
@@ -140,9 +148,6 @@ def _handle_stage_command(cmd, msg, sess):
     from urbansolarcarver import api
 
     cfg = load_config(msg["config"], msg.get("overrides", []))
-    if cmd in ("preprocessing", "run_pipeline"):
-        # A new run: drop tensors cached from the previous one.
-        sess.bump(flush=False)
 
     if cmd == "run_pipeline":
         result = api.run_pipeline(cfg, msg.get("out_dir") or cfg.out_dir)
@@ -180,7 +185,12 @@ def _simulate_weights(msg):
 
 
 def _dispatch(msg, sess) -> dict:
-    """Validate a request and run it. Raises on failure."""
+    """Validate a request and run it.
+
+    Malformed requests (not a dict, unknown command, missing keys) get an
+    error reply; exceptions raised while running a command propagate to the
+    caller.
+    """
     if not isinstance(msg, dict):
         return {"status": "error", "error": "Expected a dict message"}
     cmd = msg.get("cmd")
@@ -196,8 +206,10 @@ def _dispatch(msg, sess) -> dict:
     try:
         return _handle_stage_command(cmd, msg, sess)
     finally:
-        # Return GPU memory after every run, successful or not, so the next
-        # run (and the Rhino viewport) does not start from a full allocator.
+        # Clear the session cache and return GPU memory after every command,
+        # successful or not, so memory does not grow across runs and the
+        # Rhino viewport keeps its GPU memory. The cache therefore only
+        # saves work within one command (e.g. the stages of run_pipeline).
         sess.bump(flush=True)
 
 

@@ -160,7 +160,7 @@ class TestSessionCacheDecorator:
         def my_func(x):
             return torch.tensor([x])
 
-        # Should not crash — falls back to uncached
+        # A key that fails to format must not raise; the call runs uncached.
         result = my_func(5.0)
         assert result.item() == 5.0
         sess.close()

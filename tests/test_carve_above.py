@@ -10,15 +10,17 @@ def _col_grid(columns: dict, height: int) -> tuple[np.ndarray, np.ndarray]:
     ----------
     columns : dict
         Mapping of (x, y) -> str where each character is '#' (occupied+kept),
-        'x' (occupied+carved), or '.' (empty in original envelope).
+        'x' (occupied+carved), '.' (empty in original envelope, mask True), or
+        'o' (empty in original envelope, mask False).
         String is ordered top-to-bottom (index -1 is z=0, index 0 is z=height-1).
+        Cells not covered by a column string are occupied and kept.
     height : int
         Number of z-levels.
 
     Returns
     -------
-    mask : (X, Y, Z) bool array — True = keep, False = carved
-    voxel_grid : (X, Y, Z) bool array — True = occupied in original envelope
+    mask : (X, Y, Z) bool array; True = keep, False = carved
+    voxel_grid : (X, Y, Z) bool array; True = occupied in original envelope
     """
     max_x = max(x for x, y in columns) + 1
     max_y = max(y for x, y in columns) + 1
@@ -49,15 +51,15 @@ class TestCarveAboveColumns:
     """Tests for the carve_above_columns function."""
 
     def test_spec_example_min2(self):
-        """The exact example from the design spec with min_consecutive=2.
+        """Worked example with three columns and min_consecutive=2.
 
-        User's original grid (top-to-bottom, reading each column):
+        Grid (top-to-bottom, reading each column):
             ABC       A: ##xxx#   B: ###x##   C: #xx###
             ###       (top-to-bottom strings)
             ##x
-            x#x       A bottom-up: #,x,x,x,#,# — 3 consec >= 2 → carve 2 above
-            xx#       B bottom-up: #,#,x,#,#,# — 1 consec < 2  → no trigger, x stays carved
-            x##       C bottom-up: #,#,#,x,x,# — 2 consec >= 2 → carve 1 above
+            x#x       A bottom-up: #,x,x,x,#,#: 3 consec >= 2 → carve 2 above
+            xx#       B bottom-up: #,#,x,#,#,#: 1 consec < 2  → no trigger, x stays carved
+            x##       C bottom-up: #,#,#,x,x,#: 2 consec >= 2 → carve 1 above
             ###
         """
         from urbansolarcarver.carving import carve_above_columns
@@ -118,15 +120,15 @@ class TestCarveAboveColumns:
         assert result[0, 0, 0] == True   # bottom #
         assert result[0, 0, 1] == False  # x
         assert result[0, 0, 2] == False  # x
-        assert result[0, 0, 3] == True   # . — not occupied, unchanged
-        assert result[0, 0, 4] == False  # # — occupied, carved
+        assert result[0, 0, 3] == True   # '.': not occupied, unchanged
+        assert result[0, 0, 4] == False  # '#': occupied, carved
 
     def test_empty_cells_never_trigger(self):
         """Air below a mass (a passage, the grid margin) is not carved mass,
         whatever the mask says about it."""
         from urbansolarcarver.carving import carve_above_columns
 
-        # bottom-up: o, o, o, #, #  — bridge over a passage the mask marks False
+        # bottom-up: o, o, o, #, #: a bridge over a passage the mask marks False
         mask, vg = _col_grid({(0, 0): "##ooo"}, height=5)
         result = carve_above_columns(mask, vg, min_consecutive=1)
         assert result[0, 0, 3] and result[0, 0, 4]
@@ -161,7 +163,7 @@ class TestCarveAboveColumns:
         """Carved runs shorter than min_consecutive neither trigger nor refill."""
         from urbansolarcarver.carving import carve_above_columns
 
-        # bottom-up: #, #, x, #, #  — single carved voxel, min=2
+        # bottom-up: #, #, x, #, #: a single carved voxel, min=2
         mask, vg = _col_grid({(0, 0): "##x##"}, height=5)
         result = carve_above_columns(mask, vg, min_consecutive=2)
 
@@ -171,7 +173,7 @@ class TestCarveAboveColumns:
         """A short run below a qualifying run stays carved; carve-above fires."""
         from urbansolarcarver.carving import carve_above_columns
 
-        # bottom-up: #, x, #, x, x, #, #  — run of 1 at z1, run of 2 at z3-z4
+        # bottom-up: #, x, #, x, x, #, #: run of 1 at z1, run of 2 at z3-z4
         mask, vg = _col_grid({(0, 0): "##xx#x#"}, height=7)
         result = carve_above_columns(mask, vg, min_consecutive=2)
 

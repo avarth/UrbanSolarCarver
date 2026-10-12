@@ -17,19 +17,29 @@ def _ensure_dir(path: str) -> None:
 
 def load_mesh(path: str) -> trimesh.Trimesh:
     """
-    Load a triangle mesh from file and ensure face normals are consistently
-    oriented (outward-facing). Trimesh’s process=True fixes winding order,
-    merges duplicate vertices, and removes degenerate faces.
+    Load a triangle mesh from file.
 
-    Raises a clear error for files that contain no usable triangles, which
-    would otherwise surface much later as a cryptic empty-grid failure.
+    trimesh's default processing on load removes NaN/inf vertices and merges
+    duplicate vertices; it does not fix winding or remove degenerate faces.
+    For meshes that are not watertight, ``fix_normals`` is then called to
+    make the face winding consistent across connected faces.  Watertight
+    meshes are returned with their winding as stored.
+
+    Raises
+    ------
+    FileNotFoundError
+        If *path* is not a file.
+    ValueError
+        If the file has no triangles (empty, only points or curves, or not
+        parseable as a mesh).  Without this check the problem would only
+        show up later as an empty voxel grid.
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(f"load_mesh: file not found: {path}")
     mesh = trimesh.load(path, force="mesh")
     if not isinstance(mesh, trimesh.Trimesh) or len(mesh.faces) == 0:
         raise ValueError(
-            f"load_mesh: no triangle geometry found in {path!r} — the file is "
+            f"load_mesh: no triangle geometry found in {path!r}; the file is "
             f"empty, contains only points/curves, or could not be parsed as a mesh."
         )
     if not mesh.is_watertight:
@@ -67,11 +77,12 @@ def _export_ply_double(mesh: trimesh.Trimesh, path: str) -> None:
 
 def save_mesh(mesh: trimesh.Trimesh, path: str) -> str:
     """
-    Save a mesh to disk. Creates output directory if needed.
-    Returns the file path.
+    Save a mesh to disk, creating the output directory if needed, and
+    return the absolute file path.
 
-    PLY is written with float64 vertices when float32 would round them by
-    more than 1 mm (georeferenced coordinates); otherwise as usual.
+    The format follows the file extension.  PLY is written with float64
+    vertices when float32 spacing at the largest coordinate exceeds 1 mm
+    (as with georeferenced coordinates); otherwise trimesh's exporter is used.
     """
     _ensure_dir(path)
     if str(path).lower().endswith(".ply") and float32_resolution(mesh.vertices) > 1e-3:

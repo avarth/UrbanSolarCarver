@@ -27,9 +27,10 @@ PATH_FIELDS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir",
 def parse_override_value(raw: str) -> Any:
     """Convert a ``key=value`` override's value into a Python value.
 
-    "true"/"false" become bool, "null"/"none" None, JSON lists and objects
-    are parsed (``[45,40,35]``), then int, then float; anything else stays a
-    string. "inf" and "nan" stay strings so the schema reports them clearly.
+    "true"/"false" become bool and "null"/"none" None (case-insensitive);
+    JSON lists and objects are parsed (``[45,40,35]``), then int, then float;
+    anything else stays a string. "inf" and "nan" stay strings so the schema
+    reports them clearly.
 
     >>> parse_override_value("true")
     True
@@ -98,7 +99,8 @@ def load_config(
     FileNotFoundError
         If *path* does not exist.
     ValueError
-        On malformed YAML or invalid values (all validation errors in one message).
+        On malformed YAML, an override string without ``=``, or invalid
+        values (all validation errors in one message).
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(

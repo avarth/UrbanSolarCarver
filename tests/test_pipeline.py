@@ -1,4 +1,6 @@
-"""Integration smoke test: full pipeline on a tiny cube mesh."""
+"""Pipeline tests: full runs on a tiny cube mesh, stage-boundary validation, config
+override parsing, simulated weights, edge taper, default-threshold reporting and
+score smoothing."""
 import json
 import os
 import pytest
@@ -6,13 +8,13 @@ import numpy as np
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
-# EPW path resolution — USC_EPW_PATH env var wins, else the bundled NREL file.
+# EPW path resolution: USC_EPW_PATH env var wins, else the bundled NREL file.
 # ---------------------------------------------------------------------------
 from _epw import resolve_epw
 _EPW = resolve_epw()
 _SKIP_EPW = pytest.mark.skipif(
     not _EPW,
-    reason="EPW file not available — set USC_EPW_PATH env var to enable",
+    reason="EPW file not available; set USC_EPW_PATH env var to enable",
 )
 
 
@@ -199,8 +201,8 @@ class TestOverrideParsing:
         assert parse_override_value("2E5") == pytest.approx(200000.0)
 
     def test_inf_nan_stay_strings(self):
-        """'inf'/'nan' as config values are almost certainly typos — keep
-        them as strings so schema validation produces a clear error."""
+        """'inf'/'nan' as config values are almost certainly typos. They
+        stay strings so that schema validation produces a clear error."""
         from urbansolarcarver.load_config import parse_override_value
         assert parse_override_value("inf") == "inf"
         assert parse_override_value("nan") == "nan"
@@ -329,9 +331,7 @@ class TestEdgeTaperPipeline:
 class TestDefaultThresholdReporting:
     """With threshold unset on weighted scores, the default strategy must be
     recorded by name ('carve_fraction'), and the stage hash must depend on
-    the strategy, not on the score-dependent resolved cutoff (regression:
-    the method was reported as 'numeric' and identical configs hashed
-    differently across runs)."""
+    the strategy, not on the score-dependent resolved cutoff."""
 
     def _run_thresholding(self, tmp_path, sub, scores):
         pre_dir = tmp_path / sub / "preprocessing"
@@ -385,8 +385,8 @@ class TestDefaultThresholdReporting:
 
     def test_thresholding_warns_on_nonfinite_scores(self, tmp_path):
         """Standalone thresholding (CLI/daemon/GH) must warn about NaN/Inf
-        scores loaded from disk — preprocessing's guard doesn't cover it —
-        and must not crash on the default carve_fraction strategy."""
+        scores loaded from disk (preprocessing's guard does not cover this
+        path) and must not crash on the default carve_fraction strategy."""
         rng = np.random.default_rng(13)
         scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
         scores[0, 0, :] = np.nan
@@ -512,3 +512,25 @@ class TestScoreSmoothing:
         diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
         assert diag["score_smooth_applied"] is False
         assert diag["score_smoothing_sigma_voxels"] == 0.0
+
+
+def test_occupancy_fallback_uses_the_manifest_voxel_size(tmp_path, tiny_cube_mesh,
+                                                         tiny_surface_mesh):
+    """Without voxel_grid.npy, the grid is rebuilt at the preprocessing voxel
+    size even when the config passed later has a different one."""
+    from urbansolarcarver.api_core._util import load_occupancy
+    from urbansolarcarver.load_config import user_config
+    from urbansolarcarver.pydantic_schemas import PreprocessingManifest
+    run = TestEdgeTaperPipeline()._run_preprocessing(
+        tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)  # voxel_size=2.0
+    pre = PreprocessingManifest.model_validate_json(run.manifest_path.read_text())
+    stored = np.load(pre.voxel_grid_path).astype(bool)
+    Path(pre.voxel_grid_path).unlink()
+
+    later_cfg = user_config(
+        max_volume_path=str(tmp_path / "fb" / "vol.ply"),
+        test_surface_path=str(tmp_path / "fb" / "srf.ply"),
+        out_dir=str(tmp_path / "fb" / "out"), mode="daylight",
+        voxel_size=1.0, device="cpu",
+    )
+    np.testing.assert_array_equal(load_occupancy(pre, later_cfg), stored)

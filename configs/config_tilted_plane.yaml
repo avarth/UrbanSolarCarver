@@ -1,6 +1,6 @@
-# UrbanSolarCarver — Tilted plane mode
+# UrbanSolarCarver: Tilted plane mode
 # Carves voxels using a fixed angular plane per compass octant.
-# No weather data or analysis period needed — purely geometric.
+# No weather data or analysis period needed; purely geometric.
 # Typical use: daylight envelope (Brown & DeKay), street-canyon proportions.
 
 # --- Required paths ---
@@ -20,9 +20,9 @@ voxel_size: 1.0
 
 # --- Threshold ---
 # tilted_plane is binary: a voxel either protrudes above the plane (culled)
-# or it does not (kept). Do not set threshold — leave it unset (None).
+# or it does not (kept). Do not set threshold; leave it unset (None).
 
-# -- Defaults you may want to override ----------------------------------------
+# --- Defaults you may want to override --------------------------------------
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)
 # grid_step:       1.0    # test-surface sampling spacing in metres
 # ray_length:      300.0  # max ray distance in metres

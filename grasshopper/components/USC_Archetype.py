@@ -1,12 +1,13 @@
-"""USC Archetype — Assemble a typical building for simulated weights.
+"""USC Archetype: assemble a typical building for simulated weights.
 
 Collects the five parameter families into one archetype handle for
 USC_SimulateWeights. Wire in only the families you want to customise:
 every input is optional, and anything not provided keeps USC's neutral
-defaults (a 10 x 10 x 3 m medium-mass shoebox with wwr south 0.35 /
-east 0.15 / west 0.15). The archetype describes a *typical* building of
-the surrounding stock, not any one design — source real numbers from
-TABULA (EU), DOE prototypes (US), or national code tables.
+defaults (a 10 x 10 x 3 m medium-mass shoebox with window-to-wall ratios
+(WWR) south 0.35 / east 0.15 / west 0.15, no shading). The archetype
+describes a *typical* building of the surrounding stock, not any one
+design; take real numbers from TABULA (EU), DOE prototypes (US), or
+national code tables.
 
 Inputs
 ------
@@ -15,7 +16,7 @@ geometry : USCZoneParams, optional
 fabric : USCZoneParams, optional
     From USC_ZoneFabric: U-values, g-value, thermal mass class.
 ventilation : USCZoneParams, optional
-    From USC_ZoneVentilation: air-change rates, heat recovery.
+    From USC_ZoneVent: air-change rates, heat recovery.
 operation : USCZoneParams, optional
     From USC_ZoneOperation: setpoints, internal gains.
 shading : USCZoneParams, optional
@@ -31,7 +32,7 @@ summary : str
 
 
 class USCArchetype:
-    """Opaque archetype handle. Not iterable — GH treats it as one item."""
+    """Opaque archetype handle. Not iterable, so Grasshopper passes it as one item."""
     __slots__ = ("data",)
 
     def __init__(self, data):
@@ -48,13 +49,13 @@ class USCArchetype:
 try:
     ghenv.Component.Name = "USC Archetype"
     ghenv.Component.NickName = "USC_Archetype"
-    ghenv.Component.Description = "Assembles a typical building of the surrounding stock from the five parameter families (geometry, fabric, ventilation, operation, shading). Feed to USC_SimulateWeights to derive when solar gain is thermally useful for that kind of building. All inputs optional — defaults are USC's neutral example; source real values from TABULA / DOE prototypes / national code tables."
+    ghenv.Component.Description = "Assembles a typical building of the surrounding stock from the five parameter families (geometry, fabric, ventilation, operation, shading). Feed to USC_SimulateWeights to derive when solar gain is thermally useful for that kind of building. All inputs are optional; unwired families keep USC's neutral defaults. Take real values from TABULA, DOE prototypes or national code tables."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
         ("geometry", "Geometry family from USC_ZoneGeometry: shoebox dimensions, orientation, per-facade window-to-wall ratios. Optional."),
         ("fabric", "Fabric family from USC_ZoneFabric: opaque and glazing U-values, g-value, ISO 13790 thermal mass class. Optional."),
-        ("ventilation", "Ventilation family from USC_ZoneVentilation: intentional and infiltration air-change rates, heat-recovery efficiency. Optional."),
+        ("ventilation", "Ventilation family from USC_ZoneVent: intentional and infiltration air-change rates, heat-recovery efficiency. Optional."),
         ("operation", "Operation family from USC_ZoneOperation: heating/cooling setpoints and flat internal gains. Optional."),
         ("shading", "Shading family from USC_ZoneShading: declared permanent and hot-months transmission multipliers. Optional (no shading by default)."),
     ]):
@@ -63,7 +64,7 @@ try:
     if len(oo) > 0:
         oo[0].Name, oo[0].Description = "archetype", "Archetype handle. Connect to USC_SimulateWeights' 'archetype' input."
     if len(oo) > 1:
-        oo[1].Name, oo[1].Description = "summary", "Human-readable dump of the assembled archetype for verification."
+        oo[1].Name, oo[1].Description = "summary", "Every value of the assembled archetype, one per line, plus the derived floor area. Use it to check the inputs."
 except Exception:
     pass
 
@@ -77,7 +78,7 @@ def _add_error(msg):
     return msg
 
 
-# Neutral defaults — the single source of truth for unwired families.
+# Values used for every family that is not wired.
 _DEFAULTS = {
     "width": 10.0, "length": 10.0, "height": 3.0,
     "g_value": 0.6,
@@ -115,7 +116,7 @@ for index, name in enumerate(_FAMILIES):
         break
     if kind != name:
         summary = _add_error(
-            f"'{name}' input received a {kind} family — wire the matching "
+            f"'{name}' input received a {kind} family; wire the matching "
             "USC_Zone* component instead")
         break
     family = dict(family)
@@ -125,8 +126,8 @@ for index, name in enumerate(_FAMILIES):
 if not summary:
     wwr = {side: v for side, v in wwr.items() if v > 0.0}
     if not wwr:
-        summary = _add_error("All WWR values are zero — the archetype needs "
-                             "at least one window for solar gains to exist.")
+        summary = _add_error("All WWR values are zero: the archetype needs "
+                             "at least one window to receive solar gains.")
     else:
         data["wwr"] = wwr
         if not data.get("orientation"):

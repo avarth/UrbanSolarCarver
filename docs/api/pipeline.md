@@ -1,6 +1,6 @@
 # Pipeline
 
-The pipeline is USC's main execution model. It runs in three stages -- preprocessing, thresholding, exporting -- each producing a manifest that the next stage consumes. This design lets you re-run thresholding with different parameters without recomputing scores.
+USC runs in three stages: preprocessing, thresholding, exporting. Preprocessing and thresholding each write a manifest that the next stage reads, so you can re-run thresholding with different parameters without recomputing scores.
 
 `run_pipeline()` chains all three stages in one call. For finer control, call each stage individually.
 
@@ -28,7 +28,7 @@ exp  = exporting(thr, cfg, Path("outputs/exporting"))
 
 ## Preprocessing
 
-Voxelizes the max volume, samples the test surfaces, generates rays toward sky patches (or sun vectors), traces them through the voxel grid, and writes per-voxel obstruction scores to `scores.npy`.
+Voxelizes the max volume, samples the test surfaces, generates rays toward sky patches (or sun positions, or the tilted-plane direction), traces them through the voxel grid, and writes per-voxel obstruction scores to `scores.npy`.
 
 ::: urbansolarcarver.api_core.preprocessing
     options:
@@ -36,7 +36,7 @@ Voxelizes the max volume, samples the test surfaces, generates rays toward sky p
 
 ## Thresholding
 
-Converts the continuous score array into a binary carving mask. Supports head-tail breaks, a fixed carve-fraction, or a numeric threshold. Writes `mask.npy`.
+Converts the score array into a binary carving mask: optional score smoothing, then `carve_fraction`, head/tail breaks, or a numeric cutoff over the occupied voxels, then `carve_above`. Writes `mask.npy`.
 
 ::: urbansolarcarver.api_core.thresholding
     options:
@@ -44,7 +44,7 @@ Converts the continuous score array into a binary carving mask. Supports head-ta
 
 ## Exporting
 
-Reconstructs a triangle mesh from the binary mask -- either cubic voxel faces or SDF-smoothed marching cubes with Taubin polishing. Writes the final `carved_mesh.ply`.
+Reconstructs a triangle mesh from the binary mask, either as cubic voxel faces or as SDF-smoothed marching cubes with Taubin polishing. Writes `export.<format>` (`ply` by default, set by `final_mesh_format`) and the run's `run_report.md`.
 
 ::: urbansolarcarver.api_core.exporting
     options:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-UrbanSolarCarver — Environment Setup
-=====================================
+UrbanSolarCarver: Environment Setup
+===================================
 
 One-command bootstrap: creates a virtual environment, detects your GPU,
 installs the correct PyTorch build, and installs UrbanSolarCarver with
@@ -9,9 +9,10 @@ all dependencies.
 
 Usage
 -----
-    python setup_env.py            # auto-detect GPU, install everything
-    python setup_env.py --cpu      # force CPU-only (no CUDA)
-    python setup_env.py --dry-run  # show what would be installed
+    python setup_env.py                   # auto-detect GPU, install everything
+    python setup_env.py --cpu             # force CPU-only (no CUDA)
+    python setup_env.py --dry-run         # show what would be installed
+    python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
 
 Requirements
 ------------
@@ -20,12 +21,15 @@ Requirements
 
 What this script does
 ---------------------
-1. Creates  .venv/  (if it doesn't exist)
-2. Detects CUDA version via  nvidia-smi
+1. Creates  .venv/  in the repo if it doesn't exist (on Windows, falls back to
+   ~/.usc-venv when the repo path is too deep for the 260-character path limit)
+2. Reads the CUDA version supported by the driver from  nvidia-smi
 3. Picks the matching PyTorch wheel index
-4. Installs PyTorch + warp-lang
-5. Installs UrbanSolarCarver in editable mode  (pip install -e .)
-6. Verifies the installation
+4. Upgrades pip and installs PyTorch from that index
+5. Installs UrbanSolarCarver in editable mode with its dependencies, including
+   warp-lang  (pip install -e .[dev])
+6. Verifies that torch, warp and urbansolarcarver import
+7. Precompiles the Warp kernels so the first run does not pay the compile time
 """
 
 from __future__ import annotations
@@ -49,8 +53,8 @@ MIN_PYTHON = (3, 10)
 TORCH_PATH_HEADROOM = 170
 WINDOWS_MAX_PATH = 260
 
-# PyTorch CUDA version → pip index URL
-# Updated for PyTorch 2.5+; check https://pytorch.org/get-started/locally/
+# CUDA version reported by the driver -> PyTorch pip index URL.
+# Valid for PyTorch 2.5+; see https://pytorch.org/get-started/locally/
 TORCH_INDEX = {
     "cpu":   "https://download.pytorch.org/whl/cpu",
     "11.8":  "https://download.pytorch.org/whl/cu118",
@@ -80,8 +84,9 @@ def run(cmd: list[str], check: bool = True, capture: bool = False, **kw):
 
 def detect_cuda_version() -> str | None:
     """
-    Detect CUDA toolkit version from nvidia-smi.
-    Returns a string like "12.6" or None if no GPU / driver found.
+    Read the highest CUDA version the installed NVIDIA driver supports,
+    as printed by nvidia-smi (this is not the CUDA toolkit version).
+    Returns a string like "12.6", or None if no GPU / driver is found.
     """
     nvidia_smi = shutil.which("nvidia-smi")
     if nvidia_smi is None:
@@ -116,7 +121,7 @@ def resolve_torch_index(cuda_version: str | None, force_cpu: bool) -> tuple[str,
     if major_minor in TORCH_INDEX:
         return TORCH_INDEX[major_minor], f"CUDA {major_minor}"
 
-    # Try just the major version with common minor
+    # Minor version not in the table: choose the wheel index by major version.
     major = cuda_version.split(".")[0]
     if major.isdigit() and int(major) >= 13:
         # Drivers are backward compatible: newer-than-known CUDA runs cu128 wheels
@@ -229,7 +234,7 @@ def main():
     elif args.cpu:
         log("CPU-only mode (--cpu flag)")
     else:
-        log("No NVIDIA GPU detected — installing CPU-only PyTorch", "warn")
+        log("No NVIDIA GPU detected; installing CPU-only PyTorch", "warn")
 
     index_url, desc = resolve_torch_index(cuda_version, args.cpu)
     log(f"PyTorch target: {desc}")
@@ -238,10 +243,10 @@ def main():
     venv_dir = resolve_venv_dir(args.venv_dir)
 
     if args.dry_run:
-        log("Dry run — would execute:", "info")
+        log("Dry run, would execute:", "info")
         print(f"  1. python -m venv {venv_dir}")
         print(f"  2. pip install torch --index-url {index_url}")
-        print(f"  3. pip install .[dev]")
+        print(f"  3. pip install -e .[dev]")
         return
 
     # ── 2. Create venv ──
@@ -253,7 +258,7 @@ def main():
         log(f"Virtual environment already exists at {venv_dir}")
 
     if not vpy.is_file():
-        log(f"venv creation failed — {vpy} not found", "error")
+        log(f"venv creation failed: {vpy} not found", "error")
         sys.exit(1)
 
     # ── 3. Upgrade pip ──
@@ -283,7 +288,7 @@ def main():
         for line in r.stdout.strip().split("\n"):
             log(line, "ok")
     else:
-        log("PyTorch import failed!", "error")
+        log("PyTorch import failed.", "error")
         print(r.stderr)
         sys.exit(1)
 
@@ -293,7 +298,7 @@ def main():
     if r.returncode == 0:
         log(r.stdout.strip(), "ok")
     else:
-        log("Warp import failed — GPU kernels won't work", "warn")
+        log("Warp import failed; GPU kernels won't work", "warn")
 
     # Check urbansolarcarver
     r = run([str(vpy), "-c",
@@ -303,14 +308,14 @@ def main():
     if r.returncode == 0:
         log(r.stdout.strip(), "ok")
     else:
-        log("UrbanSolarCarver import failed!", "error")
+        log("UrbanSolarCarver import failed.", "error")
         print(r.stderr)
         sys.exit(1)
 
     # ── 7. Precompile Warp kernels ──
     # Warp JIT-compiles kernels on first use (~3-10 s, once per machine,
-    # cached on disk).  Doing it now — while the user already expects the
-    # installer to take time — means the first carving run reflects real
+    # cached on disk). Doing it now, while the user already expects the
+    # installer to take time, means the first carving run reflects real
     # compute time instead of compilation.
     log("Precompiling Warp compute kernels (one-time, cached)...")
     r = run([str(vpy), "-c",
@@ -320,11 +325,11 @@ def main():
     if r.returncode == 0 and "warm" in r.stdout:
         log("Warp kernels compiled and cached", "ok")
     else:
-        log("Kernel precompilation skipped — kernels will compile on first run", "warn")
+        log("Kernel precompilation skipped; kernels will compile on first run", "warn")
 
     # ── Done ──
     print()
-    log("Setup complete!", "ok")
+    log("Setup complete.", "ok")
     print()
     print(f"  Activate:  {venv_dir}\\Scripts\\activate" if platform.system() == "Windows"
           else f"  Activate:  source {venv_dir}/bin/activate")

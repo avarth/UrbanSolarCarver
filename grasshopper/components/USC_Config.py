@@ -1,4 +1,4 @@
-"""USC Config — Assemble a carving configuration.
+"""USC Config: assemble a carving configuration.
 
 Creates a config handle from a mode selection and optional base YAML.
 Connect parameter components (AnalysisPeriod, GridSettings, etc.) to
@@ -6,27 +6,32 @@ the overrides input for full control.
 
 Inputs
 ------
-session : dict
+session : USCSession
     Session handle from USC_Session.
 mode : str
     Carving mode. One of: time-based, irradiance, benefit, daylight,
-    tilted_plane, radiative_cooling.
+    tilted_plane, radiative_cooling (spellings such as time_based or
+    tilted-plane are accepted).
 epw_path : str, optional
-    Path to EPW weather file. Required for all modes except tilted_plane.
+    Path to EPW weather file. Required for time-based, irradiance and
+    benefit. A relative path is taken relative to the saved .gh file.
 out_dir : str
-    Output directory for all pipeline artifacts.
+    Output directory for all pipeline artifacts. A relative path is taken
+    relative to the saved .gh file.
 config_yaml : str, optional
     Path to a base YAML config. If None, uses the mode-specific default
-    from configs/.
+    from <carver_root>/configs/.
 overrides : list of str, optional
     Key=value override strings from parameter components.
-    Multiple sources are merged (last wins for duplicate keys).
+    Multiple sources are merged (last wins for duplicate keys); mode,
+    out_dir and (when connected) epw_path from this component's own
+    inputs win over any override with the same key.
 
 Outputs
 -------
-config : dict
-    Opaque config handle for pipeline components.
-    Contains: yaml_path, overrides_dict, mode, out_dir, session.
+config : USCConfig
+    Opaque config handle for pipeline components, with attributes
+    session, yaml_path, overrides (dict), mode and out_dir.
 summary : str
     Human-readable summary of the configuration.
 """
@@ -35,7 +40,7 @@ from pathlib import Path
 
 
 class USCConfig:
-    """Opaque config handle. Not iterable — GH treats it as a single item."""
+    """Opaque config handle. Not iterable, so Grasshopper passes it as a single item."""
     __slots__ = ("session", "yaml_path", "overrides", "mode", "out_dir")
 
     def __init__(self, session, yaml_path, overrides, mode, out_dir):
@@ -58,10 +63,10 @@ try:
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "session", "Session handle from the USC_Session component. Drag a wire from USC_Session's 'session' output to here."
     ii[1].Name, ii[1].Description = "mode", "Carving algorithm. Options: 'benefit' (heating-benefit envelope; hour weighting via balance point or, with USC_SimulateWeights, a 5R1C building simulation), 'time-based' (shadow-hour envelope), 'irradiance' (total solar radiation envelope), 'daylight' (CIE overcast daylight envelope), 'tilted_plane' (geometric daylight access angle), 'radiative_cooling' (experimental night-sky cooling)."
-    ii[2].Name, ii[2].Description = "epw_path", "Full path to an EnergyPlus Weather (.epw) file for your location. Required for 'time-based', 'irradiance' and 'benefit'. Download from climate.onebuilding.org or ladybug.tools."
+    ii[2].Name, ii[2].Description = "epw_path", "Path to an EnergyPlus Weather (.epw) file for your location. Required for 'time-based', 'irradiance' and 'benefit'. A relative path is taken relative to the saved .gh file. Download from climate.onebuilding.org or ladybug.tools."
     ii[3].Name, ii[3].Description = "out_dir", "Folder where all results will be saved. A subfolder structure (preprocessing/, thresholding/, exporting/) is created automatically. A relative path is taken relative to the saved .gh file. Tip: use a fresh folder for each experiment."
-    ii[4].Name, ii[4].Description = "config_yaml", "Optional. Path to a base YAML configuration file. If omitted, the tool picks a sensible default for your chosen mode. Only needed for advanced customisation."
-    ii[5].Name, ii[5].Description = "overrides", "Optional parameter overrides from other USC components (Period, Grid, Threshold, etc.). Connect multiple override wires here -- they are merged automatically."
+    ii[4].Name, ii[4].Description = "config_yaml", "Optional. Path to a base YAML configuration file. If omitted, the default file for the chosen mode in <carver_root>/configs/ is used. Only needed for advanced customisation."
+    ii[5].Name, ii[5].Description = "overrides", "Optional parameter overrides from other USC components (Period, Grid, Threshold, etc.). Connect several override wires here; they are merged, and the last one wins for a repeated key."
     oo[0].Name, oo[0].Description = "config", "Configuration handle passed to pipeline components (USC_Preprocess, USC_RunPipeline, etc.). Contains all settings for the run. Do not modify."
     oo[1].Name, oo[1].Description = "summary", "Human-readable text showing the active mode, config file, output folder, and all override parameters. Check this to verify your setup before running."
 except Exception:
@@ -117,11 +122,10 @@ elif mode is None:
 elif out_dir is None:
     summary = _error("Specify an output directory")
 else:
-    # session is a USCSession object (attribute access, not dict)
     root = session.root
     mode_str = str(mode).strip().lower()
 
-    # Normalize mode aliases to canonical form (what the schema validator expects)
+    # Map alternative spellings to the mode names the config schema accepts.
     _mode_canonical = {
         "timebased": "time-based", "time_based": "time-based",
         "tiltedplane": "tilted_plane", "tilted-plane": "tilted_plane",
@@ -149,14 +153,24 @@ else:
 
     if not summary:
         overrides_dict = gh.parse_overrides(overrides)  # last one wins
+        # Paths from feeder components (USC_EPW, USC_BenefitParams) are
+        # resolved against the .gh file here, as this component's own are.
+        try:
+            for key in ("epw_path", "simulated_weights_path", "max_volume_path",
+                        "test_surface_path"):
+                if overrides_dict.get(key):
+                    overrides_dict[key] = gh.resolve_path(ghenv.Component, overrides_dict[key])
+        except ValueError as exc:
+            summary = _error(str(exc))
 
-        # Always inject mode and out_dir
+    if not summary:
+
+        # This component's own inputs win over the same keys in overrides.
         overrides_dict["mode"] = mode_str
         overrides_dict["out_dir"] = out_dir_abs
         if epw_abs is not None:
             overrides_dict["epw_path"] = epw_abs
 
-        # Build config handle (non-iterable object, not dict)
         config = USCConfig(
             session=session,
             yaml_path=yaml_path,
@@ -165,7 +179,6 @@ else:
             out_dir=out_dir_abs,
         )
 
-        # Summary
         lines = [
             f"Mode: {mode_str}",
             f"YAML: {Path(yaml_path).name}",

@@ -1,9 +1,8 @@
-"""USC Export — Convert binary mask to mesh (fast, returns to Rhino).
+"""USC Export: convert the binary voxel mask to a mesh and return it to Rhino.
 
 Takes the thresholding result and reconstructs a triangle mesh from the
-carved voxel field. Returns the mesh directly to Grasshopper.
-
-This is fast — runs in 1-3 seconds.
+carved voxel field (stage 3 of 3). The daemon writes the mesh to
+<out_dir>/exporting/ and the component loads it onto the canvas.
 
 Inputs
 ------
@@ -13,8 +12,8 @@ thr_result : str
     Thresholding manifest path from USC Threshold Stage.
 postprocess_overrides : str, optional
     Postprocessing parameter overrides from USC Postprocess component.
-    Connect DIRECTLY here (not through Config) so that changing smoothing
-    or cleanup settings only re-runs Export — not Preprocessing or
+    Connect them here, not through Config, so that changing smoothing
+    or cleanup settings re-runs only Export, not Preprocessing or
     Thresholding.
 run : bool
     True to execute. False to idle.
@@ -22,13 +21,16 @@ run : bool
 Outputs
 -------
 mesh : Rhino.Geometry.Mesh
-    Carved envelope mesh, ready for display in Rhino.
+    Carved envelope mesh, ready for display in Rhino. None when the
+    mesh format is not PLY (only PLY is loaded onto the canvas).
 export_path : str
     Path to the exported mesh file on disk.
 report_path : str
-    Path to the run_report.md file summarising the full pipeline run.
+    Path to <out_dir>/run_report.md summarising the pipeline run (None
+    if the file was not written).
 diagnostics : str
-    Mesh stats (vertices, faces, volume), timing.
+    Mesh stats (vertices, triangles, volume, bounding box, voxel
+    retention) and timing.
 """
 
 import os
@@ -40,17 +42,17 @@ from pathlib import Path
 try:
     ghenv.Component.Name = "USC Export"
     ghenv.Component.NickName = "USC_Export"
-    ghenv.Component.Description = "Stage 3: Converts the binary voxel mask into a triangle mesh and returns it to the Grasshopper canvas. Also saves the mesh to disk."
+    ghenv.Component.Description = "Stage 3/3: Converts the binary voxel mask into a triangle mesh and returns it to the Grasshopper canvas. Also saves the mesh to disk."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config."
     ii[1].Name, ii[1].Description = "thr_result", "Thresholding manifest path from USC_ThresholdStage."
-    ii[2].Name, ii[2].Description = "postprocess_overrides", "Override string from USC_Postprocess component. Connect DIRECTLY here (not through Config) so that changing smoothing or cleanup settings only re-runs Export — not the expensive Preprocessing or Thresholding steps."
+    ii[2].Name, ii[2].Description = "postprocess_overrides", "Override string from USC_Postprocess component. Connect it here, not through Config, so that changing smoothing or cleanup settings re-runs only Export, not the slower Preprocessing and Thresholding steps."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle. True to extract and return the mesh."
-    oo[0].Name, oo[0].Description = "mesh", "The carved envelope as a Rhino Mesh, displayed directly in the viewport. This is the main result -- bake it, export it, or use it in downstream Grasshopper operations."
+    oo[0].Name, oo[0].Description = "mesh", "The carved envelope as a Rhino Mesh, displayed directly in the viewport. Bake it, export it, or use it in downstream Grasshopper operations. Empty when final_mesh_format is not ply."
     oo[1].Name, oo[1].Description = "export_path", "Full path to the mesh file saved on disk (PLY format by default). Useful if you need to open the result in another application."
     oo[2].Name, oo[2].Description = "report_path", "Full path to the run_report.md file. Contains a human-readable summary of the entire pipeline run: configuration, scores, thresholding, mesh stats, and timings."
-    oo[3].Name, oo[3].Description = "diagnostics", "Text summary: vertex/face counts, mesh volume, bounding box dimensions, timing."
+    oo[3].Name, oo[3].Description = "diagnostics", "Text summary: vertex/triangle counts, mesh volume, bounding box dimensions, voxel retention, timing."
 except Exception:
     pass
 

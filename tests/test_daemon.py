@@ -94,3 +94,12 @@ def test_bad_requests_get_error_replies(daemon, msg, fragment):
     reply = _call(addr, key, msg)
     assert reply["status"] == "error" and fragment in reply["error"]
     _alive(addr, key, proc)
+
+
+def test_authkey_created_once_and_reused(tmp_path):
+    keyfile = tmp_path / "sub" / ".daemon_authkey"
+    key = _resolve_authkey(keyfile)
+    assert len(key) == 64 and keyfile.read_bytes() == key
+    assert _resolve_authkey(keyfile) == key
+    if sys.platform != "win32":
+        assert keyfile.stat().st_mode & 0o077 == 0

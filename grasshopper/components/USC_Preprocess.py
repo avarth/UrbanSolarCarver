@@ -1,10 +1,13 @@
-"""USC Preprocess: run the ray-tracing stage (the expensive one).
+"""USC Preprocess: run the ray-tracing stage (stage 1 of 3, the slowest).
 
 Voxelizes the max volume, samples test surfaces, and casts rays through
 the grid to compute per-voxel obstruction scores. It re-runs whenever its
-inputs change, so keep threshold and export settings on their own stages.
+inputs change, including the Config, so wire threshold and postprocess
+settings into USC Threshold Stage and USC Export instead of Config.
 
-Connect the pre_result output to USC Threshold Stage.
+The geometry is written to <out_dir>/incoming/ as PLY files and the
+results to <out_dir>/preprocessing/. Connect the pre_result output to
+USC Threshold Stage.
 
 Inputs
 ------
@@ -26,10 +29,11 @@ diagnostics : str
 diag_images : list of str
     Paths to diagnostic images (score histogram, sky patch plots).
     Feed to Ladybug Image Viewer for in-canvas inspection.
-    Empty when diagnostics are disabled.
+    Empty unless plots are enabled (USC_Diagnostics).
 test_points : list of Point3d
     Sample points generated from test surfaces during preprocessing.
-    Useful for verifying sampling density and surface coverage.
+    Useful for verifying sampling density and surface coverage. Empty
+    if the stage wrote no test_points.npy.
 """
 
 import os
@@ -44,12 +48,12 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config. Contains mode, file paths, and all parameter overrides."
-    ii[1].Name, ii[1].Description = "max_volume", "The maximum building envelope -- the largest volume the building could occupy before solar carving. Provide as Rhino Mesh or Brep. Multiple objects accepted."
-    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces that need solar access (neighbouring facades, public spaces, parks). Rays are cast FROM these surfaces THROUGH the max volume. Provide as Rhino Mesh or Brep (one or many). Surfaces are subsampled into a uniform point grid at grid_step spacing (set in USC_GridSettings) — each sample point generates rays, so smaller grid_step = more points = finer results but slower. IMPORTANT: each surface must be a single flat panel — explode polysurfaces (e.g. extruded block boundaries) into individual faces before connecting, otherwise preprocessing will fail with a planarity error."
+    ii[1].Name, ii[1].Description = "max_volume", "The maximum building envelope: the largest volume the building could occupy before solar carving. Provide as Rhino Mesh or Brep. Multiple objects are joined into one volume."
+    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces that need solar access (neighbouring facades, public spaces, parks). Rays are cast from these surfaces through the max volume. Provide as Rhino Mesh or Brep (one or many). Surfaces are sampled as a uniform point grid at grid_step spacing (set in USC_GridSettings); each sample point casts rays, so a smaller grid_step gives more points, finer results and a slower run. Each surface must be a single flat panel: explode polysurfaces (e.g. extruded block boundaries) into individual faces before connecting. Non-flat pieces are skipped, and preprocessing fails if no piece is flat."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle to execute. Set True to run preprocessing. Set False to prevent computation (useful while adjusting parameters)."
     oo[0].Name, oo[0].Description = "pre_result", "Path to the preprocessing manifest file. Connect this to USC_ThresholdStage's 'pre_result' input to continue the pipeline."
     oo[1].Name, oo[1].Description = "diagnostics", "Text summary: grid dimensions, filled voxels, score range, timing. Check this to verify the preprocessing ran correctly."
-    oo[2].Name, oo[2].Description = "diag_images", "Paths to diagnostic images (score histogram, sky patch weight/intensity plots). Feed to Ladybug Image Viewer for in-canvas visualisation. Empty when diagnostics are disabled."
+    oo[2].Name, oo[2].Description = "diag_images", "Paths to diagnostic images (score histogram, sky patch weight/intensity plots). Feed to Ladybug Image Viewer for in-canvas visualisation. Empty unless plots are enabled (USC_Diagnostics)."
     oo[3].Name, oo[3].Description = "test_points", "Sample points generated from test surfaces at grid_step spacing. Visualise in Rhino to verify sampling density and surface coverage. If too sparse, reduce grid_step in USC_GridSettings."
 except Exception:
     pass
@@ -72,14 +76,14 @@ def _usc_gh(root):
     return mod
 
 
-# -- Main logic --------------------------------------------------------------
-
 def _error(msg):
     """Show an error on the component (red) and return msg."""
     from Grasshopper.Kernel import GH_RuntimeMessageLevel
     ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, msg)
     return msg
 
+
+# -- Main logic --------------------------------------------------------------
 
 pre_result = None
 diagnostics = ""

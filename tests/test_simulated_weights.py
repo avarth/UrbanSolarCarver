@@ -183,7 +183,7 @@ class TestAttribution:
 
     def test_seasonal_structure(self, weight_series):
         """Winter gains must be mostly beneficial, summer gains mostly
-        harmful — under Golden CO weather and the office archetype."""
+        harmful, under Golden CO weather and the office archetype."""
         benefit, harm = weight_series
         jan = slice(0, 31 * 24)
         jul = slice(181 * 24, 212 * 24)
@@ -466,3 +466,9 @@ class TestShadingCoefficients:
             epw, arch, tmp_path / "b.json"))
         np.testing.assert_allclose(a[0], b[0], atol=1e-6)
         np.testing.assert_allclose(a[1], b[1], atol=1e-6)
+
+
+def test_shoebox_extras_without_dimensions_are_rejected():
+    from urbansolarcarver.simulated_weights import expand_shoebox
+    with pytest.raises(ValueError, match="missing"):
+        expand_shoebox({"wwr": {"south": 0.4}})
