@@ -23,22 +23,14 @@ analysis_period:
 # Grid
 voxel_size: 1.0
 
-# Thresholding: keep the highest-weight sky patches holding protect_share of
-# the total weight fully visible from every test point (whole rays are
-# cleared, so the envelope is continuous). 0.1 already carves a lot.
-threshold: protect_share
+# How much to carve: share of the sky's weight (0-1) that stays fully visible
+# from every test point. Small values already carve a lot; start at 0.1.
 protect_share: 0.1
 
 # --- Defaults you may want to override --------------------------------------
-# score_smoothing: null  # Gaussian blur radius (m) on scores before thresholding. null = auto (1.1× voxel_size). 0 = off. Try 1.0-1.2× voxel_size.
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)
 # grid_step:       1.0    # test-surface sampling spacing in metres
 # ray_length:      300.0  # max ray distance in metres
-# Alternative: carve the voxels holding a fraction of the obstruction score.
-# With carve_above it can leave cliffs and spires (each column is decided by
-# its highest-scoring voxel).
-# threshold:       carve_fraction
-# carve_fraction:  0.7    # fraction of the obstruction score to remove (0-1)
 # apply_smoothing: false  # true = SDF smooth + marching cubes
 # device:          'auto' # 'auto', 'cpu', or 'cuda'
 # See REFERENCE_all_options.yaml for the complete parameter list.

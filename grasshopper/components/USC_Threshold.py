@@ -1,49 +1,38 @@
-"""USC Threshold: control how the score volume is binarized.
+"""USC Threshold: how much to carve, and the column clean-up.
 
-The threshold determines which voxels are "obstructing" (removed) vs
-"kept" (part of the final envelope).
+Sky modes (irradiance, benefit, daylight, radiative_cooling): connect only
+value, the share (0-1) of the sky's weight that stays fully visible from
+every test point (protect_share). time-based: set method to "numeric" and
+value to the tolerated shading in m²·h. tilted_plane: leave this
+component unconnected (the plane angle decides).
 
 Inputs
 ------
 method : str, optional
-    Threshold strategy. One of:
-      "protect_share":  keep the highest-weight sky patches that hold the
-                        given share of the total weight visible from every
-                        test point (whole rays are cleared)
-      "carve_fraction": remove the highest-scoring voxels that together
-                        hold the given fraction of the total score
-      "headtail":       head-tail breaks (for skewed distributions)
-      "numeric":        direct raw-score cutoff
-    A number typed here is used as a numeric cutoff. If None, the config's
-    threshold applies (protect_share in the shipped configs of weighted
-    modes, cutoff 0 for time-based and tilted_plane).
+    Leave unconnected for the sky modes. "numeric" makes value a cutoff:
+    for time-based, the tolerated shading in m²·h. Legacy sky-mode methods,
+    kept so older definitions still work: "carve_fraction" (value = fraction
+    of the obstruction score to remove), "headtail" (value ignored), and
+    "protect_share" written out. The legacy methods cut on voxel scores,
+    which does not return a predictable share of the sky and can leave
+    cliffs and spires.
 value : float, optional
-    Meaning depends on method:
-      protect_share  → share of the total sky weight to protect (0-1).
-      carve_fraction → fraction of total obstruction to remove (0-1).
-      headtail       → ignored (algorithm is automatic).
-      numeric        → raw score threshold; voxels above are removed.
-      no method      → used as protect_share.
+    Sky modes: share of the sky's weight (0-1) that stays visible from
+    every test point. Small values already carve a lot; start at 0.1.
+    With method "numeric": the cutoff (time-based: m²·h). With
+    "carve_fraction": the fraction to remove.
 score_smoothing : float, optional
-    Gaussian blur radius (meters) applied to the score volume before
-    thresholding.  Smooths resolution-dependent noise so the carved
-    mesh is cleaner at fine voxel sizes.
-    None (default) = auto: 1.1 × voxel_size.
-    0 = disabled.
-    Positive value = explicit radius in meters (1.0–1.2× voxel_size
-    recommended; over-smoothing above 2× rounds features).
-    Only affects weighted-score modes (irradiance, benefit, daylight,
-    radiative_cooling).
+    Legacy sky-mode methods only: Gaussian blur radius (m) of the scores
+    before the cutoff. Empty = auto (1.1 x voxel_size), 0 = off.
 carve_above : bool, optional
-    If True, carve all occupied voxels above the lowest
-    sufficiently-carved region in each (x, y) column.  Removes
-    floating mass above carved zones (buildable height field).
-    Default: True.
+    If True, carve all occupied voxels above the lowest carved region in
+    each (x, y) column, so the envelope is a buildable height field
+    without floating mass. Default: True.
 carve_above_min : int, optional
     Minimum consecutive carved voxels in a column before carve_above
-    activates for that column.  Higher values (2-3) prevent stray
-    single-voxel carvings from triggering aggressive removal;
-    shorter runs stay carved.  Default: 1.
+    activates for that column. Higher values (2-3) keep stray single
+    carved voxels from removing whole columns; shorter runs stay carved.
+    Default: 1.
 
 Outputs
 -------
@@ -57,69 +46,47 @@ try:
     ghenv.Component.Name = "USC Threshold"
     ghenv.Component.NickName = "USC_Threshold"
     ghenv.Component.Description = (
-        "Controls how the carving threshold is determined, optional score smoothing, "
-        "and column-based carve-above post-processing. "
-        "'protect_share' (default for weighted modes) keeps the highest-weight sky patches visible from "
-        "every test point and gives continuous envelopes. "
-        "'carve_fraction' removes a fraction of the total obstruction weight; with carve_above it can leave "
-        "cliffs and spires. "
-        "'headtail' uses head-tail breaks for automatic statistical splitting. "
-        "'numeric' applies a direct raw-score cutoff. "
-        "score_smoothing applies Gaussian blur to scores before thresholding for cleaner results. "
-        "carve_above removes floating occupied voxels above carved zones. "
-        "Connect the output to ThresholdStage (re-runs only thresholding and export) or to Config."
+        "How much to carve. Sky modes: connect only 'value', the share (0-1) of the sky's weight "
+        "that stays fully visible from every test point; start at 0.1. time-based: set method to "
+        "'numeric' and value to the tolerated shading in m²·h. Also controls carve_above "
+        "(removes floating mass above carved zones). Connect the output to ThresholdStage, which "
+        "re-runs only thresholding and export."
     )
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
         ("method", (
-            "How to determine the carving threshold. Options: "
-            "'protect_share' (keep the highest-weight sky patches holding a share of the total weight "
-            "visible from every test point; default for weighted modes), "
-            "'carve_fraction' (remove a fraction of the total obstruction weight; can leave cliffs and "
-            "spires with carve_above), "
-            "'headtail' (automatic heavy-tail distribution split; value is ignored), "
-            "'numeric' (direct raw-score cutoff; set the exact threshold via value). "
-            "Unset: the config's threshold (protect_share in the shipped configs of weighted modes, "
-            "cutoff 0 for time-based and tilted_plane)."
+            "Leave unconnected for the sky modes. 'numeric' makes value a cutoff: for time-based, "
+            "the tolerated shading in m²·h. Legacy sky-mode methods, kept for older definitions: "
+            "'carve_fraction' (value = fraction of the obstruction score to remove) and 'headtail' "
+            "(value ignored). They cut on voxel scores and can leave cliffs and spires."
         )),
         ("value", (
-            "Threshold parameter whose meaning depends on method:\n"
-            "  protect_share → share of the total sky weight to protect (0.0-1.0). "
-            "Small values already carve a lot; start with 0.1.\n"
-            "  carve_fraction → fraction to carve (0.0-1.0). "
-            "0.7 = remove 70% of obstruction weight. Start with 0.5.\n"
-            "  headtail → ignored (automatic).\n"
-            "  numeric → raw score cutoff. Voxels scoring above this are removed.\n"
-            "  no method → used as protect_share."
+            "Sky modes: share of the sky's weight (0-1) that stays visible from every test point. "
+            "Small values already carve a lot; start at 0.1. "
+            "With method 'numeric': the cutoff (time-based: tolerated shading in m²·h). "
+            "With 'carve_fraction': the fraction to remove."
         )),
         ("score_smoothing", (
-            "Gaussian blur radius in meters applied to the score volume before thresholding. "
-            "Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes. "
-            "Leave empty (default) = auto: 1.1× voxel_size, recommended for most runs. "
-            "Set to 0 to disable smoothing entirely. "
-            "Positive value = explicit radius in meters. Rule of thumb: 1.0–1.2× voxel_size works well. "
-            "Over-smoothing (above 2× voxel_size) rounds features excessively. "
-            "Only affects weighted-score modes (irradiance, benefit, daylight, radiative_cooling)."
+            "Legacy sky-mode methods only: Gaussian blur radius in meters applied to the scores "
+            "before the cutoff. Empty = auto (1.1x voxel_size), 0 = off."
         )),
         ("carve_above", (
-            "If True, carve all occupied voxels above the lowest sufficiently-carved "
-            "region in each (x, y) column, so the envelope is a buildable height field "
-            "without floating mass. Default: True."
+            "If True, carve all occupied voxels above the lowest carved region in each (x, y) "
+            "column, so the envelope is a buildable height field without floating mass. "
+            "Default: True."
         )),
         ("carve_above_min", (
-            "Minimum number of consecutive carved (empty) voxels in a column before "
-            "carve_above activates for that column. Higher values (2-3) prevent stray "
-            "single-voxel carvings from triggering aggressive column removal; shorter "
-            "runs stay carved. Default: 1."
+            "Minimum number of consecutive carved voxels in a column before carve_above "
+            "activates for that column. Higher values (2-3) keep stray single carved voxels "
+            "from removing whole columns; shorter runs stay carved. Default: 1."
         )),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d
     oo[0].Name, oo[0].Description = "overrides", (
-        "Threshold, smoothing, and carve-above settings formatted for USC_Config or USC_ThresholdStage. "
-        "Connect to ThresholdStage's 'threshold_overrides' for iterative "
-        "adjustment without re-running preprocessing."
+        "Settings formatted for USC_ThresholdStage's 'threshold_overrides' (or USC_Config). "
+        "Through ThresholdStage, a change re-runs only thresholding and export."
     )
 except Exception:
     pass

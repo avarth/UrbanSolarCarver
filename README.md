@@ -31,20 +31,19 @@ The tool is scale-agnostic and works on any voxelizable geometry. Surface normal
 | **daylight** | Weights sky patches by CIE overcast luminance for diffuse daylight access. |
 | **radiative_cooling** | Preserves sky-dome access for passive nighttime cooling, weighting sky patches with the Martin-Berdahl sky emissivity for a single night-time dew point (no weather file needed). Valid for horizontal surfaces only (experimental). |
 
-## Thresholding
+## How much to carve
 
-After scoring, a threshold determines which voxels to carve and which to keep. The threshold controls the trade-off between solar protection and buildable volume:
+Each mode has one setting that trades solar protection against buildable volume:
 
-| Strategy | Config | Recommended for |
-|----------|--------|-----------------|
-| **Protect share** (default) | `threshold: protect_share`<br>`protect_share: 0.1` | Design exploration. Protects the highest-weight sky patches that together hold this share of the total sky weight: every voxel that blocks one of them from any test point is carved. Whole rays are cleared, so the envelope varies continuously, as in time-based carving. Small values already carve a lot: on the ReSBE test blocks, 0.1 kept 33-74% of the volume and 0.2 kept 22-41%. |
-| **Carve fraction** | `threshold: carve_fraction`<br>`carve_fraction: 0.7` | Alternative slider over the scores: removes the voxels holding this fraction of the obstruction weight. 0.7 = aggressive (taller, slimmer volumes, more solar access), 0.3 = conservative (bulkier volumes, more floor area). With `carve_above`, each column is decided by its highest-scoring voxel, which can leave height jumps between neighbouring columns and single-voxel spires. |
-| **Head-tail breaks** | `threshold: headtail` | Heavy-tailed distributions. Biased toward removing only the worst obstructors, preserving more buildable volume when most voxels have low scores. |
-| **Manual** | `threshold: 0.35` | Expert use. Carves all voxels with score above this value. Inspect the score histogram (`diagnostics: true`) first. |
+| Mode | Setting | Meaning |
+|------|---------|---------|
+| `irradiance`, `benefit`, `daylight`, `radiative_cooling` | `protect_share: 0.1` | Share of the sky's weight (0-1) that stays fully visible from every test point. The highest-weight sky patches holding this share are protected, and every voxel that blocks one of them is carved. Whole rays are cleared, so the envelope is continuous like a classic solar envelope. Small values already carve a lot: on the ReSBE test blocks, 0.1 kept 33-74% of the volume and 0.2 kept 22-41%. |
+| `time-based` | `threshold: 0` | Tolerated shading in m²·h (shaded protected area x duration). 0 = remove any voxel that casts a shadow at any sampled moment; 5 = tolerate up to 5 m²·h. The sun is sampled every 5 minutes by default (`sun_steps_per_hour`). |
+| `tilted_plane` | `tilted_plane_angle_deg: 45` | Everything above the plane is removed. |
 
-The strategies above apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`). The two binary modes have fixed semantics: **`tilted_plane`** has no threshold (voxels above the cut plane are always removed); **`time-based`** scores the shading a voxel causes in m²·h, shaded protected area times duration (`threshold: 0` = remove any voxel that casts a shadow at any sampled moment, `threshold: 5` = tolerate up to 5 m²·h; the sun is sampled every 5 minutes by default, see `sun_steps_per_hour`).
+The **decomposed pipeline** is designed for exploring this setting: preprocessing does the ray tracing once, then thresholding re-runs in seconds with other values.
 
-The **decomposed pipeline** is designed for threshold exploration: compute scores once (the expensive step), then re-run thresholding with different values instantly. For `protect_share`, preprocessing also stores the highest-weight sky patch each voxel blocks, so changing the share does not trace rays again.
+Older configs that use `threshold: carve_fraction`, `threshold: headtail` or a numeric cutoff in the sky modes still run. These legacy methods cut on voxel scores, which does not return a predictable share of the sky and can leave cliffs and spires; see [Carving Modes](docs/modes.md#legacy-score-cutoff-methods-sky-modes).
 
 https://github.com/user-attachments/assets/7fb20820-bd24-4ccd-86f5-4f4f868b372a
 

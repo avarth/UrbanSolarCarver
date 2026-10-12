@@ -64,7 +64,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 - **USC_BenefitParams**: benefit-mode hour weighting: balance temperature and offset (simple weights), or a `simulated_weights.json` artifact plus the experimental `include_harm` toggle (simulated weights)
 - **USC_TiltedPlane**: fixed-angle envelope parameters
 - **USC_RadCooling** (*USC Radiative Cooling*): radiative cooling parameters (dew point, Bliss constant)
-- **USC_Threshold**: thresholding strategy, score smoothing, and column carve-above post-processing. The `method` input takes `protect_share` (the default for weighted modes), `carve_fraction`, `headtail` or `numeric`; `value` is the parameter of the chosen method, and a `value` without a method sets `protect_share`. Connect its output to **USC_ThresholdStage**'s `threshold_overrides` input (not Config) so threshold changes only re-run thresholding.
+- **USC_Threshold**: how much to carve, plus column carve-above post-processing. For the sky modes connect only `value`: the share (0-1) of the sky's weight that stays visible from every test point (`protect_share`; start at 0.1). For `time-based`, set `method` to `numeric` and `value` to the tolerated shading in m²·h. The legacy sky-mode methods (`carve_fraction`, `headtail`) and `score_smoothing` remain for older definitions. Connect its output to **USC_ThresholdStage**'s `threshold_overrides` input (not Config) so threshold changes only re-run thresholding.
 - **USC_Postprocess**: smoothing and cleanup settings. Connect its output to **USC_Export**'s `postprocess_overrides` input (not Config) so mesh cleanup changes only re-run export.
 - **USC_Diagnostics**: detailed score statistics and diagnostic plot images
 

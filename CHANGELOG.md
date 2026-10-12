@@ -25,9 +25,21 @@ versioning follows [Semantic Versioning](https://semver.org/).
     voxel, the rank of the highest-weight patch it blocks), so changing
     the share only re-runs thresholding. This traces the rays a second
     time, one patch at a time (about 2.0 s to 2.2-2.5 s in the test scenes).
-  - `carve_fraction` stays available: set `threshold: carve_fraction`, or
-    set only the `carve_fraction` key. Setting both keys without
-    `threshold` is an error. The shipped configs now use protect_share.
+  - One setting per mode: `protect_share` for the sky modes, `threshold`
+    (tolerated shading in m²·h) for time-based, the plane angle for
+    tilted_plane. The shipped configs, the Grasshopper USC_Threshold text
+    and the docs present only these.
+  - The score-cutoff methods for the sky modes (`carve_fraction`,
+    `headtail`, a numeric cutoff) and `score_smoothing`, which only they
+    use, are now documented as legacy: they still work, so older configs
+    run unchanged (`threshold: carve_fraction`, or only the
+    `carve_fraction` key; setting both keys without `threshold` is an
+    error). docs/modes.md explains why: blocking is not additive along a
+    ray, so removing a share of the score mass does not return a
+    predictable share of the sky.
+  - Planned (docs/modes.md): a per-surface target, where every test point
+    keeps at least a given share of the sky weight it would see on an
+    empty plot.
   - Thresholding diagnostics and the run report give the patches actually
     protected (`protected_patch_count`, `protected_patches`,
     `protected_weight_share`, which can exceed the request because patches
