@@ -371,7 +371,9 @@ def thresholding(
         "score_smooth_applied": _smooth_applied,
         "score_smoothing_m": _smooth_radius_m,
         "score_smoothing_sigma_voxels": _sigma_voxels,
-        "normalized_score_stats": score_statistics(nn, detailed=conf.diagnostics),
+        # Scores the threshold was compared with: occupied voxels only, after
+        # score smoothing when it is applied.
+        "occupied_score_stats": score_statistics(nn, detailed=conf.diagnostics),
     }
     # Performance reporting, with the score unit from the mode registry
     mode_name = pre_manifest.mode or "unknown"

@@ -21,9 +21,9 @@ def load_mesh(path: str) -> trimesh.Trimesh:
 
     trimesh's default processing on load removes NaN/inf vertices and merges
     duplicate vertices; it does not fix winding or remove degenerate faces.
-    For meshes that are not watertight, ``fix_normals`` is then called to
-    make the face winding consistent across connected faces.  Watertight
-    meshes are returned with their winding as stored.
+    ``fix_normals`` is then called: it makes the face winding consistent
+    across connected faces, and for watertight meshes it also turns each
+    closed body that is stored inside out so its normals point outward.
 
     Raises
     ------
@@ -42,8 +42,7 @@ def load_mesh(path: str) -> trimesh.Trimesh:
             f"load_mesh: no triangle geometry found in {path!r}; the file is "
             f"empty, contains only points/curves, or could not be parsed as a mesh."
         )
-    if not mesh.is_watertight:
-        mesh.fix_normals()
+    mesh.fix_normals(multibody=mesh.is_watertight)
     return mesh
 
 FLOAT32_REL_SPACING = 2.0 ** -23  # float32 spacing relative to magnitude

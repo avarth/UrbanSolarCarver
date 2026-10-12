@@ -6,7 +6,9 @@ voxel grids and the Tregenza patch directions and solid angles.  Compiled Warp k
 by Warp itself, on disk.
 
 Cache keys must describe everything the cached value depends on, including
-the device it lives on; ``bump()`` clears the cache between independent runs.
+the device it lives on, so an entry can be reused by any later run.  The
+cache holds at most ``max_cache_bytes`` of arrays and tensors and drops the
+least recently used entries beyond that; ``bump()`` clears it.
 
 Public API:
     CarverSession       context manager owning the cache
@@ -18,11 +20,28 @@ import contextlib
 import functools
 import logging
 import weakref
+from collections import OrderedDict
 from typing import Any, Callable, Dict, Optional, Union
 
 import torch
 
 _log = logging.getLogger(__name__)
+
+
+DEFAULT_CACHE_BYTES = 1 << 30  # 1 GiB
+
+
+def _nbytes(value: Any) -> int:
+    """Memory held by the tensors and arrays in *value* (nested tuples, lists, dicts)."""
+    if isinstance(value, torch.Tensor):
+        return value.element_size() * value.nelement()
+    if hasattr(value, "nbytes") and not isinstance(value, (str, bytes)):
+        return int(value.nbytes)
+    if isinstance(value, (tuple, list)):
+        return sum(_nbytes(v) for v in value)
+    if isinstance(value, dict):
+        return sum(_nbytes(v) for v in value.values())
+    return 0
 
 
 def _device_key(device: torch.device) -> int:
@@ -42,8 +61,13 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
 
     _sessions: "weakref.WeakValueDictionary[int, CarverSession]" = weakref.WeakValueDictionary()
 
-    def __init__(self, device: Union[str, torch.device, None] = None):
-        """*device*: "auto" or None (CUDA if available, else CPU), "cuda", "cpu", or a torch.device."""
+    def __init__(self, device: Union[str, torch.device, None] = None,
+                 max_cache_bytes: int = DEFAULT_CACHE_BYTES):
+        """*device*: "auto" or None (CUDA if available, else CPU), "cuda", "cpu", or a torch.device.
+
+        *max_cache_bytes*: memory the cache may hold; a value larger than this
+        on its own is returned but not cached.
+        """
         if device is None or (isinstance(device, str) and device.lower() == "auto"):
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         elif isinstance(device, str):
@@ -55,16 +79,26 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
         else:
             raise TypeError(f"device must be str, torch.device, or None, not {type(device)}")
 
-        self.tensors: Dict[str, Any] = {}
+        self.max_cache_bytes = int(max_cache_bytes)
+        self.tensors: "OrderedDict[str, Any]" = OrderedDict()  # oldest use first
+        self._sizes: Dict[str, int] = {}
+        self.cache_bytes = 0
         self._gen = 0  # number of bump() calls, for diagnostics
         CarverSession._sessions[_device_key(self.device)] = self
 
     def bump(self, flush: bool = False) -> None:
-        """Clear the cache between independent runs; *flush* also frees cached CUDA memory."""
+        """Clear the cache; *flush* also returns unused CUDA memory to the driver."""
         self.tensors.clear()
-        if flush and self.device.type == "cuda":
-            torch.cuda.empty_cache()
+        self._sizes.clear()
+        self.cache_bytes = 0
+        if flush:
+            self.release_memory()
         self._gen += 1
+
+    def release_memory(self) -> None:
+        """Return CUDA memory not held by live tensors (including cached ones) to the driver."""
+        if self.device.type == "cuda":
+            torch.cuda.empty_cache()
 
     def __enter__(self) -> "CarverSession":
         if self.device.type == "cuda":
@@ -78,11 +112,24 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
     def get_tensor(self, key: str, factory: Callable[[], Any]) -> Any:
         """Return the cached value for *key*, computing it with *factory* on a miss.
 
-        The value is stored as returned: the key must identify its device.
+        The value is stored as returned, so callers must not modify it in
+        place, and the key must identify its device.  Storing it may drop the
+        least recently used entries to stay within ``max_cache_bytes``.
         """
-        if key not in self.tensors:
-            self.tensors[key] = factory()
-        return self.tensors[key]
+        if key in self.tensors:
+            self.tensors.move_to_end(key)
+            return self.tensors[key]
+        value = factory()
+        size = _nbytes(value)
+        if size > self.max_cache_bytes:
+            return value
+        self.tensors[key] = value
+        self._sizes[key] = size
+        self.cache_bytes += size
+        while self.cache_bytes > self.max_cache_bytes:
+            old_key, _ = self.tensors.popitem(last=False)
+            self.cache_bytes -= self._sizes.pop(old_key)
+        return value
 
     def close(self, flush: bool = True) -> None:
         """Clear the cache and stop being the active session for this device."""

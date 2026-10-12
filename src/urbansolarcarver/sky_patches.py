@@ -81,6 +81,20 @@ def fetch_tregenza_patch_directions(
     coords = np.array([[v.x, v.y, v.z] for v in vecs], dtype=np.float32)
     return torch.from_numpy(coords).to(device)
 
+def tregenza_solid_angles() -> np.ndarray:
+    """Solid angle of each of the 145 Tregenza patches in steradians (float64).
+
+    Built from Ladybug's per-band constants rather than its
+    ``ViewSphere.tregenza_solid_angles`` property, which (ladybug-core
+    0.44) caches its result in the Reinhart attribute and so returns the
+    Reinhart list once ``reinhart_solid_angles`` has been read.
+    """
+    from ladybug.viewsphere import ViewSphere
+    counts = ViewSphere.TREGENZA_PATCHES_PER_ROW + (1,)  # + zenith patch
+    return np.repeat(np.asarray(ViewSphere.TREGENZA_COEFFICIENTS, dtype=np.float64),
+                     counts)
+
+
 @session_cache("{args[0]}")
 def fetch_tregenza_patch_solid_angles(
     device: torch.device  # compute device for the output tensor
@@ -88,12 +102,10 @@ def fetch_tregenza_patch_solid_angles(
     """
     Return a float32 tensor of shape [P] (P = 145) with the solid angle of
     each Tregenza sky patch in steradians, in the same order as
-    :func:`fetch_tregenza_patch_directions`. Uses Ladybug's ViewSphere;
-    the result is cached per device for the session.
+    :func:`fetch_tregenza_patch_directions` (see :func:`tregenza_solid_angles`).
+    The result is cached per device for the session.
     """
-    sphere = _load_view_sphere()
-    angles = sphere.tregenza_solid_angles           # list of floats
-    arr = np.array(angles, dtype=np.float32)
+    arr = tregenza_solid_angles().astype(np.float32)
     return torch.from_numpy(arr).to(device)
 
 def compute_radiative_cooling_weights(

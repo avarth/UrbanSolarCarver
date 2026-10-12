@@ -83,3 +83,46 @@ def test_call_daemon_against_a_real_daemon(gh):
         proc.wait(timeout=20)
     with pytest.raises(gh.DaemonError, match="not reachable"):
         gh.call_daemon(session, "ping", timeout=1)
+
+
+_PENTAGON = [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (3.0, 1.5, 0.0), (1.0, 3.0, 0.0), (-1.0, 1.5, 0.0)]
+
+
+def test_read_ply_ascii_with_normals_before_xyz(gh, tmp_path):
+    lines = ["ply", "format ascii 1.0", "element vertex 5",
+             "property float nx", "property float ny", "property float nz",
+             "property double x", "property double y", "property double z",
+             "element face 1", "property list uchar int vertex_indices", "end_header"]
+    lines += ["0 0 1 {} {} {}".format(*v) for v in _PENTAGON]
+    lines += ["5 0 1 2 3 4"]
+    path = tmp_path / "a.ply"
+    path.write_text("\n".join(lines) + "\n", encoding="ascii")
+    verts, faces = gh.read_ply(str(path))
+    assert verts == _PENTAGON
+    assert faces == [(0, 1, 2, 3, 4)]
+
+
+def test_read_ply_binary_other_list_types(gh, tmp_path):
+    import struct
+    header = ("ply\nformat binary_little_endian 1.0\nelement vertex 5\n"
+              "property float x\nproperty float y\nproperty float z\nproperty uchar red\n"
+              "element face 1\nproperty list int uint vertex_indices\nend_header\n").encode()
+    body = b"".join(struct.pack("<fffB", *v, 7) for v in _PENTAGON)
+    body += struct.pack("<i5I", 5, 0, 1, 2, 3, 4)
+    path = tmp_path / "b.ply"
+    path.write_bytes(header + body)
+    verts, faces = gh.read_ply(str(path))
+    assert verts == _PENTAGON
+    assert faces == [(0, 1, 2, 3, 4)]
+
+
+def test_read_ply_matches_usc_double_writer(gh, tmp_path):
+    import numpy as np
+    import trimesh
+    from urbansolarcarver.io import save_mesh
+    box = trimesh.creation.box(extents=(1, 1, 1))
+    box.apply_translation((500_000.37, 4_200_000.81, 10.0))
+    save_mesh(box, str(tmp_path / "box.ply"))
+    verts, faces = gh.read_ply(str(tmp_path / "box.ply"))
+    np.testing.assert_array_equal(np.array(verts), box.vertices)
+    np.testing.assert_array_equal(np.array(faces), box.faces)

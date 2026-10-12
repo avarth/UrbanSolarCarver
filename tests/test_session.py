@@ -1,4 +1,5 @@
-"""Tests for CarverSession: caching, bump(), device key, session_cache decorator."""
+"""Tests for CarverSession: caching, the cache size limit, bump(), device key, session_cache decorator."""
+import numpy as np
 import pytest
 import torch
 from unittest.mock import MagicMock
@@ -181,3 +182,31 @@ class TestCacheRespectsDevice:
         with CarverSession(device="cpu") as sess:
             assert get_active_session("cpu") is sess
         assert get_active_session("cpu") is None
+
+
+class TestCacheBudget:
+    def _session(self, budget):
+        from urbansolarcarver.session import CarverSession
+        return CarverSession(device="cpu", max_cache_bytes=budget)
+
+    def test_least_recently_used_entry_is_dropped(self):
+        sess = self._session(budget=3 * 400)
+        for k in "abc":
+            sess.get_tensor(k, lambda: torch.zeros(100))  # 400 bytes each
+        sess.get_tensor("a", lambda: pytest.fail("a should still be cached"))
+        sess.get_tensor("d", lambda: torch.zeros(100))     # evicts b, the oldest use
+        assert list(sess.tensors) == ["c", "a", "d"]
+        assert sess.cache_bytes == 1200
+        sess.close()
+
+    def test_value_over_budget_is_returned_but_not_cached(self):
+        sess = self._session(budget=100)
+        big = sess.get_tensor("big", lambda: np.zeros(1000))
+        assert big.shape == (1000,) and "big" not in sess.tensors
+        assert sess.cache_bytes == 0
+        sess.close()
+
+    def test_nested_values_are_sized(self):
+        from urbansolarcarver.session import _nbytes
+        value = (torch.zeros(10, dtype=torch.uint8), np.zeros(3), 2.0, {"k": np.zeros(2)})
+        assert _nbytes(value) == 10 + 24 + 16

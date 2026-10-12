@@ -1143,12 +1143,13 @@ def auto_batch_size(
     """Choose a ray batch size from the free GPU memory.
 
     The budget is ``vram_fraction`` of free VRAM (video memory).  With Warp,
-    the estimate is a fixed 320 bytes per ray (4 x 20 x 4 bytes, see the
-    comment in the code); this is generous, since the fused DDA kernels
-    store only per-ray inputs (origins, directions, ids) and no hit lists.
-    Without Warp, the estimate is the fixed-step sample tensor, 12 bytes
-    (three float32) per step with ``max(resolution, 50)`` steps per ray.
-    The result is at least 10,000 and at most 5,000,000 rays.
+    the fused DDA kernels accumulate into the voxel grid and keep no hit
+    lists, so a batch only adds its slice of the ray inputs: 96 bytes per
+    ray (see the comment in the code).  Without Warp, the fixed-step tracer
+    returns one hit record of 40 bytes per visited voxel, estimated as
+    ``max(resolution, 50)`` per ray; its sample points are already limited
+    by ``_FIXED_STEP_BUDGET_BYTES``.  The result is at least 10,000 and at
+    most 5,000,000 rays.
 
     Returns ``fallback`` on CPU or if VRAM cannot be queried.
 
@@ -1179,17 +1180,17 @@ def auto_batch_size(
     budget_bytes = int(free * vram_fraction)
 
     if _warp_available:
-        # Sized for 4 int32 values for each of 20 hits per ray.  The fused
-        # kernels keep no per-hit output, so this overestimates their
-        # per-ray memory (about 40 bytes of inputs) and keeps batches small.
-        est_hits = 20
-        bytes_per_ray = 4 * est_hits * 4
-        batch = max(budget_bytes // max(bytes_per_ray, 1), 10_000)
+        # Per ray: origin and direction (2 x 12 bytes), patch id and point
+        # id (2 x 8 bytes, int64) = 40 bytes, rounded up to 48; doubled for
+        # the copies made when a slice is not contiguous or needs int32 ids.
+        bytes_per_ray = 96
+        batch = max(budget_bytes // bytes_per_ray, 10_000)
     else:
-        # Fixed-step: R x S x 3 x 4 bytes (float32 sample points)
-        num_steps = max(resolution, 50)  # rough estimate of steps per ray
-        bytes_per_ray = num_steps * 3 * 4
-        batch = max(budget_bytes // max(bytes_per_ray, 1), 10_000)
+        # Hit records: ray id, patch id (int64) and voxel index (3 x int64)
+        # = 40 bytes per visited voxel.
+        num_steps = max(resolution, 50)  # rough estimate of voxels per ray
+        bytes_per_ray = num_steps * 40
+        batch = max(budget_bytes // bytes_per_ray, 10_000)
 
     batch = min(batch, 5_000_000)
 

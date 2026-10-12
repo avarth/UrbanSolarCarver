@@ -279,6 +279,30 @@ versioning follows [Semantic Versioning](https://semver.org/).
     from USC_EPW and USC_BenefitParams against the .gh file, as it does
     for its own inputs. USC_Threshold warns about an unknown `method`
     instead of ignoring it.
+  - `load_mesh` turns closed bodies stored inside out so their normals
+    point outward (before, only open meshes had their winding fixed).
+  - Tregenza solid angles are built from Ladybug's per-band constants:
+    its `ViewSphere.tregenza_solid_angles` property returns the 577
+    Reinhart values once `reinhart_solid_angles` has been read.
+  - The sky-patch diagnostic plot drew the Tregenza band edges at the band
+    centres (6°, 18°, ...); they are now at 0°, 12°, ..., 84°.
+  - The thresholding diagnostic `normalized_score_stats` is renamed
+    `occupied_score_stats`: the scores are not normalized, they are the
+    occupied-voxel scores the threshold was compared with.
+  - Automatic ray batch size with Warp assumed 320 bytes per ray for hit
+    lists the fused kernels no longer keep; it now assumes 96, so GPUs
+    with little free memory get larger batches.
+  - USC_SimulateWeights without `out_path` on an unsaved .gh file writes
+    to `~/.urbansolarcarver/simulated_weights.json` instead of failing.
+  - The Grasshopper PLY reader reads x, y, z from any column position in
+    ASCII files, accepts any face list count and index types, and splits
+    faces with more than four corners into triangles (they were cut to
+    quads).
+- **Session cache kept between daemon commands**: the daemon cleared its
+  cache after every command, so re-running preprocessing on unchanged
+  geometry voxelized again. The cache now persists, capped at 1 GiB
+  (`CarverSession(max_cache_bytes=...)`) with least-recently-used
+  eviction; after each command the daemon only returns unused GPU memory.
 - **Docs and comments**: docstrings, comments, CLI help, config field
   descriptions, Grasshopper port descriptions and the docs pages were
   checked against the code and corrected where they disagreed (removed

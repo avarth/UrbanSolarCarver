@@ -206,11 +206,10 @@ def _dispatch(msg, sess) -> dict:
     try:
         return _handle_stage_command(cmd, msg, sess)
     finally:
-        # Clear the session cache and return GPU memory after every command,
-        # successful or not, so memory does not grow across runs and the
-        # Rhino viewport keeps its GPU memory. The cache therefore only
-        # saves work within one command (e.g. the stages of run_pipeline).
-        sess.bump(flush=True)
+        # Return unused GPU memory after every command, successful or not, so
+        # the Rhino viewport gets it back.  The session cache stays: its keys
+        # cover the geometry and settings, and its size is capped.
+        sess.release_memory()
 
 
 def serve(address, authkey, device_arg="auto"):

@@ -324,28 +324,25 @@ def export_mesh_to_ply(mesh, path, include_normals=True):
 
 
 # ---------------------------------------------------------------- geometry out
-_PLY_SIZES = {
-    "char": 1, "uchar": 1, "short": 2, "ushort": 2, "int": 4, "uint": 4,
-    "float": 4, "double": 8, "int8": 1, "uint8": 1, "int16": 2, "uint16": 2,
-    "int32": 4, "uint32": 4, "float32": 4, "float64": 8,
+# PLY property type -> struct format character (little-endian).
+_PLY_STRUCT = {
+    "char": "b", "uchar": "B", "short": "h", "ushort": "H", "int": "i", "uint": "I",
+    "float": "f", "double": "d", "int8": "b", "uint8": "B", "int16": "h",
+    "uint16": "H", "int32": "i", "uint32": "I", "float32": "f", "float64": "d",
 }
 
 
-def load_ply_to_rhino(path):
-    """Read a PLY file (binary little-endian or ASCII) into a Rhino Mesh.
+def read_ply(path):
+    """Read vertices and faces from a PLY file (binary little-endian or ASCII).
 
-    Binary files may use any vertex property layout (x/y/z need not come
-    first) and float or double coordinates; ASCII files must list x, y, z
-    first.  Faces must be triangles or quads stored as a uchar count plus
-    int32 indices.  The mesh keeps double-precision vertices.
+    Vertex properties may come in any order and type; only x, y, z are
+    read.  Faces may have any number of corners and any list count and
+    index types.  Returns ``(verts, faces)``: a list of (x, y, z) floats and
+    a list of index tuples.  Raises ValueError for anything else (big-endian
+    files, missing x/y/z, no end_header).
     """
-    import System
-    import Rhino.Geometry as rg
-
-    nv = nf = 0
     binary = False
-    vertex_props = []  # (name, byte size) in file order
-    in_vertex = False
+    elements = []  # [name, count, [(prop_name, struct_char or (count_char, index_char))]]
     with open(path, "rb") as f:
         if f.readline().strip() != b"ply":
             raise ValueError("Not a PLY file: {}".format(path))
@@ -353,59 +350,99 @@ def load_ply_to_rhino(path):
             raw = f.readline()
             if not raw:
                 raise ValueError("Not a valid PLY file (no end_header): {}".format(path))
-            line = raw.decode("ascii", errors="replace").strip()
-            if line == "end_header":
+            parts = raw.decode("ascii", errors="replace").split()
+            if not parts:
+                continue
+            if parts[0] == "end_header":
                 break
-            if "binary_little_endian" in line:
-                binary = True
-            elif line.startswith("element vertex"):
-                nv, in_vertex, vertex_props = int(line.split()[-1]), True, []
-            elif line.startswith("element"):
-                in_vertex = False
-                if "face" in line:
-                    nf = int(line.split()[-1])
-            elif line.startswith("property") and in_vertex:
-                parts = line.split()
-                if len(parts) >= 3 and parts[1] != "list":
-                    vertex_props.append((parts[2], _PLY_SIZES.get(parts[1], 4)))
+            if parts[0] == "format":
+                if parts[1] == "binary_big_endian":
+                    raise ValueError("Big-endian PLY is not supported: {}".format(path))
+                binary = parts[1] == "binary_little_endian"
+            elif parts[0] == "element":
+                elements.append([parts[1], int(parts[2]), []])
+            elif parts[0] == "property" and elements:
+                if parts[1] == "list":
+                    elements[-1][2].append((parts[4], (_PLY_STRUCT[parts[2]], _PLY_STRUCT[parts[3]])))
+                else:
+                    elements[-1][2].append((parts[2], _PLY_STRUCT[parts[1]]))
+        body = f.read()
 
-        sizes = dict(vertex_props)
-        offsets, off = {}, 0
-        for name, size in vertex_props:
-            offsets[name] = off
-            off += size
-        stride = off or 12
-        fmt = "<d" if sizes.get("x", 4) == 8 else "<f"
+    verts, faces = [], []
+    if binary:
+        pos = 0
+        for name, count, props in elements:
+            fixed = all(not isinstance(t, tuple) for _, t in props)
+            if fixed:  # one struct call per row
+                row = struct.Struct("<" + "".join(t for _, t in props))
+                names = [n for n, _ in props]
+                rows = [row.unpack_from(body, pos + i * row.size) for i in range(count)]
+                pos += count * row.size
+                if name == "vertex":
+                    ix, iy, iz = names.index("x"), names.index("y"), names.index("z")
+                    verts = [(r[ix], r[iy], r[iz]) for r in rows]
+                continue
+            for _ in range(count):
+                for prop, t in props:
+                    if isinstance(t, tuple):
+                        (n,) = struct.unpack_from("<" + t[0], body, pos)
+                        pos += struct.calcsize(t[0])
+                        idx = struct.unpack_from("<{}{}".format(n, t[1]), body, pos)
+                        pos += n * struct.calcsize(t[1])
+                        if name == "face" and prop in ("vertex_indices", "vertex_index"):
+                            faces.append(idx)
+                    else:
+                        pos += struct.calcsize(t)
+    else:
+        tokens = body.decode("ascii", errors="replace").split()
+        pos = 0
+        for name, count, props in elements:
+            for _ in range(count):
+                values = {}
+                for prop, t in props:
+                    if isinstance(t, tuple):
+                        n = int(tokens[pos])
+                        values[prop] = tuple(int(x) for x in tokens[pos + 1:pos + 1 + n])
+                        pos += 1 + n
+                    else:
+                        values[prop] = tokens[pos]
+                        pos += 1
+                if name == "vertex":
+                    verts.append((float(values["x"]), float(values["y"]), float(values["z"])))
+                elif name == "face":
+                    faces.append(values.get("vertex_indices", values.get("vertex_index", ())))
+    return verts, faces
 
-        if binary:
-            raw = f.read(nv * stride)
-            verts = [struct.unpack_from(fmt, raw, i * stride + offsets[axis])[0]
-                     for i in range(nv) for axis in ("x", "y", "z")]
-            face_data = f.read()
-            faces, pos = [], 0
-            for _ in range(nf):
-                count = face_data[pos]
-                faces.append(struct.unpack_from("<{}i".format(count), face_data, pos + 1))
-                pos += 1 + 4 * count
-        else:
-            lines = f.read().decode("ascii", errors="replace").split("\n")
-            verts = [float(v) for ln in lines[:nv] for v in ln.split()[:3]]
-            faces = []
-            for ln in lines[nv:nv + nf]:
-                parts = ln.split()
-                faces.append(tuple(int(x) for x in parts[1:int(parts[0]) + 1]))
 
+def load_ply_to_rhino(path):
+    """Read a PLY file (see :func:`read_ply`) into a Rhino Mesh.
+
+    Faces with more than four corners are split into triangles around their
+    first corner.  The mesh keeps double-precision vertices.
+    """
+    import System
+    import Rhino.Geometry as rg
+
+    verts, faces = read_ply(path)
     mesh = rg.Mesh()
     # Without this Rhino stores float32 vertices: 0.5 m steps at UTM coordinates.
     mesh.Vertices.UseDoublePrecisionVertices = True
-    pts = System.Array.CreateInstance(rg.Point3d, nv)
-    for i in range(nv):
-        pts[i] = rg.Point3d(verts[3 * i], verts[3 * i + 1], verts[3 * i + 2])
+    pts = System.Array.CreateInstance(rg.Point3d, len(verts))
+    for i, (x, y, z) in enumerate(verts):
+        pts[i] = rg.Point3d(x, y, z)
     mesh.Vertices.AddVertices(pts)
-    face_arr = System.Array.CreateInstance(rg.MeshFace, nf)
-    for i, idx in enumerate(faces):
-        face_arr[i] = (rg.MeshFace(idx[0], idx[1], idx[2]) if len(idx) == 3
-                       else rg.MeshFace(idx[0], idx[1], idx[2], idx[3]))
+    mesh_faces = []
+    for idx in faces:
+        if len(idx) == 3:
+            mesh_faces.append(rg.MeshFace(idx[0], idx[1], idx[2]))
+        elif len(idx) == 4:
+            mesh_faces.append(rg.MeshFace(idx[0], idx[1], idx[2], idx[3]))
+        else:
+            mesh_faces.extend(rg.MeshFace(idx[0], idx[k], idx[k + 1])
+                              for k in range(1, len(idx) - 1))
+    face_arr = System.Array.CreateInstance(rg.MeshFace, len(mesh_faces))
+    for i, face in enumerate(mesh_faces):
+        face_arr[i] = face
     mesh.Faces.AddFaces(face_arr)
     mesh.Normals.ComputeNormals()
     return mesh

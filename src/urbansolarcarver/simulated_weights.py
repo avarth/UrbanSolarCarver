@@ -498,6 +498,7 @@ def write_simulated_weights(path, benefit, harm, meta: dict) -> Path:
         },
     }
     path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
     return path
 

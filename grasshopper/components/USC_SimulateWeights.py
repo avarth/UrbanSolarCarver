@@ -22,7 +22,7 @@ archetype : USCArchetype or str
     (see configs/archetype_example.yaml).
 out_path : str, optional
     Artifact output path. Default: simulated_weights.json next to the
-    saved .gh file.
+    saved .gh file, or in ~/.urbansolarcarver if the .gh file is unsaved.
 eps : float, optional
     Perturbation size in W (central differences). Default: 1.0
 run : bool
@@ -54,7 +54,7 @@ try:
         ("session", "Session handle from USC_Session. The daemon must be running (start_daemon=True)."),
         ("epw_path", "Path to the EPW weather file for the site. A relative path is taken relative to the saved .gh file."),
         ("archetype", "Archetype from USC_Archetype, or a path to an archetype YAML file (see configs/archetype_example.yaml)."),
-        ("out_path", "Optional output path for the artifact. Default: simulated_weights.json next to the saved .gh file. The carve reads the artifact again on every run, so overwriting it does not leave stale results."),
+        ("out_path", "Optional output path for the artifact. Default: simulated_weights.json next to the saved .gh file, or in ~/.urbansolarcarver if the .gh file is unsaved. The carve reads the artifact again on every run, so overwriting it does not leave stale results."),
         ("eps", "Perturbation size in watts for the central-difference attribution. Default 1.0; rarely needs changing."),
         ("run", "Boolean toggle to execute. The simulation runs 17 521 year-long trajectories at once (1 base + 2 per hour of the year)."),
     ]):
@@ -115,7 +115,13 @@ else:
             arch_payload = gh.resolve_path(ghenv.Component, archetype)
             if not os.path.isfile(arch_payload):
                 raise ValueError("Archetype YAML not found: " + arch_payload)
-        out = gh.resolve_path(ghenv.Component, out_path or "simulated_weights.json")
+        if out_path:
+            out = gh.resolve_path(ghenv.Component, out_path)
+        else:
+            try:
+                out = gh.resolve_path(ghenv.Component, "simulated_weights.json")
+            except ValueError:  # unsaved .gh file: no folder to write next to
+                out = str(Path.home() / ".urbansolarcarver" / "simulated_weights.json")
         reply = gh.call_daemon(session, "simulate_weights", {
             "epw": epw,
             "archetype": arch_payload,

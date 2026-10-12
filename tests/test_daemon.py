@@ -103,3 +103,32 @@ def test_authkey_created_once_and_reused(tmp_path):
     assert _resolve_authkey(keyfile) == key
     if sys.platform != "win32":
         assert keyfile.stat().st_mode & 0o077 == 0
+
+
+def test_voxel_grid_cache_survives_between_commands(tmp_path, tmp_mesh_files):
+    """A second preprocessing command on the same geometry reuses the cached
+    voxel grid and produces the same scores."""
+    import numpy as np
+    import yaml
+    from urbansolarcarver.daemon import _dispatch
+    from urbansolarcarver.session import CarverSession
+
+    vol_path, srf_path = tmp_mesh_files
+    cfg_path = tmp_path / "cfg.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "max_volume_path": str(vol_path), "test_surface_path": str(srf_path),
+        "out_dir": str(tmp_path / "out"), "mode": "daylight",
+        "voxel_size": 2.0, "grid_step": 2.0, "ray_length": 50.0, "device": "cpu",
+    }))
+    with CarverSession(device="cpu") as sess:
+        first = _dispatch({"cmd": "preprocessing", "config": str(cfg_path),
+                           "out_dir": str(tmp_path / "a")}, sess)
+        cached = [k for k in sess.tensors if k.startswith("voxelize_mesh:")]
+        assert first["status"] == "ok" and len(cached) == 1
+        grid = sess.tensors[cached[0]]
+        second = _dispatch({"cmd": "preprocessing", "config": str(cfg_path),
+                            "out_dir": str(tmp_path / "b")}, sess)
+        assert sess.tensors[cached[0]] is grid  # reused, not rebuilt
+    np.testing.assert_array_equal(np.load(tmp_path / "a" / "scores.npy"),
+                                  np.load(tmp_path / "b" / "scores.npy"))
+    assert second["status"] == "ok"

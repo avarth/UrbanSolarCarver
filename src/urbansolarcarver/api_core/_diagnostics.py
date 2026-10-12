@@ -188,12 +188,10 @@ def _plot_tregenza_hemisphere(
     tt = np.linspace(0, 2 * np.pi, 361)
     for rr in 1.0 - tregenza_alt / 90.0:
         ax.plot(tt, np.full_like(tt, rr), linewidth=0.3, alpha=0.3, color="k")
-    # Sector boundaries.  These use the band centre altitudes (6°, 18°, ...,
-    # 78°), not the true Tregenza band edges (12°, 24°, ..., 84°): the
-    # horizon ring is drawn 0°-6°, the other rings 6° below their position
-    # on the sky, and the zenith cap from 78°.
-    elev = tregenza_alt * np.pi / 180.0
-    r_edges = np.concatenate([[1.0], 1.0 - elev / (np.pi / 2)])
+    # Sector boundaries: the seven Tregenza bands are 12° tall (edges at
+    # 0°, 12°, ..., 84°); the zenith cap covers 84°-90°.
+    band_edges_deg = np.arange(0.0, 85.0, 12.0)
+    r_edges = 1.0 - band_edges_deg / 90.0
     # Draw sectors
     idx = 0
     for r_i, m in enumerate(ring_counts):
@@ -223,33 +221,10 @@ def _plot_tregenza_hemisphere(
     return path
 
 
-# Tregenza solid angles (steradians) for each of the 145 patches. Read from
-# ladybug's view sphere on first use and cached; if ladybug is not installed,
-# they are computed from the band geometry instead.
-_TREGENZA_SOLID_ANGLES: Optional[np.ndarray] = None
-
 def _get_tregenza_solid_angles() -> np.ndarray:
     """Return (145,) array of Tregenza patch solid angles in steradians."""
-    global _TREGENZA_SOLID_ANGLES
-    if _TREGENZA_SOLID_ANGLES is None:
-        try:
-            from ladybug.viewsphere import view_sphere
-            _TREGENZA_SOLID_ANGLES = np.array(
-                view_sphere.tregenza_solid_angles, dtype=np.float64
-            )
-        except ImportError:
-            # Fallback: band solid angle 2π(sin(top) - sin(bottom)), split
-            # evenly over the band's patches; the zenith cap is 84°-90°.
-            ring_counts = [30, 30, 24, 24, 18, 12, 6]
-            alt_edges = np.radians([0, 12, 24, 36, 48, 60, 72, 84, 90])
-            angles = []
-            for i, m in enumerate(ring_counts):
-                ring_omega = 2 * np.pi * (np.sin(alt_edges[i + 1]) - np.sin(alt_edges[i]))
-                angles.extend([ring_omega / m] * m)
-            zenith_omega = 2 * np.pi * (1.0 - np.sin(alt_edges[-2]))
-            angles.append(zenith_omega)
-            _TREGENZA_SOLID_ANGLES = np.array(angles, dtype=np.float64)
-    return _TREGENZA_SOLID_ANGLES
+    from ..sky_patches import tregenza_solid_angles
+    return tregenza_solid_angles()
 
 
 def save_sky_patch_weights(
