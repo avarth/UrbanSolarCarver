@@ -220,8 +220,11 @@ def exporting(
     # Generate consolidated run report from all three stages.
     pre_dir = Path(thr_manifest.upstream_manifest).parent
     thr_dir = thr_path.parent
-    # Write report to the common parent of all stages (or exporting dir).
-    report_root = out_path.parent if out_path.parent != out_path else out_path
+    # The report goes to the run folder in the standard <run>/exporting
+    # layout, otherwise next to the export. An old report is removed first
+    # so a failed regeneration cannot leave stale numbers behind.
+    report_root = out_path.parent if out_path.name == "exporting" else out_path
+    (report_root / "run_report.md").unlink(missing_ok=True)
     try:
         generate_run_report(report_root, pre_dir, thr_dir, out_path, conf)
     except Exception as exc:

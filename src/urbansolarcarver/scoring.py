@@ -15,15 +15,15 @@ Provides sky-patch weight computation and threshold selection for voxel carving.
 """
 import numpy as np
 import torch
-from .sky_patches import fetch_tregenza_patch_directions, compute_EPW_based_weights, compute_radiative_cooling_weights
+from .sky_patches import compute_EPW_based_weights, compute_radiative_cooling_weights
 from typing import Sequence
 
 def get_weights(
     mode: str,
-    device: torch.device = torch.device('cuda'),
+    device: "torch.device | str | None" = None,
     epw_file: str = None,
     hoys: Sequence[int] = None,
-    dew_point_celsius: float = 10.0,
+    dew_point_celsius: float = 14.0,
     bliss_k: float = 1.8,
     balance_temperature: float = 15.0,
     balance_offset: float = 2.0,
@@ -56,6 +56,8 @@ def get_weights(
     if not isinstance(mode, str) or not mode.strip():
         raise TypeError(f"get_weights: mode must be a non-empty string, got {mode!r}")
     mode_key = mode.strip().lower()
+    if device is None:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
     # Radiative cooling mode uses dew point to compute cooling potential per patch.
     if mode_key == 'radiative_cooling':
@@ -63,12 +65,6 @@ def get_weights(
             dew_point_celsius, bliss_k, torch.device(device),
             min_elevation_deg=min_sky_elevation_deg,
         )
-
-    # Time-based mode: assign a weight of 1 to every patch (uniform importance). Carving based on user-defined HOYs.
-    if mode_key == 'time-based':
-        sky_dirs = fetch_tregenza_patch_directions(torch.device(device))
-        count_patches = sky_dirs.shape[0]
-        return torch.ones(count_patches, dtype=torch.float32, device=device)
 
     # Daylight mode: CIE overcast sky — geometry only, no EPW needed.
     if mode_key == 'daylight':
@@ -84,7 +80,7 @@ def get_weights(
 
     # Modes requiring weather data: irradiance, benefit
     if mode_key in {'irradiance', 'benefit'}:
-        if not epw_file or not hoys:
+        if not epw_file or hoys is None or len(hoys) == 0:
             raise ValueError(
                 f"get_weights: epw_file and hoys list are required for mode '{mode}'"
             )

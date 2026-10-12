@@ -1,52 +1,41 @@
-"""
-UrbanSolarCarver — Configuration loading and validation
+"""Load a YAML config, apply overrides, and validate it into a ``user_config``.
 
-Purpose
--------
-Read a YAML config, apply optional overrides from CLI or dicts, validate
-everything with Pydantic, and hand the pipeline a typed `user_config`.
-Also emits a human-readable sample YAML.
-
-Highlights
-----------
-• Strict schema: fails fast on typos or bad values
-• Overrides: flat "key=value" pairs or a flat mapping (the schema itself is flat)
-• Clear errors: aggregates Pydantic messages into one readable string
-• Sample writer: exports a ready-to-edit template with sane defaults
-
-This module does not touch geometry. It only prepares inputs for the
-carving and meshing stages.
+Overrides come from the CLI (``key=value`` strings), the daemon, or
+Grasshopper. The schema itself lives in :mod:`pydantic_schemas`.
 """
 
+import json
 import math
 import os
+from pathlib import Path
+from typing import Any, Dict, List, Mapping, Optional, Union
+
 import yaml
-from typing import Optional, List, Any, Dict, Mapping, Union
 from pydantic import ValidationError
+
 from .pydantic_schemas import UserConfig as user_config
 from .pydantic_schemas import UrbanSolarCarverWarning  # noqa: F401 (re-exported)
+from .pydantic_schemas import expand_analysis_period
+
+# Config fields holding file or folder paths. Relative values in a YAML file
+# are resolved against the YAML's own folder, so a config means the same
+# thing whichever directory the CLI, the daemon or Grasshopper runs from.
+PATH_FIELDS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir",
+               "simulated_weights_path")
 
 
-# --- utility functions for parsing overrides, merging configs and exporting default config.YAML ---
-   
 def parse_override_value(raw: str) -> Any:
-    """
-    Convert a CLI override scalar into a Python type.
+    """Convert a ``key=value`` override's value into a Python value.
 
-    Accepted literals
-    -----------------
-    • "true"/"false" → bool
-    • "null"/"none"  → None
-    • ints and floats (simple forms)
-    • everything else stays as a string
+    "true"/"false" become bool, "null"/"none" None, JSON lists and objects
+    are parsed (``[45,40,35]``), then int, then float; anything else stays a
+    string. "inf" and "nan" stay strings so the schema reports them clearly.
 
-    Examples
-    --------
-    >>> parse_override_value("true")  # bool
+    >>> parse_override_value("true")
     True
-    >>> parse_override_value("3.5")   # float
+    >>> parse_override_value("3.5")
     3.5
-    >>> parse_override_value("foofoo")   # str
+    >>> parse_override_value("foofoo")
     'foofoo'
     """
     lowered = raw.lower()
@@ -54,74 +43,70 @@ def parse_override_value(raw: str) -> Any:
         return lowered == "true"
     if lowered in {"null", "none"}:
         return None
-    # JSON-like list or object? e.g. "[45,40,35]" or '{"method":"headtail"}'
     stripped = raw.strip()
     if (stripped.startswith("[") and stripped.endswith("]")) or (
             stripped.startswith("{") and stripped.endswith("}")):
-        import json
         try:
             return json.loads(stripped)
-        except (json.JSONDecodeError, ValueError):
+        except ValueError:
             pass
-    # int, then float (also covers scientific notation like "1e-3").
     try:
         return int(raw)
     except ValueError:
         pass
     try:
         value = float(raw)
-        # Reject inf/nan spellings ("inf", "nan"): as config values they are
-        # almost certainly typos, so keep them as strings and let the schema
-        # produce a clear validation error.
         if math.isfinite(value):
             return value
     except ValueError:
         pass
-    return raw  # keep as string
+    return raw
 
-# --- Load and validate YAML config via Pydantic. Exits on validation errors ---
+
+def _parse_overrides(overrides: Union[List[str], Mapping[str, Any]]) -> Dict[str, Any]:
+    if isinstance(overrides, Mapping):
+        return dict(overrides)
+    parsed = {}
+    for item in overrides:
+        if "=" not in item:
+            raise ValueError(f"Invalid override '{item}', expecting key=value")
+        key, val = item.split("=", 1)
+        parsed[key.strip()] = parse_override_value(val.strip())
+    return parsed
+
+
 def load_config(
     path: str,
-    overrides: Optional[Union[List[str], Mapping[str, Any]]] = None
+    overrides: Optional[Union[List[str], Mapping[str, Any]]] = None,
 ) -> user_config:
-    """
-    Load a YAML config, apply overrides, and return a validated `user_config`.
+    """Load the YAML at *path*, apply *overrides*, and validate.
 
     Parameters
     ----------
     path : str
-        Path to the YAML file.
+        YAML config file. Relative paths inside it (meshes, EPW, out_dir,
+        simulated weights) are resolved against the file's folder.
     overrides : list[str] | Mapping[str, Any] | None
-        Optional overrides for top-level config keys (the schema is flat).
-        • list[str]: each item is "key=value"; scalars are type-coerced,
-          JSON lists/objects are parsed (e.g. "tilted_plane_angle_deg=[30,27,...]")
-        • mapping  : flat dict of key → value, used as-is
-
-    Returns
-    -------
-    user_config
+        Top-level config keys that replace the YAML's values: ``"key=value"``
+        strings (values parsed by :func:`parse_override_value`) or a mapping.
+        They win over the YAML, including over its ``analysis_period`` block.
+        Relative paths in overrides are left as given (relative to the
+        current directory).
 
     Raises
     ------
     FileNotFoundError
-        If `path` does not exist.
+        If *path* does not exist.
     ValueError
-        If validation fails. The error message aggregates all Pydantic errors.
-
-    Notes
-    -----
-    • Scalars in CLI overrides are type-coerced by `parse_override_value`.
-    • The function does not mutate the YAML on disk.
+        On malformed YAML or invalid values (all validation errors in one message).
     """
     if not os.path.isfile(path):
-        # Fail loudly with a clear Python exception
         raise FileNotFoundError(
             f"Configuration file not found at {path!r}. "
             "Please check the file path and try again."
         )
     try:
-        # ensure we read the YAML as UTF-8 to avoid platform-specific codecs
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
         if raw is None:
             data: Dict[str, Any] = {}
@@ -130,30 +115,22 @@ def load_config(
                 f"Expected a YAML mapping at the top level, got {type(raw).__name__}"
             )
         else:
-            data = raw
+            data = expand_analysis_period(raw)
 
-        # Apply overrides (list[str] "k=v" or flat Mapping) before validation.
-        # The schema is flat, so overrides address top-level keys directly;
-        # unknown keys are rejected by validation (extra='forbid').
+        base = Path(path).resolve().parent
+        for key in PATH_FIELDS:
+            value = data.get(key)
+            if isinstance(value, str) and value and not os.path.isabs(value):
+                data[key] = str(base / value)
+
         if overrides:
-            if isinstance(overrides, Mapping):
-                data.update(overrides)
-            else:
-                for item in overrides:
-                    if "=" not in item:
-                        raise ValueError(f"Invalid override '{item}', expecting key=value")
-                    key, val = item.split("=", 1)
-                    data[key.strip()] = parse_override_value(val.strip())
+            data.update(expand_analysis_period(_parse_overrides(overrides)))
 
-        # Now validate
         return user_config(**data)
-    
+
     except yaml.YAMLError as exc:
-        raise ValueError(
-            f"Malformed YAML in {path!r}: {exc}"
-        ) from exc
+        raise ValueError(f"Malformed YAML in {path!r}: {exc}") from exc
     except ValidationError as exc:
-        # Aggregate Pydantic errors into a single message
         lines = []
         for err in exc.errors():
             loc = ".".join(map(str, err.get("loc", ())))
@@ -162,4 +139,3 @@ def load_config(
         raise ValueError(
             "Configuration validation error:\n  " + "\n  ".join(lines)
         ) from exc
-

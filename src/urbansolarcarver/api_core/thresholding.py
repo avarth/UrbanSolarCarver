@@ -204,6 +204,7 @@ def thresholding(
     t0_cpu = time.process_time()
     conf = _resolve_cfg(cfg)
     out_path = _ensure_out_dir(out_dir, "thresholding")
+    (out_path / "manifest.json").unlink(missing_ok=True)  # written last; see preprocessing
 
     # Resolve upstream manifest.
     if isinstance(volume, (str, Path)):
@@ -259,9 +260,15 @@ def thresholding(
     scores = raw.astype(np.float32, copy=False)
     occ_scores = scores[occ]
     spec = conf.threshold
-    # Cross-check config vs manifest: standalone re-thresholding can pair a
-    # weighted-mode config with violation-count scores (or vice versa) —
-    # the config-time validation only saw the config's own mode.
+    # Standalone re-thresholding (CLI, daemon, Grasshopper) can pair a config
+    # with scores from a run in another mode; the threshold defaults and
+    # units differ per mode, so refuse instead of carving with the wrong rule.
+    if pre_manifest.mode and pre_manifest.mode != conf.mode:
+        raise ValueError(
+            f"The scores in {scores_path} come from a '{pre_manifest.mode}' run, but "
+            f"the config's mode is '{conf.mode}'. Re-run preprocessing or use a "
+            f"config with mode '{pre_manifest.mode}'."
+        )
     if kind == "violation_count" and spec.method != "cutoff":
         raise ValueError(
             f"Scores in {scores_path} are violation counts (preprocessing mode "

@@ -97,16 +97,9 @@ Required parameters vary by mode. Every config needs at minimum `max_volume_path
     ```yaml
     max_volume_path: "path/to/maxVolume.ply"
     test_surface_path: "path/to/testSurfaces.ply"
-    epw_path: "path/to/weather.epw"
     out_dir: "outputs"
     mode: "radiative_cooling"
     voxel_size: 1.0
-    start_month: 6
-    start_day: 1
-    start_hour: 20
-    end_month: 8
-    end_day: 31
-    end_hour: 6
     dew_point_celsius: 15.0
     bliss_k: 1.22
     threshold: "carve_fraction"
@@ -135,8 +128,8 @@ Required parameters vary by mode. Every config needs at minimum `max_volume_path
 
 | Parameter | Modes | Description |
 |-----------|-------|-------------|
-| `epw_path` | all except `tilted_plane`, `daylight` | Path to EPW weather file |
-| `start_month` .. `end_hour` | all except `tilted_plane`, `daylight` | Analysis period |
+| `epw_path` | `time-based`, `irradiance`, `benefit` | Path to EPW weather file |
+| `start_month` .. `end_hour` | `time-based`, `irradiance`, `benefit` | Analysis period |
 | `sun_steps_per_hour` | `time-based` | Sun positions per hour (default 12 = every 5 min; Ladybug timesteps 1-60) |
 | `balance_temperature` | `benefit` | Free-running balance-point temperature (C); unused when `simulated_weights_path` is set |
 | `balance_offset` | `benefit` | Dead-band offset (C); unused when `simulated_weights_path` is set |

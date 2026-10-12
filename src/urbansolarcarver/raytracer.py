@@ -37,7 +37,6 @@ import math
 import torch
 import numpy as np
 from typing import Tuple
-from urbansolarcarver.session import session_cache
 import logging
 
 log = logging.getLogger(__name__)
@@ -946,75 +945,38 @@ def _trace_dda_warp(
     return ray_ids_t, patch_ids, voxel_indices
 
 def generate_sky_patch_rays(
-    pts: np.ndarray,           # List of 3D coordinates where rays originate (shape Px3).
-    norms: np.ndarray,         # Surface normals at each point (shape Px3).
-    patch_dirs: torch.Tensor,  # Unit vectors representing directions of sky patches (shape Vx3).
-    device: torch.device,       # Compute device (CPU or GPU).
-    *,
-    include_normals: bool = False,
-    ray_id: str | None = None,
-    session: "CarverSession | None" = None,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, "torch.Tensor | None", torch.Tensor]:
+    pts: np.ndarray,
+    norms: np.ndarray,
+    patch_dirs: torch.Tensor,
+    device: torch.device,
+) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+    """One ray per (sample point, sky patch) pair whose patch the surface faces.
+
+    Parameters
+    ----------
+    pts, norms : np.ndarray (P, 3)
+        Sample points and their outward unit normals.
+    patch_dirs : torch.Tensor (V, 3)
+        Unit directions of the sky patches.
+
+    Returns
+    -------
+    origins : (R, 3)      ray start points (the sample points)
+    ray_dirs : (R, 3)     unit ray directions
+    patch_ids : (R,)      sky patch index of each ray
+    point_idx : (R,)      sample point index of each ray
     """
-    Build rays for each sample point and sky patch direction.
-    1. We have P sample locations on a surface and V directions in the sky (divided into patches).
-    2. For each surface point, we want to know which sky patches are 'visible' (face-culling) by checking if the normal faces that patch.
-    3. We then record an origin (the point) and a direction (the sky patch) for each valid combination.
-
-    ``include_normals`` gates the per-ray normal gather: it is an (R, 3)
-    tensor nobody in the pipeline consumes — hundreds of MB of VRAM at
-    typical ray counts — so it is only materialized on request.
-
-    Returns:
-      origins           : Tensor of 3D positions where rays start (one per valid combination).
-      ray_dirs          : Tensor of unit vectors indicating ray directions.
-      sky_patch_ids     : Integer index for which sky patch each ray corresponds to.
-      normals_per_ray   : Surface normal per ray, or None unless include_normals=True.
-      point_idx         : Integer index mapping each ray back to its source sample point.
-    """
-
-    if pts.ndim!=2 or pts.shape[1]!=3:
+    if pts.ndim != 2 or pts.shape[1] != 3:
         raise ValueError(f"pts must be Nx3, got {pts.shape}")
     if norms.shape != pts.shape:
         raise ValueError(f"norms shape {norms.shape} must match pts shape {pts.shape}")
 
-    # --- Session cache (keyed on array identity, not just shape) -----------
-    # id(pts) is unique per array object within a session generation.
-    # bump() clears the cache between runs, so id reuse is not a concern.
-    from urbansolarcarver.session import get_active_session
-    sess = session or get_active_session()
-    if sess is not None:
-        cache_key = (
-            f"patch_rays:{pts.shape[0]}:{patch_dirs.shape[0]}:{id(pts)}"
-            f":n{int(include_normals)}"
-        )
-        cached = sess.tensors.get(f"{cache_key}|g{sess._gen}")
-        if cached is not None:
-            return cached
+    point_coords = torch.from_numpy(pts.astype(np.float32)).to(device)
+    normal_vecs = torch.from_numpy(norms.astype(np.float32)).to(device)
+    sky_vectors = patch_dirs.to(dtype=torch.float32, device=device)
 
-    # Convert input data into PyTorch tensors and move to the chosen compute device.
-    point_coords  = torch.from_numpy(pts.astype(np.float32)).to(device)    # (P,3)
-    normal_vecs   = torch.from_numpy(norms.astype(np.float32)).to(device)  # (P,3)
-    sky_vectors   = patch_dirs.to(dtype=torch.float32, device=device)      # (V,3)
-
-    # Compute a matrix of dot products between each surface normal and each sky patch vector.
-    dot_products = normal_vecs @ sky_vectors.t()  # Results in PxV matrix.
-
-    # Identify all combinations where the dot product is greater than zero.
-    point_idx, vector_idx = torch.nonzero(dot_products > 0, as_tuple=True)
-
-    origins         = point_coords[point_idx]  # (R,3) where R is number of valid rays.
-    ray_dirs        = sky_vectors[vector_idx]   # (R,3)
-    sky_patch_ids   = vector_idx                # (R,)
-    normals_per_ray = normal_vecs[point_idx] if include_normals else None  # (R,3)
-
-    result = (origins, ray_dirs, sky_patch_ids, normals_per_ray, point_idx)
-
-    # Store in session cache
-    if sess is not None:
-        sess.tensors[f"{cache_key}|g{sess._gen}"] = result
-
-    return result
+    point_idx, patch_ids = torch.nonzero(normal_vecs @ sky_vectors.t() > 0, as_tuple=True)
+    return point_coords[point_idx], sky_vectors[patch_ids], patch_ids, point_idx
 
 def generate_sun_rays(
     points_3d: np.ndarray,

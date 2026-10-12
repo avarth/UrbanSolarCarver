@@ -68,7 +68,7 @@ class TestEmptySamplePoints:
         patch_dirs = torch.tensor([[0, 0, 1]], dtype=torch.float32)
         # Currently this doesn't crash — but returns empty results silently.
         # After fix B2, preprocessing should check BEFORE calling this.
-        origins, dirs, ids, normals, point_idx = generate_sky_patch_rays(
+        origins, dirs, ids, point_idx = generate_sky_patch_rays(
             pts, norms, patch_dirs, torch.device("cpu")
         )
         assert origins.shape[0] == 0

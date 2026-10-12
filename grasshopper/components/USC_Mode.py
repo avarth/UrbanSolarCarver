@@ -13,7 +13,7 @@ determines how sky-patch weights are computed:
   - daylight:          CIE overcast sky luminance — geometry only,
                        no weather data needed.
   - radiative_cooling: Long-wave cooling potential to the sky vault
-                       (W/m²). (needs EPW)
+                       (W/m²). (needs a dew point, no EPW)
   - tilted_plane:      Geometric daylight-envelope sweep — not a
                        weighted evaluation. (needs Tilted Plane params)
 
@@ -63,7 +63,7 @@ _DESCRIPTIONS = {
     ),
     "radiative_cooling": (
         "Long-wave radiative cooling potential (W/m\u00b2). Patches weighted "
-        "by sky temperature depression from dew point. Requires EPW. "
+        "by sky temperature depression from a dew point (no EPW needed). "
         "[Experimental]"
     ),
     "tilted_plane": (

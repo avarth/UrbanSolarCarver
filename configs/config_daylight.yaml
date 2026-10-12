@@ -1,8 +1,8 @@
 # UrbanSolarCarver — Daylight mode
 # Carves voxels based on CIE Standard Overcast Sky luminance distribution.
 # Sky patches near zenith contribute more than those near the horizon.
-# No EPW data is needed — the CIE overcast sky is purely geometric.
-# Analysis period is optional (CIE weights are time-invariant).
+# No EPW data or analysis period: the CIE overcast sky is purely geometric
+# and time-invariant.
 # Typical use: daylight access envelopes, overcast-sky design.
 
 # --- Required paths ---
@@ -11,14 +11,6 @@ test_surface_path:  "path/to/testSurfaces.ply"
 out_dir:            "path/to/output"
 
 mode: daylight
-
-# Analysis period (full year is typical for daylight)
-start_month: 1
-start_day:   1
-start_hour:  0
-end_month:   12
-end_day:     31
-end_hour:    23
 
 # Grid
 voxel_size: 1.0

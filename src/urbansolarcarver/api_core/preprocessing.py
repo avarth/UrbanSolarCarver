@@ -198,6 +198,9 @@ def preprocessing(
     conf = _resolve_cfg(cfg)
     validate_inputs(conf)  # fail fast on missing mesh/EPW files
     out_path = _ensure_out_dir(out_dir, "preprocessing")
+    # A run that fails midway must not leave the previous manifest pointing
+    # at half-overwritten arrays: the manifest is written last.
+    (out_path / "manifest.json").unlink(missing_ok=True)
 
     full_cfg = conf.model_dump()
     stage_hash = hashlib.sha256(json.dumps(full_cfg, sort_keys=True).encode()).hexdigest()[:8]

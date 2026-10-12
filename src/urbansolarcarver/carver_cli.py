@@ -25,7 +25,6 @@ RPC mechanism used by the Grasshopper plugin.
 """
 from __future__ import annotations
 
-import json
 import os
 import platform
 import subprocess
@@ -109,6 +108,56 @@ def _daemon_send(payload: dict) -> dict:
         conn.close()
 
 
+def _absolute_overrides(overrides: List[str]) -> List[str]:
+    """Make path-valued ``key=value`` overrides absolute (against the CWD).
+
+    The daemon runs in another working directory, so relative paths must
+    be resolved here, where the user typed them.
+    """
+    from .load_config import PATH_FIELDS
+    out = []
+    for item in overrides:
+        key, sep, value = item.partition("=")
+        value = value.strip()
+        if sep and key.strip() in PATH_FIELDS and value and value.lower() not in ("null", "none"):
+            item = f"{key.strip()}={Path(value).resolve()}"
+        out.append(item)
+    return out
+
+
+def _run_on_daemon(payload: dict, quiet: bool) -> None:
+    """Send *payload* to the daemon, report the reply, exit 1 on failure."""
+    try:
+        resp = _daemon_send(payload)
+    except (ConnectionRefusedError, ConnectionResetError) as exc:
+        typer.secho(f"  No daemon on {daemon_host}:{daemon_port} ({exc}). "
+                    "Start one with: urbansolarcarver daemon start", fg="red")
+        raise typer.Exit(1)
+    if resp.get("status") != "ok":
+        typer.secho(f"  Daemon error: {resp.get('error', resp)}", fg="red")
+        raise typer.Exit(1)
+    if not quiet:
+        _echo_result(f"{payload['cmd']} (daemon)",
+                     {k: v for k, v in resp.items() if k != "status"})
+
+
+def _find_manifest(cfg, out_dir: Path, upstream: str, quiet: bool) -> Path:
+    """Locate ``<run>/<upstream>/manifest.json`` for a stage run without -f."""
+    candidates = [Path(cfg.out_dir) / upstream / "manifest.json",
+                  out_dir.parent / upstream / "manifest.json"]
+    for candidate in candidates:
+        if candidate.is_file():
+            if not quiet:
+                typer.secho(f"  Auto-detected manifest: {candidate}", fg="cyan")
+            return candidate
+    typer.secho(
+        f"  No -f/--from given and no {upstream}/manifest.json found in "
+        f"{candidates[0].parent.parent}. Use -f to point at the manifest.",
+        fg="red",
+    )
+    raise typer.Exit(1)
+
+
 def _echo_result(label: str, key_fields: dict):
     """Print a human-friendly summary after a stage completes."""
     typer.secho(f"\n  {label} complete", fg="green", bold=True)
@@ -172,15 +221,15 @@ def run(
     thresholding, and exporting in sequence.  For iterating on threshold
     parameters without re-computing scores, use the individual stage commands.
     """
+    cfg = load_config(str(config), override)
     if daemon:
-        resp = _daemon_send({
-            "cmd": "run_pipeline", "config": str(config),
-            "overrides": override, "out_dir": str(out_dir) if out_dir else None,
-        })
-        typer.echo(json.dumps(resp, indent=2))
+        _run_on_daemon({
+            "cmd": "run_pipeline", "config": str(config.resolve()),
+            "overrides": _absolute_overrides(override),
+            "out_dir": str(out_dir.resolve()) if out_dir else None,
+        }, quiet)
         return
 
-    cfg = load_config(str(config), override)
     out = out_dir or Path(cfg.out_dir)
 
     if not quiet:
@@ -229,14 +278,6 @@ def cmd_preprocessing(
     Outputs ``scores.npy``, ``voxel_grid.npy``, and ``manifest.json`` into
     the output directory.  The manifest is consumed by the thresholding stage.
     """
-    if daemon:
-        resp = _daemon_send({
-            "cmd": "preprocessing", "config": str(config),
-            "overrides": override, "out_dir": str(out_dir) if out_dir else None,
-        })
-        typer.echo(json.dumps(resp, indent=2))
-        return
-
     cfg = load_config(str(config), override)
     out_dir = out_dir or (Path(cfg.out_dir) / "preprocessing")
 
@@ -253,6 +294,13 @@ def cmd_preprocessing(
             typer.secho(f"    Grid size looks reasonable", fg="green")
         typer.echo()
         raise typer.Exit(0)
+
+    if daemon:
+        _run_on_daemon({
+            "cmd": "preprocessing", "config": str(config.resolve()),
+            "overrides": _absolute_overrides(override), "out_dir": str(out_dir.resolve()),
+        }, quiet)
+        return
 
     if not quiet:
         typer.secho(f"  Preprocessing [{cfg.mode}] -> {out_dir}", fg="yellow")
@@ -288,32 +336,18 @@ def cmd_thresholding(
     different ``-o threshold=...`` or ``-o carve_fraction=...`` values without
     recomputing scores.
     """
-    if daemon:
-        resp = _daemon_send({
-            "cmd": "thresholding", "from": str(from_manifest),
-            "config": str(config), "overrides": override,
-            "out_dir": str(out_dir) if out_dir else None,
-        })
-        typer.echo(json.dumps(resp, indent=2))
-        return
-
     cfg = load_config(str(config), override)
     out_dir = out_dir or (Path(cfg.out_dir) / "thresholding")
-
     if from_manifest is None:
-        parent = out_dir.parent if out_dir.name == "thresholding" else out_dir
-        candidate = parent / "preprocessing" / "manifest.json"
-        if candidate.is_file():
-            from_manifest = candidate
-            if not quiet:
-                typer.secho(f"  Auto-detected manifest: {candidate}", fg="cyan")
-        else:
-            typer.secho(
-                "  No -f/--from given and no preprocessing/manifest.json found in the default layout. "
-                "Use -f to specify the manifest path, or use the default output directory structure.",
-                fg="red",
-            )
-            raise typer.Exit(1)
+        from_manifest = _find_manifest(cfg, out_dir, "preprocessing", quiet)
+
+    if daemon:
+        _run_on_daemon({
+            "cmd": "thresholding", "from": str(from_manifest.resolve()),
+            "config": str(config.resolve()), "overrides": _absolute_overrides(override),
+            "out_dir": str(out_dir.resolve()),
+        }, quiet)
+        return
 
     if not quiet:
         typer.secho(f"  Thresholding [{cfg.threshold}] -> {out_dir}", fg="yellow")
@@ -347,32 +381,18 @@ def cmd_exporting(
     (cubic faces or SDF-smoothed marching cubes), and writes
     ``export.<format>`` (format from ``final_mesh_format``, default ply).
     """
-    if daemon:
-        resp = _daemon_send({
-            "cmd": "exporting", "from": str(from_manifest),
-            "config": str(config), "overrides": override,
-            "out_dir": str(out_dir) if out_dir else None,
-        })
-        typer.echo(json.dumps(resp, indent=2))
-        return
-
     cfg = load_config(str(config), override)
     out_dir = out_dir or (Path(cfg.out_dir) / "exporting")
-
     if from_manifest is None:
-        parent = out_dir.parent if out_dir.name == "exporting" else out_dir
-        candidate = parent / "thresholding" / "manifest.json"
-        if candidate.is_file():
-            from_manifest = candidate
-            if not quiet:
-                typer.secho(f"  Auto-detected manifest: {candidate}", fg="cyan")
-        else:
-            typer.secho(
-                "  No -f/--from given and no thresholding/manifest.json found in the default layout. "
-                "Use -f to specify the manifest path, or use the default output directory structure.",
-                fg="red",
-            )
-            raise typer.Exit(1)
+        from_manifest = _find_manifest(cfg, out_dir, "thresholding", quiet)
+
+    if daemon:
+        _run_on_daemon({
+            "cmd": "exporting", "from": str(from_manifest.resolve()),
+            "config": str(config.resolve()), "overrides": _absolute_overrides(override),
+            "out_dir": str(out_dir.resolve()),
+        }, quiet)
+        return
 
     if not quiet:
         typer.secho(f"  Exporting -> {out_dir}", fg="yellow")
@@ -804,49 +824,53 @@ def daemon_start(
 ):
     """Start the GPU daemon as a detached background process.
 
-    On Windows, uses ``pythonw.exe`` by default to avoid a visible console
-    window.  Use ``-F`` to run in the foreground (useful for debugging).
-    Polls until the daemon accepts connections, then prints a confirmation.
+    Detached runs use ``pythonw.exe`` on Windows (no console window) and
+    write their output to ``~/.urbansolarcarver/daemon.log``.  ``-F`` runs
+    in this console instead, which is useful for debugging.  Polls until
+    the daemon answers a ping.
     """
-    if python is not None:
-        py = python
-    else:
-        # On Windows, prefer pythonw.exe (no console window) for background.
-        if platform.system() == "Windows":
-            exe = Path(sys.executable)
-            py = exe.with_name("pythonw.exe") if exe.name.lower().endswith("python.exe") else exe
-        else:
-            py = Path(sys.executable)
+    try:
+        if _daemon_send({"cmd": "ping"}).get("status") == "ok":
+            typer.secho(f"  A daemon is already running on {daemon_host}:{daemon_port}", fg="yellow")
+            return
+    except OSError:
+        pass
 
-    daemon_py = Path(__file__).with_name("daemon.py")
-    cmd = [str(py), str(daemon_py), "--host", daemon_host, "--port", str(daemon_port)]
+    py = Path(python) if python is not None else Path(sys.executable)
+    if (python is None and not foreground and platform.system() == "Windows"
+            and py.name.lower() == "python.exe"):
+        py = py.with_name("pythonw.exe")
+    cmd = [str(py), "-m", "urbansolarcarver.daemon",
+           "--host", daemon_host, "--port", str(daemon_port)]
 
     if foreground:
-        subprocess.call(cmd)
-    else:
-        # Launch detached subprocess.
+        raise typer.Exit(subprocess.call(cmd))
+
+    log_path = Path.home() / ".urbansolarcarver" / "daemon.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(log_path, "w", encoding="utf-8") as log_file:
         if platform.system() == "Windows":
             flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=flags)
+            proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, creationflags=flags)
         else:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=os.setpgrp)
+            proc = subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, preexec_fn=os.setpgrp)
 
-        # Poll until daemon responds to a ping (up to 30 s).
-        typer.echo("  Starting daemon...")
-        interval = 1.0
-        max_retries = 30
-        for attempt in range(max_retries):
-            try:
-                resp = _daemon_send({"cmd": "ping"})
-                if resp.get("status") == "ok":
-                    break
-            except (ConnectionRefusedError, OSError):
-                pass
-            time.sleep(interval)
-        else:
-            typer.secho(f"  Daemon did not become ready after {max_retries}s", fg="red")
+    typer.echo("  Starting daemon...")
+    max_wait_s = 30
+    for _ in range(max_wait_s):
+        if proc.poll() is not None:
+            typer.secho(f"  Daemon exited during startup (code {proc.returncode}); see {log_path}", fg="red")
             raise typer.Exit(1)
-        typer.secho(f"  Daemon ready on {daemon_host}:{daemon_port}", fg="green")
+        try:
+            if _daemon_send({"cmd": "ping"}).get("status") == "ok":
+                break
+        except OSError:
+            pass
+        time.sleep(1.0)
+    else:
+        typer.secho(f"  Daemon did not become ready after {max_wait_s} s; see {log_path}", fg="red")
+        raise typer.Exit(1)
+    typer.secho(f"  Daemon ready on {daemon_host}:{daemon_port} (log: {log_path})", fg="green")
 
 
 @daemon_app.command("stop", help="Shutdown the running daemon")
@@ -867,10 +891,12 @@ def daemon_status():
         resp = _daemon_send({"cmd": "ping"})
         pid = resp.get("pid", "?")
         typer.secho(f"  Daemon running on {daemon_host}:{daemon_port} (pid={pid})", fg="green")
-    except (ConnectionRefusedError, OSError):
+    except OSError:
         typer.secho("  Daemon not running", fg="yellow")
+        raise typer.Exit(1)
     except Exception as e:
         typer.secho(f"  Error: {e}", fg="red")
+        raise typer.Exit(1)
 
 
 # ---------------------------------------------------------------------------

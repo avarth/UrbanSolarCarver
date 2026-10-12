@@ -164,3 +164,20 @@ class TestSessionCacheDecorator:
         result = my_func(5.0)
         assert result.item() == 5.0
         sess.close()
+
+
+class TestCacheRespectsDevice:
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+    def test_cpu_request_inside_cuda_session_gets_cpu_tensor(self):
+        """The daemon's session is on CUDA; a run configured for CPU must
+        not receive cached CUDA tensors."""
+        from urbansolarcarver.sky_patches import fetch_tregenza_patch_directions
+        with CarverSession(device="cuda"):
+            gpu = fetch_tregenza_patch_directions(torch.device("cuda"))
+            cpu = fetch_tregenza_patch_directions(torch.device("cpu"))
+        assert gpu.device.type == "cuda" and cpu.device.type == "cpu"
+
+    def test_leaving_with_block_unregisters_session(self):
+        with CarverSession(device="cpu") as sess:
+            assert get_active_session("cpu") is sess
+        assert get_active_session("cpu") is None

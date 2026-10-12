@@ -40,9 +40,6 @@ from .scoring import get_weights
 from .load_config import user_config
 from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
-from urbansolarcarver.session import get_active_session
-import hashlib
-import json
 from .sun import get_sun_vectors
 from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
@@ -534,7 +531,7 @@ def carve_with_sky_patch_rays(
     # Generate rays: sample_points (R×3), sample_normals (R×3), sky_dirs (P×3)
     # point_idx maps each ray back to its source sample point — needed when
     # per-point design weights (edge_taper) are active.
-    ray_origins, ray_directions, patch_ids, _normals_per_ray, point_idx = (
+    ray_origins, ray_directions, patch_ids, point_idx = (
         generate_sky_patch_rays(
             sample_points,
             sample_normals,
@@ -564,54 +561,23 @@ def carve_with_sky_patch_rays(
             point_idx = point_idx[keep]
     ray_point_ids = point_idx.to(torch.int32)
 
-    total_rays = ray_origins.size(0)  # Total number of rays (R * P)
+    total_rays = ray_origins.size(0)  # after facing and zero-weight filtering
 
-    # --- 3) Load patch weights ---------------------------------------------
-    # patch_weights: tensor of length P, weight per sky patch for chosen mode
-    # --- NEW: cache in CarverSession if one is active ---------------------
-    sess = get_active_session(device)
-
-    def _compute_weights():
-        return get_weights(
-            mode=config.mode,
-            device=device,
-            epw_file=config.epw_path,
-            hoys=hoys,
-            dew_point_celsius=config.dew_point_celsius,
-            bliss_k=config.bliss_k,
-            balance_temperature=config.balance_temperature,
-            balance_offset=config.balance_offset,
-            north_deg=config.north_deg,
-            min_sky_elevation_deg=config.min_sky_elevation_deg,
-            include_harm=config.include_harm,
-            simulated_weights_path=config.simulated_weights_path,
-        )
-
-    if sess:
-        # Build a reproducible key from mode + key parameters
-        key_payload = {
-            "mode": config.mode,
-            "epw": config.epw_path,
-            "hoys": list(hoys),
-            "dew": config.dew_point_celsius,
-            "bliss": config.bliss_k,
-            "balance_T": config.balance_temperature,
-            "balance_off": config.balance_offset,
-            "north": config.north_deg,
-            "min_elev": config.min_sky_elevation_deg,
-            "incl_harm": config.include_harm,
-        }
-        if config.simulated_weights_path:
-            # Cache on artifact CONTENT, not path: regenerating the file
-            # must invalidate cached patch weights.
-            with open(config.simulated_weights_path, "rb") as f:
-                key_payload["simulated_weights"] = hashlib.md5(f.read()).hexdigest()
-        cache_key = "patch_weights:" + hashlib.md5(
-            json.dumps(key_payload, sort_keys=True).encode()
-        ).hexdigest()
-        patch_weights = sess.get_tensor(cache_key, _compute_weights)
-    else:
-        patch_weights = _compute_weights()
+    # --- 3) Patch weights: one value per sky patch for the chosen mode -----
+    patch_weights = get_weights(
+        mode=config.mode,
+        device=device,
+        epw_file=config.epw_path,
+        hoys=hoys,
+        dew_point_celsius=config.dew_point_celsius,
+        bliss_k=config.bliss_k,
+        balance_temperature=config.balance_temperature,
+        balance_offset=config.balance_offset,
+        north_deg=config.north_deg,
+        min_sky_elevation_deg=config.min_sky_elevation_deg,
+        include_harm=config.include_harm,
+        simulated_weights_path=config.simulated_weights_path,
+    )
 
     # --- 4) Initialize score accumulation ---------------------------------
     num_voxels = voxel_grid.numel()     # Total voxels = X*Y*Z

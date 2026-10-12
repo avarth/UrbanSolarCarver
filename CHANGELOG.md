@@ -191,6 +191,32 @@ versioning follows [Semantic Versioning](https://semver.org/).
   while the head is a minority, return the deepest such break.
 - **Irradiance and benefit scores were labelled Wh/m²**; Ladybug returns
   kWh/m².
+- **Relative paths in a YAML config now resolve against the YAML's own
+  folder** (they resolved against whatever directory the CLI, daemon or
+  Rhino happened to run in, so one config found its files in one place and
+  not the other). The CLI sends the daemon absolute paths, and USC_Config
+  resolves relative paths against the saved `.gh` file.
+- **Period overrides no longer clash with an `analysis_period:` block**:
+  flat `start_*`/`end_*` overrides (what USC_AnalysisPeriod sends) win.
+- **`radiative_cooling` no longer requires an EPW or analysis period** (it
+  never read them), and irradiance/benefit no longer list `min_altitude`
+  (unused). Setting a field the chosen mode ignores now warns.
+- **Thresholding refuses scores from a run in another mode** instead of
+  applying that mode's default threshold rule to them.
+- **The session cache returned tensors on the wrong device** (a CPU run
+  inside the CUDA daemon failed in the Warp launch) and keyed voxel grids
+  on trimesh's rotation-invariant mesh identifier. Keys now include the
+  device, voxel grids are keyed on mesh contents, and leaving a
+  `with CarverSession()` block closes the session.
+- **CLI `--daemon`**: `--dry-run` stays local, manifests are auto-detected
+  before sending, daemon errors exit 1 with a readable message, and
+  `daemon start` refuses to start a second daemon, reports a crashed one,
+  and logs to `~/.urbansolarcarver/daemon.log`. `daemon status` exits 1
+  when no daemon runs.
+- **A stage that fails midway can no longer leave the previous run's
+  manifest** pointing at half-overwritten arrays; the run report goes into
+  the run folder (not the export folder's parent) and an old one is
+  removed before regenerating.
 - **Exporting** meshed with the config's `voxel_size` instead of the
   preprocessing run's, and counted retained voxels before the small-
   fragment cleanup (now reported as `voxels_removed_by_cleanup`).

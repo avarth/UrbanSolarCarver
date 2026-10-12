@@ -59,7 +59,7 @@ try:
     ii[0].Name, ii[0].Description = "session", "Session handle from the USC_Session component. Drag a wire from USC_Session's 'session' output to here."
     ii[1].Name, ii[1].Description = "mode", "Carving algorithm. Options: 'benefit' (heating-benefit envelope; hour weighting via balance point or, with USC_SimulateWeights, a 5R1C building simulation), 'time-based' (shadow-hour envelope), 'irradiance' (total solar radiation envelope), 'daylight' (CIE overcast daylight envelope), 'tilted_plane' (geometric daylight access angle), 'radiative_cooling' (experimental night-sky cooling)."
     ii[2].Name, ii[2].Description = "epw_path", "Full path to an EnergyPlus Weather (.epw) file for your location. Required for all modes except 'tilted_plane' and 'daylight'. Download from climate.onebuilding.org or ladybug.tools."
-    ii[3].Name, ii[3].Description = "out_dir", "Folder where all results will be saved. A subfolder structure (preprocessing/, thresholding/, exporting/) is created automatically. Tip: use a fresh folder for each experiment."
+    ii[3].Name, ii[3].Description = "out_dir", "Folder where all results will be saved. A subfolder structure (preprocessing/, thresholding/, exporting/) is created automatically. A relative path is taken relative to the saved .gh file. Tip: use a fresh folder for each experiment."
     ii[4].Name, ii[4].Description = "config_yaml", "Optional. Path to a base YAML configuration file. If omitted, the tool picks a sensible default for your chosen mode. Only needed for advanced customisation."
     ii[5].Name, ii[5].Description = "overrides", "Optional parameter overrides from other USC components (Period, Grid, Threshold, etc.). Connect multiple override wires here -- they are merged automatically."
     # CRITICAL: set overrides input to List Access so GH passes all items
@@ -100,23 +100,35 @@ def _flatten(x):
 
 
 def _mode_default_yaml(root, mode_str):
-    """Return the mode-specific default config YAML path."""
-    mode_map = {
+    """Return the mode's default config YAML path (mode_str already canonical)."""
+    fname = {
         "time-based": "config_time_based.yaml",
-        "timebased": "config_time_based.yaml",
-        "time_based": "config_time_based.yaml",
         "irradiance": "config_irradiance.yaml",
         "benefit": "config_benefit.yaml",
         "daylight": "config_daylight.yaml",
         "tilted_plane": "config_tilted_plane.yaml",
-        "tiltedplane": "config_tilted_plane.yaml",
         "radiative_cooling": "config_radiative_cooling.yaml",
-        "radiativecooling": "config_radiative_cooling.yaml",
-    }
-    # Normalize: strip hyphens/underscores for flexible matching
-    key = mode_str.replace("-", "").replace("_", "")
-    fname = mode_map.get(mode_str) or mode_map.get(key)
+    }.get(mode_str)
     return Path(root) / "configs" / fname if fname else None
+
+
+def _absolute(path_str):
+    """Resolve a relative path against the folder of the saved .gh file.
+
+    Rhino and the daemon run in different working directories, so a relative
+    path would name a different place for each of them.
+    """
+    p = Path(str(path_str).strip())
+    if p.is_absolute():
+        return str(p)
+    doc = ghenv.Component.OnPingDocument()
+    gh_file = doc.FilePath if doc is not None else None
+    if not gh_file:
+        raise ValueError(
+            "relative path '{}' needs a saved .gh file to resolve against; "
+            "save the file or use an absolute path".format(path_str)
+        )
+    return str((Path(gh_file).parent / p).resolve())
 
 
 # -- Main logic --------------------------------------------------------------
@@ -143,16 +155,22 @@ else:
     }
     mode_str = _mode_canonical.get(mode_str, mode_str)
 
-    # Resolve YAML path
-    if config_yaml is not None and str(config_yaml).strip():
-        yaml_path = str(config_yaml)
-    else:
-        _default = _mode_default_yaml(root, mode_str)
-        yaml_path = str(_default) if _default is not None else None
+    try:
+        out_dir_abs = _absolute(out_dir)
+        yaml_path = _absolute(config_yaml) if config_yaml is not None and str(config_yaml).strip() else None
+        epw_abs = _absolute(epw_path) if epw_path is not None and str(epw_path).strip() else None
+    except ValueError as exc:
+        out_dir_abs = yaml_path = epw_abs = None
+        summary = "ERROR: {}".format(exc)
 
-    if yaml_path is None:
-        summary = "ERROR: unknown mode '{}'".format(mode_str)
-    else:
+    if not summary and yaml_path is None:
+        _default = _mode_default_yaml(root, mode_str)
+        if _default is None:
+            summary = "ERROR: unknown mode '{}'".format(mode_str)
+        else:
+            yaml_path = str(_default)
+
+    if not summary:
         # Parse overrides into dict (last wins)
         override_items = _flatten(overrides)
         overrides_dict = {}
@@ -163,11 +181,9 @@ else:
 
         # Always inject mode and out_dir
         overrides_dict["mode"] = mode_str
-        overrides_dict["out_dir"] = str(out_dir)
-
-        # Inject EPW if provided
-        if epw_path is not None and str(epw_path).strip():
-            overrides_dict["epw_path"] = str(epw_path)
+        overrides_dict["out_dir"] = out_dir_abs
+        if epw_abs is not None:
+            overrides_dict["epw_path"] = epw_abs
 
         # Build config handle (non-iterable object, not dict)
         config = USCConfig(
@@ -175,14 +191,14 @@ else:
             yaml_path=yaml_path,
             overrides=overrides_dict,
             mode=mode_str,
-            out_dir=str(out_dir),
+            out_dir=out_dir_abs,
         )
 
         # Summary
         lines = [
             f"Mode: {mode_str}",
             f"YAML: {Path(yaml_path).name}",
-            f"Output: {out_dir}",
+            f"Output: {out_dir_abs}",
         ]
         if epw_path:
             lines.append(f"EPW: {Path(str(epw_path)).name}")

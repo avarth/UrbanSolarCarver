@@ -57,10 +57,7 @@ def _load_sky_matrix() -> type:
         _sky_matrix_cls = SkyMatrix
     return _sky_matrix_cls
 
-# -----------------------------------------------------------------
-#  Cache Tregenza directions once per live CarverSession.
-# -----------------------------------------------------------------
-@session_cache("tregenza_dirs")               # one-liner decorator
+@session_cache("{args[0]}")
 def fetch_tregenza_patch_directions(
     device: torch.device  # compute device for the output tensor
 ) -> torch.Tensor:
@@ -79,10 +76,7 @@ def fetch_tregenza_patch_directions(
     coords = np.array([[v.x, v.y, v.z] for v in vecs], dtype=np.float32)
     return torch.from_numpy(coords).to(device)
 
-# -----------------------------------------------------------------
-#  Cache solid angles the same way.
-# -----------------------------------------------------------------
-@session_cache("tregenza_solid_angles")
+@session_cache("{args[0]}")
 def fetch_tregenza_patch_solid_angles(
     device: torch.device  # compute device for the output tensor
 ) -> torch.Tensor:

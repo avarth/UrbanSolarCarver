@@ -171,8 +171,8 @@ def generate_run_report(
     if exp_summary:
         _mesh_path = exp_summary.get('mesh_path', '\u2014')
         lines.append(f"- **Output mesh:** `{_mesh_path}`")
-        lines.append(f"- **Vertices:** {exp_summary.get('vertices', 0):,}")
-        lines.append(f"- **Triangles:** {exp_summary.get('triangles', 0):,}")
+        lines.append(f"- **Vertices:** {exp_summary.get('vertices') or 0:,}")
+        lines.append(f"- **Triangles:** {exp_summary.get('triangles') or 0:,}")
         vol = exp_summary.get("mesh_volume_m3")
         if vol is not None:
             lines.append(f"- **Mesh volume:** {vol:,.1f} m\u00b3")

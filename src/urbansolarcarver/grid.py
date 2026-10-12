@@ -823,7 +823,16 @@ def discretize_surface_with_normals(
     return points, normals, analysis_mesh, weights, taper_stats
 
 
-@session_cache("vox:{args[0].identifier}:{kwargs[voxel_size]}:{kwargs[margin_frac]}")
+def _voxelize_cache_key(args, kwargs) -> str:
+    """Mesh contents (not trimesh's rotation-invariant identifier) + settings + device."""
+    import hashlib
+    mesh = args[0]
+    digest = hashlib.sha1(np.ascontiguousarray(mesh.vertices, dtype=np.float64).tobytes()
+                          + np.ascontiguousarray(mesh.faces, dtype=np.int64).tobytes()).hexdigest()
+    return f"{digest}:{kwargs['voxel_size']}:{kwargs['margin_frac']}:{kwargs.get('device')}"
+
+
+@session_cache(_voxelize_cache_key)
 def voxelize_mesh(
     mesh: trimesh.Trimesh,
     voxel_size: float = 1.0,

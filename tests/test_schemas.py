@@ -13,13 +13,14 @@ def _make_config(**overrides):
         "test_surface_path": "dummy_srf.ply",
         "out_dir": "out",
         "mode": "tilted_plane",
-        "tilted_plane_angle_deg": 45.0,
         "voxel_size": 2.0,
         "grid_step": 2.0,
         "ray_length": 50.0,
         "device": "cpu",
     }
     base.update(overrides)
+    if base["mode"] == "tilted_plane":
+        base.setdefault("tilted_plane_angle_deg", 45.0)
     return UserConfig(**base)
 
 
@@ -458,3 +459,38 @@ class TestCarveAboveConfig:
     def test_min_consecutive_must_be_int(self):
         cfg = _make_config(carve_above_min_consecutive=2)
         assert cfg.carve_above_min_consecutive == 2
+
+
+class TestLoadConfigOverridesAndPaths:
+    _YAML = (
+        "max_volume_path: v.ply\n"
+        "test_surface_path: s.ply\n"
+        "out_dir: out\n"
+        "mode: time-based\n"
+        "epw_path: w.epw\n"
+        "analysis_period: {st_month: 12, st_day: 21, st_hour: 10,"
+        " end_month: 12, end_day: 21, end_hour: 14}\n"
+    )
+
+    def _write(self, tmp_path):
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        path = sub / "cfg.yaml"
+        path.write_text(self._YAML, encoding="utf-8")
+        return path
+
+    def test_flat_period_overrides_win_over_yaml_block(self, tmp_path):
+        """Grasshopper's Period component sends flat start_*/end_* overrides."""
+        from urbansolarcarver.load_config import load_config
+        cfg = load_config(str(self._write(tmp_path)), ["start_month=11", "end_hour=15"])
+        assert (cfg.start_month, cfg.end_hour, cfg.end_month) == (11, 15, 12)
+
+    def test_relative_yaml_paths_resolve_against_yaml_folder(self, tmp_path, monkeypatch):
+        from pathlib import Path
+        from urbansolarcarver.load_config import load_config
+        path = self._write(tmp_path)
+        monkeypatch.chdir(tmp_path)  # a different working directory
+        cfg = load_config(str(path))
+        assert Path(cfg.out_dir) == path.parent / "out"
+        assert Path(cfg.max_volume_path) == path.parent / "v.ply"
+        assert Path(cfg.epw_path) == path.parent / "w.epw"

@@ -15,7 +15,12 @@ import os
 import warnings
 from typing import Annotated, Optional, Union, List, Tuple, Literal
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
-from .mode_registry import ALL_MODE_NAMES, EXPERIMENTAL_MODES, MODES, MODES_NEEDING_EPW
+from .mode_registry import (
+    ALL_MODE_NAMES, EXPERIMENTAL_MODES, MODES, MODES_NEEDING_EPW, MODES_NEEDING_PERIOD,
+)
+
+# Settings that only some modes read (each mode lists its own in the registry).
+_MODE_SPECIFIC_FIELDS = frozenset().union(*(spec.extra_params for spec in MODES.values()))
 
 
 # ---------- Pydantic v2 JSON helpers (public) ----------
@@ -114,6 +119,46 @@ _PERIOD_KEY_ALIASES = {
 _PERIOD_IGNORED_KEYS = {"type", "timestep", "is_leap_year"}
 
 
+def expand_analysis_period(data):
+    """Expand an ``analysis_period`` mapping into the six flat period fields.
+
+    Canonical form uses Ladybug's ``AnalysisPeriod.to_dict()`` keys
+    (``st_month`` ... ``end_hour``), so a Ladybug period can be pasted or
+    passed directly; ``start_month``-style keys work as well.  Returns a new
+    dict; raises if the mapping and a flat field in the same dict disagree.
+    """
+    if not isinstance(data, dict) or "analysis_period" not in data:
+        return data
+    data = dict(data)
+    period = data.pop("analysis_period")
+    if period is None:
+        return data
+    if not isinstance(period, dict):
+        raise ValueError(
+            "analysis_period must be a mapping, e.g. "
+            "{st_month: 10, st_day: 15, st_hour: 7, "
+            "end_month: 4, end_day: 15, end_hour: 19} "
+            "(ladybug AnalysisPeriod.to_dict() works directly)"
+        )
+    for key, raw in period.items():
+        if key in _PERIOD_IGNORED_KEYS:
+            continue
+        target = _PERIOD_KEY_ALIASES.get(key)
+        if target is None:
+            raise ValueError(
+                f"analysis_period: unknown key '{key}'; expected "
+                f"st_month/st_day/st_hour/end_month/end_day/end_hour "
+                f"(or start_* spellings)"
+            )
+        if target in data and data[target] != raw:
+            raise ValueError(
+                f"analysis_period.{key}={raw!r} conflicts with top-level "
+                f"{target}={data[target]!r}; specify the period once"
+            )
+        data[target] = raw
+    return data
+
+
 # ---------- YAML config schema ----------
 class UserConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -121,43 +166,7 @@ class UserConfig(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def _expand_analysis_period(cls, data):
-        """Expand an ``analysis_period`` mapping into the six flat fields.
-
-        Canonical form uses Ladybug's ``AnalysisPeriod.to_dict()`` keys
-        (``st_month`` ... ``end_hour``), so a Ladybug period can be pasted
-        or passed directly; ``start_month``-style keys work as well.  The
-        flat top-level fields remain valid aliases.
-        """
-        if not isinstance(data, dict) or "analysis_period" not in data:
-            return data
-        data = dict(data)  # don't mutate the caller's dict
-        period = data.pop("analysis_period")
-        if period is None:
-            return data
-        if not isinstance(period, dict):
-            raise ValueError(
-                "analysis_period must be a mapping, e.g. "
-                "{st_month: 10, st_day: 15, st_hour: 7, "
-                "end_month: 4, end_day: 15, end_hour: 19} "
-                "(ladybug AnalysisPeriod.to_dict() works directly)"
-            )
-        for key, raw in period.items():
-            if key in _PERIOD_IGNORED_KEYS:
-                continue
-            target = _PERIOD_KEY_ALIASES.get(key)
-            if target is None:
-                raise ValueError(
-                    f"analysis_period: unknown key '{key}' — expected "
-                    f"st_month/st_day/st_hour/end_month/end_day/end_hour "
-                    f"(or start_* spellings)"
-                )
-            if target in data and data[target] != raw:
-                raise ValueError(
-                    f"analysis_period.{key}={raw!r} conflicts with top-level "
-                    f"{target}={data[target]!r} — specify the period once"
-                )
-            data[target] = raw
-        return data
+        return expand_analysis_period(data)
 
     # file paths
     max_volume_path: str = Field(..., description="Path to the maximum volume mesh (PLY)")
@@ -459,16 +468,24 @@ class UserConfig(BaseModel):
                 spec = ThresholdSpec(method="carve_fraction", value=self.carve_fraction)
             elif spec.method == "carve_fraction" and spec.value is None:
                 spec = ThresholdSpec(method="carve_fraction", value=self.carve_fraction)
+            elif (spec.method == "carve_fraction" and "carve_fraction" in self.model_fields_set
+                  and spec.value != self.carve_fraction):
+                warnings.warn(
+                    f"threshold value {spec.value} and carve_fraction={self.carve_fraction} "
+                    f"disagree; using the threshold value {spec.value}.",
+                    UrbanSolarCarverWarning,
+                    stacklevel=2,
+                )
 
         self.threshold = spec
         return self
 
     @model_validator(mode='after')
     def _check_mode_requirements(self) -> 'UserConfig':
-        """Enforce that modes requiring sun/sky data have EPW + analysis period."""
-        if self.mode in MODES_NEEDING_EPW:
-            if not self.epw_path:
-                raise ValueError(f"mode '{self.mode}' requires epw_path")
+        """Require the EPW and the analysis period where the mode uses them."""
+        if self.mode in MODES_NEEDING_EPW and not self.epw_path:
+            raise ValueError(f"mode '{self.mode}' requires epw_path")
+        if self.mode in MODES_NEEDING_PERIOD:
             period_fields = {
                 'start_month': self.start_month, 'start_day': self.start_day,
                 'start_hour': self.start_hour, 'end_month': self.end_month,
@@ -482,6 +499,19 @@ class UserConfig(BaseModel):
         return self
 
     @model_validator(mode='after')
+    def _warn_ignored_fields(self) -> 'UserConfig':
+        """Warn about mode-specific settings the chosen mode does not use."""
+        used = MODES[self.mode].extra_params
+        ignored = sorted((self.model_fields_set & _MODE_SPECIFIC_FIELDS) - used)
+        if ignored:
+            warnings.warn(
+                f"mode '{self.mode}' does not use: {', '.join(ignored)} (ignored)",
+                UrbanSolarCarverWarning,
+                stacklevel=2,
+            )
+        return self
+
+    @model_validator(mode='after')
     def _check_simulated_weights_path(self) -> 'UserConfig':
         if self.simulated_weights_path is not None:
             if self.mode != "benefit":
@@ -489,9 +519,7 @@ class UserConfig(BaseModel):
                     "simulated_weights_path is only valid for mode 'benefit' "
                     f"(got mode '{self.mode}')"
                 )
-            defaults = (self.balance_temperature == 15.0
-                        and self.balance_offset == 2.0)
-            if not defaults:
+            if {"balance_temperature", "balance_offset"} & self.model_fields_set:
                 warnings.warn(
                     "balance_temperature/balance_offset are unused when "
                     "simulated_weights_path is set — the artifact's hourly weights "

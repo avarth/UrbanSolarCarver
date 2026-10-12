@@ -170,7 +170,7 @@ class TestGenerateSkyPatchRays:
         norms = np.array([[0, 0, 1]], dtype=np.float32)  # facing +Z
         # Two patches: one above (+Z), one below (-Z)
         patch_dirs = torch.tensor([[0, 0, 1], [0, 0, -1]], dtype=torch.float32)
-        origins, dirs, ids, normals, point_idx = generate_sky_patch_rays(pts, norms, patch_dirs, torch.device("cpu"))
+        origins, dirs, ids, point_idx = generate_sky_patch_rays(pts, norms, patch_dirs, torch.device("cpu"))
         # Only the +Z patch should produce a ray
         assert origins.shape[0] == 1
         assert ids[0].item() == 0  # first patch (+Z)
@@ -186,7 +186,7 @@ class TestGenerateSkyPatchRays:
             [0.5, 0.0, 0.866],
             [0.0, 0.5, 0.866],
         ], dtype=torch.float32)
-        origins, dirs, ids, normals, point_idx = generate_sky_patch_rays(pts, norms, patch_dirs, torch.device("cpu"))
+        origins, dirs, ids, point_idx = generate_sky_patch_rays(pts, norms, patch_dirs, torch.device("cpu"))
         # 2 points x 3 patches = 6 rays (all patches are above the surface)
         assert origins.shape[0] == 6
         # point_idx should map each ray back to its source point (0 or 1)

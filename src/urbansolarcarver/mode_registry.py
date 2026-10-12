@@ -48,7 +48,7 @@ MODES: Dict[str, ModeSpec] = {
         needs_period=True,
         score_kind="weighted_sum",
         weight_unit="kWh/m²",
-        extra_params=_EPW_AND_PERIOD | {"min_altitude"},
+        extra_params=_EPW_AND_PERIOD,
     ),
     "benefit": ModeSpec(
         name="benefit",
@@ -56,7 +56,7 @@ MODES: Dict[str, ModeSpec] = {
         needs_period=True,
         score_kind="weighted_sum",
         weight_unit="kWh/m² (heating benefit)",
-        extra_params=_EPW_AND_PERIOD | {"min_altitude", "balance_temperature",
+        extra_params=_EPW_AND_PERIOD | {"balance_temperature",
                                         "balance_offset", "include_harm",
                                         "simulated_weights_path"},
     ),
@@ -78,12 +78,11 @@ MODES: Dict[str, ModeSpec] = {
     ),
     "radiative_cooling": ModeSpec(
         name="radiative_cooling",
-        needs_epw=True,
-        needs_period=True,
+        needs_epw=False,
+        needs_period=False,
         score_kind="weighted_sum",
         weight_unit="W/m² (cooling potential)",
-        extra_params=_EPW_AND_PERIOD | {"dew_point_celsius", "bliss_k",
-                                        "min_sky_elevation_deg"},
+        extra_params=frozenset({"dew_point_celsius", "bliss_k", "min_sky_elevation_deg"}),
         experimental=True,
     ),
 }
