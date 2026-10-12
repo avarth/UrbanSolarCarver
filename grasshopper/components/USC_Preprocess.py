@@ -10,7 +10,7 @@ Inputs
 ------
 config : USCConfig
     Config handle from USC Config.
-max_volume : Mesh or Brep
+max_volume : Mesh or Brep (list)
     Maximum volume envelope geometry.
 test_surfaces : Mesh or Brep (list)
     Insolation test surfaces.
@@ -47,8 +47,8 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config. Contains mode, file paths, and all parameter overrides."
-    ii[1].Name, ii[1].Description = "max_volume", "The maximum building envelope -- the largest volume the building could occupy before solar carving. Provide as Rhino Mesh or Brep. Multiple objects accepted (set input to List Access)."
-    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces that need solar access (neighbouring facades, public spaces, parks). Rays are cast FROM these surfaces THROUGH the max volume. Provide as Rhino Mesh or Brep. Set input to List Access. Surfaces are subsampled into a uniform point grid at grid_step spacing (set in USC_GridSettings) — each sample point generates rays, so smaller grid_step = more points = finer results but slower. IMPORTANT: each surface must be a single flat panel — explode polysurfaces (e.g. extruded block boundaries) into individual faces before connecting, otherwise preprocessing will fail with a planarity error."
+    ii[1].Name, ii[1].Description = "max_volume", "The maximum building envelope -- the largest volume the building could occupy before solar carving. Provide as Rhino Mesh or Brep. Multiple objects accepted."
+    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces that need solar access (neighbouring facades, public spaces, parks). Rays are cast FROM these surfaces THROUGH the max volume. Provide as Rhino Mesh or Brep (one or many). Surfaces are subsampled into a uniform point grid at grid_step spacing (set in USC_GridSettings) — each sample point generates rays, so smaller grid_step = more points = finer results but slower. IMPORTANT: each surface must be a single flat panel — explode polysurfaces (e.g. extruded block boundaries) into individual faces before connecting, otherwise preprocessing will fail with a planarity error."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle to execute. Set True to run preprocessing. Set False to prevent computation (useful while adjusting parameters)."
     oo[0].Name, oo[0].Description = "pre_result", "Path to the preprocessing manifest file. Connect this to USC_ThresholdStage's 'pre_result' input to continue the pipeline."
     oo[1].Name, oo[1].Description = "diagnostics", "Text summary: grid dimensions, filled voxels, score range, timing. Check this to verify the preprocessing ran correctly."

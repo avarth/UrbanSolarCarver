@@ -63,6 +63,35 @@ def device_summary(device) -> str:
             return "CUDA"
     return "CPU"
 
+def load_occupancy(pre_manifest, conf: user_config):
+    """Boolean occupancy grid (numpy) of a preprocessing run.
+
+    Reuses the persisted ``voxel_grid.npy``; re-voxelizes the max volume
+    only for manifests written before that file existed.
+    """
+    import numpy as np
+    vg_path = pre_manifest.voxel_grid_path
+    if vg_path and Path(vg_path).is_file():
+        occ = np.load(vg_path, allow_pickle=False).astype(bool)
+    else:
+        import torch
+        from ..carving import load_meshes
+        from ..grid import voxelize
+        env_mesh, _ = load_meshes(conf)
+        env_mesh = env_mesh.copy()  # same local frame as preprocessing
+        env_mesh.vertices = np.round(env_mesh.vertices - env_mesh.bounds[0], 6)
+        vg, *_ = voxelize(env_mesh, conf, device=torch.device("cpu"))
+        occ = vg.cpu().numpy().astype(bool)
+    if tuple(occ.shape) != tuple(pre_manifest.shape):
+        raise ValueError(
+            f"Voxel grid shape {tuple(occ.shape)} does not match the grid shape "
+            f"{tuple(pre_manifest.shape)} recorded in the preprocessing manifest — "
+            f"the occupancy grid is from a different run (check voxel_size / "
+            f"margin_frac consistency)."
+        )
+    return occ
+
+
 def dump_config_snapshot(conf, diag_dir) -> Path:
     """Write the full resolved config to diagnostics for reproducibility."""
     snapshot = conf.model_dump()

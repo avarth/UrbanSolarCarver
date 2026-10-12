@@ -11,7 +11,7 @@ Inputs
 ------
 config : USCConfig
     Config handle from USC Config.
-max_volume : Mesh or Brep
+max_volume : Mesh or Brep (list)
     Maximum volume envelope geometry.
 test_surfaces : Mesh or Brep (list)
     Insolation test surfaces.
@@ -46,8 +46,8 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config. Contains all settings for the full pipeline."
-    ii[1].Name, ii[1].Description = "max_volume", "Maximum building envelope geometry (Mesh or Brep). Set input to List Access for multiple objects."
-    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces requiring solar access (Mesh or Brep). Set input to List Access."
+    ii[1].Name, ii[1].Description = "max_volume", "Maximum building envelope geometry (Mesh or Brep). Multiple objects accepted."
+    ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces requiring solar access (Mesh or Brep), one or many."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle. True to run the complete pipeline (preprocessing + thresholding + exporting) in one step."
     oo[0].Name, oo[0].Description = "mesh", "The carved envelope as a Rhino Mesh. Displayed directly in the viewport."
     oo[1].Name, oo[1].Description = "export_path", "Full path to the exported mesh file on disk."
@@ -282,20 +282,23 @@ def _load_ply_to_rhino(path):
         xo = xyz_off.get("x", 0)
         yo = xyz_off.get("y", 4)
         zo = xyz_off.get("z", 8)
+        # USC writes double-precision vertices for georeferenced exports.
+        xyz_size = dict(vertex_props).get("x", 4)
+        xyz_fmt = "d" if xyz_size == 8 else "f"
 
         if is_binary_le:
             raw = f.read(nv * stride)
-            if stride == 12 and xo == 0 and yo == 4 and zo == 8:
+            if stride == 3 * xyz_size and xo == 0 and yo == xyz_size and zo == 2 * xyz_size:
                 # Fast path: xyz-only layout (trimesh default, no normals)
-                verts = struct.unpack(f"<{nv * 3}f", raw)
+                verts = struct.unpack(f"<{nv * 3}{xyz_fmt}", raw)
             else:
                 # General path: extract x/y/z at their actual byte offsets
                 verts = []
                 for i in range(nv):
                     base = i * stride
-                    verts.append(struct.unpack_from("<f", raw, base + xo)[0])
-                    verts.append(struct.unpack_from("<f", raw, base + yo)[0])
-                    verts.append(struct.unpack_from("<f", raw, base + zo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + xo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + yo)[0])
+                    verts.append(struct.unpack_from("<" + xyz_fmt, raw, base + zo)[0])
             # Bulk-read all face data at once (avoids 2×nf individual reads)
             face_data = f.read()
             faces = []
@@ -326,6 +329,8 @@ def _load_ply_to_rhino(path):
                 faces.append(tuple(int(x) for x in p[1:c + 1]))
 
     mesh_out = rg.Mesh()
+    # Rhino stores mesh vertices as float32 by default (~0.5 m at UTM northings).
+    mesh_out.Vertices.UseDoublePrecisionVertices = True
 
     pt_arr = System.Array.CreateInstance(rg.Point3d, nv)
     for i in range(nv):

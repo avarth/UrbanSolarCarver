@@ -23,22 +23,24 @@ Scores are continuous **weighted sums** -- the total sky-patch weight obstructed
 
 | Strategy | How it works | When to use |
 |----------|---|---|
-| `carve_fraction` (default) | Ranks voxels by score, removes top-scorers until the target fraction of total obstruction weight is eliminated. `0.7` = aggressive (tall, slim volumes). `0.3` = conservative (bulky volumes). | **Recommended.** Intuitive slider; no knowledge of score distribution needed. |
+| `carve_fraction` (default) | Ranks the building's voxels by score, removes top-scorers until the target fraction of the building's total obstruction weight is eliminated. `0.7` = aggressive (tall, slim volumes). `0.3` = conservative (bulky volumes). | **Recommended.** Intuitive slider; no knowledge of score distribution needed. |
 | `headtail` | Jiang (2013) head/tail breaks: iteratively splits the distribution at the mean. Good for heavy-tailed distributions. | When you want an automatic, data-driven split without choosing a fraction. |
 | Numeric value | Manual cutoff on raw scores. Voxels scoring above this value are carved. | **Advanced.** Only useful after inspecting the score histogram in `diagnostics/`. The value is mode- and dataset-specific; not portable across runs. |
 
+All three strategies, the score smoothing and the reported retention consider **occupied voxels only**. Rays also cross the empty cells of streets, courtyards and the grid margin, and those cells typically hold 60--80% of the total score mass; including them would make the result depend on how much air the grid contains.
+
 ### For violation-count modes (time-based, tilted_plane)
 
-Scores are **integer violation counts** -- the number of time steps (sun hours) or plane intersections that each voxel causes. These have direct physical meaning:
+`time-based` scores are **violation durations in hours** -- how long, within the analysis period, each voxel shades a protected surface. These have direct physical meaning:
 
 | Threshold value | Meaning |
 |---|---|
-| `0` (default) | **Strict** -- remove any voxel that causes even one violation |
-| `1` | Allow one hour of shadow (or one plane intersection) |
-| `2` | Allow two violations, etc. |
+| `0` (default) | **Strict** -- remove any voxel that shades a protected surface at any sampled moment |
+| `1` | Tolerate up to one hour of shading |
+| `0.5` | Tolerate up to half an hour, etc. |
 | `None` | Uses the default (0 = strict) |
 
-String strategies (`carve_fraction`, `headtail`) are **not applicable** to integer counts and will raise an error for `tilted_plane`. For `time-based`, the threshold is applied as a simple integer cutoff.
+String strategies (`carve_fraction`, `headtail`) are **not applicable** to violation counts and raise an error. `tilted_plane` is strictly binary (see below).
 
 !!! tip "Violation counts are powerful"
     Unlike weighted modes, violation-count thresholds have a clear physical interpretation. `threshold: 0` means "zero shadow tolerance during the analysis period." `threshold: 2` means "allow up to 2 hours of shadow." This makes time-based mode the most transparent and controllable carving strategy.
@@ -46,6 +48,8 @@ String strategies (`carve_fraction`, `headtail`) are **not applicable** to integ
 ## time-based
 
 Casts rays from test surfaces along actual sun vectors for specific dates and times. A voxel is carved if **any** sun ray passes through it. Simple binary logic -- no weighting.
+
+The sun is sampled `sun_steps_per_hour` times per hour (default 12, i.e. every 5 minutes). The sun moves about 15° of azimuth per hour, so hourly sampling leaves gaps between the ray sheets of consecutive hours in which mass survives while still shading the protected surface between samples; at 1 m voxels, 5-minute sampling closes them for obstructions up to ~40 m away. Ray count grows linearly with this value.
 
 **Use case**: protect direct sunlight during specific hours (e.g., winter solstice 10:00--14:00).
 
@@ -101,7 +105,7 @@ Weights sky patches using the CIE standard overcast sky luminance distribution. 
 
 ## tilted_plane
 
-Traditional geometric solar envelope method. Voxels above a tilted plane at a fixed angle from each test surface are carved. No weather data or ray tracing is involved -- purely geometric.
+Traditional geometric solar envelope method. Every voxel above a tilted plane at a fixed angle from each test surface is carved. No weather data is involved. Each sample point casts one ray at the plane angle, outward along the facade's horizontal normal, and every voxel at or above that ray in its (x, y) column is removed -- the whole half-space above the plane, not only the band the rays cross.
 
 The angle can be a single float (applied uniformly) or a list of 8 floats (one per octant, for directional control).
 

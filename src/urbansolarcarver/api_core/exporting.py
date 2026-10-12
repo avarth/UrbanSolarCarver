@@ -16,12 +16,11 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 from ..load_config import user_config
-from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device
+from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, load_occupancy
 from ._reporting import generate_run_report
 from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest, schema_from_json
 from ..io import save_mesh
-from ..grid import voxelize, finalize_mesh
-from ..carving import load_meshes
+from ..grid import finalize_mesh
 import time
 
 @dataclass(frozen=True)
@@ -143,19 +142,7 @@ def exporting(
     resolved_device = resolve_device(conf.device)
     mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
-    # Reuse persisted voxel grid from preprocessing (avoids expensive re-voxelization).
-    if pre_manifest.voxel_grid_path and Path(pre_manifest.voxel_grid_path).is_file():
-        voxel_grid_np = np.load(pre_manifest.voxel_grid_path, allow_pickle=False)
-        voxel_grid = torch.as_tensor(voxel_grid_np, device=resolved_device)
-    else:
-        env_mesh, _ = load_meshes(conf)
-        voxel_grid, *_ = voxelize(env_mesh, conf, device=resolved_device)
-    if tuple(voxel_grid.shape) != grid_shape:
-        raise ValueError(
-            f"Voxel grid shape {tuple(voxel_grid.shape)} does not match the mask "
-            f"shape {grid_shape} — the occupancy grid and mask are from "
-            f"different runs (check voxel_size / margin_frac consistency)."
-        )
+    voxel_grid = torch.as_tensor(load_occupancy(pre_manifest, conf), device=resolved_device)
 
     # Column post-processing: carve occupied voxels above carved runs.
     _carve_above_extra = 0
@@ -171,9 +158,15 @@ def exporting(
         mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
     carve_grid = (voxel_grid.bool() & mask_tensor)
-    origin = np.array(pre_manifest.origin, dtype=float)
+    origin = np.array(pre_manifest.origin, dtype=np.float64)
 
-    cleaned_voxels, mesh_pre, final_mesh = finalize_mesh(carve_grid, origin, conf)
+    # Mesh at the grid's own origin, then place it in float64: the mesh
+    # builders emit float32 vertices, which cannot hold georeferenced
+    # coordinates to better than ~0.5 m.
+    cleaned_voxels, mesh_pre, final_mesh = finalize_mesh(carve_grid, np.zeros(3), conf)
+    for m in (mesh_pre, final_mesh):
+        if m is not None and hasattr(m, "apply_translation"):
+            m.apply_translation(origin)
 
     ext = conf.final_mesh_format
     export_path = out_path / f"export.{ext}"
@@ -200,10 +193,10 @@ def exporting(
         log.warning("Could not compute mesh bounds: %s", exc)
         bbox = None
     bbox_dims = [float(bbox[1][i] - bbox[0][i]) for i in range(3)] if bbox is not None else None
-    # Voxel retention
-    carved_voxels = int(carve_grid.sum().item()) if hasattr(carve_grid, 'sum') else None
-    original_voxels = int(voxel_grid.sum().item()) if hasattr(voxel_grid, 'sum') else None
-    retention_pct = round(100.0 * carved_voxels / max(original_voxels, 1), 2) if carved_voxels is not None and original_voxels is not None else None
+    # Voxel retention, over occupied voxels (same basis as thresholding).
+    retained_voxels = int(carve_grid.sum().item())
+    original_voxels = int(voxel_grid.sum().item())
+    retention_pct = round(100.0 * retained_voxels / max(original_voxels, 1), 2)
 
     diag_dir = ensure_diag(out_path)
     diagnostic = {
@@ -214,7 +207,8 @@ def exporting(
         "mesh_volume_m3": mesh_volume,
         "bbox_dimensions_m": bbox_dims,
         "voxels_original": original_voxels,
-        "voxels_carved": carved_voxels,
+        "voxels_retained": retained_voxels,
+        "voxels_removed": original_voxels - retained_voxels,
         "voxel_retention_pct": retention_pct,
         "carve_above_applied": conf.carve_above,
         "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
@@ -240,7 +234,7 @@ def exporting(
     return ExportingResult(
         out_dir=out_path,
         export_path=export_path,
-        retention_pct=retention_pct if retention_pct is not None else 0.0,
+        retention_pct=retention_pct,
         mesh_volume_m3=mesh_volume,
         vertices=v_count if v_count is not None else 0,
         faces=f_count if f_count is not None else 0,

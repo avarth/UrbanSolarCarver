@@ -28,7 +28,7 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "angle", "Single daylight access angle in degrees, applied uniformly to all directions. This is the angle between the horizontal ground plane and the daylight access plane. 45 deg means 1:1 height-to-distance ratio. Range: 10-80 deg."
-    ii[1].Name, ii[1].Description = "octants", "Eight angles in degrees, one per cardinal/intercardinal direction [N, NE, E, SE, S, SW, W, NW]. Use this instead of 'angle' when different directions need different daylight access. Set this input to List Access. Provide exactly 8 values."
+    ii[1].Name, ii[1].Description = "octants", "Eight angles in degrees, one per cardinal/intercardinal direction [N, NE, E, SE, S, SW, W, NW]. Use this instead of 'angle' when different directions need different daylight access. Provide exactly 8 values."
     oo[0].Name, oo[0].Description = "overrides", "Tilted plane settings formatted for USC_Config. Connect to Config's 'overrides' input. Only relevant when mode='tilted_plane'."
     # octants must be List Access so GH collects all 8 values at once
     import Grasshopper

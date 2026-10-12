@@ -61,7 +61,7 @@ try:
     ii[2].Name, ii[2].Description = "epw_path", "Full path to an EnergyPlus Weather (.epw) file for your location. Required for all modes except 'tilted_plane' and 'daylight'. Download from climate.onebuilding.org or ladybug.tools."
     ii[3].Name, ii[3].Description = "out_dir", "Folder where all results will be saved. A subfolder structure (preprocessing/, thresholding/, exporting/) is created automatically. Tip: use a fresh folder for each experiment."
     ii[4].Name, ii[4].Description = "config_yaml", "Optional. Path to a base YAML configuration file. If omitted, the tool picks a sensible default for your chosen mode. Only needed for advanced customisation."
-    ii[5].Name, ii[5].Description = "overrides", "Optional parameter overrides from other USC components (Period, Grid, Threshold, etc.). Connect multiple override wires here -- they are merged automatically. Set this input to List Access."
+    ii[5].Name, ii[5].Description = "overrides", "Optional parameter overrides from other USC components (Period, Grid, Threshold, etc.). Connect multiple override wires here -- they are merged automatically."
     # CRITICAL: set overrides input to List Access so GH passes all items
     # at once instead of running the component once per item.
     import Grasshopper

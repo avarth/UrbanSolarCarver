@@ -80,14 +80,18 @@ if _perm is not None:
 if _hot is not None:
     data["shading_hot"] = float(_hot)
 if _months is not None:
+    # List access: '6,7,8,9' from a panel arrives as ['6,7,8,9'], a wired
+    # series as [6, 7, 8, 9], an unwired input as []. Accept all of them.
     if isinstance(_months, str):
-        _months = [int(m) for m in _months.split(",") if m.strip()]
-    else:
-        try:
-            _months = [int(m) for m in _months]
-        except TypeError:
-            _months = [int(_months)]
-    data["hot_months"] = _months
+        _months = [_months]
+    try:
+        _items = list(_months)
+    except TypeError:
+        _items = [_months]
+    _months = [int(float(p)) for m in _items if m is not None
+               for p in str(m).split(",") if p.strip()] or None
+    if _months is not None:
+        data["hot_months"] = _months
 
 if _hot is not None and _months is None:
     summary = _add_error("shading_hot requires hot_months (e.g. '6,7,8,9')")

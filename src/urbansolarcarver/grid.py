@@ -522,8 +522,16 @@ def sample_planar_surface(
     xmin, ymin, xmax, ymax = planar_polygon.bounds
     world_ref_u = -np.dot(centroid, axis_u)  # world origin (0,0,0) in local u
     world_ref_v = -np.dot(centroid, axis_v)  # world origin (0,0,0) in local v
-    x0 = xmin + ((world_ref_u - xmin) % sample_step)
-    y0 = ymin + ((world_ref_v - ymin) % sample_step)
+    # A lattice line that falls on the polygon's edge (e.g. every facade's
+    # ground edge when the frame origin is at ground level) gives a remainder
+    # of ~0 or ~sample_step depending on rounding noise; snap both to exactly
+    # 0 so the edge row is treated the same way on every run and position.
+    def _phase(ref, lo):
+        r = (ref - lo) % sample_step
+        tol = sample_step * 1e-6
+        return 0.0 if (r < tol or r > sample_step - tol) else r
+    x0 = xmin + _phase(world_ref_u, xmin)
+    y0 = ymin + _phase(world_ref_v, ymin)
     grid_x = np.arange(x0, xmax, sample_step)
     grid_y = np.arange(y0, ymax, sample_step)
     grid_X, grid_Y = np.meshgrid(grid_x, grid_y)
@@ -1026,8 +1034,8 @@ def prune_voxels_morph(
     1. Remove tiny connected components (26-connectivity).
     2. Apply a 3×3×3 majority filter (keeps voxels with ≥3 neighbors) to
        suppress isolated specks.
-    3. Run a single binary closing with a 6-connected structuring element to
-       seal pinholes without shrinking slabs.
+
+    Only removes voxels, never adds them: re-adding would undo carving.
 
     Parameters
     ----------

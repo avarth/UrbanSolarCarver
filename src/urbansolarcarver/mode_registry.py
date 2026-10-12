@@ -40,7 +40,7 @@ MODES: Dict[str, ModeSpec] = {
         needs_period=True,
         score_kind="violation_count",
         weight_unit="hours",
-        extra_params=_EPW_AND_PERIOD | {"min_altitude"},
+        extra_params=_EPW_AND_PERIOD | {"min_altitude", "sun_steps_per_hour"},
     ),
     "irradiance": ModeSpec(
         name="irradiance",

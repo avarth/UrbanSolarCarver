@@ -41,7 +41,7 @@ After scoring, a threshold determines which voxels to carve and which to keep. T
 | **Head-tail breaks** | `threshold: headtail` | Heavy-tailed distributions. Biased toward removing only the worst obstructors, preserving more buildable volume when most voxels have low scores. |
 | **Manual** | `threshold: 0.35` | Expert use. Carves all voxels with score above this value. Inspect the score histogram (`diagnostics: true`) first. |
 
-The strategies above apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`). The two binary modes have fixed semantics: **`tilted_plane`** has no threshold (voxels above the cut plane are always removed); **`time-based`** uses an integer violation count (`threshold: 0` = remove any voxel that casts a shadow even once, `threshold: 1` = tolerate one time step, etc.).
+The strategies above apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`). The two binary modes have fixed semantics: **`tilted_plane`** has no threshold (voxels above the cut plane are always removed); **`time-based`** uses the violation duration in hours (`threshold: 0` = remove any voxel that casts a shadow at any sampled moment, `threshold: 1` = tolerate up to one hour, etc.; the sun is sampled every 5 minutes by default, see `sun_steps_per_hour`).
 
 The **decomposed pipeline** is designed for threshold exploration: compute scores once (the expensive step), then re-run thresholding with different values instantly.
 
@@ -51,7 +51,7 @@ https://github.com/user-attachments/assets/7fb20820-bd24-4ccd-86f5-4f4f868b372a
 
 - **GPU-accelerated** ray tracing via NVIDIA Warp, with CPU fallback
 - **Simulated benefit weights**: a built-in ISO 13790 (5R1C) hourly building simulation derives when a marginal joule of solar gain is actually useful (thermal lag, mass state, gain saturation), independently implemented and validated against ETH's [RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator)
-- **Grasshopper plugin** for Rhino 3D with 24 components and persistent GPU daemon
+- **Grasshopper plugin** for Rhino 3D with 25 components and persistent GPU daemon
 - **3-stage pipeline** (preprocessing, thresholding, exporting), each re-runnable independently
 - **YAML configuration** with CLI overrides (`-o voxel_size=0.5 -o mode=irradiance`) and mode-specific templates
 - **Smooth or cubic meshes**: marching cubes + Taubin smoothing, or axis-aligned voxels

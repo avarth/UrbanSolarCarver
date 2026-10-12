@@ -26,15 +26,15 @@ analysis_period:
 voxel_size: 1.0
 
 # --- Threshold ---
-# time-based scores are violation COUNTS (integer: how many time steps in the
-# analysis period a voxel casts a shadow on the test surfaces). Use a
-# non-negative integer:
+# time-based scores are violation DURATIONS in hours (how long, within the
+# analysis period, a voxel casts a shadow on the test surfaces). Use a
+# non-negative number:
 #   threshold: 0   — strict: keep only voxels that NEVER shadow test surfaces (default)
-#   threshold: 1   — allow shadow in at most 1 time step
-#   threshold: 2   — allow shadow in at most 2 time steps
-# The right value depends on how many time steps the period contains.
-# Do NOT use string methods (otsu/headtail/carve_fraction) — they are not
-# meaningful for integer violation counts and will raise an error.
+#   threshold: 1   — tolerate up to 1 hour of shadow
+#   threshold: 0.5 — tolerate up to 30 minutes
+# Do NOT use string methods (headtail/carve_fraction) — they are not
+# meaningful for violation durations and will raise an error.
+# sun_steps_per_hour: 12   # sun sampled every 5 min (default); hourly leaves gaps
 # threshold: 0    # uncomment to set explicitly; None uses the strict default (0)
 
 # -- Defaults you may want to override ----------------------------------------

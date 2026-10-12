@@ -338,6 +338,8 @@ class TestDefaultThresholdReporting:
         pre_dir.mkdir(parents=True, exist_ok=True)
         scores_path = pre_dir / "scores.npy"
         np.save(scores_path, scores, allow_pickle=False)
+        vg_path = pre_dir / "voxel_grid.npy"
+        np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
         pm = PreprocessingManifest(
             hash="test1234",
@@ -347,6 +349,7 @@ class TestDefaultThresholdReporting:
             origin=(0.0, 0.0, 0.0),
             voxel_size=1.0,
             mode="irradiance",
+            voxel_grid_path=str(vg_path),
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
@@ -405,6 +408,8 @@ class TestScoreSmoothing:
         pre_dir.mkdir(parents=True, exist_ok=True)
         scores_path = pre_dir / "scores.npy"
         np.save(scores_path, scores, allow_pickle=False)
+        vg_path = pre_dir / "voxel_grid.npy"
+        np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
         pm = PreprocessingManifest(
             hash="test1234",
@@ -414,6 +419,7 @@ class TestScoreSmoothing:
             origin=(0.0, 0.0, 0.0),
             voxel_size=voxel_size,
             mode="irradiance" if kind == "weighted_sum" else "time-based",
+            voxel_grid_path=str(vg_path),
         )
         manifest_path = pre_dir / "manifest.json"
         manifest_path.write_text(schema_to_json(pm), encoding="utf-8")

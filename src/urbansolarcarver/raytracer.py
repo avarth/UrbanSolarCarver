@@ -320,6 +320,24 @@ if _warp_available:
             s.active = 0
         return s
 
+    @wp.func
+    def _in_front(s: _DDAState, grid_origin: wp.vec3, cell_size: float,
+                  o: wp.vec3, n: wp.vec3) -> int:
+        """1 if the current voxel's centre lies in front of the ray's source
+        surface (plane through *o* with normal *n*).
+
+        A test surface sits inside the boundary voxels of its own mass; those
+        voxels are the building, not an obstruction of it.
+        """
+        c = wp.vec3(
+            grid_origin[0] + (float(s.vx) + 0.5) * cell_size,
+            grid_origin[1] + (float(s.vy) + 0.5) * cell_size,
+            grid_origin[2] + (float(s.vz) + 0.5) * cell_size,
+        )
+        if wp.dot(n, c - o) > 0.0:
+            return 1
+        return 0
+
     @wp.kernel
     def _dda_trace_kernel(
         # Ray data (one thread per ray)
@@ -371,6 +389,9 @@ if _warp_available:
         ray_origins: wp.array(dtype=wp.vec3),
         ray_dirs: wp.array(dtype=wp.vec3),
         ray_patch_ids: wp.array(dtype=int),
+        ray_point_ids: wp.array(dtype=int),
+        point_normals: wp.array(dtype=wp.vec3),
+        front_test: int,                        # 1 = skip voxels behind the source surface
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -394,8 +415,10 @@ if _warp_available:
         tid = wp.tid()
         pid = ray_patch_ids[tid]
         w = patch_weights[pid]
+        o = ray_origins[tid]
+        n = point_normals[ray_point_ids[tid]]
         res_sq = resolution * resolution
-        s = _dda_init(ray_origins[tid], ray_dirs[tid], grid_origin,
+        s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)
 
         # --- Walk and score ---
@@ -404,7 +427,8 @@ if _warp_available:
             if s.active == 0:
                 return
             if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
-                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution):
+                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution
+                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
                 # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
                 flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
                 wp.atomic_add(scores, flat_idx, w)
@@ -417,6 +441,8 @@ if _warp_available:
         ray_dirs: wp.array(dtype=wp.vec3),
         ray_patch_ids: wp.array(dtype=int),
         ray_point_ids: wp.array(dtype=int),
+        point_normals: wp.array(dtype=wp.vec3),
+        front_test: int,                        # 1 = skip voxels behind the source surface
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -430,13 +456,16 @@ if _warp_available:
         """Point-weighted fused score kernel: per-ray weight is
         patch_weight × sample-point weight (edge_taper design constraint).
 
-        A separate kernel so the unweighted hot path pays no extra
-        per-ray gathers or memory.
+        A separate kernel so the unweighted hot path skips the extra
+        per-ray weight gather.
         """
         tid = wp.tid()
-        w = patch_weights[ray_patch_ids[tid]] * point_weights[ray_point_ids[tid]]
+        pt = ray_point_ids[tid]
+        w = patch_weights[ray_patch_ids[tid]] * point_weights[pt]
+        o = ray_origins[tid]
+        n = point_normals[pt]
         res_sq = resolution * resolution
-        s = _dda_init(ray_origins[tid], ray_dirs[tid], grid_origin,
+        s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)
 
         # --- Walk and score ---
@@ -445,7 +474,8 @@ if _warp_available:
             if s.active == 0:
                 return
             if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
-                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution):
+                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution
+                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
                 flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
                 wp.atomic_add(scores, flat_idx, w)
             s = _dda_step(s, resolution, max_t)
@@ -455,6 +485,9 @@ if _warp_available:
         # Ray data
         ray_origins: wp.array(dtype=wp.vec3),
         ray_dirs: wp.array(dtype=wp.vec3),
+        ray_point_ids: wp.array(dtype=int),
+        point_normals: wp.array(dtype=wp.vec3),
+        front_test: int,                        # 1 = skip voxels behind the source surface
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -472,8 +505,10 @@ if _warp_available:
         no overflow-retry re-tracing.
         """
         tid = wp.tid()
+        o = ray_origins[tid]
+        n = point_normals[ray_point_ids[tid]]
         res_sq = resolution * resolution
-        s = _dda_init(ray_origins[tid], ray_dirs[tid], grid_origin,
+        s = _dda_init(o, ray_dirs[tid], grid_origin,
                       cell_size, resolution, max_t)
 
         # --- Walk and count ---
@@ -482,7 +517,8 @@ if _warp_available:
             if s.active == 0:
                 return
             if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
-                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution):
+                    and s.vy < resolution and s.vz >= 0 and s.vz < resolution
+                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
                 flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
                 wp.atomic_add(counts, flat_idx, 1)
             s = _dda_step(s, resolution, max_t)
@@ -639,6 +675,17 @@ def voxelize_solid_warp(
     return (v >= 2) | (s > 0)
 
 
+def _surface_args(num_rays, point_ids, surface_normals, device_str, who):
+    """Warp inputs for the behind-surface voxel filter (ids, normals, flag)."""
+    if surface_normals is not None and point_ids is None:
+        raise ValueError(f"{who}: surface_normals and point_ids must be provided together")
+    ids = (wp.from_torch(point_ids.contiguous().int()) if point_ids is not None
+           else wp.zeros(num_rays, dtype=int, device=device_str))
+    if surface_normals is None:
+        return ids, wp.zeros(1, dtype=wp.vec3, device=device_str), 0
+    return ids, wp.from_torch(surface_normals.contiguous().float(), dtype=wp.vec3), 1
+
+
 def trace_and_score_dda(
     min_corner: Tuple[float, float, float],
     scale: float,
@@ -651,6 +698,7 @@ def trace_and_score_dda(
     ray_length: float,
     point_ids: "torch.Tensor | None" = None,
     point_weights: "torch.Tensor | None" = None,
+    surface_normals: "torch.Tensor | None" = None,
 ) -> None:
     """Fused DDA traversal + score accumulation (Warp GPU kernel).
 
@@ -677,16 +725,25 @@ def trace_and_score_dda(
     ray_length : float
         Maximum march distance.
     point_ids : torch.Tensor, shape (R,), optional
-        Sample-point index per ray.  Together with ``point_weights``
-        switches to the point-weighted kernel (per-ray weight =
-        patch_weight × point_weight; edge_taper design constraint).
+        Sample-point index per ray; required by ``point_weights`` and
+        ``surface_normals``.
     point_weights : torch.Tensor, shape (num_points,), optional
-        Weight per sample point in [0, 1].
+        Weight per sample point in [0, 1] (per-ray weight =
+        patch_weight × point_weight; edge_taper design constraint).
+    surface_normals : torch.Tensor, shape (num_points, 3), optional
+        Normal of each ray's source surface.  When given, voxels whose
+        centre lies behind that surface (the surface's own mass) are not
+        scored.
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
         return
-    if (point_ids is None) != (point_weights is None):
+    if point_ids is not None and point_weights is None and surface_normals is None:
+        raise ValueError(
+            "trace_and_score_dda: point_ids must be provided together with "
+            "point_weights or surface_normals"
+        )
+    if point_weights is not None and point_ids is None:
         raise ValueError(
             "trace_and_score_dda: point_ids and point_weights must be "
             "provided together"
@@ -706,15 +763,16 @@ def trace_and_score_dda(
     wp_scores = wp.from_torch(scores)
     wp_weights = wp.from_torch(patch_weights.contiguous().float())
     grid_origin_wp = wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2]))
+    wp_point_ids, wp_normals, front = _surface_args(
+        num_rays, point_ids, surface_normals, device_str, "trace_and_score_dda")
 
-    if point_ids is not None:
-        wp_point_ids = wp.from_torch(point_ids.contiguous().int())
+    if point_weights is not None:
         wp_point_weights = wp.from_torch(point_weights.contiguous().float())
         wp.launch(
             _dda_fused_score_pw_kernel,
             dim=num_rays,
             inputs=[
-                wp_origins, wp_dirs, wp_patch_ids, wp_point_ids,
+                wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
                 grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
                 wp_scores, wp_weights, wp_point_weights,
             ],
@@ -726,7 +784,7 @@ def trace_and_score_dda(
         _dda_fused_score_kernel,
         dim=num_rays,
         inputs=[
-            wp_origins, wp_dirs, wp_patch_ids,
+            wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
             grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
             wp_scores, wp_weights,
         ],
@@ -742,6 +800,8 @@ def trace_and_count_dda(
     ray_dirs: torch.Tensor,
     counts: torch.Tensor,
     ray_length: float,
+    point_ids: "torch.Tensor | None" = None,
+    surface_normals: "torch.Tensor | None" = None,
 ) -> None:
     """Fused DDA traversal + per-voxel hit counting (Warp kernel).
 
@@ -754,6 +814,10 @@ def trace_and_count_dda(
     ----------
     counts : torch.Tensor, shape (resolution**3,)
         Flat int32 hit-count volume, modified in-place.
+    point_ids, surface_normals : optional
+        Per-ray sample-point index and per-point surface normal; when given,
+        voxels behind the ray's source surface are not counted (see
+        :func:`trace_and_score_dda`).
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
@@ -770,12 +834,14 @@ def trace_and_count_dda(
     wp_dirs = wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3)
     wp_counts = wp.from_torch(counts)
     grid_origin_wp = wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2]))
+    wp_point_ids, wp_normals, front = _surface_args(
+        num_rays, point_ids, surface_normals, device_str, "trace_and_count_dda")
 
     wp.launch(
         _dda_fused_count_kernel,
         dim=num_rays,
         inputs=[
-            wp_origins, wp_dirs,
+            wp_origins, wp_dirs, wp_point_ids, wp_normals, front,
             grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
             wp_counts,
         ],
@@ -948,8 +1014,9 @@ def generate_sun_rays(
     points_3d: np.ndarray,
     point_normals: np.ndarray,
     sun_directions: np.ndarray,
-    device: torch.device
-) -> Tuple[torch.Tensor, torch.Tensor]:
+    device: torch.device,
+    return_point_idx: bool = False,
+):
     """
     Build ray origins and directions for direct-beam sampling.
 
@@ -971,6 +1038,8 @@ def generate_sun_rays(
     Returns:
       ray_origins:   (R,3) float32 tensor of ray start points.
       ray_directions:(R,3) float32 tensor of ray direction vectors.
+      point_idx:     (R,) source sample-point index per ray, only when
+                     return_point_idx is True.
     """
     if points_3d.ndim != 2 or points_3d.shape[1] != 3:
         raise ValueError(f"points_3d must be Nx3, got {points_3d.shape}")
@@ -996,6 +1065,8 @@ def generate_sun_rays(
     ray_origins    = pts_tensor[idx_pts]    # (R,3)
     ray_directions = suns_tensor[idx_suns]  # (R,3)
 
+    if return_point_idx:
+        return ray_origins, ray_directions, idx_pts
     return ray_origins, ray_directions
 
 def trace_multi_hit_grid(

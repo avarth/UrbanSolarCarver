@@ -109,23 +109,28 @@ def validate_inputs(config: user_config):
     if config.mode not in ALL_MODE_NAMES:
         raise ValueError(f"Unsupported mode: {config.mode!r}")
 
-def sample_period(config: user_config):
+def sample_period(config: user_config, steps_per_hour: int = 1):
     """
     Build analysis datetimes and HOYs via Ladybug's AnalysisPeriod.
 
     Returns
     -------
     datetimes : list[datetime.datetime]
-        Start→end at 1-hour steps using config start/end.
+        Start→end (inclusive) at ``1/steps_per_hour``-hour steps.
     hoys : list[int]
-        Hour-of-year indices (1..8760) aligned to `datetimes`.
+        Hour-of-year indices (1..8760) of the period, always hourly: they
+        index EPW records, which are hourly.
     """
-    ap = AnalysisPeriod(
-        st_month=config.start_month, st_day=config.start_day, st_hour=config.start_hour,
-        end_month=config.end_month,   end_day=config.end_day,   end_hour=config.end_hour,
-        timestep=1
-    )
-    return ap.datetimes, ap.hoys_int
+    def _ap(timestep):
+        return AnalysisPeriod(
+            st_month=config.start_month, st_day=config.start_day, st_hour=config.start_hour,
+            end_month=config.end_month,   end_day=config.end_day,   end_hour=config.end_hour,
+            timestep=timestep,
+        )
+    hourly = _ap(1)
+    if steps_per_hour == 1:
+        return hourly.datetimes, hourly.hoys_int
+    return _ap(steps_per_hour).datetimes, hourly.hoys_int
 
 def load_meshes(config: user_config):
     """
@@ -138,7 +143,34 @@ def load_meshes(config: user_config):
     """
     envelope_mesh = load_mesh(config.max_volume_path)
     insolation_mesh = load_mesh(config.test_surface_path)
+    for path, mesh in ((config.max_volume_path, envelope_mesh),
+                       (config.test_surface_path, insolation_mesh)):
+        _warn_float32_input(path, mesh, config.voxel_size)
     return envelope_mesh, insolation_mesh
+
+
+def _stores_float32_vertices(path: str) -> bool:
+    if not str(path).lower().endswith(".ply"):
+        return False
+    with open(path, "rb") as fh:
+        header = fh.read(4096).split(b"end_header")[0].decode("ascii", errors="replace")
+    return any(line.split()[:3] in (["property", "float", "x"], ["property", "float32", "x"])
+               for line in header.splitlines())
+
+
+def _warn_float32_input(path: str, mesh, voxel_size: float) -> None:
+    """Georeferenced coordinates in a float32 PLY are already rounded on disk."""
+    from .io import float32_resolution
+    res = float32_resolution(mesh.vertices)
+    if res > 0.01 * float(voxel_size) and _stores_float32_vertices(path):
+        warnings.warn(
+            f"{os.path.basename(path)}: coordinates reach "
+            f"{float(np.abs(mesh.vertices).max()):,.0f} m and the file stores "
+            f"float32 vertices, so its geometry is rounded to ~{res:.2g} m on disk "
+            f"({100 * res / voxel_size:.0f}% of a voxel). Move the model near the "
+            f"origin before export, or export PLY with double-precision vertices.",
+            stacklevel=3,
+        )
 
 def _validate_cubic_resolution(grid_resolution, func_name: str):
     """
@@ -173,13 +205,27 @@ def _validate_cubic_resolution(grid_resolution, func_name: str):
       
 #--- Defs for time-based or weighted carving -------------------------------------------------------------------
 
-def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, config):
+def _front_of_surface(min_corner, cell, voxel_idx, origins, normals) -> torch.Tensor:
+    """Mask of hits whose voxel centre lies in front of the ray's source surface.
+
+    A test surface sits inside the boundary voxels of its own mass; those
+    voxels are the building, not an obstruction of it.  Same rule as the
+    Warp kernels' ``_in_front``, for the buffered / fixed-step fallbacks.
+    """
+    corner = torch.tensor(min_corner, dtype=torch.float32, device=voxel_idx.device)
+    centre = corner + (voxel_idx.float() + 0.5) * cell
+    return ((centre - origins) * normals).sum(dim=1) > 0.0
+
+
+def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, config,
+                    point_ids, surface_normals):
     """Count how many rays visit each voxel; returns a flat int32 tensor.
 
     Uses the fused Warp count kernel when available (no hit buffers, no
     overflow-retry re-tracing); otherwise falls back to the buffered
     :func:`trace_multi_hit_grid` path.  Both count each (ray, voxel) pair
-    at most once.
+    at most once, and skip voxels behind the ray's source surface
+    (*point_ids* maps rays to rows of *surface_normals*).
     """
     device = voxel_grid.device
     counts = torch.zeros(voxel_grid.numel(), dtype=torch.int32, device=device)
@@ -197,6 +243,7 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
                 min_corner, scale, res,
                 origins[start:end], directions[start:end],
                 counts, float(config.ray_length),
+                point_ids=point_ids[start:end], surface_normals=surface_normals,
             )
 
         if device.type == "cpu" and len(batch_ranges) > 1:
@@ -225,7 +272,7 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
         d_batch = directions[i: i + batch_size]
         # tracer requires per-ray patch ids; unused for counting
         patch_ids_stub = torch.zeros((o_batch.shape[0],), dtype=torch.long, device=device)
-        _, _, voxel_idx = trace_multi_hit_grid(
+        ray_idx, _, voxel_idx = trace_multi_hit_grid(
             min_corner=min_corner,
             scale=scale,
             resolution=res,
@@ -235,6 +282,10 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
             voxel_size=float(config.voxel_size),
             ray_length=float(config.ray_length),
         )
+        if voxel_idx.numel() > 0:
+            front = _front_of_surface(min_corner, scale / res, voxel_idx, o_batch[ray_idx],
+                                      surface_normals[point_ids[i: i + batch_size][ray_idx]])
+            voxel_idx = voxel_idx[front]
         if voxel_idx.numel() > 0:
             # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
             flat_idx = voxel_idx[:, 0] * res_sq + voxel_idx[:, 1] * res + voxel_idx[:, 2]
@@ -346,16 +397,23 @@ def carve_with_sun_rays(
     sun_arr = sun_arr / (sun_arr.norm(dim=1, keepdim=True) + 1e-9)
 
     # build rays
-    origins, directions = generate_sun_rays(
-        sample_points, sample_normals, sun_arr.cpu().numpy(), voxel_grid.device
+    normals_np = (sample_normals.detach().cpu().numpy()
+                  if isinstance(sample_normals, torch.Tensor) else np.asarray(sample_normals))
+    points_np = (sample_points.detach().cpu().numpy()
+                 if isinstance(sample_points, torch.Tensor) else np.asarray(sample_points))
+    origins, directions, point_idx = generate_sun_rays(
+        points_np, normals_np, sun_arr.cpu().numpy(), voxel_grid.device,
+        return_point_idx=True,
     )
+    surface_normals = torch.as_tensor(normals_np, dtype=torch.float32, device=voxel_grid.device)
     ray_origins = origins.cpu().numpy() if return_rays else None
     ray_directions = directions.cpu().numpy() if return_rays else None
 
     # scale is the cubic grid extent in world units (meters), not per-voxel size
     min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
     counts = _count_ray_hits(
-        voxel_grid, min_corner, float(grid_extent), res, origins, directions, config
+        voxel_grid, min_corner, float(grid_extent), res, origins, directions, config,
+        point_idx, surface_normals,
     )
     carved_grid = _carve_by_counts(voxel_grid, counts)
 
@@ -457,12 +515,12 @@ def carve_with_sky_patch_rays(
             device=device
         )
     )
+    surface_normals = torch.as_tensor(sample_normals, dtype=torch.float32, device=device)
 
     # --- 2b) Per-point design weights (edge_taper) -------------------------
     # Fold sample-point weights into per-ray weighting; rays from
     # zero-weight points contribute nothing, so drop them before tracing.
     pw_t = None
-    ray_point_ids = None
     if point_weights is not None:
         pw_t = torch.as_tensor(point_weights, dtype=torch.float32, device=device)
         n_pts = sample_points.shape[0]
@@ -477,7 +535,7 @@ def carve_with_sky_patch_rays(
             ray_directions = ray_directions[keep]
             patch_ids = patch_ids[keep]
             point_idx = point_idx[keep]
-        ray_point_ids = point_idx.to(torch.int32)
+    ray_point_ids = point_idx.to(torch.int32)
 
     total_rays = ray_origins.size(0)  # Total number of rays (R * P)
 
@@ -550,9 +608,9 @@ def carve_with_sky_patch_rays(
                 grid_origin, float(grid_extent_m), grid_resolution,
                 origins_batch, directions_batch, patches_batch,
                 patch_weights, scores, config.ray_length,
-                point_ids=(ray_point_ids[start:end]
-                           if ray_point_ids is not None else None),
+                point_ids=ray_point_ids[start:end],
                 point_weights=pw_t,
+                surface_normals=surface_normals,
             )
             return
 
@@ -562,6 +620,14 @@ def carve_with_sky_patch_rays(
             origins_batch, directions_batch, patches_batch,
             config.voxel_size, config.ray_length,
         )
+        if hit_voxel_idxs.numel() == 0:
+            return
+        front = _front_of_surface(
+            grid_origin, grid_extent_m / res, hit_voxel_idxs, origins_batch[hit_ray_ids],
+            surface_normals[point_idx[start:end][hit_ray_ids]],
+        )
+        hit_ray_ids, hit_patch_ids, hit_voxel_idxs = (
+            hit_ray_ids[front], hit_patch_ids[front], hit_voxel_idxs[front])
         if hit_voxel_idxs.numel() == 0:
             return
 
@@ -658,7 +724,9 @@ def carve_with_planes(
       1) Project the surface normal to the XY plane → n_xy
       2) Select angle α (single value or per-octant table)
       3) Form d = cos(α)·n_xy + sin(α)·ẑ and march this direction
-    Every visited voxel is deleted.
+    Every voxel at or above a visited voxel in its (x, y) column is deleted:
+    the ray traces the plane's section through that column, and everything
+    above the plane is forbidden, not only the cells the ray crosses.
 
     Parameters
     ----------
@@ -669,7 +737,8 @@ def carve_with_planes(
         Must contain ``tilted_plane_angle_deg`` — a single angle in degrees,
         or an 8-element list [N, NE, E, SE, S, SW, W, NW] for octant lookup.
     return_counts : bool, default False
-        If True, return a 4th element: per-voxel hit counts (int32 array).
+        If True, return a 4th element: per-voxel counts, propagated up each
+        column (a voxel's count is the largest ray count at or below it).
 
     Returns
     -------
@@ -678,12 +747,6 @@ def carve_with_planes(
     ray_directions : np.ndarray, shape (N, 3)
     counts : np.ndarray, shape (V,), optional
         Only returned when *return_counts* is True.
-
-    Notes
-    -----
-    • The underlying tracer samples at cell centers with floor indexing to
-      avoid checkerboarding on regular planar lattices (see
-      :func:`~urbansolarcarver.raytracer.trace_multi_hit_grid`).
     """
     _validate_cubic_resolution(grid_resolution, "carve_tilted_plane")
     side_len = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
@@ -757,7 +820,12 @@ def carve_with_planes(
     counts = _count_ray_hits(
         voxel_grid, grid_min_corner, float(grid_extent), side_len,
         origins_tensor, dirs_tensor, config,
+        torch.arange(pts_np.shape[0], device=device),
+        torch.from_numpy(norms_np).to(device),
     )
+    # Hits include empty cells: a ray passing over a low roof still bounds
+    # the mass above that roof.
+    counts = torch.cummax(counts.view(side_len, side_len, side_len), dim=2).values.reshape(-1)
     carved_grid = _carve_by_counts(voxel_grid, counts)
 
     if not return_counts:
@@ -773,13 +841,14 @@ def carve_above_columns(
     """Carve occupied voxels above the lowest sufficiently-carved run per column.
 
     For each (x, y) column, scans bottom-to-top (z=0 upward) for runs of
-    consecutive carved (False) voxels:
+    consecutive carved voxels (occupied in *voxel_grid*, False in *mask*;
+    empty cells break a run and never count as carved):
 
     * Runs with length >= *min_consecutive* **trigger** carve-above: all
       occupied voxels above the run are carved.  The first (lowest)
       qualifying run triggers; scanning stops for that column.
-    * Runs with length < *min_consecutive* are treated as noise and
-      **patched** back to kept (True).
+    * Shorter runs do not trigger, but stay carved: the result only ever
+      removes voxels, so it never re-violates the carving constraint.
 
     Parameters
     ----------
@@ -789,13 +858,11 @@ def carve_above_columns(
         Original envelope occupancy.  True = occupied.
     min_consecutive : int
         Minimum consecutive carved voxels to trigger carve-above.
-        Shorter runs are patched (filled back in).
 
     Returns
     -------
     ndarray (D, D, D) bool
-        Modified mask with short runs patched and voxels above qualifying
-        runs carved.
+        Modified mask with voxels above qualifying runs carved.
     """
     out = np.ascontiguousarray(mask.astype(bool, copy=True))
     occ = np.ascontiguousarray(voxel_grid.astype(bool, copy=False))
@@ -807,9 +874,9 @@ def carve_above_columns(
 def _carve_above_kernel(out, voxel_grid, min_consecutive):
     """Numba kernel for :func:`carve_above_columns` — mutates *out* in place.
 
-    Scans each column bottom-to-top: short carved runs are patched back to
-    kept; the first run of >= min_consecutive carved voxels triggers
-    carve-above for all occupied voxels higher in that column.
+    Scans each column bottom-to-top: the first run of >= min_consecutive
+    carved voxels triggers carve-above for all occupied voxels higher in
+    that column; shorter runs are left as they are.
     """
     nx, ny, nz = out.shape
     for x in range(nx):
@@ -817,16 +884,18 @@ def _carve_above_kernel(out, voxel_grid, min_consecutive):
             trigger_top = -1
             z = 0
             while z < nz:
-                if not out[x, y, z]:  # carved voxel — start of a run
+                # Only occupied voxels can be carved. Empty cells (pre-existing
+                # voids, air under an overhang) neither start nor extend a run,
+                # whatever the mask says about them.
+                if voxel_grid[x, y, z] and not out[x, y, z]:
                     run_start = z
-                    while z < nz and not out[x, y, z]:
+                    while z < nz and voxel_grid[x, y, z] and not out[x, y, z]:
                         z += 1
                     if z - run_start >= min_consecutive:
                         trigger_top = z - 1
                         break
-                    # Short run — noise: patch carved voxels back to kept.
-                    for zz in range(run_start, z):
-                        out[x, y, zz] = True
+                    # Short run: too small to trigger, but it stays carved —
+                    # refilling would undo the solar constraint.
                 else:
                     z += 1
 

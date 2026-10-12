@@ -20,7 +20,8 @@ Open an issue describing the use case and expected behavior. For new carving mod
 2. Install in development mode: `pip install -e .[dev]`
 3. Make your changes and add tests if applicable.
 4. Run the test suite: `pytest tests/ -v`
-5. Open a PR with a clear description of the changes.
+5. If you changed anything under `grasshopper/components/`, rebuild the `.ghuser` files (`pip install -e .[ghbuild]`, then `python grasshopper/build_ghuser.py`) and commit them with the source change. See [docs/grasshopper.md](docs/grasshopper.md#rebuilding-the-components).
+6. Open a PR with a clear description of the changes.
 
 ## Code Style
 

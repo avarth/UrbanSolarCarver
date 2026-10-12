@@ -443,7 +443,7 @@ class TestExtraFieldsRejected:
 class TestCarveAboveConfig:
     def test_defaults(self):
         cfg = _make_config()
-        assert cfg.carve_above is False
+        assert cfg.carve_above is True   # height-field envelope by default
         assert cfg.carve_above_min_consecutive == 1
 
     def test_carve_above_enabled(self):
