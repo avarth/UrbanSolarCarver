@@ -35,8 +35,6 @@ diag_images : list of str
     Empty when diagnostics are disabled.
 """
 
-import json
-import os
 import time
 from pathlib import Path
 
@@ -60,45 +58,28 @@ except Exception:
     pass
 
 
-# -- Helpers -----------------------------------------------------------------
+# -- Helpers ------------------------------------------------------------------
 
-def _parse_overrides(x):
-    """Parse semicolon-joined override string(s) into a dict."""
-    if x is None:
-        return {}
-    items = str(x).split(";") if isinstance(x, str) else []
-    result = {}
-    for item in items:
-        item = item.strip()
-        if "=" in item:
-            k, v = item.split("=", 1)
-            result[k.strip()] = v.strip()
-    return result
-
-
-def _rpc_call(session, cmd, payload):
-    from multiprocessing.connection import Client as MPClient
-    authkey = getattr(session, "authkey", None)
-    if authkey is None:
-        raise RuntimeError("No daemon authkey — start the daemon first")
-    c = MPClient((session.host, session.port), authkey=authkey)
-    c.send({"cmd": cmd, **payload})
-    resp = c.recv()
-    c.close()
-    if isinstance(resp, dict) and resp.get("status") == "error":
-        raise RuntimeError(resp.get("error", "Unknown error"))
-    return resp
+def _usc_gh(root):
+    """Shared helpers from <carver_root>/grasshopper/usc_gh.py, reloaded when that file changes."""
+    import importlib.util
+    import sys
+    path = Path(root) / "grasshopper" / "usc_gh.py"
+    stamp = (str(path), path.stat().st_mtime)
+    mod = sys.modules.get("usc_gh")
+    if mod is None or getattr(mod, "_source", None) != stamp:
+        spec = importlib.util.spec_from_file_location("usc_gh", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._source = stamp
+        sys.modules["usc_gh"] = mod
+    return mod
 
 
-# -- Main logic --------------------------------------------------------------
-
-def _add_error(msg):
-    """Surface an error on the GH component (turns it red) and return msg."""
-    try:
-        from Grasshopper.Kernel import GH_RuntimeMessageLevel
-        ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, msg)
-    except Exception:
-        pass
+def _error(msg):
+    """Show an error on the component (red) and return msg."""
+    from Grasshopper.Kernel import GH_RuntimeMessageLevel
+    ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, msg)
     return msg
 
 
@@ -108,55 +89,37 @@ diagnostics = ""
 diag_images = []
 
 if not run:
-    diagnostics = "Idle — set run=True"
+    diagnostics = "Idle: set run=True"
 elif config is None:
-    diagnostics = _add_error("Connect a USC Config component")
+    diagnostics = _error("Connect a USC Config component")
 elif pre_result is None:
-    diagnostics = _add_error("Connect pre_result from USC Preprocess")
+    diagnostics = _error("Connect pre_result from USC Preprocess")
 else:
     t_start = time.perf_counter()
-    session = config.session
-    out_dir = config.out_dir
-
-    # Start with config overrides, then merge threshold-specific ones on top.
-    # This means threshold_overrides changes do NOT change config → do NOT
-    # trigger Preprocessing to re-run.
-    overrides = dict(config.overrides)
-    thr_ovr = _parse_overrides(threshold_overrides)
-    overrides.update(thr_ovr)
-
+    gh = _usc_gh(config.session.root)
+    thr_out = Path(config.out_dir) / "thresholding"
+    # Threshold settings are merged here, not in Config, so changing them
+    # re-runs only this stage and not Preprocess.
+    overrides = dict(config.overrides, **gh.parse_overrides(threshold_overrides))
     try:
-        thr_out = str(Path(out_dir) / "thresholding")
-        if getattr(session, "daemon_running", False):
-            resp = _rpc_call(session, "thresholding", {
-                "from": str(pre_result),
-                "config": config.yaml_path,
-                "overrides": [f"{k}={v}" for k, v in overrides.items()],
-                "out_dir": thr_out,
-            })
-            # Use daemon response if available, otherwise construct from known path
-            thr_manifest = resp.get("manifest", "")
-            if not thr_manifest or not Path(thr_manifest).is_file():
-                thr_manifest = str(Path(thr_out) / "manifest.json")
-            thr_result = thr_manifest
-            # Read diagnostics
-            elapsed = time.perf_counter() - t_start
-            diag_lines = [f"Thresholding: {elapsed:.1f}s"]
-            summary_path = Path(thr_out) / "diagnostics" / "diagnostic.json"
-            if summary_path.exists():
-                data = json.load(open(summary_path))
-                threshold_value = data.get("threshold_value")
-                diag_lines.append(f"Method: {data.get('threshold_method', '?')}")
-                diag_lines.append(f"Threshold: {threshold_value}")
-                diag_lines.append(f"Kept: {data.get('retention_pct', '?')}%")
-                diag_lines.append(f"Voxels kept: {data.get('voxels_kept', '?')} / {data.get('voxels_occupied', '?')}")
-                # Collect histogram path for LB Image Viewer
-                hist = data.get("threshold_histogram")
-                if hist and os.path.isfile(hist):
-                    diag_images.append(hist)
-            diagnostics = "\n".join(diag_lines)
-        else:
-            diagnostics = _add_error("Daemon not running — connect USC_Session and set start_daemon=True")
-
+        reply = gh.call_daemon(config.session, "thresholding", {
+            "from": str(pre_result),
+            "config": config.yaml_path,
+            "overrides": gh.override_list(overrides),
+            "out_dir": str(thr_out),
+        })
+        thr_result = reply["manifest"]
+        if not Path(thr_result).is_file():
+            raise RuntimeError("the daemon reported success but wrote no manifest at " + thr_result)
+        data = gh.read_diagnostics(thr_out)
+        threshold_value = data.get("threshold_value")
+        diagnostics = "\n".join([
+            "Thresholding: {:.1f}s".format(time.perf_counter() - t_start),
+            "Method: {}".format(data.get("threshold_method", "?")),
+            "Threshold: {}".format(threshold_value),
+            "Kept: {}%".format(data.get("retention_pct", "?")),
+            "Voxels kept: {} / {}".format(data.get("voxels_kept", "?"), data.get("voxels_occupied", "?")),
+        ])
+        diag_images = gh.existing_files(data.get("threshold_histogram"))
     except Exception as e:
-        diagnostics = _add_error(str(e))
+        diagnostics = _error(str(e))

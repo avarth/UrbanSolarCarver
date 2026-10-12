@@ -233,6 +233,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
   none reached `min_face_count`; it now keeps the largest and warns.
 - **An EPW replaced on disk is re-read** by a running daemon (the parse
   cache now keys on modification time and size).
+- **Grasshopper components share one helper module**
+  (`grasshopper/usc_gh.py`) instead of keeping 2-5 drifting copies of the
+  daemon call, PLY reader/writer, mesh conversion and override parsing
+  (Preprocess, Threshold Stage, Export and Run Pipeline went from 1,343 to
+  528 lines). Daemon calls time out instead of freezing Rhino on a hung
+  daemon, errors show as red runtime messages everywhere, a missing result
+  file is an error instead of an empty output, test points are read
+  without numpy, and USC_Session checks the daemon with a ping (not
+  "a key file exists and the port is open"), logs a detached daemon to
+  `~/.urbansolarcarver/daemon.log` and reports a daemon that crashed on
+  start. USC_RunPipeline's subprocess fallback is removed (it broke on
+  quotes in paths and on Warp's start-up banner); it needs the daemon like
+  the other stages. Brep inputs now reach the components unconverted, so
+  the fine Brep meshing applies instead of Grasshopper's coarse default.
+  USC_Archetype reports a connected family input that delivered nothing
+  (a failed USC_Zone* component) instead of silently using defaults.
 - **Exporting** meshed with the config's `voxel_size` instead of the
   preprocessing run's, and counted retained voxels before the small-
   fragment cleanup (now reported as `voxels_removed_by_cleanup`).

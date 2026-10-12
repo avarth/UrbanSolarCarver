@@ -38,6 +38,7 @@ summary : str
 """
 
 import os
+from pathlib import Path
 
 # -- GH UI --------------------------------------------------------------------
 try:
@@ -66,27 +67,27 @@ except Exception:
     pass
 
 
-def _add_error(msg):
-    try:
-        from Grasshopper.Kernel import GH_RuntimeMessageLevel
-        ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, msg)
-    except Exception:
-        pass
+def _usc_gh(root):
+    """Shared helpers from <carver_root>/grasshopper/usc_gh.py, reloaded when that file changes."""
+    import importlib.util
+    import sys
+    path = Path(root) / "grasshopper" / "usc_gh.py"
+    stamp = (str(path), path.stat().st_mtime)
+    mod = sys.modules.get("usc_gh")
+    if mod is None or getattr(mod, "_source", None) != stamp:
+        spec = importlib.util.spec_from_file_location("usc_gh", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._source = stamp
+        sys.modules["usc_gh"] = mod
+    return mod
+
+
+def _error(msg):
+    """Show an error on the component (red) and return msg."""
+    from Grasshopper.Kernel import GH_RuntimeMessageLevel
+    ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, msg)
     return msg
-
-
-def _rpc_call(session, cmd, payload):
-    from multiprocessing.connection import Client as MPClient
-    authkey = getattr(session, "authkey", None)
-    if authkey is None:
-        raise RuntimeError("No daemon authkey — start the daemon first")
-    c = MPClient((session.host, session.port), authkey=authkey)
-    c.send({"cmd": cmd, **payload})
-    resp = c.recv()
-    c.close()
-    if isinstance(resp, dict) and resp.get("status") == "error":
-        raise RuntimeError(resp.get("error", "Unknown error"))
-    return resp
 
 
 weights_path = None
@@ -94,41 +95,33 @@ preview = None
 summary = ""
 
 if not run:
-    summary = "Idle — set run=True"
+    summary = "Idle: set run=True"
 elif session is None:
-    summary = _add_error("Connect a USC Session component")
-elif not getattr(session, "daemon_running", False):
-    summary = _add_error("Daemon not running — connect USC_Session and set "
-                         "start_daemon=True")
-elif not epw_path or not os.path.isfile(str(epw_path)):
-    summary = _add_error("Provide a valid epw_path")
+    summary = _error("Connect a USC Session component")
 elif archetype is None:
-    summary = _add_error("Connect USC_Archetype or provide an archetype "
-                         "YAML path")
+    summary = _error("Connect USC_Archetype or provide an archetype YAML path")
 else:
-    # Accept an USC_Archetype handle or a YAML path string.
-    arch_payload = getattr(archetype, "data", None)
-    if arch_payload is None:
-        arch_str = str(archetype)
-        if not os.path.isfile(arch_str):
-            summary = _add_error(f"Archetype YAML not found: {arch_str}")
-        arch_payload = arch_str
-    if not summary:
-        out = str(out_path) if out_path else os.path.join(
-            str(getattr(session, "root", ".")), "simulated_weights.json")
-        try:
-            resp = _rpc_call(session, "simulate_weights", {
-                "epw": str(epw_path),
-                "archetype": arch_payload,
-                "out": out,
-                "eps": float(eps) if eps is not None else 1.0,
-            })
-            weights_path = resp.get("artifact")
-            png = resp.get("preview")
-            if png and os.path.isfile(png):
-                preview = png
-            summary = ("Wrote {}\nEPW: {}\nWire weights_path into "
-                       "USC_BenefitParams.".format(
-                           weights_path, os.path.basename(str(epw_path))))
-        except Exception as e:
-            summary = _add_error(f"simulate_weights failed: {e}")
+    gh = _usc_gh(session.root)
+    try:
+        epw = gh.resolve_path(ghenv.Component, epw_path) if epw_path else None
+        if not epw or not os.path.isfile(epw):
+            raise ValueError("Provide a valid epw_path")
+        # An USC_Archetype handle carries the archetype as a dict; a string is a YAML path.
+        arch_payload = getattr(archetype, "data", None)
+        if arch_payload is None:
+            arch_payload = gh.resolve_path(ghenv.Component, archetype)
+            if not os.path.isfile(arch_payload):
+                raise ValueError("Archetype YAML not found: " + arch_payload)
+        out = gh.resolve_path(ghenv.Component, out_path or "simulated_weights.json")
+        reply = gh.call_daemon(session, "simulate_weights", {
+            "epw": epw,
+            "archetype": arch_payload,
+            "out": out,
+            "eps": float(eps) if eps is not None else 1.0,
+        })
+        weights_path = reply["artifact"]
+        preview = reply.get("preview")
+        summary = "Wrote {}\nEPW: {}\nWire weights_path into USC_BenefitParams.".format(
+            weights_path, os.path.basename(epw))
+    except Exception as e:
+        summary = _error("simulate_weights failed: {}".format(e))

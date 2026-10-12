@@ -20,6 +20,8 @@ By default the updates come from the installed user objects (Grasshopper's User 
 
 The `.ghuser` files are generated from the sources in `grasshopper/components/`; edit the `.py`, never the `.ghuser`. Each source declares its own ports: names and descriptions in its "GH UI" block, order and types in the numpydoc `Inputs` / `Outputs` docstring. `grasshopper/components.json` holds the ribbon subcategory and the stable user-object GUID; icons are `grasshopper/icons/<source name>.png` (24x24).
 
+Code shared by several components (daemon calls, PLY reading and writing, mesh conversion, override parsing) lives in `grasshopper/usc_gh.py`. The components load it at run time from the folder given to USC_Session, so editing it takes effect on the next solve without rebuilding any `.ghuser`. It uses only the standard library and RhinoCommon, because the component scripts run in Rhino's own Python, not in the USC environment.
+
 ```bash
 pip install -e .[ghbuild]                       # pythonnet
 python grasshopper/build_ghuser.py              # rebuild into USC_GHplugin/

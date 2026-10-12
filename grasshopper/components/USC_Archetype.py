@@ -95,9 +95,16 @@ summary = ""
 
 data = dict(_DEFAULTS)
 wwr = dict(_WWR_DEFAULTS)
-for name in _FAMILIES:
+for index, name in enumerate(_FAMILIES):
     handle = globals().get(name)
     if handle is None:
+        # Wired but empty means the upstream USC_Zone* component failed;
+        # falling back to defaults would hide that.
+        if ghenv.Component.Params.Input[index].SourceCount > 0:
+            summary = _add_error(
+                f"'{name}' is connected but received nothing; fix the upstream "
+                "USC_Zone* component (it shows the error)")
+            break
         continue
     family = getattr(handle, "data", None)
     kind = getattr(handle, "kind", None)

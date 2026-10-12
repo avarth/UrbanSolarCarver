@@ -66,8 +66,11 @@ _TYPE_RULES = [
     (r"^list of (\d+ )?floats?$", ("float", True)),
     (r"^list of str$", ("str", True)),
     (r"^list of point3d$", ("object", True)),
-    (r"^mesh or brep \(list\)$", ("mesh", True)),
-    (r"^(rhino\.geometry\.)?mesh( or brep)?$", ("mesh", False)),
+    # Breps must reach the script unconverted: a mesh hint makes Grasshopper
+    # mesh them with its coarse default settings first.
+    (r"^mesh or brep \(list\)$", ("object", True)),
+    (r"^mesh or brep$", ("object", False)),
+    (r"^(rhino\.geometry\.)?mesh$", ("mesh", False)),
     (r"^str or list$", ("object", True)),
     (r"^float$", ("float", False)),
     (r"^int( \(\d+-\d+\))?$", ("int", False)),

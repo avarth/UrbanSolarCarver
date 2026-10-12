@@ -12,22 +12,21 @@ carver_root : str
     full path to the python executable — useful when the venv lives
     elsewhere on the machine).
 start_daemon : bool, optional
-    True (default) = start daemon if not running. False = report only.
+    True = start the daemon if it is not running. Unconnected or False =
+    only report whether one is running.
 verbose : bool, optional
-    True = show daemon console window for debugging.
+    True = show the daemon's console window (for debugging). Otherwise its
+    output goes to ~/.urbansolarcarver/daemon.log.
 
 Outputs
 -------
-session : dict
-    Opaque session handle passed to all other USC components.
-    Contains: root, python_path, authkey, host, port, daemon_pid.
+session : USCSession
+    Handle passed to USC_Config: carver root, Python path, daemon address
+    and key.
 status : str
-    "ready" | "starting" | "no_daemon" | "error: ..."
+    "ready" | "no_daemon" | "error: ..."
 """
 
-import os
-import socket
-import subprocess
 import time
 from pathlib import Path
 
@@ -52,10 +51,7 @@ class USCSession:
 # -- Constants ---------------------------------------------------------------
 HOST = "localhost"
 PORT = 6000
-DETACHED_PROCESS = 0x00000008
-CREATE_NEW_PROCESS_GROUP = 0x00000200
-CREATE_NO_WINDOW = 0x08000000
-CREATE_NEW_CONSOLE = 0x00000010
+STARTUP_TIMEOUT_S = 60  # first start compiles the Warp kernels
 
 # -- GH UI rollovers --------------------------------------------------------
 try:
@@ -65,11 +61,10 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "carver_root", "Path to the UrbanSolarCarver folder on your computer (the folder containing the 'src' subfolder). The Python environment is found automatically in '.venv' or 'venv' inside it; if your venv lives elsewhere, create a text file 'python_path.txt' in this folder containing the full path to python.exe. Right-click > Set One String, then paste the full path."
-    ii[1].Name, ii[1].Description = "start_daemon", "Wire a Boolean True to launch the background computation server (daemon). If left unconnected (None) or False the daemon is NOT started — status will be 'no_daemon'. The daemon keeps the GPU warm between runs for fast iteration."
-    if len(ii) > 2:
-        ii[2].Name, ii[2].Description = "verbose", "Set to True to open a visible console window showing daemon activity. Useful for debugging if things go wrong. Leave False for normal use."
+    ii[1].Name, ii[1].Description = "start_daemon", "Wire a Boolean True to launch the background computation server (daemon). If left unconnected (None) or False the daemon is NOT started; status will be 'no_daemon'. The daemon keeps the GPU warm between runs for fast iteration."
+    ii[2].Name, ii[2].Description = "verbose", "Set to True to open a visible console window showing daemon activity. Useful for debugging if things go wrong. Leave False for normal use (output then goes to ~/.urbansolarcarver/daemon.log)."
     oo[0].Name, oo[0].Description = "session", "Connection handle passed to the USC_Config component. Contains the daemon address and authentication. Do not modify."
-    oo[1].Name, oo[1].Description = "status", "Current daemon state: 'ready' means the daemon is running and accepting jobs. 'starting' means it is loading. 'error:...' means something went wrong -- read the message."
+    oo[1].Name, oo[1].Description = "status", "Current daemon state: 'ready' means the daemon is running and accepting jobs. 'no_daemon' means none is running. 'error:...' means something went wrong; read the message."
 except Exception:
     pass
 
@@ -106,131 +101,69 @@ def _venv_python(root):
     return None
 
 
-def _read_authkey(root):
-    """Read daemon authkey from the shared keyfile.
-
-    The daemon writes to ~/.urbansolarcarver/.daemon_authkey (user-specific,
-    cross-platform).  Falls back to <repo_root>/.daemon_authkey for
-    backward compatibility with older daemon versions.
-    """
-    # Primary: user-specific location (matches daemon.py _DEFAULT_KEYFILE)
+def _read_authkey():
+    """The daemon's key from ~/.urbansolarcarver/.daemon_authkey (None if absent)."""
     kf = Path.home() / ".urbansolarcarver" / ".daemon_authkey"
-    if kf.is_file():
-        return kf.read_bytes().strip()
-    # Fallback: legacy repo-root location
-    kf_legacy = Path(root).resolve() / ".daemon_authkey"
-    if kf_legacy.is_file():
-        return kf_legacy.read_bytes().strip()
-    return None
-
-
-def _port_open(host=HOST, port=PORT, timeout=0.3):
-    """Check if the daemon port is listening."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except (ConnectionRefusedError, OSError, socket.timeout):
-        return False
-
-
-def _ping_daemon(authkey, host=HOST, port=PORT):
-    """Verify daemon responds to RPC ping."""
-    if authkey is None:
-        return False
-    try:
-        from multiprocessing.connection import Client as MPClient
-        c = MPClient((host, port), authkey=authkey)
-        c.send({"cmd": "ping"})
-        resp = c.recv()
-        c.close()
-        # daemon sends {"status": "ok", "pid": ...}
-        return resp.get("status") == "ok" if isinstance(resp, dict) else False
-    except Exception:
-        return False
-
-
-def _start_daemon(root, verbose=False):
-    """Launch the daemon subprocess with proper PYTHONPATH."""
-    py = _venv_python(root)
-    if py is None:
+    if not kf.is_file():
         return None
+    return kf.read_bytes().strip() or None
 
-    # Use -m to invoke the daemon module (requires PYTHONPATH)
-    cmd = [str(py), "-m", "urbansolarcarver.daemon",
-           "--host", HOST, "--port", str(PORT)]
 
-    # Set PYTHONPATH so the daemon can import urbansolarcarver
-    env = os.environ.copy()
-    src_dir = str(Path(root) / "src")
-    env["PYTHONPATH"] = src_dir + os.pathsep + env.get("PYTHONPATH", "")
-
-    if verbose:
-        # Keep console open so user can see init messages and errors
-        flags = CREATE_NEW_CONSOLE
-        out, err = None, None
-    else:
-        flags = CREATE_NEW_PROCESS_GROUP | DETACHED_PROCESS
-        out, err = subprocess.DEVNULL, subprocess.DEVNULL
-
-    popen_kwargs = {}
-    if os.name == "nt":
-        popen_kwargs["creationflags"] = flags  # Windows-only argument
-    proc = subprocess.Popen(
-        cmd, env=env, cwd=str(root),
-        stdout=out, stderr=err,
-        **popen_kwargs,
-    )
-    return proc.pid
+def _usc_gh(root):
+    """Shared helpers from <carver_root>/grasshopper/usc_gh.py, reloaded when that file changes."""
+    import importlib.util
+    import sys
+    path = Path(root) / "grasshopper" / "usc_gh.py"
+    stamp = (str(path), path.stat().st_mtime)
+    mod = sys.modules.get("usc_gh")
+    if mod is None or getattr(mod, "_source", None) != stamp:
+        spec = importlib.util.spec_from_file_location("usc_gh", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        mod._source = stamp
+        sys.modules["usc_gh"] = mod
+    return mod
 
 
 # -- Main logic --------------------------------------------------------------
 
-# Defaults
+session = None
 if carver_root is None:
-    session = None
     status = "error: carver_root is required"
 else:
     root = Path(str(carver_root)).resolve()
     py = _venv_python(root)
-
     if py is None:
-        session = None
         status = (
-            "error: no Python interpreter found under " + str(root) + " — "
+            "error: no Python interpreter found under " + str(root) + "; "
             "run setup_env.py to create .venv/, or write the full path to "
             "your python executable into <carver_root>/python_path.txt"
         )
+    elif not (root / "grasshopper" / "usc_gh.py").is_file():
+        status = "error: " + str(root) + " is not an UrbanSolarCarver folder (no grasshopper/usc_gh.py)"
     else:
-        authkey = _read_authkey(root)
-        port_open_now = _port_open()
-        daemon_running = authkey is not None and port_open_now
+        gh = _usc_gh(root)
+        session = USCSession(root=str(root), python_path=str(py), authkey=_read_authkey(),
+                             host=HOST, port=PORT, daemon_running=False)
+        session.daemon_running = gh.ping(session)
+        status = None
 
-        if not daemon_running and start_daemon:
-            # Only launch if the port is not already open — prevents spawning a
-            # second daemon when one is starting up but hasn't written the keyfile yet.
-            pid = _start_daemon(root, verbose=bool(verbose)) if not port_open_now else None
-            # Wait for daemon to become ready (CUDA+Warp init can take 15-25s)
-            for attempt in range(60):  # 60 × 0.5s = 30s max
+        if not session.daemon_running and start_daemon:
+            proc = gh.start_daemon(py, root, HOST, PORT, visible_console=bool(verbose))
+            deadline = time.time() + STARTUP_TIMEOUT_S
+            while time.time() < deadline and proc.poll() is None:
                 time.sleep(0.5)
-                authkey = _read_authkey(root)
-                if authkey and _port_open() and _ping_daemon(authkey):
-                    daemon_running = True
+                session.authkey = _read_authkey()
+                if gh.ping(session, timeout=2):
+                    session.daemon_running = True
                     break
+            if not session.daemon_running:
+                where = "its console" if verbose else str(gh.daemon_log_path())
+                state = ("exited with code {}".format(proc.returncode) if proc.poll() is not None
+                         else "did not answer within {} s".format(STARTUP_TIMEOUT_S))
+                status = "error: the daemon {}; see {}".format(state, where)
 
-            if daemon_running:
-                status = "ready"
-            else:
-                status = "starting (pid={})".format(pid) if pid else "error: daemon failed to launch"
-        elif daemon_running:
+        if session.daemon_running:
             status = "ready"
-        else:
+        elif status is None:
             status = "no_daemon"
-
-        session = USCSession(
-            root=str(root),
-            python_path=str(py),
-            authkey=authkey,
-            host=HOST,
-            port=PORT,
-            daemon_running=daemon_running,
-        )
