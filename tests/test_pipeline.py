@@ -333,18 +333,13 @@ class TestDefaultThresholdReporting:
     recorded by name ('carve_fraction'), and the stage hash must depend on
     the strategy, not on the score-dependent resolved cutoff."""
 
-    def _run_thresholding(self, tmp_path, sub, scores, **cfg_extra):
+    def _run_thresholding(self, tmp_path, sub, scores):
         pre_dir = tmp_path / sub / "preprocessing"
         pre_dir.mkdir(parents=True, exist_ok=True)
         scores_path = pre_dir / "scores.npy"
         np.save(scores_path, scores, allow_pickle=False)
         vg_path = pre_dir / "voxel_grid.npy"
         np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
-        # Patch weights and per-voxel patch ranks, as preprocessing writes them.
-        rng = np.random.default_rng(0)
-        np.save(pre_dir / "patch_weights.npy", rng.uniform(0, 1, 145).astype(np.float32))
-        np.save(pre_dir / "patch_rank.npy",
-                rng.integers(0, 145, scores.size).astype(np.int32))
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
         pm = PreprocessingManifest(
             hash="test1234",
@@ -355,8 +350,6 @@ class TestDefaultThresholdReporting:
             voxel_size=1.0,
             mode="irradiance",
             voxel_grid_path=str(vg_path),
-            patch_weights_path=str(pre_dir / "patch_weights.npy"),
-            patch_rank_path=str(pre_dir / "patch_rank.npy"),
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
@@ -366,7 +359,7 @@ class TestDefaultThresholdReporting:
             out_dir=str(tmp_path / sub), mode="irradiance", epw_path="dummy",
             start_month=1, start_day=1, start_hour=0,
             end_month=12, end_day=31, end_hour=23,
-            **cfg_extra,  # threshold left unset unless given
+            # threshold intentionally left unset (None → carve_fraction)
         )
         from urbansolarcarver.api_core.thresholding import thresholding
         return thresholding(pre_dir, cfg, tmp_path / sub / "thr")
@@ -377,25 +370,6 @@ class TestDefaultThresholdReporting:
         result = self._run_thresholding(tmp_path, "a", scores)
         diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
         assert diag["threshold_method"] == "carve_fraction"
-        assert diag["max_slope_deg"] == 75.0  # default slope limit for score cutoffs
-        assert diag["slope_limit_extra_voxels_removed"] >= 0
-
-    def test_setting_only_protect_share_selects_it(self, tmp_path):
-        rng = np.random.default_rng(11)
-        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
-        result = self._run_thresholding(tmp_path, "ps", scores, protect_share=0.2)
-        diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
-        assert diag["threshold_method"] == "protect_share"
-        assert diag["protected_weight_share"] >= 0.2
-        assert diag["max_slope_deg"] is None  # ray-based result: no slope limit
-
-    def test_max_slope_90_turns_the_limit_off(self, tmp_path):
-        rng = np.random.default_rng(11)
-        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
-        result = self._run_thresholding(tmp_path, "off", scores, max_slope_deg=90)
-        diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
-        assert diag["max_slope_deg"] is None
-        assert diag["slope_limit_extra_voxels_removed"] == 0
 
     def test_stage_hash_independent_of_score_data(self, tmp_path):
         """Same config + same upstream hash → same stage hash, even when the

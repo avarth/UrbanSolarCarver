@@ -25,7 +25,6 @@ from dataclasses import asdict, replace
 from pathlib import Path
 
 import numpy as np
-from scipy.ndimage import binary_dilation
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -148,23 +147,6 @@ def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
         np.save(run.pre / "scores.npy", run.scores)
     if run.mask[~occ].any():
         failed.append("mask_true_on_air")
-
-    # 2b. protect_share: every voxel on a ray to a protected patch is carved,
-    # and nothing else.  Outline points with edge_taper weight 0 cast no
-    # rays in USC, so tapered runs are left out (as for score agreement).
-    if run.cfg.get("mode") not in ("tilted_plane", "time-based") and not run.cfg.get("edge_taper"):
-        share = round(float(rng.uniform(0.05, 0.6)), 3)
-        mask = _rethreshold(run, root / "protect", threshold="protect_share",
-                            protect_share=share, carve_above=False)
-        must = oracle.protected_hits(run, share)
-        carved = occ & ~mask
-        near = binary_dilation(must, structure=np.ones((3, 3, 3), bool))
-        metrics.update(protect_share=share, protect_kept_bad=int((occ & mask & must).sum()),
-                       protect_unexplained=int((carved & ~near).sum()))
-        if metrics["protect_kept_bad"]:
-            failed.append("protect_soundness")
-        if metrics["protect_unexplained"]:
-            failed.append("protect_tightness")
 
     # 3. carve_fraction nesting
     if run.cfg.get("threshold") == "carve_fraction":

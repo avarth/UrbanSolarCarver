@@ -48,9 +48,6 @@ class ThresholdSpec(BaseModel):
 
     Methods
     -------
-    * ``protect_share``: protect the highest-weight sky patches that
-        together hold ``value`` (0-1) of the total patch weight: carve every
-        voxel on a ray from a test point towards a protected patch's centre.
     * ``carve_fraction``: carve the highest-scoring voxels that together
         hold ``value`` (0-1) of the total score mass.
     * ``headtail``: head/tail breaks (Jiang 2013); takes no value.
@@ -59,7 +56,7 @@ class ThresholdSpec(BaseModel):
     """
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    method: Literal["protect_share", "carve_fraction", "headtail", "cutoff"]
+    method: Literal["carve_fraction", "headtail", "cutoff"]
     value: Optional[float] = None
 
     @model_validator(mode="after")
@@ -72,9 +69,9 @@ class ThresholdSpec(BaseModel):
                 )
             if self.value < 0:
                 raise ValueError("cutoff threshold must be >= 0")
-        elif self.method in ("carve_fraction", "protect_share"):
+        elif self.method == "carve_fraction":
             if self.value is not None and not (0.0 <= self.value <= 1.0):
-                raise ValueError(f"{self.method} threshold value must be in [0, 1]")
+                raise ValueError("carve_fraction threshold value must be in [0, 1]")
         elif self.method == "headtail" and self.value is not None:
             raise ValueError("threshold method 'headtail' takes no value")
         return self
@@ -88,7 +85,7 @@ def _normalize_threshold(v):
 
     * ``None``: left as is; ``UserConfig`` fills in the mode default later.
     * number: ``{method: cutoff, value: n}``. Booleans are rejected.
-    * ``'protect_share'`` / ``'carve_fraction'`` / ``'headtail'``: ``{method: <name>}``.
+    * ``'headtail'`` / ``'carve_fraction'``: ``{method: <name>}``.
     * mapping or :class:`ThresholdSpec`: passed on to :class:`ThresholdSpec`
       validation unchanged.
     """
@@ -105,12 +102,11 @@ def _normalize_threshold(v):
                 "threshold='numeric' requires an explicit number: set "
                 "threshold to the raw-score cutoff itself (e.g. threshold: 0.35)."
             )
-        if key in ("protect_share", "carve_fraction", "headtail"):
+        if key in ("headtail", "carve_fraction"):
             return {"method": key}
         raise ValueError(
-            "threshold must be a number (raw-score cutoff), 'protect_share', "
-            "'carve_fraction', 'headtail', or a mapping like "
-            "{method: protect_share, value: 0.1}"
+            "threshold must be a number (raw-score cutoff), 'headtail', "
+            "'carve_fraction', or a mapping like {method: carve_fraction, value: 0.7}"
         )
     return v
 
@@ -274,9 +270,8 @@ class UserConfig(BaseModel):
             "Positive value = explicit radius in meters (rule of thumb: 1.0–1.2× voxel_size; "
             "above 2× voxel_size features get noticeably rounded). The radius is clipped "
             "to 0.5-8 voxels. "
-            "Used only by the score-cutoff methods of the sky modes (carve_fraction, "
-            "headtail, a numeric cutoff); protect_share, time-based and tilted_plane "
-            "do not use it."
+            "Only affects weighted-score modes (irradiance, benefit, daylight, radiative_cooling). "
+            "Violation-count modes (time-based, tilted_plane) are unaffected."
         ),
     )
 
@@ -308,51 +303,22 @@ class UserConfig(BaseModel):
         ),
     )
 
-    max_slope_deg: Optional[float] = Field(
-        None,
-        gt=0.0,
-        le=90.0,
-        description=(
-            "Steepest rise (degrees above horizontal) allowed between neighbouring "
-            "columns of the kept volume, applied after carve_above. Taller columns are "
-            "cut down until they rise at most this steeply above a median-filtered "
-            "height map, which turns one-voxel spires and tall cliffs into ramps. It "
-            "only ever removes voxels. None (default): 75 for the score-cutoff methods of the sky modes "
-            "(carve_fraction, headtail, a numeric cutoff), off otherwise. 90: off. "
-            "Lower values give gentler ramps and remove more volume."
-        ),
-    )
-
     # thresholding & classification
     threshold: Annotated[Optional[ThresholdSpec], BeforeValidator(_normalize_threshold)] = Field(
         None,
         description=(
-            "time-based: tolerated shading in m²·h (shaded test-surface area x "
-            "duration); 0 (default) carves any voxel that shades a test surface. "
-            "tilted_plane: leave unset. "
-            "Sky modes: leave unset to use carve_fraction (value from the carve_fraction "
-            "key). Other methods: 'protect_share' (keep the rays to the top sky patches "
-            "clear; value from protect_share), 'headtail' (automatic split of the scores) "
-            "or a number (raw-score cutoff). "
-            "Canonical form is a mapping {method: ..., value: ...}; the shorthands "
-            "above are normalized to it. Unset in a sky mode: carve_fraction, or "
-            "protect_share if only the protect_share key is set."
-        ),
-    )
-    protect_share: float = Field(
-        0.1,
-        ge=0.0,
-        le=1.0,
-        description=(
-            "Sky modes (irradiance, benefit, daylight, radiative_cooling): share (0-1) "
-            "of the sky's weight to protect. The highest-weight sky patches are "
-            "protected, in order, until they hold this share, and every voxel on a ray "
-            "from a test point towards a protected patch's centre "
-            "is carved. Patches are whole (145 Tregenza patches), so the share actually "
-            "protected is reported in the thresholding diagnostics and can exceed this "
-            "value. Small values already carve a lot: 0.1 kept 33-74% of the volume in "
-            "the ReSBE test blocks, 0.2 kept 22-41%. edge_taper does not apply to it. "
-            "Used by the protect_share method, which setting only this key selects."
+            "How to decide which voxels to carve. Canonical form is a mapping "
+            "{method: ..., value: ...}; shorthands are accepted and normalized: "
+            "'carve_fraction' (recommended): remove a fraction of the obstructing "
+            "score mass (value from the carve_fraction parameter unless given). "
+            "'headtail': automatic split biased toward removing only the worst "
+            "obstructors. Both are for weighted modes only. "
+            "A bare number (≥ 0): raw-score cutoff; carve voxels scoring above it "
+            "(inspect the score histogram first); for time-based this is the "
+            "tolerated shading in m²·h (shaded test-surface area x duration). "
+            "Unset: mode default (carve_fraction for weighted modes, 0 for "
+            "violation-count modes). After validation this field is always a "
+            "ThresholdSpec."
         ),
     )
     carve_fraction: float = Field(
@@ -360,14 +326,15 @@ class UserConfig(BaseModel):
         ge=0.0,
         le=1.0,
         description=(
-            "Sky modes (the default method): the fraction (0-1) of the building's total "
-            "obstruction score to remove, not the fraction of voxels removed. Because a few highly-obstructing voxels dominate the score "
-            "distribution, 0.7 typically removes far fewer than 70% of voxels. "
+            "How aggressively to carve (0.0-1.0): the fraction of the building's total "
+            "obstruction score to remove, not the fraction of voxels removed. Because a few "
+            "highly-obstructing voxels dominate the score distribution, 0.7 typically removes "
+            "far fewer than 70% of voxels. "
             "0.7 = aggressive (removes the voxels holding 70% of the obstruction score; "
             "taller, slimmer volumes). "
             "0.3 = conservative (removes 30%; bulkier volumes, more floor area). "
             "Used by the carve_fraction threshold method when the threshold gives no value "
-            "of its own. max_slope_deg then smooths the resulting heights."
+            "of its own, which includes the default for weighted modes."
         ),
     )
     # benefit parameters
@@ -478,31 +445,14 @@ class UserConfig(BaseModel):
             raise ValueError(f"device must be one of {opts}")
         return v
 
-    def effective_max_slope_deg(self) -> Optional[float]:
-        """The slope limit thresholding applies, or None when it is off.
-
-        An explicit ``max_slope_deg`` applies as given (90 = off).  Unset, it
-        is 75 degrees for the score-cutoff methods of the sky modes, whose
-        per-voxel decisions can leave cliffs and spires, and off for the
-        ray-based results (time-based, tilted_plane, protect_share), which
-        are exact solar envelopes.
-        """
-        if self.max_slope_deg is not None:
-            return None if self.max_slope_deg >= 90.0 else float(self.max_slope_deg)
-        spec = self.threshold
-        if MODES[self.mode].score_kind == "weighted_sum" and spec.method != "protect_share":
-            return 75.0
-        return None
-
     @model_validator(mode='after')
     def _resolve_threshold_spec(self) -> 'UserConfig':
         """Resolve ``threshold`` to a concrete :class:`ThresholdSpec`.
 
         After this validator the field is never None and never a shorthand:
-        the mode default is filled in and the method is cross-checked against
-        the mode's score kind.  The weighted-mode default is carve_fraction,
-        unless the config sets protect_share (and not carve_fraction), which
-        then selects protect_share; violation-count modes default to cutoff 0.
+        the mode default is filled in (carve_fraction for weighted modes,
+        cutoff 0 for violation-count modes) and the method is cross-checked
+        against the mode's score kind.
         """
         kind = MODES[self.mode].score_kind
         spec = self.threshold
@@ -528,25 +478,17 @@ class UserConfig(BaseModel):
                 )
         else:  # weighted_sum
             if spec is None:
-                set_cf = "carve_fraction" in self.model_fields_set
-                set_ps = "protect_share" in self.model_fields_set
-                if set_cf and set_ps:
-                    raise ValueError(
-                        "both carve_fraction and protect_share are set; set threshold to "
-                        "'protect_share' or 'carve_fraction' to choose the method."
-                    )
-                spec = ThresholdSpec(method="protect_share" if set_ps else "carve_fraction")
-            if spec.method in ("carve_fraction", "protect_share"):
-                field_value = getattr(self, spec.method)
-                if spec.value is None:
-                    spec = ThresholdSpec(method=spec.method, value=field_value)
-                elif spec.method in self.model_fields_set and spec.value != field_value:
-                    warnings.warn(
-                        f"threshold value {spec.value} and {spec.method}={field_value} "
-                        f"disagree; using the threshold value {spec.value}.",
-                        UrbanSolarCarverWarning,
-                        stacklevel=2,
-                    )
+                spec = ThresholdSpec(method="carve_fraction", value=self.carve_fraction)
+            elif spec.method == "carve_fraction" and spec.value is None:
+                spec = ThresholdSpec(method="carve_fraction", value=self.carve_fraction)
+            elif (spec.method == "carve_fraction" and "carve_fraction" in self.model_fields_set
+                  and spec.value != self.carve_fraction):
+                warnings.warn(
+                    f"threshold value {spec.value} and carve_fraction={self.carve_fraction} "
+                    f"disagree; using the threshold value {spec.value}.",
+                    UrbanSolarCarverWarning,
+                    stacklevel=2,
+                )
 
         self.threshold = spec
         return self
@@ -669,7 +611,6 @@ class PreprocessingManifest(BaseModel):
     voxel_size: Optional[float] = None
     mode: Optional[str] = None
     patch_weights_path: Optional[str] = None
-    patch_rank_path: Optional[str] = None
     sample_point_count: Optional[int] = None
 
 class ThresholdingManifest(BaseModel):

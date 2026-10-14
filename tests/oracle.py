@@ -209,61 +209,23 @@ def sky_scores(run: Run, substeps: int = 10) -> np.ndarray:
                  substeps=substeps)
 
 
-def protected_hits(run: Run, share: float) -> np.ndarray:
-    """Voxels that block one of the patches protect_share=*share* protects.
-
-    The protected patches are the highest-weight ones (ties in patch order)
-    whose weights first reach *share* of the total positive weight; the
-    ranking is recomputed here rather than taken from USC.
-    """
-    import torch
-    from urbansolarcarver.sky_patches import fetch_tregenza_patch_directions
-    dirs = fetch_tregenza_patch_directions(torch.device("cpu")).numpy().astype(float)
-    pw = np.load(run.pre / "patch_weights.npy").astype(float)
-    ranked = sorted((i for i in range(len(pw)) if pw[i] > 0), key=lambda i: (-pw[i], i))
-    total, acc, chosen = sum(pw[i] for i in ranked), 0.0, []
-    for i in ranked:
-        if share <= 0 or acc >= share * total * (1 - 1e-12):
-            break
-        chosen.append(i)
-        acc += pw[i]
-    if not chosen:
-        return np.zeros(run.shape, bool)
-    o, n, d, _, _ = pairs(run.points, run.normals, dirs[chosen])
-    return march(run, o, n, d, ray_length=run.cfg.get("ray_length", 300.0)) > 0
-
-
 def score_agreement(run: Run) -> dict:
     """Compare USC's raw scores on occupied voxels with the reference.
 
-    shortfall: occupied voxels USC scores below the reference beyond float32
-    accumulation error (1e-4 relative), unless a face neighbour (occupied or
-    not) holds at least the missing score as extra.  A ray that starts on a
-    voxel face and runs parallel to it (a facade on a lattice plane, a patch
-    straight along a grid axis) touches both voxels; the reference and the
-    DDA may put it on different sides, which moves its weight to the
-    neighbour without losing it.  Other shortfalls come only from rays
-    passing within rounding of a voxel edge.
+    shortfall: voxels USC scores below the reference beyond float32
+    accumulation error (1e-4 relative). Only rays passing within rounding of
+    a voxel edge, where either neighbour is a valid DDA step, may cause one.
     excess: extra score mass, i.e. corner clips the fixed-step reference
     misses. Grazing (low-sun) ray sets can show >10% at 10 sub-steps; it is
     then re-measured at 40, where only genuine over-scoring stays large.
     """
-    usc_grid = run.scores.astype(float)
-    ref_grid = sky_scores(run)
-    usc, ref = usc_grid[run.occ], ref_grid[run.occ]
+    usc = run.scores[run.occ].astype(float)
+    ref = sky_scores(run)[run.occ]
     out = {"ref_mass": float(ref.sum())}
     if ref.sum() <= 0:
         return out
-    tol_grid = 1e-4 * np.maximum(ref_grid, usc_grid) + 1e-9 * ref.max()
-    missing = ref_grid - usc_grid
-    surplus = np.pad(np.maximum(-missing, 0.0), 1)
-    neighbour_surplus = np.zeros_like(missing)
-    for axis in range(3):
-        for shift in (-1, 1):
-            neighbour_surplus = np.maximum(
-                neighbour_surplus, np.roll(surplus, shift, axis=axis)[1:-1, 1:-1, 1:-1])
-    short = run.occ & (missing > tol_grid) & (neighbour_surplus < missing - tol_grid)
-    out["shortfall_voxels"] = int(short.sum())
+    tol = 1e-4 * np.maximum(ref, usc) + 1e-9 * ref.max()
+    out["shortfall_voxels"] = int(((ref - usc) > tol).sum())
     out["excess"] = float((usc - ref).sum() / ref.sum())
     if out["excess"] > 0.10:
         fine = sky_scores(run, substeps=40)[run.occ]
