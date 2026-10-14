@@ -49,7 +49,7 @@ import torch
 import numpy as np
 from numba import njit
 
-from .scoring import get_weights, protection_order
+from .scoring import get_weights
 from .load_config import user_config
 from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
@@ -77,7 +77,6 @@ class SkyPatchCarvingResult(NamedTuple):
     ray_directions: "np.ndarray | None"   # (N, 3) ray unit vectors, or None
     raw_voxel_scores: np.ndarray          # (X*Y*Z,) float32 per-voxel weighted scores
     patch_weights: np.ndarray             # (P,) weight per Tregenza sky patch
-    patch_rank: "np.ndarray | None" = None  # (X*Y*Z,) int32, see rank_blocked_patches
 
 import os
 from ladybug.analysisperiod import AnalysisPeriod
@@ -478,7 +477,6 @@ def carve_with_sky_patch_rays(
     hoys: Sequence[int],
     return_rays: bool = False,
     point_weights: "np.ndarray | None" = None,
-    return_patch_rank: bool = False,
     ):
     """
     Score each voxel by the sky-patch weight of the rays that cross it.
@@ -541,9 +539,6 @@ def carve_with_sky_patch_rays(
         contribution is patch_weight × point_weight, and zero-weight rays
         are dropped before tracing.  None (default) = all points count
         fully.
-    return_patch_rank : bool, default False
-        Also compute :func:`rank_blocked_patches` (used by the protect_share
-        threshold).  This traces the rays a second time, one patch at a time.
 
     Returns
     -------
@@ -553,8 +548,6 @@ def carve_with_sky_patch_rays(
         - ray_directions (N, 3): unit ray vectors, or None unless return_rays.
         - raw_voxel_scores (X*Y*Z,): accumulated weights per voxel (float32).
         - patch_weights (P,): weight per Tregenza sky patch.
-        - patch_rank (X*Y*Z,): int32 rank per voxel, or None unless
-          return_patch_rank.
 
     Raises
     ------
@@ -695,14 +688,6 @@ def carve_with_sky_patch_rays(
 
     raw_voxel_scores = scores.cpu().numpy()
 
-    patch_rank = None
-    if return_patch_rank:
-        traced_points = None if point_weights is None else np.asarray(point_weights) > 0.0
-        patch_rank = rank_blocked_patches(
-            voxel_grid, grid_origin, grid_extent_m, res, sample_points, sample_normals,
-            config, sky_dirs, patch_weights.cpu().numpy(), traced_points=traced_points,
-        )
-
     # Thresholding lives in api_core.thresholding, so users can re-threshold
     # without re-tracing rays.
     return SkyPatchCarvingResult(
@@ -710,82 +695,7 @@ def carve_with_sky_patch_rays(
         ray_directions=ray_directions.cpu().numpy() if return_rays else None,
         raw_voxel_scores=raw_voxel_scores,
         patch_weights=patch_weights.cpu().numpy(),
-        patch_rank=patch_rank,
     )
-
-
-# Rank for voxels that block no positive-weight patch: never carved.
-UNBLOCKED_RANK = np.iinfo(np.int32).max
-
-
-def rank_blocked_patches(voxel_grid, grid_origin, grid_extent, res, sample_points,
-                         sample_normals, config, patch_dirs, patch_weights,
-                         traced_points=None):
-    """For each voxel, the highest-weight sky patch it blocks from some test point.
-
-    Patches are ranked by :func:`scoring.protection_order` (rank 0 = highest
-    weight; zero-weight patches are not ranked).  A voxel gets rank r when
-    it lies, in front of the source surface, on a ray from any sample point
-    towards the patch of rank r, and on no ray towards a patch ranked
-    higher.  Protecting the top n patches therefore means carving every
-    voxel with rank < n; the thresholding stage does that for a chosen
-    share of the total patch weight without tracing again.
-
-    The rays are traced one patch at a time with the same counting kernel
-    and behind-surface filter as time-based carving.
-
-    Parameters
-    ----------
-    voxel_grid : torch.Tensor (X, Y, Z)
-        Occupancy grid; only its shape and device are used.
-    grid_origin : array_like (3,)
-        World-space minimum corner of the grid.
-    grid_extent : float
-        Side length of the cubic grid in metres.
-    res : int
-        Voxels per side.
-    sample_points, sample_normals : np.ndarray (R, 3)
-        Test points and their outward unit normals.
-    config : user_config
-        Supplies ray_length, ray_batch_size and voxel_size.
-    patch_dirs : torch.Tensor or np.ndarray (P, 3)
-        Unit directions to the patch centres, in the order of *patch_weights*.
-    patch_weights : np.ndarray (P,)
-        Weight per patch.
-    traced_points : np.ndarray (R,) bool, optional
-        Which sample points cast rays (e.g. edge_taper weight > 0); None = all.
-
-    Returns
-    -------
-    np.ndarray (X*Y*Z,) int32
-        Rank per voxel (flat, C order); :data:`UNBLOCKED_RANK` where no
-        ranked patch is blocked.
-    """
-    device = voxel_grid.device
-    points = np.asarray(sample_points)
-    normals = np.asarray(sample_normals)
-    if traced_points is not None:
-        points, normals = points[traced_points], normals[traced_points]
-    dirs = (patch_dirs.detach().cpu().numpy() if isinstance(patch_dirs, torch.Tensor)
-            else np.asarray(patch_dirs))
-    surface_normals = torch.as_tensor(normals, dtype=torch.float32, device=device)
-    min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-
-    rank = torch.full((voxel_grid.numel(),), UNBLOCKED_RANK, dtype=torch.int32, device=device)
-    for r, patch in enumerate(protection_order(patch_weights)):
-        origins, directions, point_idx = generate_sun_rays(
-            points, normals, dirs[patch:patch + 1], device, return_point_idx=True,
-        )
-        if origins.shape[0] == 0:
-            continue  # no test point faces this patch
-        counts = _count_ray_hits(
-            voxel_grid, min_corner, float(grid_extent), res, origins, directions, config,
-            point_idx, surface_normals,
-        )
-        # Patches come in rank order, so the first patch to reach a voxel
-        # is its highest-ranked one.
-        rank[(counts > 0) & (rank == UNBLOCKED_RANK)] = r
-    return rank.cpu().numpy()
 
 
 def carve_with_planes(
@@ -1000,95 +910,3 @@ def _carve_above_kernel(out, voxel_grid, min_consecutive):
                 for z_above in range(trigger_top + 1, nz):
                     if voxel_grid[x, y, z_above]:
                         out[x, y, z_above] = False
-
-
-def limit_column_slope(mask, occupancy, max_slope_deg: float, median_size: int = 5):
-    """Lower columns that rise too steeply above their neighbours.
-
-    Each building column's kept height (one above its highest kept voxel,
-    0 if nothing is kept) is capped so that it rises at most
-    ``tan(max_slope_deg)`` voxels per voxel of horizontal distance above a
-    reference height map, counting the reference at the column itself as
-    one voxel away; every kept voxel above the cap is removed.  The result
-    only ever removes voxels.
-
-    The reference is the kept height map after a ``median_size`` x
-    ``median_size`` median filter over the building's columns, so features
-    one or two columns wide are ignored: a single tall column (a spire) is
-    measured against its surroundings and ends at most one slope step above
-    them, and a single low column (a stub left at a curved edge) or a
-    narrow slot does not pull its neighbours down.  Wider differences in
-    height, including next to areas carved to the ground, become ramps of
-    the given slope, cut from the taller side.  Columns outside the
-    building (no occupied voxel) take no part.
-
-    The cap never rises when the input loses voxels, so carving more before
-    this step never keeps more after it (a carve_fraction slider stays
-    nested).
-
-    Parameters
-    ----------
-    mask : ndarray (X, Y, Z) bool
-        Kept voxels (True), normally after carve_above.  Not mutated.
-    occupancy : ndarray (X, Y, Z) bool
-        The building's voxels before carving; decides which columns count.
-    max_slope_deg : float
-        Steepest allowed rise between neighbouring columns, in degrees
-        above horizontal (0 < angle < 90; voxels are cubes, so the slope is
-        the same in metres).
-    median_size : int, default 5
-        Width in voxels of the median filter that builds the reference.
-
-    Returns
-    -------
-    ndarray (X, Y, Z) bool
-        A copy of *mask* with the voxels above each column's cap removed.
-    """
-    from numpy.lib.stride_tricks import sliding_window_view
-    if not 0.0 < max_slope_deg < 90.0:
-        raise ValueError(f"max_slope_deg must be between 0 and 90, got {max_slope_deg}")
-    z = np.arange(mask.shape[2])
-    building = np.asarray(occupancy, dtype=bool).any(axis=2)
-    top = np.where(mask.any(axis=2), (mask * (z + 1)).max(axis=2), 0).astype(np.float64)
-    half = median_size // 2
-    with np.errstate(all="ignore"), warnings.catch_warnings():
-        warnings.simplefilter("ignore", RuntimeWarning)  # windows with no building column
-        windows = sliding_window_view(
-            np.pad(np.where(building, top, np.nan), half, constant_values=np.nan),
-            (median_size, median_size))
-        reference = np.where(building, np.nanmedian(windows, axis=(-2, -1)), 0.0)
-    rise = float(np.tan(np.radians(max_slope_deg)))
-    cap = _slope_envelope(np.ascontiguousarray(reference), building, rise, rise * np.sqrt(2.0))
-    cap = np.minimum(top, cap + rise)
-    return mask & (z[None, None, :] < np.floor(cap + 1e-9)[:, :, None])
-
-
-@njit(cache=True)
-def _slope_envelope(h, valid, rise_axis, rise_diag):
-    """Lower *h* (in place) to min over neighbours q of h[q] + rise * distance.
-
-    Two raster passes over the 8-neighbourhood (forward, then backward)
-    give the chamfer approximation of the Euclidean distance: axis steps
-    cost *rise_axis*, diagonal steps *rise_diag*.  Only cells with
-    ``valid`` True take part.  Returns *h*.
-    """
-    nx, ny = h.shape
-    for i in range(nx):
-        for j in range(ny):
-            if not valid[i, j]:
-                continue
-            for di, dj, r in ((-1, 0, rise_axis), (0, -1, rise_axis),
-                              (-1, -1, rise_diag), (-1, 1, rise_diag)):
-                a, b = i + di, j + dj
-                if 0 <= a < nx and 0 <= b < ny and valid[a, b] and h[a, b] + r < h[i, j]:
-                    h[i, j] = h[a, b] + r
-    for i in range(nx - 1, -1, -1):
-        for j in range(ny - 1, -1, -1):
-            if not valid[i, j]:
-                continue
-            for di, dj, r in ((1, 0, rise_axis), (0, 1, rise_axis),
-                              (1, 1, rise_diag), (1, -1, rise_diag)):
-                a, b = i + di, j + dj
-                if 0 <= a < nx and 0 <= b < ny and valid[a, b] and h[a, b] + r < h[i, j]:
-                    h[i, j] = h[a, b] + r
-    return h

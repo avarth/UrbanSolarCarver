@@ -16,11 +16,6 @@ Sky-patch weight computation and threshold selection for voxel carving.
    Head/tail breaks (Jiang 2013): repeatedly splits a right-skewed score
    distribution at its arithmetic mean.  Suited to obstruction scores,
    which are usually heavy-tailed.
-
-4. protection_order(weights) / protected_patch_count(weights, share)
-   The order in which the protect_share method protects sky patches
-   (highest weight first) and how many patches a share of the total
-   weight needs.
 """
 import numpy as np
 import torch
@@ -263,35 +258,3 @@ def headtail_threshold(
         threshold = mean_val
         current = head
     return threshold
-
-
-def protection_order(weights) -> np.ndarray:
-    """Indices of the sky patches with positive weight, highest weight first.
-
-    Ties keep patch order (stable sort), so preprocessing and thresholding
-    always agree on the order.  Patches with zero or negative weight are
-    left out: protecting them gains nothing.
-    """
-    w = np.asarray(weights, dtype=np.float64).ravel()
-    order = np.argsort(-w, kind="stable")
-    return order[w[order] > 0.0]
-
-
-def protected_patch_count(weights, share: float) -> int:
-    """How many patches of :func:`protection_order` hold *share* of the weight.
-
-    Returns the smallest n whose top-n patches hold at least ``share`` of
-    the total positive weight: 0 for share 0, every positive-weight patch
-    for share 1.
-    """
-    if not 0.0 <= share <= 1.0:
-        raise ValueError(f"share must be in [0, 1], got {share}")
-    w = np.asarray(weights, dtype=np.float64).ravel()
-    order = protection_order(w)
-    if share == 0.0 or order.size == 0:
-        return 0
-    cum = np.cumsum(w[order])
-    # The small tolerance keeps share=1.0 from missing the last patch to
-    # floating-point rounding in the cumulative sum.
-    n = int(np.searchsorted(cum, share * cum[-1] * (1.0 - 1e-12))) + 1
-    return min(n, order.size)

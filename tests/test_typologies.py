@@ -80,39 +80,6 @@ def test_protected_floors_not_carved_by_own_rays(tmp_path, epw, mode):
         assert run.mask[run.occ].all()
 
 
-@pytest.mark.parametrize("typology", ["courtyard", "towers", "freeform", "passage"])
-@pytest.mark.parametrize("mode", ["benefit", "daylight"])
-def test_protect_share_matches_reference(tmp_path, epw, typology, mode):
-    """protect_share carves every voxel on a ray from a test point to a
-    protected patch, and nothing else (as for the binary modes)."""
-    run = cases.run(build(SceneSpec(typology, seed=7)), tmp_path, epw, mode,
-                    threshold="protect_share", protect_share=0.3)
-    must = oracle.protected_hits(run, 0.3)
-    assert oracle.soundness_violations(run, must) == 0
-    unexplained, carved = oracle.unexplained_carving(run, must)
-    assert carved > 0
-    assert unexplained == 0
-    assert run.diag("thr")["protected_weight_share"] >= 0.3
-
-
-def test_protect_share_nested(tmp_path, epw):
-    """Protecting more sky never keeps a voxel that protecting less removed."""
-    from urbansolarcarver.api_core.thresholding import thresholding
-    from urbansolarcarver.load_config import user_config
-
-    run = cases.run(build(SceneSpec("towers")), tmp_path / "a", epw, "benefit",
-                    threshold="protect_share")
-    masks = []
-    for share in (0.0, 0.1, 0.3, 0.6, 1.0):
-        cfg = dict(run.cfg, protect_share=share)
-        thr = thresholding(run.pre, user_config(**cfg), tmp_path / f"t{share}")
-        masks.append(np.load(thr.mask_path))
-    assert np.array_equal(masks[0], run.occ)  # nothing protected, nothing carved
-    for loose, tight in zip(masks, masks[1:]):
-        assert not (tight & ~loose).any()
-    assert masks[-1].sum() < masks[1].sum()
-
-
 # ----------------------------------------------------------------- thresholding
 def test_threshold_ignores_empty_cells(tmp_path, epw):
     """The mask over the building must not depend on scores stored in air."""
@@ -160,32 +127,11 @@ def test_tilted_angle_monotone(tmp_path, epw):
 
 
 # ----------------------------------------------------------------- carve_above
-@pytest.mark.parametrize("typology", ["courtyard", "freeform", "rows"])
-def test_carve_fraction_with_carve_above_leaves_no_spires(tmp_path, epw, typology):
-    """With a 45 degree slope limit (one voxel of rise per voxel), no kept
-    column stands 4 or more voxels above the median of its 5 x 5
-    neighbourhood. (At 2 m voxels the default 75 degrees allows about 3.7
-    voxels per column, too much for this criterion.)"""
-    from numpy.lib.stride_tricks import sliding_window_view
-    run = cases.run(build(SceneSpec(typology, seed=7)), tmp_path, epw, "benefit",
-                    carve_fraction=0.4, carve_above=True, max_slope_deg=45.0)
-    z = np.arange(run.shape[2])
-    kept = run.mask.any(axis=2)
-    h = np.where(kept, (run.mask * (z + 1)).max(axis=2), np.nan)
-    med = np.nanmedian(sliding_window_view(np.pad(h, 2, constant_values=np.nan), (5, 5)),
-                       axis=(-2, -1))
-    assert run.diag("thr")["max_slope_deg"] == 45.0
-    assert not ((h - med) >= 4)[kept].any()
-
-
 @pytest.mark.parametrize("min_run", [1, 3])
-@pytest.mark.parametrize("mode", ["time-based", "benefit", "benefit-protect"])
+@pytest.mark.parametrize("mode", ["time-based", "benefit"])
 def test_carve_above_leaves_no_floating_mass(tmp_path, epw, mode, min_run):
-    over = {}
-    if mode == "benefit-protect":
-        mode, over = "benefit", dict(threshold="protect_share")
     run = cases.run(build(SceneSpec("courtyard")), tmp_path, epw, mode,
-                    carve_above=True, carve_above_min_consecutive=min_run, **over)
+                    carve_above=True, carve_above_min_consecutive=min_run)
     kept = oracle.kept_grid(run)
     assert oracle.floating_voxels(kept, run.occ, min_run) == 0
     assert not (kept & ~run.mask).any()   # only removes: never undoes the constraint
@@ -231,8 +177,6 @@ def test_cpu_cuda_parity(tmp_path, epw, mode):
         assert np.array_equal(cpu.mask, gpu.mask)
     else:
         np.testing.assert_allclose(gpu.scores, cpu.scores, rtol=1e-4, atol=1e-3)
-        assert np.array_equal(np.load(cpu.pre / "patch_rank.npy"),
-                              np.load(gpu.pre / "patch_rank.npy"))
 
 
 @pytest.mark.parametrize("mode", ["daylight", "time-based"])

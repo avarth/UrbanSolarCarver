@@ -49,6 +49,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
     end_month: 12
     end_day: 31
     end_hour: 18
+    threshold: "carve_fraction"
     carve_fraction: 0.7
     ```
 
@@ -69,6 +70,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
     end_hour: 16
     balance_temperature: 18.0
     balance_offset: 2.0
+    threshold: "carve_fraction"
     carve_fraction: 0.7
     ```
 
@@ -80,6 +82,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
     out_dir: "outputs"
     mode: "daylight"
     voxel_size: 1.0
+    threshold: "carve_fraction"
     carve_fraction: 0.7
     ```
 
@@ -93,6 +96,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
     voxel_size: 1.0
     dew_point_celsius: 14.0
     bliss_k: 1.8
+    threshold: "carve_fraction"
     carve_fraction: 0.35   # cooling scores are diffuse; 0.7 over-carves
     ```
 
@@ -104,11 +108,9 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `voxel_size` | 1.0 | Voxel edge length in meters (0.01-100) |
 | `grid_step` | 1.0 | Surface sampling spacing in meters (must be <= voxel_size) |
 | `ray_length` | 300.0 | Maximum ray cast distance in meters |
-| `carve_fraction` | 0.7 | Sky modes: fraction (0-1) of the building's obstruction score to remove. See [How much to carve](#how-much-to-carve) |
-| `max_slope_deg` | `null` | Steepest rise (degrees) allowed between neighbouring columns after `carve_above`; taller columns are cut into ramps. `null` = 75 for the score-cutoff methods of the sky modes, off otherwise; 90 = off |
-| `threshold` | 0 | `time-based`: tolerated shading in m²·h (0 = none). Sky modes: unset uses `carve_fraction`; set it to choose [another method](../modes.md#sky-modes-other-methods) |
-| `protect_share` | 0.1 | Sky modes, with `threshold: protect_share`: share (0-1) of the sky weight whose patch directions stay clear from every test point |
-| `score_smoothing` | `null` | Score-cutoff methods of the sky modes: Gaussian blur radius (m) on the scores before the cutoff; `null` = 1.1 x voxel_size, 0 = off |
+| `threshold` | mode default | `carve_fraction` for weighted modes, `0` for `time-based`, unset for `tilted_plane`. See [Thresholding strategies](#thresholding-strategies) below |
+| `carve_fraction` | 0.7 | Solar protection slider: 0.7 = aggressive (remove 70% of the obstruction weight), 0.3 = conservative |
+| `score_smoothing` | `null` | Gaussian blur radius (m) on the scores before thresholding; `null` = 1.1 x voxel_size, 0 = off. Weighted modes only |
 | `carve_above` | true | Carve all occupied voxels above the lowest carved region in each column, so the result is a buildable height field without floating mass (empty cells such as a ground-floor passage never trigger it). `false` keeps mass that floats above carved zones but casts no violating shadow |
 | `carve_above_min_consecutive` | 1 | Min consecutive carved voxels to trigger carve_above (2-3 avoid column removal from stray single voxels; shorter runs stay carved) |
 | `apply_smoothing` | false | SDF smoothing + marching cubes instead of cubic mesh |
@@ -134,33 +136,37 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `dew_point_celsius` | `radiative_cooling` | Night-time dew point (°C, default 14) |
 | `bliss_k` | `radiative_cooling` | Bliss angular-attenuation constant (default 1.8) |
 | `min_sky_elevation_deg` | `radiative_cooling` | Ignore sky patches below this elevation in degrees (default 0 = full hemisphere) |
-| `edge_taper` | weighted modes | Sample points closer than this (m) to their surface's edge count proportionally less (default 0 = off). Does not apply to `protect_share` (points with taper weight 0 cast no rays there) |
+| `edge_taper` | weighted modes | Sample points closer than this (m) to their surface's edge count proportionally less (default 0 = off) |
 
-## How much to carve
+## Thresholding strategies
 
-Each mode has one setting for this; it sets the trade-off between solar protection and buildable volume. Details and limitations: [Carving Modes: How much to carve](../modes.md#how-much-to-carve).
+After preprocessing computes per-voxel obstruction scores, thresholding decides which voxels to remove. This is the main design control: it sets the trade-off between solar protection and buildable volume.
 
-**Sky modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`): `carve_fraction` (0-1, default 0.7)
-:   Removes the voxels that block the most sky weight until they hold this fraction of the building's total obstruction score. 0.7 is aggressive (taller, slimmer result), 0.3 conservative (bulkier volume, more floor area). After `carve_above`, a slope limit (`max_slope_deg`, 75° by default) cuts columns that rise too steeply above their neighbours, so the result has ramps instead of cliffs and one-voxel spires.
+!!! note "Mode-specific threshold semantics"
+    The strategies below apply to the **weighted modes** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`) whose scores are continuous values.
 
-**`time-based`**: `threshold` in m²·h (default 0)
-:   The shading a voxel may cause on the protected surfaces (area x duration) before it is carved. `0` removes any voxel that shades at any sampled moment; `5` tolerates up to 5 m²·h.
+    **`tilted_plane`** is strictly binary: a voxel either protrudes above the cut plane (removed) or it does not (kept). Do not set `threshold`; leave it unset (`None`). Setting a string method or a value > 0 raises a validation error.
 
-**`tilted_plane`**: `tilted_plane_angle_deg`
-:   Everything above the plane is carved; do not set `threshold`.
+    **`time-based`** scores are **shaded area x duration in m²·h** (how much protected surface the voxel shades, and for how long, during the period). Use a non-negative number: `threshold: 0` removes any voxel that shadows at any sampled moment (strict, default); `threshold: 5` tolerates up to 5 m²·h; and so on. See [Modes: violation-count thresholds](../modes.md#for-violation-count-modes-time-based-tilted_plane) for details.
 
-**Other methods for the sky modes**
-:   `threshold: protect_share` (with `protect_share`) keeps the rays from every test point to the highest-weight sky patches clear, like a solar envelope over those directions; `threshold: headtail` splits the scores automatically; a numeric `threshold` is a raw-score cutoff. See [Carving Modes](../modes.md#sky-modes-other-methods).
+**`carve_fraction`** (recommended for weighted modes)
+:   Removes a fraction of the total obstruction weight of the building's voxels. Set `carve_fraction: 0.7` to remove 70% of the obstruction (aggressive: taller, slimmer result with better solar access). Set `carve_fraction: 0.3` for a conservative result (bulkier volume, more floor area). It works as a **solar protection slider**.
+
+**`headtail`**
+:   Jiang (2013) head/tail breaks: splits the scores at their mean and keeps splitting the upper part while it holds at most 40% of the values. Designed for heavy-tailed score distributions where most voxels have low scores and a few have very high scores. Biased toward removing only the worst obstructors.
+
+**Numeric value** (e.g., `threshold: 0.35`)
+:   Manual cutoff on the raw scores. Carves all voxels scoring above this value. Set `diagnostic_plots: true` to get the score histogram and pick a value from it. For `time-based`, the value is the tolerated shading in m²·h (see above).
 
 !!! tip
-    The **decomposed pipeline** is designed for exploring this setting. Compute once (`preprocessing`), then re-run `thresholding` with other values; it takes seconds because the ray tracing is already done (for `protect_share`, preprocessing also stores the per-voxel patch ranks in `patch_rank.npy`).
+    The **decomposed pipeline** is designed for threshold exploration. Compute scores once (`preprocessing`), then re-run `thresholding` with different parameters; it takes seconds because the ray tracing is already done.
 
 ## CLI overrides
 
 Any config value can be overridden from the command line:
 
 ```bash
-urbansolarcarver preprocessing -c config.yaml     -o voxel_size=0.5     -o mode=irradiance     -o carve_fraction=0.5
+urbansolarcarver preprocessing -c config.yaml     -o voxel_size=0.5     -o mode=irradiance     -o threshold=carve_fraction
 ```
 
 Relative paths given in overrides are resolved against the current directory, not the YAML's folder.
@@ -180,7 +186,7 @@ outputs/
   run_report.md
 ```
 
-Weighted modes also write `preprocessing/patch_weights.npy` and `preprocessing/patch_rank.npy` (for each voxel, the rank of the highest-weight sky patch it blocks; used by `protect_share`).
+Weighted modes also write `preprocessing/patch_weights.npy`.
 
 ## Full reference
 

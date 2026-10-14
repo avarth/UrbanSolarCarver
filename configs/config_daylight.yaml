@@ -15,13 +15,12 @@ mode: daylight
 # Grid
 voxel_size: 1.0
 
-# How much to carve: fraction (0-1) of the building's obstruction score to
-# remove. 0.7 = aggressive (slimmer volume, more sky); 0.3 = conservative.
-# Columns are then limited to a 75 degree slope against their neighbours
-# (max_slope_deg), which turns cliffs and spires into ramps.
+# Thresholding
+threshold: carve_fraction
 carve_fraction: 0.7
 
 # --- Defaults you may want to override --------------------------------------
+# score_smoothing: null  # Gaussian blur radius (m) on scores before thresholding. null = auto (1.1× voxel_size). 0 = off. Try 1.0-1.2× voxel_size.
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)
 # grid_step:       1.0    # test-surface sampling spacing in metres
 # ray_length:      300.0  # max ray distance in metres
