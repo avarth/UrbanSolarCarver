@@ -496,6 +496,128 @@ if _warp_available:
                 wp.atomic_add(counts, flat_idx, 1)
             s = _dda_step(s, resolution, max_t)
 
+    # ----- Kernels for the recovered_sky method --------------------------
+    # One output per ray (cost, clear time) or a per-voxel minimum (rank).
+    # Rays toward the sky always climb (every Tregenza patch is above the
+    # horizon), so the first occupied voxel a ray meets in a column is the
+    # lowest one it crosses there, and a ray never returns to a column.
+
+    @wp.kernel
+    def _dda_ray_cost_kernel(
+        ray_origins: wp.array(dtype=wp.vec3),
+        ray_dirs: wp.array(dtype=wp.vec3),
+        ray_point_ids: wp.array(dtype=int),
+        point_normals: wp.array(dtype=wp.vec3),
+        front_test: int,
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        max_t: float,
+        occupied: wp.array(dtype=wp.uint8),      # flat [res^3], 1 = building
+        above: wp.array(dtype=wp.int32),         # flat [res^3], occupied voxels at or above
+        cost: wp.array(dtype=wp.int32),          # per ray, output
+    ):
+        """Voxels that clearing this ray removes, counting carve_above.
+
+        For each column the ray crosses, the occupied voxels at or above the
+        lowest occupied voxel it meets there (in front of its surface).
+        0 means the ray crosses no part of the building.
+        """
+        tid = wp.tid()
+        o = ray_origins[tid]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:
+            n = point_normals[ray_point_ids[tid]]
+        res_sq = resolution * resolution
+        s = _dda_init(o, ray_dirs[tid], grid_origin, cell_size, resolution, max_t)
+        total = int(0)
+        last_x = int(-1)
+        last_y = int(-1)
+        for _step in range(3 * resolution):
+            if s.active == 1:
+                if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
+                        and s.vy < resolution and s.vz >= 0 and s.vz < resolution
+                        and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
+                    flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
+                    if occupied[flat_idx] != wp.uint8(0):
+                        if s.vx != last_x or s.vy != last_y:
+                            total = total + above[flat_idx]
+                            last_x = s.vx
+                            last_y = s.vy
+                s = _dda_step(s, resolution, max_t)
+        cost[tid] = total
+
+    @wp.kernel
+    def _dda_ray_rank_kernel(
+        ray_origins: wp.array(dtype=wp.vec3),
+        ray_dirs: wp.array(dtype=wp.vec3),
+        ray_point_ids: wp.array(dtype=int),
+        point_normals: wp.array(dtype=wp.vec3),
+        front_test: int,
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        max_t: float,
+        occupied: wp.array(dtype=wp.uint8),
+        ray_rank: wp.array(dtype=wp.int32),      # per ray, its clearing priority
+        voxel_rank: wp.array(dtype=wp.int32),    # flat [res^3], min over rays, in place
+    ):
+        """Lower each occupied voxel's rank to that of the rays crossing it."""
+        tid = wp.tid()
+        o = ray_origins[tid]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:
+            n = point_normals[ray_point_ids[tid]]
+        r = ray_rank[tid]
+        res_sq = resolution * resolution
+        s = _dda_init(o, ray_dirs[tid], grid_origin, cell_size, resolution, max_t)
+        for _step in range(3 * resolution):
+            if s.active == 1:
+                if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
+                        and s.vy < resolution and s.vz >= 0 and s.vz < resolution
+                        and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
+                    flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
+                    if occupied[flat_idx] != wp.uint8(0):
+                        wp.atomic_min(voxel_rank, flat_idx, r)
+                s = _dda_step(s, resolution, max_t)
+
+    @wp.kernel
+    def _dda_ray_clear_kernel(
+        ray_origins: wp.array(dtype=wp.vec3),
+        ray_dirs: wp.array(dtype=wp.vec3),
+        ray_point_ids: wp.array(dtype=int),
+        point_normals: wp.array(dtype=wp.vec3),
+        front_test: int,
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        max_t: float,
+        occupied: wp.array(dtype=wp.uint8),
+        removal: wp.array(dtype=wp.int32),       # flat [res^3], cut at which a voxel goes
+        clear_at: wp.array(dtype=wp.int32),      # per ray, output
+    ):
+        """The cut from which this ray is clear: the largest removal value
+        of the occupied voxels it crosses (-1 if it crosses none)."""
+        tid = wp.tid()
+        o = ray_origins[tid]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:
+            n = point_normals[ray_point_ids[tid]]
+        res_sq = resolution * resolution
+        s = _dda_init(o, ray_dirs[tid], grid_origin, cell_size, resolution, max_t)
+        latest = int(-1)
+        for _step in range(3 * resolution):
+            if s.active == 1:
+                if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
+                        and s.vy < resolution and s.vz >= 0 and s.vz < resolution
+                        and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
+                    flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
+                    if occupied[flat_idx] != wp.uint8(0):
+                        latest = wp.max(latest, removal[flat_idx])
+                s = _dda_step(s, resolution, max_t)
+        clear_at[tid] = latest
+
+
     @wp.kernel
     def _parity_voxelize_kernel(
         mesh_id: wp.uint64,
@@ -853,6 +975,91 @@ def trace_and_count_dda(
         ],
         device=device_str,
     )
+
+
+def _ray_kernel_inputs(min_corner, scale, resolution, origins, ray_dirs, point_ids,
+                       surface_normals, occupied, who):
+    """Shared Warp inputs of the recovered_sky kernels."""
+    device_str = f"cuda:{origins.device.index or 0}" if origins.is_cuda else "cpu"
+    if occupied.dtype != torch.uint8 or not occupied.is_contiguous():
+        raise ValueError(f"{who}: occupied must be a contiguous uint8 tensor")
+    ids, normals, front = _surface_args(origins.shape[0], point_ids, surface_normals,
+                                        device_str, who)
+    return device_str, [
+        wp.from_torch(origins.contiguous().float(), dtype=wp.vec3),
+        wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3),
+        ids, normals, front,
+        wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2])),
+        float(scale / resolution), int(resolution), 0.0,  # max_t is set by the caller
+        wp.from_torch(occupied),
+    ]
+
+
+def trace_ray_costs(min_corner, scale, resolution, origins, ray_dirs, occupied, above,
+                    ray_length, point_ids=None, surface_normals=None) -> torch.Tensor:
+    """Per ray, the occupied voxels that clearing it removes (Warp DDA).
+
+    For each column a ray crosses, counts the occupied voxels at or above
+    the lowest occupied voxel it meets there, in front of its source
+    surface: the voxels removed by clearing the ray, with carve_above.
+    *occupied* (uint8) and *above* (int32, occupied voxels at or above
+    each voxel in its column) are flat ``resolution**3`` tensors on the
+    rays' device.  Returns an int32 tensor, one value per ray; 0 means the
+    ray crosses no part of the building.
+    """
+    cost = torch.zeros(origins.shape[0], dtype=torch.int32, device=origins.device)
+    if origins.shape[0] == 0:
+        return cost
+    device_str, inputs = _ray_kernel_inputs(min_corner, scale, resolution, origins, ray_dirs,
+                                            point_ids, surface_normals, occupied,
+                                            "trace_ray_costs")
+    inputs[8] = float(ray_length)
+    wp.launch(_dda_ray_cost_kernel, dim=origins.shape[0],
+              inputs=inputs + [wp.from_torch(above.contiguous()), wp.from_torch(cost)],
+              device=device_str)
+    return cost
+
+
+def trace_ray_ranks(min_corner, scale, resolution, origins, ray_dirs, occupied, ray_rank,
+                    voxel_rank, ray_length, point_ids=None, surface_normals=None) -> None:
+    """Lower ``voxel_rank`` (flat int32, in place) to the smallest *ray_rank*
+    of the rays crossing each occupied voxel in front of their surface.
+
+    Uses ``wp.atomic_min``; on the Warp CPU backend do not run parallel
+    calls on the same ``voxel_rank`` (see the note above ``_DDAState``).
+    """
+    if origins.shape[0] == 0:
+        return
+    if voxel_rank.dtype != torch.int32 or not voxel_rank.is_contiguous():
+        raise ValueError("trace_ray_ranks: voxel_rank must be a contiguous int32 tensor")
+    device_str, inputs = _ray_kernel_inputs(min_corner, scale, resolution, origins, ray_dirs,
+                                            point_ids, surface_normals, occupied,
+                                            "trace_ray_ranks")
+    inputs[8] = float(ray_length)
+    wp.launch(_dda_ray_rank_kernel, dim=origins.shape[0],
+              inputs=inputs + [wp.from_torch(ray_rank.contiguous().int()),
+                               wp.from_torch(voxel_rank)],
+              device=device_str)
+
+
+def trace_ray_clear_times(min_corner, scale, resolution, origins, ray_dirs, occupied, removal,
+                          ray_length, point_ids=None, surface_normals=None) -> torch.Tensor:
+    """Per ray, the largest *removal* value among the occupied voxels it
+    crosses in front of its surface (-1 if none): the ray is clear once
+    every voxel with removal below the cut is gone, i.e. for cuts above
+    this value.  Returns an int32 tensor, one value per ray.
+    """
+    out = torch.full((origins.shape[0],), -1, dtype=torch.int32, device=origins.device)
+    if origins.shape[0] == 0:
+        return out
+    device_str, inputs = _ray_kernel_inputs(min_corner, scale, resolution, origins, ray_dirs,
+                                            point_ids, surface_normals, occupied,
+                                            "trace_ray_clear_times")
+    inputs[8] = float(ray_length)
+    wp.launch(_dda_ray_clear_kernel, dim=origins.shape[0],
+              inputs=inputs + [wp.from_torch(removal.contiguous()), wp.from_torch(out)],
+              device=device_str)
+    return out
 
 
 def generate_sky_patch_rays(

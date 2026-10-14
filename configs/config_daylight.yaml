@@ -15,11 +15,11 @@ mode: daylight
 # Grid
 voxel_size: 1.0
 
-# How much to carve: fraction (0-1) of the building's obstruction score to
-# remove. 0.7 = aggressive (slimmer volume, more sky); 0.3 = conservative.
-# Columns are then limited to a 75 degree slope against their neighbours
-# (max_slope_deg), which turns cliffs and spires into ramps.
-carve_fraction: 0.7
+# How much to carve: share (0-1) of the sky that the maximum volume blocks
+# from the test surfaces that is given back. 0.4 = the surfaces get back 40%
+# of what the full volume would take from them. The volume that blocks the
+# most sky per cubic metre goes first.
+recovered_sky: 0.5
 
 # --- Defaults you may want to override --------------------------------------
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)

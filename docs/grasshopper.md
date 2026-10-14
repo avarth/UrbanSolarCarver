@@ -64,7 +64,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 - **USC_BenefitParams**: benefit-mode hour weighting: balance temperature and offset (simple weights), or a `simulated_weights.json` artifact plus the experimental `include_harm` toggle (simulated weights)
 - **USC_TiltedPlane**: fixed-angle envelope parameters
 - **USC_RadCooling** (*USC Radiative Cooling*): radiative cooling parameters (dew point, Bliss constant)
-- **USC_Threshold**: how much to carve, plus the column clean-up. For the sky modes connect only `value`: the fraction (0-1) of the obstruction score to remove (`carve_fraction`). For `time-based`, set `method` to `numeric` and `value` to the tolerated shading in m²·h. `method` also accepts `protect_share` and `headtail`; `max_slope` sets the slope limit (empty = 75° for carve_fraction). Connect its output to **USC_ThresholdStage**'s `threshold_overrides` input (not Config) so threshold changes only re-run thresholding.
+- **USC_Threshold**: how much to carve, plus the column clean-up. For the sky modes connect only `value`: the share (0-1) of the sky blocked by the maximum volume that the test surfaces get back (`recovered_sky`; 0.4 = they get back 40% of what the maximum volume takes). For `time-based`, set `method` to `numeric` and `value` to the tolerated shading in m²·h. `method` accepts `recovered_sky` (the default when it is unconnected), `carve_fraction`, `protect_share`, `headtail` and `numeric`; with `carve_fraction` or `protect_share`, `value` is that method's value. `max_slope` sets the slope limit for the score-cutoff methods (`carve_fraction`, `headtail`, `numeric`; empty = 75°, 90 = off), and `score_smoothing` also applies only to them. Connect its output to **USC_ThresholdStage**'s `threshold_overrides` input (not Config) so threshold changes only re-run thresholding.
 - **USC_Postprocess**: smoothing and cleanup settings. Connect its output to **USC_Export**'s `postprocess_overrides` input (not Config) so mesh cleanup changes only re-run export.
 - **USC_Diagnostics**: detailed score statistics and diagnostic plot images
 
@@ -72,7 +72,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 
 - **USC_RunPipeline**: runs all three stages in one go (quick prototyping)
 - **USC_Preprocess**: runs preprocessing only (ray tracing + scoring). Errors turn the component red.
-- **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. With `protect_share`, its summary shows the number of protected sky patches and the share of the patch weight they hold. Errors turn the component red.
+- **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. With `recovered_sky`, its summary shows the share of the blocked sky actually recovered (`recovered_sky_actual`); with `protect_share`, the number of protected sky patches and the share of the patch weight they hold. Errors turn the component red.
 - **USC_Export**: runs exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
 
 **Simulated weights** (`3::Weights`)

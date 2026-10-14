@@ -16,8 +16,8 @@ Voxelization, surface sampling, ray casting, and mesh reconstruction.
 
 | Module | Contents |
 |--------|----------|
-| [Carving](carving.md) | `carve_with_sun_rays()`, `carve_with_sky_patch_rays()`, `rank_blocked_patches()`, `carve_with_planes()`, `carve_above_columns()`, `limit_column_slope()`, `validate_inputs()`, `load_meshes()`, `sample_period()` |
-| [Ray Tracer](raytracer.md) | `trace_and_score_dda()` / `trace_and_count_dda()` (DDA kernels), `generate_sky_patch_rays()`, `generate_sun_rays()`, `voxelize_solid_warp()`, `auto_batch_size()`, `warmup_kernels()` |
+| [Carving](carving.md) | `carve_with_sun_rays()`, `carve_with_sky_patch_rays()`, `rank_blocked_patches()`, `rank_rays_for_recovery()`, `removal_order()`, `ray_clear_times()`, `recovered_sky_cut()`, `RecoveryRays`, `carve_with_planes()`, `carve_above_columns()`, `limit_column_slope()`, `validate_inputs()`, `load_meshes()`, `sample_period()` |
+| [Ray Tracer](raytracer.md) | `trace_and_score_dda()` / `trace_and_count_dda()` (DDA kernels), `trace_ray_costs()` / `trace_ray_ranks()` / `trace_ray_clear_times()` (recovered_sky), `generate_sky_patch_rays()`, `generate_sun_rays()`, `voxelize_solid_warp()`, `auto_batch_size()`, `warmup_kernels()` |
 | [Grid Operations](grid.md) | `voxelize()`, `sample_surface()`, `prune_voxels()`, `mesh_from_voxels()`, `mesh_from_voxels_smoothed()`, `polish_mesh_taubin()` |
 | [I/O](io.md) | `load_mesh()`, `save_mesh()` |
 

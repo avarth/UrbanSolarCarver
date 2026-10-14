@@ -119,6 +119,9 @@ else:
             "Method: {}".format(data.get("threshold_method", "?")),
             "Threshold: {}".format(threshold_value),
         ]
+        if "recovered_sky_actual" in data:
+            lines.append("Recovered sky: {:.1%} of what the maximum volume blocks".format(
+                data["recovered_sky_actual"]))
         if "protected_patch_count" in data:
             lines.append("Protected: {} sky patches, {:.1%} of the sky weight".format(
                 data["protected_patch_count"], data.get("protected_weight_share", 0.0)))
