@@ -152,11 +152,6 @@ def generate_run_report(
         value = thr_summary.get("threshold_value", 0)
         lines.append(f"- **Method:** {method}")
         lines.append(f"- **Threshold value:** {value:.4g}")
-        if "recovered_sky_actual" in thr_summary:
-            lines.append(
-                f"- **Recovered sky:** {100 * thr_summary['recovered_sky_actual']:.1f}% of the "
-                f"sky weight the maximum volume blocks ({thr_summary.get('rays_recovered', 0):,} "
-                f"of {thr_summary.get('rays_obstructed', 0):,} obstructed rays)")
         if "protected_patch_count" in thr_summary:
             lines.append(
                 f"- **Protected sky:** {thr_summary['protected_patch_count']} patches, "

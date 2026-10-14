@@ -80,9 +80,6 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
         Per-voxel rank of the highest-weight patch blocked, for the
         protect_share threshold (weighted modes only; see
         ``carving.rank_blocked_patches``).
-    recovery : carving.RecoveryRays | None
-        Obstructed rays in clearing order and per-voxel ray ranks, for the
-        recovered_sky threshold (weighted modes only).
     """
     mode = conf.mode
     spec = MODES.get(mode)
@@ -121,15 +118,15 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
                 f"mode '{mode}' declares score_kind='violation_count' but has "
                 f"no carver wired in _compute_raw_scores"
             )
-        return counts.astype(np.float32), spec.score_kind, None, None, None
+        return counts.astype(np.float32), spec.score_kind, None, None
 
     # weighted_sum: all sky-patch modes share one carver.
     carve_out = carve_with_sky_patch_rays(
         voxel_grid, origin, extent, resolution, pts, norms, conf, hoys,
-        point_weights=point_weights, return_patch_rank=True, return_recovery=True,
+        point_weights=point_weights, return_patch_rank=True,
     )
     return (carve_out.raw_voxel_scores, spec.score_kind, carve_out.patch_weights,
-            carve_out.patch_rank, carve_out.recovery)
+            carve_out.patch_rank)
 
 
 def preprocessing(
@@ -209,10 +206,6 @@ def preprocessing(
         Flat ``int32`` array, per voxel the rank of the highest-weight sky
         patch it blocks from some test point (sky-patch modes only); read
         by the protect_share threshold.
-    ``recovery_rays.npz``
-        The obstructed rays in clearing order (sample point, sky patch,
-        weight), the per-voxel ray ranks and the traced points and normals
-        (sky-patch modes only); read by the recovered_sky threshold.
     ``manifest.json``
         Machine-readable manifest (``PreprocessingManifest``) recording grid
         shape, world origin, voxel size, mode, score kind, and file paths.
@@ -295,7 +288,7 @@ def preprocessing(
         else:
             point_weights = sample_weights
 
-    raw_scores, scores_kind, patch_weights, patch_rank, recovery = _compute_raw_scores(
+    raw_scores, scores_kind, patch_weights, patch_rank = _compute_raw_scores(
         voxel_grid, origin, extent, resolution, pts, norms, conf,
         point_weights=point_weights,
     )
@@ -321,12 +314,6 @@ def preprocessing(
     else:
         rank_path.unlink(missing_ok=True)  # from an earlier run in a weighted mode
         rank_path = None
-    recovery_path = out_path / "recovery_rays.npz"
-    if recovery is not None:
-        np.savez(recovery_path, **recovery._asdict())
-    else:
-        recovery_path.unlink(missing_ok=True)
-        recovery_path = None
 
     # Persist test points and normals for diagnostics and GH visualization
     test_points_path = out_path / "test_points.npy"
@@ -362,7 +349,6 @@ def preprocessing(
         mode=mode,
         patch_weights_path=str(pw_path) if pw_path else None,
         patch_rank_path=str(rank_path) if rank_path else None,
-        recovery_rays_path=str(recovery_path) if recovery_path else None,
         sample_point_count=int(pts.shape[0]),
     )
 

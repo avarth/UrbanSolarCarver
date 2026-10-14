@@ -50,12 +50,11 @@ from numba import njit
 
 from .scoring import get_weights, protection_order
 from .load_config import user_config
-from .mode_registry import ALL_MODE_NAMES, MODES, MODES_NEEDING_EPW
+from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
 from .sun import get_sun_vectors
 from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
-    trace_ray_costs, trace_ray_ranks, trace_ray_clear_times,
     trace_and_count_dda, auto_batch_size, dda_backend_available,
 )
 # The fused score kernel exists only when Warp is installed.
@@ -78,7 +77,6 @@ class SkyPatchCarvingResult(NamedTuple):
     raw_voxel_scores: np.ndarray          # (X*Y*Z,) float32 per-voxel weighted scores
     patch_weights: np.ndarray             # (P,) weight per Tregenza sky patch
     patch_rank: "np.ndarray | None" = None  # (X*Y*Z,) int32, see rank_blocked_patches
-    recovery: "RecoveryRays | None" = None  # see rank_rays_for_recovery
 
 import os
 from ladybug.analysisperiod import AnalysisPeriod
@@ -225,313 +223,6 @@ def _validate_cubic_resolution(grid_resolution, func_name: str):
       
 #--- Ray tracing and carving -----------------------------------------------------------------------------------
 
-
-# ----------------------------------------------------------------- recovered_sky
-class RecoveryRays(NamedTuple):
-    """The obstructed rays of a run, in clearing order, plus what is needed to
-    trace them again (see :func:`rank_rays_for_recovery`).
-
-    ``points`` and ``normals`` are the sample points and normals exactly as
-    traced, in the grid's local frame (float32), so a later pass visits the
-    same voxels.
-    """
-    voxel_rank: np.ndarray    # (X*Y*Z,) int32: best rank of the rays crossing each voxel
-    point_idx: np.ndarray     # (M,) int32: sample point of each obstructed ray, by rank
-    patch_idx: np.ndarray     # (M,) int16: sky patch of each obstructed ray, by rank
-    weight: np.ndarray        # (M,) float32: ray weight, by rank
-    points: np.ndarray        # (R, 3) float32
-    normals: np.ndarray       # (R, 3) float32
-    min_corner: np.ndarray    # (3,) float64: grid corner in the same frame
-    extent: float             # grid side length (m)
-    resolution: int           # voxels per side
-
-
-UNRANKED = np.iinfo(np.int32).max  # rank of voxels no obstructed ray crosses
-
-
-def rank_rays_for_recovery(voxel_grid, grid_origin, grid_extent, res, sample_points,
-                           sample_normals, config, patch_dirs, patch_weights,
-                           point_weights=None, incidence_cosine=True) -> RecoveryRays:
-    """Order the obstructed rays by sky weight per removed voxel.
-
-    A ray goes from a sample point to a sky patch the surface faces.  Its
-    weight is the patch weight, times the cosine of its angle to the
-    surface normal when *incidence_cosine* is True, times the point's
-    edge_taper weight.  Its cost is the number of building voxels that
-    clearing it removes: in each column it crosses, the occupied voxels at
-    or above the lowest one it meets (carve_above removes the rest).  Rays
-    that cross no building voxel are already clear and left out.
-
-    The remaining rays are ranked by weight / cost, highest first (ties in
-    ray order), and every building voxel gets the best rank of the rays
-    crossing it.  Clearing the first n rays then means removing the voxels
-    with rank < n; the recovered_sky threshold chooses n.
-
-    Returns
-    -------
-    RecoveryRays
-    """
-    device = voxel_grid.device
-    points = np.ascontiguousarray(np.asarray(sample_points, dtype=np.float32))
-    normals = np.ascontiguousarray(np.asarray(sample_normals, dtype=np.float32))
-    min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-    origins, dirs, patch_ids, point_idx = generate_sky_patch_rays(points, normals, patch_dirs, device)
-
-    weight = torch.as_tensor(np.asarray(patch_weights, dtype=np.float32), device=device)[patch_ids]
-    normals_t = torch.as_tensor(normals, device=device)
-    if incidence_cosine:
-        weight = weight * (normals_t[point_idx] * dirs).sum(dim=1).clamp(min=0.0)
-    if point_weights is not None:
-        weight = weight * torch.as_tensor(np.asarray(point_weights, dtype=np.float32),
-                                          device=device)[point_idx]
-    live = weight > 0.0
-    origins, dirs, patch_ids, point_idx, weight = (
-        origins[live], dirs[live], patch_ids[live], point_idx[live], weight[live])
-
-    occupied = voxel_grid.reshape(-1).to(torch.uint8).contiguous()
-    above = torch.flip(torch.cumsum(torch.flip(voxel_grid.to(torch.int32), [2]), 2), [2])
-    above = above.reshape(-1).to(torch.int32).contiguous()
-    tracer = _RecoveryTracer(min_corner, float(grid_extent), res, config, occupied,
-                             point_idx, normals_t)
-
-    cost = tracer.costs(origins, dirs, above)
-    obstructed = cost > 0
-    order = torch.argsort(-(weight / cost.clamp(min=1).float()), stable=True)
-    order = order[obstructed[order]]
-    ray_rank = torch.full((origins.shape[0],), int(UNRANKED), dtype=torch.int32, device=device)
-    ray_rank[order] = torch.arange(order.numel(), dtype=torch.int32, device=device)
-
-    keep = obstructed
-    voxel_rank = tracer.ranks(origins[keep], dirs[keep], ray_rank[keep], keep)
-    return RecoveryRays(
-        voxel_rank=voxel_rank.cpu().numpy(),
-        point_idx=point_idx[order].to(torch.int32).cpu().numpy(),
-        patch_idx=patch_ids[order].to(torch.int16).cpu().numpy(),
-        weight=weight[order].cpu().numpy().astype(np.float32),
-        points=points, normals=normals,
-        min_corner=np.asarray(min_corner, dtype=np.float64),
-        extent=float(grid_extent), resolution=int(res),
-    )
-
-
-def removal_order(voxel_rank, occupancy, carve_above=True, min_consecutive=1) -> np.ndarray:
-    """For each voxel, the smallest cut n at which it is removed.
-
-    With cut n, every occupied voxel with rank < n is carved, then
-    carve_above (if on) removes the occupied voxels above each column's
-    first run of at least *min_consecutive* carved voxels.  The result is
-    the value r such that the voxel is removed exactly for cuts n > r, so
-    the final mask for cut n is ``occupancy & (removal >= n)``; the same
-    as :func:`carve_above_columns` applied to ``occupancy & (rank >= n)``.
-
-    Parameters
-    ----------
-    voxel_rank : ndarray (X, Y, Z) or flat, int32
-    occupancy : ndarray (X, Y, Z) bool
-    carve_above : bool
-    min_consecutive : int
-
-    Returns
-    -------
-    ndarray (X, Y, Z) int32
-    """
-    occ = np.ascontiguousarray(np.asarray(occupancy, dtype=bool))
-    rank = np.ascontiguousarray(np.asarray(voxel_rank, dtype=np.int32).reshape(occ.shape))
-    if not carve_above:
-        return rank.copy()
-    out = np.empty_like(rank)
-    _removal_order_kernel(rank, occ, int(min_consecutive), out)
-    return out
-
-
-@njit(cache=True)
-def _removal_order_kernel(rank, occ, k, out):
-    """Column scan for :func:`removal_order`.
-
-    Walking up a column, ``trigger`` is the smallest cut at which some run
-    of k consecutive occupied voxels below the current voxel is entirely
-    carved (the largest rank in that run); everything above such a run goes
-    with carve_above.  Empty cells break runs but not ``trigger``.
-    """
-    nx, ny, nz = occ.shape
-    big = np.iinfo(np.int32).max
-    for x in range(nx):
-        for y in range(ny):
-            trigger = big
-            run = 0
-            for z in range(nz):
-                if not occ[x, y, z]:
-                    out[x, y, z] = rank[x, y, z]
-                    run = 0
-                    continue
-                out[x, y, z] = min(rank[x, y, z], trigger)
-                run += 1
-                if run >= k:
-                    window = rank[x, y, z]
-                    for zz in range(z - k + 1, z):
-                        window = max(window, rank[x, y, zz])
-                    trigger = min(trigger, window)
-
-
-def ray_clear_times(recovery: RecoveryRays, removal, occupancy, patch_dirs, config,
-                    device) -> np.ndarray:
-    """For each obstructed ray (in rank order), the cut from which it is clear.
-
-    A ray is clear when none of the occupied voxels it crosses remains;
-    with removal values from :func:`removal_order`, that holds for cuts
-    above the largest removal value along the ray.  Returns int32 values.
-    """
-    dirs_all = torch.as_tensor(np.asarray(patch_dirs.detach().cpu() if isinstance(
-        patch_dirs, torch.Tensor) else patch_dirs, dtype=np.float32), device=device)
-    pidx = torch.as_tensor(recovery.point_idx.astype(np.int64), device=device)
-    origins = torch.as_tensor(recovery.points, device=device)[pidx]
-    dirs = dirs_all[torch.as_tensor(recovery.patch_idx.astype(np.int64), device=device)]
-    occ_t = torch.as_tensor(np.asarray(occupancy, dtype=np.uint8).reshape(-1), device=device)
-    normals_t = torch.as_tensor(recovery.normals, device=device)
-    tracer = _RecoveryTracer(tuple(recovery.min_corner), recovery.extent, recovery.resolution,
-                             config, occ_t.contiguous(), pidx, normals_t)
-    removal_t = torch.as_tensor(np.asarray(removal, dtype=np.int32).reshape(-1), device=device)
-    return tracer.clear_times(origins, dirs, removal_t.contiguous()).cpu().numpy()
-
-
-def recovered_sky_cut(clear_at, weight, share):
-    """The smallest cut recovering at least *share* of the obstructed weight.
-
-    Parameters
-    ----------
-    clear_at : ndarray (M,) int
-        Per ray, the cut above which it is clear (:func:`ray_clear_times`).
-    weight : ndarray (M,)
-        Ray weights.
-    share : float
-        Target share (0-1) of the total weight.
-
-    Returns
-    -------
-    (cut, recovered) : (int, float)
-        Voxels with removal value below *cut* are removed; *recovered* is
-        the share of the weight actually recovered (>= share, and only
-        above it by the weight of rays that clear at the same cut).
-    """
-    w = np.asarray(weight, dtype=np.float64)
-    total = w.sum()
-    if share <= 0.0 or total <= 0.0:
-        return 0, 0.0
-    order = np.argsort(clear_at, kind="stable")
-    t_sorted = np.asarray(clear_at)[order]
-    cum = np.cumsum(w[order])
-    i = int(np.searchsorted(cum, share * total * (1.0 - 1e-12)))
-    i = min(i, len(cum) - 1)
-    cut = int(t_sorted[i]) + 1
-    recovered = float(w[np.asarray(clear_at) < cut].sum() / total)
-    return cut, recovered
-
-
-class _RecoveryTracer:
-    """Runs the recovered_sky ray passes in batches, with the Warp DDA
-    kernels when available and the fixed-step tracer otherwise."""
-
-    def __init__(self, min_corner, extent, res, config, occupied, point_idx, normals):
-        self.min_corner, self.extent, self.res = min_corner, float(extent), int(res)
-        self.config, self.occupied = config, occupied
-        self.point_idx, self.normals = point_idx, normals
-        self.device = occupied.device
-        self.batch = _resolve_batch_size(config, self.res, self.device)
-        self.exact = dda_backend_available(self.device)
-
-    def _ranges(self, n):
-        return [(a, min(a + self.batch, n)) for a in range(0, n, self.batch)]
-
-    def _per_ray(self, n, fn):
-        """Run fn(start, end) over disjoint ray ranges (threads on CPU)."""
-        ranges = self._ranges(n)
-        if self.device.type != "cpu" or len(ranges) < 2:
-            for a, b in ranges:
-                fn(a, b)
-            return
-        fn(*ranges[0])  # compiles the Warp module once
-        from concurrent.futures import ThreadPoolExecutor
-        with ThreadPoolExecutor(max_workers=min(4, os.cpu_count() or 1)) as pool:
-            list(pool.map(lambda r: fn(*r), ranges[1:]))
-
-    def _pairs(self, origins, dirs, point_idx):
-        """Fallback: (ray, flat voxel) pairs for occupied voxels in front of the surface."""
-        n_rays = origins.shape[0]
-        stub = torch.zeros(n_rays, dtype=torch.long, device=self.device)
-        rid, _, vox = trace_multi_hit_grid(self.min_corner, self.extent, self.res, origins, dirs,
-                                           stub, float(self.config.voxel_size),
-                                           float(self.config.ray_length))
-        if vox.numel() == 0:
-            return rid, vox[:, 0]
-        front = _front_of_surface(self.min_corner, self.extent / self.res, vox, origins[rid],
-                                  self.normals[point_idx[rid]])
-        flat = vox[:, 0] * self.res * self.res + vox[:, 1] * self.res + vox[:, 2]
-        keep = front & (self.occupied[flat] != 0)
-        return rid[keep], flat[keep]
-
-    def costs(self, origins, dirs, above):
-        out = torch.zeros(origins.shape[0], dtype=torch.int32, device=self.device)
-
-        def fn(a, b):
-            if self.exact:
-                out[a:b] = trace_ray_costs(self.min_corner, self.extent, self.res, origins[a:b],
-                                           dirs[a:b], self.occupied, above,
-                                           self.config.ray_length, self.point_idx[a:b],
-                                           self.normals)
-                return
-            rid, flat = self._pairs(origins[a:b], dirs[a:b], self.point_idx[a:b])
-            if rid.numel() == 0:
-                return
-            res2 = self.res * self.res
-            key = rid * res2 + flat // self.res          # (ray, column)
-            z = flat % self.res
-            uniq, inv = torch.unique(key, return_inverse=True)
-            zmin = torch.full((uniq.numel(),), self.res, dtype=z.dtype, device=self.device)
-            zmin.scatter_reduce_(0, inv, z, reduce="amin")
-            col = uniq % res2
-            gained = above[col * self.res + zmin].to(torch.int32)
-            out[a:b].index_add_(0, (uniq // res2), gained)
-        self._per_ray(origins.shape[0], fn)
-        return out
-
-    def ranks(self, origins, dirs, ray_rank, mask):
-        point_idx = self.point_idx[mask]
-        out = torch.full((self.occupied.numel(),), int(UNRANKED), dtype=torch.int32,
-                         device=self.device)
-
-        def launch(a, b, buf):
-            if self.exact:
-                trace_ray_ranks(self.min_corner, self.extent, self.res, origins[a:b], dirs[a:b],
-                                self.occupied, ray_rank[a:b], buf, self.config.ray_length,
-                                point_idx[a:b], self.normals)
-                return
-            rid, flat = self._pairs(origins[a:b], dirs[a:b], point_idx[a:b])
-            if rid.numel():
-                buf.scatter_reduce_(0, flat, ray_rank[a:b][rid], reduce="amin")
-        _run_batches(self._ranges(origins.shape[0]), launch, out, self.device,
-                     parallel=True, merge="min")
-        if self.device.type == "cuda":
-            torch.cuda.synchronize()
-        return out
-
-    def clear_times(self, origins, dirs, removal):
-        out = torch.full((origins.shape[0],), -1, dtype=torch.int32, device=self.device)
-
-        def fn(a, b):
-            if self.exact:
-                out[a:b] = trace_ray_clear_times(self.min_corner, self.extent, self.res,
-                                                 origins[a:b], dirs[a:b], self.occupied,
-                                                 removal, self.config.ray_length,
-                                                 self.point_idx[a:b], self.normals)
-                return
-            rid, flat = self._pairs(origins[a:b], dirs[a:b], self.point_idx[a:b])
-            if rid.numel():
-                out[a:b].scatter_reduce_(0, rid, removal[flat], reduce="amax")
-        self._per_ray(origins.shape[0], fn)
-        if self.device.type == "cuda":
-            torch.cuda.synchronize()
-        return out
-
 def _front_of_surface(min_corner, cell, voxel_idx, origins, normals) -> torch.Tensor:
     """Mask of hits whose voxel centre lies in front of the ray's source surface.
 
@@ -547,17 +238,14 @@ def _front_of_surface(min_corner, cell, voxel_idx, origins, normals) -> torch.Te
 _CPU_BUFFER_BUDGET_BYTES = 1 << 30  # 1 GiB cap on the per-thread accumulation buffers
 
 
-def _run_batches(batch_ranges, launch, out, device, parallel: bool,
-                 merge: str = "sum") -> None:
+def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
     """Call ``launch(start, end, buffer)`` for every batch, accumulating into *out*.
 
     On CPU, Warp kernel launches release the GIL, so a few threads can run
-    batches on separate cores. Warp's CPU atomics are plain
-    read-modify-writes, not atomic across threads, so each thread writes its
-    own buffer and the buffers are merged at the end: added (``merge="sum"``,
-    for counts and scores) or combined by element-wise minimum
-    (``merge="min"``, for ranks). The first batch runs alone because it
-    triggers Warp's one-time module compile.
+    batches on separate cores. Warp's CPU ``atomic_add`` is a plain
+    read-modify-write, not atomic across threads, so each thread writes its
+    own buffer and the buffers are summed at the end. The first batch runs
+    alone because it triggers Warp's one-time module compile.
     """
     if not parallel or device.type != "cpu" or len(batch_ranges) < 2:
         for start, end in batch_ranges:
@@ -575,8 +263,7 @@ def _run_batches(batch_ranges, launch, out, device, parallel: bool,
         return
 
     from concurrent.futures import ThreadPoolExecutor
-    buffers = [torch.zeros_like(out) if merge == "sum" else out.clone()
-               for _ in range(n_workers)]
+    buffers = [torch.zeros_like(out) for _ in range(n_workers)]
     chunks = [rest[i::n_workers] for i in range(n_workers)]
 
     def _work(i):
@@ -586,10 +273,7 @@ def _run_batches(batch_ranges, launch, out, device, parallel: bool,
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         list(pool.map(_work, range(n_workers)))  # list() re-raises worker exceptions
     for buf in buffers:
-        if merge == "sum":
-            out += buf
-        else:
-            torch.minimum(out, buf, out=out)
+        out += buf
 
 
 def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, config,
@@ -792,7 +476,6 @@ def carve_with_sky_patch_rays(
     return_rays: bool = False,
     point_weights: "np.ndarray | None" = None,
     return_patch_rank: bool = False,
-    return_recovery: bool = False,
     ):
     """
     Score each voxel by the sky-patch weight of the rays that cross it.
@@ -858,9 +541,6 @@ def carve_with_sky_patch_rays(
     return_patch_rank : bool, default False
         Also compute :func:`rank_blocked_patches` (used by the protect_share
         threshold).  This traces the rays a second time, one patch at a time.
-    return_recovery : bool, default False
-        Also compute :func:`rank_rays_for_recovery` (used by the
-        recovered_sky threshold).  This traces the rays twice more.
 
     Returns
     -------
@@ -872,7 +552,6 @@ def carve_with_sky_patch_rays(
         - patch_weights (P,): weight per Tregenza sky patch.
         - patch_rank (X*Y*Z,): int32 rank per voxel, or None unless
           return_patch_rank.
-        - recovery: :class:`RecoveryRays`, or None unless return_recovery.
 
     Raises
     ------
@@ -1021,14 +700,6 @@ def carve_with_sky_patch_rays(
             config, sky_dirs, patch_weights.cpu().numpy(), traced_points=traced_points,
         )
 
-    recovery = None
-    if return_recovery:
-        recovery = rank_rays_for_recovery(
-            voxel_grid, grid_origin, grid_extent_m, res, sample_points, sample_normals,
-            config, sky_dirs, patch_weights.cpu().numpy(), point_weights=point_weights,
-            incidence_cosine=MODES[config.mode].incidence_cosine,
-        )
-
     # Thresholding lives in api_core.thresholding, so users can re-threshold
     # without re-tracing rays.
     return SkyPatchCarvingResult(
@@ -1037,7 +708,6 @@ def carve_with_sky_patch_rays(
         raw_voxel_scores=raw_voxel_scores,
         patch_weights=patch_weights.cpu().numpy(),
         patch_rank=patch_rank,
-        recovery=recovery,
     )
 
 

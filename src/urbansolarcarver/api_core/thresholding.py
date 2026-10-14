@@ -110,49 +110,6 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     return smoothed, True, radius_m, sigma_voxels
 
 
-def _recover_sky(pre_manifest, pre_manifest_path, occ, conf, share):
-    """Kept voxels for the recovered_sky method, plus diagnostics.
-
-    Uses the ray data of preprocessing (``recovery_rays.npz``): turns the
-    per-voxel ray ranks into the cut at which each voxel goes (carve_above
-    included, with this config's settings), traces the obstructed rays once
-    to find the cut from which each is clear, and picks the smallest cut
-    that recovers *share* of the obstructed weight.
-
-    Returns a dict with ``kept`` (the final mask) and the diagnostic entries
-    ``recovered_sky_actual`` (share of the obstructed weight recovered, at
-    least *share*), ``rays_obstructed``, ``rays_recovered`` and
-    ``recovery_cut``.
-    """
-    from ..carving import (RecoveryRays, recovered_sky_cut, ray_clear_times,
-                           removal_order)
-    from ..sky_patches import fetch_tregenza_patch_directions
-    from ._util import resolve_device
-    path = pre_manifest.recovery_rays_path
-    if not (path and Path(path).is_file()):
-        raise ValueError(
-            f"threshold method recovered_sky needs recovery_rays.npz from preprocessing, "
-            f"and {pre_manifest_path} does not point to it (it was written by an older USC "
-            f"version, or by a mode without sky patches). Re-run preprocessing."
-        )
-    with np.load(path, allow_pickle=False) as data:
-        rays = RecoveryRays(**{k: (data[k].item() if data[k].ndim == 0 else data[k])
-                               for k in RecoveryRays._fields})
-    removal = removal_order(rays.voxel_rank, occ, conf.carve_above,
-                            conf.carve_above_min_consecutive)
-    device = resolve_device(conf.device)
-    clear_at = ray_clear_times(rays, removal, occ, fetch_tregenza_patch_directions(device),
-                               conf, device)
-    cut, recovered = recovered_sky_cut(clear_at, rays.weight, share)
-    return {
-        "kept": occ & (removal >= cut),
-        "recovered_sky_actual": round(recovered, 4),
-        "rays_obstructed": int(len(rays.weight)),
-        "rays_recovered": int((clear_at < cut).sum()) if cut > 0 else 0,
-        "recovery_cut": int(cut),
-    }
-
-
 def _protect_patches(pre_manifest, pre_manifest_path, share):
     """Carved voxels for the protect_share method, plus diagnostics.
 
@@ -234,21 +191,14 @@ def thresholding(
       40 % of the values, the head is split again at its own mean.  The
       last such mean is the cutoff.  Suited to the heavy-tailed score
       distributions common in urban solar access studies.
-    * ``recovered_sky`` (default for weighted modes): the test surfaces
-      get back the given share of the sky weight that the maximum volume
-      blocks from them.  The obstructed rays (sample point to sky patch)
-      are cleared in order of weight per removed voxel, carve_above
-      included; preprocessing stores that order (``recovery_rays.npz``),
-      and thresholding traces the rays once to find the smallest cut that
-      recovers the share.  The scores are not used, so score smoothing and
-      the slope limit do not apply.
     * ``protect_share``: sky-patch protection.  The sky patches are ranked by weight; the top patches
       holding the given share of the total weight are protected, and every
       voxel that blocks one of them from some test point is carved.  Uses
       ``patch_rank.npy`` from preprocessing, so the scores are not used and
       score smoothing does not apply.  Because whole rays are cleared, the
       envelope varies continuously, as in time-based carving.
-    * ``carve_fraction``: cumulative-score cutoff.  Sorting the occupied voxels by descending score, it finds the
+    * ``carve_fraction`` (default for weighted modes): cumulative-score
+      cutoff.  Sorting the occupied voxels by descending score, it finds the
       cutoff above which the voxels hold the given fraction of the
       building's total score mass.  With ``carve_above`` each column is then
       decided by its highest-scoring voxel, which can leave cliffs and
@@ -318,8 +268,8 @@ def thresholding(
         If the preprocessing manifest cannot be read, the scores do not
         match its grid shape, the config's mode differs from the
         preprocessing run's, a non-numeric threshold is used with
-        violation-count scores, or recovered_sky or protect_share is used
-        with a preprocessing run that lacks its ray data.
+        violation-count scores, or protect_share is used with a
+        preprocessing run that has no ``patch_rank.npy``.
     FileNotFoundError
         If the scores file named in the manifest is missing.
     """
@@ -377,9 +327,9 @@ def thresholding(
     occ = load_occupancy(pre_manifest, conf)
 
     spec = conf.threshold
-    if spec.method in ("recovered_sky", "protect_share"):
-        # The mask comes from the ray data of preprocessing; smoothing the
-        # scores would change nothing but the statistics below.
+    if spec.method == "protect_share":
+        # The mask comes from patch_rank.npy; smoothing the scores would
+        # change nothing but the statistics below.
         _smooth_applied, _smooth_radius_m, _sigma_voxels = False, 0.0, 0.0
     else:
         raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
@@ -405,11 +355,7 @@ def thresholding(
             f"or match the config mode to the preprocessing run."
         )
     protection = None
-    if spec.method == "recovered_sky":
-        protection = _recover_sky(pre_manifest, pre_manifest_path, occ, conf, float(spec.value))
-        thr_val = float(spec.value)
-        mask = protection.pop("kept")  # carve_above is already included
-    elif spec.method == "protect_share":
+    if spec.method == "protect_share":
         protection = _protect_patches(pre_manifest, pre_manifest_path, float(spec.value))
         thr_val = float(spec.value)
         # Empty cells are False: there is nothing to keep.

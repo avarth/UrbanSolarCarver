@@ -329,9 +329,9 @@ class TestEdgeTaperPipeline:
 # ---------------------------------------------------------------------------
 
 class TestDefaultThresholdReporting:
-    """Default method selection, and for the score-based carve_fraction:
-    the method is recorded by name and the stage hash depends on the
-    strategy, not on the score-dependent resolved cutoff."""
+    """With threshold unset on weighted scores, the default strategy must be
+    recorded by name ('carve_fraction'), and the stage hash must depend on
+    the strategy, not on the score-dependent resolved cutoff."""
 
     def _run_thresholding(self, tmp_path, sub, scores, **cfg_extra):
         pre_dir = tmp_path / sub / "preprocessing"
@@ -366,33 +366,12 @@ class TestDefaultThresholdReporting:
             out_dir=str(tmp_path / sub), mode="irradiance", epw_path="dummy",
             start_month=1, start_day=1, start_hour=0,
             end_month=12, end_day=31, end_hour=23,
-            **({"carve_fraction": 0.7} if not cfg_extra else cfg_extra),
+            **cfg_extra,  # threshold left unset unless given
         )
         from urbansolarcarver.api_core.thresholding import thresholding
         return thresholding(pre_dir, cfg, tmp_path / sub / "thr")
 
-    @staticmethod
-    def _cfg(**extra):
-        from urbansolarcarver.load_config import user_config
-        return user_config(
-            max_volume_path="dummy", test_surface_path="dummy", out_dir="x",
-            mode="irradiance", epw_path="dummy", start_month=1, start_day=1, start_hour=0,
-            end_month=12, end_day=31, end_hour=23, **extra)
-
-    def test_default_is_recovered_sky(self):
-        cfg = self._cfg()
-        assert cfg.threshold.method == "recovered_sky"
-        assert cfg.threshold.value == 0.5
-        assert cfg.effective_max_slope_deg() is None  # ray-based: no slope limit
-
-    def test_only_key_set_selects_its_method(self):
-        assert self._cfg(carve_fraction=0.4).threshold.method == "carve_fraction"
-        assert self._cfg(protect_share=0.2).threshold.method == "protect_share"
-        assert self._cfg(recovered_sky=0.3).threshold.value == 0.3
-        with pytest.raises(ValueError, match="set threshold"):
-            self._cfg(carve_fraction=0.4, recovered_sky=0.3)
-
-    def test_carve_fraction_reported_with_slope_limit(self, tmp_path):
+    def test_default_reported_as_carve_fraction(self, tmp_path):
         rng = np.random.default_rng(11)
         scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
         result = self._run_thresholding(tmp_path, "a", scores)
@@ -413,8 +392,7 @@ class TestDefaultThresholdReporting:
     def test_max_slope_90_turns_the_limit_off(self, tmp_path):
         rng = np.random.default_rng(11)
         scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
-        result = self._run_thresholding(tmp_path, "off", scores, carve_fraction=0.7,
-                                        max_slope_deg=90)
+        result = self._run_thresholding(tmp_path, "off", scores, max_slope_deg=90)
         diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
         assert diag["max_slope_deg"] is None
         assert diag["slope_limit_extra_voxels_removed"] == 0

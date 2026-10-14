@@ -160,63 +160,6 @@ def test_tilted_angle_monotone(tmp_path, epw):
 
 
 # ----------------------------------------------------------------- carve_above
-@pytest.mark.parametrize("typology", ["courtyard", "towers", "freeform", "passage"])
-@pytest.mark.parametrize("mode", ["benefit", "daylight"])
-@pytest.mark.parametrize("carve_above", [False, True])
-def test_recovered_sky_matches_reference(tmp_path, epw, typology, mode, carve_above):
-    """The share reported is at least the one asked for (above it only by
-    rays that clear at the same cut), and an independent recount on the
-    final mask agrees; it can differ slightly because the stepped
-    reference misses rays that only clip a voxel corner."""
-    run = cases.run(build(SceneSpec(typology, seed=7)), tmp_path, epw, mode,
-                    threshold="recovered_sky", recovered_sky=0.4, carve_above=carve_above)
-    d = run.diag("thr")
-    assert d["threshold_method"] == "recovered_sky" and d["max_slope_deg"] is None
-    assert 0.4 <= d["recovered_sky_actual"] <= 0.46
-    assert abs(oracle.recovered_share(run, run.occ & run.mask) - d["recovered_sky_actual"]) < 0.03
-
-
-@pytest.mark.parametrize("typology", ["courtyard", "towers", "irregular"])
-def test_recovered_sky_full_share_clears_every_ray(tmp_path, epw, typology):
-    """With share 1, no kept voxel stands on any obstructed ray (the stepped
-    reference sees a subset of the exact rays' voxels, so this is exact)."""
-    run = cases.run(build(SceneSpec(typology, seed=7)), tmp_path, epw, "benefit",
-                    threshold="recovered_sky", recovered_sky=1.0, carve_above=True)
-    assert run.diag("thr")["recovered_sky_actual"] == 1.0
-    assert oracle.recovered_share(run, run.occ & run.mask) == 1.0
-
-
-def test_recovered_sky_nested(tmp_path, epw):
-    """Recovering more never keeps a voxel that recovering less removed."""
-    from urbansolarcarver.api_core.thresholding import thresholding
-    from urbansolarcarver.load_config import user_config
-
-    run = cases.run(build(SceneSpec("towers")), tmp_path / "a", epw, "benefit",
-                    threshold="recovered_sky", carve_above=True)
-    masks = []
-    for share in (0.0, 0.2, 0.4, 0.6, 0.8, 1.0):
-        thr = thresholding(run.pre, user_config(**dict(run.cfg, recovered_sky=share)),
-                           tmp_path / f"t{share}")
-        masks.append(np.load(thr.mask_path))
-    assert np.array_equal(masks[0], run.occ)
-    for loose, tight in zip(masks, masks[1:]):
-        assert not (tight & ~loose).any()
-    assert masks[-1].sum() < masks[1].sum()
-
-
-def test_recovered_sky_without_warp(tmp_path, epw, monkeypatch):
-    """The fixed-step fallback gives the same share and nearly the same mask."""
-    import urbansolarcarver.carving as C
-    scene = build(SceneSpec("courtyard"))
-    over = dict(threshold="recovered_sky", recovered_sky=0.5)
-    exact = cases.run(scene, tmp_path / "w", epw, "daylight", **over)
-    monkeypatch.setattr(C, "dda_backend_available", lambda device: False)
-    fallback = cases.run(scene, tmp_path / "f", epw, "daylight", **over)
-    assert fallback.diag("thr")["recovered_sky_actual"] >= 0.5
-    differ = (exact.mask != fallback.mask).sum() / exact.occ.sum()
-    assert differ < 0.05
-
-
 @pytest.mark.parametrize("typology", ["courtyard", "freeform", "rows"])
 def test_carve_fraction_with_carve_above_leaves_no_spires(tmp_path, epw, typology):
     """With a 45 degree slope limit (one voxel of rise per voxel), no kept
@@ -225,8 +168,7 @@ def test_carve_fraction_with_carve_above_leaves_no_spires(tmp_path, epw, typolog
     voxels per column, too much for this criterion.)"""
     from numpy.lib.stride_tricks import sliding_window_view
     run = cases.run(build(SceneSpec(typology, seed=7)), tmp_path, epw, "benefit",
-                    threshold="carve_fraction", carve_fraction=0.4, carve_above=True,
-                    max_slope_deg=45.0)
+                    carve_fraction=0.4, carve_above=True, max_slope_deg=45.0)
     z = np.arange(run.shape[2])
     kept = run.mask.any(axis=2)
     h = np.where(kept, (run.mask * (z + 1)).max(axis=2), np.nan)
@@ -291,8 +233,6 @@ def test_cpu_cuda_parity(tmp_path, epw, mode):
         np.testing.assert_allclose(gpu.scores, cpu.scores, rtol=1e-4, atol=1e-3)
         assert np.array_equal(np.load(cpu.pre / "patch_rank.npy"),
                               np.load(gpu.pre / "patch_rank.npy"))
-        with np.load(cpu.pre / "recovery_rays.npz") as c, np.load(gpu.pre / "recovery_rays.npz") as g:
-            assert np.array_equal(c["voxel_rank"], g["voxel_rank"])
 
 
 @pytest.mark.parametrize("mode", ["daylight", "time-based"])
@@ -306,8 +246,7 @@ def test_threaded_cpu_accumulation_matches_sequential(tmp_path, epw, mode, monke
     threaded = cases.run(scene, tmp_path / "t", epw, mode, **over)
     run_batches = C._run_batches
     monkeypatch.setattr(C, "_run_batches",
-                        lambda b, launch, out, device, parallel, **kw: run_batches(b, launch, out, device,
-                                                                                False, **kw))
+                        lambda b, launch, out, device, parallel: run_batches(b, launch, out, device, False))
     sequential = cases.run(scene, tmp_path / "s", epw, mode, **over)
     if mode == "time-based":
         assert np.array_equal(threaded.scores, sequential.scores)

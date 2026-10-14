@@ -7,7 +7,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Changed (sky modes; results change)
+### Changed (weighted modes; results change)
 
 - **Slope limit after carve_above (`max_slope_deg`).** With
   `carve_fraction` and `carve_above`, each column was decided by its single
@@ -28,35 +28,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   points of kept volume (9 in the curved block). Diagnostics, the run
   report and USC_ThresholdStage report `max_slope_deg` and
   `slope_limit_extra_voxels_removed`; USC_Threshold has a `max_slope` input.
-- **New default for the sky modes: `recovered_sky`** (0-1, default 0.5):
-  the share of the sky blocked by the maximum volume that the test
-  surfaces get back. 0.4 means the surfaces get back 40% of what the full
-  volume would take from them, with "sky" weighted as the mode weights it
-  (patch weight times incidence cosine: kWh reaching the surfaces in
-  irradiance and benefit mode). USC clears first the rays (test point to
-  sky patch) that recover the most weight per removed voxel, counting
-  what carve_above removes above them. The value is exact: thresholding
-  finds the smallest cut that reaches it and reports the share recovered
-  (`recovered_sky_actual`, plus `rays_obstructed`, `rays_recovered`,
-  `recovery_cut`). Envelopes are ray fans and ramps, so no slope limit or
-  score smoothing applies. On the ReSBE test blocks it kept as much or
-  more volume than carve_fraction for the same recovered sky (9-11
-  percentage points more sky at about 60% kept volume in the courtyard
-  block).
-  - Preprocessing of the sky modes traces the rays twice more (cost, then
-    rank) and writes `recovery_rays.npz` (about 2.1 s to 2.6 s and 31 MB
-    for the 0.5 m courtyard block); thresholding traces the obstructed rays
-    once (about 0.5 s on a GPU). New Warp kernels with fixed-step
-    fallbacks; the exact per-voxel removal order including carve_above
-    (`carving.removal_order`) is checked against `carve_above_columns`.
-  - carve_fraction keeps its score-based meaning and is selected by
-    `threshold: carve_fraction` or by setting only its key, so existing
-    configs give the same results. Setting more than one of
-    `recovered_sky`, `carve_fraction` and `protect_share` without
-    `threshold` is an error. The shipped configs use recovered_sky;
-    USC_Threshold's `value` without a method now means recovered_sky.
-  - Mode registry: `incidence_cosine` (off for radiative_cooling, whose
-    weights already contain the view factor of a horizontal surface).
+- **carve_fraction stays the default** for the sky modes. docs/modes.md
+  now explains what it does and does not tell you (blocking is not
+  additive along a ray, so removing a share of the score mass does not
+  return the same share of the sky) and describes a planned ray-based
+  version of the slider.
 
 ### Added (protect_share)
 
