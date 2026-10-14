@@ -9,6 +9,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (weighted modes; results change)
 
+- **A voxel obstructs a test surface only if it lies entirely in front of
+  it.** Before, a voxel counted when its centre was in front of the
+  surface's plane, so the voxels a facade's own plane passes through (its
+  skin) counted as obstructions of that facade. That mattered where test
+  panels lie inside a curved mass (faceted facades of a round or freeform
+  building): in the ReSBE freeform block, 110 edge columns were carved to
+  the ground for nothing, and its kept volume at carve_fraction 0.4 rises
+  from 35.9% to 38.9% with the fix. Flat facades aligned with the grid are
+  unaffected. Applies to every mode (Warp kernels, the fixed-step
+  fallback and the test reference).
 - **Slope limit after carve_above (`max_slope_deg`).** With
   `carve_fraction` and `carve_above`, each column was decided by its single
   highest-scoring voxel. Weighted scores in a column are hump-shaped (near
