@@ -560,3 +560,39 @@ def test_occupancy_fallback_uses_the_manifest_voxel_size(tmp_path, tiny_cube_mes
         voxel_size=1.0, device="cpu",
     )
     np.testing.assert_array_equal(load_occupancy(pre, later_cfg), stored)
+
+
+def test_curved_own_facade_is_not_shaded_by_its_own_skin(tmp_path):
+    """A convex tower protecting only its own faceted facade: nothing shades
+    it, so no voxel may score. The facets lie inside the curved mass, so
+    the voxels they pass through have centres slightly in front of them;
+    those are the building's skin, not obstructions."""
+    import trimesh
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.load_config import user_config
+    from urbansolarcarver.io import save_mesh
+    tower = trimesh.creation.cylinder(radius=8.0, height=12.0, sections=64)
+    tower.apply_translation((0.3, 0.7, 6.0))
+    facets = trimesh.creation.cylinder(radius=8.0, height=12.0, sections=12)  # coarser, inside
+    facets.apply_translation((0.3, 0.7, 6.0))
+    # One separate flat panel per facet (as exploded in Grasshopper), shrunk
+    # slightly so neighbouring panels do not share edges.
+    panels = []
+    for group in facets.facets:
+        if abs(facets.face_normals[group[0], 2]) > 0.5:
+            continue  # top and bottom caps
+        panel = trimesh.Trimesh(facets.vertices, facets.faces[group])
+        panel.remove_unreferenced_vertices()
+        c = panel.vertices.mean(axis=0)
+        panel.vertices = c + 0.98 * (panel.vertices - c)
+        panels.append(panel)
+    facade = trimesh.util.concatenate(panels)
+    save_mesh(tower, str(tmp_path / "vol.ply"))
+    save_mesh(facade, str(tmp_path / "srf.ply"))
+    cfg = user_config(max_volume_path=str(tmp_path / "vol.ply"),
+                      test_surface_path=str(tmp_path / "srf.ply"), out_dir=str(tmp_path / "out"),
+                      mode="daylight", voxel_size=1.0, grid_step=1.0, ray_length=60.0, device="cpu")
+    pre = preprocessing(cfg, tmp_path / "out" / "preprocessing")
+    scores = np.load(pre.volume_path)
+    occ = np.load(tmp_path / "out" / "preprocessing" / "voxel_grid.npy").astype(bool).ravel()
+    assert scores[occ].max() == 0.0

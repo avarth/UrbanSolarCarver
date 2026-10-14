@@ -338,18 +338,21 @@ if _warp_available:
     @wp.func
     def _in_front(s: _DDAState, grid_origin: wp.vec3, cell_size: float,
                   o: wp.vec3, n: wp.vec3) -> int:
-        """1 if the current voxel's centre lies strictly in front of the ray's
-        source surface (the plane through *o* with normal *n*), else 0.
+        """1 if the whole current voxel lies in front of the ray's source
+        surface (the plane through *o* with normal *n*), else 0.
 
-        A test surface sits inside the boundary voxels of its own mass; those
-        voxels are the building itself, not something that shades it.
+        A voxel the surface's plane passes through is the building's own skin
+        (a test surface on a facade sits inside the boundary voxels of its own
+        mass), not something that shades it.  The voxel is entirely in front
+        when its centre is further in front than its half-extent along *n*.
         """
         c = wp.vec3(
             grid_origin[0] + (float(s.vx) + 0.5) * cell_size,
             grid_origin[1] + (float(s.vy) + 0.5) * cell_size,
             grid_origin[2] + (float(s.vz) + 0.5) * cell_size,
         )
-        if wp.dot(n, c - o) > 0.0:
+        half_extent = 0.5 * cell_size * (wp.abs(n[0]) + wp.abs(n[1]) + wp.abs(n[2]))
+        if wp.dot(n, c - o) > half_extent:
             return 1
         return 0
 
@@ -724,9 +727,9 @@ def trace_and_score_dda(
         Weight per sample point in [0, 1] (per-ray weight =
         patch_weight × point_weight; edge_taper design constraint).
     surface_normals : torch.Tensor, shape (num_points, 3), optional
-        Normal of each ray's source surface.  When given, voxels whose
-        centre lies behind that surface (the surface's own mass) are not
-        scored.
+        Normal of each ray's source surface.  When given, only voxels that
+        lie entirely in front of that surface are scored; voxels behind it
+        or crossed by its plane (the surface's own mass and skin) are not.
 
     Raises
     ------

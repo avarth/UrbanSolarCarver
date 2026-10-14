@@ -6,9 +6,10 @@ from Ladybug's Sunpath at 5-minute resolution, and model north is applied
 from first principles. Only the Tregenza patch directions and patch
 weights are reused, since those are inputs rather than the code under test.
 
-A voxel counts as an obstruction of sample p only when its centre lies in
-front of p's surface plane (n . (c - p) > 0): the voxel a protected
-surface sits in is the building itself, not an obstruction of it.
+A voxel counts as an obstruction of sample p only when it lies entirely in
+front of p's surface plane (n . (c - p) greater than the voxel's half-extent
+along n): a voxel the plane passes through is the building's own skin, not
+an obstruction of it.
 
 Fixed-step marching can miss voxels a ray only clips at a corner, so the
 oracle's hit set is a subset of the exact one. Soundness checks (every
@@ -109,7 +110,8 @@ def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
         idx = np.floor((pos - lo) / run.vs).astype(np.int64)
         inb = valid & np.all((idx >= 0) & (idx < shape), axis=2)
         centre = lo + (idx + 0.5) * run.vs
-        front = np.einsum("rkj,rj->rk", centre - o[:, None, :], n) > 1e-9
+        half_extent = 0.5 * run.vs * np.abs(n).sum(axis=1)
+        front = np.einsum("rkj,rj->rk", centre - o[:, None, :], n) > half_extent[:, None] + 1e-9
         keep = inb & front
         ray_id, kk = np.nonzero(keep)
         if ray_id.size == 0:

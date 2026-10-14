@@ -23,8 +23,9 @@ raytracer.py, which visit every voxel a ray crosses exactly once and
 accumulate counts or scores in place.  Without Warp, `trace_multi_hit_grid`
 lists the (ray, voxel) pairs with a fixed-step PyTorch march (each pair at
 most once) and the scores are accumulated here with torch; that path is
-slower and can miss voxels that oblique rays only clip.  Both paths drop
-voxels behind the surface a ray starts from (see `_front_of_surface`).
+slower and can miss voxels that oblique rays only clip.  Both paths count
+only voxels that lie entirely in front of the surface a ray starts from
+(see `_front_of_surface`).
 
 Coordinate/scale conventions
 ----------------------------
@@ -224,15 +225,17 @@ def _validate_cubic_resolution(grid_resolution, func_name: str):
 #--- Ray tracing and carving -----------------------------------------------------------------------------------
 
 def _front_of_surface(min_corner, cell, voxel_idx, origins, normals) -> torch.Tensor:
-    """Mask of hits whose voxel centre lies in front of the ray's source surface.
+    """Mask of hits whose whole voxel lies in front of the ray's source surface.
 
-    A test surface sits inside the boundary voxels of its own mass; those
-    voxels are the building, not an obstruction of it.  Same rule as the
-    Warp kernels' ``_in_front``, applied here for the fixed-step fallback.
+    A voxel the surface's plane passes through is the building's own skin
+    (a test surface on a facade sits inside the boundary voxels of its own
+    mass), not an obstruction of it.  Same rule as the Warp kernels'
+    ``_in_front``, applied here for the fixed-step fallback.
     """
     corner = torch.tensor(min_corner, dtype=torch.float32, device=voxel_idx.device)
     centre = corner + (voxel_idx.float() + 0.5) * cell
-    return ((centre - origins) * normals).sum(dim=1) > 0.0
+    half_extent = 0.5 * cell * normals.abs().sum(dim=1)
+    return ((centre - origins) * normals).sum(dim=1) > half_extent
 
 
 _CPU_BUFFER_BUDGET_BYTES = 1 << 30  # 1 GiB cap on the per-thread accumulation buffers
