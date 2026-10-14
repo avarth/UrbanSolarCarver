@@ -11,9 +11,7 @@ front of p's surface plane (n . (c - p) > 0): the voxel a protected
 surface sits in is the building itself, not an obstruction of it.
 
 Fixed-step marching can miss voxels a ray only clips at a corner, so the
-oracle's hit set is a subset of the exact one. Each ray is also sampled just
-past its start, so the voxel it starts in is not missed when the ray leaves
-it within half a step. Soundness checks (every
+oracle's hit set is a subset of the exact one. Soundness checks (every
 oracle hit must be carved) are therefore exact; tightness checks (every
 carve must be explained) use a one-voxel dilation.
 """
@@ -67,12 +65,11 @@ class Run:
 
 # ----------------------------------------------------------------- marching
 def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
-          substeps: int = 10, chunk: int = 4096, return_pairs: bool = False):
+          substeps: int = 10, chunk: int = 4096):
     """Trace rays and return per-voxel hit counts (or weight sums).
 
     Each (ray, voxel) pair is counted once. Only voxels in front of the
-    ray's source surface are recorded. With *return_pairs*, return the
-    (ray index, flat voxel index) pairs instead.
+    ray's source surface are recorded.
     """
     origins = np.asarray(origins, float)
     normals = np.asarray(normals, float)
@@ -85,7 +82,6 @@ def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
     hi = run.origin + shape * run.vs
     step = run.vs / substeps
     diag = float(np.linalg.norm(hi - lo))
-    pair_rays, pair_voxels = [], []
     for s in range(0, len(origins), chunk):
         o, n, d = origins[s:s + chunk], normals[s:s + chunk], dirs[s:s + chunk]
         w = None if weights is None else np.asarray(weights[s:s + chunk], float)
@@ -107,11 +103,7 @@ def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
         if w is not None:
             w = w[live]
         k = np.arange(int(math.ceil(min(diag, ray_length) / step)) + 1)
-        # Samples at mid-step, plus one just past the start, so the voxel a
-        # ray starts in (or enters the grid through) is seen even when the ray
-        # leaves it within half a step.
-        t = np.concatenate([t_near[:, None] + 1e-4 * step,
-                            t_near[:, None] + (k[None, :] + 0.5) * step], axis=1)
+        t = t_near[:, None] + (k[None, :] + 0.5) * step
         valid = t < t_far[:, None]
         pos = o[:, None, :] + t[..., None] * d[:, None, :]
         idx = np.floor((pos - lo) / run.vs).astype(np.int64)
@@ -125,15 +117,7 @@ def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
         flat = np.ravel_multi_index(tuple(idx[ray_id, kk].T), tuple(shape))
         pair = np.unique(ray_id.astype(np.int64) * n_vox + flat)
         r, v = np.divmod(pair, n_vox)
-        if return_pairs:
-            pair_rays.append(np.flatnonzero(live)[r] + s)
-            pair_voxels.append(v)
-            continue
         np.add.at(out, v, 1.0 if w is None else w[r])
-    if return_pairs:
-        if not pair_rays:
-            return np.zeros(0, np.int64), np.zeros(0, np.int64)
-        return np.concatenate(pair_rays), np.concatenate(pair_voxels)
     return out.reshape(tuple(shape))
 
 
@@ -245,36 +229,6 @@ def protected_hits(run: Run, share: float) -> np.ndarray:
         return np.zeros(run.shape, bool)
     o, n, d, _, _ = pairs(run.points, run.normals, dirs[chosen])
     return march(run, o, n, d, ray_length=run.cfg.get("ray_length", 300.0)) > 0
-
-
-def recovered_share(run: Run, kept: np.ndarray) -> float:
-    """Share of the obstructed, cosine-weighted ray weight that *kept* clears.
-
-    A ray (sample point to Tregenza patch centre) is obstructed when it
-    crosses an occupied voxel in front of its surface, and clear when none
-    of those voxels is kept. Weights are patch weight x cos(incidence) (no
-    cosine for radiative_cooling). Corner clips the stepped march misses
-    leave rays out of both totals.
-    """
-    import torch
-    from urbansolarcarver.sky_patches import fetch_tregenza_patch_directions
-    dirs = fetch_tregenza_patch_directions(torch.device("cpu")).numpy().astype(float)
-    pw = np.load(run.pre / "patch_weights.npy").astype(float)
-    o, n, d, _, di = pairs(run.points, run.normals, dirs)
-    w = pw[di]
-    if run.cfg.get("mode") != "radiative_cooling":
-        w = w * np.einsum("ij,ij->i", n, d)
-    ray, vox = march(run, o, n, d, ray_length=run.cfg.get("ray_length", 300.0),
-                     return_pairs=True)
-    occ_hit = run.occ.ravel()[vox]
-    ray, vox = ray[occ_hit], vox[occ_hit]
-    obstructed = np.zeros(len(o), bool)
-    obstructed[ray] = True
-    blocked = np.zeros(len(o), bool)
-    blocked[ray[kept.ravel()[vox]]] = True
-    obstructed &= w > 0
-    total = w[obstructed].sum()
-    return float(w[obstructed & ~blocked].sum() / total) if total > 0 else 0.0
 
 
 def score_agreement(run: Run) -> dict:

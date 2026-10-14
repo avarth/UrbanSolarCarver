@@ -37,11 +37,11 @@ Each mode has one main setting that trades solar protection against buildable vo
 
 | Mode | Setting | Meaning |
 |------|---------|---------|
-| `irradiance`, `benefit`, `daylight`, `radiative_cooling` | `recovered_sky: 0.5` | Share (0-1) of the sky blocked by the maximum volume that the test surfaces get back, with the sky weighted as the mode weights it. 0.5 = the surfaces get back half of what the maximum volume takes from them. USC removes first the parts of the volume that block the most sky per cubic metre, so as much volume as possible is kept for that share. The value is exact: thresholding reports the share actually recovered (`recovered_sky_actual`). |
+| `irradiance`, `benefit`, `daylight`, `radiative_cooling` | `carve_fraction: 0.7` | Fraction (0-1) of the building's obstruction score to remove: the voxels that block the most sky weight go first. 0.7 = aggressive (taller, slimmer volumes, more sky), 0.3 = conservative (bulkier volumes, more floor area). A slope limit (`max_slope_deg`, 75° by default) then turns the cliffs and one-voxel spires that a per-voxel cutoff can leave into ramps. |
 | `time-based` | `threshold: 0` | Tolerated shading in m²·h (shaded protected area x duration). 0 = remove any voxel that casts a shadow at any sampled moment; 5 = tolerate up to 5 m²·h. The sun is sampled every 5 minutes by default (`sun_steps_per_hour`). |
 | `tilted_plane` | `tilted_plane_angle_deg: 45` | Everything above the plane is removed. |
 
-The sky modes also offer score-based methods: `threshold: carve_fraction` (remove the highest-scoring voxels until they hold a fraction of the building's obstruction score; the default before `recovered_sky`, so configs that set it give the same results as before), `threshold: headtail` and a numeric score cutoff. These are followed by a slope limit (`max_slope_deg`, 75° by default) that turns cliffs and one-voxel spires into ramps. `threshold: protect_share` keeps the rays from every test point to the highest-weight sky patches clear, like a solar envelope over those directions. See [Carving Modes](docs/modes.md#how-much-to-carve).
+The sky modes also offer `threshold: protect_share` (keep the rays from every test point to the highest-weight sky patches clear, like a solar envelope over those directions), `threshold: headtail` and a numeric score cutoff; see [Carving Modes](docs/modes.md#how-much-to-carve).
 
 The **decomposed pipeline** is designed for exploring this setting: preprocessing does the ray tracing once, then thresholding re-runs in seconds with other values.
 
