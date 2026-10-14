@@ -166,6 +166,22 @@ def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
         if metrics["protect_unexplained"]:
             failed.append("protect_tightness")
 
+    # 2c. recovered_sky: the reported share is at least the target, and an
+    # independent recount on the final mask agrees (the stepped reference
+    # misses corner clips, hence the tolerance; it has no edge_taper weights).
+    if run.cfg.get("mode") not in ("tilted_plane", "time-based") and not run.cfg.get("edge_taper"):
+        share = round(float(rng.uniform(0.1, 0.9)), 3)
+        mask = _rethreshold(run, root / "recover", threshold="recovered_sky", recovered_sky=share)
+        thr_diag = json.loads((root / "recover" / "diagnostics" / "diagnostic.json").read_text())
+        reported = thr_diag["recovered_sky_actual"]
+        recount = oracle.recovered_share(run, occ & mask)
+        metrics.update(recover_share=share, recover_reported=reported,
+                       recover_recount=round(recount, 4))
+        if reported < share or reported > share + 0.1:
+            failed.append("recover_share")
+        if abs(recount - reported) > 0.04:
+            failed.append("recover_recount")
+
     # 3. carve_fraction nesting
     if run.cfg.get("threshold") == "carve_fraction":
         tighter = _rethreshold(run, root / "nest", carve_fraction=min(run.cfg["carve_fraction"] + 0.1, 0.99))

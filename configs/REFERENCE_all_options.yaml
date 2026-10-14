@@ -70,28 +70,33 @@ carve_above: true                 # Column carve-above post-processing (default 
 carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-3 ignore stray single voxels; they stay carved)
 
 # How much to carve (see docs/modes.md)
-# Sky modes (irradiance, benefit, daylight, radiative_cooling): fraction (0-1)
-# of the building's obstruction score to remove. 0.7 = aggressive, 0.3 =
-# conservative.
-carve_fraction: 0.7
-# Slope limit after carve_above: columns may rise at most this steeply above
-# their neighbours (degrees), so cliffs and spires become ramps. null = 75 for
-# the score-cutoff methods of the sky modes, off otherwise; 90 = off.
-max_slope_deg: null
+# Sky modes (irradiance, benefit, daylight, radiative_cooling): share (0-1) of
+# the sky that the maximum volume blocks from the test surfaces that is given
+# back, weighted as the mode weights it. The volume that blocks the most sky
+# per cubic metre goes first.
+recovered_sky: 0.5
 # time-based: tolerated shading in m²·h (shaded area x duration), 0 = none.
 # tilted_plane: leave threshold unset; tilted_plane_angle_deg decides.
 # threshold: 0
 
 # Other methods for the sky modes (set threshold to choose one):
-#   threshold: protect_share    # keep the rays from every test point to the
-#                               # top sky patches clear; value from protect_share
+#   threshold: carve_fraction   # remove the voxels holding this fraction of the
+#                               # obstruction score; value from carve_fraction
+#   threshold: protect_share    # keep the rays from every test point to the top
+#                               # sky patches clear; value from protect_share
 #   threshold: headtail         # automatic split of the scores, no value
 #   threshold: 0.35             # raw-score cutoff
-#   threshold: {method: carve_fraction, value: 0.7}   # canonical mapping form
+#   threshold: {method: recovered_sky, value: 0.5}   # canonical mapping form
+# carve_fraction: 0.7
 # protect_share: 0.1
 #
-# score_smoothing (score-cutoff methods only): Gaussian blur radius (m) of the
-# scores before the cutoff. null = auto (1.1x voxel_size), 0 = off.
+# For the score-cutoff methods (carve_fraction, headtail, numeric) only:
+# Slope limit after carve_above: columns may rise at most this steeply above
+# their neighbours (degrees), so cliffs and spires become ramps. null = 75 for
+# those methods, off otherwise; 90 = off.
+max_slope_deg: null
+# Gaussian blur radius (m) of the scores before the cutoff. null = auto
+# (1.1x voxel_size), 0 = off.
 score_smoothing: null
 
 # Benefit mode settings (used when mode: benefit)

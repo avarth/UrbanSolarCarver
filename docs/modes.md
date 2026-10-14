@@ -19,35 +19,56 @@ Each mode has one main setting that decides how much is carved:
 
 | Mode | Setting | Meaning |
 |---|---|---|
-| `irradiance`, `benefit`, `daylight`, `radiative_cooling` (sky modes) | `carve_fraction` (0-1, default 0.7) | Fraction of the building's obstruction score to remove |
+| `irradiance`, `benefit`, `daylight`, `radiative_cooling` (sky modes) | `recovered_sky` (0-1, default 0.5) | Share of the sky blocked by the maximum volume that the test surfaces get back |
 | `time-based` | `threshold` (m²·h, default 0) | Shading a voxel may cause before it is carved; 0 = none |
 | `tilted_plane` | `tilted_plane_angle_deg` | Angle of the plane above which everything is carved |
 
-### Sky modes: `carve_fraction`
+### Sky modes: `recovered_sky`
 
 ```yaml
-carve_fraction: 0.4   # remove the voxels holding 40% of the obstruction score
+recovered_sky: 0.4   # the test surfaces get back 40% of the sky the maximum volume blocks
 ```
 
-Each voxel's **score** is the sky weight it blocks: the sum, over every ray from a test point to a sky patch that passes through the voxel, of that patch's weight (for example its heating-season irradiance in `benefit` mode). Scores are compared within the building only (occupied voxels). `carve_fraction` sorts these voxels from highest to lowest score and removes the top ones until they hold the given fraction of the building's total score. `0.7` is aggressive (tall, slim volumes, more sky), `0.3` conservative (bulky volumes, more floor area). Because a few voxels hold much of the score, 0.7 removes far fewer than 70% of the voxels.
+**What it means.** The maximum volume blocks part of the sky from the test surfaces. `recovered_sky: 0.4` carves the volume so that the surfaces get 40% of that blocked sky back. USC removes first the parts of the volume that block the most sky per cubic metre, so as much volume as possible is kept for that share.
 
-Before the cutoff, the scores are blurred with a small Gaussian (`score_smoothing`, default 1.1 x `voxel_size`) to reduce noise from the sampling. After it, `carve_above` removes everything above a carved voxel in its column, so the result has no floating mass.
+**What "sky" means in each mode.** The sky is divided into the 145 Tregenza patches, and each patch has a weight for the mode. A test point's view of a patch counts with the patch weight times the cosine of the angle between the patch direction and the surface normal, so the totals are what the surfaces receive:
 
-**Slope limit (`max_slope_deg`, default 75 degrees).** With `carve_above`, each column is decided by its single highest-scoring voxel. Scores in a column are near zero at the base and peak partway up, so two neighbouring columns whose peaks fall just above and just below the cutoff can end up 15-30 m apart in height, and score noise leaves one-voxel spires. The slope limit removes this: after `carve_above`, each column may rise at most `tan(max_slope_deg)` above its neighbours, measured against a median-filtered height map, and anything higher is cut off. Cliffs become ramps and spires end at most one step above their surroundings. The limit only ever removes voxels, and carving more before it never keeps more after it, so the slider stays consistent. The median ignores features one or two columns wide (a stub at a curved edge, a narrow slot); wider height differences, including next to areas carved to the ground, become ramps. On the ReSBE test blocks (0.5 m voxels, `benefit`) at `carve_fraction: 0.4`, it removed all spires (31-182 per scene before) at a cost of 1-6 percentage points of kept volume (9 points in the curved "freeform" block). Lower angles give gentler ramps and remove more; `90` turns the limit off. The thresholding diagnostics report `max_slope_deg` and `slope_limit_extra_voxels_removed`.
+| Mode | The recovered share is a share of |
+|---|---|
+| `irradiance` | solar energy (kWh/m²) reaching the test surfaces over the analysis period |
+| `benefit` | solar energy reaching the test surfaces in the hours when it offsets heating |
+| `daylight` | overcast-sky daylight reaching the test surfaces |
+| `radiative_cooling` | the surfaces' long-wave cooling potential to the sky (the patch weights already contain the view factor, so no extra cosine) |
 
-**What `carve_fraction` does not tell you.** The score adds up the sky weight of every ray through a voxel, but blocking does not add up: a ray that crosses ten voxels stays blocked until all ten are removed. Removing the voxels that hold 40% of the score therefore does not return 40% of the sky to the test surfaces; how much it returns depends on the geometry. Treat the value as a design slider and judge the result, for example with a daylight or radiation study of the exported envelope. A ray-based version that removes this gap is planned (see below).
+**The baseline is the maximum volume.** Neighbouring buildings are not modelled: 0.4 means 40% of what the maximum volume blocks, not 40% of the open sky. Sky that the maximum volume does not block (for example above a low part of it) is not counted either way.
+
+**The value is exact.** The thresholding stage finds the smallest cut that recovers at least the requested share and reports the share actually recovered (`recovered_sky_actual` in `diagnostics/diagnostic.json`, also in the run report and the Grasshopper USC_ThresholdStage summary). It is above the request only by rays that clear together at the same cut, usually by less than 0.1 percentage points. The share is measured on the voxel model, before the mesh export removes small fragments.
+
+**How it works.** USC treats each pair of a test point and a sky patch as a ray. A ray is obstructed if it crosses the maximum volume in front of its surface. Each obstructed ray gets:
+
+- a *weight*: the patch weight times the incidence cosine (times the point's `edge_taper` weight, if set);
+- a *cost*: the number of voxels that clearing it removes, counting what `carve_above` removes above it (in each column the ray crosses, the voxels at and above the lowest one on the ray).
+
+The rays are ranked by weight per voxel of cost, and clearing the first *n* rays means removing every voxel those rays cross, then applying `carve_above`. Preprocessing traces the rays to compute this ranking and stores it with the rays (`recovery_rays.npz`). Thresholding traces the obstructed rays once more to find, for each, the cut from which it is clear, and picks the smallest cut that reaches the share. On the ReSBE test blocks (0.5 m voxels) the extra tracing adds about 0.5 s to preprocessing, and thresholding takes about 0.5 s on a GPU (at 1 m voxels, 0.5 s on a CPU as well).
+
+**Shapes.** Because whole rays are cleared, the envelope is made of ray fans and ramps, like a time-based solar envelope; there are no one-voxel spires, and no slope limit or score smoothing is applied. The order is a greedy one (each ray's cost is counted as if it were cleared alone), so it is not guaranteed to keep the very largest volume possible for a share, but on the test blocks it kept as much or more volume than `carve_fraction` for the same recovered sky: for example 9-11 percentage points more sky at about 60% kept volume in the courtyard block.
+
+**Resolution.** The result depends on the voxel size, the sampling step (`grid_step`) and the 145-patch sky: a ray that only clips a voxel corner counts as obstructed. Compare designs at the same settings.
 
 ### Sky modes: other methods
 
-Set `threshold` to choose one of these instead of `carve_fraction`:
+Set `threshold` to choose one of these instead (setting only the `carve_fraction` or `protect_share` key also selects that method; setting more than one of the three keys without `threshold` is an error):
 
 | Method | How it works |
 |---|---|
-| `protect_share` (with `protect_share`, 0-1) | Ray-based. The highest-weight sky patches holding this share of the total weight are protected: every voxel on a ray from a test point towards a protected patch's centre is carved. This is the solar-envelope operation of `time-based`, with patch centres chosen by weather-weighted value in place of clock-time sun positions. Setting only the `protect_share` key also selects it. |
-| `headtail` | Jiang (2013) head/tail breaks: splits the scores at their mean, then splits the part above the mean again while it holds at most 40% of the values. |
-| a number | Carves voxels scoring above it. The value depends on the mode, weather file and sampling, so it does not carry over between runs. |
+| `carve_fraction` (with `carve_fraction`, 0-1) | Score-based, the default before `recovered_sky`. Each voxel's score is the sky weight of all rays through it; the highest-scoring voxels are removed until they hold the given fraction of the building's total score. Scores add up the rays through a voxel, but a ray stays blocked until every voxel on it is gone, so the value does not say how much sky comes back. With `carve_above` each column is decided by its highest-scoring voxel, which can leave cliffs and one-voxel spires; a slope limit (`max_slope_deg`, 75 degrees by default for the score-based methods) cuts columns that rise too steeply above their neighbours into ramps. |
+| `protect_share` (with `protect_share`, 0-1) | Ray-based. The highest-weight sky patches holding this share of the total weight are protected: every voxel on a ray from a test point towards a protected patch's centre is carved. This is the `time-based` solar-envelope operation with patch centres chosen by weight in place of sun positions. Patches are protected whole and for every test point, so small values already carve a lot. |
+| `headtail` | Jiang (2013) head/tail breaks on the scores: splits them at their mean, then splits the part above the mean again while it holds at most 40% of the values. Uses the slope limit like `carve_fraction`. |
+| a number | Carves voxels scoring above it. The value depends on the mode, weather file and sampling, so it does not carry over between runs. Uses the slope limit like `carve_fraction`. |
 
-**More on `protect_share`.** It gives a firm statement: every protected surface keeps unobstructed lines of sight towards the centres of the patches that together carry at least the given share of the sky weight (rays towards the rest of a 12° x 12° patch can still be partly blocked). Its limits: patches are protected whole, so nearby values can give the same result (the share actually protected is reported as `protected_weight_share`); the same patches are protected for every test point, so the most demanding point (low in a courtyard, say) drives the carving; and small values already carve a lot (on the ReSBE blocks, 0.1 kept 33-74% of the volume, 0.2 kept 22-41%). It needs no slope limit or score smoothing. To keep re-thresholding instant, preprocessing of the sky modes also stores for each voxel the rank of the highest-weight patch it blocks (`patch_rank.npy`), which makes preprocessing somewhat slower (about 2.0 s to 2.2-2.5 s in the test scenes). Setting both `carve_fraction` and `protect_share` without `threshold` is an error.
+The score-based methods consider **occupied voxels only** (rays also cross streets, courtyards and the grid margin, which can hold 60-80% of the score mass) and blur the scores slightly before the cutoff (`score_smoothing`, default 1.1 x `voxel_size`).
+
+**Slope limit (`max_slope_deg`).** After `carve_above`, each column may rise at most `tan(max_slope_deg)` above its neighbours, measured against a 5 x 5 median-filtered height map, and anything higher is cut off. Features one or two columns wide (an edge stub, a narrow slot) are ignored by the median. The limit only removes voxels, and carving more before it never keeps more after it. On the ReSBE blocks at `carve_fraction: 0.4` it removed every spire (31-182 per scene before) for 1-9 percentage points of kept volume. `90` turns it off; setting a value applies it to any method.
 
 ### Time-based: tolerated shading
 
@@ -59,10 +80,6 @@ Set `threshold` to choose one of these instead of `carve_fraction`:
 | `5` | Tolerate a voxel that shades up to 5 m²·h, e.g. 5 m² of facade for one hour, or 1 m² for five hours |
 
 `tilted_plane` is strictly binary (see below) and takes no threshold. Neither mode applies the slope limit unless `max_slope_deg` is set: their envelopes follow the rays exactly.
-
-### Planned: a ray-based carve fraction
-
-The aim is to keep the `carve_fraction` slider but give it a physical meaning: *clear the given fraction of the obstructed sky weight, removing as little volume as possible*. Each ray from a test point gets a weight (its patch weight) and a cost (the volume that clearing it removes, including what `carve_above` removes above it), and the rays that clear the most weight per cubic metre are cleared first. This counts rays instead of adding up voxel scores, and it clears expensive rays, such as those from low courtyard points, last. It needs new tracing kernels and a prototype on the test scenes before it can replace the score-based version.
 
 ## time-based
 

@@ -40,6 +40,13 @@ class ModeSpec:
         CLI ``schema`` command filters parameters by mode with it.
     experimental : bool
         Config validation warns that the mode is experimental.
+    incidence_cosine : bool
+        Weighted modes: the recovered_sky method multiplies each ray's patch
+        weight by the cosine of its angle to the test surface's normal, so
+        the weights add up to what the surface receives (kWh/m² for the
+        solar modes).  False when the patch weights already contain a
+        cosine (radiative_cooling uses the view factor of a horizontal
+        surface).
     """
 
     name: str
@@ -49,6 +56,7 @@ class ModeSpec:
     weight_unit: str
     extra_params: FrozenSet[str] = field(default_factory=frozenset)
     experimental: bool = False
+    incidence_cosine: bool = True
 
 
 _PERIOD_FIELDS = frozenset({
@@ -109,6 +117,7 @@ MODES: Dict[str, ModeSpec] = {
         weight_unit="cooling potential fraction (dimensionless)",
         extra_params=frozenset({"dew_point_celsius", "bliss_k", "min_sky_elevation_deg"}),
         experimental=True,
+        incidence_cosine=False,
     ),
 }
 

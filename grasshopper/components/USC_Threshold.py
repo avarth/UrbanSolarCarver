@@ -1,22 +1,24 @@
 """USC Threshold: how much to carve, and the column clean-up.
 
 Sky modes (irradiance, benefit, daylight, radiative_cooling): connect only
-value, the fraction (0-1) of the building's obstruction score to remove
-(carve_fraction). time-based: set method to "numeric" and value to the
+value, the share (0-1) of the sky blocked by the maximum volume that the
+test surfaces get back (recovered_sky). time-based: set method to "numeric" and value to the
 tolerated shading in m²·h. tilted_plane: leave this component unconnected
 (the plane angle decides).
 
 Inputs
 ------
 method : str, optional
-    Leave unconnected for carve_fraction. "numeric" makes value a cutoff:
+    Leave unconnected for recovered_sky. "numeric" makes value a cutoff:
     for time-based, the tolerated shading in m²·h. Other sky-mode methods:
+    "carve_fraction" (value = fraction of the obstruction score to remove),
     "protect_share" (value = share of the sky weight whose patch directions
     stay clear from every test point) and "headtail" (value ignored).
 value : float, optional
-    Sky modes: fraction of the obstruction score to remove (0-1); 0.7 is
-    aggressive, 0.3 conservative. With method "numeric": the cutoff
-    (time-based: m²·h). With "protect_share": the share to protect.
+    Sky modes: share (0-1) of the blocked sky given back to the test
+    surfaces; 0.4 = they get back 40% of what the maximum volume takes.
+    With method "numeric": the cutoff (time-based: m²·h). With
+    "carve_fraction" or "protect_share": that method's value.
 score_smoothing : float, optional
     Score-cutoff methods only: Gaussian blur radius (m) of the scores
     before the cutoff. Empty = auto (1.1 x voxel_size), 0 = off.
@@ -30,10 +32,10 @@ carve_above_min : int, optional
     carved voxels from removing whole columns; shorter runs stay carved.
     Default: 1.
 max_slope : float, optional
-    Steepest rise in degrees allowed between neighbouring columns after
-    carve_above; taller columns are cut into ramps, which removes cliffs
-    and spires. Empty = 75 for the score-cutoff methods of the sky modes,
-    off otherwise. 90 = off.
+    Score-cutoff methods (carve_fraction, headtail, numeric) only: steepest
+    rise in degrees allowed between neighbouring columns after carve_above;
+    taller columns are cut into ramps, which removes cliffs and spires.
+    Empty = 75 for those methods, off otherwise. 90 = off.
 
 Outputs
 -------
@@ -47,25 +49,27 @@ try:
     ghenv.Component.Name = "USC Threshold"
     ghenv.Component.NickName = "USC_Threshold"
     ghenv.Component.Description = (
-        "How much to carve. Sky modes: connect only 'value', the fraction (0-1) of the building's "
-        "obstruction score to remove (carve_fraction). time-based: set method to 'numeric' and "
-        "value to the tolerated shading in m²·h. Also controls carve_above (removes floating mass "
-        "above carved zones) and max_slope (turns cliffs and spires into ramps). Connect the output "
-        "to ThresholdStage, which re-runs only thresholding and export."
+        "How much to carve. Sky modes: connect only 'value', the share (0-1) of the sky blocked by "
+        "the maximum volume that the test surfaces get back (recovered_sky). time-based: set method "
+        "to 'numeric' and value to the tolerated shading in m²·h. Also controls carve_above "
+        "(removes floating mass above carved zones). Connect the output to ThresholdStage, which "
+        "re-runs only thresholding and export."
     )
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
         ("method", (
-            "Leave unconnected for carve_fraction. 'numeric' makes value a cutoff: for time-based, "
-            "the tolerated shading in m²·h. Other sky-mode methods: 'protect_share' (value = share "
-            "of the sky weight whose patch directions stay clear from every test point) and "
-            "'headtail' (value ignored)."
+            "Leave unconnected for recovered_sky. 'numeric' makes value a cutoff: for time-based, "
+            "the tolerated shading in m²·h. Other sky-mode methods: 'carve_fraction' (value = "
+            "fraction of the obstruction score to remove), 'protect_share' (value = share of the "
+            "sky weight whose patch directions stay clear from every test point) and 'headtail' "
+            "(value ignored)."
         )),
         ("value", (
-            "Sky modes: fraction of the obstruction score to remove (0-1); 0.7 is aggressive, "
-            "0.3 conservative. With method 'numeric': the cutoff (time-based: tolerated shading "
-            "in m²·h). With 'protect_share': the share to protect."
+            "Sky modes: share (0-1) of the blocked sky given back to the test surfaces; 0.4 = "
+            "they get back 40% of what the maximum volume takes. With method 'numeric': the "
+            "cutoff (time-based: tolerated shading in m²·h). With 'carve_fraction' or "
+            "'protect_share': that method's value."
         )),
         ("score_smoothing", (
             "Score-cutoff methods only: Gaussian blur radius in meters applied to the scores "
@@ -82,9 +86,9 @@ try:
             "from removing whole columns; shorter runs stay carved. Default: 1."
         )),
         ("max_slope", (
-            "Steepest rise in degrees allowed between neighbouring columns after carve_above; "
-            "taller columns are cut into ramps, which removes cliffs and spires. Empty = 75 for "
-            "the score-cutoff methods of the sky modes, off otherwise. 90 = off."
+            "Score-cutoff methods (carve_fraction, headtail, numeric) only: steepest rise in "
+            "degrees allowed between neighbouring columns after carve_above; taller columns are "
+            "cut into ramps. Empty = 75 for those methods, off otherwise. 90 = off."
         )),
     ]):
         if i < len(ii):
@@ -117,10 +121,9 @@ if _m == "numeric":
     else:
         _warn("method='numeric' needs a number in the 'value' input; "
               "no threshold override emitted (the mode default is used).")
-elif _m in ("protect_share", "carve_fraction", "headtail"):
+elif _m in ("recovered_sky", "carve_fraction", "protect_share", "headtail"):
     _items.append(f"threshold={_m}")
-    # protect_share and carve_fraction take value as their parameter;
-    # headtail ignores it.
+    # Every method but headtail takes value as its parameter.
     if _m != "headtail" and value is not None:
         _items.append(f"{_m}={float(value)}")
 elif _m is not None:
@@ -129,11 +132,12 @@ elif _m is not None:
         float(_m)
         _items.append(f"threshold={_m}")
     except ValueError:
-        _warn(f"Unknown method {method!r}: use protect_share, carve_fraction, headtail or numeric. "
+        _warn(f"Unknown method {method!r}: use recovered_sky, carve_fraction, protect_share, "
+              "headtail or numeric. "
               "No threshold override emitted.")
 elif value is not None:
     # No method connected: value is the parameter of the default method.
-    _items.append(f"carve_fraction={float(value)}")
+    _items.append(f"recovered_sky={float(value)}")
 
 if score_smoothing is not None:
     _items.append(f"score_smoothing={float(score_smoothing)}")
