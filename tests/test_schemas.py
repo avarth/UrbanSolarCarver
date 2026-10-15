@@ -73,12 +73,12 @@ class TestGridStepValidation:
 
 class TestResolutionCap:
     def test_resolution_exceeds_cap(self):
-        """voxelize_mesh should reject a per-axis resolution above 4096."""
+        """voxelize_mesh should reject a grid above the voxel budget."""
         import trimesh
         from urbansolarcarver.grid import voxelize_mesh
-        # 100m cube / 0.01m voxel = 10000 resolution → should fail
+        # 100m cube / 0.01m voxel = 10000^3 voxels → should fail
         big_cube = trimesh.creation.box(extents=(100, 100, 100))
-        with pytest.raises(ValueError, match="per-axis limit"):
+        with pytest.raises(ValueError, match="Increase voxel_size"):
             voxelize_mesh(big_cube, voxel_size=0.01)
 
 
