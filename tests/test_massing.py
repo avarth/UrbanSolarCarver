@@ -123,3 +123,37 @@ class TestFaces:
         _, _, facades, faces = _faces(circle, vs=0.5)
         assert (faces.face == 0).all()
         assert faces.u.min() >= 0 and faces.u.max() <= facades[0].length + 1e-9
+
+
+def _bays(polygon, vs, width):
+    ij, xy, facades, faces = _faces(polygon, vs)
+    bay, bay_face = mg.cut_bays(faces, width, vs)
+    return ij, xy, facades, faces, bay, bay_face
+
+
+class TestBays:
+    def test_cuts_line_up_on_both_sides_of_a_bar(self):
+        _, xy, _, faces, bay, bay_face = _bays(box(0, 0, 80, 14), 0.5, 3.0)
+        spans = {}
+        for b in range(len(bay_face)):
+            x = xy[bay == b, 0]
+            spans.setdefault(bay_face[b], set()).add((round(x.min(), 6), round(x.max(), 6)))
+        sides = list(spans.values())
+        assert len(sides) == 2 and sides[0] == sides[1]
+
+    def test_no_bay_narrower_than_the_bay_width(self):
+        _, _, _, faces, bay, bay_face = _bays(box(0, 0, 80, 14), 0.5, 3.0)
+        for b in range(len(bay_face)):
+            u = faces.u[bay == b]
+            assert u.max() - u.min() + 0.5 >= 3.0 - 1e-9
+
+    def test_short_end_bays_merge(self):
+        # 10 m bar, centroid at x = 5: cuts at x = 2, 5, 8; the 2 m end bays merge.
+        _, xy, _, _, bay, bay_face = _bays(box(0, 0, 10, 6), 0.5, 3.0)
+        for f in np.unique(bay_face):
+            widths = sorted(np.ptp(xy[bay == b, 0]) + 0.5 for b in np.flatnonzero(bay_face == f))
+            assert widths == [5.0, 5.0]
+
+    def test_round_tower_bays_follow_the_curve(self):
+        _, _, facades, _, bay, bay_face = _bays(Point(0, 0).buffer(10, quad_segs=16), 0.5, 3.0)
+        assert abs(len(bay_face) - facades[0].length / 3.0) <= 1.0

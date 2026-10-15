@@ -263,3 +263,36 @@ def assign_faces(xy, facades, corners, polygons, voxel_size) -> Faces:
         else:
             u[mine] = shapely.line_locate_point(f.line, points[mine])
     return Faces(face=face, u=u)
+
+
+# ----------------------------------------------------------------- bays
+def _bay_span(u, voxel_size):
+    return float(u.max() - u.min()) + voxel_size
+
+
+def cut_bays(faces: Faces, bay_width, voxel_size):
+    """Cut each face into bays at ``u = k * bay_width`` (perpendicular to its facade).
+
+    A bay at either end of a face that is narrower than *bay_width* merges
+    into its neighbour.
+
+    Returns
+    -------
+    bay : ndarray (N,) int
+        Bay of each column, numbered 0..B-1.
+    bay_face : ndarray (B,) int
+        Facade index of each bay.
+    """
+    k = np.floor(faces.u / bay_width + 1e-9).astype(np.int64)
+    for f in np.unique(faces.face):
+        mine = np.flatnonzero(faces.face == f)
+        ks, us = k[mine], faces.u[mine]
+        lo, hi = ks.min(), ks.max()
+        if hi > lo and _bay_span(us[ks == lo], voxel_size) < bay_width - 1e-9:
+            ks[ks == lo] = lo + 1
+        lo, hi = ks.min(), ks.max()
+        if hi > lo and _bay_span(us[ks == hi], voxel_size) < bay_width - 1e-9:
+            ks[ks == hi] = hi - 1
+        k[mine] = ks
+    keys, bay = np.unique(np.stack([faces.face, k], axis=1), axis=0, return_inverse=True)
+    return bay.ravel().astype(np.int64), keys[:, 0].astype(np.int64)
