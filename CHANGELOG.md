@@ -26,6 +26,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `UpstreamMismatchError` (a `ValueError`) when it no longer matches.
   Thresholding manifests written before this change lack the field and
   need thresholding to be re-run.
+- **A failed Warp voxelization switched to trimesh and was cached.** Any
+  exception from the Warp voxelizer (including CUDA out-of-memory) made
+  `voxelize_mesh` use trimesh's rasterizer, which classifies boundary
+  voxels differently, and the session cache (the daemon keeps one for its
+  lifetime) kept that grid for the geometry. The error now propagates;
+  trimesh is used only when Warp cannot run on the device at all.
 
 ### Changed (weighted modes; results change)
 

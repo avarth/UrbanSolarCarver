@@ -619,8 +619,9 @@ def voxelize_solid_warp(
     centre inside (a majority vote, so one axis confused by a small hole or
     a grazing ray does not decide the result; trimesh's orthographic fill
     uses the same idea), or when the mesh surface passes through it.  Runs
-    on CUDA or the Warp CPU device; grid.py falls back to trimesh's slower
-    rasterize-and-fill when this returns None or raises.
+    on CUDA or the Warp CPU device; grid.py uses trimesh's slower
+    rasterize-and-fill only when this returns None, and lets anything it
+    raises propagate.
 
     Returns
     -------

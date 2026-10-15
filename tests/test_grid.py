@@ -283,6 +283,27 @@ class TestWarpVoxelizer:
         assert iou > 0.9
 
 
+def test_warp_voxelizer_failure_raises_instead_of_switching_to_trimesh(monkeypatch):
+    """A Warp run that fails (here a simulated CUDA out-of-memory) must raise:
+    trimesh classifies boundary voxels differently, and a long-lived session
+    would cache that other grid for the geometry.  The trimesh path is only
+    for when Warp cannot run on the device at all."""
+    import trimesh
+    import urbansolarcarver.raytracer as rt
+    from urbansolarcarver.grid import voxelize_mesh
+    from urbansolarcarver.session import CarverSession
+
+    def failing_warp_voxelizer(*args, **kwargs):
+        raise RuntimeError("simulated CUDA out of memory")
+
+    monkeypatch.setattr(rt, "voxelize_solid_warp", failing_warp_voxelizer)
+    cube = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
+    with CarverSession("cpu") as session:
+        with pytest.raises(RuntimeError, match="simulated CUDA out of memory"):
+            voxelize_mesh(cube, voxel_size=1.0, margin_frac=0.1,
+                          device=torch.device("cpu"), session=session)
+
+
 class TestSmoothedMeshPath:
     """Tests for mesh_from_voxels_smoothed (SDF + marching cubes)."""
 

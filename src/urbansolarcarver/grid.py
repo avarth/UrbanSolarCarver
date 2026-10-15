@@ -925,14 +925,15 @@ def voxelize_mesh(
     ValueError
         If voxel_size <= 0, margin_frac < 0, or D exceeds 4096.
     RuntimeError
-        If the trimesh fallback voxelization fails.
+        If the Warp voxelizer fails (for example out of memory), or the
+        trimesh voxelization fails.
 
     Notes
     -----
     - Uses the Warp parity voxelizer (``raytracer.voxelize_solid_warp``,
-      on CUDA or the Warp CPU device); if it is unavailable or fails, falls
-      back to trimesh voxelization plus fill.  Sealed interior cavities are
-      then filled with scipy's binary_fill_holes.
+      on CUDA or the Warp CPU device); only when Warp cannot run on
+      *device* does it use trimesh voxelization plus fill.  Sealed interior
+      cavities are then filled with scipy's binary_fill_holes.
     - The grid is axis-aligned, cubic, and centred on the mesh bounding box.
     - Results are cached per session (see `_voxelize_cache_key`).
     """
@@ -967,26 +968,19 @@ def voxelize_mesh(
     center = (bmin + bmax) / 2.0
     origin = center - grid_extent/2.0
 
-    # --- Rasterize: Warp parity voxelizer first (CUDA or Warp CPU), with
-    # the trimesh rasterize-and-fill path as fallback.  The Warp kernel
-    # casts one ray per grid column along each axis and marks a voxel
-    # inside when at least 2 of the 3 parities agree.  It is much faster
-    # than trimesh's CPU rasterizer and does not need the fill fallbacks
-    # used below.
-    grid_np = None
-    try:
-        from .raytracer import voxelize_solid_warp
-        grid_np = voxelize_solid_warp(
-            mesh.vertices, mesh.faces, origin, voxel_size, resolution, device
-        )
-    except Exception as exc:
-        import warnings
-        warnings.warn(
-            f"Warp voxelization failed ({type(exc).__name__}: {exc}); falling back to "
-            f"trimesh's rasterizer, which can classify boundary voxels differently.",
-            stacklevel=2,
-        )
-        grid_np = None
+    # --- Rasterize: Warp parity voxelizer (CUDA or Warp CPU), or the
+    # trimesh rasterize-and-fill path when Warp cannot run on *device*.
+    # The Warp kernel casts one ray per grid column along each axis and
+    # marks a voxel inside when at least 2 of the 3 parities agree.  It is
+    # much faster than trimesh's CPU rasterizer and does not need the fill
+    # fallbacks used below.  A Warp run that fails (out of memory, a driver
+    # error) raises instead of switching to trimesh: trimesh classifies
+    # boundary voxels differently, and the session cache would keep that
+    # other grid for this geometry.
+    from .raytracer import voxelize_solid_warp
+    grid_np = voxelize_solid_warp(
+        mesh.vertices, mesh.faces, origin, voxel_size, resolution, device
+    )
 
     if grid_np is None:
         # Voxelize with trimesh.  The default 'subdivide' method produces
