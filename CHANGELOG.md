@@ -63,7 +63,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Floor-plate massing (stage 4, `massing`).** Turns the carved envelope into
   stacked floor plates: a ground floor (`ground_floor_height`, 5 m), then
-  floors of `floor_height` (3 m). The footprint (each body's base outline) is
+  floors of `floor_height` (3 m). The footprint (the maximum volume's plan projection) is
   split into faces, one per facade (corners squared to the longer facade), and
   each face into bays of `min_plate_dimension` (3 m) cut perpendicular to its
   facade. A bay is built on a floor when it stays in the maximum volume, at

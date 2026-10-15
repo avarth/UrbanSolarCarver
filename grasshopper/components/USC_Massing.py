@@ -136,7 +136,7 @@ else:
         if total_floor_area is not None:
             lines.append("Total floor area: {:,.0f} m2".format(total_floor_area))
         if data.get("footprint_source") == "voxels":
-            lines.append("Footprint from voxels (the mesh outline could not be read)")
+            lines.append("Footprint from voxels (the mesh footprint could not be read or does not match the voxels)")
         diagnostics = "\n".join(lines)
         report = m_out.parent / "run_report.md"
         report_path = str(report) if report.is_file() else None

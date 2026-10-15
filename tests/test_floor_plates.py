@@ -51,7 +51,7 @@ class TestFootprint:
         assert len(polys) == 1
         assert np.allclose(polys[0].bounds, (0.5, 0.25, 20.5, 10.25))
 
-    def test_each_body_is_sectioned_at_its_own_base(self):
+    def test_raised_body_keeps_its_footprint(self):
         import trimesh
         low = trimesh.creation.box(extents=[10, 10, 20])
         low.apply_translation([-10, 0, 10])
@@ -274,3 +274,91 @@ def test_plate_narrower_than_the_minimum_is_dropped():
     kept = mg.plate_polygons(ij, np.ones(len(ij), bool), np.zeros(len(ij), bool), 1.0, poly,
                              min_dimension=2.0)
     assert len(kept) == 1
+
+
+# ----------------------------------------------------------------- final-review fixes
+def test_uneven_base_keeps_the_whole_footprint():
+    import trimesh
+    mesh = trimesh.creation.box(extents=[30, 12, 20])
+    mesh.apply_translation([0, 0, 10])
+    v = mesh.vertices.copy()
+    low = v[:, 2] < 1e-9
+    v[low, 2] -= 0.01 * (v[low, 0] + 15)          # base drops 0.3 m over 30 m
+    mesh.vertices = v
+    polys = mg.footprint_polygons(mesh, offset_xy=(0, 0))
+    assert sum(p.area for p in polys) == pytest.approx(360.0, rel=1e-6)
+
+
+def test_square_tie_does_not_depend_on_the_ring_start():
+    a = Polygon([(0, 0), (24, 0), (24, 24), (0, 24)])
+    b = Polygon([(24, 24), (0, 24), (0, 0), (24, 0)])          # same square, other start
+    parts = []
+    for poly in (a, b):
+        ij, _, facades, faces = _faces(poly)
+        groups = {tuple(map(tuple, ij[faces.face == k])) for k in np.unique(faces.face)}
+        parts.append(groups)
+        for k in np.unique(faces.face):
+            assert _is_rectangle(ij[faces.face == k])
+    assert parts[0] == parts[1] and len(parts[0]) == 2
+
+
+def test_short_chamfer_belongs_to_the_corner():
+    block = Polygon([(0, 0), (40, 0), (40, 17), (37, 20), (0, 20)])   # 3 m chamfer
+    ij, xy = _cells(block, 1.0)
+    facades, corners = mg.split_facades([block])
+    faces = mg.assign_faces(xy, facades, corners, [block], 1.0, min_facade_length=6.0)
+    used = [k for k in np.unique(faces.face) if (faces.face == k).sum() > 0]
+    assert len(used) == 2
+    assert all(facades[k].length > 30 for k in used)
+
+
+def test_voxel_fallback_straightens_diagonal_outlines():
+    from shapely import affinity
+    bar = affinity.rotate(box(-30, -7, 30, 7), 45, origin=(0, 0))
+    bar = affinity.translate(bar, 40, 40)
+    ij, _ = _cells(bar, 0.5)
+    columns = np.zeros((200, 200), bool)
+    columns[ij[:, 0], ij[:, 1]] = True
+    polys = mg.footprint_from_columns(columns, 0.5)
+    facades, _ = mg.split_facades(polys)
+    assert len(facades) <= 8
+
+
+def test_cut_edges_are_straight_on_rotated_footprints():
+    from shapely import affinity
+    bar = affinity.rotate(box(-30, -7, 30, 7), 30, origin=(0, 0))
+    bar = affinity.translate(bar, 40, 40)
+    vs = 0.5
+    ij, xy = _cells(bar, vs)
+    facades, corners = mg.split_facades([bar])
+    faces = mg.assign_faces(xy, facades, corners, [bar], vs)
+    bay, bay_face = mg.cut_bays(faces, 3.0, vs)
+    shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [bar], 3.0, vs)
+    # Both long faces are cut at the bar's middle (u is measured from the
+    # centroid); split the bar there, by whole bays.
+    axis = np.array([np.cos(np.radians(30)), np.sin(np.radians(30))])
+    west = (xy - (40.0, 40.0)) @ axis < 0.0
+    in_a = np.isin(bay, np.unique(bay[west]))
+    a = mg.plate_polygons(ij, in_a, ~in_a, vs, bar, bay=bay, bay_shapes=shapes)
+    b = mg.plate_polygons(ij, ~in_a, in_a, vs, bar, bay=bay, bay_shapes=shapes)
+    assert len(a) == 1 and len(b) == 1
+    assert len(a[0].exterior.coords) <= 8 and len(b[0].exterior.coords) <= 8
+    assert a[0].intersection(b[0]).area < 1e-6
+    assert a[0].area + b[0].area == pytest.approx(bar.area, rel=1e-6)
+
+
+def test_plates_do_not_cover_neighbouring_bays_on_a_rotated_l():
+    from shapely import affinity
+    poly = affinity.translate(affinity.rotate(L_SHAPE, 20, origin=(0, 0)), 40, 10)
+    vs = 0.5
+    ij, xy = _cells(poly, vs)
+    facades, corners = mg.split_facades([poly])
+    faces = mg.assign_faces(xy, facades, corners, [poly], vs, min_facade_length=6.0)
+    bay, bay_face = mg.cut_bays(faces, 3.0, vs)
+    shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [poly], 3.0, vs)
+    in_a = bay % 2 == 0                       # every other bay, on both sides of every ridge
+    a = shapely.union_all(mg.plate_polygons(ij, in_a, ~in_a, vs, poly, bay=bay, bay_shapes=shapes))
+    b = shapely.union_all(mg.plate_polygons(ij, ~in_a, in_a, vs, poly, bay=bay, bay_shapes=shapes))
+    assert a.intersection(b).area < 1e-6
+    # face ends that are not cuts or ridges lie within half a voxel of the columns
+    assert a.area + b.area == pytest.approx(poly.area, rel=1e-2)

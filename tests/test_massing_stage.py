@@ -148,3 +148,25 @@ def test_run_report_has_a_massing_section(tmp_path):
     _massing(cfg, thr, tmp_path / "out" / "massing")
     report = (tmp_path / "out" / "run_report.md").read_text(encoding="utf-8")
     assert "## Massing" in report and "Total floor area" in report
+
+
+def test_uneven_base_still_builds_plates(tmp_path):
+    vol = _box([30, 12, 20])
+    v = vol.vertices.copy()
+    low = v[:, 2] < 1e-9
+    v[low, 2] -= 0.01 * (v[low, 0] + 15)          # 0.3 m over 30 m
+    vol.vertices = v
+    cfg, thr = _run_upstream(tmp_path, vol)
+    _set_mask(thr, lambda occ: occ)
+    res = _massing(cfg, thr, tmp_path / "m")
+    assert res.floor_areas[0] == pytest.approx(30 * 12, rel=0.02)
+
+
+def test_outline_not_matching_the_voxels_falls_back(tmp_path):
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
+    _set_mask(thr, lambda occ: occ)
+    other = tmp_path / "other.ply"
+    _box([30, 12, 20], center_xy=(25.0, 0.0)).export(other)    # a different, shifted volume
+    with pytest.warns(UserWarning, match="does not match"):
+        res = _massing(cfg, thr, tmp_path / "m", max_volume_path=str(other))
+    assert res.n_plates == 6

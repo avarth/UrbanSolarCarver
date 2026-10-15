@@ -29,6 +29,11 @@ from ._util import _ensure_out_dir, _resolve_cfg, ensure_diag, load_thresholded_
 
 log = logging.getLogger(__name__)
 
+# Share of occupied voxel columns allowed to lie more than one voxel outside
+# the mesh footprint before the footprint is taken as not matching the voxel
+# grid (another mesh, a shifted origin) and the voxel footprint is used.
+FOOTPRINT_MISMATCH_SHARE = 0.05
+
 
 @dataclass(frozen=True)
 class MassingResult:
@@ -45,17 +50,31 @@ class MassingResult:
 
 
 def _footprint(conf, origin, columns, voxel_size):
-    """Footprint polygons (local xy) and their source ("mesh" or "voxels")."""
+    """Footprint polygons (local xy) and their source ("mesh" or "voxels").
+
+    The mesh footprint is the maximum volume's plan projection.  It is used
+    only when it matches the voxel grid: at most FOOTPRINT_MISMATCH_SHARE
+    of the occupied columns may have their centre more than one voxel
+    outside it.  Otherwise the voxel footprint is used, with a warning.
+    """
     try:
         polygons = mg.footprint_polygons(load_mesh(conf.max_volume_path), origin[:2])
     except Exception as exc:  # unreadable or broken mesh
-        log.warning("massing: could not section the maximum volume: %s", exc)
+        log.warning("massing: could not project the maximum volume: %s", exc)
         polygons = []
-    if polygons:
-        return polygons, "mesh"
-    warnings.warn("massing: the maximum volume's base outline could not be read; "
-                  "using the voxel footprint", UserWarning, stacklevel=3)
-    return mg.footprint_from_columns(columns, voxel_size), "voxels"
+    if not polygons:
+        warnings.warn("massing: the maximum volume's footprint could not be read; "
+                      "using the voxel footprint", UserWarning, stacklevel=3)
+        return mg.footprint_from_columns(columns, voxel_size), "voxels"
+    centres = (np.argwhere(columns) + 0.5) * voxel_size
+    grown = shapely.union_all(polygons).buffer(voxel_size)
+    outside = 1.0 - shapely.contains_xy(grown, centres[:, 0], centres[:, 1]).mean()
+    if outside > FOOTPRINT_MISMATCH_SHARE:
+        warnings.warn(f"massing: the maximum volume's footprint does not match the voxel grid "
+                      f"({100 * outside:.0f}% of the occupied columns lie outside it); "
+                      f"using the voxel footprint", UserWarning, stacklevel=3)
+        return mg.footprint_from_columns(columns, voxel_size), "voxels"
+    return polygons, "mesh"
 
 
 def _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin_z, voxel_size):
@@ -77,8 +96,8 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     """Fourth stage: floor plates that follow the footprint, from the carved envelope.
 
     Floors are ``ground_floor_height`` then ``floor_height`` tall, counted
-    from the lowest point of the maximum volume.  The footprint (the base
-    outline of each body of the maximum volume) is split into faces, one per
+    from the lowest point of the maximum volume.  The footprint (the maximum
+    volume's plan projection) is split into faces, one per
     facade, and each face into bays ``min_plate_dimension`` wide, cut
     perpendicular to its facade.  A bay is built on a floor when it stays in
     the maximum volume over the floor's full height, at most
@@ -134,8 +153,13 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     xy = (cells_ij + 0.5) * vs
     polygons, footprint_source = _footprint(conf, origin, columns, vs)
     facades, corners = mg.split_facades(polygons)
-    faces = mg.assign_faces(xy, facades, corners, polygons, vs)
-    bay, _ = mg.cut_bays(faces, conf.min_plate_dimension, vs)
+    # A facade shorter than two bays (a chamfer, a small step) would get a
+    # face of at most one bay; its columns go to the neighbouring facades.
+    faces = mg.assign_faces(xy, facades, corners, polygons, vs,
+                            min_facade_length=2.0 * conf.min_plate_dimension)
+    bay, bay_face = mg.cut_bays(faces, conf.min_plate_dimension, vs)
+    bay_shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, polygons,
+                                 conf.min_plate_dimension, vs)
     n_cols = np.bincount(bay)
 
     layers = np.flatnonzero(occ.any(axis=(0, 1)))
@@ -156,7 +180,8 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
             outside = float((floor.outside_share[bays_in] * n_cols[bays_in]).sum()
                             / n_cols[bays_in].sum())
             for poly in mg.plate_polygons(cells_ij, in_plate, ~in_plate, vs, footprint,
-                                          min_dimension=conf.min_plate_dimension):
+                                          min_dimension=conf.min_plate_dimension,
+                                          bay=bay, bay_shapes=bay_shapes):
                 world = shapely.affinity.translate(poly, origin[0], origin[1])
                 plates.append({
                     "floor": n, "plate": count_this_floor,
