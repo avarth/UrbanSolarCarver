@@ -318,6 +318,29 @@ class UserConfig(BaseModel):
         ),
     )
 
+    # massing (floor plates; see docs/massing.md)
+    ground_floor_height: float = Field(
+        5.0, gt=0.0, description="Massing: height of the ground floor (m)")
+    floor_height: float = Field(
+        3.0, gt=0.0, description="Massing: height of every floor above the ground floor (m)")
+    min_plate_dimension: float = Field(
+        3.0, gt=0.0,
+        description="Massing: bay width, and the minimum width of any floor plate (m)")
+    plate_tolerance: float = Field(
+        0.2, ge=0.0, le=1.0,
+        description=(
+            "Massing: largest share (0-1) of a bay's volume on a floor that may lie "
+            "outside the carved envelope. Plates never leave the maximum volume."
+        ),
+    )
+    plate_stacking: Literal["supported", "free"] = Field(
+        "supported",
+        description=(
+            "Massing: 'supported' builds a bay on a floor only where it is built on the "
+            "floor below; 'free' decides each floor on its own."
+        ),
+    )
+
     # thresholding & classification
     threshold: Annotated[Optional[ThresholdSpec], BeforeValidator(_normalize_threshold)] = Field(
         None,

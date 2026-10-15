@@ -73,6 +73,14 @@ carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-
 # the weighted modes, off for time-based and tilted_plane; 90 = off.
 max_slope_deg: null
 
+# Massing (stage 4, see docs/massing.md): stacked floor plates that follow the
+# maximum volume's footprint, cut into bays perpendicular to the facades.
+ground_floor_height: 5.0          # m
+floor_height: 3.0                 # m, every floor above the ground floor
+min_plate_dimension: 3.0          # m, bay width and minimum plate width
+plate_tolerance: 0.2              # share of a bay's volume allowed outside the carved envelope
+plate_stacking: supported         # supported | free
+
 # Score smoothing (pre-threshold Gaussian blur on the score volume)
 # Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes.
 # null (default) = auto: 1.1× voxel_size, recommended for most runs.
