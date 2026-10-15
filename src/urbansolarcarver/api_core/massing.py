@@ -24,10 +24,16 @@ from .. import floor_plates as mg
 from ..io import load_mesh
 from ..load_config import user_config
 from ..pydantic_schemas import MassingManifest, schema_to_json
-from ._reporting import generate_run_report
-from ._util import _ensure_out_dir, _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
+from ._reporting import write_run_report
+from ._util import (
+    _ensure_out_dir, _resolve_cfg, ensure_diag, load_thresholded_grid,
+    remove_previous_stage_outputs, write_json,
+)
 
 log = logging.getLogger(__name__)
+
+# Everything massing writes into its folder, besides manifest.json.
+_MASSING_OUTPUTS = ("plates.json", "plates.obj", "diagnostics/diagnostic.json")
 
 # Share of occupied voxel columns allowed to lie more than one voxel outside
 # the mesh footprint before the footprint is taken as not matching the voxel
@@ -128,17 +134,24 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         One closed mesh per plate, named ``floor_<n>_plate_<m>``.
     ``manifest.json``, ``diagnostics/diagnostic.json``, ``run_report.md``
         The report goes to the parent folder when *out_dir* is named
-        ``massing``, otherwise into *out_dir*.
+        ``massing``, otherwise into *out_dir*; it keeps an Export section
+        when the run's exporting folder was built from the same
+        thresholding run.  The outputs of an earlier run in *out_dir* are
+        deleted first and the manifest is written last.
 
     Raises
     ------
     ValueError
         If a manifest cannot be read, or a massing size is smaller than the
         preprocessing run's voxel size.
+    UpstreamMismatchError
+        If preprocessing was re-run after the thresholding run (a
+        ValueError).
     """
     t0_wall, t0_cpu = time.perf_counter(), time.process_time()
     conf = _resolve_cfg(cfg)
     out_path = _ensure_out_dir(out_dir, "massing")
+    remove_previous_stage_outputs(out_path, _MASSING_OUTPUTS)
     chain = load_thresholded_grid(threshold_manifest, conf)
     vs, origin = chain.voxel_size, chain.origin
     for name in ("min_plate_dimension", "ground_floor_height", "floor_height"):
@@ -198,9 +211,8 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         floor_areas.append(area_this_floor)
     total = float(sum(floor_areas))
 
-    plates_path = out_path / "plates.json"
-    plates_path.write_text(json.dumps({"plates": plates, "floor_area_m2_per_floor": floor_areas,
-                                       "total_floor_area_m2": total}, indent=1), encoding="utf-8")
+    # The mesh first: plates.json, which clients read for the results, then
+    # appears only once the mesh beside it was written.
     mesh_path = out_path / "plates.obj"
     if meshes:
         import trimesh
@@ -212,17 +224,13 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         mesh_path.write_text("", encoding="utf-8")
         warnings.warn("massing: no floor plates fit the envelope with these settings",
                       UserWarning, stacklevel=2)
+    plates_path = out_path / "plates.json"
+    plates_path.write_text(json.dumps({"plates": plates, "floor_area_m2_per_floor": floor_areas,
+                                       "total_floor_area_m2": total}, indent=1), encoding="utf-8")
 
     settings = {k: getattr(conf, k) for k in ("ground_floor_height", "floor_height",
                                               "min_plate_dimension", "plate_tolerance",
                                               "plate_stacking")}
-    upstream = chain.thr_manifest.hash
-    stage_hash = hashlib.sha256((json.dumps(settings, sort_keys=True) + upstream).encode()).hexdigest()[:8]
-    manifest = MassingManifest(hash=stage_hash, plates_path=str(plates_path),
-                               mesh_path=str(mesh_path), upstream_manifest=str(chain.thr_path),
-                               upstream_hash=upstream)
-    (out_path / "manifest.json").write_text(schema_to_json(manifest), encoding="utf-8")
-
     plate_volume = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) for q in plates)
     inside = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) * (1.0 - q["outside_share"]) for q in plates)
     envelope = float(kept.sum()) * vs ** 3
@@ -236,15 +244,16 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         "timings": {"wall_seconds": float(time.perf_counter() - t0_wall),
                     "cpu_seconds": float(time.process_time() - t0_cpu)},
     })
-    # The report goes to the run folder in the standard <run>/massing layout,
-    # otherwise next to the plates; an old report is removed first.
-    report_root = out_path.parent if out_path.name == "massing" else out_path
-    (report_root / "run_report.md").unlink(missing_ok=True)
-    try:
-        generate_run_report(report_root, chain.pre_path.parent, chain.thr_path.parent,
-                            report_root / "exporting", conf, massing_dir=out_path)
-    except Exception as exc:
-        log.warning("Could not generate run report: %s", exc)
+    upstream = chain.thr_manifest.hash
+    write_run_report("massing", out_path, chain.pre_path.parent, chain.thr_path.parent,
+                     upstream, conf)
+
+    stage_hash = hashlib.sha256((json.dumps(settings, sort_keys=True) + upstream).encode()).hexdigest()[:8]
+    manifest = MassingManifest(hash=stage_hash, plates_path=str(plates_path),
+                               mesh_path=str(mesh_path), upstream_manifest=str(chain.thr_path),
+                               upstream_hash=upstream)
+    # Manifest last (see remove_previous_stage_outputs at the start).
+    (out_path / "manifest.json").write_text(schema_to_json(manifest), encoding="utf-8")
 
     return MassingResult(out_dir=out_path, plates_path=plates_path, mesh_path=mesh_path,
                          floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates))

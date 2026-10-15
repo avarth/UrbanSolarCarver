@@ -1,8 +1,9 @@
 """Run-report generation and grid memory estimation.
 
-Used by the exporting stage (run report) and by
+Used by the exporting and massing stages (run report) and by
 ``urbansolarcarver preprocessing --dry-run`` (memory estimate).
 """
+import logging
 from pathlib import Path
 from typing import Union
 
@@ -10,6 +11,11 @@ import json
 
 from ..load_config import user_config
 from ..mode_registry import MODES_NEEDING_EPW
+
+log = logging.getLogger(__name__)
+
+# Stages that read the thresholding output and add a section to the report.
+_REPORTED_LEAF_STAGES = ("exporting", "massing")
 
 
 def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float = 0.01) -> dict:
@@ -41,12 +47,51 @@ def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float =
     return {"grid_dims": (resolution,) * 3, "total_voxels": total, "memory_mb": mem_mb, "warning": warning}
 
 
+def write_run_report(stage: str, stage_out_path: Path, pre_dir: Path, thr_dir: Path,
+                     thresholding_hash: str, conf: user_config):
+    """Write ``run_report.md`` at the end of the exporting or massing *stage*.
+
+    The report goes to the run folder in the standard ``<run>/<stage>``
+    layout, otherwise into *stage_out_path*.  Besides the finishing stage,
+    it has a section for the other one (exporting or massing) when that
+    stage's folder in the run folder holds a manifest built from the same
+    thresholding run (*thresholding_hash*); a section of an earlier
+    thresholding run is left out.  The old report is removed first, so a
+    failed regeneration leaves none instead of stale numbers; a failure is
+    logged, not raised.  Returns the report path, or None.
+    """
+    report_folder = stage_out_path.parent if stage_out_path.name == stage else stage_out_path
+    (report_folder / "run_report.md").unlink(missing_ok=True)
+    leaf_stage_dirs = {name: _leaf_stage_dir(report_folder / name, thresholding_hash)
+                       for name in _REPORTED_LEAF_STAGES if name != stage}
+    leaf_stage_dirs[stage] = stage_out_path
+    try:
+        return generate_run_report(report_folder, pre_dir, thr_dir, conf,
+                                   exporting_dir=leaf_stage_dirs["exporting"],
+                                   massing_dir=leaf_stage_dirs["massing"])
+    except Exception as exc:
+        log.warning("Could not generate run report: %s", exc)
+        return None
+
+
+def _leaf_stage_dir(stage_dir: Path, thresholding_hash: str):
+    """*stage_dir* if its manifest was built from the given thresholding run, else None."""
+    manifest_path = stage_dir / "manifest.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        upstream_hash = json.loads(manifest_path.read_text(encoding="utf-8")).get("upstream_hash")
+    except (OSError, ValueError):
+        return None
+    return stage_dir if upstream_hash == thresholding_hash else None
+
+
 def generate_run_report(
     out_dir: Union[str, Path],
     pre_dir: Union[str, Path],
     thr_dir: Union[str, Path],
-    exp_dir: Union[str, Path],
     conf: user_config,
+    exporting_dir: Union[str, Path, None] = None,
     massing_dir: Union[str, Path, None] = None,
 ) -> Path:
     """Compile a human-readable run report from the stage diagnostics.
@@ -54,7 +99,8 @@ def generate_run_report(
     Reads ``diagnostics/diagnostic.json`` from each stage directory (a
     missing file leaves that section empty), takes the configuration table
     from *conf*, and writes a single ``run_report.md`` into *out_dir*.  The
-    Massing section is added when *massing_dir* is given.
+    Export and Massing sections are added when *exporting_dir* and
+    *massing_dir* are given.
 
     Returns the path to the written report.
     """
@@ -165,25 +211,27 @@ def generate_run_report(
     lines.append("")
 
     # --- Exporting ---
-    exp_summary, exp_timing = _load_diag(exp_dir)
-    lines.append("## Export\n")
-    if exp_summary:
-        _mesh_path = exp_summary.get('mesh_path', '\u2014')
-        lines.append(f"- **Output mesh:** `{_mesh_path}`")
-        lines.append(f"- **Vertices:** {exp_summary.get('vertices') or 0:,}")
-        lines.append(f"- **Triangles:** {exp_summary.get('triangles') or 0:,}")
-        vol = exp_summary.get("mesh_volume_m3")
-        if vol is not None:
-            lines.append(f"- **Mesh volume:** {vol:,.1f} m\u00b3")
-        bbox = exp_summary.get("bbox_dimensions_m")
-        if bbox:
-            lines.append(f"- **Bounding box:** {bbox[0]:.1f} \u00d7 {bbox[1]:.1f} \u00d7 {bbox[2]:.1f} m")
-        ret = exp_summary.get("voxel_retention_pct")
-        if ret is not None:
-            lines.append(f"- **Voxel retention:** {ret:.1f}%")
-    if exp_timing:
-        lines.append(f"- **Time:** {exp_timing.get('wall_seconds', 0):.1f}s")
-    lines.append("")
+    exp_timing = {}
+    if exporting_dir is not None:
+        exp_summary, exp_timing = _load_diag(exporting_dir)
+        lines.append("## Export\n")
+        if exp_summary:
+            _mesh_path = exp_summary.get('mesh_path', '\u2014')
+            lines.append(f"- **Output mesh:** `{_mesh_path}`")
+            lines.append(f"- **Vertices:** {exp_summary.get('vertices') or 0:,}")
+            lines.append(f"- **Triangles:** {exp_summary.get('triangles') or 0:,}")
+            vol = exp_summary.get("mesh_volume_m3")
+            if vol is not None:
+                lines.append(f"- **Mesh volume:** {vol:,.1f} m\u00b3")
+            bbox = exp_summary.get("bbox_dimensions_m")
+            if bbox:
+                lines.append(f"- **Bounding box:** {bbox[0]:.1f} \u00d7 {bbox[1]:.1f} \u00d7 {bbox[2]:.1f} m")
+            ret = exp_summary.get("voxel_retention_pct")
+            if ret is not None:
+                lines.append(f"- **Voxel retention:** {ret:.1f}%")
+        if exp_timing:
+            lines.append(f"- **Time:** {exp_timing.get('wall_seconds', 0):.1f}s")
+        lines.append("")
 
     # --- Massing ---
     m_timing = {}

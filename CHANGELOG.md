@@ -41,6 +41,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (`check_voxel_grid_budget`, limit `MAX_GRID_VOXELS`) before anything is
   allocated; `voxelize_mesh` and the `--dry-run` estimate use it, and a
   client can call it to validate a request without importing torch.
+- **Stale outputs survived repeated and failed runs.** Exporting wrote no
+  manifest and deleted nothing, so changing `final_mesh_format` left the
+  old `export.ply` beside the new file; thresholding wrote its manifest
+  before its diagnostics; massing kept its old manifest and wrote
+  `plates.json` before `plates.obj`; and exporting and massing each
+  rewrote `run_report.md` with only their own leaf section, so running
+  one dropped the other's. Every stage now deletes its manifest and the
+  outputs of its previous run first (`remove_previous_stage_outputs`, only
+  the file names the stage writes) and writes its manifest last. Exporting
+  writes an `ExportingManifest` with `upstream_hash`. The run report keeps
+  the Export and Massing sections whose manifests were built from the
+  same thresholding run and leaves out sections of an earlier one.
 
 ### Changed (weighted modes; results change)
 

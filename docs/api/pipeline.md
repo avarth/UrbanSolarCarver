@@ -1,6 +1,6 @@
 # Pipeline
 
-USC runs in three stages: preprocessing, thresholding, exporting. Preprocessing and thresholding each write a manifest that the next stage reads, so you can re-run thresholding with different parameters without recomputing scores.
+USC runs in three stages: preprocessing, thresholding, exporting, with massing as an optional fourth that reads the thresholding output like exporting. Each stage writes a manifest, last, after all its other outputs; the next stage reads it, so you can re-run thresholding with different parameters without recomputing scores. Every manifest after preprocessing records the hash of the manifest it was built from (`upstream_hash`), and a stage refuses an upstream that has changed since (`UpstreamMismatchError`). A stage first deletes the manifest and the outputs of its previous run in its folder, so a failed run leaves no manifest.
 
 `run_pipeline()` chains all three stages in one call. For finer control, call each stage individually.
 
@@ -44,7 +44,7 @@ Converts the score array into a binary carving mask: optional score smoothing, t
 
 ## Exporting
 
-Reconstructs a triangle mesh from the binary mask, either as cubic voxel faces or as SDF-smoothed marching cubes with Taubin polishing. Writes `export.<format>` (`ply` by default, set by `final_mesh_format`) and the run's `run_report.md`.
+Reconstructs a triangle mesh from the binary mask, either as cubic voxel faces or as SDF-smoothed marching cubes with Taubin polishing. Writes `export.<format>` (`ply` by default, set by `final_mesh_format`), `manifest.json` and diagnostics, and the run's `run_report.md`. The report has a Massing section too when the run's massing folder was built from the same thresholding run.
 
 ::: urbansolarcarver.api_core.exporting
     options:

@@ -16,8 +16,16 @@ from ..pydantic_schemas import (
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..carving import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
-from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy
+from ._util import (
+    _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy,
+    remove_previous_stage_outputs,
+)
 from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
+
+# Everything thresholding writes into its folder, besides manifest.json.
+_THRESHOLDING_OUTPUTS = (
+    "mask.npy", "diagnostics/diagnostic.json", "diagnostics/threshold_histogram.png",
+)
 
 @dataclass(frozen=True)
 class ThresholdingResult:
@@ -222,7 +230,9 @@ def thresholding(
         3-D Boolean array (same shape as the voxel grid), True = keep.
     ``manifest.json``
         ``ThresholdingManifest`` recording the stage hash, the mask path and
-        the path of the upstream preprocessing manifest.
+        the path and hash of the upstream preprocessing manifest.  The
+        outputs of an earlier run in *out_dir* are deleted first and the
+        manifest is written last, after the diagnostics.
     ``diagnostics/``
         ``diagnostic.json`` (resolved threshold, voxel retention, smoothing
         and carve_above statistics, wall/CPU timings) and, with
@@ -242,7 +252,7 @@ def thresholding(
     t0_cpu = time.process_time()
     conf = _resolve_cfg(cfg)
     out_path = _ensure_out_dir(out_dir, "thresholding")
-    (out_path / "manifest.json").unlink(missing_ok=True)  # written last; see preprocessing
+    remove_previous_stage_outputs(out_path, _THRESHOLDING_OUTPUTS)
 
     # Resolve upstream manifest.
     if isinstance(volume, (str, Path)):
@@ -368,15 +378,6 @@ def thresholding(
     }
     stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
 
-    # Manifest.
-    tm = ThresholdingManifest(
-        hash=stage_hash,
-        mask_path=str(mask_path),
-        upstream_manifest=str(pre_manifest_path),
-        upstream_hash=upstream_hash,
-    )
-    (out_path / "manifest.json").write_text(schema_to_json(tm), encoding="utf-8")
-
     # Per-stage diagnostics
     diag_dir = ensure_diag(out_path)
     nn = occ_scores
@@ -449,6 +450,15 @@ def thresholding(
         "cpu_seconds": float(time.process_time() - t0_cpu),
     }
     write_json(diag_dir, "diagnostic.json", summary)
+
+    # Manifest last (see remove_previous_stage_outputs at the start).
+    tm = ThresholdingManifest(
+        hash=stage_hash,
+        mask_path=str(mask_path),
+        upstream_manifest=str(pre_manifest_path),
+        upstream_hash=upstream_hash,
+    )
+    (out_path / "manifest.json").write_text(schema_to_json(tm), encoding="utf-8")
 
     return ThresholdingResult(
         out_dir=out_path,

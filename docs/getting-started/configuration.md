@@ -188,7 +188,7 @@ outputs/
   thresholding/
     mask.npy, manifest.json, diagnostics/
   exporting/
-    export.ply (or .obj/.stl/.glb), diagnostics/
+    export.ply (or .obj/.stl/.glb), manifest.json, diagnostics/
   run_report.md
 ```
 

@@ -28,6 +28,21 @@ def _ensure_out_dir(out_dir: Union[str, Path], stage: str) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     return path
 
+def remove_previous_stage_outputs(out_path: Path, output_names) -> None:
+    """Delete the manifest and the outputs of an earlier run of a stage in *out_path*.
+
+    *output_names* are the paths, relative to *out_path*, that the stage
+    writes (diagnostics included).  The manifest goes first and each stage
+    writes it last, so a run that fails midway leaves no manifest, and an
+    output the new run does not write (another mesh format, a plot that is
+    now off) does not survive beside the new ones.  Only these names are
+    deleted; other files in *out_path* are left alone.
+    """
+    (out_path / "manifest.json").unlink(missing_ok=True)
+    for name in output_names:
+        (out_path / name).unlink(missing_ok=True)
+
+
 def ensure_diag(base_out_dir: Union[str, Path]) -> Path:
     """Return <base_out_dir>/diagnostics/ path and ensure it exists."""
     p = Path(base_out_dir) / "diagnostics"

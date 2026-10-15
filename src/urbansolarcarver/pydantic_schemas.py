@@ -682,6 +682,14 @@ class ThresholdingManifest(BaseModel):
     upstream_manifest: str
     upstream_hash: str
 
+class ExportingManifest(BaseModel):
+    """Manifest written by exporting."""
+
+    hash: str
+    mesh_path: str
+    upstream_manifest: str
+    upstream_hash: str
+
 class MassingManifest(BaseModel):
     """Manifest written by massing."""
 

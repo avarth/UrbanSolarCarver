@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Tuple, Union
 import numpy as np
 from ..load_config import user_config
-from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, device_summary, dump_config_snapshot
+from ._util import (
+    _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, device_summary,
+    dump_config_snapshot, remove_previous_stage_outputs,
+)
 from ._diagnostics import (
     save_sky_patch_weights, save_sky_patch_comparison, save_histogram,
     score_statistics, warn_score_anomalies,
@@ -17,6 +20,15 @@ from ..carving import (
 )
 from ..grid import voxelize, sample_surface
 from ..mode_registry import MODES, MODES_NEEDING_PERIOD
+
+# Everything preprocessing writes into its folder, besides manifest.json.
+_PREPROCESSING_OUTPUTS = (
+    "scores.npy", "voxel_grid.npy", "patch_weights.npy", "test_points.npy",
+    "test_normals.npy", "analysis_mesh.json",
+    "diagnostics/diagnostic.json", "diagnostics/config_snapshot.json",
+    "diagnostics/score_histogram.png", "diagnostics/sky_patch_weights.png",
+    "diagnostics/sky_patch_weights_intensity.png", "diagnostics/sky_patch_comparison.png",
+)
 
 @dataclass(frozen=True)
 class PreprocessingResult:
@@ -218,7 +230,7 @@ def preprocessing(
     out_path = _ensure_out_dir(out_dir, "preprocessing")
     # A run that fails midway must not leave the previous manifest pointing
     # at half-overwritten arrays: the manifest is written last.
-    (out_path / "manifest.json").unlink(missing_ok=True)
+    remove_previous_stage_outputs(out_path, _PREPROCESSING_OUTPUTS)
 
     full_cfg = conf.model_dump()
     stage_hash = hashlib.sha256(json.dumps(full_cfg, sort_keys=True).encode()).hexdigest()[:8]
@@ -424,7 +436,7 @@ def preprocessing(
         "steps": {k: round(v, 3) for k, v in _step_times.items()},
     }
     write_json(diag_dir, "diagnostic.json", summary)
-    # Manifest last (see the unlink at the start of this function).
+    # Manifest last (see remove_previous_stage_outputs at the start).
     (out_path / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
     return PreprocessingResult(

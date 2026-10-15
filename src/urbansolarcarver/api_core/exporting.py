@@ -7,6 +7,7 @@ pipeline stage.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
@@ -17,12 +18,23 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 from ..load_config import user_config
-from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, load_thresholded_grid
-from ._reporting import generate_run_report
-from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest, schema_from_json
+from ._util import (
+    _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device,
+    load_thresholded_grid, remove_previous_stage_outputs,
+)
+from ._reporting import write_run_report
+from ..pydantic_schemas import ExportingManifest, schema_to_json
 from ..io import save_mesh
 from ..grid import finalize_mesh
 import time
+
+# Everything exporting writes into its folder, besides manifest.json; every
+# mesh format is listed so that a change of final_mesh_format leaves no
+# export of the earlier format behind.
+_EXPORTING_OUTPUTS = (
+    "export.ply", "export.obj", "export.stl", "export.glb",
+    "diagnostics/diagnostic.json",
+)
 
 @dataclass(frozen=True)
 class ExportingResult:
@@ -99,14 +111,24 @@ def exporting(
         Mesh statistics (vertex/face counts, watertightness, volume, bounding
         box), voxel retention percentage, and wall/CPU timings.
     ``run_report.md``
-        Markdown summary of all three stages, written to the parent folder
-        when *out_dir* is named ``exporting``, otherwise into *out_dir*.
+        Markdown summary of the stages, written to the parent folder when
+        *out_dir* is named ``exporting``, otherwise into *out_dir*; it keeps
+        a Massing section when the run's massing folder was built from the
+        same thresholding run.
+    ``manifest.json``
+        ``ExportingManifest`` with the stage hash, the mesh path and the
+        thresholding manifest's path and hash.  The outputs of an earlier
+        run in *out_dir* (any mesh format) are deleted first and the
+        manifest is written last, so a failed run leaves no manifest.
 
     Raises
     ------
     ValueError
         If a manifest cannot be read or the mask does not match the grid
         shape.
+    UpstreamMismatchError
+        If preprocessing was re-run after the thresholding run (a
+        ValueError).
     FileNotFoundError
         If the mask file named in the thresholding manifest is missing.
     """
@@ -114,6 +136,7 @@ def exporting(
     _t0_cpu = time.process_time()
     conf = _resolve_cfg(cfg)
     out_path = _ensure_out_dir(out_dir, "exporting")
+    remove_previous_stage_outputs(out_path, _EXPORTING_OUTPUTS)
 
     chain = load_thresholded_grid(threshold_manifest, conf)
     thr_path, thr_manifest, pre_manifest = chain.thr_path, chain.thr_manifest, chain.pre_manifest
@@ -198,18 +221,17 @@ def exporting(
     }
     write_json(diag_dir, "diagnostic.json", diagnostic)
 
-    # Generate consolidated run report from all three stages.
-    pre_dir = Path(thr_manifest.upstream_manifest).parent
-    thr_dir = thr_path.parent
-    # The report goes to the run folder in the standard <run>/exporting
-    # layout, otherwise next to the export. An old report is removed first
-    # so a failed regeneration cannot leave stale numbers behind.
-    report_root = out_path.parent if out_path.name == "exporting" else out_path
-    (report_root / "run_report.md").unlink(missing_ok=True)
-    try:
-        generate_run_report(report_root, pre_dir, thr_dir, out_path, conf)
-    except Exception as exc:
-        log.warning("Could not generate run report: %s", exc)
+    write_run_report("exporting", out_path, chain.pre_path.parent, thr_path.parent,
+                     thr_manifest.hash, conf)
+
+    settings = {k: getattr(conf, k) for k in ("final_mesh_format", "apply_smoothing", "min_voxels",
+                                              "min_face_count", "smooth_iters")}
+    stage_hash = hashlib.sha256(
+        (json.dumps(settings, sort_keys=True) + thr_manifest.hash).encode()).hexdigest()[:8]
+    manifest = ExportingManifest(hash=stage_hash, mesh_path=str(export_path),
+                                 upstream_manifest=str(thr_path), upstream_hash=thr_manifest.hash)
+    # Manifest last (see remove_previous_stage_outputs at the start).
+    (out_path / "manifest.json").write_text(schema_to_json(manifest), encoding="utf-8")
 
     return ExportingResult(
         out_dir=out_path,
