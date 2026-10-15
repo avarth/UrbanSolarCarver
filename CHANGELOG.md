@@ -32,6 +32,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
   voxels differently, and the session cache (the daemon keeps one for its
   lifetime) kept that grid for the geometry. The error now propagates;
   trimesh is used only when Warp cannot run on the device at all.
+- **The grid size limit was checked after the grid was allocated.**
+  `voxelize_mesh` only logged above 500 million voxels and refused more
+  than 4096 per side; preprocessing raised at 500 million only after the
+  Warp voxelizer had allocated its 8 bytes per voxel. The new
+  `urbansolarcarver.grid_planning` module (numpy only) plans the grid from
+  the mesh bounds (`plan_voxel_grid`) and checks it
+  (`check_voxel_grid_budget`, limit `MAX_GRID_VOXELS`) before anything is
+  allocated; `voxelize_mesh` and the `--dry-run` estimate use it, and a
+  client can call it to validate a request without importing torch.
 
 ### Changed (weighted modes; results change)
 

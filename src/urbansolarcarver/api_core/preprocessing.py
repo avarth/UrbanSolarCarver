@@ -178,9 +178,10 @@ def preprocessing(
     FileNotFoundError
         If the mesh or required EPW file is missing.
     ValueError
-        If the grid is too large (more than 4096 voxels per side or
-        500,000,000 in total) or, in radiative_cooling mode, the test
-        surfaces do not face up.
+        If the grid is too large (more than
+        ``grid_planning.MAX_GRID_VOXELS``, 500,000,000, checked before it is
+        allocated) or, in radiative_cooling mode, the test surfaces do not
+        face up.
     RuntimeError
         If the voxel grid is empty or no test-surface points are sampled.
 
@@ -242,14 +243,10 @@ def preprocessing(
     mesh_insol.vertices = np.round(mesh_insol.vertices - frame, 6)
     _mark("load_meshes")
 
+    # voxelize checks the grid size against grid_planning.MAX_GRID_VOXELS
+    # before allocating anything.
     voxel_grid, origin, extent, resolution = voxelize(mesh_env, conf, device=resolved_device)
     _mark("voxelize")
-    total_voxels = int(np.prod(voxel_grid.shape))
-    if total_voxels > 500_000_000:
-        raise ValueError(
-            f"Voxel grid has {total_voxels:,} voxels, too many to score in memory. "
-            f"Increase voxel_size (currently {conf.voxel_size}m) or reduce geometry extent."
-        )
     pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, conf)
     _mark("sample_surface")
     if pts.shape[0] == 0:

@@ -135,6 +135,7 @@ from shapely import contains_xy
 import trimesh
 from trimesh import repair
 from urbansolarcarver.session import session_cache
+from urbansolarcarver.grid_planning import check_voxel_grid_budget, plan_voxel_grid
 
 from .load_config import user_config
 
@@ -923,7 +924,9 @@ def voxelize_mesh(
     Raises
     ------
     ValueError
-        If voxel_size <= 0, margin_frac < 0, or D exceeds 4096.
+        If voxel_size <= 0, margin_frac < 0, or the grid would have more
+        than ``grid_planning.MAX_GRID_VOXELS`` voxels (checked before
+        anything is allocated).
     RuntimeError
         If the Warp voxelizer fails (for example out of memory), or the
         trimesh voxelization fails.
@@ -941,32 +944,11 @@ def voxelize_mesh(
     if device is None:
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    if voxel_size <= 0 or margin_frac < 0:
-        raise ValueError("voxelize_mesh: invalid voxel_size or margin_frac")
-
-    bmin, bmax = mesh.bounds
-    bbox = bmax - bmin
-    max_dim = float(np.max(bbox))
-    margin = max_dim * margin_frac
-    side = max_dim + 2*margin
-    resolution = int(np.ceil(side / voxel_size))
-    _MAX_RES = 4096  # per-axis cap; the 500M-voxel check below only logs a warning
-    if resolution > _MAX_RES:
-        raise ValueError(
-            f"Grid resolution {resolution} exceeds per-axis limit {_MAX_RES} "
-            f"(domain {side:.1f} m / voxel {voxel_size:g} m). Increase voxel_size."
-        )
-    total_voxels = resolution ** 3
-    if total_voxels > 500_000_000:
-        mem_est_gb = total_voxels * 5 / (1024**3)
-        _log.warning(
-            "Large grid: %d³ = %s voxels (~%.1f GB). "
-            "Consider increasing voxel_size for faster iteration.",
-            resolution, f"{total_voxels:,}", mem_est_gb,
-        )
-    grid_extent  = resolution * voxel_size
-    center = (bmin + bmax) / 2.0
-    origin = center - grid_extent/2.0
+    # Size the grid and check it against the budget before anything is
+    # allocated (the Warp voxelizer alone needs 8 bytes per voxel).
+    plan = plan_voxel_grid(mesh.bounds, voxel_size, margin_frac)
+    check_voxel_grid_budget(plan)
+    resolution, grid_extent, origin = plan.resolution, plan.extent, plan.origin
 
     # --- Rasterize: Warp parity voxelizer (CUDA or Warp CPU), or the
     # trimesh rasterize-and-fill path when Warp cannot run on *device*.

@@ -8,8 +8,6 @@ from typing import Union
 
 import json
 
-import numpy as np
-
 from ..load_config import user_config
 from ..mode_registry import MODES_NEEDING_EPW
 
@@ -17,35 +15,30 @@ from ..mode_registry import MODES_NEEDING_EPW
 def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float = 0.01) -> dict:
     """Estimate voxel grid dimensions and memory without running the full pipeline.
 
-    Mirrors :func:`~urbansolarcarver.grid.voxelize_mesh`, which always builds
-    a cubic grid sized to the largest bounding-box side plus margin.
+    Plans the grid with :func:`~urbansolarcarver.grid_planning.plan_voxel_grid`,
+    the same function :func:`~urbansolarcarver.grid.voxelize_mesh` uses.
 
     Returns dict with keys: grid_dims, total_voxels, memory_mb, warning.
     """
     import trimesh
+    from ..grid_planning import check_voxel_grid_budget, plan_voxel_grid
     mesh = trimesh.load(mesh_path, force='mesh')
-    bbox = mesh.bounds
-    span = bbox[1] - bbox[0]
-    max_dim = float(span.max())
-    side = max_dim + 2 * max_dim * margin_frac
-    resolution = int(np.ceil(side / voxel_size))
-    dims = (resolution, resolution, resolution)
-    total = resolution ** 3
+    plan = plan_voxel_grid(mesh.bounds, voxel_size, margin_frac)
+    resolution, total = plan.resolution, plan.total_voxels
     # 4 bytes (float32 score) + 1 byte (uint8 occupancy) per voxel
     mem_mb = total * 5 / (1024**2)
     warning = None
-    if total > 500_000_000:
-        warning = (
-            f"Grid would contain {total:,} voxels ({mem_mb:,.0f} MB). "
-            f"Preprocessing refuses grids above 500,000,000 voxels. Increase voxel_size "
-            f"(currently {voxel_size}m) or reducing the mesh bounding box."
-        )
-    elif total > 50_000_000:
-        warning = (
-            f"Grid contains {total:,} voxels ({mem_mb:,.0f} MB). "
-            f"This is large and may be slow. Consider voxel_size > {voxel_size}m for faster iteration."
-        )
-    return {"grid_dims": dims, "total_voxels": total, "memory_mb": mem_mb, "warning": warning}
+    try:
+        check_voxel_grid_budget(plan)
+    except ValueError as exc:
+        warning = f"{exc} Preprocessing refuses this grid."
+    else:
+        if total > 50_000_000:
+            warning = (
+                f"Grid contains {total:,} voxels ({mem_mb:,.0f} MB). "
+                f"This is large and may be slow. Consider voxel_size > {voxel_size}m for faster iteration."
+            )
+    return {"grid_dims": (resolution,) * 3, "total_voxels": total, "memory_mb": mem_mb, "warning": warning}
 
 
 def generate_run_report(
