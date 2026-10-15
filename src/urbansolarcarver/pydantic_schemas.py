@@ -673,6 +673,8 @@ class PreprocessingManifest(BaseModel):
     mode: Optional[str] = None
     patch_weights_path: Optional[str] = None
     sample_point_count: Optional[int] = None
+    # The maximum volume mesh this run voxelized; massing reads its footprint.
+    max_volume_path: Optional[str] = None
 
 class ThresholdingManifest(BaseModel):
     """Manifest written by thresholding, read by exporting."""

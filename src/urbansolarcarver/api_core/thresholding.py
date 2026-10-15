@@ -299,7 +299,7 @@ def thresholding(
     # score mass can sit there, so every statistic below is taken over the
     # building alone; otherwise carve_fraction/headtail would depend on how
     # much air the grid happens to contain.
-    occ = load_occupancy(pre_manifest, conf)
+    occ = load_occupancy(pre_manifest)
 
     raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
         raw, kind, pre_manifest.voxel_size, conf.score_smoothing, occ=occ

@@ -9,7 +9,6 @@ from typing import Union
 
 import json
 
-from ..load_config import user_config
 from ..mode_registry import MODES_NEEDING_EPW
 
 log = logging.getLogger(__name__)
@@ -48,7 +47,7 @@ def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float =
 
 
 def write_run_report(stage: str, stage_out_path: Path, pre_dir: Path, thr_dir: Path,
-                     thresholding_hash: str, conf: user_config):
+                     thresholding_hash: str):
     """Write ``run_report.md`` at the end of the exporting or massing *stage*.
 
     The report goes to the run folder in the standard ``<run>/<stage>``
@@ -66,7 +65,7 @@ def write_run_report(stage: str, stage_out_path: Path, pre_dir: Path, thr_dir: P
                        for name in _REPORTED_LEAF_STAGES if name != stage}
     leaf_stage_dirs[stage] = stage_out_path
     try:
-        return generate_run_report(report_folder, pre_dir, thr_dir, conf,
+        return generate_run_report(report_folder, pre_dir, thr_dir,
                                    exporting_dir=leaf_stage_dirs["exporting"],
                                    massing_dir=leaf_stage_dirs["massing"])
     except Exception as exc:
@@ -90,7 +89,6 @@ def generate_run_report(
     out_dir: Union[str, Path],
     pre_dir: Union[str, Path],
     thr_dir: Union[str, Path],
-    conf: user_config,
     exporting_dir: Union[str, Path, None] = None,
     massing_dir: Union[str, Path, None] = None,
 ) -> Path:
@@ -98,7 +96,9 @@ def generate_run_report(
 
     Reads ``diagnostics/diagnostic.json`` from each stage directory (a
     missing file leaves that section empty), takes the configuration table
-    from *conf*, and writes a single ``run_report.md`` into *out_dir*.  The
+    from the config snapshot preprocessing saved (the settings the run
+    used, not a config passed to a later stage), and writes a single
+    ``run_report.md`` into *out_dir*.  The
     Export and Massing sections are added when *exporting_dir* and
     *massing_dir* are given.
 
@@ -109,36 +109,6 @@ def generate_run_report(
     lines = []
     lines.append("# UrbanSolarCarver run report")
     lines.append(f"\n*Generated {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*\n")
-
-    # --- Configuration overview ---
-    lines.append("## Configuration\n")
-    lines.append("| Parameter | Value |")
-    lines.append("|-----------|-------|")
-    cfg_items = [
-        ("Mode", conf.mode),
-        ("Voxel size", f"{conf.voxel_size} m"),
-        ("Grid step", f"{conf.grid_step} m"),
-        ("Ray length", f"{conf.ray_length} m"),
-        ("Min altitude", f"{conf.min_altitude}\u00b0"),
-        ("Device", conf.device),
-        ("Smoothing", conf.apply_smoothing),
-        ("Output format", conf.final_mesh_format),
-    ]
-    if conf.mode in MODES_NEEDING_EPW:
-        cfg_items.append(("EPW", conf.epw_path or "\u2014"))
-        if conf.start_month is not None:
-            period = (f"{conf.start_month}/{conf.start_day} {conf.start_hour}:00 \u2192 "
-                      f"{conf.end_month}/{conf.end_day} {conf.end_hour}:00")
-            cfg_items.append(("Analysis period", period))
-    if conf.mode == "benefit":
-        cfg_items.append(("Balance temperature", f"{conf.balance_temperature}\u00b0C"))
-        cfg_items.append(("Balance offset", f"\u00b1{conf.balance_offset}\u00b0C"))
-    if conf.mode == "radiative_cooling":
-        cfg_items.append(("Dew point", f"{conf.dew_point_celsius}\u00b0C"))
-        cfg_items.append(("Bliss k", conf.bliss_k))
-    for label, val in cfg_items:
-        lines.append(f"| {label} | {val} |")
-    lines.append("")
 
     # --- Helper to load JSON safely ---
     def _load(stage_dir, subpath):
@@ -152,6 +122,39 @@ def generate_run_report(
         """Return (diagnostics, timings) for one stage; empty dicts if missing."""
         diag = _load(stage_dir, "diagnostics/diagnostic.json")
         return diag, diag.get("timings", {})
+
+    # --- Configuration overview: the settings preprocessing ran with ---
+    lines.append("## Configuration\n")
+    run_cfg = _load(pre_dir, "diagnostics/config_snapshot.json")
+    if run_cfg:
+        lines.append("| Parameter | Value |")
+        lines.append("|-----------|-------|")
+        mode = run_cfg.get("mode")
+        cfg_items = [
+            ("Mode", mode),
+            ("Voxel size", f"{run_cfg.get('voxel_size')} m"),
+            ("Grid step", f"{run_cfg.get('grid_step')} m"),
+            ("Ray length", f"{run_cfg.get('ray_length')} m"),
+            ("Min altitude", f"{run_cfg.get('min_altitude')}\u00b0"),
+            ("Device", run_cfg.get("device")),
+        ]
+        if mode in MODES_NEEDING_EPW:
+            cfg_items.append(("EPW", run_cfg.get("epw_path") or "\u2014"))
+            if run_cfg.get("start_month") is not None:
+                period = (f"{run_cfg['start_month']}/{run_cfg['start_day']} {run_cfg['start_hour']}:00 \u2192 "
+                          f"{run_cfg['end_month']}/{run_cfg['end_day']} {run_cfg['end_hour']}:00")
+                cfg_items.append(("Analysis period", period))
+        if mode == "benefit":
+            cfg_items.append(("Balance temperature", f"{run_cfg.get('balance_temperature')}\u00b0C"))
+            cfg_items.append(("Balance offset", f"\u00b1{run_cfg.get('balance_offset')}\u00b0C"))
+        if mode == "radiative_cooling":
+            cfg_items.append(("Dew point", f"{run_cfg.get('dew_point_celsius')}\u00b0C"))
+            cfg_items.append(("Bliss k", run_cfg.get("bliss_k")))
+        for label, val in cfg_items:
+            lines.append(f"| {label} | {val} |")
+    else:
+        lines.append("- No configuration snapshot in the preprocessing diagnostics.")
+    lines.append("")
 
     # --- Preprocessing ---
     pre_summary, pre_timing = _load_diag(pre_dir)
@@ -226,6 +229,8 @@ def generate_run_report(
             bbox = exp_summary.get("bbox_dimensions_m")
             if bbox:
                 lines.append(f"- **Bounding box:** {bbox[0]:.1f} \u00d7 {bbox[1]:.1f} \u00d7 {bbox[2]:.1f} m")
+            if exp_summary.get("apply_smoothing") is not None:
+                lines.append(f"- **Smoothing:** {'on' if exp_summary['apply_smoothing'] else 'off'}")
             ret = exp_summary.get("voxel_retention_pct")
             if ret is not None:
                 lines.append(f"- **Voxel retention:** {ret:.1f}%")

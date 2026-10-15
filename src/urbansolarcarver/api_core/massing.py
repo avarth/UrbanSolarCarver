@@ -55,17 +55,21 @@ class MassingResult:
         return str(self.plates_path)
 
 
-def _footprint(conf, origin, columns, voxel_size):
+def _footprint(max_volume_path, origin, columns, voxel_size):
     """Footprint polygons (local xy) and their source ("mesh" or "voxels").
 
-    The mesh footprint is the maximum volume's plan projection.  It is used
+    The mesh footprint is the plan projection of the maximum volume at
+    *max_volume_path*, the mesh the preprocessing run voxelized.  It is used
     only when it matches the voxel grid: at most FOOTPRINT_MISMATCH_SHARE
     of the occupied columns may have their centre more than one voxel
-    outside it.  Otherwise the voxel footprint is used, with a warning.
+    outside it.  Otherwise (or without a path) the voxel footprint is used,
+    with a warning.
     """
     try:
-        polygons = mg.footprint_polygons(load_mesh(conf.max_volume_path), origin[:2])
-    except Exception as exc:  # unreadable or broken mesh
+        if max_volume_path is None:
+            raise ValueError("the preprocessing manifest names no maximum volume")
+        polygons = mg.footprint_polygons(load_mesh(max_volume_path), origin[:2])
+    except Exception as exc:  # no path, unreadable or broken mesh
         log.warning("massing: could not project the maximum volume: %s", exc)
         polygons = []
     if not polygons:
@@ -102,8 +106,9 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     """Fourth stage: floor plates that follow the footprint, from the carved envelope.
 
     Floors are ``ground_floor_height`` then ``floor_height`` tall, counted
-    from the lowest point of the maximum volume.  The footprint (the maximum
-    volume's plan projection) is split into faces, one per
+    from the lowest point of the maximum volume.  The footprint (the plan
+    projection of the maximum volume named in the preprocessing manifest,
+    not in *cfg*) is split into faces, one per
     facade, and each face into bays ``min_plate_dimension`` wide, cut
     perpendicular to its facade.  A bay is built on a floor when it stays in
     the maximum volume over the floor's full height, at most
@@ -164,7 +169,7 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     columns = occ.any(axis=2)
     cells_ij = np.argwhere(columns)
     xy = (cells_ij + 0.5) * vs
-    polygons, footprint_source = _footprint(conf, origin, columns, vs)
+    polygons, footprint_source = _footprint(chain.pre_manifest.max_volume_path, origin, columns, vs)
     facades, corners = mg.split_facades(polygons)
     # A facade shorter than two bays (a chamfer, a small step) would get a
     # face of at most one bay; its columns go to the neighbouring facades.
@@ -246,7 +251,7 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     })
     upstream = chain.thr_manifest.hash
     write_run_report("massing", out_path, chain.pre_path.parent, chain.thr_path.parent,
-                     upstream, conf)
+                     upstream)
 
     stage_hash = hashlib.sha256((json.dumps(settings, sort_keys=True) + upstream).encode()).hexdigest()[:8]
     manifest = MassingManifest(hash=stage_hash, plates_path=str(plates_path),

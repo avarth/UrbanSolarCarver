@@ -343,6 +343,7 @@ def preprocessing(
         mode=mode,
         patch_weights_path=str(pw_path) if pw_path else None,
         sample_point_count=int(pts.shape[0]),
+        max_volume_path=str(Path(conf.max_volume_path).resolve()),
     )
 
     # Per-stage diagnostics

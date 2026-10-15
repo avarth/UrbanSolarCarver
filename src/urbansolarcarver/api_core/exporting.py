@@ -203,6 +203,7 @@ def exporting(
     diag_dir = ensure_diag(out_path)
     diagnostic = {
         "mesh_path": str(export_path),
+        "apply_smoothing": conf.apply_smoothing,
         "vertices": v_count,
         "triangles": f_count,
         "is_watertight": watertight,
@@ -222,7 +223,7 @@ def exporting(
     write_json(diag_dir, "diagnostic.json", diagnostic)
 
     write_run_report("exporting", out_path, chain.pre_path.parent, thr_path.parent,
-                     thr_manifest.hash, conf)
+                     thr_manifest.hash)
 
     settings = {k: getattr(conf, k) for k in ("final_mesh_format", "apply_smoothing", "min_voxels",
                                               "min_face_count", "smooth_iters")}

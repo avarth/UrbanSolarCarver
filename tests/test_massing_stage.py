@@ -165,8 +165,20 @@ def test_uneven_base_still_builds_plates(tmp_path):
 def test_outline_not_matching_the_voxels_falls_back(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
     _set_mask(thr, lambda occ: occ)
-    other = tmp_path / "other.ply"
-    _box([30, 12, 20], center_xy=(25.0, 0.0)).export(other)    # a different, shifted volume
+    # The file preprocessing read is replaced by a different, shifted volume.
+    _box([30, 12, 20], center_xy=(25.0, 0.0)).export(tmp_path / "max_volume.ply")
     with pytest.warns(UserWarning, match="does not match"):
-        res = _massing(cfg, thr, tmp_path / "m", max_volume_path=str(other))
+        res = _massing(cfg, thr, tmp_path / "m")
     assert res.n_plates == 6
+
+
+def test_footprint_comes_from_the_mesh_preprocessing_read(tmp_path):
+    """A config passed to massing later may name another max volume (in
+    Grasshopper it names none of the preprocessed geometry); the footprint
+    is the maximum volume recorded in the preprocessing manifest."""
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
+    _set_mask(thr, lambda occ: occ)
+    larger = tmp_path / "larger.ply"
+    _box([36, 18, 20]).export(larger)
+    res = _massing(cfg, thr, tmp_path / "m", max_volume_path=str(larger))
+    assert res.floor_areas[0] == pytest.approx(30 * 12, rel=1e-6)

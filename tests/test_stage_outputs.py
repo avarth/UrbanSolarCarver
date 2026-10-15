@@ -125,3 +125,14 @@ class TestRunReport:
         _quietly(exporting, rethresholded, stricter, run / "exporting")
         report = (run / "run_report.md").read_text(encoding="utf-8")
         assert "## Export" in report and "## Massing" not in report
+
+
+def test_run_report_shows_the_settings_preprocessing_ran_with(tmp_path, thresholded_run):
+    """Exporting with a config whose preprocessing settings differ from the
+    run's: the report's configuration is the run's."""
+    from urbansolarcarver import exporting
+    conf, thr = thresholded_run
+    _quietly(exporting, thr, conf.model_copy(update={"ray_length": 30.0}),
+             tmp_path / "run" / "exporting")
+    report = (tmp_path / "run" / "run_report.md").read_text(encoding="utf-8")
+    assert "| Ray length | 50.0 m |" in report

@@ -83,28 +83,22 @@ def device_summary(device) -> str:
             return "CUDA"
     return "CPU"
 
-def load_occupancy(pre_manifest, conf: user_config):
+def load_occupancy(pre_manifest):
     """Return the boolean occupancy grid (numpy) of a preprocessing run.
 
-    Loads the persisted ``voxel_grid.npy``.  If the manifest has no
-    ``voxel_grid_path`` or the file is gone, the max volume is voxelized
-    again with the manifest's ``voxel_size`` and *conf*'s ``margin_frac``.  Raises
-    ValueError if the grid shape differs from the manifest's.
+    Loads the persisted ``voxel_grid.npy``.  Raises FileNotFoundError if the
+    manifest names none or the file is gone (the grid is not rebuilt from a
+    config, which may describe other geometry), and ValueError if the grid
+    shape differs from the manifest's.
     """
     import numpy as np
     vg_path = pre_manifest.voxel_grid_path
-    if vg_path and Path(vg_path).is_file():
-        occ = np.load(vg_path, allow_pickle=False).astype(bool)
-    else:
-        import torch
-        from ..carving import load_meshes
-        from ..grid import voxelize
-        env_mesh, _ = load_meshes(conf)
-        env_mesh = env_mesh.copy()  # same local frame as preprocessing
-        env_mesh.vertices = np.round(env_mesh.vertices - env_mesh.bounds[0], 6)
-        same_grid = conf.model_copy(update={"voxel_size": pre_manifest.voxel_size})
-        vg, *_ = voxelize(env_mesh, same_grid, device=torch.device("cpu"))
-        occ = vg.cpu().numpy().astype(bool)
+    if not vg_path or not Path(vg_path).is_file():
+        raise FileNotFoundError(
+            f"Occupancy grid not found: {vg_path} (named by the preprocessing "
+            f"manifest). Re-run preprocessing."
+        )
+    occ = np.load(vg_path, allow_pickle=False).astype(bool)
     if tuple(occ.shape) != tuple(pre_manifest.shape):
         raise ValueError(
             f"Voxel grid shape {tuple(occ.shape)} does not match the grid shape "
@@ -202,7 +196,7 @@ def load_thresholded_grid(threshold_manifest, conf) -> ThresholdedGrid:
     return ThresholdedGrid(
         thr_path=thr_path, thr_manifest=thr_manifest, pre_path=pre_path,
         pre_manifest=pre_manifest, mask=mask,
-        occupancy=load_occupancy(pre_manifest, conf),
+        occupancy=load_occupancy(pre_manifest),
         origin=np.asarray(pre_manifest.origin, dtype=np.float64),
         voxel_size=float(pre_manifest.voxel_size or conf.voxel_size),
     )

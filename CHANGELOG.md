@@ -53,6 +53,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
   writes an `ExportingManifest` with `upstream_hash`. The run report keeps
   the Export and Massing sections whose manifests were built from the
   same thresholding run and leaves out sections of an earlier one.
+- **Later stages took facts of the preprocessing run from the current
+  config.** Massing projected the footprint from the config's
+  `max_volume_path`, so a config naming another mesh changed the plates
+  without any warning when the voxel columns fell inside it (a 30 x 12 m
+  volume got 594 m² of ground-floor plates from a 36 x 18 m mesh); in
+  Grasshopper the massing config does not name the preprocessed geometry
+  at all. The preprocessing manifest now records `max_volume_path`, and
+  massing reads it from there. `load_occupancy` no longer re-voxelizes the
+  config's mesh when `voxel_grid.npy` is missing; it raises
+  `FileNotFoundError`. The run report's configuration table comes from the
+  preprocessing run's `config_snapshot.json` instead of the config passed
+  to exporting or massing; smoothing moved to the Export section, read
+  from exporting's diagnostics.
 
 ### Changed (weighted modes; results change)
 

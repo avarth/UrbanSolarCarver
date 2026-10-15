@@ -537,26 +537,17 @@ class TestScoreSmoothing:
         assert diag["score_smoothing_sigma_voxels"] == 0.0
 
 
-def test_occupancy_fallback_uses_the_manifest_voxel_size(tmp_path, tiny_cube_mesh,
-                                                         tiny_surface_mesh):
-    """Without voxel_grid.npy, the grid is rebuilt at the preprocessing voxel
-    size even when the config passed later has a different one."""
+def test_missing_occupancy_grid_is_an_error(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+    """Without voxel_grid.npy the preprocessing run is incomplete: the grid
+    is not rebuilt from a config that may describe other geometry."""
     from urbansolarcarver.api_core._util import load_occupancy
-    from urbansolarcarver.load_config import user_config
     from urbansolarcarver.pydantic_schemas import PreprocessingManifest
     run = TestEdgeTaperPipeline()._run_preprocessing(
-        tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)  # voxel_size=2.0
+        tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)
     pre = PreprocessingManifest.model_validate_json(run.manifest_path.read_text())
-    stored = np.load(pre.voxel_grid_path).astype(bool)
     Path(pre.voxel_grid_path).unlink()
-
-    later_cfg = user_config(
-        max_volume_path=str(tmp_path / "fb" / "vol.ply"),
-        test_surface_path=str(tmp_path / "fb" / "srf.ply"),
-        out_dir=str(tmp_path / "fb" / "out"), mode="daylight",
-        voxel_size=1.0, device="cpu",
-    )
-    np.testing.assert_array_equal(load_occupancy(pre, later_cfg), stored)
+    with pytest.raises(FileNotFoundError, match="Re-run preprocessing"):
+        load_occupancy(pre)
 
 
 def test_curved_own_facade_is_not_shaded_by_its_own_skin(tmp_path):
