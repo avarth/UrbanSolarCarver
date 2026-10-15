@@ -115,6 +115,7 @@ _REQUIRED_KEYS = {
     "preprocessing": ("config",),
     "thresholding": ("config", "from"),
     "exporting": ("config", "from"),
+    "massing": ("config", "from"),
     "run_pipeline": ("config",),
     "simulate_weights": ("epw", "archetype", "out"),
     "ping": (),
@@ -160,6 +161,10 @@ def _handle_stage_command(cmd, msg, sess):
     if cmd == "thresholding":
         result = api.thresholding(msg["from"], cfg, out_dir)
         return {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
+    if cmd == "massing":
+        result = api.massing(msg["from"], cfg, out_dir)
+        return {"status": "ok", "manifest": str(result.out_dir / "manifest.json"),
+                "plates_path": str(result.plates_path), "mesh_path": str(result.mesh_path)}
     result = api.exporting(msg["from"], cfg, out_dir)
     return {"status": "ok", "export_path": str(result.export_path)}
 
@@ -216,7 +221,7 @@ def serve(address, authkey, device_arg="auto"):
     """Serve pipeline requests from Grasshopper and the CLI until "shutdown".
 
     Keeps one CarverSession (CUDA context and compiled Warp kernels) alive
-    across requests. Commands: preprocessing, thresholding, exporting,
+    across requests. Commands: preprocessing, thresholding, exporting, massing,
     run_pipeline, simulate_weights, ping, shutdown. Requests are handled one
     at a time; a failing request becomes an error reply and the server keeps
     running.

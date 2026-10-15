@@ -132,3 +132,24 @@ def test_voxel_grid_cache_survives_between_commands(tmp_path, tmp_mesh_files):
     np.testing.assert_array_equal(np.load(tmp_path / "a" / "scores.npy"),
                                   np.load(tmp_path / "b" / "scores.npy"))
     assert second["status"] == "ok"
+
+
+def test_massing_command_runs_after_thresholding(tmp_path, tmp_mesh_files):
+    import yaml
+    from urbansolarcarver.daemon import _dispatch
+    from urbansolarcarver.session import CarverSession
+
+    vol_path, srf_path = tmp_mesh_files
+    cfg_path = tmp_path / "cfg.yaml"
+    cfg_path.write_text(yaml.safe_dump({
+        "max_volume_path": str(vol_path), "test_surface_path": str(srf_path),
+        "out_dir": str(tmp_path / "out"), "mode": "daylight",
+        "voxel_size": 2.0, "grid_step": 2.0, "ray_length": 50.0, "device": "cpu",
+    }))
+    with CarverSession(device="cpu") as sess:
+        pre = _dispatch({"cmd": "preprocessing", "config": str(cfg_path)}, sess)
+        thr = _dispatch({"cmd": "thresholding", "config": str(cfg_path), "from": pre["manifest"]}, sess)
+        reply = _dispatch({"cmd": "massing", "config": str(cfg_path), "from": thr["manifest"]}, sess)
+    assert reply["status"] == "ok", reply
+    assert (tmp_path / "out" / "massing" / "plates.json").is_file()
+    assert reply["plates_path"].endswith("plates.json")
