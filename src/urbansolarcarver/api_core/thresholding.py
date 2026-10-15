@@ -373,6 +373,7 @@ def thresholding(
         hash=stage_hash,
         mask_path=str(mask_path),
         upstream_manifest=str(pre_manifest_path),
+        upstream_hash=upstream_hash,
     )
     (out_path / "manifest.json").write_text(schema_to_json(tm), encoding="utf-8")
 

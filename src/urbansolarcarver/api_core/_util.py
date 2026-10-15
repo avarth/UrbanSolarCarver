@@ -119,10 +119,32 @@ class ThresholdedGrid:
     voxel_size: float
 
 
+def verify_upstream_hash(recorded_upstream_hash: str, upstream_manifest, upstream_manifest_path,
+                         upstream_stage: str) -> None:
+    """Raise UpstreamMismatchError unless *upstream_manifest* is the run a
+    downstream manifest was built from.
+
+    *recorded_upstream_hash* is the ``upstream_hash`` stored in the
+    downstream manifest; *upstream_manifest* is the manifest now at
+    *upstream_manifest_path*, written by stage *upstream_stage*.
+    """
+    from ..pydantic_schemas import UpstreamMismatchError
+    if recorded_upstream_hash != upstream_manifest.hash:
+        raise UpstreamMismatchError(
+            f"The {upstream_stage} run at {upstream_manifest_path} has changed since "
+            f"this output was built from it (hash {upstream_manifest.hash}, expected "
+            f"{recorded_upstream_hash}). Re-run the stages after {upstream_stage}."
+        )
+
+
 def load_thresholded_grid(threshold_manifest, conf) -> ThresholdedGrid:
     """Load a thresholding manifest, its preprocessing manifest, the mask and
     the occupancy grid.  *threshold_manifest* is a ThresholdingResult or a
-    path to its folder or manifest.json."""
+    path to its folder or manifest.json.
+
+    Raises UpstreamMismatchError if preprocessing was re-run after this
+    thresholding run.
+    """
     import numpy as np
     from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest, schema_from_json
     thr_path = Path(threshold_manifest)
@@ -131,7 +153,11 @@ def load_thresholded_grid(threshold_manifest, conf) -> ThresholdedGrid:
     try:
         thr_manifest = schema_from_json(ThresholdingManifest, thr_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        raise ValueError("Unable to load thresholding manifest; pass a ThresholdingResult or a path to its manifest.json") from exc
+        raise ValueError(
+            f"Unable to load thresholding manifest {thr_path}; pass a ThresholdingResult "
+            f"or a path to its manifest.json. A manifest written by an older version "
+            f"(without upstream_hash) needs thresholding to be re-run."
+        ) from exc
     pre_path = Path(thr_manifest.upstream_manifest)
     try:
         pre_manifest = schema_from_json(PreprocessingManifest, pre_path.read_text(encoding="utf-8"))
@@ -141,6 +167,7 @@ def load_thresholded_grid(threshold_manifest, conf) -> ThresholdedGrid:
             f"thresholding manifest ({pre_path}). Re-run preprocessing, "
             f"or fix the manifest chain."
         ) from exc
+    verify_upstream_hash(thr_manifest.upstream_hash, pre_manifest, pre_path, "preprocessing")
     grid_shape = tuple(pre_manifest.shape)
     mask_path = Path(thr_manifest.mask_path)
     if not mask_path.is_file():

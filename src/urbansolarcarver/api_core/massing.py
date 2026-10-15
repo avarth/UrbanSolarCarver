@@ -216,10 +216,11 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     settings = {k: getattr(conf, k) for k in ("ground_floor_height", "floor_height",
                                               "min_plate_dimension", "plate_tolerance",
                                               "plate_stacking")}
-    upstream = getattr(chain.thr_manifest, "hash", "")
+    upstream = chain.thr_manifest.hash
     stage_hash = hashlib.sha256((json.dumps(settings, sort_keys=True) + upstream).encode()).hexdigest()[:8]
     manifest = MassingManifest(hash=stage_hash, plates_path=str(plates_path),
-                               mesh_path=str(mesh_path), upstream_manifest=str(chain.thr_path))
+                               mesh_path=str(mesh_path), upstream_manifest=str(chain.thr_path),
+                               upstream_hash=upstream)
     (out_path / "manifest.json").write_text(schema_to_json(manifest), encoding="utf-8")
 
     plate_volume = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) for q in plates)

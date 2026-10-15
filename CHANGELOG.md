@@ -15,6 +15,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (below). Configs that set `protect_share` or `threshold: protect_share`
   are rejected.
 
+### Fixed (stage chain)
+
+- **Exporting and massing could combine outputs of two different
+  preprocessing runs.** Re-running preprocessing in place (another EPW or
+  analysis period, same grid shape) left the old `mask.npy` beside the new
+  occupancy grid, and the only check was the grid shape. The thresholding
+  and massing manifests now record `upstream_hash`, the hash of the
+  manifest they were built from, and exporting and massing raise
+  `UpstreamMismatchError` (a `ValueError`) when it no longer matches.
+  Thresholding manifests written before this change lack the field and
+  need thresholding to be re-run.
+
 ### Changed (weighted modes; results change)
 
 - **carve_fraction counts what carve_above removes.** The cutoff was

@@ -3,8 +3,9 @@
 Defines :class:`UserConfig` (the pipeline configuration model, imported
 elsewhere as ``user_config``), :class:`ThresholdSpec` (the normalized
 threshold setting), two stage manifest schemas
-(:class:`PreprocessingManifest`, :class:`ThresholdingManifest`), and the
-project-specific warning class :class:`UrbanSolarCarverWarning`.
+(:class:`PreprocessingManifest`, :class:`ThresholdingManifest`), the
+project-specific warning class :class:`UrbanSolarCarverWarning`, and
+:class:`UpstreamMismatchError`.
 
 The config schemas use ``extra='forbid'`` so that typos in YAML keys are
 caught at load time rather than silently ignored. The manifest schemas use
@@ -37,6 +38,16 @@ def schema_to_json(model: BaseModel, *, indent: int = 2) -> str:
 # ---------- Warnings ----------
 class UrbanSolarCarverWarning(UserWarning):
     """Non-fatal configuration warning."""
+
+
+class UpstreamMismatchError(ValueError):
+    """A stage's output was built from an upstream run that has since changed.
+
+    Each manifest records the hash of the upstream manifest it was built
+    from; a consumer raises this when that hash no longer matches the
+    upstream manifest on disk (for example after preprocessing was re-run
+    in place), instead of combining outputs of different runs.
+    """
 
 # ---------- Threshold specification ----------
 class ThresholdSpec(BaseModel):
@@ -669,6 +680,7 @@ class ThresholdingManifest(BaseModel):
     hash: str
     mask_path: str
     upstream_manifest: str
+    upstream_hash: str
 
 class MassingManifest(BaseModel):
     """Manifest written by massing."""
@@ -677,4 +689,5 @@ class MassingManifest(BaseModel):
     plates_path: str
     mesh_path: str
     upstream_manifest: str
+    upstream_hash: str
 
