@@ -232,3 +232,32 @@ class TestFloors:
         kept[:, :, 2:] = False
         fl = _floors(ij, bays, occ, kept, levels=[(0.0, 2.5)], tolerance=1.0)[0]
         assert np.allclose(fl.outside_share, 0.5 / 2.5)
+
+
+class TestPlateGeometry:
+    def test_full_plate_is_the_footprint(self):
+        poly = box(0, 0, 20, 6)
+        ij, _ = _cells(poly, 1.0)
+        out = mg.plate_polygons(ij, np.ones(len(ij), bool), np.zeros(len(ij), bool), 1.0, poly)
+        assert len(out) == 1 and out[0].symmetric_difference(poly).area < 1e-9
+
+    def test_cut_edge_on_the_column_boundary(self):
+        poly = box(0, 0, 20, 6)
+        ij, _ = _cells(poly, 1.0)
+        in_plate = ij[:, 0] < 10
+        out = mg.plate_polygons(ij, in_plate, ~in_plate, 1.0, poly)
+        assert len(out) == 1 and out[0].area == pytest.approx(60.0)
+
+    def test_rotated_footprint_keeps_exact_facades(self):
+        from shapely import affinity
+        poly = affinity.rotate(box(0, 0, 20, 6), 30, origin=(0, 0))
+        poly = affinity.translate(poly, 10, 2)
+        ij, _ = _cells(poly, 0.5)
+        out = mg.plate_polygons(ij, np.ones(len(ij), bool), np.zeros(len(ij), bool), 0.5, poly)
+        assert len(out) == 1 and out[0].symmetric_difference(poly).area < 1e-6
+
+    def test_prism_is_closed_with_the_right_volume(self):
+        plate = box(0, 0, 10, 6).difference(box(3, 2, 5, 4))
+        mesh = mg.prism_mesh(plate, 5.0, 8.0)
+        assert mesh.is_watertight and mesh.is_winding_consistent
+        assert mesh.volume == pytest.approx(plate.area * 3.0)

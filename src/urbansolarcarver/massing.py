@@ -382,3 +382,60 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
                             plate=_label_plates(keep[bay], cells_ij, grid_shape)))
         below = keep
     return floors
+
+
+# ----------------------------------------------------------------- plate geometry
+def _squares(cells_ij, mask, voxel_size):
+    i, j = cells_ij[mask, 0], cells_ij[mask, 1]
+    vs = float(voxel_size)
+    return shapely.union_all(shapely.box(i * vs, j * vs, (i + 1) * vs, (j + 1) * vs))
+
+
+def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint):
+    """Outline of one floor plate (local xy).
+
+    The plate's column squares are grown by one and a half voxels (enough
+    to reach the facade after simplification), the squares of the *removed*
+    columns are subtracted, and the result is simplified to half a voxel
+    and clipped to the exact *footprint*.  Facade edges therefore come from
+    the footprint; cuts between built and removed columns are straight to
+    within half a voxel.
+    """
+    vs = float(voxel_size)
+    shape = _squares(cells_ij, in_plate, vs).buffer(1.5 * vs, join_style="mitre")
+    if np.any(removed):
+        shape = shape.difference(_squares(cells_ij, removed, vs))
+    shape = shape.simplify(vs / 2, preserve_topology=True).intersection(footprint)
+    parts = getattr(shape, "geoms", [shape])
+    return [orient(p, 1.0) for p in parts if isinstance(p, Polygon) and p.area > vs * vs]
+
+
+def prism_mesh(polygon, zb, zt):
+    """Closed triangle mesh of *polygon* extruded from *zb* to *zt*.
+
+    Caps come from shapely's constrained Delaunay triangulation (no extra
+    triangulation dependency); walls follow every ring.
+    """
+    import trimesh
+    polygon = orient(polygon, 1.0)
+    vertices, faces = [], []
+
+    def add(triangle):
+        base = len(vertices)
+        vertices.extend(triangle)
+        faces.append([base, base + 1, base + 2])
+
+    for tri in shapely.constrained_delaunay_triangles(polygon).geoms:
+        a, b, c = np.asarray(orient(tri, 1.0).exterior.coords)[:3]
+        add([(*a, zt), (*b, zt), (*c, zt)])      # top, counter-clockwise: normal up
+        add([(*a, zb), (*c, zb), (*b, zb)])      # bottom, reversed: normal down
+    for ring in [polygon.exterior, *polygon.interiors]:
+        xy = np.asarray(ring.coords)
+        for p, q in zip(xy[:-1], xy[1:]):
+            # Solid on the left of p -> q, so (p, q, q_top) faces outward.
+            add([(*p, zb), (*q, zb), (*q, zt)])
+            add([(*p, zb), (*q, zt), (*p, zt)])
+    mesh = trimesh.Trimesh(np.asarray(vertices, dtype=np.float64), np.asarray(faces), process=True)
+    mesh.merge_vertices()
+    trimesh.repair.fix_normals(mesh)
+    return mesh
