@@ -74,6 +74,8 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 - **USC_Preprocess**: runs preprocessing only (ray tracing + scoring). Errors turn the component red.
 - **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.
 - **USC_Export**: runs exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
+- **USC_Massing**: stage 4, builds floor plates from the carving mask (inputs `config`, `thr_result`, `massing_overrides`, `run`; outputs closed Breps, floor areas per floor and in total, and the `plates.json` path). See [Floor-plate massing](massing.md).
+- **USC_MassingSettings**: floor heights, bay width, tolerance and stacking for USC_Massing. Connect its output to USC_Massing's `massing_overrides` input so changes re-run only massing.
 
 **Simulated weights** (`3::Weights`)
 

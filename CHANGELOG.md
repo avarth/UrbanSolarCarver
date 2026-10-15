@@ -61,6 +61,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Floor-plate massing (stage 4, `massing`).** Turns the carved envelope into
+  stacked floor plates: a ground floor (`ground_floor_height`, 5 m), then
+  floors of `floor_height` (3 m). The footprint (each body's base outline) is
+  split into faces, one per facade (corners squared to the longer facade), and
+  each face into bays of `min_plate_dimension` (3 m) cut perpendicular to its
+  facade. A bay is built on a floor when it stays in the maximum volume, at
+  most `plate_tolerance` (0.2) of its volume lies outside the envelope, and,
+  with `plate_stacking: supported`, it is built on the floor below; parts
+  narrower than `min_plate_dimension` are dropped. Writes `plates.json` (world
+  outlines, floor areas) and `plates.obj` (one closed prism per plate) and adds
+  a Massing section to the run report. `usc massing`, a daemon command, and the
+  Grasshopper components USC_Massing and USC_MassingSettings. Geometry in
+  `urbansolarcarver.floor_plates`.
+
 - **Simulated-weights generator (benefit mode)**: `usc simulate-weights` and the
   `urbansolarcarver.simulated_weights` module: an ISO 13790 Annex C simple hourly
   ("5R1C") thermal model plus batched central-difference perturbation,
