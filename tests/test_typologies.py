@@ -117,6 +117,36 @@ def test_carve_fraction_nested(tmp_path, epw):
         assert tight.sum() < loose.sum()
 
 
+@pytest.mark.parametrize("typology", ["courtyard", "freeform", "rows"])
+def test_carve_fraction_with_slope_limit_leaves_no_spires(tmp_path, epw, typology):
+    """With a 45 degree slope limit (one voxel of rise per voxel), no kept
+    column stands 4 or more voxels above the median of its 5 x 5
+    neighbourhood. (At 2 m voxels the default 75 degrees allows about 3.7
+    voxels per column, too much for this criterion.)"""
+    from numpy.lib.stride_tricks import sliding_window_view
+    run = cases.run(build(SceneSpec(typology, seed=7)), tmp_path, epw, "benefit",
+                    carve_fraction=0.4, carve_above=True, max_slope_deg=45.0)
+    z = np.arange(run.shape[2])
+    kept = run.mask.any(axis=2)
+    h = np.where(kept, (run.mask * (z + 1)).max(axis=2), np.nan)
+    with np.errstate(all="ignore"):
+        med = np.nanmedian(sliding_window_view(np.pad(h, 2, constant_values=np.nan), (5, 5)),
+                           axis=(-2, -1))
+    assert run.diag("thr")["max_slope_deg"] == 45.0
+    assert not ((h - med) >= 4)[kept].any()
+
+
+def test_carve_fraction_share_includes_carve_above(tmp_path, epw):
+    """With the slope limit off, the removed share of the obstruction score
+    is the carve_fraction value (carve_above included), up to one group of
+    tied voxels."""
+    run = cases.run(build(SceneSpec("courtyard")), tmp_path, epw, "benefit",
+                    carve_fraction=0.5, carve_above=True, max_slope_deg=90.0)
+    d = run.diag("thr")
+    assert d["obstruction_fraction_carved_by_slope_limit"] == 0.0
+    assert 0.5 - 0.02 < d["obstruction_fraction_carved"] <= 0.5 + 1e-4
+
+
 def test_tilted_angle_monotone(tmp_path, epw):
     """A steeper plane forbids less: kept(30°) ⊆ kept(45°) ⊆ kept(60°)."""
     scene = build(SceneSpec("courtyard"))

@@ -148,8 +148,16 @@ def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
     if run.mask[~occ].any():
         failed.append("mask_true_on_air")
 
-    # 3. carve_fraction nesting
+    # 3. carve_fraction: the share removed before the slope limit is the
+    # value set (carve_above included), and the slider nests
     if run.cfg.get("threshold") == "carve_fraction":
+        d = run.diag("thr")
+        if "obstruction_fraction_carved" in d:
+            share = d["obstruction_fraction_carved"] - d.get(
+                "obstruction_fraction_carved_by_slope_limit", 0.0)
+            metrics["carve_fraction_share"] = round(share, 4)
+            if not run.cfg["carve_fraction"] - 0.05 < share <= run.cfg["carve_fraction"] + 1e-3:
+                failed.append("carve_fraction_share")
         tighter = _rethreshold(run, root / "nest", carve_fraction=min(run.cfg["carve_fraction"] + 0.1, 0.99))
         if (tighter & ~run.mask).any():
             failed.append("carve_fraction_not_nested")

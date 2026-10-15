@@ -33,7 +33,7 @@ UrbanSolarCarver/
 | `api.py` | Public facade. Defines `run_pipeline()` (one-shot full pipeline, writing into `<out_dir>/preprocessing`, `thresholding` and `exporting`) and re-exports `preprocessing()`, `thresholding()`, `exporting()`, their result types, and `load_config()`. |
 | `api_core/__init__.py` | Collects the three stage modules and their result types into one importable sub-package. |
 | `api_core/preprocessing.py` | **Stage 1.** Voxelizes the max-volume mesh into a dense 3D grid, samples test surfaces into evenly spaced points with outward normals, generates rays toward sky patches (or sun positions, or the tilted-plane direction, depending on mode), traces them through the grid with the DDA kernel, and writes the per-voxel obstruction scores to `scores.npy`. Also writes `voxel_grid.npy`, the sample points and normals, the manifest, and diagnostics (JSON always; plots with `diagnostic_plots: true`). |
-| `api_core/thresholding.py` | **Stage 2.** Loads `scores.npy` from Stage 1, optionally applies Gaussian score smoothing (weighted modes), applies the selected thresholding strategy (`carve_fraction`, `headtail`, or a numeric cutoff) to the raw scores of the occupied voxels, applies `carve_above`, and writes the binary mask `mask.npy`. Can be re-run with different threshold parameters without re-computing scores. |
+| `api_core/thresholding.py` | **Stage 2.** Loads `scores.npy` from Stage 1, optionally applies Gaussian score smoothing (weighted modes), applies the selected thresholding strategy (`carve_fraction`, `headtail`, or a numeric cutoff) to the raw scores of the occupied voxels together with `carve_above` (`carving.carve_above_scores`, so `carve_fraction` counts what carve_above removes), applies the slope limit (`carving.limit_column_slope`; 75 degrees by default for the weighted modes), and writes the binary mask `mask.npy`. Can be re-run with different threshold parameters without re-computing scores. |
 | `api_core/exporting.py` | **Stage 3.** Loads the binary mask from Stage 2, removes small disconnected voxel clusters, reconstructs a triangle mesh (cubic voxel faces, or SDF-smoothed marching cubes with Taubin polishing), writes `export.<format>`, and writes `run_report.md` for the whole run. |
 | `api_core/_util.py` | Helpers shared by the stages: config resolution, output-directory creation, device resolution (`"auto"` → `"cuda"` or `"cpu"`), JSON writing, reloading the occupancy grid, config snapshots. |
 | `api_core/_diagnostics.py` | Diagnostic plots and statistics: score histograms, sky-patch hemisphere plots, the simple-vs-simulated weight comparison dome, score statistics, NaN/Inf warnings. |
@@ -121,7 +121,7 @@ tests/
 ├── cases.py                 Runs USC end-to-end on a typology scene and loads the results
 ├── montecarlo.py            Random scenes x random settings from a seed, checked against oracle.py
 ├── data/                    5R1C oracle reference data and its capture script
-├── test_carve_above.py      carve_above_columns post-processing
+├── test_carve_above.py      carve_above_columns, carve_above_scores, limit_column_slope
 ├── test_cli.py              CLI commands and the schema table
 ├── test_daemon.py           Daemon survives misbehaving clients and failing requests
 ├── test_exporting.py        Stage-hash scheme

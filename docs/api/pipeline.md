@@ -36,7 +36,7 @@ Voxelizes the max volume, samples the test surfaces, generates rays toward sky p
 
 ## Thresholding
 
-Converts the score array into a binary carving mask: optional score smoothing, then `carve_fraction`, head/tail breaks, or a numeric cutoff over the occupied voxels, then `carve_above`. Writes `mask.npy`.
+Converts the score array into a binary carving mask: optional score smoothing, then `carve_fraction`, head/tail breaks, or a numeric cutoff over the occupied voxels, with `carve_above` applied through `carving.carve_above_scores` (the cutoff at which carve_above removes each voxel, so that `carve_fraction` counts what carve_above removes), then the slope limit (`max_slope_deg`, 75 degrees for the weighted modes; `carving.limit_column_slope`). Writes `mask.npy`; the diagnostics record `max_slope_deg`, `slope_limit_extra_voxels_removed` and `obstruction_fraction_carved_by_slope_limit`.
 
 ::: urbansolarcarver.api_core.thresholding
     options:

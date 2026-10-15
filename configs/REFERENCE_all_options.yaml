@@ -68,6 +68,10 @@ smooth_iters:   2     # Taubin polish passes, 0-6 (only with apply_smoothing)
 # shadow, but cannot be built).
 carve_above: true                 # Column carve-above post-processing (default on)
 carve_above_min_consecutive: 1    # Min consecutive carved voxels to trigger (2-3 ignore stray single voxels; they stay carved)
+# Slope limit after carve_above: columns may rise at most this steeply above
+# their neighbours (degrees), so cliffs and spires become ramps. null = 75 for
+# the weighted modes, off for time-based and tilted_plane; 90 = off.
+max_slope_deg: null
 
 # Score smoothing (pre-threshold Gaussian blur on the score volume)
 # Smooths resolution-dependent noise so the carved mesh is cleaner at fine voxel sizes.

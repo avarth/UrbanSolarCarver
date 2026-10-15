@@ -9,14 +9,46 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Removed
 
-- **protect_share, the slope limit (`max_slope_deg`) and recovered_sky.**
-  Thresholding is back to the state before them: `carve_fraction` (the
-  default of the weighted modes), `headtail` and a numeric cutoff, with
-  score smoothing and carve_above. Configs that set `protect_share`,
-  `max_slope_deg` or `threshold: protect_share` are rejected.
+- **protect_share and recovered_sky.** Thresholding offers
+  `carve_fraction` (the default of the weighted modes), `headtail` and a
+  numeric cutoff, with score smoothing, carve_above and the slope limit
+  (below). Configs that set `protect_share` or `threshold: protect_share`
+  are rejected.
 
 ### Changed (weighted modes; results change)
 
+- **carve_fraction counts what carve_above removes.** The cutoff was
+  computed on the voxels it picked, and carve_above then removed the
+  voxels above them uncounted: carve_fraction 0.4 removed 50-62% of the
+  obstruction score in the ReSBE test blocks (33 m, 0.5 m voxels), 0.6
+  removed 64-73%. Each voxel now gets the cutoff at which carve_above
+  would remove it (`carving.carve_above_scores`, which reproduces
+  `carve_above_columns` exactly), and the cutoff is found on those values
+  while counting each voxel's own score, so the removed share is the value
+  set, up to one group of tied voxels. The same carve_fraction now keeps
+  more volume than before (0.4: 72-75% kept instead of 56-68%); to get a
+  result like before, raise it (0.4 before is about 0.55 now). The shapes
+  for a given removed share are unchanged.
+- **Slope limit after carve_above (`max_slope_deg`, back).** Each column
+  is decided by its highest-scoring voxel, and scores in a column rise and
+  fall with height, so neighbouring columns whose peaks fall just above
+  and below the cutoff end 10-15 m apart, and score noise leaves spires.
+  The resolution study (ReSBE blocks at 33 m, voxel sizes 0.5-2 m,
+  sample spacing 0.25-2 m) showed that finer sampling reduces spikes only
+  modestly (0-37% fewer with 4x the rays), so they come from the column
+  rule rather than from rays missing voxels. Thresholding again caps each
+  column at a maximum rise above a 5 x 5 median-filtered height map of its
+  neighbours (`carving.limit_column_slope`): it only removes voxels and
+  keeps the slider nested. Default: 75 degrees for the weighted modes, off
+  for time-based and tilted_plane; `90` turns it off. In the ReSBE blocks
+  at 0.5 m voxels it cut the spike area from 26-186 m2 to 0-25 m2 and
+  the share of column pairs 2 m apart that differ by 9 m or more from
+  3-14% to 0.1-1.7%, for 0-10% of extra obstruction score
+  (`obstruction_fraction_carved_by_slope_limit`; most at low
+  carve_fraction). At 1 m voxels it is weaker (its median window and
+  allowance are counted in voxels). Diagnostics, the run report,
+  USC_ThresholdStage and USC_Threshold (input `max_slope`) report or set
+  it.
 - **A voxel obstructs a test surface only if it lies entirely in front of
   it.** Before, a voxel counted when its centre was in front of the
   surface's plane, so the voxels a facade's own plane passes through (its

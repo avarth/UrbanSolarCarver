@@ -302,6 +302,21 @@ class UserConfig(BaseModel):
             "shorter runs stay carved but do not trigger."
         ),
     )
+    max_slope_deg: Optional[float] = Field(
+        None,
+        gt=0.0,
+        le=90.0,
+        description=(
+            "Steepest rise (degrees above horizontal) allowed between neighbouring "
+            "columns of the kept volume, applied after carve_above. Taller columns are "
+            "cut down until they rise at most this steeply above a median-filtered "
+            "height map, which turns one-voxel spires and tall cliffs into ramps. It "
+            "only ever removes voxels. None (default): 75 for the weighted modes "
+            "(irradiance, benefit, daylight, radiative_cooling), off for time-based "
+            "and tilted_plane. 90: off. Lower values give gentler ramps and remove "
+            "more volume."
+        ),
+    )
 
     # thresholding & classification
     threshold: Annotated[Optional[ThresholdSpec], BeforeValidator(_normalize_threshold)] = Field(
@@ -444,6 +459,18 @@ class UserConfig(BaseModel):
         if v not in opts:
             raise ValueError(f"device must be one of {opts}")
         return v
+
+    def effective_max_slope_deg(self) -> Optional[float]:
+        """The slope limit thresholding applies, or None when it is off.
+
+        An explicit ``max_slope_deg`` applies as given (90 = off).  Unset, it
+        is 75 degrees for the weighted modes, whose per-voxel score cutoffs
+        can leave cliffs and spires, and off for the violation-count modes
+        (time-based, tilted_plane), whose results follow the rays exactly.
+        """
+        if self.max_slope_deg is not None:
+            return None if self.max_slope_deg >= 90.0 else float(self.max_slope_deg)
+        return 75.0 if MODES[self.mode].score_kind == "weighted_sum" else None
 
     @model_validator(mode='after')
     def _resolve_threshold_spec(self) -> 'UserConfig':

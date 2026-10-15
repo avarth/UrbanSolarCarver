@@ -64,7 +64,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 - **USC_BenefitParams**: benefit-mode hour weighting: balance temperature and offset (simple weights), or a `simulated_weights.json` artifact plus the experimental `include_harm` toggle (simulated weights)
 - **USC_TiltedPlane**: fixed-angle envelope parameters
 - **USC_RadCooling** (*USC Radiative Cooling*): radiative cooling parameters (dew point, Bliss constant)
-- **USC_Threshold**: thresholding strategy, score smoothing, and column carve-above post-processing. Connect its output to **USC_ThresholdStage**'s `threshold_overrides` input (not Config) so threshold changes only re-run thresholding.
+- **USC_Threshold**: thresholding strategy, score smoothing, column carve-above post-processing, and the slope limit (`max_slope`; empty = 75 degrees for the weighted modes, 90 = off). Connect its output to **USC_ThresholdStage**'s `threshold_overrides` input (not Config) so threshold changes only re-run thresholding.
 - **USC_Postprocess**: smoothing and cleanup settings. Connect its output to **USC_Export**'s `postprocess_overrides` input (not Config) so mesh cleanup changes only re-run export.
 - **USC_Diagnostics**: detailed score statistics and diagnostic plot images
 
@@ -72,7 +72,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 
 - **USC_RunPipeline**: runs all three stages in one go (quick prototyping)
 - **USC_Preprocess**: runs preprocessing only (ray tracing + scoring). Errors turn the component red.
-- **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. Errors turn the component red.
+- **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.
 - **USC_Export**: runs exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
 
 **Simulated weights** (`3::Weights`)

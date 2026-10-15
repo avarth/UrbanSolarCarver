@@ -148,12 +148,16 @@ def get_weights(
 
 
 
-def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
+def carve_fraction_threshold(scores: np.ndarray, fraction: float,
+                             mass: "np.ndarray | None" = None) -> float:
     """Score-mass cutoff: the threshold above which voxels collectively
     account for *fraction* of the total score mass.
 
     Equivalent to sorting all scores descending and walking the cumulative
-    sum until it reaches ``fraction * total``.  A full sort of a large grid
+    sum until it reaches ``fraction * total``.  With *mass*, the voxels are
+    ranked by *scores* but the sum counts *mass* (thresholding ranks by the
+    cutoff at which carve_above removes a voxel and counts each voxel's own
+    score, so the fraction includes what carve_above removes).  A full sort of a large grid
     is O(N log N) and takes seconds to minutes at 300³ voxels and above, so
     this implementation makes two O(N) passes instead:
 
@@ -167,6 +171,9 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
         Array of non-negative voxel scores (any shape).
     fraction : float
         Fraction of the total score mass to carve, in [0, 1].
+    mass : np.ndarray, optional
+        Non-negative mass of each voxel, same shape as *scores*; default
+        *scores* itself.
 
     Returns
     -------
@@ -174,22 +181,23 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
         Threshold value; voxels scoring strictly above it are carved.
     """
     flat = scores.ravel()
+    weight = flat if mass is None else np.asarray(mass).ravel()
     if flat.size == 0:
         return 0.0
-    finite = np.isfinite(flat)
+    finite = np.isfinite(flat) & np.isfinite(weight)
     if not finite.all():
         # NaN and +Inf scores are always carved by the downstream
         # `score <= threshold` comparison, so exclude them from the mass
         # calculation instead of letting max()/np.histogram raise on a
         # non-finite range.
-        flat = flat[finite]
+        flat, weight = flat[finite], weight[finite]
         if flat.size == 0:
             return 0.0
     vmax = float(flat.max())
     if vmax <= 0.0:
         return 0.0
     # float64 accumulation: float32 cumsum over many elements loses mass
-    total = float(flat.sum(dtype=np.float64))
+    total = float(weight.sum(dtype=np.float64))
     target = float(fraction) * total
     if target <= 0.0:
         return vmax  # carve nothing: only scores above the max qualify
@@ -197,7 +205,7 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
     # Pass 1: weighted histogram → mass contributed by each score bin.
     n_bins = 8192
     hist, edges = np.histogram(flat, bins=n_bins, range=(0.0, vmax),
-                               weights=flat.astype(np.float64, copy=False))
+                               weights=weight.astype(np.float64, copy=False))
     # Cumulative mass from the top bin downward; mass_above[b] is the mass
     # in bins strictly above b.
     mass_from_top = np.cumsum(hist[::-1])[::-1]
@@ -211,13 +219,14 @@ def carve_fraction_threshold(scores: np.ndarray, fraction: float) -> float:
     # Pass 2: exact resolution inside the boundary bin only.
     lo_edge = edges[b]
     if b == n_bins - 1:
-        in_bin = flat[flat >= lo_edge]  # last bin includes vmax
+        in_bin = flat >= lo_edge  # last bin includes vmax
     else:
-        in_bin = flat[(flat >= lo_edge) & (flat < edges[b + 1])]
-    if in_bin.size == 0:
+        in_bin = (flat >= lo_edge) & (flat < edges[b + 1])
+    if not in_bin.any():
         return float(lo_edge)
-    desc = np.sort(in_bin)[::-1]
-    csum = mass_above[b] + np.cumsum(desc.astype(np.float64))
+    order = np.argsort(flat[in_bin], kind="stable")[::-1]
+    desc = flat[in_bin][order]
+    csum = mass_above[b] + np.cumsum(weight[in_bin][order].astype(np.float64))
     idx = int(np.searchsorted(csum, target, side="right"))
     if idx < desc.size:
         return float(desc[idx])

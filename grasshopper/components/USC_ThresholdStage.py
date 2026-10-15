@@ -113,13 +113,20 @@ else:
             raise RuntimeError("the daemon reported success but wrote no manifest at " + thr_result)
         data = gh.read_diagnostics(thr_out)
         threshold_value = data.get("threshold_value")
-        diagnostics = "\n".join([
+        lines = [
             "Thresholding: {:.1f}s".format(time.perf_counter() - t_start),
             "Method: {}".format(data.get("threshold_method", "?")),
             "Threshold: {}".format(threshold_value),
+        ]
+        if data.get("max_slope_deg") is not None:
+            lines.append("Slope limit: {:g} deg (removed {} voxels, {:.1%} of the score)".format(
+                data["max_slope_deg"], data.get("slope_limit_extra_voxels_removed", 0),
+                data.get("obstruction_fraction_carved_by_slope_limit", 0.0)))
+        lines += [
             "Kept: {}%".format(data.get("retention_pct", "?")),
             "Voxels kept: {} / {}".format(data.get("voxels_kept", "?"), data.get("voxels_occupied", "?")),
-        ])
+        ]
+        diagnostics = "\n".join(lines)
         diag_images = gh.existing_files(data.get("threshold_histogram"))
     except Exception as e:
         diagnostics = _error(str(e))
