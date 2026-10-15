@@ -33,6 +33,14 @@
       "subcategory": "1:: Config",
       "guid": "078249e4-632b-46d5-a243-2996e0a7f3a1"
     },
+    "USC_Massing.py": {
+      "subcategory": "2::Main",
+      "guid": "378d2a56-1267-4edf-b93a-dc45eb8037ce"
+    },
+    "USC_MassingSettings.py": {
+      "subcategory": "1:: Config",
+      "guid": "4f968208-bbce-4203-8fe7-98d68bcf3d24"
+    },
     "USC_Mode.py": {
       "subcategory": "1:: Config",
       "guid": "ad3de535-fb51-4023-aea3-ddc58d444f05"

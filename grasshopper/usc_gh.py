@@ -125,6 +125,12 @@ def read_diagnostics(stage_dir):
         return json.load(f)
 
 
+def read_plates(path):
+    """The plate list of a massing run's plates.json (outlines in world coordinates)."""
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)["plates"]
+
+
 def existing_files(*paths):
     """Return the given paths that are existing files, as strings; None entries are skipped."""
     return [str(p) for p in paths if p and os.path.isfile(str(p))]

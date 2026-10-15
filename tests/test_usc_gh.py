@@ -126,3 +126,13 @@ def test_read_ply_matches_usc_double_writer(gh, tmp_path):
     verts, faces = gh.read_ply(str(tmp_path / "box.ply"))
     np.testing.assert_array_equal(np.array(verts), box.vertices)
     np.testing.assert_array_equal(np.array(faces), box.faces)
+
+
+def test_read_plates(tmp_path, gh):
+    import json
+    path = tmp_path / "plates.json"
+    path.write_text(json.dumps({"plates": [{"floor": 0, "plate": 0, "z_bottom": 0.0, "z_top": 5.0,
+                                            "outline": [[0, 0], [1, 0], [1, 1], [0, 0]], "holes": []}],
+                                "floor_area_m2_per_floor": [0.5], "total_floor_area_m2": 0.5}))
+    plates = gh.read_plates(path)
+    assert len(plates) == 1 and plates[0]["z_top"] == 5.0
