@@ -157,3 +157,78 @@ class TestBays:
     def test_round_tower_bays_follow_the_curve(self):
         _, _, facades, _, bay, bay_face = _bays(Point(0, 0).buffer(10, quad_segs=16), 0.5, 3.0)
         assert abs(len(bay_face) - facades[0].length / 3.0) <= 1.0
+
+
+def _bar_grid(nx=20, ny=6, nz=40, top=33, bay=3.0):
+    """A 20 x 6 m bar on a 1 m grid aligned with the polygon; occupied below z = top."""
+    poly = box(0, 0, nx, ny)
+    ij, xy = _cells(poly, 1.0)
+    facades, corners = mg.split_facades([poly])
+    bays, _ = mg.cut_bays(mg.assign_faces(xy, facades, corners, [poly], 1.0), bay, 1.0)
+    occ = np.zeros((nx, ny, nz), bool)
+    occ[:, :, :top] = True
+    return ij, bays, occ
+
+
+def _floors(ij, bays, occ, kept, levels=None, tolerance=0.2, stacking="supported", min_dim=3.0):
+    levels = levels if levels is not None else mg.floor_levels(0.0, 33.0, 5.0, 3.0)
+    return mg.build_floors(ij, bays, occ, kept, 0.0, 1.0, levels, tolerance, stacking, min_dim)
+
+
+class TestFloors:
+    def test_floor_levels(self):
+        levels = mg.floor_levels(0.0, 33.0, 5.0, 3.0)
+        assert len(levels) == 10 and levels[0] == (0.0, 5.0) and levels[-1] == (29.0, 32.0)
+        assert mg.floor_levels(0.0, 4.0, 5.0, 3.0) == []
+
+    def test_layer_overlaps_count_partial_voxels_by_length(self):
+        assert np.allclose(mg.layer_overlaps(0.0, 1.0, 5, 0.5, 2.5), [0.5, 1, 0.5, 0, 0])
+
+    def test_tolerance_zero_builds_nothing_outside_the_envelope(self):
+        ij, bays, occ = _bar_grid()
+        kept = occ.copy()
+        kept[10:, :, 20:] = False
+        for fl in _floors(ij, bays, occ, kept, tolerance=0.0):
+            assert np.all(fl.outside_share[fl.kept_bays] == 0.0)
+
+    def test_never_outside_the_maximum_volume(self):
+        ij, bays, occ = _bar_grid()
+        occ[10:, :, 20:] = False
+        for fl in _floors(ij, bays, occ, occ.copy(), tolerance=1.0):
+            if fl.zt > 20:
+                assert not (fl.plate[ij[:, 0] >= 10] >= 0).any()
+
+    def test_supported_never_builds_on_nothing(self):
+        ij, bays, occ = _bar_grid()
+        kept = occ.copy()
+        kept[:6, :, 20:23] = False
+        supported = _floors(ij, bays, occ, kept, tolerance=0.0)
+        for lower, upper in zip(supported, supported[1:]):
+            assert not (upper.kept_bays & ~lower.kept_bays).any()
+        free = _floors(ij, bays, occ, kept, tolerance=0.0, stacking="free")
+        assert any((upper.kept_bays & ~lower.kept_bays).any() for lower, upper in zip(free, free[1:]))
+
+    def test_carving_more_never_builds_more(self):
+        ij, bays, occ = _bar_grid()
+        loose = occ.copy()
+        loose[12:, :, 15:] = False
+        tight = loose.copy()
+        tight[:5, :3, 10:] = False
+        for a, b in zip(_floors(ij, bays, occ, loose), _floors(ij, bays, occ, tight)):
+            assert not ((b.plate >= 0) & (a.plate < 0)).any()
+
+    def test_plates_narrower_than_the_minimum_are_dropped(self):
+        ij, bays, occ = _bar_grid()
+        kept = occ.copy()
+        kept[:, 3:, 20:] = False   # only the 3 m deep south face fits above 20 m
+        floors = _floors(ij, bays, occ, kept, tolerance=0.0, min_dim=4.0)
+        for fl in floors:
+            if fl.zb >= 20:
+                assert (fl.plate < 0).all()
+
+    def test_outside_share_by_length(self):
+        ij, bays, occ = _bar_grid()
+        kept = occ.copy()
+        kept[:, :, 2:] = False
+        fl = _floors(ij, bays, occ, kept, levels=[(0.0, 2.5)], tolerance=1.0)[0]
+        assert np.allclose(fl.outside_share, 0.5 / 2.5)

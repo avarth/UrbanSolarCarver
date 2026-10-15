@@ -296,3 +296,89 @@ def cut_bays(faces: Faces, bay_width, voxel_size):
         k[mine] = ks
     keys, bay = np.unique(np.stack([faces.face, k], axis=1), axis=0, return_inverse=True)
     return bay.ravel().astype(np.int64), keys[:, 0].astype(np.int64)
+
+
+# ----------------------------------------------------------------- floors
+def floor_levels(z0, z_top, ground_floor_height, floor_height):
+    """(bottom, top) of each floor from *z0*: the ground floor, then equal
+    floors, while the floor's top is at or below *z_top*."""
+    levels = []
+    zb, zt = float(z0), float(z0) + ground_floor_height
+    while zt <= z_top + 1e-6:
+        levels.append((zb, zt))
+        zb, zt = zt, zt + floor_height
+    return levels
+
+
+def layer_overlaps(z_grid0, voxel_size, nz, zb, zt):
+    """Length of [zb, zt) inside each of the *nz* voxel layers (layer k spans
+    [z_grid0 + k*vs, z_grid0 + (k+1)*vs])."""
+    bottoms = z_grid0 + np.arange(nz) * voxel_size
+    return np.clip(np.minimum(zt, bottoms + voxel_size) - np.maximum(zb, bottoms), 0.0, voxel_size)
+
+
+@dataclass(frozen=True)
+class Floor:
+    zb: float
+    zt: float
+    kept_bays: np.ndarray      # (B,) bool
+    outside_share: np.ndarray  # (B,) share of each bay's volume outside the envelope
+    plate: np.ndarray          # (N,) plate index of each column, -1 = not built
+
+
+def _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, n_cols):
+    """Drop bays that keep less than half of their columns after a morphological
+    opening with a *side* x *side* square (parts narrower than the minimum)."""
+    from scipy.ndimage import binary_opening
+    built = keep[bay]
+    grid = np.zeros(grid_shape, dtype=bool)
+    grid[cells_ij[built, 0], cells_ij[built, 1]] = True
+    opened = binary_opening(grid, structure=np.ones((side, side), dtype=bool))
+    surviving = opened[cells_ij[:, 0], cells_ij[:, 1]] & built
+    share = np.bincount(bay, weights=surviving.astype(np.float64), minlength=len(keep))
+    return keep & (share >= 0.5 * np.maximum(n_cols, 1))
+
+
+def _label_plates(built, cells_ij, grid_shape):
+    from scipy.ndimage import label
+    grid = np.zeros(grid_shape, dtype=bool)
+    grid[cells_ij[built, 0], cells_ij[built, 1]] = True
+    labels, _ = label(grid)
+    plate = labels[cells_ij[:, 0], cells_ij[:, 1]].astype(np.int64) - 1
+    plate[~built] = -1
+    return plate
+
+
+def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
+                 tolerance, stacking, min_dimension):
+    """Decide, floor by floor, which bays are built.
+
+    A bay is built on a floor when every one of its columns is filled by
+    the maximum volume (*occupancy*) over the floor's full height, the share
+    of its volume outside the carved envelope (*kept*) is at most
+    *tolerance*, and, with ``stacking == "supported"``, it is built on the
+    floor below.  Bays left in parts narrower than *min_dimension* are then
+    dropped.  The connected built columns of a floor are its plates.
+    """
+    n_bays = int(bay.max()) + 1 if bay.size else 0
+    occ_cols = occupancy[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
+    kept_cols = (kept & occupancy)[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
+    n_cols = np.bincount(bay, minlength=n_bays)
+    grid_shape = occupancy.shape[:2]
+    side = max(1, int(round(min_dimension / voxel_size)))
+    floors, below = [], None
+    for zb, zt in levels:
+        overlap = layer_overlaps(z_grid0, voxel_size, occupancy.shape[2], zb, zt)
+        height = zt - zb
+        column_full = occ_cols @ overlap >= height - 1e-6
+        in_max = np.bincount(bay, weights=(~column_full).astype(np.float64), minlength=n_bays) == 0
+        outside = (np.bincount(bay, weights=height - kept_cols @ overlap, minlength=n_bays)
+                   / (np.maximum(n_cols, 1) * height))
+        keep = in_max & (outside <= tolerance + 1e-9)
+        if stacking == "supported" and below is not None:
+            keep &= below
+        keep = _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, n_cols)
+        floors.append(Floor(zb=zb, zt=zt, kept_bays=keep, outside_share=outside,
+                            plate=_label_plates(keep[bay], cells_ij, grid_shape)))
+        below = keep
+    return floors
