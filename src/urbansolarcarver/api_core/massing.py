@@ -24,6 +24,7 @@ from .. import floor_plates as mg
 from ..io import load_mesh
 from ..load_config import user_config
 from ..pydantic_schemas import MassingManifest, schema_to_json
+from ._reporting import generate_run_report
 from ._util import _ensure_out_dir, _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
 
 log = logging.getLogger(__name__)
@@ -106,7 +107,9 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         floor areas per floor and in total.
     ``plates.obj``
         One closed mesh per plate, named ``floor_<n>_plate_<m>``.
-    ``manifest.json``, ``diagnostics/diagnostic.json``
+    ``manifest.json``, ``diagnostics/diagnostic.json``, ``run_report.md``
+        The report goes to the parent folder when *out_dir* is named
+        ``massing``, otherwise into *out_dir*.
 
     Raises
     ------
@@ -207,5 +210,15 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         "timings": {"wall_seconds": float(time.perf_counter() - t0_wall),
                     "cpu_seconds": float(time.process_time() - t0_cpu)},
     })
+    # The report goes to the run folder in the standard <run>/massing layout,
+    # otherwise next to the plates; an old report is removed first.
+    report_root = out_path.parent if out_path.name == "massing" else out_path
+    (report_root / "run_report.md").unlink(missing_ok=True)
+    try:
+        generate_run_report(report_root, chain.pre_path.parent, chain.thr_path.parent,
+                            report_root / "exporting", conf, massing_dir=out_path)
+    except Exception as exc:
+        log.warning("Could not generate run report: %s", exc)
+
     return MassingResult(out_dir=out_path, plates_path=plates_path, mesh_path=mesh_path,
                          floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates))

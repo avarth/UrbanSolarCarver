@@ -140,3 +140,11 @@ def test_uses_the_preprocessing_voxel_size(tmp_path):
     assert a.floor_areas == pytest.approx(b.floor_areas)
     with pytest.raises(ValueError, match="min_plate_dimension"):
         _massing(cfg, thr, tmp_path / "c", voxel_size=0.5, grid_step=0.5, min_plate_dimension=0.5)
+
+
+def test_run_report_has_a_massing_section(tmp_path):
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
+    _set_mask(thr, lambda occ: occ)
+    _massing(cfg, thr, tmp_path / "out" / "massing")
+    report = (tmp_path / "out" / "run_report.md").read_text(encoding="utf-8")
+    assert "## Massing" in report and "Total floor area" in report

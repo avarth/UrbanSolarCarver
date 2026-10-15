@@ -54,12 +54,14 @@ def generate_run_report(
     thr_dir: Union[str, Path],
     exp_dir: Union[str, Path],
     conf: user_config,
+    massing_dir: Union[str, Path, None] = None,
 ) -> Path:
-    """Compile a human-readable run report from all three stage diagnostics.
+    """Compile a human-readable run report from the stage diagnostics.
 
     Reads ``diagnostics/diagnostic.json`` from each stage directory (a
     missing file leaves that section empty), takes the configuration table
-    from *conf*, and writes a single ``run_report.md`` into *out_dir*.
+    from *conf*, and writes a single ``run_report.md`` into *out_dir*.  The
+    Massing section is added when *massing_dir* is given.
 
     Returns the path to the written report.
     """
@@ -190,9 +192,32 @@ def generate_run_report(
         lines.append(f"- **Time:** {exp_timing.get('wall_seconds', 0):.1f}s")
     lines.append("")
 
+    # --- Massing ---
+    m_timing = {}
+    if massing_dir is not None:
+        m_summary, m_timing = _load_diag(massing_dir)
+        lines.append("## Massing\n")
+        if m_summary:
+            lines.append(f"- **Floors built:** {m_summary.get('floors_built', 0)} of {m_summary.get('floors', 0)}")
+            lines.append(f"- **Floor plates:** {m_summary.get('plates', 0)}")
+            lines.append(f"- **Total floor area:** {m_summary.get('total_floor_area_m2', 0.0):,.0f} m²")
+            per_floor = m_summary.get("floor_area_m2_per_floor") or []
+            if per_floor:
+                lines.append("- **Floor area per floor (m²):** " + ", ".join(f"{a:,.0f}" for a in per_floor))
+            share = m_summary.get("envelope_share_in_plates")
+            if share is not None:
+                lines.append(f"- **Share of the carved envelope inside plates:** {100 * share:.1f}%")
+            lines.append(f"- **Volume outside the envelope (tolerance):** "
+                         f"{m_summary.get('volume_outside_envelope_m3', 0.0):,.0f} m³")
+            if m_summary.get("footprint_source") == "voxels":
+                lines.append("- **Footprint:** from the voxels (the mesh outline could not be read)")
+        if m_timing:
+            lines.append(f"- **Time:** {m_timing.get('wall_seconds', 0):.1f}s")
+        lines.append("")
+
     # --- Total time ---
     total_wall = sum(
-        t.get("wall_seconds", 0) for t in [pre_timing, thr_timing, exp_timing]
+        t.get("wall_seconds", 0) for t in [pre_timing, thr_timing, exp_timing, m_timing]
     )
     lines.append("## Total\n")
     lines.append(f"- **Total time:** {total_wall:.1f}s")
