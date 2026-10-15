@@ -205,10 +205,17 @@ def _fine_mesh_params():
 
 
 def _to_rhino_mesh(geom):
-    """A triangulated copy of a Mesh, Brep or Extrusion (bare or GH-wrapped); None otherwise."""
+    """A triangulated copy of a Mesh, Brep or Extrusion (bare, GH-wrapped, or a
+    document object id); None otherwise."""
     import Rhino.Geometry as rg
+    import System
     if hasattr(geom, "Value"):  # GH_ObjectWrapper and goo
         geom = geom.Value
+    if isinstance(geom, System.Guid):
+        # Components placed with the older "ghdoc Object" input hint receive
+        # geometry as ids of the script's document.
+        import rhinoscriptsyntax as rs
+        geom = rs.coercegeometry(geom)
     if isinstance(geom, rg.Extrusion):
         geom = geom.ToBrep()
     if isinstance(geom, rg.Mesh):
