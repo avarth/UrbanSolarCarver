@@ -40,6 +40,11 @@ carve_above_min : int, optional
     activates for that column.  Higher values (2-3) prevent stray
     single-voxel carvings from triggering aggressive removal;
     shorter runs stay carved.  Default: 1.
+max_slope : float, optional
+    Steepest rise in degrees allowed between neighbouring columns after
+    carve_above; taller columns are cut into ramps, which removes cliffs
+    and spires. Empty = 75 for the weighted modes, off for time-based and
+    tilted_plane. 90 = off.
 
 Outputs
 -------
@@ -60,6 +65,7 @@ try:
         "'numeric' applies a direct raw-score cutoff. "
         "score_smoothing applies Gaussian blur to scores before thresholding for cleaner results. "
         "carve_above removes floating occupied voxels above carved zones. "
+        "max_slope turns cliffs and spires into ramps. "
         "Connect the output to ThresholdStage (re-runs only thresholding and export) or to Config."
     )
     ii = ghenv.Component.Params.Input
@@ -75,7 +81,8 @@ try:
         ("value", (
             "Threshold parameter whose meaning depends on method:\n"
             "  carve_fraction → fraction to carve (0.0-1.0). "
-            "0.7 = remove 70% of obstruction weight. Start with 0.5.\n"
+            "0.7 = remove 70% of obstruction weight, including what carve_above removes. "
+            "Start with 0.5.\n"
             "  headtail → ignored (automatic).\n"
             "  numeric → raw score cutoff. Voxels scoring above this are removed.\n"
             "  no method → used as carve_fraction."
@@ -99,6 +106,11 @@ try:
             "carve_above activates for that column. Higher values (2-3) prevent stray "
             "single-voxel carvings from triggering aggressive column removal; shorter "
             "runs stay carved. Default: 1."
+        )),
+        ("max_slope", (
+            "Steepest rise in degrees allowed between neighbouring columns after carve_above; "
+            "taller columns are cut into ramps, which removes cliffs and spires. Empty = 75 for "
+            "the weighted modes, off for time-based and tilted_plane. 90 = off."
         )),
     ]):
         if i < len(ii):
@@ -157,5 +169,8 @@ if carve_above is not None:
 
 if carve_above_min is not None:
     _items.append(f"carve_above_min_consecutive={int(carve_above_min)}")
+
+if max_slope is not None:
+    _items.append(f"max_slope_deg={float(max_slope)}")
 
 overrides = ";".join(_items) if _items else None

@@ -14,7 +14,7 @@ from ..pydantic_schemas import (
     schema_to_json,
 )
 from ..scoring import carve_fraction_threshold, headtail_threshold
-from ..carving import carve_above_columns
+from ..carving import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
 from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy
 from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
@@ -108,7 +108,7 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     return smoothed, True, radius_m, sigma_voxels
 
 
-def _resolve_threshold(scores, spec):
+def _resolve_threshold(scores, spec, removal_scores=None):
     """Resolve a validated :class:`ThresholdSpec` into a numeric cutoff.
 
     The config layer guarantees the spec is complete and valid for the
@@ -116,13 +116,21 @@ def _resolve_threshold(scores, spec):
     dispatches: ``cutoff`` is the value itself; ``headtail`` (Jiang 2013
     head/tail breaks) and ``carve_fraction`` (a score-mass cutoff, not a
     percentile of voxel counts) compute it from *scores*.
+
+    *removal_scores* (same shape as *scores*): the cutoff at which each
+    voxel is removed once carve_above runs
+    (:func:`~urbansolarcarver.carving.carve_above_scores`).  carve_fraction
+    then ranks by it and counts *scores*, so the fraction includes what
+    carve_above removes.
     """
     if spec.method == "cutoff":
         return float(spec.value)
     if spec.method == "headtail":
         return float(headtail_threshold(scores, max_iterations=50))
     if spec.method == "carve_fraction":
-        return carve_fraction_threshold(scores, float(spec.value))
+        if removal_scores is None:
+            return carve_fraction_threshold(scores, float(spec.value))
+        return carve_fraction_threshold(removal_scores, float(spec.value), mass=scores)
     raise ValueError(f"Unknown threshold method: {spec.method!r}")
 
 
@@ -157,14 +165,20 @@ def thresholding(
       last such mean is the cutoff.  Suited to the heavy-tailed score
       distributions common in urban solar access studies.
     * ``carve_fraction`` (default for weighted modes): cumulative-score
-      cutoff.  Sorting the occupied voxels by descending score, it finds the
-      cutoff above which the voxels hold the given fraction of the
-      building's total score mass.
+      cutoff.  It finds the cutoff at which the removed voxels hold the
+      given fraction of the building's total score mass, counting the
+      voxels that carve_above removes along with them.
 
     All threshold statistics, retention counts and smoothing use occupied
     voxels only; the mask is False on empty cells.  With ``carve_above``
     (the default), occupied voxels above a carved run in their column are
-    removed as well, so ``mask.npy`` is the final mask that gets exported.
+    removed as well.  Then, for the score-cutoff methods of the weighted
+    modes (or whenever ``max_slope_deg`` is set), columns that rise more
+    steeply than ``max_slope_deg`` above their surroundings are cut down
+    (:func:`~urbansolarcarver.carving.limit_column_slope`); this removes
+    some score beyond the fraction, reported as
+    ``obstruction_fraction_carved_by_slope_limit``.  ``mask.npy`` is the
+    final mask that gets exported.
 
     Score smoothing (``cfg.score_smoothing``):
 
@@ -300,7 +314,14 @@ def thresholding(
             f"'{spec.method}'. Use a numeric threshold (a raw-score cutoff) "
             f"or match the config mode to the preprocessing run."
         )
-    thr_val = _resolve_threshold(occ_scores, spec)
+    # With carve_above, each voxel goes at the cutoff of the lowest
+    # carved run below it; comparing that value with the cutoff gives the
+    # mask after carve_above, and lets carve_fraction count what it removes.
+    removal_scores = (carve_above_scores(scores.reshape(grid_shape), occ,
+                                         conf.carve_above_min_consecutive)
+                      if conf.carve_above else None)
+    thr_val = _resolve_threshold(
+        occ_scores, spec, None if removal_scores is None else removal_scores[occ])
 
     # Threshold to mask. Empty cells are False: there is nothing to keep.
     mask = occ & (scores <= thr_val).reshape(grid_shape)
@@ -323,8 +344,14 @@ def thresholding(
     carve_above_removed = 0
     if conf.carve_above:
         kept_before = int(mask.sum())
-        mask = carve_above_columns(mask, occ, min_consecutive=conf.carve_above_min_consecutive)
+        mask = occ & (removal_scores <= thr_val)
         carve_above_removed = kept_before - int(mask.sum())
+    # Slope limit: turns cliffs and spires left by per-voxel cutoffs into ramps.
+    max_slope = conf.effective_max_slope_deg()
+    mask_before_slope = mask
+    if max_slope is not None:
+        mask = limit_column_slope(mask, occ, max_slope)
+    slope_removed = int(mask_before_slope.sum()) - int(mask.sum())
 
     mask_path = out_path / "mask.npy"
     np.save(mask_path, mask, allow_pickle=False)
@@ -337,6 +364,7 @@ def thresholding(
         "score_smoothing": conf.score_smoothing,
         "carve_above": conf.carve_above,
         "carve_above_min_consecutive": conf.carve_above_min_consecutive,
+        "max_slope_deg": max_slope,
     }
     stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
 
@@ -368,6 +396,8 @@ def thresholding(
         "carve_above_applied": conf.carve_above,
         "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
         "carve_above_extra_voxels_removed": carve_above_removed,
+        "max_slope_deg": max_slope,
+        "slope_limit_extra_voxels_removed": slope_removed,
         "score_smooth_applied": _smooth_applied,
         "score_smoothing_m": _smooth_radius_m,
         "score_smoothing_sigma_voxels": _sigma_voxels,
@@ -393,6 +423,9 @@ def thresholding(
         score_mass_total = float(nn.sum())
         if score_mass_total > 0:
             summary["obstruction_fraction_carved"] = round(score_mass_carved / score_mass_total, 4)
+            by_slope = float(nn[mask_before_slope[occ] & ~mask[occ]].sum())
+            summary["obstruction_fraction_carved_by_slope_limit"] = round(
+                by_slope / score_mass_total, 4)
         if n_samples and n_samples > 0:
             # Score mass divided by the number of sample points
             summary["mean_obstruction_per_sample"] = round(score_mass_total / n_samples, 2)

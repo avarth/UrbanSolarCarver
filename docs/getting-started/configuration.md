@@ -109,10 +109,11 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `grid_step` | 1.0 | Surface sampling spacing in meters (must be <= voxel_size) |
 | `ray_length` | 300.0 | Maximum ray cast distance in meters |
 | `threshold` | mode default | `carve_fraction` for weighted modes, `0` for `time-based`, unset for `tilted_plane`. See [Thresholding strategies](#thresholding-strategies) below |
-| `carve_fraction` | 0.7 | Solar protection slider: 0.7 = aggressive (remove 70% of the obstruction weight), 0.3 = conservative |
+| `carve_fraction` | 0.7 | Solar protection slider: 0.7 = aggressive (remove 70% of the obstruction weight, including what `carve_above` removes), 0.3 = conservative |
 | `score_smoothing` | `null` | Gaussian blur radius (m) on the scores before thresholding; `null` = 1.1 x voxel_size, 0 = off. Weighted modes only |
 | `carve_above` | true | Carve all occupied voxels above the lowest carved region in each column, so the result is a buildable height field without floating mass (empty cells such as a ground-floor passage never trigger it). `false` keeps mass that floats above carved zones but casts no violating shadow |
 | `carve_above_min_consecutive` | 1 | Min consecutive carved voxels to trigger carve_above (2-3 avoid column removal from stray single voxels; shorter runs stay carved) |
+| `max_slope_deg` | 75 (weighted modes), off otherwise | Steepest rise (degrees) allowed between neighbouring columns after carve_above; taller columns are cut into ramps, which removes cliffs and spires. `90` = off. The extra score it removes is reported, not counted in `carve_fraction` |
 | `apply_smoothing` | false | SDF smoothing + marching cubes instead of cubic mesh |
 | `min_voxels` | 300 | Remove connected voxel clusters smaller than this |
 | `final_mesh_format` | `"ply"` | Exported mesh format: `ply`, `obj`, `stl`, or `glb` |
@@ -150,7 +151,7 @@ After preprocessing computes per-voxel obstruction scores, thresholding decides 
     **`time-based`** scores are **shaded area x duration in m²·h** (how much protected surface the voxel shades, and for how long, during the period). Use a non-negative number: `threshold: 0` removes any voxel that shadows at any sampled moment (strict, default); `threshold: 5` tolerates up to 5 m²·h; and so on. See [Modes: violation-count thresholds](../modes.md#for-violation-count-modes-time-based-tilted_plane) for details.
 
 **`carve_fraction`** (recommended for weighted modes)
-:   Removes a fraction of the total obstruction weight of the building's voxels. Set `carve_fraction: 0.7` to remove 70% of the obstruction (aggressive: taller, slimmer result with better solar access). Set `carve_fraction: 0.3` for a conservative result (bulkier volume, more floor area). It works as a **solar protection slider**.
+:   Removes a fraction of the total obstruction weight of the building's voxels, counting what `carve_above` removes. Set `carve_fraction: 0.7` to remove 70% of the obstruction (aggressive: taller, slimmer result with better solar access). Set `carve_fraction: 0.3` for a conservative result (bulkier volume, more floor area). It works as a **solar protection slider**.
 
 **`headtail`**
 :   Jiang (2013) head/tail breaks: splits the scores at their mean and keeps splitting the upper part while it holds at most 40% of the values. Designed for heavy-tailed score distributions where most voxels have low scores and a few have very high scores. Biased toward removing only the worst obstructors.

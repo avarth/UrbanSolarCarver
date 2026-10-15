@@ -152,6 +152,12 @@ def generate_run_report(
         value = thr_summary.get("threshold_value", 0)
         lines.append(f"- **Method:** {method}")
         lines.append(f"- **Threshold value:** {value:.4g}")
+        if thr_summary.get("max_slope_deg") is not None:
+            lines.append(
+                f"- **Slope limit:** {thr_summary['max_slope_deg']:g} deg, removed "
+                f"{thr_summary.get('slope_limit_extra_voxels_removed', 0):,} voxels "
+                f"({100 * thr_summary.get('obstruction_fraction_carved_by_slope_limit', 0.0):.1f}% "
+                f"of the obstruction score)")
         lines.append(f"- **Voxels kept / removed:** {thr_summary.get('voxels_kept', 0):,} / {thr_summary.get('voxels_removed', 0):,}")
         obs = thr_summary.get("obstruction_fraction_carved")
         if obs is not None:

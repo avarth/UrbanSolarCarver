@@ -333,7 +333,7 @@ class TestDefaultThresholdReporting:
     recorded by name ('carve_fraction'), and the stage hash must depend on
     the strategy, not on the score-dependent resolved cutoff."""
 
-    def _run_thresholding(self, tmp_path, sub, scores):
+    def _run_thresholding(self, tmp_path, sub, scores, **overrides):
         pre_dir = tmp_path / sub / "preprocessing"
         pre_dir.mkdir(parents=True, exist_ok=True)
         scores_path = pre_dir / "scores.npy"
@@ -360,6 +360,7 @@ class TestDefaultThresholdReporting:
             start_month=1, start_day=1, start_hour=0,
             end_month=12, end_day=31, end_hour=23,
             # threshold intentionally left unset (None → carve_fraction)
+            **overrides,
         )
         from urbansolarcarver.api_core.thresholding import thresholding
         return thresholding(pre_dir, cfg, tmp_path / sub / "thr")
@@ -370,6 +371,28 @@ class TestDefaultThresholdReporting:
         result = self._run_thresholding(tmp_path, "a", scores)
         diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
         assert diag["threshold_method"] == "carve_fraction"
+        assert diag["max_slope_deg"] == 75.0  # default slope limit for the weighted modes
+        assert diag["slope_limit_extra_voxels_removed"] >= 0
+
+    def test_max_slope_90_turns_the_limit_off(self, tmp_path):
+        rng = np.random.default_rng(14)
+        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
+        result = self._run_thresholding(tmp_path, "off", scores, max_slope_deg=90)
+        diag = json.loads((result.out_dir / "diagnostics" / "diagnostic.json").read_text())
+        assert diag["max_slope_deg"] is None
+        assert diag["slope_limit_extra_voxels_removed"] == 0
+
+    def test_carve_fraction_counts_carve_above(self, tmp_path):
+        """Without smoothing and slope limit, the removed voxels (carve_above
+        included) hold the carve_fraction share of the score, up to one
+        group of tied voxels."""
+        rng = np.random.default_rng(15)
+        scores = rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32)
+        result = self._run_thresholding(tmp_path, "share", scores, carve_fraction=0.4,
+                                        score_smoothing=0, max_slope_deg=90)
+        mask = np.load(result.mask_path)
+        share = scores[~mask].sum(dtype=np.float64) / scores.sum(dtype=np.float64)
+        assert 0.4 - 0.03 < share <= 0.4 + 1e-9
 
     def test_stage_hash_independent_of_score_data(self, tmp_path):
         """Same config + same upstream hash → same stage hash, even when the
