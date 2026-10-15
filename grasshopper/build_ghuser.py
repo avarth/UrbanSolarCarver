@@ -57,8 +57,11 @@ SCRIPT_PARAM_ID = "08908df5-fa14-4982-9ab2-1aa0927566aa"
 GUID_NAMESPACE = uuid.UUID("5b0f3c1e-6d2a-4f3e-9a51-0c4b7d1e2a90")
 
 # hint name -> (TypeHintID, converter assembly, converter type)
+# "object" is the hint Rhino shows as "ghdoc Object": non-geometry values pass
+# through unchanged, but geometry arrives as document Guids.
 TYPE_HINTS = {
     "object": ("1c282eeb-dd16-439f-94e4-7d92b542fe8b", "System.Private.CoreLib", "System.Object"),
+    "geometrybase": ("c37956f4-d39c-49c7-af71-1e87f8031b26", "RhinoCommon", "Rhino.Geometry.GeometryBase"),
     "float": ("9d51e32e-c038-4352-9554-f4137ca91b9a", "System.Private.CoreLib", "System.Double"),
     "int": ("48d01794-d3d8-4aef-990e-127168822244", "System.Private.CoreLib", "System.Int32"),
     "str": ("3aceb454-6dbd-4c5b-9b6b-e71f8c1cdf88", "System.Private.CoreLib", "System.String"),
@@ -73,9 +76,10 @@ _TYPE_RULES = [
     (r"^list of str$", ("str", True)),
     (r"^list of point3d$", ("object", True)),
     # Breps must reach the script unconverted: a mesh hint makes Grasshopper
-    # mesh them with its coarse default settings first.
-    (r"^mesh or brep \(list\)$", ("object", True)),
-    (r"^mesh or brep$", ("object", False)),
+    # mesh them with its coarse default settings first, and the ghdoc hint
+    # turns them into document Guids.  GeometryBase passes both as geometry.
+    (r"^mesh or brep \(list\)$", ("geometrybase", True)),
+    (r"^mesh or brep$", ("geometrybase", False)),
     (r"^(rhino\.geometry\.)?mesh$", ("mesh", False)),
     (r"^str or list$", ("object", True)),
     (r"^float$", ("float", False)),

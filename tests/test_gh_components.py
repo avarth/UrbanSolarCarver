@@ -41,3 +41,14 @@ def test_component_describes(fname):
 def test_packaged_ghuser_exists(fname):
     comp = build_ghuser.describe(GH_DIR / "components" / fname, MANIFEST["components"][fname])
     assert (GH_DIR / "USC_GHplugin" / f"{comp['name']}.ghuser").is_file()
+
+
+@pytest.mark.parametrize("fname", ["USC_Preprocess.py", "USC_RunPipeline.py"])
+def test_geometry_inputs_reach_the_script_as_geometry(fname):
+    # The "ghdoc Object" hint (1c282eeb...) hands geometry over as document
+    # Guids, so referenced Breps would arrive as ids, not geometry.
+    comp = build_ghuser.describe(GH_DIR / "components" / fname, MANIFEST["components"][fname])
+    ports = {p["name"]: p for p in comp["inputs"]}
+    for name in ("max_volume", "test_surfaces"):
+        assert ports[name]["hint"] == "geometrybase" and ports[name]["is_list"]
+    assert build_ghuser.TYPE_HINTS["geometrybase"][2] == "Rhino.Geometry.GeometryBase"
