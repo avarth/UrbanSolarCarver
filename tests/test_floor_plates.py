@@ -362,3 +362,24 @@ def test_plates_do_not_cover_neighbouring_bays_on_a_rotated_l():
     assert a.intersection(b).area < 1e-6
     # face ends that are not cuts or ridges lie within half a voxel of the columns
     assert a.area + b.area == pytest.approx(poly.area, rel=1e-2)
+
+
+def test_collinear_vertices_keep_a_facade_straight():
+    # A stray vertex on a straight edge (mesh sections, T-junctions) must not
+    # turn the facade into a curved one, whose positions are arc lengths.
+    block = Polygon([(0, 0), (20, 0), (40, 0), (40, 15), (0, 15)])
+    facades, corners = mg.split_facades([block])
+    assert len(facades) == 4 and all(f.straight for f in facades)
+
+
+def test_corner_square_of_a_curved_facade_is_cut_into_bays():
+    # The inner facade of this L bends by 10 degrees, so it is one curved
+    # facade; at the reflex corner it takes the corner square past its end.
+    # Those columns must be cut into bays like the rest, not lumped into one.
+    bent_l = Polygon([(0, 0), (60, 0), (60, 15), (37, 17), (15, 15), (15, 60), (0, 60)])
+    ij, xy, facades, faces = _faces(bent_l, 0.5)
+    bay, bay_face = mg.cut_bays(faces, 3.0, 0.5)
+    bent = next(k for k, f in enumerate(facades) if not f.straight)
+    for b in np.flatnonzero(bay_face == bent):
+        x = xy[bay == b, 0]
+        assert np.ptp(x) < 2 * 3.0

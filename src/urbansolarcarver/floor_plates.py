@@ -84,14 +84,18 @@ def footprint_from_columns(columns, voxel_size) -> list:
 
 
 def _facade(part, xy, closed) -> Facade:
+    """A facade through the points *xy*; straight when every point lies within
+    a micrometre of the line from the first to the last (stray collinear
+    vertices from mesh edges do not make it curved)."""
     start, end = xy[0], xy[-1]
     chord = end - start
     norm = float(np.hypot(*chord))
     direction = chord / norm if norm > 0.0 else np.array([1.0, 0.0])
-    line = LineString(xy)
-    return Facade(part=part, line=line, length=float(line.length),
-                  straight=(not closed) and len(xy) == 2, direction=direction,
-                  start=start, end=end, closed=closed)
+    off_line = np.abs((xy[:, 0] - start[0]) * direction[1] - (xy[:, 1] - start[1]) * direction[0])
+    straight = (not closed) and norm > 0.0 and bool(off_line.max() <= 1e-6)
+    line = LineString([start, end] if straight else xy)
+    return Facade(part=part, line=line, length=float(line.length), straight=straight,
+                  direction=direction, start=start, end=end, closed=closed)
 
 
 def _ring_facades(coords, part, corner_angle_deg):
@@ -265,7 +269,8 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
     Equal lengths go to the facade closer to the x axis (see ``_longer``).
     ``u`` is the projection on the facade direction measured from the
     part's centroid for straight facades (so parallel facades share cut
-    positions), the arc length otherwise.
+    positions), the arc length otherwise, continued along the end edges
+    past either end.
     """
     xy = np.asarray(xy, dtype=np.float64)
     # Columns whose centre lies exactly on a ridge (aligned grids, odd voxel
@@ -318,7 +323,17 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
         if f.straight:
             u[mine] = (xy[mine] - centroids[f.part]) @ f.direction
         else:
-            u[mine] = shapely.line_locate_point(f.line, points[mine])
+            t = shapely.line_locate_point(f.line, points[mine])
+            if not f.closed:
+                # Past either end (corner squares at reflex corners) the arc
+                # length continues along the end edge instead of stopping.
+                coords = np.asarray(f.line.coords)
+                first, last = coords[1] - coords[0], coords[-1] - coords[-2]
+                before = (xy[mine] - f.start) @ (first / np.hypot(*first))
+                after = (xy[mine] - f.end) @ (last / np.hypot(*last))
+                t = np.where(t <= 1e-9, np.minimum(before, 0.0),
+                             np.where(t >= f.length - 1e-9, f.length + np.maximum(after, 0.0), t))
+            u[mine] = t
     return Faces(face=face, u=u)
 
 
