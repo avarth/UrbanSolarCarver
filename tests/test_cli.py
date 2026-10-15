@@ -120,3 +120,10 @@ class TestArchetypeCommand:
                             "-s", "wwr_west=0"])
         assert res.exit_code == 1
         assert "INVALID archetype" in res.output
+
+
+def test_massing_command_exists():
+    from typer.testing import CliRunner
+    from urbansolarcarver.carver_cli import app
+    result = CliRunner().invoke(app, ["massing", "--help"], env={"COLUMNS": "200"})
+    assert result.exit_code == 0 and "--from" in result.output and "--config" in result.output

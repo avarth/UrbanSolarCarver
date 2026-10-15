@@ -17,7 +17,7 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 from ..load_config import user_config
-from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, load_occupancy
+from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, load_thresholded_grid
 from ._reporting import generate_run_report
 from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest, schema_from_json
 from ..io import save_mesh
@@ -115,48 +115,15 @@ def exporting(
     conf = _resolve_cfg(cfg)
     out_path = _ensure_out_dir(out_dir, "exporting")
 
-    thr_path = Path(threshold_manifest)
-    if thr_path.is_dir():
-        thr_path = thr_path / "manifest.json"
-    try:
-        thr_manifest = schema_from_json(ThresholdingManifest, thr_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise ValueError("Unable to load thresholding manifest; pass a ThresholdingResult or a path to its manifest.json") from exc
-
-    mask_path = Path(thr_manifest.mask_path)
-
-    # Load preprocessing manifest for grid metadata
-    upstream_path = Path(thr_manifest.upstream_manifest)
-    try:
-        pre_manifest = schema_from_json(PreprocessingManifest, upstream_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise ValueError(
-            f"Unable to load the preprocessing manifest referenced by the "
-            f"thresholding manifest ({upstream_path}). Re-run preprocessing, "
-            f"or fix the manifest chain."
-        ) from exc
-
-    grid_shape = tuple(pre_manifest.shape)
-    if not mask_path.is_file():
-        raise FileNotFoundError(
-            f"Mask file not found: {mask_path} (referenced by {thr_path}). "
-            f"Re-run thresholding."
-        )
-    mask = np.load(mask_path, allow_pickle=False)
-    if mask.ndim == 1:
-        mask = mask.reshape(grid_shape)
-    elif tuple(mask.shape) != grid_shape:
-        raise ValueError(
-            f"Mask shape {tuple(mask.shape)} does not match the grid shape "
-            f"{grid_shape} recorded in {upstream_path}; the mask and manifest "
-            f"are from different runs."
-        )
+    chain = load_thresholded_grid(threshold_manifest, conf)
+    thr_path, thr_manifest, pre_manifest = chain.thr_path, chain.thr_manifest, chain.pre_manifest
+    mask = chain.mask
 
     import torch  # lazy
     resolved_device = resolve_device(conf.device)
     mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
-    voxel_grid = torch.as_tensor(load_occupancy(pre_manifest, conf), device=resolved_device)
+    voxel_grid = torch.as_tensor(chain.occupancy, device=resolved_device)
     carve_grid = (voxel_grid.bool() & mask_tensor)
     origin = np.array(pre_manifest.origin, dtype=np.float64)
 

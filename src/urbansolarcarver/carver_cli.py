@@ -429,6 +429,50 @@ def cmd_exporting(
     })
 
 
+@app.command("massing", help="Stage 4: floor plates from the carved envelope -> plates.json, plates.obj")
+def cmd_massing(
+    from_manifest: Optional[Path] = Option(None, "-f", "--from", help="Path to thresholding manifest.json (auto-detected if omitted)"),
+    config: Path = Option(..., "-c", "--config", exists=True, readable=True, help="YAML config path"),
+    override: List[str] = Option([], "-o", "--override", help="Override config fields"),
+    out_dir: Optional[Path] = Option(None, "--out", help="Output directory"),
+    daemon: bool = Option(False, "--daemon", help="Send to running daemon"),
+    quiet: bool = Option(False, "-q", "--quiet", help="Minimal output"),
+):
+    """Build stacked floor plates that follow the footprint, from the carving mask.
+
+    Reads the thresholding manifest (``-f``) and writes ``plates.json``
+    (outlines in world coordinates) and ``plates.obj`` (one closed prism per
+    plate).  Settings: ground_floor_height, floor_height,
+    min_plate_dimension, plate_tolerance, plate_stacking.
+    """
+    cfg = load_config(str(config), override)
+    out_dir = out_dir or (Path(cfg.out_dir) / "massing")
+    if from_manifest is None:
+        from_manifest = _find_manifest(cfg, out_dir, "thresholding", quiet)
+
+    if daemon:
+        _run_on_daemon({
+            "cmd": "massing", "from": str(from_manifest.resolve()),
+            "config": str(config.resolve()), "overrides": _absolute_overrides(override),
+            "out_dir": str(out_dir.resolve()),
+        }, quiet)
+        return
+
+    if not quiet:
+        typer.secho(f"  Massing -> {out_dir}", fg="yellow")
+
+    t0 = time.perf_counter()
+    res = _api("massing")(from_manifest, cfg, out_dir)
+    elapsed = time.perf_counter() - t0
+
+    _echo_result("Massing", {
+        "Plates": str(res.plates_path),
+        "Floor plates": f"{res.n_plates}",
+        "Total floor area": f"{res.total_floor_area:,.0f} m²",
+        "Time": f"{elapsed:.1f}s",
+    })
+
+
 # ---------------------------------------------------------------------------
 # warmup: precompile Warp kernels so the first run is not misleadingly slow
 # ---------------------------------------------------------------------------

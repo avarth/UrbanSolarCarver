@@ -12,9 +12,11 @@ __all__ = [
     "preprocessing",
     "thresholding",
     "exporting",
+    "massing",
     "PreprocessingResult",
     "ThresholdingResult",
     "ExportingResult",
+    "MassingResult",
     "load_config",
     "user_config",
 ]
@@ -29,8 +31,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:  # pragma: no cover
     from .api import (  # noqa: F401
         run_pipeline,
-        preprocessing, thresholding, exporting,
-        PreprocessingResult, ThresholdingResult, ExportingResult,
+        preprocessing, thresholding, exporting, massing,
+        PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
     )
 
 # Everything else is deferred until actually accessed.
@@ -58,17 +60,19 @@ def _ensure_api():
         ) from _e
     from .api import (
         run_pipeline,
-        preprocessing, thresholding, exporting,
-        PreprocessingResult, ThresholdingResult, ExportingResult,
+        preprocessing, thresholding, exporting, massing,
+        PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
     )
     _api_names.update({
         "run_pipeline": run_pipeline,
         "preprocessing": preprocessing,
         "thresholding": thresholding,
         "exporting": exporting,
+        "massing": massing,
         "PreprocessingResult": PreprocessingResult,
         "ThresholdingResult": ThresholdingResult,
         "ExportingResult": ExportingResult,
+        "MassingResult": MassingResult,
     })
     _api_loaded = True
 

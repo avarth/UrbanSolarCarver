@@ -9,8 +9,8 @@ from typing import Union
 
 from .load_config import load_config, user_config
 from .api_core import (
-    preprocessing, thresholding, exporting,
-    PreprocessingResult, ThresholdingResult, ExportingResult,
+    preprocessing, thresholding, exporting, massing,
+    PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
 )
 
 
@@ -41,9 +41,11 @@ __all__ = [
     "preprocessing",
     "thresholding",
     "exporting",
+    "massing",
     "PreprocessingResult",
     "ThresholdingResult",
     "ExportingResult",
+    "MassingResult",
     "load_config",
     "user_config",
 ]
