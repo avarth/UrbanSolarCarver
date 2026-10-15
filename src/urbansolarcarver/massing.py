@@ -20,6 +20,7 @@ from shapely.geometry import LineString, Polygon
 from shapely.geometry.polygon import orient
 
 CORNER_ANGLE_DEG = 30.0  # turns sharper than this split facades
+_TIE_SHIFT = np.array([1.1e-6, 2.3e-6])  # m; see assign_faces
 
 
 # ----------------------------------------------------------------- footprint and facades
@@ -140,3 +141,125 @@ def split_facades(polygons, corner_angle_deg=CORNER_ANGLE_DEG):
                 if a != b:
                     corners.append(Corner(a, b, convex[m], facades[a].end))
     return facades, corners
+
+
+# ----------------------------------------------------------------- faces
+@dataclass(frozen=True)
+class Faces:
+    """For each footprint column: its facade and its position along that facade."""
+    face: np.ndarray   # (N,) facade index
+    u: np.ndarray      # (N,) m along the facade
+
+
+def part_of_points(points, polygons):
+    """Index of the polygon containing each point; points on no polygon (edge
+    rounding) take the nearest one."""
+    part = np.full(len(points), -1, dtype=np.int64)
+    for k, polygon in enumerate(polygons):
+        part[(part < 0) & shapely.intersects(polygon, points)] = k
+    missing = part < 0
+    if missing.any():
+        dist = np.stack([shapely.distance(p, points[missing]) for p in polygons], axis=1)
+        part[missing] = np.argmin(dist, axis=1)
+    return part
+
+
+def _half_depth(facade, polygon, voxel_size):
+    """Half the part's thickness measured inward from *facade* along its normal
+    (median over positions along the facade, one per voxel)."""
+    n = max(1, int(facade.length / voxel_size))
+    t = (np.arange(n) + 0.5) * facade.length / n
+    step = min(1e-3, facade.length / (4 * n))
+    ahead = shapely.get_coordinates(shapely.line_interpolate_point(facade.line, np.minimum(t + step, facade.length)))
+    behind = shapely.get_coordinates(shapely.line_interpolate_point(facade.line, np.maximum(t - step, 0.0)))
+    at = shapely.get_coordinates(shapely.line_interpolate_point(facade.line, t))
+    tangent = ahead - behind
+    tangent /= np.linalg.norm(tangent, axis=1, keepdims=True)
+    inward = np.stack([-tangent[:, 1], tangent[:, 0]], axis=1)   # solid on the left
+    x0, y0, x1, y1 = polygon.bounds
+    reach = float(np.hypot(x1 - x0, y1 - y0)) + 1.0
+    thickness = []
+    for p, d in zip(at, inward):
+        ray = LineString([p + d * 1e-6, p + d * reach])
+        inside = ray.intersection(polygon)
+        pieces = [g for g in getattr(inside, "geoms", [inside]) if g.length > 0.0]
+        first = [g for g in pieces if shapely.distance(g, shapely.Point(p)) < 1e-4]
+        if first:
+            thickness.append(first[0].length)
+    return 0.5 * float(np.median(thickness)) if thickness else 0.0
+
+
+def _longer(a, b, facades):
+    """(longer, shorter) facade index; ties go to the lower index."""
+    la, lb = facades[a].length, facades[b].length
+    return (a, b) if (la > lb + 1e-9 or (abs(la - lb) <= 1e-9 and a < b)) else (b, a)
+
+
+def _distance_to_tangent(facade, at_end, xy):
+    """Distance from *xy* to the line through the facade's first or last edge."""
+    coords = np.asarray(facade.line.coords)
+    a, b = (coords[-2], coords[-1]) if at_end else (coords[0], coords[1])
+    d = (b - a) / np.hypot(*(b - a))
+    rel = xy - a
+    return np.abs(rel[:, 0] * d[1] - rel[:, 1] * d[0])
+
+
+def assign_faces(xy, facades, corners, polygons, voxel_size) -> Faces:
+    """Assign footprint columns (centres *xy*, local) to faces.
+
+    Each column first goes to its nearest facade of the same part, which
+    splits the footprint into faces meeting along ridges (diagonal at
+    corners).  Corners are then squared:
+
+    * convex corner: the shorter facade's columns that lie in front of the
+      longer facade (projection within its extent) and within its half
+      depth (half the part's thickness behind it) move to the longer facade;
+    * reflex corner: the columns whose nearest point on both facades is the
+      corner vertex, and that lie within each facade's half depth of its
+      tangent line, move to the longer facade, extending it past its end.
+
+    Equal lengths go to the lower facade index.  ``u`` is the projection on the facade
+    direction measured from the part's centroid for straight facades (so
+    parallel facades share cut positions), the arc length otherwise.
+    """
+    xy = np.asarray(xy, dtype=np.float64)
+    # Columns whose centre lies exactly on a ridge (aligned grids, odd voxel
+    # counts) would make every test below a tie; a fixed sub-micrometre shift
+    # sends all of them to the same side, so faces stay rectangular.
+    probe = xy + _TIE_SHIFT
+    points = shapely.points(probe)
+    part = part_of_points(points, polygons)
+    facade_part = np.array([f.part for f in facades])
+    lines = np.array([f.line for f in facades], dtype=object)
+    dist = shapely.distance(points[:, None], lines[None, :])
+    dist = np.where(part[:, None] == facade_part[None, :], dist, np.inf)
+    nearest = np.argmin(dist, axis=1)
+
+    half_depth = np.array([_half_depth(f, polygons[f.part], voxel_size) for f in facades])
+
+    face = nearest.copy()
+    for c in (c for c in corners if c.convex):
+        longer, shorter = _longer(c.ending, c.starting, facades)
+        t = shapely.line_locate_point(facades[longer].line, points)
+        in_front = (t > 1e-9) & (t < facades[longer].length - 1e-9)
+        face[(nearest == shorter) & in_front & (dist[:, longer] <= half_depth[longer])] = longer
+    for c in (c for c in corners if not c.convex):
+        ending, starting = facades[c.ending], facades[c.starting]
+        longer, _ = _longer(c.ending, c.starting, facades)
+        at_vertex = ((shapely.line_locate_point(ending.line, points) >= ending.length - 1e-9)
+                     & (shapely.line_locate_point(starting.line, points) <= 1e-9))
+        near = ((_distance_to_tangent(ending, True, probe) <= half_depth[c.ending])
+                & (_distance_to_tangent(starting, False, probe) <= half_depth[c.starting]))
+        face[at_vertex & near & (part == ending.part)] = longer
+
+    centroids = np.array([[p.centroid.x, p.centroid.y] for p in polygons])
+    u = np.zeros(len(xy))
+    for k, f in enumerate(facades):
+        mine = face == k
+        if not mine.any():
+            continue
+        if f.straight:
+            u[mine] = (xy[mine] - centroids[f.part]) @ f.direction
+        else:
+            u[mine] = shapely.line_locate_point(f.line, points[mine])
+    return Faces(face=face, u=u)
