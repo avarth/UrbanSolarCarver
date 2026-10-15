@@ -1,10 +1,10 @@
-"""Floor-plate massing geometry (massing.py)."""
+"""Floor-plate massing geometry (floor_plates.py)."""
 import numpy as np
 import pytest
 import shapely
 from shapely.geometry import LineString, Point, Polygon, box
 
-from urbansolarcarver import massing as mg
+from urbansolarcarver import floor_plates as mg
 
 L_SHAPE = Polygon([(0, 0), (60, 0), (60, 15), (15, 15), (15, 60), (0, 60)])
 
@@ -261,3 +261,16 @@ class TestPlateGeometry:
         mesh = mg.prism_mesh(plate, 5.0, 8.0)
         assert mesh.is_watertight and mesh.is_winding_consistent
         assert mesh.volume == pytest.approx(plate.area * 3.0)
+
+
+def test_plate_narrower_than_the_minimum_is_dropped():
+    # A 2 m deep footprint touches 3 voxel columns at 1 m; the geometric check
+    # removes it even though the column-based opening keeps it.
+    poly = box(0, 0, 20, 2)
+    ij, _ = _cells(box(-0.5, -0.5, 20.5, 2.5), 1.0)
+    out = mg.plate_polygons(ij, np.ones(len(ij), bool), np.zeros(len(ij), bool), 1.0, poly,
+                            min_dimension=3.0)
+    assert out == []
+    kept = mg.plate_polygons(ij, np.ones(len(ij), bool), np.zeros(len(ij), bool), 1.0, poly,
+                             min_dimension=2.0)
+    assert len(kept) == 1

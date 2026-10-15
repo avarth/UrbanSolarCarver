@@ -391,7 +391,7 @@ def _squares(cells_ij, mask, voxel_size):
     return shapely.union_all(shapely.box(i * vs, j * vs, (i + 1) * vs, (j + 1) * vs))
 
 
-def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint):
+def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint, min_dimension=0.0):
     """Outline of one floor plate (local xy).
 
     The plate's column squares are grown by one and a half voxels (enough
@@ -399,15 +399,19 @@ def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint):
     columns are subtracted, and the result is simplified to half a voxel
     and clipped to the exact *footprint*.  Facade edges therefore come from
     the footprint; cuts between built and removed columns are straight to
-    within half a voxel.
+    within half a voxel.  Parts narrower than *min_dimension* everywhere
+    (nothing left after an inward offset of half of it) are dropped: voxel
+    columns can make a thin part look one voxel wider than it is.
     """
     vs = float(voxel_size)
     shape = _squares(cells_ij, in_plate, vs).buffer(1.5 * vs, join_style="mitre")
     if np.any(removed):
         shape = shape.difference(_squares(cells_ij, removed, vs))
     shape = shape.simplify(vs / 2, preserve_topology=True).intersection(footprint)
-    parts = getattr(shape, "geoms", [shape])
-    return [orient(p, 1.0) for p in parts if isinstance(p, Polygon) and p.area > vs * vs]
+    parts = [p for p in getattr(shape, "geoms", [shape]) if isinstance(p, Polygon) and p.area > vs * vs]
+    if min_dimension > 0.0:
+        parts = [p for p in parts if not p.buffer(-0.5 * min_dimension + 1e-3).is_empty]
+    return [orient(p, 1.0) for p in parts]
 
 
 def prism_mesh(polygon, zb, zt):

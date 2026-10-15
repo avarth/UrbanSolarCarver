@@ -6,6 +6,7 @@ directory creation, config snapshot).
 
 Visualization helpers live in ``_diagnostics``, reporting in ``_reporting``.
 """
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Union
 
@@ -103,3 +104,63 @@ def dump_config_snapshot(conf, diag_dir) -> Path:
     """Write the full resolved config to diagnostics for reproducibility."""
     snapshot = conf.model_dump()
     return write_json(diag_dir, "config_snapshot.json", snapshot)
+
+
+@dataclass(frozen=True)
+class ThresholdedGrid:
+    """The thresholding chain of a run: manifests, mask and occupancy grid."""
+    thr_path: Path
+    thr_manifest: object
+    pre_path: Path
+    pre_manifest: object
+    mask: "np.ndarray"
+    occupancy: "np.ndarray"
+    origin: "np.ndarray"
+    voxel_size: float
+
+
+def load_thresholded_grid(threshold_manifest, conf) -> ThresholdedGrid:
+    """Load a thresholding manifest, its preprocessing manifest, the mask and
+    the occupancy grid.  *threshold_manifest* is a ThresholdingResult or a
+    path to its folder or manifest.json."""
+    import numpy as np
+    from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest, schema_from_json
+    thr_path = Path(threshold_manifest)
+    if thr_path.is_dir():
+        thr_path = thr_path / "manifest.json"
+    try:
+        thr_manifest = schema_from_json(ThresholdingManifest, thr_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError("Unable to load thresholding manifest; pass a ThresholdingResult or a path to its manifest.json") from exc
+    pre_path = Path(thr_manifest.upstream_manifest)
+    try:
+        pre_manifest = schema_from_json(PreprocessingManifest, pre_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise ValueError(
+            f"Unable to load the preprocessing manifest referenced by the "
+            f"thresholding manifest ({pre_path}). Re-run preprocessing, "
+            f"or fix the manifest chain."
+        ) from exc
+    grid_shape = tuple(pre_manifest.shape)
+    mask_path = Path(thr_manifest.mask_path)
+    if not mask_path.is_file():
+        raise FileNotFoundError(
+            f"Mask file not found: {mask_path} (referenced by {thr_path}). "
+            f"Re-run thresholding."
+        )
+    mask = np.load(mask_path, allow_pickle=False)
+    if mask.ndim == 1:
+        mask = mask.reshape(grid_shape)
+    elif tuple(mask.shape) != grid_shape:
+        raise ValueError(
+            f"Mask shape {tuple(mask.shape)} does not match the grid shape "
+            f"{grid_shape} recorded in {pre_path}; the mask and manifest "
+            f"are from different runs."
+        )
+    return ThresholdedGrid(
+        thr_path=thr_path, thr_manifest=thr_manifest, pre_path=pre_path,
+        pre_manifest=pre_manifest, mask=mask,
+        occupancy=load_occupancy(pre_manifest, conf),
+        origin=np.asarray(pre_manifest.origin, dtype=np.float64),
+        voxel_size=float(pre_manifest.voxel_size or conf.voxel_size),
+    )

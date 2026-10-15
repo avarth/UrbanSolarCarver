@@ -670,3 +670,11 @@ class ThresholdingManifest(BaseModel):
     mask_path: str
     upstream_manifest: str
 
+class MassingManifest(BaseModel):
+    """Manifest written by massing."""
+
+    hash: str
+    plates_path: str
+    mesh_path: str
+    upstream_manifest: str
+
