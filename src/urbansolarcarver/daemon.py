@@ -35,8 +35,13 @@ from multiprocessing.connection import Listener
 import traceback
 
 log = logging.getLogger(__name__)
+from urbansolarcarver.errors import ConfigError, ConfigFieldError
+from urbansolarcarver.load_config import _parse_overrides, _wrap_value_error, build_config, load_config
+from urbansolarcarver.mode_registry import MODES, canonical_mode_name
+from urbansolarcarver.pydantic_schemas import expand_analysis_period
+from urbansolarcarver.run_context import RunContext, run_context
 from urbansolarcarver.session import CarverSession
-from urbansolarcarver.load_config import load_config
+from urbansolarcarver.stage_settings import PIPELINE_STAGES
 
 # Per-user key file shared by the daemon and its clients.
 _DEFAULT_KEYFILE = Path.home() / ".urbansolarcarver" / ".daemon_authkey"
@@ -117,6 +122,7 @@ _REQUIRED_KEYS = {
     "exporting": ("config", "from"),
     "massing": ("config", "from"),
     "run_pipeline": ("config",),
+    "run": ("produce", "run_folder"),
     "simulate_weights": ("epw", "archetype", "out"),
     "ping": (),
     "shutdown": (),
@@ -124,7 +130,45 @@ _REQUIRED_KEYS = {
 
 
 def _error_reply(exc: BaseException) -> dict:
-    return {"status": "error", "error": f"{type(exc).__name__}: {exc}"}
+    """The error reply for *exc*: its text, its class name and, for a
+    ``ConfigError``, the invalid fields."""
+    reply = {"status": "error", "error": f"{type(exc).__name__}: {exc}",
+             "error_type": type(exc).__name__}
+    if isinstance(exc, ConfigError):
+        reply["config_errors"] = [{"field": e.field, "message": e.message} for e in exc.errors]
+    return reply
+
+
+def _issues_of(context: RunContext) -> list:
+    """The issues of *context* as reply dicts."""
+    return [{"stage": issue.stage, "code": issue.code, "message": issue.message}
+            for issue in context.issues]
+
+
+def _build_request_config(msg):
+    """The validated config of a request.
+
+    With ``msg["config"]`` (a YAML path) the file is loaded and the request's
+    ``overrides`` are applied.  Without it, the config is built from the
+    starting values of the mode named in the overrides, with the overrides
+    on top; the overrides must then give ``mode``.  ``overrides`` is a list of
+    ``key=value`` strings or a mapping.
+    """
+    overrides = msg.get("overrides") or []
+    if msg.get("config") is not None:
+        return load_config(msg["config"], overrides)
+    try:
+        values = dict(expand_analysis_period(_parse_overrides(overrides)))
+    except ValueError as exc:
+        raise _wrap_value_error(exc) from exc
+    if values.get("mode") is None:
+        raise ConfigError(
+            "mode: required when no config file is given",
+            [ConfigFieldError("mode", "required when no config file is given")])
+    mode_name = canonical_mode_name(values["mode"])
+    if mode_name not in MODES:
+        return build_config(values)  # the schema reports the unknown mode
+    return build_config({**MODES[mode_name].starting_values, **values, "mode": mode_name})
 
 
 def _reply(conn, obj) -> None:
@@ -148,25 +192,59 @@ def _handle_stage_command(cmd, msg, sess):
     """Run one pipeline command and build the reply dict. Raises on failure."""
     from urbansolarcarver import api
 
-    cfg = load_config(msg["config"], msg.get("overrides", []))
+    context = RunContext()
+    with run_context(context):
+        # The config is built inside the run context, so the issues its
+        # validators report reach the reply.
+        cfg = _build_request_config(msg)
 
-    if cmd == "run_pipeline":
-        result = api.run_pipeline(cfg, msg.get("out_dir") or cfg.out_dir)
-        return {"status": "ok", "export_path": str(result.exporting.export_path)}
+        if cmd == "run":
+            result = api.run_pipeline(
+                cfg, msg["run_folder"], produce=msg["produce"],
+                start_from=msg.get("start_from", PIPELINE_STAGES[0]), context=context)
+            return _run_reply(msg["run_folder"], result, context)
 
-    out_dir = msg.get("out_dir") or (Path(cfg.out_dir) / cmd)
-    if cmd == "preprocessing":
-        result = api.preprocessing(cfg, out_dir)
-        return {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
-    if cmd == "thresholding":
-        result = api.thresholding(msg["from"], cfg, out_dir)
-        return {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
-    if cmd == "massing":
-        result = api.massing(msg["from"], cfg, out_dir)
-        return {"status": "ok", "manifest": str(result.out_dir / "manifest.json"),
-                "plates_path": str(result.plates_path), "mesh_path": str(result.mesh_path)}
-    result = api.exporting(msg["from"], cfg, out_dir)
-    return {"status": "ok", "export_path": str(result.export_path)}
+        if cmd == "run_pipeline":
+            result = api.run_pipeline(cfg, msg.get("out_dir") or cfg.out_dir, context=context)
+            return {"status": "ok", "export_path": str(result.exporting.export_path),
+                    "issues": _issues_of(context)}
+
+        out_dir = msg.get("out_dir") or (Path(cfg.out_dir) / cmd)
+        if cmd == "preprocessing":
+            result = api.preprocessing(cfg, out_dir)
+            reply = {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
+        elif cmd == "thresholding":
+            result = api.thresholding(msg["from"], cfg, out_dir)
+            reply = {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
+        elif cmd == "massing":
+            result = api.massing(msg["from"], cfg, out_dir)
+            reply = {"status": "ok", "manifest": str(result.out_dir / "manifest.json"),
+                     "plates_path": str(result.plates_path), "mesh_path": str(result.mesh_path)}
+        else:
+            result = api.exporting(msg["from"], cfg, out_dir)
+            reply = {"status": "ok", "export_path": str(result.export_path)}
+        reply["issues"] = _issues_of(context)
+        return reply
+
+
+def _run_reply(run_folder, result, context) -> dict:
+    """The reply of a ``run`` command: the folders of the stages that ran, the
+    manifest of the last of them, the paths it produced, and the issues."""
+    from urbansolarcarver.api_core._stage_io import stage_folder
+
+    ran = [stage for stage in PIPELINE_STAGES if getattr(result, stage) is not None]
+    reply = {
+        "status": "ok",
+        "stage_folders": {stage: str(stage_folder(run_folder, stage)) for stage in ran},
+        "manifest": str(stage_folder(run_folder, ran[-1]) / "manifest.json"),
+        "issues": _issues_of(context),
+    }
+    if result.exporting is not None:
+        reply["export_path"] = str(result.exporting.export_path)
+    if result.massing is not None:
+        reply["plates_path"] = str(result.massing.plates_path)
+        reply["mesh_path"] = str(result.massing.mesh_path)
+    return reply
 
 
 def _simulate_weights(msg):
@@ -221,7 +299,7 @@ def serve(address, authkey, device_arg="auto"):
     """Serve pipeline requests from Grasshopper and the CLI until "shutdown".
 
     Keeps one CarverSession (CUDA context and compiled Warp kernels) alive
-    across requests. Commands: preprocessing, thresholding, exporting, massing,
+    across requests. Commands: run, preprocessing, thresholding, exporting, massing,
     run_pipeline, simulate_weights, ping, shutdown. Requests are handled one
     at a time; a failing request becomes an error reply and the server keeps
     running.
