@@ -25,7 +25,7 @@ from ..pydantic_schemas import ExportingManifest
 from ..io import save_mesh
 from ..run_context import Issue, RunContext, stage_context
 from ..stage_settings import ExportingSettings, RunOptions
-from ..grid import finalize_mesh
+from ..meshing import finalize_mesh
 import time
 
 # Everything exporting writes into its folder, besides manifest.json; every
@@ -72,7 +72,7 @@ def exporting(
     (logical AND), and converts the resulting carved voxel field into a
     triangle mesh suitable for downstream CAD / BIM / visualisation workflows.
 
-    Mesh extraction proceeds through :func:`~urbansolarcarver.grid.finalize_mesh`,
+    Mesh extraction proceeds through :func:`~urbansolarcarver.meshing.finalize_mesh`,
     which supports two strategies (selected by ``cfg.apply_smoothing``):
 
     * **cubic** (``apply_smoothing=False``, default): a 3x3x3 neighbour

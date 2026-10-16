@@ -21,6 +21,17 @@ versioning follows [Semantic Versioning](https://semver.org/).
   base_folder=None)`** builds a config from the starting values of the mode
   *values* names, with *values* on top. It was private to the daemon.
 
+### Changed (module layout)
+
+- **`grid.py` is split by responsibility** into `surface_sampling.py`
+  (test-surface sampling, `sample_surface`, `AnalysisMesh`),
+  `voxelization.py` (`voxelize`, `voxelize_mesh`) and `meshing.py`
+  (`finalize_mesh`, pruning, the cubic and smoothed meshers, cleanup).
+  The code is unchanged; code that imported from `urbansolarcarver.grid`
+  imports from the new modules. `test_grid.py` is split the same way, and
+  the EPW cache test moved to `test_sun.py`. The API page "Grid Operations"
+  is now "Geometry".
+
 ### Changed (engine requests)
 
 - **A malformed daemon request reports `error_type` `MalformedEngineRequest`**

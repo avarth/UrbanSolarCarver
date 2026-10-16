@@ -38,7 +38,7 @@ nav:
     - Pipeline: api/pipeline.md
     - Carving: api/carving.md
     - Ray Tracer: api/raytracer.md
-    - Grid Operations: api/grid.md
+    - Geometry: api/geometry.md
     - Sky Patches: api/sky-patches.md
     - Sun Vectors: api/sun.md
     - Scoring: api/scoring.md

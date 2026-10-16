@@ -7,8 +7,9 @@ The three stages live in submodules:
  - exporting.py: mesh the mask and write the run report
  - massing.py: stacked floor plates that follow the footprint
 Private helpers for these stages are in `_util`, `_diagnostics` and
-`_reporting`; the geometry and ray-tracing code is in `urbansolarcarver.grid`
-and `urbansolarcarver.carving`.
+`_reporting`; the geometry code is in `urbansolarcarver.surface_sampling`,
+`urbansolarcarver.voxelization` and `urbansolarcarver.meshing`, and the
+ray-tracing code in `urbansolarcarver.carving`.
 """
 
 # Staged API

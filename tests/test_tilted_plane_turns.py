@@ -32,7 +32,8 @@ def _carved_column_heights(panels, box_min_xy, box_max_xy, angle_deg=45.0):
     (0 for columns outside the box), and the column centres in x and y.
     """
     from urbansolarcarver.load_config import user_config
-    from urbansolarcarver.grid import voxelize, sample_surface
+    from urbansolarcarver.voxelization import voxelize
+    from urbansolarcarver.surface_sampling import sample_surface
     from urbansolarcarver.carving import carve_with_planes
     from urbansolarcarver.stage_settings import PreprocessingSettings
 

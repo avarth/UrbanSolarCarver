@@ -47,7 +47,8 @@ def _box_grid_and_samples(panels, box_min_y, box_max_y, **config):
     """A 20 x (box_max_y - box_min_y) x 20 m box (x from 0 to 20), 1 m
     voxels, CPU: its grid, the panels' sample points and the config."""
     from urbansolarcarver.load_config import user_config
-    from urbansolarcarver.grid import voxelize, sample_surface
+    from urbansolarcarver.voxelization import voxelize
+    from urbansolarcarver.surface_sampling import sample_surface
 
     max_volume = trimesh.creation.box(extents=(20.0, box_max_y - box_min_y, 20.0))
     max_volume.apply_translation([10.0, (box_min_y + box_max_y) / 2.0, 10.0])

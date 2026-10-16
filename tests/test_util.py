@@ -13,7 +13,7 @@ class TestEstimateGridMemory:
         builds a CUBIC grid sized to the longest bounding-box side."""
         import trimesh
         from urbansolarcarver.grid_planning import estimate_grid_memory
-        from urbansolarcarver.grid import voxelize_mesh
+        from urbansolarcarver.voxelization import voxelize_mesh
 
         slab = trimesh.creation.box(extents=(40.0, 10.0, 5.0))
         slab_path = tmp_path / "slab.ply"

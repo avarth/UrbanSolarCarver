@@ -1,7 +1,7 @@
 """Voxel grid planning: grid size from the mesh bounds, before any allocation.
 
 ``plan_voxel_grid`` computes the cubic grid that
-:func:`urbansolarcarver.grid.voxelize_mesh` builds, from the bounding box
+:func:`urbansolarcarver.voxelization.voxelize_mesh` builds, from the bounding box
 alone, and ``check_voxel_grid_budget`` rejects a grid that is too large to
 score.  Both are pure and need only numpy, so a client can validate a
 request without importing torch or Warp.
@@ -72,7 +72,7 @@ def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float =
     """Estimate voxel grid dimensions and memory without running the full pipeline.
 
     Plans the grid with :func:`plan_voxel_grid`, the same function
-    :func:`~urbansolarcarver.grid.voxelize_mesh` uses.  The mesh is loaded
+    :func:`~urbansolarcarver.voxelization.voxelize_mesh` uses.  The mesh is loaded
     with trimesh (imported here, so this module needs only numpy to import).
 
     Returns dict with keys: grid_dims, total_voxels, memory_mb, warning.

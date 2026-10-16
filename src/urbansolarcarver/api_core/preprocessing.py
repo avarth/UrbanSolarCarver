@@ -20,7 +20,8 @@ from ..carving import (
     carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes,
     load_meshes, sample_period, validate_inputs,
 )
-from ..grid import voxelize, sample_surface
+from ..voxelization import voxelize
+from ..surface_sampling import sample_surface
 from ..mode_registry import MODES, MODES_NEEDING_PERIOD
 
 log = logging.getLogger(__name__)
