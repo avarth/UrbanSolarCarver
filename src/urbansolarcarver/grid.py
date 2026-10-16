@@ -206,7 +206,7 @@ def sample_surface(insolation_mesh, settings: PreprocessingSettings):
 
     Raises
     ------
-    RuntimeError
+    InputError
         If no points are sampled from the insolation surface.
     """
     sample_points, sample_normals, analysis_mesh, sample_weights, taper_stats = (

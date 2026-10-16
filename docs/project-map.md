@@ -89,7 +89,7 @@ UrbanSolarCarver/
 
 ```
 grasshopper/
-├── USC_GHplugin/       25 .ghuser components (copy into the GH User Objects folder)
+├── USC_GHplugin/       27 .ghuser components (copy into the GH User Objects folder)
 ├── components/         Python source for each component
 ├── icons/              24×24 component icons
 ├── components.json     Ribbon group and stable GUID per component

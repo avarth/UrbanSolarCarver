@@ -390,8 +390,9 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         footprint_path=stored_path(footprint_path, out_path),
     )
 
-    # Per-stage diagnostics: the stage builds the summary, the writer puts
-    # it (and the config snapshot and plots) on disk.
+    # Per-stage diagnostics: the stage builds the summary and the writer puts
+    # it (and the plots) on disk. The public preprocessing function writes
+    # the config snapshot.
     diag_dir = ensure_diag(out_path)
     rs = np.asarray(raw_scores)
     summary = {

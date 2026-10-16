@@ -1,4 +1,4 @@
-import threading, warnings, pytest
+import warnings, pytest
 from urbansolarcarver.run_context import (RunContext, Issue, run_context, report_issue,
                                           report_progress, stage_context, active_context)
 from urbansolarcarver.errors import (RunCancelled, ConfigError, ConfigFieldError, InputError,

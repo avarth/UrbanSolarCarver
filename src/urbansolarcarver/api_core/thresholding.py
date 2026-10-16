@@ -69,7 +69,6 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     ``score_smoothing``: None means auto (1.1 × voxel_size), 0 disables
     smoothing, and a positive value is the radius in meters.  The radius is
     used as the Gaussian sigma and clipped to 0.5-8 voxels (with a warning).
-    Smoothing is skipped with a warning if *voxel_size* is missing.
 
     Returns (scores, applied, radius_m, sigma_voxels), where radius_m is the
     radius after clipping.
@@ -77,22 +76,13 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     if kind != "weighted_sum":
         return raw, False, 0.0, 0.0
 
-    has_voxel_size = bool(voxel_size) and voxel_size > 0
     requested_m = 0.0
-    if score_smoothing is None and has_voxel_size:
+    if score_smoothing is None:
         requested_m = 1.1 * voxel_size  # auto-default
-    elif score_smoothing is not None and score_smoothing > 0:
+    elif score_smoothing > 0:
         requested_m = float(score_smoothing)
 
     if requested_m <= 0:
-        return raw, False, 0.0, 0.0
-    if not has_voxel_size:
-        report_issue(
-            "smoothing_skipped",
-            "score_smoothing requested but the preprocessing manifest has no "
-            "voxel_size, so meters cannot be converted to voxels; skipping smoothing. "
-            "Re-run preprocessing to regenerate the manifest.",
-        )
         return raw, False, 0.0, 0.0
 
     from scipy.ndimage import gaussian_filter
@@ -401,9 +391,7 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         "occupied_score_stats": score_statistics(nn, detailed=options.diagnostics),
     }
     # Performance reporting, with the score unit from the mode registry
-    mode_name = pre_manifest.mode or "unknown"
-    mode_spec = MODES.get(mode_name)
-    weight_unit = mode_spec.weight_unit if mode_spec else "dimensionless"
+    weight_unit = MODES[pre_manifest.mode].weight_unit
     # Load patch weights if available
     pw_path = pre_manifest.patch_weights_path
     n_samples = pre_manifest.sample_point_count

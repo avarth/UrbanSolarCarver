@@ -29,7 +29,6 @@ from ..pydantic_schemas import (
     ExportingManifest, MassingManifest, PreprocessingManifest, ThresholdingManifest,
     schema_from_json, schema_to_json,
 )
-from ..stage_settings import stage_folder  # noqa: F401 (the run-folder layout, re-exported)
 
 MANIFEST_NAME = "manifest.json"
 
@@ -132,8 +131,9 @@ def load_upstream(source, expected_stage: str) -> LoadedManifest:
             _MANIFEST_CLASSES[expected_stage], manifest_path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise StageChainError(
-            f"Unable to read a {expected_stage} manifest at {manifest_path} (it is missing, "
-            f"damaged, or written by an older version); re-run {expected_stage}."
+            f"{manifest_path} holds no valid {expected_stage} manifest (it may be the folder "
+            f"of another stage, a damaged file, or one written by an older version). Pass the "
+            f"{expected_stage} folder or re-run {expected_stage}."
         ) from exc
     loaded = LoadedManifest(manifest, manifest_path.parent, manifest_path)
     upstream_stage = _UPSTREAM_STAGE.get(expected_stage)

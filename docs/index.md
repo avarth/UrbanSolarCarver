@@ -11,7 +11,7 @@ USC works by subtraction: it starts from a theoretical maximum volume, casts ray
 - **6 carving modes** covering solar access, passive heating, daylighting, and radiative cooling
 - **3-stage pipeline** (preprocessing, thresholding, exporting); each stage can be re-run on its own
 - **GPU-accelerated** ray tracing via NVIDIA Warp (DDA kernel), with CPU fallback
-- **Grasshopper plugin** (25 components) for Rhino 3D integration
+- **Grasshopper plugin** (27 components) for Rhino 3D integration
 - **Python API**, **CLI**, and **Jupyter notebooks**
 
 ## Pipeline
