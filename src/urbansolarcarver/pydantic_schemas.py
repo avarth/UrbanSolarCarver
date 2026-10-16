@@ -153,6 +153,19 @@ def resolve_threshold(mode: str, threshold: Optional[ThresholdSpec],
     return threshold
 
 
+def resolve_max_slope_deg(mode: str, max_slope_deg: Optional[float]) -> Optional[float]:
+    """The slope limit thresholding applies for *mode*, or None when it is off.
+
+    An explicit *max_slope_deg* applies as given (90 = off).  Unset, it is 75
+    degrees for the weighted modes, whose per-voxel score cutoffs can leave
+    cliffs and spires, and off for the violation-count modes (time-based,
+    tilted_plane), whose results follow the rays exactly.
+    """
+    if max_slope_deg is not None:
+        return None if max_slope_deg >= 90.0 else float(max_slope_deg)
+    return 75.0 if MODES[mode].score_kind == "weighted_sum" else None
+
+
 # Keys of an analysis_period mapping: Ladybug's AnalysisPeriod.to_dict() keys
 # map onto the six flat period fields; plain start_*/end_* spellings are
 # accepted too. Ladybug's other keys (type, timestep, is_leap_year) are ignored.
@@ -528,16 +541,9 @@ class UserConfig(BaseModel):
         return v
 
     def effective_max_slope_deg(self) -> Optional[float]:
-        """The slope limit thresholding applies, or None when it is off.
-
-        An explicit ``max_slope_deg`` applies as given (90 = off).  Unset, it
-        is 75 degrees for the weighted modes, whose per-voxel score cutoffs
-        can leave cliffs and spires, and off for the violation-count modes
-        (time-based, tilted_plane), whose results follow the rays exactly.
-        """
-        if self.max_slope_deg is not None:
-            return None if self.max_slope_deg >= 90.0 else float(self.max_slope_deg)
-        return 75.0 if MODES[self.mode].score_kind == "weighted_sum" else None
+        """The slope limit thresholding applies, or None when it is off;
+        see :func:`resolve_max_slope_deg`."""
+        return resolve_max_slope_deg(self.mode, self.max_slope_deg)
 
     def resolved_threshold(self) -> ThresholdSpec:
         """The thresholding strategy this config applies; see :func:`resolve_threshold`."""

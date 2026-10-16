@@ -17,6 +17,7 @@ from ..run_context import Issue, report_issue, stage_context
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..carving import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
+from ..stage_settings import applied_smoothing_radius_m
 from ._util import (
     _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy,
     remove_previous_stage_outputs,
@@ -79,15 +80,16 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     if kind != "weighted_sum":
         return raw, False, 0.0, 0.0
 
-    radius_m = 0.0
-    if score_smoothing is None and voxel_size and voxel_size > 0:
-        radius_m = 1.1 * voxel_size  # auto-default
+    has_voxel_size = bool(voxel_size) and voxel_size > 0
+    requested_m = 0.0
+    if score_smoothing is None and has_voxel_size:
+        requested_m = 1.1 * voxel_size  # auto-default
     elif score_smoothing is not None and score_smoothing > 0:
-        radius_m = float(score_smoothing)
+        requested_m = float(score_smoothing)
 
-    if radius_m <= 0:
+    if requested_m <= 0:
         return raw, False, 0.0, 0.0
-    if not voxel_size or voxel_size <= 0:
+    if not has_voxel_size:
         report_issue(
             "smoothing_skipped",
             "score_smoothing requested but the preprocessing manifest has no "
@@ -97,15 +99,14 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
         return raw, False, 0.0, 0.0
 
     from scipy.ndimage import gaussian_filter
-    requested = radius_m / voxel_size
-    sigma_voxels = float(np.clip(requested, 0.5, 8.0))
-    if sigma_voxels != requested:
+    radius_m = applied_smoothing_radius_m(kind, voxel_size, score_smoothing)
+    sigma_voxels = radius_m / voxel_size
+    if radius_m != requested_m:
         report_issue(
             "smoothing_radius_clipped",
-            f"score_smoothing={radius_m:g} m is {requested:.2g} voxels; clipped to "
-            f"{sigma_voxels:g} voxels ({sigma_voxels * voxel_size:g} m).",
+            f"score_smoothing={requested_m:g} m is {requested_m / voxel_size:.2g} voxels; clipped to "
+            f"{sigma_voxels:g} voxels ({radius_m:g} m).",
         )
-        radius_m = sigma_voxels * voxel_size
     if occ is None:
         smoothed = gaussian_filter(raw.astype(np.float32), sigma=sigma_voxels)
         return smoothed, True, radius_m, sigma_voxels
