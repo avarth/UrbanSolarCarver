@@ -18,6 +18,7 @@ import os
 import warnings
 from typing import Annotated, Optional, Union, List, Tuple, Literal
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
+from .errors import UrbanSolarCarverWarning  # noqa: F401 (re-exported)
 from .mode_registry import (
     ALL_MODE_NAMES, EXPERIMENTAL_MODES, MODES, MODES_NEEDING_EPW, MODES_NEEDING_PERIOD,
 )
@@ -34,11 +35,6 @@ def schema_from_json(cls, text: str):
 def schema_to_json(model: BaseModel, *, indent: int = 2) -> str:
     """Serialize a Pydantic model to a JSON string."""
     return model.model_dump_json(indent=indent)
-
-# ---------- Warnings ----------
-class UrbanSolarCarverWarning(UserWarning):
-    """Non-fatal configuration warning."""
-
 
 class UpstreamMismatchError(ValueError):
     """A stage's output was built from an upstream run that has since changed.

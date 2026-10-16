@@ -14,7 +14,7 @@ import yaml
 from pydantic import ValidationError
 
 from .pydantic_schemas import UserConfig as user_config
-from .pydantic_schemas import UrbanSolarCarverWarning  # noqa: F401 (re-exported)
+from .errors import UrbanSolarCarverWarning  # noqa: F401 (re-exported)
 from .pydantic_schemas import expand_analysis_period
 
 # Config fields holding file or folder paths. Relative values in a YAML file
