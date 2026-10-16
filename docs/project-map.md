@@ -57,8 +57,8 @@ UrbanSolarCarver/
 |------|---------|
 | `carving.py` | The three carving strategies. **`carve_with_sun_rays`** (`time-based`): traces rays from test-surface points toward the sun positions of the analysis period and returns the carved grid and per-voxel hit counts. **`carve_with_sky_patch_rays`** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`): traces rays toward the 145 Tregenza sky patches, weights each ray by its patch's mode-specific value, and returns the accumulated per-voxel scores. **`carve_with_planes`** (`tilted_plane`): traces one ray per sample point at the plane angle (per-octant angles supported) and removes every voxel at or above it in its column. |
 | `column_postprocessing.py` | The column rules thresholding applies after the score threshold: `carve_above_columns()` and `carve_above_scores()` (the `carve_above` setting) and `limit_column_slope()` (`max_slope_deg`), as numba kernels. |
-| `ray_tracing.py` | Ray generation and voxel traversal. **`trace_and_score_dda`** / **`trace_and_count_dda`**: launch the Digital Differential Analyzer (DDA) kernels that step each ray through the voxel grid cell by cell and add the ray's weight (or a count of 1) to every voxel it crosses; they run on CUDA or on Warp's CPU backend, and without Warp a fixed-step PyTorch marcher (`trace_multi_hit_grid`, approximate) is used. **`follow_mass_behind_skin_dda`**: the skin rule. **`generate_sky_patch_rays`** / **`generate_sun_rays`**: expand sample points × directions into flat ray arrays, keeping only directions the surface faces. **`auto_batch_size`**: picks a ray batch size from the free GPU memory. |
-| `warp_kernels.py` | Warp setup and every Warp kernel of the package (DDA traversal, skin rule, parity voxelizer), kept in one module so Warp compiles and caches them as one unit. **`dda_backend_available`**: whether the exact DDA backend can run on a device. **`warmup_kernels`**: precompiles the kernels. |
+| `ray_tracing.py` | Ray generation and voxel traversal. **`trace_and_score_dda`** / **`trace_and_count_dda`**: launch the Digital Differential Analyzer (DDA) kernels that step each ray through the voxel grid cell by cell and add the ray's weight (or a count of 1) to every voxel it crosses; they run on CUDA or on Warp's CPU backend, and there is no other tracer. **`follow_mass_behind_skin_dda`**: the skin rule. **`generate_sky_patch_rays`** / **`generate_sun_rays`**: expand sample points × directions into flat ray arrays, keeping only directions the surface faces. **`auto_batch_size`**: picks a ray batch size from the free GPU memory. |
+| `warp_kernels.py` | Warp setup and every Warp kernel of the package (DDA traversal, skin rule, parity voxelizer), kept in one module so Warp compiles and caches them as one unit. **`dda_backend_available`**: whether the DDA backend can run on a device; **`require_dda_backend`** raises `WarpBackendUnavailableError` with the reason when it cannot. **`warmup_kernels`**: precompiles the kernels. |
 
 ### Sky and sun models
 
@@ -148,7 +148,7 @@ tests/
 ├── test_north.py            north_deg convention (clockwise from +Y) at every Ladybug boundary
 ├── test_pipeline.py         Full runs, stage-boundary validation, overrides, simulated weights
 ├── test_preprocessing.py    Preprocessing helpers and manifest keys
-├── test_ray_tracing.py      Fixed-step marcher, Warp DDA kernel launches, ray generation, batch size
+├── test_ray_tracing.py      Warp DDA kernel launches, ray generation, batch size
 ├── test_schemas.py          Config schema validation, grid resolution cap, overrides, relative paths
 ├── test_run_context.py      RunContext: issues, progress, cancel, and the error classes
 ├── test_scoring.py          Head/tail and carve-fraction thresholds
@@ -165,5 +165,5 @@ tests/
 ├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
 ├── test_util.py             Diagnostics helpers and the grid memory estimate
 ├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
-└── test_warp_kernels.py     Warp availability and kernel warmup
+└── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
 ```

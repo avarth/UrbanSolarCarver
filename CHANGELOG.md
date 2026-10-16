@@ -7,6 +7,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed (fallback tracer)
+
+- **The fixed-step PyTorch fallback tracer** (`trace_multi_hit_grid`,
+  `_trace_fixed_step`) and the torch copies of the surface and skin rules
+  in `carving.py`. It ran only when Warp could not run on the device, and
+  then gave approximate results (an oblique ray could skip a voxel corner)
+  with nothing but a log warning. Warp ships wheels for every platform
+  torch runs on, with a CPU backend for machines without an NVIDIA GPU,
+  so it only ever ran on a broken installation. Every carver now calls
+  `warp_kernels.require_dda_backend` first, which raises the new
+  `WarpBackendUnavailableError` (a `RuntimeError`) naming why Warp cannot
+  run and pointing to `setup_env.py`. `auto_batch_size` loses its
+  `resolution` argument, which only fed the fallback's estimate. The DDA
+  count-kernel test keeps its fine-sampling reference as a small helper
+  in the test file.
+
 ### Added (engine requests)
 
 - **`engine_requests`: one request core for every transport.** Parsing a

@@ -38,6 +38,8 @@ from typing import Any
 
 import torch
 
+from .errors import WarpBackendUnavailableError
+
 log = logging.getLogger(__name__)
 
 
@@ -45,18 +47,21 @@ log = logging.getLogger(__name__)
 # Warp DDA kernel (compiled lazily on first use)
 # ---------------------------------------------------------------------------
 _warp_available = False
+# Why Warp cannot run, for the error require_dda_backend raises; None when
+# Warp imported and initialised.
+_warp_unavailable_reason: "str | None" = None
 _warp_cpu_ok_cache: "bool | None" = None
 try:
     import warp as wp
     wp.init()
     _warp_available = True
-except ImportError:
-    log.debug("Warp is not installed; using the PyTorch fallback tracer")
+except ImportError as _warp_err:
+    _warp_unavailable_reason = f"Warp is not installed ({_warp_err})"
+    log.warning("%s; ray tracing will not run", _warp_unavailable_reason)
 except Exception as _warp_err:
-    # Installed but unusable (driver, CUDA or compiler problem): say why,
-    # since every result then comes from the slower fallback paths.
-    log.warning("Warp failed to initialise (%s); using the PyTorch fallback "
-                "tracer and the trimesh voxelizer", _warp_err)
+    # Installed but unusable (driver, CUDA or compiler problem).
+    _warp_unavailable_reason = f"Warp failed to initialise ({_warp_err})"
+    log.warning("%s; ray tracing will not run", _warp_unavailable_reason)
 
 
 def _warp_cpu_ok() -> bool:
@@ -91,9 +96,8 @@ def warmup_kernels(device=None) -> bool:
     -------
     bool
         True if the kernels are ready on the device (compiled or cached);
-        False if Warp is unavailable or compilation failed.  The pipeline
-        still works in that case: kernels compile on first use, or the
-        fallback tracer is used.
+        False if Warp is unavailable or compilation failed.  When only the
+        precompilation failed, the kernels compile on first use instead.
     """
     if not _warp_available:
         return False
@@ -115,14 +119,24 @@ def warmup_kernels(device=None) -> bool:
 
 
 def dda_backend_available(device) -> bool:
-    """True if the exact Warp DDA backend can run on *device*.
-
-    Callers can use this to know whether trace results come from the exact
-    DDA traversal or the approximate fixed-step fallback.
-    """
+    """True if the Warp DDA backend can run on *device*: Warp initialised
+    and, for the CPU, Warp's CPU backend can compile kernels."""
     if not _warp_available:
         return False
     return device.type == "cuda" or _warp_cpu_ok()
+
+
+def require_dda_backend(device) -> None:
+    """Raise WarpBackendUnavailableError unless the Warp DDA backend can run
+    on *device*.  Ray tracing has no other backend; the error says why
+    Warp cannot run and how to repair the installation."""
+    if dda_backend_available(device):
+        return
+    reason = _warp_unavailable_reason or "Warp's CPU backend cannot compile kernels on this machine"
+    raise WarpBackendUnavailableError(
+        f"Ray tracing needs NVIDIA Warp, which cannot run on device {str(device)!r}: {reason}. "
+        f"Repair the environment with `python setup_env.py` (or reinstall warp-lang)."
+    )
 
 if _warp_available:
     # ===================================================================

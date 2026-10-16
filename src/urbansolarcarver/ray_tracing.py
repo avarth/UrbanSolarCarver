@@ -6,26 +6,18 @@ This module builds rays (sample point to sky patch, or sample point to sun,
 keeping only directions the surface faces) and traces them through the
 voxel grid for the carving pipeline.
 
-Two traversal backends are available:
-
-* DDA (digital differential analyzer, Amanatides & Woo 1987): the Warp
-  kernels of :mod:`warp_kernels`, launched here.  The fused wrappers
-  (:func:`trace_and_score_dda`, :func:`trace_and_count_dda`) add each
-  ray's weight or a count of 1 directly into a per-voxel volume, so no
-  list of hits is stored.  Used whenever Warp can run on the device
-  (CUDA or Warp's CPU backend).
-
-* Fixed-step fallback (:func:`trace_multi_hit_grid`): pure PyTorch, used
-  only when Warp is unavailable.  It samples each ray at regular
-  distances and returns the list of (ray, voxel) pairs.  It is
-  approximate: an oblique ray can cross a voxel corner between two
-  samples, so that voxel is missed.
+Rays are traced with the DDA (digital differential analyzer, Amanatides &
+Woo 1987) Warp kernels of :mod:`warp_kernels`, launched here, on CUDA or on
+Warp's CPU backend.  The fused wrappers (:func:`trace_and_score_dda`,
+:func:`trace_and_count_dda`) add each ray's weight or a count of 1
+directly into a per-voxel volume, so no list of hits is stored.  There is
+no other tracer: when Warp cannot run, the carvers raise
+``WarpBackendUnavailableError`` (see :func:`warp_kernels.require_dda_backend`).
 
 The coordinate conventions are those of :mod:`warp_kernels`.
 """
 
 import logging
-import math
 from typing import Tuple
 
 import numpy as np
@@ -441,193 +433,7 @@ def generate_sun_rays(
         return ray_origins, ray_directions, idx_pts
     return ray_origins, ray_directions
 
-def trace_multi_hit_grid(
-    min_corner: Tuple[float, float, float],
-    scale: float,
-    resolution: int,
-    origins: torch.Tensor,
-    ray_dirs: torch.Tensor,
-    sky_patch_ids: torch.Tensor,
-    voxel_size: float,
-    ray_length: float,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Fallback tracer for when Warp cannot run: list the voxels each ray visits.
-
-    Fixed-step PyTorch marching (see :func:`_trace_fixed_step` for the
-    parameters); when Warp is available the pipeline uses the exact fused
-    DDA kernels instead.  Each (ray, voxel) pair appears at most once.
-    Every call with at least one ray emits a UserWarning.
-
-    Returns
-    -------
-    ray_ids : (H,)        index of the ray that made each hit
-    patch_ids : (H,)      sky patch of that ray
-    voxel_indices : (H, 3) grid index of each visited voxel
-    """
-    if origins.shape[0] == 0:
-        empty1 = torch.empty((0,), dtype=torch.long, device=origins.device)
-        return empty1, empty1, torch.empty((0, 3), dtype=torch.long, device=origins.device)
-    log.warning(
-        "Warp is not available: using the fixed-step ray marcher, which is "
-        "slower and can miss voxels that oblique rays only clip."
-    )
-    return _trace_fixed_step(min_corner, float(scale), resolution, origins, ray_dirs,
-                             sky_patch_ids, voxel_size, ray_length)
-
-
-# Memory budget that sets how many rays _trace_fixed_step processes per
-# chunk (R rays x S steps per chunk).  Tests lower it by assigning to this
-# module attribute.
-_FIXED_STEP_BUDGET_BYTES: int = 512 * 1024 * 1024
-
-
-def _trace_fixed_step(
-    min_corner, scale, resolution,
-    origins, ray_dirs, sky_patch_ids,
-    voxel_size, ray_length,
-) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-    """Fixed-step ray marcher in pure PyTorch (runs on any torch device).
-
-    Samples each ray at distances ``(k + 0.5) * voxel_size`` for
-    ``k = 0 .. ceil(ray_length / voxel_size) - 1`` and records the voxel
-    containing each in-bounds sample.  Each (ray, voxel) pair is reported
-    at most once, as with the DDA kernels.  Used only when Warp is not
-    installed or cannot run on the device.
-
-    With a step of one voxel, an oblique ray can cross a voxel corner
-    between two samples and miss that voxel; the Warp DDA kernels do not
-    have this problem.
-
-    Rays are processed in chunks sized from ``_FIXED_STEP_BUDGET_BYTES``
-    (512 MB by default) so the ``(R, S, 3)`` sample tensor never covers
-    all rays at once.  The output is identical for any chunk size.
-
-    Parameters
-    ----------
-    min_corner : tuple of float
-        World-space (x, y, z) of the grid's lower corner.
-    scale : float
-        Edge length of the cubic grid in meters.
-    resolution : int
-        Number of voxels per axis.
-    origins : (R, 3) torch.Tensor
-        Ray start positions.
-    ray_dirs : (R, 3) torch.Tensor
-        Unit direction vectors.
-    sky_patch_ids : (R,) torch.Tensor
-        Sky-patch index per ray.
-    voxel_size : float
-        Step length along the ray (meters); callers pass the voxel edge
-        length.  Must be positive.
-    ray_length : float
-        Maximum march distance (meters).
-
-    Returns
-    -------
-    ray_ids : (H,) torch.Tensor
-        Which ray produced each hit (indices into the *full* input batch).
-    patch_ids : (H,) torch.Tensor
-        Sky-patch index for each hit.
-    voxel_indices : (H, 3) torch.Tensor
-        3-D grid coordinates of each visited voxel.
-
-    Raises
-    ------
-    ValueError
-        If ``voxel_size`` is not positive.
-    """
-    device = origins.device
-    num_rays = origins.shape[0]
-
-    if voxel_size <= 0:
-        raise ValueError(
-            f"_trace_fixed_step: voxel_size must be positive, got {voxel_size}"
-        )
-    num_steps = math.ceil(ray_length / voxel_size)
-    if num_steps <= 0 or num_rays == 0:
-        empty1 = torch.empty((0,), dtype=torch.long, device=device)
-        empty3 = torch.empty((0, 3), dtype=torch.long, device=device)
-        return empty1, empty1, empty3
-
-    # Chunk size from the tensors held per sample: sample_pts and voxel_rel
-    # (3 x float32 each, 24 bytes), voxel_idxs (3 x int64, 24 bytes) and
-    # in_bounds (1 byte) make 49 bytes; 64 leaves room for the selections.
-    bytes_per_ray = num_steps * 64
-    budget = _FIXED_STEP_BUDGET_BYTES
-    chunk_size = max(budget // max(bytes_per_ray, 1), 1)
-
-    distances = (
-        (torch.arange(num_steps, dtype=torch.float32, device=device) + 0.5)
-        * voxel_size
-    )
-    grid_origin = torch.tensor(min_corner, dtype=torch.float32, device=device)
-
-    all_ray_ids = []
-    all_patch_ids = []
-    all_voxel_indices = []
-
-    for start in range(0, num_rays, chunk_size):
-        end = min(start + chunk_size, num_rays)
-        o = origins[start:end]             # (C, 3)
-        d = ray_dirs[start:end]            # (C, 3)
-        c = end - start
-
-        sample_pts = o[:, None, :] + d[:, None, :] * distances[None, :, None]
-        voxel_rel = (sample_pts - grid_origin) / scale * resolution
-        voxel_idxs = torch.floor(voxel_rel).long()
-
-        in_bounds = (
-            (voxel_idxs[..., 0] >= 0) & (voxel_idxs[..., 0] < resolution) &
-            (voxel_idxs[..., 1] >= 0) & (voxel_idxs[..., 1] < resolution) &
-            (voxel_idxs[..., 2] >= 0) & (voxel_idxs[..., 2] < resolution)
-        )
-
-        ray_indices = torch.arange(c, device=device)[:, None].expand_as(in_bounds)
-        chunk_ray_ids = ray_indices[in_bounds] + start  # offset to global index
-        chunk_voxels = voxel_idxs[in_bounds]
-
-        if chunk_ray_ids.numel() > 0:
-            # Deduplicate (ray, voxel) pairs: two samples of one ray can fall
-            # in the same voxel, which would count that ray twice for the
-            # voxel.  Duplicates only arise within a single ray, and a ray
-            # is never split across chunks, so per-chunk deduplication is
-            # exact.  torch.unique sorts the keys, so the output order is
-            # deterministic and independent of chunk size.
-            res_sq = resolution * resolution
-            n_vox = res_sq * resolution
-            flat_vox = (
-                chunk_voxels[:, 0] * res_sq
-                + chunk_voxels[:, 1] * resolution
-                + chunk_voxels[:, 2]
-            )
-            ukey = torch.unique(chunk_ray_ids * n_vox + flat_vox)
-            uray = ukey // n_vox
-            uflat = ukey - uray * n_vox
-            uvox = torch.stack(
-                (uflat // res_sq, (uflat % res_sq) // resolution, uflat % resolution),
-                dim=1,
-            )
-            all_ray_ids.append(uray)
-            all_patch_ids.append(sky_patch_ids[uray])
-            all_voxel_indices.append(uvox)
-
-        # Free this chunk's tensors before the next chunk allocates its own.
-        del sample_pts, voxel_rel, voxel_idxs, in_bounds
-
-    if not all_ray_ids:
-        empty1 = torch.empty((0,), dtype=torch.long, device=device)
-        empty3 = torch.empty((0, 3), dtype=torch.long, device=device)
-        return empty1, empty1, empty3
-
-    return (
-        torch.cat(all_ray_ids),
-        torch.cat(all_patch_ids),
-        torch.cat(all_voxel_indices),
-    )
-
-
 def auto_batch_size(
-    resolution: int,
     device: torch.device,
     *,
     vram_fraction: float = 0.6,
@@ -635,21 +441,16 @@ def auto_batch_size(
 ) -> int:
     """Choose a ray batch size from the free GPU memory.
 
-    The budget is ``vram_fraction`` of free VRAM (video memory).  With Warp,
-    the fused DDA kernels accumulate into the voxel grid and keep no hit
-    lists, so a batch only adds its slice of the ray inputs: 96 bytes per
-    ray (see the comment in the code).  Without Warp, the fixed-step tracer
-    returns one hit record of 40 bytes per visited voxel, estimated as
-    ``max(resolution, 50)`` per ray; its sample points are already limited
-    by ``_FIXED_STEP_BUDGET_BYTES``.  The result is at least 10,000 and at
-    most 5,000,000 rays.
+    The budget is ``vram_fraction`` of free VRAM (video memory).  The fused
+    DDA kernels accumulate into the voxel grid and keep no hit lists, so a
+    batch only adds its slice of the ray inputs: 96 bytes per ray (see the
+    comment in the code).  The result is at least 10,000 and at most
+    5,000,000 rays.
 
     Returns ``fallback`` on CPU or if VRAM cannot be queried.
 
     Parameters
     ----------
-    resolution : int
-        Voxel grid resolution (used only for the no-Warp step estimate).
     device : torch.device
         Target compute device.
     vram_fraction : float
@@ -672,20 +473,11 @@ def auto_batch_size(
 
     budget_bytes = int(free * vram_fraction)
 
-    if _warp_available:
-        # Per ray: origin and direction (2 x 12 bytes), patch id and point
-        # id (2 x 8 bytes, int64) = 40 bytes, rounded up to 48; doubled for
-        # the copies made when a slice is not contiguous or needs int32 ids.
-        bytes_per_ray = 96
-        batch = max(budget_bytes // bytes_per_ray, 10_000)
-    else:
-        # Hit records: ray id, patch id (int64) and voxel index (3 x int64)
-        # = 40 bytes per visited voxel.
-        num_steps = max(resolution, 50)  # rough estimate of voxels per ray
-        bytes_per_ray = num_steps * 40
-        batch = max(budget_bytes // bytes_per_ray, 10_000)
-
-    batch = min(batch, 5_000_000)
+    # Per ray: origin and direction (2 x 12 bytes), patch id and point id
+    # (2 x 8 bytes, int64) = 40 bytes, rounded up to 48; doubled for the
+    # copies made when a slice is not contiguous or needs int32 ids.
+    bytes_per_ray = 96
+    batch = min(max(budget_bytes // bytes_per_ray, 10_000), 5_000_000)
 
     log.info("auto_batch_size: free=%.0f MB, budget=%.0f MB, batch=%d",
              free / 1e6, budget_bytes / 1e6, batch)

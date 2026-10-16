@@ -19,26 +19,23 @@ Supports:
 
 Raytracing contract
 -------------------
-With Warp installed, rays are traced by the fused DDA kernels of
-warp_kernels.py (launched from ray_tracing.py), which visit every voxel a ray crosses exactly once and
-accumulate counts or scores in place.  Without Warp, `trace_multi_hit_grid`
-lists the (ray, voxel) pairs with a fixed-step PyTorch march (each pair at
-most once) and the scores are accumulated here with torch; that path is
-slower and can miss voxels that oblique rays only clip.  Both paths count
-voxels that lie entirely in front of the surface a ray starts from (see
-`_front_of_surface`), plus the surface's skin voxels (crossed by its plane)
-that are occupied and have nothing of the max volume behind them.
-Occupied skin voxels with max volume behind them are the surface's own skin: not counted, but raised to
-the value of the voxel behind them once tracing is done
-(`_follow_mass_behind_skin`), so they never outlast the mass behind them.
+Rays are traced by the fused DDA kernels of warp_kernels.py (launched from
+ray_tracing.py), which visit every voxel a ray crosses exactly once and
+accumulate counts or scores in place; without Warp the carvers raise
+WarpBackendUnavailableError.  The kernels count voxels that lie entirely
+in front of the surface a ray starts from, plus the surface's skin voxels
+(crossed by its plane) that are occupied and have nothing of the max
+volume behind them.  Occupied skin voxels with max volume behind them are
+the surface's own skin: not counted, but raised to the value of the voxel
+behind them once tracing is done (`_follow_mass_behind_skin`), so they
+never outlast the mass behind them.
 
 Coordinate/scale conventions
 ----------------------------
 `grid_origin` is the world-space min corner for grid index [0,0,0].
 `grid_extent` is the physical cube size (meters). `grid_resolution` is D, the
 number of voxels per side, so one voxel is `grid_extent / D` meters wide.
-The tracers receive `scale = grid_extent`; the fixed-step fallback also uses
-`voxel_size` as its step length.
+The tracers receive `scale = grid_extent`.
 
 Determinism and batching
 ------------------------
@@ -61,20 +58,10 @@ from .sky_patches import fetch_tregenza_patch_directions
 from .sun import get_sun_vectors
 from .run_context import active_context, report_issue, report_progress
 from .ray_tracing import (
-    generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
-    trace_and_count_dda, auto_batch_size,
+    generate_sun_rays, generate_sky_patch_rays, trace_and_count_dda, trace_and_score_dda,
+    follow_mass_behind_skin_dda, auto_batch_size,
 )
-from .warp_kernels import dda_backend_available
-# The own-skin pass exists only when Warp is installed.
-try:
-    from .ray_tracing import follow_mass_behind_skin_dda
-except ImportError:
-    follow_mass_behind_skin_dda = None
-# The fused score kernel exists only when Warp is installed.
-try:
-    from .ray_tracing import trace_and_score_dda as _fused_dda
-except ImportError:
-    _fused_dda = None
+from .warp_kernels import require_dda_backend
 from typing import NamedTuple, Sequence
 
 
@@ -91,7 +78,7 @@ class SkyPatchCarvingResult(NamedTuple):
     patch_weights: np.ndarray             # (P,) weight per Tregenza sky patch
 
 
-def _resolve_batch_size(resolution: int, device, *, ray_batch_size: int) -> int:
+def _resolve_batch_size(device, *, ray_batch_size: int) -> int:
     """Return the effective ray batch size, auto-tuning if requested.
 
     If *ray_batch_size* is 0 the batch size is computed from free GPU
@@ -99,7 +86,7 @@ def _resolve_batch_size(resolution: int, device, *, ray_batch_size: int) -> int:
     """
     if ray_batch_size > 0:
         return int(ray_batch_size)
-    return auto_batch_size(resolution, device)
+    return auto_batch_size(device)
 
 
 def _validate_cubic_resolution(grid_resolution, func_name: str):
@@ -135,72 +122,7 @@ def _validate_cubic_resolution(grid_resolution, func_name: str):
       
 #--- Ray tracing and carving -----------------------------------------------------------------------------------
 
-def _front_of_surface(min_corner, cell, voxel_idx, origins, normals) -> torch.Tensor:
-    """Mask of hits whose whole voxel lies in front of the ray's source surface.
-
-    A voxel the surface's plane passes through is the building's own skin
-    (a test surface on a facade sits inside the boundary voxels of its own
-    mass), not an obstruction of it.  Same rule as the Warp kernels'
-    ``_in_front``, applied here for the fixed-step fallback.
-    """
-    corner = torch.tensor(min_corner, dtype=torch.float32, device=voxel_idx.device)
-    centre = corner + (voxel_idx.float() + 0.5) * cell
-    half_extent = 0.5 * cell * normals.abs().sum(dim=1)
-    return ((centre - origins) * normals).sum(dim=1) > half_extent
-
-
-def _voxel_behind_skin(min_corner, cell, res, voxel_idx, origins, normals) -> torch.Tensor:
-    """Flat index of the voxel behind each skin voxel, or -1 outside the grid.
-
-    Steps from the voxel's centre one cell length at a time against the
-    normal, up to three steps, until the voxel containing the stepped point
-    lies wholly behind the plane.  Same rule as the Warp kernels'
-    ``_voxel_behind_skin``, for the fixed-step fallback.
-    """
-    corner = torch.tensor(min_corner, dtype=torch.float32, device=voxel_idx.device)
-    centre = corner + (voxel_idx.float() + 0.5) * cell
-    half_extent = 0.5 * cell * normals.abs().sum(dim=1)
-    behind = voxel_idx.clone()
-    found = torch.zeros(voxel_idx.shape[0], dtype=torch.bool, device=voxel_idx.device)
-    for k in (1, 2, 3):
-        stepped = torch.floor((centre - normals * (k * cell) - corner) / cell).long()
-        stepped_centre = corner + (stepped.float() + 0.5) * cell
-        wholly_behind = ((stepped_centre - origins) * normals).sum(dim=1) <= -half_extent
-        behind[~found] = stepped[~found]
-        found |= wholly_behind
-    inside = ((behind >= 0) & (behind < res)).all(dim=1)
-    flat = behind[:, 0] * res * res + behind[:, 1] * res + behind[:, 2]
-    return torch.where(inside, flat, torch.full_like(flat, -1))
-
-
-def _split_hits_at_surface(min_corner, cell, res, voxel_idx, origins, normals, occupancy):
-    """Classify fixed-step hits against each ray's source surface.
-
-    Returns ``(counted, skin_flat, behind_flat)``: *counted* masks hits
-    that obstruct the surface (voxel wholly in front, or occupied skin with
-    nothing of the max volume behind it); *skin_flat* and *behind_flat*
-    list the occupied skin voxels that have occupied mass behind them, with
-    that voxel, for :func:`_follow_mass_behind_skin`.  Empty skin is
-    neither.  Same rule as the Warp kernels.
-    """
-    front = _front_of_surface(min_corner, cell, voxel_idx, origins, normals)
-    corner = torch.tensor(min_corner, dtype=torch.float32, device=voxel_idx.device)
-    centre = corner + (voxel_idx.float() + 0.5) * cell
-    half_extent = 0.5 * cell * normals.abs().sum(dim=1)
-    skin = ~front & (((centre - origins) * normals).sum(dim=1) > -half_extent)
-    skin &= occupancy[voxel_idx[:, 0] * res * res + voxel_idx[:, 1] * res + voxel_idx[:, 2]] != 0
-    skin_ids = torch.nonzero(skin).squeeze(1)
-    behind = _voxel_behind_skin(min_corner, cell, res, voxel_idx[skin_ids],
-                                origins[skin_ids], normals[skin_ids])
-    has_mass = (behind >= 0) & (occupancy[behind.clamp(min=0)] != 0)
-    counted = front.clone()
-    counted[skin_ids[~has_mass]] = True
-    own = voxel_idx[skin_ids[has_mass]]
-    skin_flat = own[:, 0] * res * res + own[:, 1] * res + own[:, 2]
-    return counted, skin_flat, behind[has_mass]
-
-
-def _follow_mass_behind_skin(values, skin_pairs, min_corner, scale, res,
+def _follow_mass_behind_skin(values, min_corner, scale, res,
                              origins, directions, point_ids, surface_normals,
                              occupancy, ray_length):
     """Raise every own-skin voxel to the value of the voxel behind it.
@@ -208,20 +130,13 @@ def _follow_mass_behind_skin(values, skin_pairs, min_corner, scale, res,
     A voxel the source surface's plane passes through, with occupied max
     volume behind it, is the surface's own skin: the surface's rays do not
     count it, but it must not outlast the mass behind it.  *values* are the
-    finished flat counts or scores.  *skin_pairs* is ``(skin_flat,
-    behind_flat)`` collected by the fixed-step fallback, or None to run the
-    Warp pass over the rays.  Returns a new tensor.
+    finished flat counts or scores.  Runs the Warp pass over the rays and
+    returns a new tensor.
     """
-    if skin_pairs is None:
-        return follow_mass_behind_skin_dda(
-            min_corner, scale, res, origins, directions, point_ids,
-            surface_normals, occupancy, values, ray_length,
-        )
-    skin_flat, behind_flat = skin_pairs
-    out = values.clone()
-    if skin_flat.numel() > 0:
-        out.scatter_reduce_(0, skin_flat, values[behind_flat], reduce="amax")
-    return out
+    return follow_mass_behind_skin_dda(
+        min_corner, scale, res, origins, directions, point_ids,
+        surface_normals, occupancy, values, ray_length,
+    )
 
 
 _CPU_BUFFER_BUDGET_BYTES = 1 << 30  # 1 GiB cap on the per-thread accumulation buffers
@@ -318,78 +233,37 @@ def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
 def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions,
                     settings: PreprocessingSettings, point_ids, surface_normals, occupancy,
                     *, ray_batch_size: int):
-    """Count how many rays visit each voxel.
+    """Count how many rays visit each voxel with the fused Warp count kernel.
 
-    Uses the fused Warp count kernel when available; otherwise the
-    fixed-step :func:`trace_multi_hit_grid` fallback.  Both count each
-    (ray, voxel) pair at most once, and skip voxels behind the ray's source
-    surface (*point_ids* maps rays to rows of *surface_normals*) and its
-    own skin (crossed by its plane, with max volume behind it; *occupancy*
-    is the flat uint8 grid).
-
-    Returns ``(counts, skin_pairs)``: a flat int32 tensor, and the
-    fallback's own-skin pairs for :func:`_follow_mass_behind_skin` (None
-    on the Warp path, which finds them itself).
+    Each (ray, voxel) pair counts at most once.  Voxels behind the ray's
+    source surface (*point_ids* maps rays to rows of *surface_normals*) and
+    its own skin (crossed by its plane, with max volume behind it;
+    *occupancy* is the flat uint8 grid) are skipped.  Returns a flat int32
+    tensor.  The carvers check first that Warp can run on the grid's device.
     """
     device = voxel_grid.device
     counts = torch.zeros(voxel_grid.numel(), dtype=torch.int32, device=device)
-    batch_size = _resolve_batch_size(res, device, ray_batch_size=ray_batch_size)
-    res_sq = res * res
+    batch_size = _resolve_batch_size(device, ray_batch_size=ray_batch_size)
+    batch_ranges = [
+        (start, min(start + batch_size, origins.shape[0]))
+        for start in range(0, origins.shape[0], batch_size)
+    ]
 
-    if dda_backend_available(device):
-        batch_ranges = [
-            (start, min(start + batch_size, origins.shape[0]))
-            for start in range(0, origins.shape[0], batch_size)
-        ]
-
-        def _count_batch(start, end, buf):
-            trace_and_count_dda(
-                min_corner, scale, res,
-                origins[start:end], directions[start:end],
-                buf, float(settings.ray_length),
-                point_ids=point_ids[start:end], surface_normals=surface_normals,
-                occupancy=occupancy,
-            )
-
-        _run_batches(batch_ranges, _count_batch, counts, device, parallel=True)
-        # Warp launches run on Warp's own CUDA stream; the counts buffer is
-        # shared zero-copy with torch, so synchronize before torch reads it.
-        if device.type == "cuda":
-            torch.cuda.synchronize()
-        return counts, None
-
-    skin_flat, behind_flat = [], []
-
-    for i in range(0, origins.shape[0], batch_size):
-        o_batch = origins[i: i + batch_size]
-        d_batch = directions[i: i + batch_size]
-        # The tracer requires per-ray patch ids; they are unused for counting.
-        patch_ids_stub = torch.zeros((o_batch.shape[0],), dtype=torch.long, device=device)
-        ray_idx, _, voxel_idx = trace_multi_hit_grid(
-            min_corner=min_corner,
-            scale=scale,
-            resolution=res,
-            origins=o_batch,
-            ray_dirs=d_batch,
-            sky_patch_ids=patch_ids_stub,
-            voxel_size=float(settings.voxel_size),
-            ray_length=float(settings.ray_length),
+    def _count_batch(start, end, buf):
+        trace_and_count_dda(
+            min_corner, scale, res,
+            origins[start:end], directions[start:end],
+            buf, float(settings.ray_length),
+            point_ids=point_ids[start:end], surface_normals=surface_normals,
+            occupancy=occupancy,
         )
-        if voxel_idx.numel() > 0:
-            counted, own_skin, behind = _split_hits_at_surface(
-                min_corner, scale / res, res, voxel_idx, o_batch[ray_idx],
-                surface_normals[point_ids[i: i + batch_size][ray_idx]], occupancy)
-            skin_flat.append(own_skin)
-            behind_flat.append(behind)
-            voxel_idx = voxel_idx[counted]
-        if voxel_idx.numel() > 0:
-            # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
-            flat_idx = voxel_idx[:, 0] * res_sq + voxel_idx[:, 1] * res + voxel_idx[:, 2]
-            counts.index_add_(0, flat_idx, torch.ones_like(flat_idx, dtype=torch.int32))
-    empty = torch.zeros(0, dtype=torch.long, device=device)
-    return counts, (torch.cat(skin_flat) if skin_flat else empty,
-                    torch.cat(behind_flat) if behind_flat else empty)
 
+    _run_batches(batch_ranges, _count_batch, counts, device, parallel=True)
+    # Warp launches run on Warp's own CUDA stream; the counts buffer is
+    # shared zero-copy with torch, so synchronize before torch reads it.
+    if device.type == "cuda":
+        torch.cuda.synchronize()
+    return counts
 
 def _occupancy_flat(voxel_grid) -> torch.Tensor:
     """Flat contiguous uint8 copy of the max volume occupancy (1 = occupied)."""
@@ -452,7 +326,6 @@ def carve_with_sun_rays(
           - epw_path: path to EPW file used for sun positions.
           - min_altitude: degrees above horizon for filtering sun vectors.
           - north_deg: model north, degrees clockwise from +Y.
-          - voxel_size: step length of the fixed-step fallback tracer.
           - ray_length: maximum traced distance along each ray.
     datetimes : Sequence[datetime.datetime]
         Wall-clock timestamps for which sun vectors are generated.
@@ -476,6 +349,7 @@ def carve_with_sun_rays(
     counts : np.ndarray, shape (X*Y*Z,), int32, optional
         Per-voxel hit counts (flat).  Only returned when *return_counts* is True.
     """
+    require_dda_backend(voxel_grid.device)
     _validate_cubic_resolution(grid_resolution, "carve_with_sun_rays")
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
 
@@ -517,12 +391,12 @@ def carve_with_sun_rays(
     # scale is the cubic grid extent in world units (meters), not per-voxel size
     min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
     occupancy = _occupancy_flat(voxel_grid)
-    counts, skin_pairs = _count_ray_hits(
+    counts = _count_ray_hits(
         voxel_grid, min_corner, float(grid_extent), res, origins, directions, settings,
         point_idx, surface_normals, occupancy, ray_batch_size=ray_batch_size,
     )
     counts = _follow_mass_behind_skin(
-        counts, skin_pairs, min_corner, float(grid_extent), res, origins, directions,
+        counts, min_corner, float(grid_extent), res, origins, directions,
         point_idx, surface_normals, occupancy, float(settings.ray_length))
     carved_grid = _carve_by_counts(voxel_grid, counts)
 
@@ -591,7 +465,7 @@ def carve_with_sky_patch_rays(
           - balance_temperature, balance_offset, include_harm,
             simulated_weights_path: benefit.
           - north_deg: model north, degrees clockwise from +Y.
-          - voxel_size, ray_length: fallback step length and maximum ray length.
+          - ray_length: maximum ray length.
     hoys : Sequence[int]
         Hour-of-year indices (0..8759) of the analysis period, used by the
         EPW-based modes.
@@ -624,6 +498,7 @@ def carve_with_sky_patch_rays(
 
     # --- 0) Setup ----------------------------------------------------------
     device = voxel_grid.device
+    require_dda_backend(device)
     _validate_cubic_resolution(grid_resolution, 'carve_with_sky_patch_rays')
 
     # --- 1) Sky patch directions ------------------------------------------
@@ -688,73 +563,26 @@ def carve_with_sky_patch_rays(
 
     # --- 5) Batch ray tracing & weighting ----------------------------------
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
-    batch_size = _resolve_batch_size(res, device, ray_batch_size=ray_batch_size)
-    use_fused = (_fused_dda is not None and dda_backend_available(device))
-
-    # Own-skin pairs found by the fallback tracer (the Warp path finds them
-    # in its own pass after scoring).
-    skin_flat, behind_flat = [], []
+    batch_size = _resolve_batch_size(device, ray_batch_size=ray_batch_size)
 
     def _score_batch(start: int, end: int, buf) -> None:
-        origins_batch = ray_origins[start:end]
-        directions_batch = ray_directions[start:end]
-        patches_batch = patch_ids[start:end]
-
-        if use_fused:
-            # Trace and accumulate in one Warp kernel, writing into buf.
-            _fused_dda(
-                grid_origin, float(grid_extent_m), res,
-                origins_batch, directions_batch, patches_batch,
-                patch_weights, buf, settings.ray_length,
-                point_ids=ray_point_ids[start:end],
-                point_weights=pw_t,
-                surface_normals=surface_normals,
-                occupancy=occupancy,
-            )
-            return
-
-        # Fallback without Warp: trace, then accumulate with torch.
-        hit_ray_ids, hit_patch_ids, hit_voxel_idxs = trace_multi_hit_grid(
-            grid_origin, grid_extent_m, res,
-            origins_batch, directions_batch, patches_batch,
-            settings.voxel_size, settings.ray_length,
+        # Trace and accumulate in one Warp kernel, writing into buf.
+        trace_and_score_dda(
+            grid_origin, float(grid_extent_m), res,
+            ray_origins[start:end], ray_directions[start:end], patch_ids[start:end],
+            patch_weights, buf, settings.ray_length,
+            point_ids=ray_point_ids[start:end],
+            point_weights=pw_t,
+            surface_normals=surface_normals,
+            occupancy=occupancy,
         )
-        if hit_voxel_idxs.numel() == 0:
-            return
-        counted, own_skin, behind = _split_hits_at_surface(
-            grid_origin, grid_extent_m / res, res, hit_voxel_idxs, origins_batch[hit_ray_ids],
-            surface_normals[point_idx[start:end][hit_ray_ids]], occupancy,
-        )
-        skin_flat.append(own_skin)
-        behind_flat.append(behind)
-        hit_ray_ids, hit_patch_ids, hit_voxel_idxs = (
-            hit_ray_ids[counted], hit_patch_ids[counted], hit_voxel_idxs[counted])
-        if hit_voxel_idxs.numel() == 0:
-            return
-
-        idx_flat = (
-            hit_voxel_idxs[:, 0] * res * res +
-            hit_voxel_idxs[:, 1] * res +
-            hit_voxel_idxs[:, 2]
-        )
-
-        # trace_multi_hit_grid guarantees each (ray, voxel) pair
-        # appears at most once, so weights can be accumulated directly.
-        weights_for_hits = patch_weights[hit_patch_ids]
-        if pw_t is not None:
-            # hit_ray_ids index into this batch; map back to sample points.
-            weights_for_hits = weights_for_hits * pw_t[
-                point_idx[start:end][hit_ray_ids]
-            ]
-
-        buf.scatter_add_(0, idx_flat, weights_for_hits)
 
     batch_ranges = [
         (start, min(start + batch_size, total_rays))
         for start in range(0, total_rays, batch_size)
     ]
     with torch.no_grad():
-        _run_batches(batch_ranges, _score_batch, scores, device, parallel=use_fused)
+        _run_batches(batch_ranges, _score_batch, scores, device, parallel=True)
 
     # Warp launches run on Warp's own CUDA stream; wait for them before
     # torch reads the shared scores buffer.
@@ -763,14 +591,9 @@ def carve_with_sky_patch_rays(
 
     # Own skin scores at least as much as the mass behind it, so it is
     # never kept once that mass is carved.
-    skin_pairs = None
-    if not use_fused:
-        empty = torch.zeros(0, dtype=torch.long, device=device)
-        skin_pairs = (torch.cat(skin_flat) if skin_flat else empty,
-                      torch.cat(behind_flat) if behind_flat else empty)
     with torch.no_grad():
         scores = _follow_mass_behind_skin(
-            scores, skin_pairs, grid_origin, grid_extent_m, res, ray_origins,
+            scores, grid_origin, grid_extent_m, res, ray_origins,
             ray_directions, ray_point_ids, surface_normals, occupancy,
             float(settings.ray_length))
 
@@ -994,6 +817,7 @@ def carve_with_planes(
     ValueError
         If ``tilted_plane_angle_deg`` is neither a number nor 8 values.
     """
+    require_dda_backend(voxel_grid.device)
     _validate_cubic_resolution(grid_resolution, "carve_tilted_plane")
     side_len = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
 
@@ -1069,7 +893,7 @@ def carve_with_planes(
     # in-front test and the own-skin rule.
     ray_point_ids = torch.from_numpy(source_ids).to(device)
     surface_normals = torch.from_numpy(norms_np).to(device)
-    counts, skin_pairs = _count_ray_hits(
+    counts = _count_ray_hits(
         voxel_grid, grid_min_corner, float(grid_extent), side_len,
         origins_tensor, dirs_tensor, settings,
         ray_point_ids, surface_normals, occupancy,
@@ -1086,7 +910,7 @@ def carve_with_planes(
     # Own skin goes with the mass behind it (that mass's final state, so
     # after the column pass), and then takes its own column with it.
     counts = _up_columns(_follow_mass_behind_skin(
-        counts, skin_pairs, grid_min_corner, float(grid_extent), side_len,
+        counts, grid_min_corner, float(grid_extent), side_len,
         origins_tensor, dirs_tensor, ray_point_ids, surface_normals, occupancy,
         float(settings.ray_length)))
     carved_grid = _carve_by_counts(voxel_grid, counts)

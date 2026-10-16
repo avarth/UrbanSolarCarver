@@ -1,163 +1,15 @@
-"""Tests for ray_tracing.py: fixed-step marcher, Warp DDA kernel launches, ray
-generation and auto batch size."""
+"""Tests for ray_tracing.py: Warp DDA kernel launches, ray generation and auto
+batch size."""
 import math
 import pytest
 import numpy as np
 import torch
 
 from urbansolarcarver.ray_tracing import (
-    _trace_fixed_step,
-    trace_multi_hit_grid,
     generate_sky_patch_rays,
     generate_sun_rays,
     auto_batch_size,
 )
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _axis_aligned_ray(origin, direction, resolution=10, voxel_size=1.0):
-    """Create tensors for a single ray through a known grid."""
-    scale = resolution * voxel_size
-    min_corner = (0.0, 0.0, 0.0)
-    origins = torch.tensor([origin], dtype=torch.float32)
-    dirs = torch.tensor([direction], dtype=torch.float32)
-    patch_ids = torch.tensor([0], dtype=torch.long)
-    ray_length = scale * 2  # enough to traverse entire grid
-    return min_corner, scale, resolution, origins, dirs, patch_ids, voxel_size, ray_length
-
-
-# ---------------------------------------------------------------------------
-# Fixed-step marcher
-# ---------------------------------------------------------------------------
-
-class TestFixedStepMarcher:
-    def test_axis_aligned_ray_hits_all_cells(self):
-        """A +X ray through a 10-cell grid should hit all 10 cells along X."""
-        args = _axis_aligned_ray(
-            origin=(-0.5, 0.5, 0.5),
-            direction=(1.0, 0.0, 0.0),
-            resolution=10, voxel_size=1.0,
-        )
-        ray_ids, patch_ids, voxel_indices = _trace_fixed_step(*args)
-        # Should hit cells (0..9, 0, 0)
-        hit_x = set(voxel_indices[:, 0].tolist())
-        assert hit_x == set(range(10)), f"Expected cells 0-9 on X, got {hit_x}"
-
-    def test_diagonal_ray_reaches_far_corner(self):
-        """A diagonal ray should reach the far corner of the grid.
-
-        With voxel_size=1.0 and resolution=10 the grid diagonal is
-        10*sqrt(3) ~ 17.32. The ray length is one voxel longer (~18.32), so
-        the ceil(18.32) = 19 samples at (k + 0.5) * voxel_size reach the
-        corner cell (9, 9, 9).
-        """
-        resolution = 10
-        voxel_size = 1.0
-        scale = resolution * voxel_size
-        direction = np.array([1.0, 1.0, 1.0])
-        direction = direction / np.linalg.norm(direction)
-        ray_length = scale * math.sqrt(3) + voxel_size
-
-        min_corner = (0.0, 0.0, 0.0)
-        origins = torch.tensor([[-0.01, -0.01, -0.01]], dtype=torch.float32)
-        dirs = torch.tensor([direction.tolist()], dtype=torch.float32)
-        patch_ids = torch.tensor([0], dtype=torch.long)
-
-        ray_ids, p_ids, voxel_indices = _trace_fixed_step(
-            min_corner, scale, resolution,
-            origins, dirs, patch_ids,
-            voxel_size, ray_length,
-        )
-        hit_set = set(map(tuple, voxel_indices.tolist()))
-        assert (9, 9, 9) in hit_set, f"Far corner (9,9,9) not reached. Max: {voxel_indices.max(dim=0).values.tolist()}"
-
-    def test_truncation_bug_specific_case(self):
-        """Arithmetic behind the step count of the fixed-step marcher.
-
-        With ray_length=7.5 and voxel_size=1.0, int(7.5)=7 steps would sample
-        at (0.5, 1.5, ..., 6.5)*voxel_size, i.e. cells 0-6, and miss cell 7.
-        ceil(7.5)=8 steps, which _trace_fixed_step uses, reaches cell 7.
-        This test checks only the arithmetic; it does not call the marcher.
-        """
-        num_steps_int = int(7.5 / 1.0)    # 7
-        num_steps_ceil = math.ceil(7.5 / 1.0)  # 8
-        assert num_steps_int == 7
-        assert num_steps_ceil == 8
-
-    def test_no_duplicate_ray_voxel_pairs(self):
-        """Each (ray, voxel) pair must appear at most once; duplicates would
-        inflate scores and violation counts downstream."""
-        # Fixed-step sampling can put two samples of one ray in the same
-        # voxel; the marcher must report that voxel once.
-        origins = torch.tensor([[-0.5, 2.5, 2.5]], dtype=torch.float32)
-        dirs = torch.nn.functional.normalize(
-            torch.tensor([[1.0, 0.001, 0.001]]), dim=1)
-        pids = torch.tensor([0], dtype=torch.long)
-        rid, _, vox = _trace_fixed_step(
-            (0.0, 0.0, 0.0), 10.0, 10, origins, dirs, pids, 1.0, 30.0,
-        )
-        pairs = list(zip(rid.tolist(), map(tuple, vox.tolist())))
-        assert len(pairs) == len(set(pairs)), "duplicate (ray, voxel) hits"
-
-    def test_zero_ray_length_returns_empty(self):
-        """ray_length=0 should produce no hits."""
-        min_corner = (0.0, 0.0, 0.0)
-        origins = torch.tensor([[0.5, 0.5, 0.5]], dtype=torch.float32)
-        dirs = torch.tensor([[1.0, 0.0, 0.0]], dtype=torch.float32)
-        patch_ids = torch.tensor([0], dtype=torch.long)
-        ray_ids, p_ids, voxel_indices = _trace_fixed_step(
-            min_corner, 10.0, 10, origins, dirs, patch_ids, 1.0, 0.0,
-        )
-        assert ray_ids.shape[0] == 0
-
-    def test_ray_outside_grid_returns_empty(self):
-        """A ray that never enters the grid should produce no hits."""
-        min_corner = (0.0, 0.0, 0.0)
-        origins = torch.tensor([[20.0, 20.0, 20.0]], dtype=torch.float32)
-        dirs = torch.tensor([[1.0, 0.0, 0.0]], dtype=torch.float32)
-        patch_ids = torch.tensor([0], dtype=torch.long)
-        ray_ids, p_ids, voxel_indices = _trace_fixed_step(
-            min_corner, 10.0, 10, origins, dirs, patch_ids, 1.0, 20.0,
-        )
-        # Ray starts at (20,20,20) going +X and the grid is [0,10]^3, so it misses
-        assert ray_ids.shape[0] == 0
-
-
-# ---------------------------------------------------------------------------
-# trace_multi_hit_grid dispatch
-# ---------------------------------------------------------------------------
-
-class TestTraceMultiHitGrid:
-    def test_empty_rays_returns_empty(self):
-        """Zero rays should return empty tensors."""
-        empty_origins = torch.empty((0, 3), dtype=torch.float32)
-        empty_dirs = torch.empty((0, 3), dtype=torch.float32)
-        empty_ids = torch.empty((0,), dtype=torch.long)
-        ray_ids, p_ids, voxels = trace_multi_hit_grid(
-            (0, 0, 0), 10.0, 10,
-            empty_origins, empty_dirs, empty_ids,
-            1.0, 20.0,
-        )
-        assert ray_ids.shape[0] == 0
-        assert voxels.shape == (0, 3)
-
-    def test_cpu_path_produces_hits(self, caplog):
-        """The no-Warp fallback logs that it is approximate and still hits."""
-        args = _axis_aligned_ray(
-            origin=(-0.5, 0.5, 0.5),
-            direction=(1.0, 0.0, 0.0),
-            resolution=5, voxel_size=1.0,
-        )
-        with caplog.at_level("WARNING", logger="urbansolarcarver.ray_tracing"):
-            ray_ids, p_ids, voxels = trace_multi_hit_grid(*args)
-        assert "fixed-step ray marcher" in caplog.text
-        assert ray_ids.shape[0] > 0
-        # All voxel indices should be in [0, 5)
-        assert (voxels >= 0).all()
-        assert (voxels < 5).all()
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +61,26 @@ class TestGenerateSunRays:
 # Fused count kernel (binary carving modes)
 # ---------------------------------------------------------------------------
 
+def _counts_by_fine_sampling(origins, directions, scale, res, ray_length, step):
+    """Per-voxel ray counts from sampling each ray at (k + 0.5) * step, a
+    reference for the DDA count kernel that shares no code with it.  A ray
+    counts once per voxel; corner clips shorter than *step* are missed.  The
+    grid's minimum corner is the origin; float32, like the kernel."""
+    distances = (torch.arange(math.ceil(ray_length / step), dtype=torch.float32) + 0.5) * step
+    counts = torch.zeros(res ** 3, dtype=torch.int32)
+    for start in range(0, origins.shape[0], 20):
+        points = (origins[start:start + 20, None, :]
+                  + directions[start:start + 20, None, :] * distances[None, :, None])
+        voxels = torch.floor(points / scale * res).long()
+        inside = ((voxels >= 0) & (voxels < res)).all(dim=2)
+        rays = torch.arange(voxels.shape[0])[:, None].expand_as(inside)[inside]
+        hit = voxels[inside]
+        flat = hit[:, 0] * res * res + hit[:, 1] * res + hit[:, 2]
+        once_per_ray = torch.unique(rays * res ** 3 + flat) % res ** 3
+        counts.index_add_(0, once_per_ray, torch.ones_like(once_per_ray, dtype=torch.int32))
+    return counts
+
+
 class TestFusedCountKernel:
     @pytest.mark.skipif(
         not __import__("urbansolarcarver.warp_kernels", fromlist=["dda_backend_available"])
@@ -232,17 +104,12 @@ class TestFusedCountKernel:
         d = rng.normal(size=(n, 3)).astype(np.float32)
         d /= np.linalg.norm(d, axis=1, keepdims=True)
         dirs = torch.from_numpy(d)
-        pids = torch.zeros(n, dtype=torch.long)
 
         counts_fused = torch.zeros(res**3, dtype=torch.int32)
         trace_and_count_dda((0.0, 0.0, 0.0), scale, res, origins, dirs,
                             counts_fused, ray_len)
 
-        _, _, vox = _trace_fixed_step((0.0, 0.0, 0.0), scale, res,
-                                      origins, dirs, pids, voxel / 400, ray_len)
-        counts_ref = torch.zeros(res**3, dtype=torch.int32)
-        flat = vox[:, 0] * res * res + vox[:, 1] * res + vox[:, 2]
-        counts_ref.index_add_(0, flat, torch.ones_like(flat, dtype=torch.int32))
+        counts_ref = _counts_by_fine_sampling(origins, dirs, scale, res, ray_len, voxel / 400)
 
         assert (counts_fused >= counts_ref).all()
         extra = (counts_fused - counts_ref).sum().item()
@@ -311,82 +178,11 @@ class TestFusedScorePointWeighted:
 
 class TestAutoBatchSize:
     def test_cpu_returns_fallback(self):
-        result = auto_batch_size(100, torch.device("cpu"))
+        result = auto_batch_size(torch.device("cpu"))
         assert result == 300_000
 
     def test_returns_positive_integer(self):
-        result = auto_batch_size(100, torch.device("cpu"), fallback=50_000)
+        result = auto_batch_size(torch.device("cpu"), fallback=50_000)
         assert isinstance(result, int)
         assert result > 0
 
-
-class TestFixedStepChunking:
-    """Verify that internal chunking in _trace_fixed_step produces
-    identical results regardless of chunk size."""
-
-    def test_chunked_matches_unchunked(self):
-        """A batch of rays should produce the same hits whether processed
-        in one chunk or many small chunks."""
-        import urbansolarcarver.ray_tracing as rt
-
-        resolution = 20
-        voxel_size = 1.0
-        scale = resolution * voxel_size
-        min_corner = (0.0, 0.0, 0.0)
-        ray_length = scale * 1.5
-
-        # 500 rays in random directions from one side of the grid
-        rng = np.random.RandomState(42)
-        n_rays = 500
-        origins = torch.zeros(n_rays, 3, dtype=torch.float32)
-        origins[:, 0] = -0.5  # just outside grid on -X face
-        origins[:, 1] = torch.from_numpy(rng.uniform(0.5, scale - 0.5, n_rays).astype(np.float32))
-        origins[:, 2] = torch.from_numpy(rng.uniform(0.5, scale - 0.5, n_rays).astype(np.float32))
-        dirs = torch.zeros(n_rays, 3, dtype=torch.float32)
-        dirs[:, 0] = 1.0  # +X direction
-        patch_ids = torch.arange(n_rays, dtype=torch.long) % 145
-
-        # Run with a very large budget (no chunking)
-        saved = getattr(rt, '_FIXED_STEP_BUDGET_BYTES', None)
-        rt._FIXED_STEP_BUDGET_BYTES = 10 * 1024**3  # 10 GB: effectively no chunking
-        r1_ray, r1_patch, r1_vox = rt._trace_fixed_step(
-            min_corner, scale, resolution,
-            origins, dirs, patch_ids,
-            voxel_size, ray_length,
-        )
-        # Run with a tiny budget (forces many chunks)
-        rt._FIXED_STEP_BUDGET_BYTES = 1024  # 1 KB: many small chunks
-        r2_ray, r2_patch, r2_vox = rt._trace_fixed_step(
-            min_corner, scale, resolution,
-            origins, dirs, patch_ids,
-            voxel_size, ray_length,
-        )
-        # Restore
-        if saved is not None:
-            rt._FIXED_STEP_BUDGET_BYTES = saved
-        elif hasattr(rt, '_FIXED_STEP_BUDGET_BYTES'):
-            del rt._FIXED_STEP_BUDGET_BYTES
-
-        # Results must be identical (same rays, same order)
-        assert r1_ray.shape == r2_ray.shape, (
-            f"Hit count mismatch: {r1_ray.shape[0]} vs {r2_ray.shape[0]}"
-        )
-        torch.testing.assert_close(r1_ray, r2_ray)
-        torch.testing.assert_close(r1_patch, r2_patch)
-        torch.testing.assert_close(r1_vox, r2_vox)
-
-    def test_single_ray_still_works(self):
-        """Edge case: a single ray should work regardless of chunk size."""
-        import urbansolarcarver.ray_tracing as rt
-        args = _axis_aligned_ray(
-            origin=(-0.5, 0.5, 0.5),
-            direction=(1.0, 0.0, 0.0),
-            resolution=10, voxel_size=1.0,
-        )
-        saved = getattr(rt, '_FIXED_STEP_BUDGET_BYTES', None)
-        rt._FIXED_STEP_BUDGET_BYTES = 1  # absurdly small
-        ray_ids, patch_ids, voxel_indices = rt._trace_fixed_step(*args)
-        if saved is not None:
-            rt._FIXED_STEP_BUDGET_BYTES = saved
-        hit_x = set(voxel_indices[:, 0].tolist())
-        assert hit_x == set(range(10))
