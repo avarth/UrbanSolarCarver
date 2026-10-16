@@ -104,8 +104,6 @@ def run_pipeline(
         raise ValueError(
             f"start_from must be one of the stages on the path to {list(produce)}: "
             f"{list(path)}; got {start_from!r}")
-    if not isinstance(config, user_config):
-        config = load_config(str(config))
     if context is None:
         context = RunContext(forward_issues_to_warnings=True)
 
@@ -118,6 +116,10 @@ def run_pipeline(
     results: dict = {}
     issues_before = len(context.issues)
     with run_context(context):
+        if not isinstance(config, user_config):
+            # Loaded inside the context, so the config validators' issues are
+            # part of this call's issues.
+            config = load_config(str(config))
         for stage in path[path.index(start_from):]:
             with stage_context(stage):
                 report_progress(0, 1)

@@ -49,7 +49,7 @@ from .archetype_defaults import (
 from .errors import UrbanSolarCarverError
 from .load_config import load_config, user_config
 from .run_context import RunContext, run_context
-from .stage_settings import PIPELINE_STAGES, stage_folder
+from .stage_settings import _STAGES_NEEDED_BY, PIPELINE_STAGES, stage_folder
 
 # Windows consoles may use legacy code pages (cp1252 and similar); when output
 # is piped or redirected, printing schema descriptions that contain characters
@@ -293,6 +293,12 @@ def run(
                 raise typer.BadParameter(
                     f"{name!r} is not a stage; choose from {', '.join(PIPELINE_STAGES)}",
                     param_hint=option)
+    needed = {stage for name in produce for stage in _STAGES_NEEDED_BY[name]}
+    path = [stage for stage in PIPELINE_STAGES if stage in needed]
+    if start_from not in path:
+        raise typer.BadParameter(
+            f"{start_from!r} is not on the path to {', '.join(produce)} ({', '.join(path)})",
+            param_hint="--start-from")
 
     context = RunContext()
     with run_context(context):

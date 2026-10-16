@@ -182,6 +182,16 @@ def test_run_unknown_stage_is_a_usage_error(tmp_path):
     assert result.exit_code == 2 and "rendering" in result.output
 
 
+def test_run_start_from_outside_the_path_is_a_usage_error(tmp_path):
+    config = _write_cube_config(tmp_path)
+    result = _invoke(["run", "-c", str(config), "--produce", "preprocessing",
+                      "--start-from", "massing"])
+    assert result.exit_code == 2, result.output
+    assert "--start-from" in result.output and "massing" in result.output
+    assert "Traceback" not in result.output
+    assert not (tmp_path / "run").exists()          # refused before anything ran
+
+
 def test_invalid_config_prints_a_clean_error(tmp_path):
     config = _write_cube_config(tmp_path, voxel_size=2.0)
     text = config.read_text(encoding="utf-8").replace("voxel_size: 2.0", "voxel_size: 0")

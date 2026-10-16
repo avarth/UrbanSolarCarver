@@ -86,6 +86,18 @@ def test_config_can_be_a_yaml_path(tmp_path):
     assert result.exporting.export_path.is_file()
 
 
+def test_a_yaml_configs_validator_issues_reach_the_result(tmp_path):
+    import yaml
+    conf = daylight_cube_config(tmp_path)
+    data = conf.model_dump(mode="json", exclude_none=True)
+    data["threshold"] = 0.5                  # a numeric cutoff makes carve_fraction unused
+    data["carve_fraction"] = 0.3
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(data), encoding="utf-8")
+    result = run_pipeline(path, tmp_path / "run", produce={"preprocessing"})
+    assert ("None", "carve_fraction_unused") in [(str(i.stage), i.code) for i in result.issues]
+
+
 def test_issues_of_all_stages_are_collected(tmp_path):
     conf = daylight_cube_config(tmp_path, threshold=1e9)            # nothing carved
     result = run_pipeline(conf, tmp_path / "run")
