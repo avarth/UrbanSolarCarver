@@ -24,7 +24,8 @@ What this script does
 1. Creates  .venv/  in the repo if it doesn't exist (on Windows, falls back to
    ~/.usc-venv when the repo path is too deep for the 260-character path limit)
 2. Reads the CUDA version supported by the driver from  nvidia-smi
-3. Picks the matching PyTorch wheel index
+3. Asks the PyTorch wheel indexes the driver can run which torch they offer,
+   and picks the one with the newest torch
 4. Upgrades pip and installs PyTorch from that index
 5. Installs UrbanSolarCarver in editable mode with its dependencies, including
    warp-lang  (pip install -e .[dev])
@@ -53,15 +54,20 @@ MIN_PYTHON = (3, 10)
 TORCH_PATH_HEADROOM = 170
 WINDOWS_MAX_PATH = 260
 
-# CUDA version reported by the driver -> PyTorch pip index URL.
-# Valid for PyTorch 2.5+; see https://pytorch.org/get-started/locally/
-TORCH_INDEX = {
-    "cpu":   "https://download.pytorch.org/whl/cpu",
-    "11.8":  "https://download.pytorch.org/whl/cu118",
-    "12.1":  "https://download.pytorch.org/whl/cu121",
-    "12.4":  "https://download.pytorch.org/whl/cu124",
-    "12.6":  "https://download.pytorch.org/whl/cu124",  # 12.6 driver uses cu124 wheels
-    "12.8":  "https://download.pytorch.org/whl/cu124",  # 12.8 driver uses cu124 wheels
+# PyTorch's wheel indexes, by the CUDA version their wheels need.  PyTorch
+# stops publishing to older indexes (cu124 ends at torch 2.6, cu128 at 2.11),
+# so the installer asks every index the driver can run which torch it offers
+# and takes the newest (see resolve_torch_index).  Add new indexes here.
+CPU_WHEEL_INDEX = "https://download.pytorch.org/whl/cpu"
+CUDA_WHEEL_INDEXES = {
+    (11, 8): "https://download.pytorch.org/whl/cu118",
+    (12, 1): "https://download.pytorch.org/whl/cu121",
+    (12, 4): "https://download.pytorch.org/whl/cu124",
+    (12, 6): "https://download.pytorch.org/whl/cu126",
+    (12, 8): "https://download.pytorch.org/whl/cu128",
+    (12, 9): "https://download.pytorch.org/whl/cu129",
+    (13, 0): "https://download.pytorch.org/whl/cu130",
+    (13, 2): "https://download.pytorch.org/whl/cu132",
 }
 
 # ── Helpers ────────────────────────────────────────────────────────────
@@ -108,32 +114,58 @@ def detect_cuda_version() -> str | None:
     return None
 
 
-def resolve_torch_index(cuda_version: str | None, force_cpu: bool) -> tuple[str, str]:
-    """
-    Given CUDA version string (or None), return (index_url, description).
+def _version_tuple(text: str) -> tuple[int, ...]:
+    """(2, 14, 1) for "2.14.1" or "2.14.1+cu126"."""
+    return tuple(int(part) for part in re.findall(r"\d+", text.split("+")[0]))
+
+
+def newest_torch_on_index(index_url: str) -> tuple[int, ...] | None:
+    """The newest torch version *index_url* offers for this Python and
+    platform (asked with ``pip index versions``), or None if it cannot be
+    asked (no network, old pip, nothing for this platform)."""
+    try:
+        r = run([sys.executable, "-m", "pip", "index", "versions", "torch",
+                 "--index-url", index_url], capture=True, check=False, timeout=60)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"^torch \(([^)]+)\)", r.stdout, re.MULTILINE)
+    return _version_tuple(m.group(1)) if m else None
+
+
+def resolve_torch_index(cuda_version: str | None, force_cpu: bool,
+                        newest_torch_on=newest_torch_on_index) -> tuple[str, str]:
+    """Return (index_url, description) for the driver's CUDA version.
+
+    Among the wheel indexes whose CUDA version the driver supports (drivers
+    run wheels built for their CUDA version or older), the one offering the
+    newest torch wins, the higher CUDA version breaking ties.  When no index
+    can be asked, the highest supported one is used.  No driver, a forced
+    CPU install, or a driver older than every index gives CPU wheels.
+    *newest_torch_on* maps an index URL to its newest torch version, or None.
     """
     if force_cpu or cuda_version is None:
-        return TORCH_INDEX["cpu"], "CPU-only"
-
-    # Match major.minor to our known index URLs
-    major_minor = ".".join(cuda_version.split(".")[:2])
-
-    if major_minor in TORCH_INDEX:
-        return TORCH_INDEX[major_minor], f"CUDA {major_minor}"
-
-    # Minor version not in the table: choose the wheel index by major version.
-    major = cuda_version.split(".")[0]
-    if major.isdigit() and int(major) >= 13:
-        # Drivers are backward compatible: newer-than-known CUDA runs cu128 wheels
-        return "https://download.pytorch.org/whl/cu128", f"CUDA {major_minor} (using cu128 wheels)"
-    if major == "12":
-        # All CUDA 12.x uses cu124 wheels (binary compatible)
-        return TORCH_INDEX["12.4"], f"CUDA {major_minor} (using cu124 wheels)"
-    elif major == "11":
-        return TORCH_INDEX["11.8"], f"CUDA {major_minor} (using cu118 wheels)"
-
-    log(f"Unknown CUDA version {cuda_version}, falling back to CPU", "warn")
-    return TORCH_INDEX["cpu"], f"CPU-only (unknown CUDA {cuda_version})"
+        return CPU_WHEEL_INDEX, "CPU-only"
+    try:
+        driver = tuple(int(part) for part in cuda_version.split(".")[:2])
+    except ValueError:
+        log(f"Unreadable CUDA version {cuda_version!r}, falling back to CPU", "warn")
+        return CPU_WHEEL_INDEX, f"CPU-only (unreadable CUDA {cuda_version})"
+    supported = sorted(cuda for cuda in CUDA_WHEEL_INDEXES if cuda <= driver)
+    if not supported:
+        log(f"CUDA {cuda_version} is older than every PyTorch wheel index, falling back to CPU", "warn")
+        return CPU_WHEEL_INDEX, f"CPU-only (CUDA {cuda_version} too old)"
+    log(f"Asking {len(supported)} PyTorch wheel indexes which torch they offer...")
+    offers = {cuda: newest_torch_on(CUDA_WHEEL_INDEXES[cuda]) for cuda in supported}
+    reachable = {cuda: version for cuda, version in offers.items() if version is not None}
+    driver_text = ".".join(map(str, driver))
+    if not reachable:
+        cuda = supported[-1]
+        log("No PyTorch wheel index could be asked; using the highest one the driver supports", "warn")
+        return (CUDA_WHEEL_INDEXES[cuda],
+                f"CUDA {driver_text} (cu{cuda[0]}{cuda[1]} wheels; the indexes could not be checked)")
+    cuda = max(reachable, key=lambda c: (reachable[c], c))
+    torch_text = ".".join(map(str, reachable[cuda]))
+    return CUDA_WHEEL_INDEXES[cuda], f"CUDA {driver_text} (cu{cuda[0]}{cuda[1]} wheels, torch {torch_text})"
 
 
 def venv_python(venv_dir: Path) -> Path:
