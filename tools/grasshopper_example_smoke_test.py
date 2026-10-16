@@ -28,17 +28,18 @@ from pathlib import Path
 
 import numpy as np
 
+from urbansolarcarver.daemon_client import DEFAULT_DAEMON_PORT
+
 RUNS = Path.home() / ".urbansolarcarver" / "gh_runs"
 RHINOCODE = Path(r"C:\Program Files\Rhino 8\System\RhinoCode.exe")
 SOLVE_SCRIPT = Path(__file__).with_name("grasshopper_example_solve_in_rhino.py")
-DAEMON_PORT = 6000
 MESH_SUFFIXES = {".ply", ".obj", ".stl", ".glb"}
 FLOAT_RTOL = 1e-5
 
 
 def daemon_listening():
     try:
-        socket.create_connection(("localhost", DAEMON_PORT), timeout=1).close()
+        socket.create_connection(("localhost", DEFAULT_DAEMON_PORT), timeout=1).close()
         return True
     except OSError:
         return False
