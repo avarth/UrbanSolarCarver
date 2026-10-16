@@ -202,21 +202,31 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **Grasshopper.** USC_Preprocess, USC_ThresholdStage, USC_Export,
   USC_Massing and USC_RunPipeline send the daemon's `run` command and read
   stage folders from the reply, and each engine issue appears as a warning
-  on the component (`<stage>: <message>`). A stage component reads its
-  upstream stage from `<out_dir>/<stage>` of its Config, not from the path
-  on its `pre_result` or `thr_result` input (the input still has to be
-  connected). USC_Config sends no YAML path when none is given, so the daemon
+  on the component (`<stage>: <message>`; `config: <message>` for a
+  configuration check). A stage component reads its upstream stage from
+  `<out_dir>/<stage>` of its Config, not from the path on its `pre_result`
+  or `thr_result` input (the input still has to be connected); when that
+  path is in another folder the component shows an error naming both
+  folders. USC_Config sends no YAML path when none is given, so the daemon
   starts from the mode's starting values and Grasshopper no longer reads
-  `configs/`; it takes mode spellings from the mode registry. USC_Mode and
+  `configs/`; without a YAML the stage components send
+  `<out_dir>/incoming/max_volume.ply` and `test_surfaces.ply` (written by
+  USC_Preprocess) as `max_volume_path` and `test_surface_path`. Grasshopper
+  takes mode spellings from the mode registry. USC_Mode and
   USC_Archetype read the mode list, descriptions and archetype defaults from
   the engine, which they find through the USC helpers that USC_Session
-  loads: solve USC_Session before them, otherwise they show a message that
-  says so. The `.ghuser` files of USC_Config, USC_Mode, USC_Archetype,
+  loads: when they solve before USC_Session (a saved file opened in a new
+  Rhino session), they show a message that says so and solve once more
+  after the current solution. The `.ghuser` files of USC_Config, USC_Mode, USC_Archetype,
   USC_Preprocess, USC_ThresholdStage, USC_Export, USC_Massing and
   USC_RunPipeline are rebuilt; run USC_SyncCanvas on existing canvases.
   Component inputs and outputs are unchanged.
 - **Migration.** Each existing run folder needs one re-run from
   preprocessing (old manifests lack `run_id`; see "Fixed (stage chain)").
+  A daemon that was started before this update has to be restarted
+  (USC_Session, or `usc daemon stop` and `usc daemon start`): an old daemon
+  answers the `run` command with "Unknown command: 'run'", and USC_Session's
+  helpers then say to restart it.
   `run_pipeline` returns a `PipelineResult`: `result.export_path` is now
   `result.exporting.export_path`, and the same goes for the other fields of
   the exporting Result (`retention_pct`, `faces`, ...); the quick start and

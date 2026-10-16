@@ -254,7 +254,69 @@ def test_run_stages_omits_config_when_no_yaml_was_given(gh, monkeypatch):
     gh.run_stages("s", _config(None), ["exporting"], "preprocessing", None)
     (payload,) = sent
     assert "config" not in payload
-    assert payload["overrides"] == ["mode=irradiance", "start_month=3"]
+    incoming = Path("C:/runs/one") / "incoming"
+    assert payload["overrides"] == ["mode=irradiance", "start_month=3",
+                                    "max_volume_path={}".format(incoming / "max_volume.ply"),
+                                    "test_surface_path={}".format(incoming / "test_surfaces.ply")]
+
+
+def test_run_stages_keeps_explicit_geometry_paths_and_adds_no_default_with_a_yaml(gh, monkeypatch):
+    sent = []
+    monkeypatch.setattr(gh, "call_daemon",
+                        lambda session, cmd, payload=None, timeout=None: sent.append(payload) or {"status": "ok"})
+    explicit = {"max_volume_path": "D:/in/volume.ply"}
+    gh.run_stages("s", _config(None), ["preprocessing"], "preprocessing", explicit)
+    gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None)
+    without_yaml, with_yaml = sent
+    assert "max_volume_path=D:/in/volume.ply" in without_yaml["overrides"]
+    assert not any(o.startswith("max_volume_path=") and "incoming" in o for o in without_yaml["overrides"])
+    assert any(o.startswith("test_surface_path=") and "incoming" in o for o in without_yaml["overrides"])
+    assert not any(o.startswith(("max_volume_path=", "test_surface_path=")) for o in with_yaml["overrides"])
+
+
+def test_show_issues_labels_a_config_issue_without_a_stage(gh, fake_grasshopper):
+    component = _FakeComponent()
+    reply = {"status": "ok", "issues": [{"stage": None, "code": "c", "message": "mode note"}]}
+    assert gh.show_issues(component, reply) == ["config: mode note"]
+    assert component.messages == [("warning", "config: mode note")]
+
+
+def test_stage_folder_mismatch_names_both_paths(gh):
+    config = types.SimpleNamespace(out_dir="C:/runs/one")
+    assert gh.stage_folder_mismatch(config, "C:/runs/one/preprocessing/manifest.json", "preprocessing") is None
+    assert gh.stage_folder_mismatch(config, "C:/runs/one/../one/preprocessing/manifest.json",
+                                    "preprocessing") is None
+    message = gh.stage_folder_mismatch(config, "C:/runs/other/preprocessing/manifest.json", "preprocessing")
+    assert "other" in message and "one" in message
+    assert str(Path("C:/runs/other/preprocessing")) in message
+    assert str(Path("C:/runs/one/preprocessing")) in message
+
+
+def test_call_daemon_hints_at_a_restart_for_an_old_daemon(gh, monkeypatch):
+    class _OldDaemonConnection:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def send(self, message):
+            pass
+
+        def poll(self, timeout):
+            return True
+
+        def recv(self):
+            return {"status": "error", "error": "Unknown command: 'run'"}
+
+    import multiprocessing.connection
+    monkeypatch.setattr(multiprocessing.connection, "Client", _OldDaemonConnection)
+    session = types.SimpleNamespace(host="localhost", port=1, authkey=b"key")
+    with pytest.raises(gh.DaemonError, match="Restart the daemon from USC_Session"):
+        gh.call_daemon(session, "run", {})
 
 
 def test_components_no_longer_use_the_replaced_helpers_or_stage_commands():

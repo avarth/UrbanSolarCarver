@@ -259,3 +259,30 @@ def test_stage_reply_carries_issues(tmp_path, tmp_mesh_files):
     assert [i["code"] for i in reply["issues"]] == ["nothing_carved"]
     assert reply["issues"][0]["stage"] == "thresholding"
     assert set(reply["issues"][0]) == {"stage", "code", "message"}
+
+
+def test_run_from_thresholding_without_a_yaml_after_a_preprocessing_run(tmp_path, tmp_mesh_files):
+    """Grasshopper's stage-by-stage workflow without a YAML: the later stages send
+    the mode, the run folder and the two incoming paths only (usc_gh.run_stages adds
+    the paths); the geometry files are not read again."""
+    from urbansolarcarver.daemon import _dispatch
+    from urbansolarcarver.session import CarverSession
+
+    vol_path, srf_path = tmp_mesh_files
+    run_folder = tmp_path / "run"
+    common = ["mode=daylight", f"out_dir={run_folder}", "device=cpu", "voxel_size=2.0",
+              "grid_step=2.0", "ray_length=50.0"]
+    with CarverSession(device="cpu") as sess:
+        first = _dispatch({"cmd": "run", "produce": ["preprocessing"], "run_folder": str(run_folder),
+                           "overrides": common + [f"max_volume_path={vol_path}",
+                                                  f"test_surface_path={srf_path}"]}, sess)
+        assert first["status"] == "ok", first
+        incoming = run_folder / "incoming"
+        reply = _dispatch({"cmd": "run", "produce": ["thresholding"], "start_from": "thresholding",
+                           "run_folder": str(run_folder),
+                           "overrides": common + [f"max_volume_path={incoming / 'max_volume.ply'}",
+                                                  f"test_surface_path={incoming / 'test_surfaces.ply'}"]},
+                          sess)
+    assert reply["status"] == "ok", reply
+    assert set(reply["stage_folders"]) == {"thresholding"}
+    assert (run_folder / "thresholding" / "manifest.json").is_file()

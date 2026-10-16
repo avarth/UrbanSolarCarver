@@ -98,6 +98,9 @@ else:
     # Postprocess settings are merged here, not in Config, so changing them
     # re-runs only Export.
     try:
+        mismatch = gh.stage_folder_mismatch(config, thr_result, "thresholding")
+        if mismatch:
+            raise ValueError(mismatch)
         reply = gh.run_stages(config.session, config, ["exporting"], "exporting",
                               gh.parse_overrides(postprocess_overrides))
         gh.show_issues(ghenv.Component, reply)

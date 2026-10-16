@@ -100,6 +100,9 @@ else:
     # Threshold settings are merged here, not in Config, so changing them
     # re-runs only this stage and not Preprocess.
     try:
+        mismatch = gh.stage_folder_mismatch(config, pre_result, "preprocessing")
+        if mismatch:
+            raise ValueError(mismatch)
         reply = gh.run_stages(config.session, config, ["thresholding"], "thresholding",
                               gh.parse_overrides(threshold_overrides))
         gh.show_issues(ghenv.Component, reply)

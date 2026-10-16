@@ -114,6 +114,9 @@ else:
     # Massing settings are merged here, not in Config, so changing them
     # re-runs only Massing.
     try:
+        mismatch = gh.stage_folder_mismatch(config, thr_result, "thresholding")
+        if mismatch:
+            raise ValueError(mismatch)
         reply = gh.run_stages(config.session, config, ["massing"], "massing",
                               gh.parse_overrides(massing_overrides))
         gh.show_issues(ghenv.Component, reply)
