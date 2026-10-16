@@ -119,7 +119,7 @@ def get_sun_vectors(
                     below it are dropped.
       device      : Torch device for the result.
       north_deg   : Model north in degrees clockwise from the +Y axis
-                    (USC convention, same as ``cfg.north_deg``).  Sun
+                    (USC convention, same as the ``north_deg`` setting).  Sun
                     vectors are returned in model coordinates.
 
     Returns:

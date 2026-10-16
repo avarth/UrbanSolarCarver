@@ -392,13 +392,13 @@ class TestSmoothedMeshPath:
     def test_finalize_mesh_smooth_path(self):
         """The full smoothed finalize path (prune → SDF → MC → cleanup →
         Taubin) must deliver a watertight, positive-volume mesh."""
-        from types import SimpleNamespace
         from urbansolarcarver.grid import finalize_mesh
-        cfg = SimpleNamespace(
-            apply_smoothing=True, min_voxels=10, min_face_count=10,
-            smooth_iters=2, voxel_size=1.0,
+        from urbansolarcarver.stage_settings import ExportingSettings
+        settings = ExportingSettings(
+            final_mesh_format="ply", apply_smoothing=True, min_voxels=10,
+            min_face_count=10, smooth_iters=2,
         )
-        _, _, final = finalize_mesh(self._cube_voxels(), np.zeros(3), cfg)
+        _, _, final = finalize_mesh(self._cube_voxels(), np.zeros(3), settings, 1.0)
         assert len(final.faces) > 0
         assert final.is_watertight
         assert final.volume > 0.8 * 4096
@@ -610,11 +610,13 @@ class TestEdgeTaper:
 # Degenerate input and fallback paths: warnings, empty results, EPW cache
 # ---------------------------------------------------------------------------
 
-def _sampling_config():
+def _sampling_settings():
     from urbansolarcarver.load_config import user_config
-    return user_config(max_volume_path="x", test_surface_path="x", out_dir="x",
-                       mode="tilted_plane", tilted_plane_angle_deg=45,
-                       grid_step=1.0, voxel_size=1.0)
+    from urbansolarcarver.stage_settings import PreprocessingSettings
+    return PreprocessingSettings.from_config(user_config(
+        max_volume_path="x", test_surface_path="x", out_dir="x",
+        mode="tilted_plane", tilted_plane_angle_deg=45,
+        grid_step=1.0, voxel_size=1.0))
 
 
 def test_zero_area_face_does_not_drop_panel_and_bent_panel_warns():
@@ -625,7 +627,7 @@ def test_zero_area_face_does_not_drop_panel_and_bent_panel_warns():
     bent = trimesh.Trimesh([[10, 0, 0], [14, 0, 0], [14, 1, 3], [10, 0, 3]],
                            [[0, 1, 2], [0, 2, 3]], process=False)
     with pytest.warns(UserWarning, match="1 non-planar"):
-        pts, *_ = sample_surface(trimesh.util.concatenate([rect, bent]), _sampling_config())
+        pts, *_ = sample_surface(trimesh.util.concatenate([rect, bent]), _sampling_settings())
     assert len(pts) > 0 and pts[:, 0].max() <= 4.0  # the rectangle is sampled, the bent panel is not
 
 

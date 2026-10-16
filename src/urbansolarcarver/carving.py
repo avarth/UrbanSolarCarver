@@ -40,7 +40,7 @@ Determinism and batching
 Given a fixed config, hit counts are deterministic. Float scores are summed
 with atomic adds on the GPU, so the order of additions, and therefore the last
 bits of a score, can differ between runs. Rays are processed in batches of
-`config.ray_batch_size` (0 = sized from free GPU memory) on the device of the
+the `ray_batch_size` run option (0 = sized from free GPU memory) on the device of the
 input voxel grid.
 """
 
@@ -50,7 +50,7 @@ import numpy as np
 from numba import njit
 
 from .scoring import get_weights
-from .load_config import user_config
+from .stage_settings import PreprocessingSettings
 from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
 from .sun import get_sun_vectors
@@ -84,18 +84,18 @@ import os
 from ladybug.analysisperiod import AnalysisPeriod
 from .io import load_mesh
 
-def _resolve_batch_size(config, resolution: int, device) -> int:
+def _resolve_batch_size(resolution: int, device, *, ray_batch_size: int) -> int:
     """Return the effective ray batch size, auto-tuning if requested.
 
-    If ``config.ray_batch_size`` is 0 the batch size is computed from
-    free GPU memory via :func:`auto_batch_size` (a fixed default on CPU).
+    If *ray_batch_size* is 0 the batch size is computed from free GPU
+    memory via :func:`auto_batch_size` (a fixed default on CPU).
     """
-    if config.ray_batch_size > 0:
-        return int(config.ray_batch_size)
+    if ray_batch_size > 0:
+        return int(ray_batch_size)
     return auto_batch_size(resolution, device)
 
 
-def validate_inputs(config: user_config):
+def validate_inputs(settings: PreprocessingSettings):
     """
     Validate file paths and supported modes.
 
@@ -105,23 +105,23 @@ def validate_inputs(config: user_config):
         If the max-volume or test-surface mesh is missing, or the EPW file is
         missing for a mode that needs one.
     ValueError
-        If `config.mode` is not one of:
+        If `settings.mode` is not one of:
         {'time-based','irradiance','benefit','daylight','radiative_cooling','tilted_plane'}.
     """
     for filepath, name in [
-        (config.max_volume_path, 'max_volume'),
-        (config.test_surface_path,    'test_surface'),
+        (settings.max_volume_path, 'max_volume'),
+        (settings.test_surface_path,    'test_surface'),
     ]:
         if not filepath or not os.path.isfile(filepath):
             raise InputError(f"{name} file missing: {filepath!r}")
     # EPW is required for modes that use weather data
-    if config.mode in MODES_NEEDING_EPW:
-        if not config.epw_path or not os.path.isfile(config.epw_path):
-            raise InputError(f"EPW file missing: {config.epw_path!r}")
-    if config.mode not in ALL_MODE_NAMES:
-        raise ValueError(f"Unsupported mode: {config.mode!r}")
+    if settings.mode in MODES_NEEDING_EPW:
+        if not settings.epw_path or not os.path.isfile(settings.epw_path):
+            raise InputError(f"EPW file missing: {settings.epw_path!r}")
+    if settings.mode not in ALL_MODE_NAMES:
+        raise ValueError(f"Unsupported mode: {settings.mode!r}")
 
-def sample_period(config: user_config, steps_per_hour: int = 1):
+def sample_period(settings: PreprocessingSettings, steps_per_hour: int = 1):
     """
     Build analysis datetimes and HOYs via Ladybug's AnalysisPeriod.
 
@@ -135,8 +135,8 @@ def sample_period(config: user_config, steps_per_hour: int = 1):
     """
     def _ap(timestep):
         return AnalysisPeriod(
-            st_month=config.start_month, st_day=config.start_day, st_hour=config.start_hour,
-            end_month=config.end_month,   end_day=config.end_day,   end_hour=config.end_hour,
+            st_month=settings.start_month, st_day=settings.start_day, st_hour=settings.start_hour,
+            end_month=settings.end_month,   end_day=settings.end_day,   end_hour=settings.end_hour,
             timestep=timestep,
         )
     hourly = _ap(1)
@@ -144,7 +144,7 @@ def sample_period(config: user_config, steps_per_hour: int = 1):
         return hourly.datetimes, hourly.hoys_int
     return _ap(steps_per_hour).datetimes, hourly.hoys_int
 
-def load_meshes(config: user_config):
+def load_meshes(settings: PreprocessingSettings):
     """
     Load the maximum envelope mesh and the insolation sampling surface.
 
@@ -156,11 +156,11 @@ def load_meshes(config: user_config):
     envelope_mesh : trimesh.Trimesh
     insolation_mesh : trimesh.Trimesh
     """
-    envelope_mesh = load_mesh(config.max_volume_path)
-    insolation_mesh = load_mesh(config.test_surface_path)
-    for path, mesh in ((config.max_volume_path, envelope_mesh),
-                       (config.test_surface_path, insolation_mesh)):
-        _warn_float32_input(path, mesh, config.voxel_size)
+    envelope_mesh = load_mesh(settings.max_volume_path)
+    insolation_mesh = load_mesh(settings.test_surface_path)
+    for path, mesh in ((settings.max_volume_path, envelope_mesh),
+                       (settings.test_surface_path, insolation_mesh)):
+        _warn_float32_input(path, mesh, settings.voxel_size)
     return envelope_mesh, insolation_mesh
 
 
@@ -280,8 +280,9 @@ def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
         out += buf
 
 
-def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, config,
-                    point_ids, surface_normals):
+def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions,
+                    settings: PreprocessingSettings, point_ids, surface_normals,
+                    *, ray_batch_size: int):
     """Count how many rays visit each voxel; returns a flat int32 tensor.
 
     Uses the fused Warp count kernel when available; otherwise the
@@ -291,7 +292,7 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
     """
     device = voxel_grid.device
     counts = torch.zeros(voxel_grid.numel(), dtype=torch.int32, device=device)
-    batch_size = _resolve_batch_size(config, res, device)
+    batch_size = _resolve_batch_size(res, device, ray_batch_size=ray_batch_size)
     res_sq = res * res
 
     if dda_backend_available(device):
@@ -304,7 +305,7 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
             trace_and_count_dda(
                 min_corner, scale, res,
                 origins[start:end], directions[start:end],
-                buf, float(config.ray_length),
+                buf, float(settings.ray_length),
                 point_ids=point_ids[start:end], surface_normals=surface_normals,
             )
 
@@ -327,8 +328,8 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions, con
             origins=o_batch,
             ray_dirs=d_batch,
             sky_patch_ids=patch_ids_stub,
-            voxel_size=float(config.voxel_size),
-            ray_length=float(config.ray_length),
+            voxel_size=float(settings.voxel_size),
+            ray_length=float(settings.ray_length),
         )
         if voxel_idx.numel() > 0:
             front = _front_of_surface(min_corner, scale / res, voxel_idx, o_batch[ray_idx],
@@ -354,10 +355,12 @@ def carve_with_sun_rays(
     grid_resolution,
     sample_points,
     sample_normals,
-    config: "user_config",
+    settings: PreprocessingSettings,
     datetimes,
     return_counts: bool = False,
     return_rays: bool = False,
+    *,
+    ray_batch_size: int,
 ):
     """
     Time-based carving of a voxel grid with sun vectors for explicit datetimes.
@@ -369,7 +372,7 @@ def carve_with_sun_rays(
 
     Core procedure
       1. Compute sun vectors for the provided datetimes from the EPW file and
-         drop those below ``config.min_altitude``.
+         drop those below ``settings.min_altitude``.
       2. For each surface sample point, build rays toward the sun directions
          on the outward side of its normal (dot product > 0).
       3. Trace each ray through the grid (exact Warp DDA when available),
@@ -390,14 +393,13 @@ def carve_with_sun_rays(
         Coordinates of R surface evaluation points.
     sample_normals : torch.Tensor or np.ndarray, shape (R, 3)
         Outward unit normals at each sample point.
-    config : user_config
-        Configuration containing:
+    settings : PreprocessingSettings
+        Settings used:
           - epw_path: path to EPW file used for sun positions.
           - min_altitude: degrees above horizon for filtering sun vectors.
           - north_deg: model north, degrees clockwise from +Y.
           - voxel_size: step length of the fixed-step fallback tracer.
           - ray_length: maximum traced distance along each ray.
-          - ray_batch_size: rays processed per batch (0 = automatic).
     datetimes : Sequence[datetime.datetime]
         Wall-clock timestamps for which sun vectors are generated.
     return_counts : bool, default False
@@ -406,6 +408,8 @@ def carve_with_sun_rays(
         If True, return the full ray set as host numpy arrays.  Off by
         default: at millions of rays this is hundreds of MB of
         device-to-host transfer that the pipeline never uses.
+    ray_batch_size : int
+        Rays processed per batch (0 = automatic); keyword only.
 
     Returns
     -------
@@ -423,8 +427,8 @@ def carve_with_sun_rays(
 
     # Sun directions in model coordinates (rotated by north_deg).
     sun_dirs = get_sun_vectors(
-        config.epw_path, datetimes, config.min_altitude,
-        north_deg=config.north_deg,
+        settings.epw_path, datetimes, settings.min_altitude,
+        north_deg=settings.north_deg,
     )
     if isinstance(sun_dirs, torch.Tensor):
         sun_arr = sun_dirs.clone().detach().to(voxel_grid.device)
@@ -459,8 +463,8 @@ def carve_with_sun_rays(
     # scale is the cubic grid extent in world units (meters), not per-voxel size
     min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
     counts = _count_ray_hits(
-        voxel_grid, min_corner, float(grid_extent), res, origins, directions, config,
-        point_idx, surface_normals,
+        voxel_grid, min_corner, float(grid_extent), res, origins, directions, settings,
+        point_idx, surface_normals, ray_batch_size=ray_batch_size,
     )
     carved_grid = _carve_by_counts(voxel_grid, counts)
 
@@ -475,15 +479,17 @@ def carve_with_sky_patch_rays(
     grid_resolution,
     sample_points,
     sample_normals,
-    config: user_config,
+    settings: PreprocessingSettings,
     hoys: Sequence[int],
     return_rays: bool = False,
     point_weights: "np.ndarray | None" = None,
-    ):
+    *,
+    ray_batch_size: int,
+):
     """
     Score each voxel by the sky-patch weight of the rays that cross it.
 
-    Each Tregenza sky patch gets a weight according to ``config.mode``:
+    Each Tregenza sky patch gets a weight according to ``settings.mode``:
       • irradiance: cumulative direct + diffuse irradiance per patch (kWh/m²)
         from the EPW over the analysis hours (Ladybug sky matrix).
       • benefit: the same, counted only in hours cold enough for solar gains
@@ -519,15 +525,14 @@ def carve_with_sky_patch_rays(
         Coordinates of R surface evaluation points.
     sample_normals : np.ndarray, shape (R, 3)
         Outward-facing unit normals at each sample point.
-    config : user_config
-        Configuration containing:
+    settings : PreprocessingSettings
+        Settings used:
           - mode: weight mode selector.
           - epw_path: EPW file (irradiance and benefit).
           - dew_point_celsius, bliss_k, min_sky_elevation_deg: radiative_cooling.
           - balance_temperature, balance_offset, include_harm,
             simulated_weights_path: benefit.
           - north_deg: model north, degrees clockwise from +Y.
-          - ray_batch_size: rays processed per batch (0 = automatic).
           - voxel_size, ray_length: fallback step length and maximum ray length.
     hoys : Sequence[int]
         Hour-of-year indices (0..8759) of the analysis period, used by the
@@ -541,6 +546,8 @@ def carve_with_sky_patch_rays(
         contribution is patch_weight × point_weight, and zero-weight rays
         are dropped before tracing.  None (default) = all points count
         fully.
+    ray_batch_size : int
+        Rays processed per batch (0 = automatic); keyword only.
 
     Returns
     -------
@@ -601,18 +608,18 @@ def carve_with_sky_patch_rays(
 
     # --- 3) Patch weights: one value per sky patch for the chosen mode -----
     patch_weights = get_weights(
-        mode=config.mode,
+        mode=settings.mode,
         device=device,
-        epw_file=config.epw_path,
+        epw_file=settings.epw_path,
         hoys=hoys,
-        dew_point_celsius=config.dew_point_celsius,
-        bliss_k=config.bliss_k,
-        balance_temperature=config.balance_temperature,
-        balance_offset=config.balance_offset,
-        north_deg=config.north_deg,
-        min_sky_elevation_deg=config.min_sky_elevation_deg,
-        include_harm=config.include_harm,
-        simulated_weights_path=config.simulated_weights_path,
+        dew_point_celsius=settings.dew_point_celsius,
+        bliss_k=settings.bliss_k,
+        balance_temperature=settings.balance_temperature,
+        balance_offset=settings.balance_offset,
+        north_deg=settings.north_deg,
+        min_sky_elevation_deg=settings.min_sky_elevation_deg,
+        include_harm=settings.include_harm,
+        simulated_weights_path=settings.simulated_weights_path,
     )
 
     # --- 4) Initialize score accumulation ---------------------------------
@@ -622,7 +629,7 @@ def carve_with_sky_patch_rays(
 
     # --- 5) Batch ray tracing & weighting ----------------------------------
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
-    batch_size = _resolve_batch_size(config, res, device)
+    batch_size = _resolve_batch_size(res, device, ray_batch_size=ray_batch_size)
     use_fused = (_fused_dda is not None and dda_backend_available(device))
 
     def _score_batch(start: int, end: int, buf) -> None:
@@ -635,7 +642,7 @@ def carve_with_sky_patch_rays(
             _fused_dda(
                 grid_origin, float(grid_extent_m), res,
                 origins_batch, directions_batch, patches_batch,
-                patch_weights, buf, config.ray_length,
+                patch_weights, buf, settings.ray_length,
                 point_ids=ray_point_ids[start:end],
                 point_weights=pw_t,
                 surface_normals=surface_normals,
@@ -646,7 +653,7 @@ def carve_with_sky_patch_rays(
         hit_ray_ids, hit_patch_ids, hit_voxel_idxs = trace_multi_hit_grid(
             grid_origin, grid_extent_m, res,
             origins_batch, directions_batch, patches_batch,
-            config.voxel_size, config.ray_length,
+            settings.voxel_size, settings.ray_length,
         )
         if hit_voxel_idxs.numel() == 0:
             return
@@ -707,8 +714,10 @@ def carve_with_planes(
     grid_resolution,
     sample_points,
     sample_normals,
-    config: "user_config",
+    settings: PreprocessingSettings,
     return_counts: bool = False,
+    *,
+    ray_batch_size: int,
 ):
     """
     Tilted-plane daylight carving.
@@ -726,7 +735,7 @@ def carve_with_planes(
     voxel_grid, grid_origin, grid_extent, grid_resolution,
     sample_points, sample_normals :
         See :func:`carve_with_sun_rays` for shared parameter descriptions.
-    config : user_config
+    settings : PreprocessingSettings
         Must contain ``tilted_plane_angle_deg``: a single angle in degrees
         above the horizon, or an 8-element list [N, NE, E, SE, S, SW, W, NW]
         looked up by the compass direction the surface faces (which uses
@@ -734,6 +743,8 @@ def carve_with_planes(
     return_counts : bool, default False
         If True, return a 4th element: per-voxel counts, propagated up each
         column (a voxel's count is the largest ray count at or below it).
+    ray_batch_size : int
+        Rays processed per batch (0 = automatic); keyword only.
 
     Returns
     -------
@@ -789,7 +800,7 @@ def carve_with_planes(
     # Scalar: all surfaces share the same angle.
     # 8-element list: each surface gets an angle based on the compass octant
     # its horizontal normal faces ([N, NE, E, SE, S, SW, W, NW]).
-    spec = config.tilted_plane_angle_deg
+    spec = settings.tilted_plane_angle_deg
     if isinstance(spec, (int, float)) or np.isscalar(spec):
         alpha_deg = np.full((n_xy.shape[0],), float(spec), dtype=np.float32)
     else:
@@ -801,7 +812,7 @@ def carve_with_planes(
         # Compute the model-space azimuth from +Y clockwise toward +X, then
         # subtract north_deg (model north, degrees clockwise from +Y) to get
         # the true compass azimuth of each surface normal.
-        north_deg = float(config.north_deg)
+        north_deg = float(settings.north_deg)
         phi = (np.degrees(np.arctan2(n_xy[:, 0], n_xy[:, 1])) - north_deg + 360.0) % 360.0
         # Octant bins are 45° wide (360° / 8). Adding half a bin (22.5°)
         # centres each bin on its direction (N = 0°, NE = 45°, E = 90°, ...),
@@ -826,9 +837,10 @@ def carve_with_planes(
     grid_min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
     counts = _count_ray_hits(
         voxel_grid, grid_min_corner, float(grid_extent), side_len,
-        origins_tensor, dirs_tensor, config,
+        origins_tensor, dirs_tensor, settings,
         torch.arange(pts_np.shape[0], device=device),
         torch.from_numpy(norms_np).to(device),
+        ray_batch_size=ray_batch_size,
     )
     # Propagate counts up each (x, y) column (running maximum along z), so
     # every cell at or above a visited cell is carved. Visits to empty cells

@@ -21,10 +21,11 @@ import shapely.affinity
 from .. import floor_plates as mg
 from ..load_config import user_config
 from ..pydantic_schemas import MassingManifest
-from ..run_context import Issue, report_issue, stage_context
+from ..run_context import Issue, RunContext, report_issue, stage_context
+from ..stage_settings import MassingSettings, RunOptions
 from ._reporting import write_run_report
 from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
-from ._util import _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
+from ._util import ThresholdedGrid, _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
 
 # Everything massing writes into its folder, besides manifest.json.
 _MASSING_OUTPUTS = ("plates.json", "plates.obj", "diagnostics/diagnostic.json")
@@ -160,113 +161,124 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         If a massing size is smaller than the preprocessing run's voxel size.
     """
     with stage_context("massing") as context:
-        t0_wall, t0_cpu = time.perf_counter(), time.process_time()
         conf = _resolve_cfg(cfg)
         out_path = begin_stage(out_dir, _MASSING_OUTPUTS)
         chain = load_thresholded_grid(threshold_manifest)
-        vs, origin = chain.voxel_size, chain.origin
-        for name in ("min_plate_dimension", "ground_floor_height", "floor_height"):
-            if getattr(conf, name) < vs - 1e-9:
-                raise ValueError(f"{name} ({getattr(conf, name):g} m) is smaller than the voxel "
-                                 f"size of the preprocessing run ({vs:g} m)")
+        return _run_massing(
+            MassingSettings.from_config(conf), RunOptions.from_config(conf),
+            chain, out_path, context)
 
-        occ = chain.occupancy.astype(bool)
-        kept = occ & chain.mask.astype(bool)
-        columns = occ.any(axis=2)
-        cells_ij = np.argwhere(columns)
-        xy = (cells_ij + 0.5) * vs
-        polygons, footprint_source = _footprint(_read_footprint(chain.pre), origin, columns, vs)
-        facades, corners = mg.split_facades(polygons)
-        # A facade shorter than two bays (a chamfer, a small step) would get a
-        # face of at most one bay; its columns go to the neighbouring facades.
-        faces = mg.assign_faces(xy, facades, corners, polygons, vs,
-                                min_facade_length=2.0 * conf.min_plate_dimension)
-        bay, bay_face = mg.cut_bays(faces, conf.min_plate_dimension, vs)
-        bay_shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, polygons,
-                                     conf.min_plate_dimension, vs)
-        n_cols = np.bincount(bay)
 
-        layers = np.flatnonzero(occ.any(axis=(0, 1)))
-        z0 = origin[2] + layers.min() * vs
-        z_top = origin[2] + (layers.max() + 1) * vs
-        _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin[2], vs)
-        levels = mg.floor_levels(z0, z_top, conf.ground_floor_height, conf.floor_height)
-        floors = mg.build_floors(cells_ij, bay, occ, kept, origin[2], vs, levels,
-                                 conf.plate_tolerance, conf.plate_stacking, conf.min_plate_dimension)
+def _run_massing(settings: MassingSettings, options: RunOptions, upstream: ThresholdedGrid,
+                 out_path: Path, context: RunContext) -> MassingResult:
+    """The computation of :func:`massing`, from its own settings only.
 
-        footprint = shapely.union_all(polygons)
-        plates, meshes, floor_areas = [], [], []
-        for n, floor in enumerate(floors):
-            area_this_floor, count_this_floor = 0.0, 0
-            for p in range(int(floor.plate.max()) + 1):
-                in_plate = floor.plate == p
-                bays_in = np.unique(bay[in_plate])
-                outside = float((floor.outside_share[bays_in] * n_cols[bays_in]).sum()
-                                / n_cols[bays_in].sum())
-                for poly in mg.plate_polygons(cells_ij, in_plate, ~in_plate, vs, footprint,
-                                              min_dimension=conf.min_plate_dimension,
-                                              bay=bay, bay_shapes=bay_shapes):
-                    world = shapely.affinity.translate(poly, origin[0], origin[1])
-                    plates.append({
-                        "floor": n, "plate": count_this_floor,
-                        "z_bottom": floor.zb, "z_top": floor.zt, "area_m2": float(poly.area),
-                        "bays": int(len(bays_in)), "outside_share": round(outside, 4),
-                        "outline": np.asarray(world.exterior.coords).tolist(),
-                        "holes": [np.asarray(r.coords).tolist() for r in world.interiors],
-                    })
-                    prism = mg.prism_mesh(poly, floor.zb, floor.zt)
-                    prism.apply_translation([origin[0], origin[1], 0.0])
-                    meshes.append((f"floor_{n}_plate_{count_this_floor}", prism))
-                    area_this_floor += float(poly.area)
-                    count_this_floor += 1
-            floor_areas.append(area_this_floor)
-        total = float(sum(floor_areas))
+    *upstream* is the loaded thresholding chain (manifests, mask, occupancy
+    grid).  *out_path* is the stage folder, already cleared by
+    :func:`begin_stage`.
+    """
+    t0_wall, t0_cpu = time.perf_counter(), time.process_time()
+    chain = upstream
+    vs, origin = chain.voxel_size, chain.origin
+    for name in ("min_plate_dimension", "ground_floor_height", "floor_height"):
+        if getattr(settings, name) < vs - 1e-9:
+            raise ValueError(f"{name} ({getattr(settings, name):g} m) is smaller than the voxel "
+                             f"size of the preprocessing run ({vs:g} m)")
 
-        # The mesh first: plates.json, which clients read for the results, then
-        # appears only once the mesh beside it was written.
-        mesh_path = out_path / "plates.obj"
-        if meshes:
-            import trimesh
-            scene = trimesh.Scene()
-            for name, prism in meshes:
-                scene.add_geometry(prism, geom_name=name)
-            scene.export(str(mesh_path), file_type="obj")
-        else:
-            mesh_path.write_text("", encoding="utf-8")
-            report_issue(
-                "no_plates_fit",
-                "massing: no floor plates fit the envelope with these settings",
-            )
-        plates_path = out_path / "plates.json"
-        plates_path.write_text(json.dumps({"plates": plates, "floor_area_m2_per_floor": floor_areas,
-                                           "total_floor_area_m2": total}, indent=1), encoding="utf-8")
+    occ = chain.occupancy.astype(bool)
+    kept = occ & chain.mask.astype(bool)
+    columns = occ.any(axis=2)
+    cells_ij = np.argwhere(columns)
+    xy = (cells_ij + 0.5) * vs
+    polygons, footprint_source = _footprint(_read_footprint(chain.pre), origin, columns, vs)
+    facades, corners = mg.split_facades(polygons)
+    # A facade shorter than two bays (a chamfer, a small step) would get a
+    # face of at most one bay; its columns go to the neighbouring facades.
+    faces = mg.assign_faces(xy, facades, corners, polygons, vs,
+                            min_facade_length=2.0 * settings.min_plate_dimension)
+    bay, bay_face = mg.cut_bays(faces, settings.min_plate_dimension, vs)
+    bay_shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, polygons,
+                                 settings.min_plate_dimension, vs)
+    n_cols = np.bincount(bay)
 
-        settings = {k: getattr(conf, k) for k in ("ground_floor_height", "floor_height",
-                                                  "min_plate_dimension", "plate_tolerance",
-                                                  "plate_stacking")}
-        plate_volume = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) for q in plates)
-        inside = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) * (1.0 - q["outside_share"]) for q in plates)
-        envelope = float(kept.sum()) * vs ** 3
-        write_json(ensure_diag(out_path), "diagnostic.json", {
-            "floors": len(levels), "floors_built": int(sum(a > 0 for a in floor_areas)),
-            "plates": len(plates), "floor_area_m2_per_floor": floor_areas,
-            "total_floor_area_m2": total, "envelope_volume_m3": envelope,
-            "envelope_share_in_plates": inside / envelope if envelope > 0 else None,
-            "volume_outside_envelope_m3": plate_volume - inside,
-            "footprint_source": footprint_source, "settings": settings,
-            "timings": {"wall_seconds": float(time.perf_counter() - t0_wall),
-                        "cpu_seconds": float(time.process_time() - t0_cpu)},
-        })
-        thr_run_id = chain.thr.manifest.run_id
-        write_run_report("massing", out_path, chain.pre.folder, chain.thr.folder, thr_run_id)
+    layers = np.flatnonzero(occ.any(axis=(0, 1)))
+    z0 = origin[2] + layers.min() * vs
+    z_top = origin[2] + (layers.max() + 1) * vs
+    _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin[2], vs)
+    levels = mg.floor_levels(z0, z_top, settings.ground_floor_height, settings.floor_height)
+    floors = mg.build_floors(cells_ij, bay, occ, kept, origin[2], vs, levels,
+                             settings.plate_tolerance, settings.plate_stacking, settings.min_plate_dimension)
 
-        # Manifest last (see begin_stage at the start).
-        commit_manifest(out_path, MassingManifest(
-            run_id=new_run_id(), plates_path=stored_path(plates_path, out_path),
-            mesh_path=stored_path(mesh_path, out_path),
-            upstream_manifest=stored_path(chain.thr.manifest_path, out_path),
-            upstream_run_id=thr_run_id))
+    footprint = shapely.union_all(polygons)
+    plates, meshes, floor_areas = [], [], []
+    for n, floor in enumerate(floors):
+        area_this_floor, count_this_floor = 0.0, 0
+        for p in range(int(floor.plate.max()) + 1):
+            in_plate = floor.plate == p
+            bays_in = np.unique(bay[in_plate])
+            outside = float((floor.outside_share[bays_in] * n_cols[bays_in]).sum()
+                            / n_cols[bays_in].sum())
+            for poly in mg.plate_polygons(cells_ij, in_plate, ~in_plate, vs, footprint,
+                                          min_dimension=settings.min_plate_dimension,
+                                          bay=bay, bay_shapes=bay_shapes):
+                world = shapely.affinity.translate(poly, origin[0], origin[1])
+                plates.append({
+                    "floor": n, "plate": count_this_floor,
+                    "z_bottom": floor.zb, "z_top": floor.zt, "area_m2": float(poly.area),
+                    "bays": int(len(bays_in)), "outside_share": round(outside, 4),
+                    "outline": np.asarray(world.exterior.coords).tolist(),
+                    "holes": [np.asarray(r.coords).tolist() for r in world.interiors],
+                })
+                prism = mg.prism_mesh(poly, floor.zb, floor.zt)
+                prism.apply_translation([origin[0], origin[1], 0.0])
+                meshes.append((f"floor_{n}_plate_{count_this_floor}", prism))
+                area_this_floor += float(poly.area)
+                count_this_floor += 1
+        floor_areas.append(area_this_floor)
+    total = float(sum(floor_areas))
 
-        return MassingResult(out_dir=out_path, plates_path=plates_path, mesh_path=mesh_path,
-                             floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates),
-                             issues=context.issues_of("massing"))
+    # The mesh first: plates.json, which clients read for the results, then
+    # appears only once the mesh beside it was written.
+    mesh_path = out_path / "plates.obj"
+    if meshes:
+        import trimesh
+        scene = trimesh.Scene()
+        for name, prism in meshes:
+            scene.add_geometry(prism, geom_name=name)
+        scene.export(str(mesh_path), file_type="obj")
+    else:
+        mesh_path.write_text("", encoding="utf-8")
+        report_issue(
+            "no_plates_fit",
+            "massing: no floor plates fit the envelope with these settings",
+        )
+    plates_path = out_path / "plates.json"
+    plates_path.write_text(json.dumps({"plates": plates, "floor_area_m2_per_floor": floor_areas,
+                                       "total_floor_area_m2": total}, indent=1), encoding="utf-8")
+
+    plate_volume = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) for q in plates)
+    inside = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) * (1.0 - q["outside_share"]) for q in plates)
+    envelope = float(kept.sum()) * vs ** 3
+    write_json(ensure_diag(out_path), "diagnostic.json", {
+        "floors": len(levels), "floors_built": int(sum(a > 0 for a in floor_areas)),
+        "plates": len(plates), "floor_area_m2_per_floor": floor_areas,
+        "total_floor_area_m2": total, "envelope_volume_m3": envelope,
+        "envelope_share_in_plates": inside / envelope if envelope > 0 else None,
+        "volume_outside_envelope_m3": plate_volume - inside,
+        "footprint_source": footprint_source, "settings": settings.model_dump(),
+        "timings": {"wall_seconds": float(time.perf_counter() - t0_wall),
+                    "cpu_seconds": float(time.process_time() - t0_cpu)},
+    })
+    thr_run_id = chain.thr.manifest.run_id
+    write_run_report("massing", out_path, chain.pre.folder, chain.thr.folder, thr_run_id)
+
+    # Manifest last (see begin_stage at the start).
+    commit_manifest(out_path, MassingManifest(
+        run_id=new_run_id(), plates_path=stored_path(plates_path, out_path),
+        mesh_path=stored_path(mesh_path, out_path),
+        upstream_manifest=stored_path(chain.thr.manifest_path, out_path),
+        upstream_run_id=thr_run_id))
+
+    return MassingResult(out_dir=out_path, plates_path=plates_path, mesh_path=mesh_path,
+                         floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates),
+                         issues=context.issues_of("massing"))

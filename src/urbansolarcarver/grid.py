@@ -26,14 +26,14 @@ Two meshing modes are supported:
 
 Pipeline entry points
 ---------------------
-voxelize(envelope_mesh, config, device=None)
-    voxelize_mesh with settings from the config; raises on an empty grid.
+voxelize(envelope_mesh, settings, device=None)
+    voxelize_mesh with the preprocessing settings; raises on an empty grid.
 
-sample_surface(insolation_mesh, config)
-    discretize_surface_with_normals with settings from the config; raises
+sample_surface(insolation_mesh, settings)
+    discretize_surface_with_normals with the preprocessing settings; raises
     when no sample points are produced.
 
-finalize_mesh(carved_grid, grid_origin, config)
+finalize_mesh(carved_grid, grid_origin, settings, voxel_size)
     Clean the carved grid and mesh it with the cubic or smoothed path.
 
 Public API
@@ -137,18 +137,18 @@ from trimesh import repair
 from urbansolarcarver.session import session_cache
 from urbansolarcarver.grid_planning import check_voxel_grid_budget, plan_voxel_grid
 
-from .load_config import user_config
+from .stage_settings import ExportingSettings, PreprocessingSettings
 from .errors import InputError
 from .run_context import report_issue
 
-def voxelize(envelope_mesh, config: user_config, device: torch.device | None = None):
+def voxelize(envelope_mesh, settings: PreprocessingSettings, device: torch.device | None = None):
     """
     Rasterize the envelope into a padded cubic voxel grid.
 
     Parameters
     ----------
     envelope_mesh : trimesh.Trimesh
-    config : user_config
+    settings : PreprocessingSettings
         Supplies ``voxel_size`` and ``margin_frac``.
     device : torch.device or None
         Device for the returned grid; None picks CUDA when available.
@@ -171,8 +171,8 @@ def voxelize(envelope_mesh, config: user_config, device: torch.device | None = N
     """
     voxel_grid, grid_origin, grid_extent, grid_resolution = voxelize_mesh(
         envelope_mesh,
-        voxel_size=config.voxel_size,
-        margin_frac=config.margin_frac,
+        voxel_size=settings.voxel_size,
+        margin_frac=settings.margin_frac,
         device=device                    
     )
 
@@ -181,7 +181,7 @@ def voxelize(envelope_mesh, config: user_config, device: torch.device | None = N
     
     return voxel_grid, grid_origin, grid_extent, grid_resolution
 
-def sample_surface(insolation_mesh, config: user_config):
+def sample_surface(insolation_mesh, settings: PreprocessingSettings):
     """
     Sample quasi-planar patches to produce point/normal sets for carving.
 
@@ -189,7 +189,7 @@ def sample_surface(insolation_mesh, config: user_config):
     ----------
     insolation_mesh : trimesh.Trimesh
         Test surfaces; each connected component should be one flat panel.
-    config : user_config
+    settings : PreprocessingSettings
         Supplies ``grid_step`` (sample spacing) and ``edge_taper``.
 
     Returns
@@ -200,7 +200,7 @@ def sample_surface(insolation_mesh, config: user_config):
         The analysis mesh whose face centroids are the sample points.
     sample_weights : np.ndarray (N,)
         Edge-taper design weights in [0, 1] (all ones when
-        ``config.edge_taper`` is 0).
+        ``settings.edge_taper`` is 0).
     taper_stats : list of dict
         Per-component taper statistics (empty when edge_taper is 0).
 
@@ -211,7 +211,7 @@ def sample_surface(insolation_mesh, config: user_config):
     """
     sample_points, sample_normals, analysis_mesh, sample_weights, taper_stats = (
         discretize_surface_with_normals(
-            insolation_mesh, config.grid_step, edge_taper=config.edge_taper
+            insolation_mesh, settings.grid_step, edge_taper=settings.edge_taper
         )
     )
 
@@ -225,11 +225,11 @@ def sample_surface(insolation_mesh, config: user_config):
             "one non-planar component and rejected. "
             "Fix: explode your polysurfaces into individual flat panels in Grasshopper before "
             "connecting to USC_Preprocess. Also check that grid_step ({:g} m) is smaller than "
-            "your smallest surface.".format(n_components, config.grid_step)
+            "your smallest surface.".format(n_components, settings.grid_step)
         )
     return sample_points, sample_normals, analysis_mesh, sample_weights, taper_stats
 
-def finalize_mesh(carved_grid, grid_origin, config: user_config):
+def finalize_mesh(carved_grid, grid_origin, settings: ExportingSettings, voxel_size: float):
     """
     Convert carved voxels to a mesh and clean results.
 
@@ -242,7 +242,7 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         `prune_voxels` (small-component prune),
         SDF presmooth + marching cubes, vertex weld, then `cleanup_mesh`
         (light mode when the welded mesh is watertight),
-        then `polish_mesh_taubin` with ``config.smooth_iters`` (0 to 6).
+        then `polish_mesh_taubin` with ``settings.smooth_iters`` (0 to 6).
 
     Parameters
     ----------
@@ -250,9 +250,12 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         Binary occupancy after carving.
     grid_origin : np.ndarray(3,)
         World-space min corner for index (0,0,0).
-    config : user_config
-        Supplies ``apply_smoothing``, ``min_voxels``, ``voxel_size``,
-        ``min_face_count`` and ``smooth_iters``.
+    settings : ExportingSettings
+        Supplies ``apply_smoothing``, ``min_voxels``, ``min_face_count`` and
+        ``smooth_iters``.
+    voxel_size : float
+        Edge length of a voxel in meters; it belongs to the preprocessing run
+        that built the grid, so it is not part of the exporting settings.
 
     Returns
     -------
@@ -263,12 +266,12 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
     final_mesh : trimesh.Trimesh
         Cleaned mesh, Taubin-polished on the smoothed path when smooth_iters > 0.
     """
-    use_smooth = bool(config.apply_smoothing)
+    use_smooth = bool(settings.apply_smoothing)
 
     if use_smooth:
         # Smooth path: prune → SDF smooth → marching cubes → cleanup → Taubin
-        cleaned_voxels = prune_voxels(carved_grid, config.min_voxels)
-        raw_mesh = mesh_from_voxels_smoothed(cleaned_voxels, grid_origin, config.voxel_size)
+        cleaned_voxels = prune_voxels(carved_grid, settings.min_voxels)
+        raw_mesh = mesh_from_voxels_smoothed(cleaned_voxels, grid_origin, voxel_size)
         initial_mesh = raw_mesh.copy()
         # Marching cubes on the padded SDF yields a watertight, consistently
         # wound mesh; the expensive full repair (fill_holes / fix_winding /
@@ -278,15 +281,15 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         # dropping those before welding would open pinholes.
         raw_mesh.merge_vertices()
         light = bool(raw_mesh.is_watertight)
-        filtered_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=light)
-        iters = int(config.smooth_iters)  # 0-6, validated by the config schema
+        filtered_mesh = cleanup_mesh(raw_mesh, settings.min_face_count, light=light)
+        iters = int(settings.smooth_iters)  # 0-6, validated by the config schema
         final_mesh = polish_mesh_taubin(filtered_mesh, iters=iters)
     else:
         # Cubic path: prune + neighbour-count filter, cubic meshing, then cleanup
-        cleaned_voxels = prune_voxels_morph(carved_grid, config.min_voxels)
-        raw_mesh = mesh_from_voxels(cleaned_voxels, grid_origin, config.voxel_size)
+        cleaned_voxels = prune_voxels_morph(carved_grid, settings.min_voxels)
+        raw_mesh = mesh_from_voxels(cleaned_voxels, grid_origin, voxel_size)
         initial_mesh = raw_mesh.copy()
-        final_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=True)
+        final_mesh = cleanup_mesh(raw_mesh, settings.min_face_count, light=True)
 
     return cleaned_voxels, initial_mesh, final_mesh
 

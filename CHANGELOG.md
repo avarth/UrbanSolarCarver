@@ -91,6 +91,17 @@ versioning follows [Semantic Versioning](https://semver.org/).
   from the preprocessing run's `config_snapshot.json` instead of the
   config passed to exporting or massing; smoothing moved to the Export
   section, read from exporting's diagnostics.
+- **Each stage reads only its own settings.** Preprocessing, thresholding,
+  exporting and massing keep their public signatures; inside, each receives
+  its settings model (`PreprocessingSettings`, `ThresholdingSettings`,
+  `ExportingSettings`, `MassingSettings`) and `RunOptions`, and the
+  carving and grid functions take the settings model in place of the whole
+  config (`ray_batch_size` is a keyword of the carvers; `finalize_mesh`
+  takes the `voxel_size` of the preprocessing run). Thresholding takes the
+  mode and voxel size from the preprocessing manifest, and a config whose
+  `mode` differs from the run's raises `StageChainError` (it was a plain
+  `ValueError`). Exporting no longer warns when the config's `voxel_size`
+  differs from the run's: it never reads it.
 - **A dumped config did not load back with the same meaning.** The
   config validator wrote the mode default into `threshold`, so a dumped
   config (`config_snapshot.json`, or one a client keeps) ignored a later

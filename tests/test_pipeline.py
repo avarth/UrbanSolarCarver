@@ -625,3 +625,50 @@ def test_missing_max_volume_file_is_an_input_error(tmp_path):
     Path(conf.max_volume_path).unlink()
     with pytest.raises(InputError, match="max_volume file missing"):
         preprocessing(conf, tmp_path / "run" / "preprocessing")
+
+
+def test_thresholding_refuses_a_config_of_another_mode(tmp_path):
+    """Scores from a daylight run cannot be thresholded with an irradiance config:
+    the threshold defaults and units differ per mode."""
+    import warnings
+    from _stage_scene import daylight_cube_config
+    from urbansolarcarver import preprocessing, thresholding
+    from urbansolarcarver.errors import StageChainError
+    from urbansolarcarver.load_config import user_config
+    run = tmp_path / "run"
+    daylight = daylight_cube_config(tmp_path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pre = preprocessing(daylight, run / "preprocessing")
+    irradiance = user_config(
+        max_volume_path=daylight.max_volume_path, test_surface_path=daylight.test_surface_path,
+        out_dir=str(run), mode="irradiance", epw_path="dummy.epw",
+        start_month=1, start_day=1, start_hour=8, end_month=1, end_day=1, end_hour=16,
+        voxel_size=1.0, grid_step=1.0, ray_length=50.0, device="cpu",
+    )
+    with pytest.raises(StageChainError, match="daylight"):
+        thresholding(pre, irradiance, run / "thresholding")
+
+
+def test_exporting_meshes_with_the_preprocessing_voxel_size(tmp_path):
+    """The grid's voxel size is a fact of the preprocessing run: a config with
+    another voxel_size changes nothing and raises no warning."""
+    import warnings
+    import trimesh
+    from _stage_scene import daylight_cube_config
+    from urbansolarcarver import exporting, preprocessing, thresholding
+    run = tmp_path / "run"
+    conf = daylight_cube_config(tmp_path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pre = preprocessing(conf, run / "preprocessing")
+        thr = thresholding(pre, conf, run / "thresholding")
+    np.save(thr.mask_path, np.ones_like(np.load(thr.mask_path), dtype=bool))
+    other_voxel_size = conf.model_copy(update={"voxel_size": 2.0})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = exporting(thr, other_voxel_size, run / "exporting")
+    assert result.issues == ()
+    mesh = trimesh.load(result.export_path, force="mesh")
+    cube_bounds = np.array([[-5.0, -5.0, -5.0], [5.0, 5.0, 5.0]])
+    assert np.abs(mesh.bounds - cube_bounds).max() <= 1.0 + 1e-6

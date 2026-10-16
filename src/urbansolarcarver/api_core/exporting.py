@@ -17,13 +17,14 @@ import numpy as np
 log = logging.getLogger(__name__)
 from ..load_config import user_config
 from ._util import (
-    _resolve_cfg, ensure_diag, write_json, resolve_device, load_thresholded_grid,
+    ThresholdedGrid, _resolve_cfg, ensure_diag, write_json, resolve_device, load_thresholded_grid,
 )
 from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
 from ._reporting import write_run_report
 from ..pydantic_schemas import ExportingManifest
 from ..io import save_mesh
-from ..run_context import Issue, stage_context
+from ..run_context import Issue, RunContext, stage_context
+from ..stage_settings import ExportingSettings, RunOptions
 from ..grid import finalize_mesh
 import time
 
@@ -84,7 +85,7 @@ def exporting(
     On both paths, connected voxel clusters smaller than ``cfg.min_voxels``
     and mesh fragments with fewer than ``cfg.min_face_count`` faces are
     removed.  The mesh uses the voxel size and origin recorded by
-    preprocessing, not the config's ``voxel_size``.
+    preprocessing; the config's ``voxel_size`` is not read.
 
     Parameters
     ----------
@@ -133,110 +134,113 @@ def exporting(
         If the mask file named in the thresholding manifest is missing.
     """
     with stage_context("exporting") as context:
-        _t0_wall = time.perf_counter()
-        _t0_cpu = time.process_time()
         conf = _resolve_cfg(cfg)
         out_path = begin_stage(out_dir, _EXPORTING_OUTPUTS)
-
         chain = load_thresholded_grid(threshold_manifest)
-        thr, pre_manifest = chain.thr, chain.pre.manifest
-        mask = chain.mask
+        return _run_exporting(
+            ExportingSettings.from_config(conf), RunOptions.from_config(conf),
+            chain, out_path, context)
 
-        import torch  # lazy
-        resolved_device = resolve_device(conf.device)
-        mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
-        voxel_grid = torch.as_tensor(chain.occupancy, device=resolved_device)
-        carve_grid = (voxel_grid.bool() & mask_tensor)
-        origin = np.array(pre_manifest.origin, dtype=np.float64)
+def _run_exporting(settings: ExportingSettings, options: RunOptions, upstream: ThresholdedGrid,
+                   out_path: Path, context: RunContext) -> ExportingResult:
+    """The computation of :func:`exporting`, from its own settings only.
 
-        # The grid's voxel size is a fact of the preprocessing run, not a setting
-        # of this stage: re-exporting with a different config must not rescale it.
-        if pre_manifest.voxel_size and pre_manifest.voxel_size != conf.voxel_size:
-            import warnings
-            warnings.warn(
-                f"Config voxel_size={conf.voxel_size:g} differs from the preprocessing "
-                f"run's {pre_manifest.voxel_size:g}; meshing with "
-                f"{pre_manifest.voxel_size:g}.",
-                stacklevel=2,
-            )
-            conf = conf.model_copy(update={"voxel_size": pre_manifest.voxel_size})
+    *upstream* is the loaded thresholding chain (manifests, mask, occupancy
+    grid); the voxel size and origin of the mesh come from it.  *out_path* is
+    the stage folder, already cleared by :func:`begin_stage`.
+    """
+    _t0_wall = time.perf_counter()
+    _t0_cpu = time.process_time()
+    chain = upstream
+    thr, pre_manifest = chain.thr, chain.pre.manifest
+    mask = chain.mask
 
-        # Mesh at the grid's own origin, then place it in float64: the mesh
-        # builders emit float32 vertices, which cannot hold georeferenced
-        # coordinates to better than ~0.5 m.
-        cleaned_voxels, _, final_mesh = finalize_mesh(carve_grid, np.zeros(3), conf)
-        final_mesh.apply_translation(origin)
+    import torch  # lazy
+    resolved_device = resolve_device(options.device)
+    mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
-        ext = conf.final_mesh_format
-        export_path = out_path / f"export.{ext}"
+    voxel_grid = torch.as_tensor(chain.occupancy, device=resolved_device)
+    carve_grid = (voxel_grid.bool() & mask_tensor)
+    origin = np.array(pre_manifest.origin, dtype=np.float64)
 
-        save_mesh(final_mesh, str(export_path))
+    # The grid's voxel size is a fact of the preprocessing run, not a setting
+    # of this stage.  Mesh at the grid's own origin, then place it in float64:
+    # the mesh builders emit float32 vertices, which cannot hold georeferenced
+    # coordinates to better than ~0.5 m.
+    cleaned_voxels, _, final_mesh = finalize_mesh(
+        carve_grid, np.zeros(3), settings, chain.voxel_size)
+    final_mesh.apply_translation(origin)
 
-        # Per-stage diagnostics
-        v_count = int(len(final_mesh.vertices)) if hasattr(final_mesh, "vertices") else None
-        f_count = int(len(final_mesh.faces)) if hasattr(final_mesh, "faces") else None
-        try:
-            watertight = bool(final_mesh.is_watertight)
-        except Exception as exc:
-            log.warning("Could not determine watertightness: %s", exc)
-            watertight = None
-        # Mesh volume and bounding box
-        try:
-            mesh_volume = float(final_mesh.volume) if watertight else None
-        except Exception as exc:
-            log.warning("Could not compute mesh volume: %s", exc)
-            mesh_volume = None
-        try:
-            bbox = final_mesh.bounds  # None when mesh is empty
-        except Exception as exc:
-            log.warning("Could not compute mesh bounds: %s", exc)
-            bbox = None
-        bbox_dims = [float(bbox[1][i] - bbox[0][i]) for i in range(3)] if bbox is not None else None
-        # Voxel retention over occupied voxels, counted on the voxels that were
-        # actually meshed (after small clusters and isolated voxels are removed).
-        kept_by_mask = int(carve_grid.sum().item())
-        retained_voxels = int(cleaned_voxels.sum().item())
-        original_voxels = int(voxel_grid.sum().item())
-        retention_pct = round(100.0 * retained_voxels / max(original_voxels, 1), 2)
+    ext = settings.final_mesh_format
+    export_path = out_path / f"export.{ext}"
 
-        diag_dir = ensure_diag(out_path)
-        diagnostic = {
-            "mesh_path": str(export_path),
-            "apply_smoothing": conf.apply_smoothing,
-            "vertices": v_count,
-            "triangles": f_count,
-            "is_watertight": watertight,
-            "mesh_volume_m3": mesh_volume,
-            "bbox_dimensions_m": bbox_dims,
-            "voxels_original": original_voxels,
-            "voxels_retained": retained_voxels,
-            "voxels_removed": original_voxels - retained_voxels,
-            "voxels_removed_by_cleanup": kept_by_mask - retained_voxels,
-            "voxel_retention_pct": retention_pct,
-        }
-        # One diagnostic file per stage.
-        diagnostic["timings"] = {
-            "wall_seconds": float(time.perf_counter() - _t0_wall),
-            "cpu_seconds": float(time.process_time() - _t0_cpu),
-        }
-        write_json(diag_dir, "diagnostic.json", diagnostic)
+    save_mesh(final_mesh, str(export_path))
 
-        write_run_report("exporting", out_path, chain.pre.folder, thr.folder,
-                         thr.manifest.run_id)
+    # Per-stage diagnostics
+    v_count = int(len(final_mesh.vertices)) if hasattr(final_mesh, "vertices") else None
+    f_count = int(len(final_mesh.faces)) if hasattr(final_mesh, "faces") else None
+    try:
+        watertight = bool(final_mesh.is_watertight)
+    except Exception as exc:
+        log.warning("Could not determine watertightness: %s", exc)
+        watertight = None
+    # Mesh volume and bounding box
+    try:
+        mesh_volume = float(final_mesh.volume) if watertight else None
+    except Exception as exc:
+        log.warning("Could not compute mesh volume: %s", exc)
+        mesh_volume = None
+    try:
+        bbox = final_mesh.bounds  # None when mesh is empty
+    except Exception as exc:
+        log.warning("Could not compute mesh bounds: %s", exc)
+        bbox = None
+    bbox_dims = [float(bbox[1][i] - bbox[0][i]) for i in range(3)] if bbox is not None else None
+    # Voxel retention over occupied voxels, counted on the voxels that were
+    # actually meshed (after small clusters and isolated voxels are removed).
+    kept_by_mask = int(carve_grid.sum().item())
+    retained_voxels = int(cleaned_voxels.sum().item())
+    original_voxels = int(voxel_grid.sum().item())
+    retention_pct = round(100.0 * retained_voxels / max(original_voxels, 1), 2)
 
-        # Manifest last (see begin_stage at the start).
-        commit_manifest(out_path, ExportingManifest(
-            run_id=new_run_id(), mesh_path=stored_path(export_path, out_path),
-            upstream_manifest=stored_path(thr.manifest_path, out_path),
-            upstream_run_id=thr.manifest.run_id))
+    diag_dir = ensure_diag(out_path)
+    diagnostic = {
+        "mesh_path": str(export_path),
+        "apply_smoothing": settings.apply_smoothing,
+        "vertices": v_count,
+        "triangles": f_count,
+        "is_watertight": watertight,
+        "mesh_volume_m3": mesh_volume,
+        "bbox_dimensions_m": bbox_dims,
+        "voxels_original": original_voxels,
+        "voxels_retained": retained_voxels,
+        "voxels_removed": original_voxels - retained_voxels,
+        "voxels_removed_by_cleanup": kept_by_mask - retained_voxels,
+        "voxel_retention_pct": retention_pct,
+    }
+    # One diagnostic file per stage.
+    diagnostic["timings"] = {
+        "wall_seconds": float(time.perf_counter() - _t0_wall),
+        "cpu_seconds": float(time.process_time() - _t0_cpu),
+    }
+    write_json(diag_dir, "diagnostic.json", diagnostic)
 
-        return ExportingResult(
-            out_dir=out_path,
-            export_path=export_path,
-            retention_pct=retention_pct,
-            mesh_volume_m3=mesh_volume,
-            vertices=v_count if v_count is not None else 0,
-            faces=f_count if f_count is not None else 0,
-            issues=context.issues_of("exporting"),
-        )
+    write_run_report("exporting", out_path, chain.pre.folder, thr.folder,
+                     thr.manifest.run_id)
+
+    # Manifest last (see begin_stage at the start).
+    commit_manifest(out_path, ExportingManifest(
+        run_id=new_run_id(), mesh_path=stored_path(export_path, out_path),
+        upstream_manifest=stored_path(thr.manifest_path, out_path),
+        upstream_run_id=thr.manifest.run_id))
+
+    return ExportingResult(
+        out_dir=out_path,
+        export_path=export_path,
+        retention_pct=retention_pct,
+        mesh_volume_m3=mesh_volume,
+        vertices=v_count if v_count is not None else 0,
+        faces=f_count if f_count is not None else 0,
+        issues=context.issues_of("exporting"),
+    )

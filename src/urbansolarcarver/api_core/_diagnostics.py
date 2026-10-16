@@ -3,8 +3,7 @@ writers that put a stage's diagnostics on disk.
 
 Stages compute their ``summary`` dict and hand it to
 :func:`write_preprocessing_diagnostics` or :func:`write_thresholding_diagnostics`,
-which write ``diagnostic.json``, the config snapshot (preprocessing) and, when
-plots are on, the plot images.
+which write ``diagnostic.json`` and, when plots are on, the plot images.
 
 matplotlib is imported inside the plot helpers only, so importing the package
 does not load it.  Plots draw on :class:`matplotlib.figure.Figure` and save
@@ -16,9 +15,9 @@ from pathlib import Path
 from typing import List, Union, Optional
 
 import numpy as np
-from ..pydantic_schemas import UserConfig
+from ..stage_settings import PreprocessingSettings, RunOptions
 from ..run_context import report_issue
-from ._util import write_json, dump_config_snapshot
+from ._util import write_json
 
 
 def _new_figure(**kwargs):
@@ -403,21 +402,21 @@ class ThresholdingPlotInputs:
     weight_unit: str
 
 
-def write_preprocessing_diagnostics(summary: dict, folder: Path, config: UserConfig,
+def write_preprocessing_diagnostics(summary: dict, folder: Path, settings: PreprocessingSettings,
+                                    options: RunOptions,
                                     plot_inputs: PreprocessingPlotInputs) -> None:
     """Write preprocessing's diagnostics into *folder* (its ``diagnostics`` folder).
 
-    Writes the config snapshot and ``diagnostic.json`` from *summary*, plus,
-    with ``config.diagnostic_plots``, the score histogram, the sky-patch
+    Writes ``diagnostic.json`` from *summary*, plus, with
+    ``options.diagnostic_plots``, the score histogram, the sky-patch
     weight plots and, for a benefit run with simulated weights, the plot
     comparing them with the simple balance-point weights.  The paths of the
     plots written are added to the ``diagnostic.json`` content.
     """
     folder = Path(folder)
     folder.mkdir(parents=True, exist_ok=True)
-    dump_config_snapshot(config, folder)
     summary = dict(summary)
-    if config.diagnostic_plots:
+    if options.diagnostic_plots:
         patch_weights = plot_inputs.patch_weights
         if patch_weights is not None and patch_weights.size > 0:
             summary["sky_patch_images"] = [
@@ -425,30 +424,30 @@ def write_preprocessing_diagnostics(summary: dict, folder: Path, config: UserCon
                 str(folder / "sky_patch_weights_intensity.png"),
             ]
             save_sky_patch_weights(patch_weights, folder, weight_unit=plot_inputs.weight_unit)
-            if config.mode == "benefit" and config.simulated_weights_path:
-                _write_simulated_weights_comparison(summary, folder, config, patch_weights)
+            if settings.mode == "benefit" and settings.simulated_weights_path:
+                _write_simulated_weights_comparison(summary, folder, settings, patch_weights)
         summary["score_histogram"] = str(folder / "score_histogram.png")
         save_histogram(plot_inputs.raw_scores, folder, "score_histogram.png",
-                       title=f"Raw Scores ({config.mode})", xlabel=plot_inputs.weight_unit)
+                       title=f"Raw Scores ({settings.mode})", xlabel=plot_inputs.weight_unit)
     write_json(folder, "diagnostic.json", summary)
 
 
-def _write_simulated_weights_comparison(summary: dict, folder: Path, config: UserConfig,
+def _write_simulated_weights_comparison(summary: dict, folder: Path, settings: PreprocessingSettings,
                                         patch_weights: np.ndarray) -> None:
     """Plot how the simulated weights shifted the sky relative to the simple
-    balance-point rule under the same config.  Parses the EPW a second time to
+    balance-point rule under the same settings.  Parses the EPW a second time to
     get the simple weights."""
     import torch
     from ..carving import sample_period
     from ..scoring import get_weights
-    _, hours_of_year = sample_period(config)
+    _, hours_of_year = sample_period(settings)
     simple = get_weights(
         "benefit", device=torch.device("cpu"),
-        epw_file=config.epw_path, hoys=hours_of_year,
-        balance_temperature=config.balance_temperature,
-        balance_offset=config.balance_offset,
-        north_deg=config.north_deg,
-        include_harm=config.include_harm,
+        epw_file=settings.epw_path, hoys=hours_of_year,
+        balance_temperature=settings.balance_temperature,
+        balance_offset=settings.balance_offset,
+        north_deg=settings.north_deg,
+        include_harm=settings.include_harm,
     ).cpu().numpy()
     comparison = save_sky_patch_comparison(
         simple, np.asarray(patch_weights, dtype=float), folder,
