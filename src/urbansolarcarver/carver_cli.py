@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """UrbanSolarCarver command-line interface.
 
-Exposes the three-stage pipeline (preprocessing -> thresholding -> exporting)
-as individual subcommands, plus a one-shot ``run`` that chains all three.
+Exposes the pipeline stages (preprocessing, thresholding, exporting, massing)
+as individual subcommands, plus ``run``, which runs the stages needed for what
+``--produce`` asks for (the carved mesh by default).
 Performance evaluation is out of scope: use Ladybug/Honeybee/Radiance on the
 exported mesh.
 
@@ -35,13 +36,20 @@ import sys
 import time
 from multiprocessing import AuthenticationError
 from pathlib import Path
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 import typer
 from typer import Option
+from typer.core import TyperGroup
 
 # Light imports only: no torch, warp or api_core at module level.
+from .archetype_defaults import (
+    ARCHETYPE_DEFAULTS, ARCHETYPE_OPTIONAL_KEYS, WINDOW_TO_WALL_DEFAULTS,
+)
+from .errors import UrbanSolarCarverError
 from .load_config import load_config, user_config
+from .run_context import RunContext, run_context
+from .stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for
 
 # Windows consoles may use legacy code pages (cp1252 and similar); when output
 # is piped or redirected, printing schema descriptions that contain characters
@@ -150,7 +158,8 @@ def _run_on_daemon(payload: dict, quiet: bool) -> None:
         raise typer.Exit(1)
     if not quiet:
         _echo_result(f"{payload['cmd']} (daemon)",
-                     {k: v for k, v in resp.items() if k != "status"})
+                     {k: v for k, v in resp.items() if k not in ("status", "issues")})
+    _echo_issues(resp.get("issues", []))
 
 
 def _find_manifest(cfg, out_dir: Path, upstream: str, quiet: bool) -> Path:
@@ -159,8 +168,8 @@ def _find_manifest(cfg, out_dir: Path, upstream: str, quiet: bool) -> Path:
     Looks in ``<cfg.out_dir>/<upstream>/`` and then in a sibling
     ``<upstream>/`` folder next to *out_dir*; exits with code 1 if neither exists.
     """
-    candidates = [Path(cfg.out_dir) / upstream / "manifest.json",
-                  out_dir.parent / upstream / "manifest.json"]
+    candidates = [stage_folder(cfg.out_dir, upstream) / "manifest.json",
+                  stage_folder(out_dir.parent, upstream) / "manifest.json"]
     for candidate in candidates:
         if candidate.is_file():
             if not quiet:
@@ -182,10 +191,39 @@ def _echo_result(label: str, key_fields: dict):
     typer.echo()
 
 
+def _echo_issues(issues: Iterable) -> None:
+    """Print the issues of a run: ``Issue`` objects or the dicts of a daemon reply."""
+    lines = []
+    for issue in issues:
+        if not isinstance(issue, dict):
+            issue = {"stage": issue.stage, "code": issue.code, "message": issue.message}
+        where = f"{issue['stage']}: " if issue.get("stage") else ""
+        lines.append(f"    {where}{issue['code']}: {issue['message']}")
+    if lines:
+        typer.secho("  Issues:", fg="yellow", bold=True)
+        for line in lines:
+            typer.secho(line, fg="yellow")
+        typer.echo()
+
+
 # ---------------------------------------------------------------------------
 # App: Typer instance without the shell-completion install options.
 # ---------------------------------------------------------------------------
+class _ErrorReportingGroup(TyperGroup):
+    """A command group that reports an error raised on purpose by this package
+    as ``Error: <message>`` and exits with code 1, without a traceback.
+    Any other exception propagates with its traceback."""
+
+    def invoke(self, ctx):
+        try:
+            return super().invoke(ctx)
+        except UrbanSolarCarverError as exc:
+            typer.secho(f"Error: {exc}", fg="red", err=True)
+            raise typer.Exit(1)
+
+
 app = typer.Typer(
+    cls=_ErrorReportingGroup,
     add_completion=False,
     no_args_is_help=True,
     pretty_exceptions_enable=False,
@@ -223,31 +261,56 @@ def main(
 # ---------------------------------------------------------------------------
 # run: one-shot full pipeline
 # ---------------------------------------------------------------------------
-@app.command(help="Run the full pipeline (preprocessing + thresholding + exporting)")
+@app.command(help="Run the pipeline up to the stages named by --produce (default: exporting)")
 def run(
     config: Path = Option(..., "-c", "--config", exists=True, readable=True, help="YAML config path"),
     override: List[str] = Option([], "-o", "--override", help="Override config KEY=VALUE"),
-    out_dir: Optional[Path] = Option(None, "--out", help="Output root directory"),
+    out_dir: Optional[Path] = Option(None, "--out", help="Run folder (one subfolder per stage)"),
+    produce: List[str] = Option(
+        [], "--produce",
+        help="Stage to produce: preprocessing, thresholding, exporting or massing "
+             "(repeatable; default exporting)"),
+    start_from: str = Option(
+        "preprocessing", "--start-from",
+        help="First stage to run; the stage before it is read from the run folder"),
     daemon: bool = Option(False, "--daemon", help="Send to running daemon instead of running locally"),
     quiet: bool = Option(False, "-q", "--quiet", help="Minimal output"),
 ):
-    """Chain all three stages and write the final carved mesh.
+    """Run the stages needed to produce what ``--produce`` names.
 
-    This is the simplest entry point, equivalent to running preprocessing,
-    thresholding, and exporting in sequence into ``<out>/preprocessing``,
-    ``<out>/thresholding`` and ``<out>/exporting``.  To iterate on threshold
-    parameters without recomputing scores, use the individual stage commands.
+    With no ``--produce`` this chains preprocessing, thresholding and
+    exporting into ``<out>/preprocessing``, ``<out>/thresholding`` and
+    ``<out>/exporting``.  ``--produce massing`` runs preprocessing,
+    thresholding and massing; both together threshold once.  With
+    ``--start-from thresholding`` the scores already in ``<out>/preprocessing``
+    are reused, which is the way to iterate on threshold parameters without
+    recomputing them.
     """
-    cfg = load_config(str(config), override)
+    produce = produce or ["exporting"]
+    for option, names in (("--produce", produce), ("--start-from", [start_from])):
+        for name in names:
+            if name not in PIPELINE_STAGES:
+                raise typer.BadParameter(
+                    f"{name!r} is not a stage; choose from {', '.join(PIPELINE_STAGES)}",
+                    param_hint=option)
+    path = stages_needed_for(produce)
+    if start_from not in path:
+        raise typer.BadParameter(
+            f"{start_from!r} is not on the path to {', '.join(produce)} ({', '.join(path)})",
+            param_hint="--start-from")
+
+    context = RunContext()
+    with run_context(context):
+        cfg = load_config(str(config), override)
+    out = out_dir or Path(cfg.out_dir)
+
     if daemon:
         _run_on_daemon({
-            "cmd": "run_pipeline", "config": str(config.resolve()),
-            "overrides": _absolute_overrides(override),
-            "out_dir": str(out_dir.resolve()) if out_dir else None,
+            "cmd": "run", "produce": produce, "start_from": start_from,
+            "config": str(config.resolve()), "overrides": _absolute_overrides(override),
+            "run_folder": str(out.resolve()),
         }, quiet)
         return
-
-    out = out_dir or Path(cfg.out_dir)
 
     if not quiet:
         typer.secho(f"  Mode: {cfg.mode}", bold=True)
@@ -257,17 +320,29 @@ def run(
     run_pipeline = _api("run_pipeline")
 
     if not quiet:
-        typer.secho("  Running pipeline (preprocessing + thresholding + exporting)...", fg="yellow")
+        typer.secho(f"  Running pipeline (produce {', '.join(produce)}; "
+                    f"start from {start_from})...", fg="yellow")
     t0 = time.perf_counter()
-    res = run_pipeline(cfg, out)
+    result = run_pipeline(cfg, out, produce=produce, start_from=start_from, context=context)
     elapsed = time.perf_counter() - t0
 
-    _echo_result("Pipeline", {
-        "Mesh": str(res.export_path),
-        "Volume retained": f"{res.retention_pct:.1f}%" + (f" ({res.mesh_volume_m3:.0f} m³)" if res.mesh_volume_m3 is not None else ""),
-        "Faces": f"{res.faces:,}",
-        "Time": f"{elapsed:.1f}s",
-    })
+    summary = {}
+    if result.exporting is not None:
+        res = result.exporting
+        summary["Mesh"] = str(res.export_path)
+        summary["Volume retained"] = f"{res.retention_pct:.1f}%" + (
+            f" ({res.mesh_volume_m3:.0f} m³)" if res.mesh_volume_m3 is not None else "")
+        summary["Faces"] = f"{res.faces:,}"
+    if result.massing is not None:
+        summary["Plates"] = str(result.massing.plates_path)
+        summary["Floor plates"] = f"{result.massing.n_plates}"
+        summary["Total floor area"] = f"{result.massing.total_floor_area:,.0f} m²"
+    if not summary:
+        last = [stage for stage in PIPELINE_STAGES if getattr(result, stage) is not None][-1]
+        summary["Output"] = str(stage_folder(out, last))
+    summary["Time"] = f"{elapsed:.1f}s"
+    _echo_result("Pipeline", summary)
+    _echo_issues(context.issues)
 
 
 # ---------------------------------------------------------------------------
@@ -297,11 +372,13 @@ def cmd_preprocessing(
     Outputs ``scores.npy``, ``voxel_grid.npy``, and ``manifest.json`` into
     the output directory.  The manifest is consumed by the thresholding stage.
     """
-    cfg = load_config(str(config), override)
-    out_dir = out_dir or (Path(cfg.out_dir) / "preprocessing")
+    context = RunContext()
+    with run_context(context):
+        cfg = load_config(str(config), override)
+    out_dir = out_dir or stage_folder(cfg.out_dir, "preprocessing")
 
     if dry_run:
-        from .api_core._reporting import estimate_grid_memory
+        from .grid_planning import estimate_grid_memory
         est = estimate_grid_memory(cfg.voxel_size, cfg.max_volume_path, cfg.margin_frac)
         typer.secho(f"\n  Dry-run estimate ({cfg.mode})", fg="cyan", bold=True)
         typer.echo(f"    Grid: {est['grid_dims'][0]} x {est['grid_dims'][1]} x {est['grid_dims'][2]}")
@@ -325,16 +402,18 @@ def cmd_preprocessing(
         typer.secho(f"  Preprocessing [{cfg.mode}] -> {out_dir}", fg="yellow")
 
     t0 = time.perf_counter()
-    res = _api("preprocessing")(cfg, out_dir)
+    with run_context(context):
+        res = _api("preprocessing")(cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Preprocessing", {
         "Device": res.device_info,
         "Grid": f"{res.volume_shape}",
         "Scores": str(res.volume_path),
-        "Hash": res.hash[:12],
+        "Run ID": res.run_id[:12],
         "Time": f"{elapsed:.1f}s",
     })
+    _echo_issues(context.issues)
 
 
 @app.command("thresholding", help="Stage 2: apply threshold to scores -> binary mask")
@@ -356,8 +435,10 @@ def cmd_thresholding(
     different ``-o threshold=...`` or ``-o carve_fraction=...`` values without
     recomputing scores.
     """
-    cfg = load_config(str(config), override)
-    out_dir = out_dir or (Path(cfg.out_dir) / "thresholding")
+    context = RunContext()
+    with run_context(context):
+        cfg = load_config(str(config), override)
+    out_dir = out_dir or stage_folder(cfg.out_dir, "thresholding")
     if from_manifest is None:
         from_manifest = _find_manifest(cfg, out_dir, "preprocessing", quiet)
 
@@ -370,19 +451,21 @@ def cmd_thresholding(
         return
 
     if not quiet:
-        typer.secho(f"  Thresholding [{cfg.threshold}] -> {out_dir}", fg="yellow")
+        typer.secho(f"  Thresholding [{cfg.resolved_threshold()}] -> {out_dir}", fg="yellow")
 
     t0 = time.perf_counter()
-    res = _api("thresholding")(from_manifest, cfg, out_dir)
+    with run_context(context):
+        res = _api("thresholding")(from_manifest, cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Thresholding", {
         "Method": f"{res.threshold_method} -> {res.threshold_value:.4g}",
         "Carved": f"{res.voxels_removed:,} voxels ({100 - res.retention_pct:.1f}% of volume)",
         "Retained": f"{res.voxels_kept:,} voxels ({res.retention_pct:.1f}%)",
-        "Hash": res.hash[:12],
+        "Run ID": res.run_id[:12],
         "Time": f"{elapsed:.1f}s",
     })
+    _echo_issues(context.issues)
 
 
 @app.command("exporting", help="Stage 3: reconstruct mesh from mask -> mesh file (PLY by default)")
@@ -401,8 +484,10 @@ def cmd_exporting(
     (cubic faces or SDF-smoothed marching cubes), and writes
     ``export.<format>`` (format from ``final_mesh_format``, default ply).
     """
-    cfg = load_config(str(config), override)
-    out_dir = out_dir or (Path(cfg.out_dir) / "exporting")
+    context = RunContext()
+    with run_context(context):
+        cfg = load_config(str(config), override)
+    out_dir = out_dir or stage_folder(cfg.out_dir, "exporting")
     if from_manifest is None:
         from_manifest = _find_manifest(cfg, out_dir, "thresholding", quiet)
 
@@ -418,7 +503,8 @@ def cmd_exporting(
         typer.secho(f"  Exporting -> {out_dir}", fg="yellow")
 
     t0 = time.perf_counter()
-    res = _api("exporting")(from_manifest, cfg, out_dir)
+    with run_context(context):
+        res = _api("exporting")(from_manifest, cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Exporting", {
@@ -427,6 +513,7 @@ def cmd_exporting(
         "Faces": f"{res.faces:,}",
         "Time": f"{elapsed:.1f}s",
     })
+    _echo_issues(context.issues)
 
 
 @app.command("massing", help="Stage 4: floor plates from the carved envelope -> plates.json, plates.obj")
@@ -445,8 +532,10 @@ def cmd_massing(
     plate).  Settings: ground_floor_height, floor_height,
     min_plate_dimension, plate_tolerance, plate_stacking.
     """
-    cfg = load_config(str(config), override)
-    out_dir = out_dir or (Path(cfg.out_dir) / "massing")
+    context = RunContext()
+    with run_context(context):
+        cfg = load_config(str(config), override)
+    out_dir = out_dir or stage_folder(cfg.out_dir, "massing")
     if from_manifest is None:
         from_manifest = _find_manifest(cfg, out_dir, "thresholding", quiet)
 
@@ -462,7 +551,8 @@ def cmd_massing(
         typer.secho(f"  Massing -> {out_dir}", fg="yellow")
 
     t0 = time.perf_counter()
-    res = _api("massing")(from_manifest, cfg, out_dir)
+    with run_context(context):
+        res = _api("massing")(from_manifest, cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Massing", {
@@ -471,6 +561,7 @@ def cmd_massing(
         "Total floor area": f"{res.total_floor_area:,.0f} m²",
         "Time": f"{elapsed:.1f}s",
     })
+    _echo_issues(context.issues)
 
 
 # ---------------------------------------------------------------------------
@@ -553,7 +644,7 @@ def simulate_weights(
 
 
 # Shoebox archetype template written by `usc archetype`. The values come from
-# _ARCHETYPE_DEFAULTS (or the --from file) with any -s overrides applied.
+# ARCHETYPE_DEFAULTS (or the --from file) with any -s overrides applied.
 _ARCHETYPE_TEMPLATE = """\
 # Building archetype for `usc simulate-weights` (simulated benefit weights).
 # Shoebox form: floor area, volume, facade and window areas are derived.
@@ -590,19 +681,7 @@ _SHADING_TEMPLATE = """\
 {hot_months_line}
 """
 
-_ARCHETYPE_DEFAULTS = {
-    "width": 10.0, "length": 10.0, "height": 3.0,
-    "wwr": {"south": 0.35, "east": 0.15, "west": 0.15},
-    "g_value": 0.6, "orientation": 0.0,
-    "u_opaque": 0.6, "u_window": 1.6,
-    "ach_vent": 0.8, "ach_infiltration": 0.3, "heat_recovery": 0.0,
-    "mass_class": "medium",
-    "t_set_heating": 20.0, "t_set_cooling": 26.0,
-    "internal_gains_w_m2": 5.0,
-}
 _WWR_SIDES = ("north", "east", "south", "west")
-# Optional keys with no default (absent = feature off).
-_ARCHETYPE_OPTIONAL = ("shading_permanent", "shading_hot", "hot_months")
 
 
 @app.command(help="Create and validate a shoebox archetype YAML for simulate-weights")
@@ -633,8 +712,8 @@ def archetype(
         ZoneParams, expand_shoebox,
     )
 
-    values = dict(_ARCHETYPE_DEFAULTS)
-    values["wwr"] = dict(values["wwr"])
+    values = dict(ARCHETYPE_DEFAULTS)
+    values["wwr"] = dict(WINDOW_TO_WALL_DEFAULTS)
 
     if from_ is not None:
         base = yaml.safe_load(from_.read_text(encoding="utf-8"))
@@ -648,8 +727,8 @@ def archetype(
                         "only shoebox-form archetypes can be edited here; "
                         "edit that YAML directly instead", fg="red")
             raise typer.Exit(1)
-        unknown = (set(base) - set(_ARCHETYPE_DEFAULTS) - {"wwr"}
-                   - set(_ARCHETYPE_OPTIONAL))
+        unknown = (set(base) - set(ARCHETYPE_DEFAULTS) - {"wwr"}
+                   - set(ARCHETYPE_OPTIONAL_KEYS))
         if unknown:
             typer.secho(f"  Unknown archetype keys in --from file: "
                         f"{sorted(unknown)}", fg="red")
@@ -681,7 +760,7 @@ def archetype(
         if key in ("shading_permanent", "shading_hot"):
             values[key] = float(raw)
             continue
-        if key not in _ARCHETYPE_DEFAULTS or key == "wwr":
+        if key not in ARCHETYPE_DEFAULTS:
             typer.secho(f"  Unknown archetype key {key!r}", fg="red")
             raise typer.Exit(1)
         if key == "mass_class":
@@ -697,13 +776,13 @@ def archetype(
     # arguments, so those keys are left out here (shading is checked
     # separately below); a zero orientation is the default and is dropped.
     arch = {k: v for k, v in values.items()
-            if k not in ("internal_gains_w_m2",) + _ARCHETYPE_OPTIONAL
+            if k not in ("internal_gains_w_m2",) + ARCHETYPE_OPTIONAL_KEYS
             and not (k == "orientation" and not v)}
     try:
         expanded = expand_shoebox(arch)
         windows = expanded.pop("windows")
         ZoneParams.from_archetype(**expanded)
-        if any(k in values for k in _ARCHETYPE_OPTIONAL):
+        if any(k in values for k in ARCHETYPE_OPTIONAL_KEYS):
             from urbansolarcarver.simulated_weights import _shading_factors
             _shading_factors(windows,
                              values.get("shading_permanent"),
@@ -743,7 +822,7 @@ def archetype(
         wwr_block=wwr_block, orientation_line=orientation_line,
         shading_block=shading_block,
         **{k: v for k, v in values.items()
-           if k not in ("wwr", "orientation") + _ARCHETYPE_OPTIONAL},
+           if k not in ("wwr", "orientation") + ARCHETYPE_OPTIONAL_KEYS},
     ), encoding="utf-8")
 
     typer.secho(f"  Wrote {out}", fg="green", bold=True)
@@ -778,7 +857,7 @@ def validate(
     typer.secho("  Config OK", fg="green", bold=True)
     typer.echo(f"    mode:       {cfg.mode}")
     typer.echo(f"    voxel_size: {cfg.voxel_size}")
-    typer.echo(f"    threshold:  {cfg.threshold}")
+    typer.echo(f"    threshold:  {cfg.resolved_threshold()}")
     typer.echo(f"    device:     {cfg.device}")
     typer.echo(f"    out_dir:    {cfg.out_dir}")
 

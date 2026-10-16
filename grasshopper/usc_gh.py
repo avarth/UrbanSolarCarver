@@ -31,6 +31,20 @@ def report(component, message, level="error"):
     return message
 
 
+def show_issues(component, reply):
+    """Show each issue of a daemon *reply* as a warning on *component*.
+
+    Every issue becomes the message ``"<stage>: <message>"``; an issue that
+    belongs to no stage (a configuration check) is labelled "config".
+    Returns the list of those lines (empty when the reply has no issues).
+    """
+    lines = ["{}: {}".format(issue["stage"] or "config", issue["message"])
+             for issue in reply.get("issues") or []]
+    for line in lines:
+        report(component, line, "warning")
+    return lines
+
+
 # ---------------------------------------------------------------- daemon
 class DaemonError(RuntimeError):
     """The daemon could not be reached, or answered with an error."""
@@ -64,7 +78,11 @@ def call_daemon(session, cmd, payload=None, timeout=JOB_TIMEOUT_S):
     if not isinstance(reply, dict):
         raise DaemonError("Unexpected daemon reply: {!r}".format(reply))
     if reply.get("status") != "ok":
-        raise DaemonError(reply.get("error", repr(reply)))
+        error = reply.get("error", repr(reply))
+        if "Unknown command: 'run'" in str(error):
+            raise DaemonError("{}. This daemon was started before the update and does not know "
+                              "the 'run' command. Restart the daemon from USC_Session.".format(error))
+        raise DaemonError(error)
     return reply
 
 
@@ -74,6 +92,85 @@ def ping(session, timeout=PING_TIMEOUT_S):
         return call_daemon(session, "ping", timeout=timeout).get("status") == "ok"
     except (DaemonError, OSError, EOFError):
         return False
+
+
+def run_stages(session, config, produce, start_from, extra_overrides=None):
+    """Run pipeline stages through the daemon's ``run`` command and return its reply.
+
+    *config* is a USCConfig.  The run folder is ``config.out_dir``; the YAML
+    path is sent only when ``config.yaml_path`` is set, otherwise the daemon
+    builds the configuration from the mode's starting values.  The overrides
+    sent are ``config.overrides`` with *extra_overrides* (a {key: value}
+    dict, or None) on top.  *produce* is a list of stage names and
+    *start_from* the first stage to run.  The reply's ``stage_folders`` names
+    the folder of each stage that ran, and its ``issues`` go to
+    :func:`show_issues`.
+
+    Without a YAML the configuration needs ``max_volume_path`` and
+    ``test_surface_path``.  When the overrides lack them, they default to the
+    PLY files USC_Preprocess writes to ``<run folder>/incoming`` (stages after
+    preprocessing never read them).
+    """
+    overrides = dict(config.overrides, **(extra_overrides or {}))
+    if not config.yaml_path:
+        incoming = Path(config.out_dir) / "incoming"
+        overrides.setdefault("max_volume_path", str(incoming / "max_volume.ply"))
+        overrides.setdefault("test_surface_path", str(incoming / "test_surfaces.ply"))
+    payload = {
+        "produce": list(produce),
+        "start_from": start_from,
+        "run_folder": str(config.out_dir),
+        "overrides": override_list(overrides),
+    }
+    if config.yaml_path:
+        payload["config"] = str(config.yaml_path)
+    return call_daemon(session, "run", payload)
+
+
+def stage_folder_mismatch(config, manifest_path, stage):
+    """An error message when *manifest_path* is not in the Config run folder's *stage* folder, else None.
+
+    The stage components run against ``<config.out_dir>/<stage>``.  A
+    connected result from another folder would be silently ignored, so the
+    message names both folders.
+    """
+    expected = Path(config.out_dir) / stage
+    connected = Path(str(manifest_path)).parent
+    if os.path.normcase(os.path.abspath(connected)) == os.path.normcase(os.path.abspath(expected)):
+        return None
+    return ("The connected {0} result is in {1}, but the Config run folder uses {2}. "
+            "Connect the {0} result of this run, or change out_dir in USC_Config".format(
+                stage, connected, expected))
+
+
+# ---------------------------------------------------------------- engine modules
+def engine_module(root, name):
+    """Load ``<root>/src/urbansolarcarver/<name>.py`` by path and return the module.
+
+    Meant for the standard-library-only engine modules (``mode_registry``,
+    ``archetype_defaults``); they have no package-relative imports.  The
+    module is cached in ``sys.modules`` as ``usc_engine_<name>`` and loaded
+    again when the file changes.  It is registered before it runs because
+    dataclasses look their module up in ``sys.modules``.
+    """
+    import importlib.util
+    import sys
+    path = Path(root) / "src" / "urbansolarcarver" / "{}.py".format(name)
+    stamp = (str(path), path.stat().st_mtime)
+    key = "usc_engine_{}".format(name)
+    mod = sys.modules.get(key)
+    if mod is not None and getattr(mod, "_source", None) == stamp:
+        return mod
+    spec = importlib.util.spec_from_file_location(key, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[key] = mod
+    try:
+        spec.loader.exec_module(mod)
+    except BaseException:
+        sys.modules.pop(key, None)
+        raise
+    mod._source = stamp
+    return mod
 
 
 # ---------------------------------------------------------------- overrides

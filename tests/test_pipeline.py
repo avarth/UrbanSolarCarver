@@ -129,7 +129,7 @@ def test_run_pipeline_convenience(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
 
     cfg = load_config(str(cfg_path))
     result = run_pipeline(cfg, tmp_path / "pipeline_out")
-    assert result.export_path.exists()
+    assert result.exporting.export_path.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -157,28 +157,31 @@ class TestStageBoundaryValidation:
         scores_path = pre_dir / "scores.npy"
         np.save(scores_path, scores, allow_pickle=False)
         pm = PreprocessingManifest(
-            hash="t", scores_path=str(scores_path), scores_kind="weighted_sum",
+            run_id="t", scores_path=str(scores_path), scores_kind="weighted_sum",
             shape=manifest_shape, origin=(0.0, 0.0, 0.0), voxel_size=1.0,
-            mode="irradiance",
+            mode="irradiance", voxel_grid_path="voxel_grid.npy", sample_point_count=1,
+            footprint_path="footprint.json",
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
         return pre_dir
 
     def test_scores_shape_mismatch_rejected(self, tmp_path):
         from urbansolarcarver.api_core.thresholding import thresholding
+        from urbansolarcarver.errors import StageChainError
         pre_dir = self._write_pre_manifest(
             tmp_path, np.zeros((8, 8, 8), dtype=np.float32), manifest_shape=(9, 9, 9),
         )
-        with pytest.raises(ValueError, match="does not match the grid shape"):
+        with pytest.raises(StageChainError, match="does not match the grid shape"):
             thresholding(pre_dir, self._cfg(tmp_path), tmp_path / "thr")
 
     def test_missing_scores_file_rejected(self, tmp_path):
         from urbansolarcarver.api_core.thresholding import thresholding
+        from urbansolarcarver.errors import StageChainError
         pre_dir = self._write_pre_manifest(
             tmp_path, np.zeros((8, 8, 8), dtype=np.float32), manifest_shape=(8, 8, 8),
         )
         (pre_dir / "scores.npy").unlink()
-        with pytest.raises(FileNotFoundError, match="Scores file not found"):
+        with pytest.raises(StageChainError, match="Scores file not found"):
             thresholding(pre_dir, self._cfg(tmp_path), tmp_path / "thr")
 
 
@@ -259,6 +262,45 @@ def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
     assert diag["simulated_weights"]["archetype"]["mass_class"] == "medium"
 
 
+@_SKIP_EPW
+def test_benefit_with_weights_artifact_writes_the_comparison_plot(tmp_path, tiny_cube_mesh,
+                                                                  tiny_surface_mesh):
+    """With diagnostic_plots, a benefit run with simulated weights also plots
+    them against the simple balance-point weights and records the result."""
+    import numpy as _np
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.load_config import user_config
+    from urbansolarcarver.simulated_weights import write_simulated_weights
+
+    vol_path = tmp_path / "vol.ply"
+    srf_path = tmp_path / "srf.ply"
+    tiny_cube_mesh.export(str(vol_path))
+    tiny_surface_mesh.export(str(srf_path))
+    artifact = write_simulated_weights(
+        tmp_path / "u.json", _np.full(8760, 0.8), _np.zeros(8760),
+        {"method": "test-schedule", "generated": "2026", "archetype": {"mass_class": "medium"}},
+    )
+    cfg = user_config(
+        max_volume_path=str(vol_path), test_surface_path=str(srf_path),
+        out_dir=str(tmp_path / "out"), mode="benefit", epw_path=_EPW,
+        start_month=1, start_day=1, start_hour=8,
+        end_month=1, end_day=5, end_hour=16,
+        voxel_size=2.0, grid_step=2.0, ray_length=50.0,
+        min_voxels=1, min_face_count=1, device="cpu",
+        simulated_weights_path=str(artifact), diagnostic_plots=True,
+    )
+    result = preprocessing(cfg, tmp_path / "out")
+    diag_dir = result.out_dir / "diagnostics"
+    diag = json.loads((diag_dir / "diagnostic.json").read_text())
+    for name in ("sky_patch_weights.png", "sky_patch_weights_intensity.png",
+                 "sky_patch_comparison.png", "score_histogram.png", "config_snapshot.json"):
+        assert (diag_dir / name).is_file(), name
+    assert diag["sky_patch_comparison_image"].endswith("sky_patch_comparison.png")
+    assert set(diag["sky_patch_comparison_stats"]) == {
+        "mass_redistributed_pct", "patches_over_20pct", "rel_change_min_pct", "rel_change_max_pct"}
+    assert len(diag["sky_patch_images"]) == 2 and diag["score_histogram"].endswith("score_histogram.png")
+
+
 # ---------------------------------------------------------------------------
 # edge_taper end-to-end (daylight mode needs no EPW)
 # ---------------------------------------------------------------------------
@@ -330,8 +372,7 @@ class TestEdgeTaperPipeline:
 
 class TestDefaultThresholdReporting:
     """With threshold unset on weighted scores, the default strategy must be
-    recorded by name ('carve_fraction'), and the stage hash must depend on
-    the strategy, not on the score-dependent resolved cutoff."""
+    recorded by name ('carve_fraction')."""
 
     def _run_thresholding(self, tmp_path, sub, scores, **overrides):
         pre_dir = tmp_path / sub / "preprocessing"
@@ -342,7 +383,7 @@ class TestDefaultThresholdReporting:
         np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
         pm = PreprocessingManifest(
-            hash="test1234",
+            run_id="test1234",
             scores_path=str(scores_path),
             scores_kind="weighted_sum",
             shape=tuple(scores.shape),
@@ -350,6 +391,8 @@ class TestDefaultThresholdReporting:
             voxel_size=1.0,
             mode="irradiance",
             voxel_grid_path=str(vg_path),
+            sample_point_count=1,
+            footprint_path="footprint.json",
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
@@ -394,18 +437,6 @@ class TestDefaultThresholdReporting:
         share = scores[~mask].sum(dtype=np.float64) / scores.sum(dtype=np.float64)
         assert 0.4 - 0.03 < share <= 0.4 + 1e-9
 
-    def test_stage_hash_independent_of_score_data(self, tmp_path):
-        """Same config + same upstream hash → same stage hash, even when the
-        score data (and therefore the resolved cutoff) differ."""
-        rng = np.random.default_rng(12)
-        r1 = self._run_thresholding(
-            tmp_path, "run1", rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32))
-        r2 = self._run_thresholding(
-            tmp_path, "run2", rng.uniform(0, 500, size=(8, 8, 8)).astype(np.float32))
-        h1 = json.loads((r1.out_dir / "manifest.json").read_text())["hash"]
-        h2 = json.loads((r2.out_dir / "manifest.json").read_text())["hash"]
-        assert h1 == h2
-
     def test_thresholding_warns_on_nonfinite_scores(self, tmp_path):
         """Standalone thresholding (CLI/daemon/GH) must warn about NaN/Inf
         scores loaded from disk (preprocessing's guard does not cover this
@@ -435,7 +466,7 @@ class TestScoreSmoothing:
         np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
         pm = PreprocessingManifest(
-            hash="test1234",
+            run_id="test1234",
             scores_path=str(scores_path),
             scores_kind=kind,
             shape=tuple(scores.shape),
@@ -443,6 +474,8 @@ class TestScoreSmoothing:
             voxel_size=voxel_size,
             mode="irradiance" if kind == "weighted_sum" else "time-based",
             voxel_grid_path=str(vg_path),
+            sample_point_count=1,
+            footprint_path="footprint.json",
         )
         manifest_path = pre_dir / "manifest.json"
         manifest_path.write_text(schema_to_json(pm), encoding="utf-8")
@@ -537,26 +570,18 @@ class TestScoreSmoothing:
         assert diag["score_smoothing_sigma_voxels"] == 0.0
 
 
-def test_occupancy_fallback_uses_the_manifest_voxel_size(tmp_path, tiny_cube_mesh,
-                                                         tiny_surface_mesh):
-    """Without voxel_grid.npy, the grid is rebuilt at the preprocessing voxel
-    size even when the config passed later has a different one."""
+def test_missing_occupancy_grid_is_an_error(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
+    """Without voxel_grid.npy the preprocessing run is incomplete: the grid
+    is not rebuilt from a config that may describe other geometry."""
+    from urbansolarcarver.api_core._stage_io import load_upstream
     from urbansolarcarver.api_core._util import load_occupancy
-    from urbansolarcarver.load_config import user_config
-    from urbansolarcarver.pydantic_schemas import PreprocessingManifest
+    from urbansolarcarver.errors import StageChainError
     run = TestEdgeTaperPipeline()._run_preprocessing(
-        tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)  # voxel_size=2.0
-    pre = PreprocessingManifest.model_validate_json(run.manifest_path.read_text())
-    stored = np.load(pre.voxel_grid_path).astype(bool)
-    Path(pre.voxel_grid_path).unlink()
-
-    later_cfg = user_config(
-        max_volume_path=str(tmp_path / "fb" / "vol.ply"),
-        test_surface_path=str(tmp_path / "fb" / "srf.ply"),
-        out_dir=str(tmp_path / "fb" / "out"), mode="daylight",
-        voxel_size=1.0, device="cpu",
-    )
-    np.testing.assert_array_equal(load_occupancy(pre, later_cfg), stored)
+        tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)
+    pre = load_upstream(run, "preprocessing")
+    pre.resolve(pre.manifest.voxel_grid_path).unlink()
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
+        load_occupancy(pre)
 
 
 def test_curved_own_facade_is_not_shaded_by_its_own_skin(tmp_path):
@@ -593,3 +618,60 @@ def test_curved_own_facade_is_not_shaded_by_its_own_skin(tmp_path):
     scores = np.load(pre.volume_path)
     occ = np.load(tmp_path / "out" / "preprocessing" / "voxel_grid.npy").astype(bool).ravel()
     assert scores[occ].max() == 0.0
+
+
+def test_missing_max_volume_file_is_an_input_error(tmp_path):
+    from _stage_scene import daylight_cube_config
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.errors import InputError
+    conf = daylight_cube_config(tmp_path)
+    Path(conf.max_volume_path).unlink()
+    with pytest.raises(InputError, match="max_volume file missing"):
+        preprocessing(conf, tmp_path / "run" / "preprocessing")
+
+
+def test_thresholding_refuses_a_config_of_another_mode(tmp_path):
+    """Scores from a daylight run cannot be thresholded with an irradiance config:
+    the threshold defaults and units differ per mode."""
+    import warnings
+    from _stage_scene import daylight_cube_config
+    from urbansolarcarver import preprocessing, thresholding
+    from urbansolarcarver.errors import StageChainError
+    from urbansolarcarver.load_config import user_config
+    run = tmp_path / "run"
+    daylight = daylight_cube_config(tmp_path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pre = preprocessing(daylight, run / "preprocessing")
+    irradiance = user_config(
+        max_volume_path=daylight.max_volume_path, test_surface_path=daylight.test_surface_path,
+        out_dir=str(run), mode="irradiance", epw_path="dummy.epw",
+        start_month=1, start_day=1, start_hour=8, end_month=1, end_day=1, end_hour=16,
+        voxel_size=1.0, grid_step=1.0, ray_length=50.0, device="cpu",
+    )
+    with pytest.raises(StageChainError, match="daylight"):
+        thresholding(pre, irradiance, run / "thresholding")
+
+
+def test_exporting_meshes_with_the_preprocessing_voxel_size(tmp_path):
+    """The grid's voxel size is a fact of the preprocessing run: a config with
+    another voxel_size changes nothing and raises no warning."""
+    import warnings
+    import trimesh
+    from _stage_scene import daylight_cube_config
+    from urbansolarcarver import exporting, preprocessing, thresholding
+    run = tmp_path / "run"
+    conf = daylight_cube_config(tmp_path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        pre = preprocessing(conf, run / "preprocessing")
+        thr = thresholding(pre, conf, run / "thresholding")
+    np.save(thr.mask_path, np.ones_like(np.load(thr.mask_path), dtype=bool))
+    other_voxel_size = conf.model_copy(update={"voxel_size": 2.0})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        result = exporting(thr, other_voxel_size, run / "exporting")
+    assert result.issues == ()
+    mesh = trimesh.load(result.export_path, force="mesh")
+    cube_bounds = np.array([[-5.0, -5.0, -5.0], [5.0, 5.0, 5.0]])
+    assert np.abs(mesh.bounds - cube_bounds).max() <= 1.0 + 1e-6

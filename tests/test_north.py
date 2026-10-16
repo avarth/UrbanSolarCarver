@@ -70,6 +70,7 @@ class TestTiltedPlaneOctantNorth:
         recover the applied angle from the emitted ray direction."""
         from urbansolarcarver.load_config import user_config
         from urbansolarcarver.carving import carve_with_planes
+        from urbansolarcarver.stage_settings import PreprocessingSettings
 
         cfg = user_config(
             max_volume_path="d", test_surface_path="d", out_dir="o",
@@ -77,10 +78,12 @@ class TestTiltedPlaneOctantNorth:
             tilted_plane_angle_deg=[10, 20, 30, 40, 50, 60, 70, 80],  # N..NW
             voxel_size=1.0, grid_step=1.0, device="cpu", north_deg=north_deg,
         )
+        settings = PreprocessingSettings.from_config(cfg)
         grid = torch.ones((4, 4, 4), dtype=torch.uint8)
         pts = np.array([[2.0, 2.0, 2.0]], dtype=np.float32)
         nrm = np.array([list(normal_xy) + [0.0]], dtype=np.float32)
-        _, _, dirs = carve_with_planes(grid, np.zeros(3), 4.0, 4, pts, nrm, cfg)
+        _, _, dirs = carve_with_planes(
+            grid, np.zeros(3), 4.0, 4, pts, nrm, settings, ray_batch_size=cfg.ray_batch_size)
         return float(np.degrees(np.arcsin(dirs[0, 2])))
 
     def test_north_zero_uses_model_axes(self):

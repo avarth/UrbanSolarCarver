@@ -17,6 +17,7 @@ import torch
 import trimesh
 
 from urbansolarcarver.raytracer import dda_backend_available
+from urbansolarcarver.stage_settings import PreprocessingSettings
 
 WARP_CPU = dda_backend_available(torch.device("cpu"))
 BACKENDS = [
@@ -54,8 +55,9 @@ def _box_grid_and_samples(panels, box_min_y, box_max_y, **config):
         max_volume_path="unused", test_surface_path="unused", out_dir="unused",
         voxel_size=1.0, grid_step=1.0, device="cpu", **config,
     )
-    grid, origin, extent, resolution = voxelize(max_volume, cfg, device=torch.device("cpu"))
-    points, normals, *_ = sample_surface(trimesh.util.concatenate(panels), cfg)
+    settings = PreprocessingSettings.from_config(cfg)
+    grid, origin, extent, resolution = voxelize(max_volume, settings, device=torch.device("cpu"))
+    points, normals, *_ = sample_surface(trimesh.util.concatenate(panels), settings)
     return grid, origin, extent, resolution, points, normals, cfg
 
 
@@ -78,7 +80,9 @@ def _tilted_plane_heights_along_y(panels, box_min_y, box_max_y):
 
     grid, origin, extent, resolution, points, normals, cfg = _box_grid_and_samples(
         panels, box_min_y, box_max_y, mode="tilted_plane", tilted_plane_angle_deg=45.0)
-    carved, _, _ = carve_with_planes(grid, origin, extent, resolution, points, normals, cfg)
+    carved, _, _ = carve_with_planes(grid, origin, extent, resolution, points, normals,
+                                     PreprocessingSettings.from_config(cfg),
+                                     ray_batch_size=cfg.ray_batch_size)
     return _row_heights(carved.numpy().astype(bool), grid.numpy().astype(bool),
                         origin, extent / resolution)
 
@@ -134,7 +138,9 @@ def test_facade_on_the_max_volume_face_obstructed_in_sky_scores(monkeypatch, bac
     panels = [_vertical_panel_along_x(0.0, 20.0, 0.3, facing_positive_y=True)]
     grid, origin, extent, resolution, points, normals, cfg = _box_grid_and_samples(
         panels, 0.3, 20.3, mode="daylight", ray_length=60.0)
-    result = carve_with_sky_patch_rays(grid, origin, extent, resolution, points, normals, cfg, None)
+    result = carve_with_sky_patch_rays(grid, origin, extent, resolution, points, normals,
+                                       PreprocessingSettings.from_config(cfg), None,
+                                       ray_batch_size=cfg.ray_batch_size)
     scores = result.raw_voxel_scores.reshape(grid.shape)
     occupied = grid.numpy().astype(bool)
     cell = extent / resolution

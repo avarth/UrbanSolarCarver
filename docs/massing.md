@@ -10,8 +10,13 @@ simulation input (one closed prism per floor and plate).
 
 1. **Footprint and facades.** The footprint is the maximum volume's plan
    projection (the area it covers seen from above), so an uneven or raised
-   base does not change it. Its outline is split into facades wherever it
-   turns by more than 30 degrees. Curved or faceted outlines with smaller
+   base does not change it. Preprocessing saves this footprint
+   (`footprint.json` in its folder, world coordinates) from the mesh it
+   voxelized; massing reads that file, not the mesh in the config passed to
+   massing and not the mesh file on disk, so later edits to either change
+   nothing. If preprocessing could not compute a footprint, massing uses the
+   outline of the occupied voxel columns and warns. The footprint outline is split into facades
+   wherever it turns by more than 30 degrees. Curved or faceted outlines with smaller
    turns stay one facade.
 2. **Faces.** Every footprint column belongs to its nearest facade. Facades
    shorter than two bays (`2 * min_plate_dimension`: chamfers, small steps)
@@ -76,7 +81,8 @@ The run report gets a Massing section.
   higher gets a warning (sloped ground is not supported yet).
 - If the maximum volume's footprint cannot be read from the mesh, or does not
   match the voxel grid (more than 5% of the occupied voxel columns more than
-  one voxel outside it, for example another mesh or a moved origin), the voxel
+  one voxel outside it, for example when the file was replaced after
+  preprocessing), the voxel
   footprint is used, with a warning; plates can then be up to one voxel larger
   than the true footprint.
 - Bays are rectangles in their face's frame; there are no interior zones (core,

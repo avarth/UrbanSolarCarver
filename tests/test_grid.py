@@ -283,6 +283,75 @@ class TestWarpVoxelizer:
         assert iou > 0.9
 
 
+def test_warp_voxelizer_failure_raises_instead_of_switching_to_trimesh(monkeypatch):
+    """A Warp run that fails (here a simulated CUDA out-of-memory) must raise:
+    trimesh classifies boundary voxels differently, and a long-lived session
+    would cache that other grid for the geometry.  The trimesh path is only
+    for when Warp cannot run on the device at all."""
+    import trimesh
+    import urbansolarcarver.raytracer as rt
+    from urbansolarcarver.grid import voxelize_mesh
+    from urbansolarcarver.session import CarverSession
+
+    def failing_warp_voxelizer(*args, **kwargs):
+        raise RuntimeError("simulated CUDA out of memory")
+
+    monkeypatch.setattr(rt, "voxelize_solid_warp", failing_warp_voxelizer)
+    cube = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
+    with CarverSession("cpu") as session:
+        with pytest.raises(RuntimeError, match="simulated CUDA out of memory"):
+            voxelize_mesh(cube, voxel_size=1.0, margin_frac=0.1,
+                          device=torch.device("cpu"), session=session)
+
+
+class TestVoxelGridPlan:
+    """The grid size is planned and checked against the budget from the mesh
+    bounds alone, before anything is allocated."""
+
+    def test_plan_matches_the_voxelized_grid(self):
+        import trimesh
+        from urbansolarcarver.grid import voxelize_mesh
+        from urbansolarcarver.grid_planning import plan_voxel_grid
+        slab = trimesh.creation.box(extents=(40.0, 10.0, 5.0))
+        slab.apply_translation([3.0, -7.0, 2.0])
+        plan = plan_voxel_grid(slab.bounds, voxel_size=2.0, margin_frac=0.05)
+        _, origin, extent, resolution = voxelize_mesh.__wrapped__(
+            slab, voxel_size=2.0, margin_frac=0.05, device=torch.device("cpu"))
+        assert plan.resolution == resolution
+        assert plan.total_voxels == resolution ** 3
+        assert plan.extent == pytest.approx(extent)
+        np.testing.assert_allclose(plan.origin, origin)
+
+    def test_budget_check_accepts_a_small_grid_and_rejects_a_large_one(self):
+        from urbansolarcarver.errors import ConfigError
+        from urbansolarcarver.grid_planning import (
+            MAX_GRID_VOXELS, check_voxel_grid_budget, plan_voxel_grid,
+        )
+        bounds = np.array([[0.0, 0.0, 0.0], [10.0, 10.0, 10.0]])
+        check_voxel_grid_budget(plan_voxel_grid(bounds, voxel_size=1.0, margin_frac=0.0))
+        side = int(np.ceil(MAX_GRID_VOXELS ** (1 / 3))) + 1
+        too_fine = 10.0 / side
+        with pytest.raises(ConfigError) as caught:
+            check_voxel_grid_budget(plan_voxel_grid(bounds, voxel_size=too_fine, margin_frac=0.0))
+        assert caught.value.errors[0].field == "voxel_size"
+
+    def test_voxelize_mesh_rejects_an_oversized_grid_before_allocating(self, monkeypatch):
+        import trimesh
+        import urbansolarcarver.raytracer as rt
+        from urbansolarcarver.grid import voxelize_mesh
+        from urbansolarcarver.grid_planning import MAX_GRID_VOXELS
+
+        def voxelizer_must_not_run(*args, **kwargs):
+            pytest.fail("the voxelizer ran (and allocated) for a grid over the budget")
+
+        monkeypatch.setattr(rt, "voxelize_solid_warp", voxelizer_must_not_run)
+        cube = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
+        side = int(np.ceil(MAX_GRID_VOXELS ** (1 / 3))) + 1
+        with pytest.raises(ValueError, match="voxel_size"):
+            voxelize_mesh.__wrapped__(cube, voxel_size=10.0 / side, margin_frac=0.0,
+                                      device=torch.device("cpu"))
+
+
 class TestSmoothedMeshPath:
     """Tests for mesh_from_voxels_smoothed (SDF + marching cubes)."""
 
@@ -323,13 +392,13 @@ class TestSmoothedMeshPath:
     def test_finalize_mesh_smooth_path(self):
         """The full smoothed finalize path (prune → SDF → MC → cleanup →
         Taubin) must deliver a watertight, positive-volume mesh."""
-        from types import SimpleNamespace
         from urbansolarcarver.grid import finalize_mesh
-        cfg = SimpleNamespace(
-            apply_smoothing=True, min_voxels=10, min_face_count=10,
-            smooth_iters=2, voxel_size=1.0,
+        from urbansolarcarver.stage_settings import ExportingSettings
+        settings = ExportingSettings(
+            final_mesh_format="ply", apply_smoothing=True, min_voxels=10,
+            min_face_count=10, smooth_iters=2,
         )
-        _, _, final = finalize_mesh(self._cube_voxels(), np.zeros(3), cfg)
+        _, _, final = finalize_mesh(self._cube_voxels(), np.zeros(3), settings, 1.0)
         assert len(final.faces) > 0
         assert final.is_watertight
         assert final.volume > 0.8 * 4096
@@ -541,11 +610,13 @@ class TestEdgeTaper:
 # Degenerate input and fallback paths: warnings, empty results, EPW cache
 # ---------------------------------------------------------------------------
 
-def _sampling_config():
+def _sampling_settings():
     from urbansolarcarver.load_config import user_config
-    return user_config(max_volume_path="x", test_surface_path="x", out_dir="x",
-                       mode="tilted_plane", tilted_plane_angle_deg=45,
-                       grid_step=1.0, voxel_size=1.0)
+    from urbansolarcarver.stage_settings import PreprocessingSettings
+    return PreprocessingSettings.from_config(user_config(
+        max_volume_path="x", test_surface_path="x", out_dir="x",
+        mode="tilted_plane", tilted_plane_angle_deg=45,
+        grid_step=1.0, voxel_size=1.0))
 
 
 def test_zero_area_face_does_not_drop_panel_and_bent_panel_warns():
@@ -556,7 +627,7 @@ def test_zero_area_face_does_not_drop_panel_and_bent_panel_warns():
     bent = trimesh.Trimesh([[10, 0, 0], [14, 0, 0], [14, 1, 3], [10, 0, 3]],
                            [[0, 1, 2], [0, 2, 3]], process=False)
     with pytest.warns(UserWarning, match="1 non-planar"):
-        pts, *_ = sample_surface(trimesh.util.concatenate([rect, bent]), _sampling_config())
+        pts, *_ = sample_surface(trimesh.util.concatenate([rect, bent]), _sampling_settings())
     assert len(pts) > 0 and pts[:, 0].max() <= 4.0  # the rectangle is sampled, the bent panel is not
 
 

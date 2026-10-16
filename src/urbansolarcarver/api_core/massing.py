@@ -1,17 +1,15 @@
 """Massing stage: stacked floor plates from the carved envelope.
 
 Reads the thresholding manifest, builds floor plates that follow the
-maximum volume's footprint (``urbansolarcarver.floor_plates``), and writes them
+maximum volume's footprint, which preprocessing saved as ``footprint.json``
+(``urbansolarcarver.floor_plates``), and writes them
 as ``plates.json`` (outlines in world coordinates) and ``plates.obj`` (one
 closed prism per plate), with a manifest, diagnostics and the run report.
 """
 from __future__ import annotations
 
-import hashlib
 import json
-import logging
 import time
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Union
@@ -19,15 +17,20 @@ from typing import List, Union
 import numpy as np
 import shapely
 import shapely.affinity
+from shapely.errors import GEOSException
 
 from .. import floor_plates as mg
-from ..io import load_mesh
+from ..errors import StageChainError
 from ..load_config import user_config
-from ..pydantic_schemas import MassingManifest, schema_to_json
-from ._reporting import generate_run_report
-from ._util import _ensure_out_dir, _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
+from ..pydantic_schemas import MassingManifest
+from ..run_context import Issue, RunContext, report_issue, stage_context
+from ..stage_settings import MassingSettings, RunOptions
+from ._reporting import write_run_report
+from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
+from ._util import ThresholdedGrid, _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
 
-log = logging.getLogger(__name__)
+# Everything massing writes into its folder, besides manifest.json.
+_MASSING_OUTPUTS = ("plates.json", "plates.obj", "diagnostics/diagnostic.json")
 
 # Share of occupied voxel columns allowed to lie more than one voxel outside
 # the mesh footprint before the footprint is taken as not matching the voxel
@@ -44,35 +47,60 @@ class MassingResult:
     floor_areas: List[float]
     total_floor_area: float
     n_plates: int
+    issues: tuple[Issue, ...] = ()
 
     def __fspath__(self) -> str:
         return str(self.plates_path)
 
 
-def _footprint(conf, origin, columns, voxel_size):
+def _read_footprint(pre):
+    """The footprint polygons preprocessing saved (world xy); empty when it saved none.
+
+    Raises StageChainError, naming preprocessing as the stage to re-run, when
+    the file is missing or cannot be read as a footprint.
+    """
+    path = pre.resolve(pre.manifest.footprint_path)
+    if not path.is_file():
+        raise StageChainError(
+            f"Footprint file not found: {path} (named by the preprocessing manifest). "
+            f"Re-run preprocessing."
+        )
+    try:
+        return mg.footprint_from_dict(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, KeyError, TypeError, GEOSException) as exc:
+        raise StageChainError(
+            f"Footprint file {path} is damaged ({type(exc).__name__}: {exc}). "
+            f"Re-run preprocessing."
+        ) from exc
+
+
+def _footprint(world_polygons, origin, columns, voxel_size):
     """Footprint polygons (local xy) and their source ("mesh" or "voxels").
 
-    The mesh footprint is the maximum volume's plan projection.  It is used
-    only when it matches the voxel grid: at most FOOTPRINT_MISMATCH_SHARE
-    of the occupied columns may have their centre more than one voxel
-    outside it.  Otherwise the voxel footprint is used, with a warning.
+    *world_polygons* is the plan projection of the maximum volume that
+    preprocessing saved, in world xy.  It is used only when it matches the
+    voxel grid: at most FOOTPRINT_MISMATCH_SHARE of the occupied columns may
+    have their centre more than one voxel outside it.  Otherwise (or when
+    preprocessing saved none) the voxel footprint is used, with a warning.
     """
-    try:
-        polygons = mg.footprint_polygons(load_mesh(conf.max_volume_path), origin[:2])
-    except Exception as exc:  # unreadable or broken mesh
-        log.warning("massing: could not project the maximum volume: %s", exc)
-        polygons = []
+    polygons = [shapely.affinity.translate(p, -origin[0], -origin[1]) for p in world_polygons]
     if not polygons:
-        warnings.warn("massing: the maximum volume's footprint could not be read; "
-                      "using the voxel footprint", UserWarning, stacklevel=3)
+        report_issue(
+            "footprint_unreadable",
+            "massing: the maximum volume's footprint could not be read; "
+            "using the voxel footprint",
+        )
         return mg.footprint_from_columns(columns, voxel_size), "voxels"
     centres = (np.argwhere(columns) + 0.5) * voxel_size
     grown = shapely.union_all(polygons).buffer(voxel_size)
     outside = 1.0 - shapely.contains_xy(grown, centres[:, 0], centres[:, 1]).mean()
     if outside > FOOTPRINT_MISMATCH_SHARE:
-        warnings.warn(f"massing: the maximum volume's footprint does not match the voxel grid "
-                      f"({100 * outside:.0f}% of the occupied columns lie outside it); "
-                      f"using the voxel footprint", UserWarning, stacklevel=3)
+        report_issue(
+            "footprint_mismatch",
+            f"massing: the maximum volume's footprint does not match the voxel grid "
+            f"({100 * outside:.0f}% of the occupied columns lie outside it); "
+            f"using the voxel footprint",
+        )
         return mg.footprint_from_columns(columns, voxel_size), "voxels"
     return polygons, "mesh"
 
@@ -86,9 +114,11 @@ def _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin_z, voxel_size):
             continue
         base = origin_z + lowest[mine].min() * voxel_size
         if base > z0 + 1e-6:
-            warnings.warn(f"massing: part {k} starts {base - z0:.2f} m above the lowest point; "
-                          f"floors count from the lowest point (sloped ground is not supported yet)",
-                          UserWarning, stacklevel=3)
+            report_issue(
+                "raised_part",
+                f"massing: part {k} starts {base - z0:.2f} m above the lowest point; "
+                f"floors count from the lowest point (sloped ground is not supported yet)",
+            )
 
 
 def massing(threshold_manifest, cfg: Union[user_config, str, Path],
@@ -96,8 +126,9 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     """Fourth stage: floor plates that follow the footprint, from the carved envelope.
 
     Floors are ``ground_floor_height`` then ``floor_height`` tall, counted
-    from the lowest point of the maximum volume.  The footprint (the maximum
-    volume's plan projection) is split into faces, one per
+    from the lowest point of the maximum volume.  The footprint (the plan
+    projection of the maximum volume that preprocessing saved as
+    ``footprint.json``, not the mesh named in *cfg*) is split into faces, one per
     facade, and each face into bays ``min_plate_dimension`` wide, cut
     perpendicular to its facade.  A bay is built on a floor when it stays in
     the maximum volume over the floor's full height, at most
@@ -128,22 +159,43 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         One closed mesh per plate, named ``floor_<n>_plate_<m>``.
     ``manifest.json``, ``diagnostics/diagnostic.json``, ``run_report.md``
         The report goes to the parent folder when *out_dir* is named
-        ``massing``, otherwise into *out_dir*.
+        ``massing``, otherwise into *out_dir*; it keeps an Export section
+        when the run's exporting folder was built from the same
+        thresholding run.  The outputs of an earlier run in *out_dir* are
+        deleted first and the manifest is written last.
 
     Raises
     ------
+    StageChainError
+        If a manifest cannot be read, preprocessing was re-run after the
+        thresholding run, or the mask, occupancy grid or footprint is missing
+        or damaged (a ValueError; the message names the stage to re-run).
     ValueError
-        If a manifest cannot be read, or a massing size is smaller than the
-        preprocessing run's voxel size.
+        If a massing size is smaller than the preprocessing run's voxel size.
+    """
+    with stage_context("massing") as context:
+        conf = _resolve_cfg(cfg)
+        out_path = begin_stage(out_dir, _MASSING_OUTPUTS)
+        chain = load_thresholded_grid(threshold_manifest)
+        return _run_massing(
+            MassingSettings.from_config(conf), RunOptions.from_config(conf),
+            chain, out_path, context)
+
+
+def _run_massing(settings: MassingSettings, options: RunOptions, upstream: ThresholdedGrid,
+                 out_path: Path, context: RunContext) -> MassingResult:
+    """The computation of :func:`massing`, from its own settings only.
+
+    *upstream* is the loaded thresholding chain (manifests, mask, occupancy
+    grid).  *out_path* is the stage folder, already cleared by
+    :func:`begin_stage`.
     """
     t0_wall, t0_cpu = time.perf_counter(), time.process_time()
-    conf = _resolve_cfg(cfg)
-    out_path = _ensure_out_dir(out_dir, "massing")
-    chain = load_thresholded_grid(threshold_manifest, conf)
+    chain = upstream
     vs, origin = chain.voxel_size, chain.origin
     for name in ("min_plate_dimension", "ground_floor_height", "floor_height"):
-        if getattr(conf, name) < vs - 1e-9:
-            raise ValueError(f"{name} ({getattr(conf, name):g} m) is smaller than the voxel "
+        if getattr(settings, name) < vs - 1e-9:
+            raise ValueError(f"{name} ({getattr(settings, name):g} m) is smaller than the voxel "
                              f"size of the preprocessing run ({vs:g} m)")
 
     occ = chain.occupancy.astype(bool)
@@ -151,24 +203,24 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     columns = occ.any(axis=2)
     cells_ij = np.argwhere(columns)
     xy = (cells_ij + 0.5) * vs
-    polygons, footprint_source = _footprint(conf, origin, columns, vs)
+    polygons, footprint_source = _footprint(_read_footprint(chain.pre), origin, columns, vs)
     facades, corners = mg.split_facades(polygons)
     # A facade shorter than two bays (a chamfer, a small step) would get a
     # face of at most one bay; its columns go to the neighbouring facades.
     faces = mg.assign_faces(xy, facades, corners, polygons, vs,
-                            min_facade_length=2.0 * conf.min_plate_dimension)
-    bay, bay_face = mg.cut_bays(faces, conf.min_plate_dimension, vs)
+                            min_facade_length=2.0 * settings.min_plate_dimension)
+    bay, bay_face = mg.cut_bays(faces, settings.min_plate_dimension, vs)
     bay_shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, polygons,
-                                 conf.min_plate_dimension, vs)
+                                 settings.min_plate_dimension, vs)
     n_cols = np.bincount(bay)
 
     layers = np.flatnonzero(occ.any(axis=(0, 1)))
     z0 = origin[2] + layers.min() * vs
     z_top = origin[2] + (layers.max() + 1) * vs
     _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin[2], vs)
-    levels = mg.floor_levels(z0, z_top, conf.ground_floor_height, conf.floor_height)
+    levels = mg.floor_levels(z0, z_top, settings.ground_floor_height, settings.floor_height)
     floors = mg.build_floors(cells_ij, bay, occ, kept, origin[2], vs, levels,
-                             conf.plate_tolerance, conf.plate_stacking, conf.min_plate_dimension)
+                             settings.plate_tolerance, settings.plate_stacking, settings.min_plate_dimension)
 
     footprint = shapely.union_all(polygons)
     plates, meshes, floor_areas = [], [], []
@@ -180,7 +232,7 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
             outside = float((floor.outside_share[bays_in] * n_cols[bays_in]).sum()
                             / n_cols[bays_in].sum())
             for poly in mg.plate_polygons(cells_ij, in_plate, ~in_plate, vs, footprint,
-                                          min_dimension=conf.min_plate_dimension,
+                                          min_dimension=settings.min_plate_dimension,
                                           bay=bay, bay_shapes=bay_shapes):
                 world = shapely.affinity.translate(poly, origin[0], origin[1])
                 plates.append({
@@ -198,9 +250,8 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         floor_areas.append(area_this_floor)
     total = float(sum(floor_areas))
 
-    plates_path = out_path / "plates.json"
-    plates_path.write_text(json.dumps({"plates": plates, "floor_area_m2_per_floor": floor_areas,
-                                       "total_floor_area_m2": total}, indent=1), encoding="utf-8")
+    # The mesh first: plates.json, which clients read for the results, then
+    # appears only once the mesh beside it was written.
     mesh_path = out_path / "plates.obj"
     if meshes:
         import trimesh
@@ -210,17 +261,13 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         scene.export(str(mesh_path), file_type="obj")
     else:
         mesh_path.write_text("", encoding="utf-8")
-        warnings.warn("massing: no floor plates fit the envelope with these settings",
-                      UserWarning, stacklevel=2)
-
-    settings = {k: getattr(conf, k) for k in ("ground_floor_height", "floor_height",
-                                              "min_plate_dimension", "plate_tolerance",
-                                              "plate_stacking")}
-    upstream = getattr(chain.thr_manifest, "hash", "")
-    stage_hash = hashlib.sha256((json.dumps(settings, sort_keys=True) + upstream).encode()).hexdigest()[:8]
-    manifest = MassingManifest(hash=stage_hash, plates_path=str(plates_path),
-                               mesh_path=str(mesh_path), upstream_manifest=str(chain.thr_path))
-    (out_path / "manifest.json").write_text(schema_to_json(manifest), encoding="utf-8")
+        report_issue(
+            "no_plates_fit",
+            "massing: no floor plates fit the envelope with these settings",
+        )
+    plates_path = out_path / "plates.json"
+    plates_path.write_text(json.dumps({"plates": plates, "floor_area_m2_per_floor": floor_areas,
+                                       "total_floor_area_m2": total}, indent=1), encoding="utf-8")
 
     plate_volume = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) for q in plates)
     inside = sum(q["area_m2"] * (q["z_top"] - q["z_bottom"]) * (1.0 - q["outside_share"]) for q in plates)
@@ -231,19 +278,20 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         "total_floor_area_m2": total, "envelope_volume_m3": envelope,
         "envelope_share_in_plates": inside / envelope if envelope > 0 else None,
         "volume_outside_envelope_m3": plate_volume - inside,
-        "footprint_source": footprint_source, "settings": settings,
+        "footprint_source": footprint_source, "settings": settings.model_dump(),
         "timings": {"wall_seconds": float(time.perf_counter() - t0_wall),
                     "cpu_seconds": float(time.process_time() - t0_cpu)},
     })
-    # The report goes to the run folder in the standard <run>/massing layout,
-    # otherwise next to the plates; an old report is removed first.
-    report_root = out_path.parent if out_path.name == "massing" else out_path
-    (report_root / "run_report.md").unlink(missing_ok=True)
-    try:
-        generate_run_report(report_root, chain.pre_path.parent, chain.thr_path.parent,
-                            report_root / "exporting", conf, massing_dir=out_path)
-    except Exception as exc:
-        log.warning("Could not generate run report: %s", exc)
+    thr_run_id = chain.thr.manifest.run_id
+    write_run_report("massing", out_path, chain.pre.folder, chain.thr.folder, thr_run_id)
+
+    # Manifest last (see begin_stage at the start).
+    commit_manifest(out_path, MassingManifest(
+        run_id=new_run_id(), plates_path=stored_path(plates_path, out_path),
+        mesh_path=stored_path(mesh_path, out_path),
+        upstream_manifest=stored_path(chain.thr.manifest_path, out_path),
+        upstream_run_id=thr_run_id))
 
     return MassingResult(out_dir=out_path, plates_path=plates_path, mesh_path=mesh_path,
-                         floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates))
+                         floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates),
+                         issues=context.issues_of("massing"))

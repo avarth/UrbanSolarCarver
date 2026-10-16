@@ -78,25 +78,63 @@ def _add_error(msg):
     return msg
 
 
-# Values used for every family that is not wired.
-_DEFAULTS = {
-    "width": 10.0, "length": 10.0, "height": 3.0,
-    "g_value": 0.6,
-    "u_opaque": 0.6, "u_window": 1.6,
-    "ach_vent": 0.8, "ach_infiltration": 0.3, "heat_recovery": 0.0,
-    "mass_class": "medium",
-    "t_set_heating": 20.0, "t_set_cooling": 26.0,
-    "internal_gains_w_m2": 5.0,
-}
-_WWR_DEFAULTS = {"south": 0.35, "east": 0.15, "west": 0.15, "north": 0.0}
+def _archetype_defaults():
+    """The engine's archetype defaults module, or None while no USC component has loaded usc_gh.
+
+    This component has no session input. USC_Session loads usc_gh.py from the
+    carver root, and the root is taken from there.
+    """
+    import sys
+    from pathlib import Path
+    gh = sys.modules.get("usc_gh")
+    if gh is None:
+        return None
+    return gh.engine_module(Path(gh.__file__).resolve().parent.parent, "archetype_defaults")
+
+
+def _solve_again_once(engine_found):
+    """Schedule one more solve of this component after the current solution.
+
+    A saved file opened in a fresh Rhino session can solve this component before
+    USC_Session has loaded usc_gh.py; USC_Session solves in the same solution, so
+    one more solve afterwards finds the engine.  The re-solve is scheduled once
+    per component until the engine is found, so a canvas without a USC_Session
+    does not re-solve forever.
+    """
+    try:
+        import scriptcontext as sc
+        from Grasshopper.Kernel import GH_Document
+        component = ghenv.Component
+        key = "usc_resolve_scheduled_" + str(component.InstanceGuid)
+        if engine_found:
+            sc.sticky.pop(key, None)
+            return
+        doc = component.OnPingDocument()
+        if doc is None or sc.sticky.get(key):
+            return
+        sc.sticky[key] = True
+        doc.ScheduleSolution(1, GH_Document.GH_ScheduleDelegate(
+            lambda d: component.ExpireSolution(False)))
+    except Exception:
+        pass
+
+
 _FAMILIES = ("geometry", "fabric", "ventilation", "operation", "shading")
 
 archetype = None
 summary = ""
 
-data = dict(_DEFAULTS)
-wwr = dict(_WWR_DEFAULTS)
-for index, name in enumerate(_FAMILIES):
+engine_defaults = _archetype_defaults()
+_solve_again_once(engine_defaults is not None)
+if engine_defaults is None:
+    summary = _add_error("The archetype defaults come from the engine: solve USC_Session "
+                         "first, then this component again")
+    data, wwr = {}, {}
+else:
+    # Values used for every family that is not wired.
+    data = dict(engine_defaults.ARCHETYPE_DEFAULTS)
+    wwr = dict(engine_defaults.WINDOW_TO_WALL_DEFAULTS)
+for index, name in enumerate(() if summary else _FAMILIES):
     handle = globals().get(name)
     if handle is None:
         # Wired but empty means the upstream USC_Zone* component failed;

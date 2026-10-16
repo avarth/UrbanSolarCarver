@@ -102,15 +102,12 @@ else:
     t_start = time.perf_counter()
     gh = _usc_gh(config.session.root)
     out_dir = Path(config.out_dir)
-    pre_out = out_dir / "preprocessing"
     try:
         vol_path, srf_path = gh.write_input_geometry(max_volume, test_surfaces, out_dir / "incoming")
-        overrides = dict(config.overrides, max_volume_path=vol_path, test_surface_path=srf_path)
-        reply = gh.call_daemon(config.session, "preprocessing", {
-            "config": config.yaml_path,
-            "overrides": gh.override_list(overrides),
-            "out_dir": str(pre_out),
-        })
+        reply = gh.run_stages(config.session, config, ["preprocessing"], "preprocessing",
+                              {"max_volume_path": vol_path, "test_surface_path": srf_path})
+        gh.show_issues(ghenv.Component, reply)
+        pre_out = Path(reply["stage_folders"]["preprocessing"])
         pre_result = reply["manifest"]
         if not os.path.isfile(pre_result):
             raise RuntimeError("the daemon reported success but wrote no manifest at " + pre_result)

@@ -1,4 +1,4 @@
-﻿# UrbanSolarCarver: Benefit mode
+# UrbanSolarCarver: Benefit mode
 # Carves voxels based on passive solar heating benefit: sky-patch irradiance
 # of the hours when the outdoor temperature is below balance_temperature -
 # balance_offset.

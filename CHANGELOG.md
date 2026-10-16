@@ -15,6 +15,226 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (below). Configs that set `protect_share` or `threshold: protect_share`
   are rejected.
 
+### Fixed (stage chain)
+
+- **Exporting and massing could combine outputs of two different
+  preprocessing runs.** Re-running preprocessing in place (another EPW or
+  analysis period, same grid shape) left the old `mask.npy` beside the new
+  occupancy grid, and the only check was the grid shape. Every manifest
+  now has a random `run_id`, new on every run of its stage, and every
+  downstream manifest records `upstream_run_id`, the `run_id` of the
+  manifest it was built from. Thresholding, exporting and massing raise
+  `StageChainError` (a `ValueError`) naming the stage to re-run when the
+  upstream manifest is missing, unreadable or has another `run_id`. A
+  re-run with identical settings is refused too, which a hash of the
+  settings could not tell apart. Stage hashes are gone: `hash` and
+  `upstream_hash` are removed from the manifests, `PreprocessingResult.hash`
+  and `ThresholdingResult.hash` are now `run_id`, and
+  `ThresholdingResult.upstream` is now `upstream_run_id`. The CLI prints
+  `Run ID` instead of `Hash`.
+- **A run folder could not be moved.** Manifests stored absolute paths.
+  They now store paths relative to the manifest's own folder, with forward
+  slashes (`scores.npy`, `../preprocessing/manifest.json`; the absolute
+  path when no relative one exists), so a run folder can be copied or moved
+  and still loads. Absolute paths in a manifest still load. The new
+  `api_core/_stage_io.py` holds the stage folder layout, the start and end
+  of a stage (`begin_stage`, `commit_manifest`) and the reading of an
+  upstream (`load_upstream`); `PreprocessingManifest` now requires
+  `voxel_size`, `mode`, `voxel_grid_path` and `sample_point_count`, which
+  it always held.
+- **Migration.** Run folders written before this change have manifests
+  without `run_id`. Re-run the stages from preprocessing once for each
+  existing run folder; until then thresholding, exporting and massing
+  refuse them with a `StageChainError` that names the stage to re-run.
+- **A failed Warp voxelization switched to trimesh and was cached.** Any
+  exception from the Warp voxelizer (including CUDA out-of-memory) made
+  `voxelize_mesh` use trimesh's rasterizer, which classifies boundary
+  voxels differently, and the session cache (the daemon keeps one for its
+  lifetime) kept that grid for the geometry. The error now propagates;
+  trimesh is used only when Warp cannot run on the device at all.
+- **The grid size limit was checked after the grid was allocated.**
+  `voxelize_mesh` only logged above 500 million voxels and refused more
+  than 4096 per side; preprocessing raised at 500 million only after the
+  Warp voxelizer had allocated its 8 bytes per voxel. The new
+  `urbansolarcarver.grid_planning` module (numpy only) plans the grid from
+  the mesh bounds (`plan_voxel_grid`) and checks it
+  (`check_voxel_grid_budget`, limit `MAX_GRID_VOXELS`) before anything is
+  allocated; `voxelize_mesh` and the `--dry-run` estimate use it, and a
+  client can call it to validate a request without importing torch.
+- **Stale outputs survived repeated and failed runs.** Exporting wrote no
+  manifest and deleted nothing, so changing `final_mesh_format` left the
+  old `export.ply` beside the new file; thresholding wrote its manifest
+  before its diagnostics; massing kept its old manifest and wrote
+  `plates.json` before `plates.obj`; and exporting and massing each
+  rewrote `run_report.md` with only their own leaf section, so running
+  one dropped the other's. Every stage now deletes its manifest and the
+  outputs of its previous run first (`begin_stage`, only the file names
+  the stage writes) and writes its manifest last. Exporting writes an
+  `ExportingManifest` with `upstream_run_id`. The run report keeps
+  the Export and Massing sections whose manifests were built from the
+  same thresholding run and leaves out sections of an earlier one.
+- **Later stages took facts of the preprocessing run from the current
+  config.** Massing projected the footprint from the config's
+  `max_volume_path`, so a config naming another mesh changed the plates
+  without any warning when the voxel columns fell inside it (a 30 x 12 m
+  volume got 594 m² of ground-floor plates from a 36 x 18 m mesh); in
+  Grasshopper the massing config does not name the preprocessed geometry
+  at all. Preprocessing now saves the plan projection of the mesh it
+  voxelized as `footprint.json` (world xy, listed in the manifest as
+  `footprint_path`), and massing reads that file, never the input mesh, so
+  editing or replacing the mesh afterwards cannot change the plates. When
+  the projection fails or covers no area, preprocessing reports a
+  `footprint_unreadable` issue, saves an empty list, and massing uses the
+  voxel footprint with its existing warning. `load_occupancy` no longer
+  re-voxelizes the config's mesh when `voxel_grid.npy` is missing; it
+  raises `FileNotFoundError`. The run report's configuration table comes
+  from the preprocessing run's `config_snapshot.json` instead of the
+  config passed to exporting or massing; smoothing moved to the Export
+  section, read from exporting's diagnostics.
+- **Each stage reads only its own settings.** Preprocessing, thresholding,
+  exporting and massing keep their public signatures; inside, each receives
+  its settings model (`PreprocessingSettings`, `ThresholdingSettings`,
+  `ExportingSettings`, `MassingSettings`) and `RunOptions`, and the
+  carving and grid functions take the settings model in place of the whole
+  config (`ray_batch_size` is a keyword of the carvers; `finalize_mesh`
+  takes the `voxel_size` of the preprocessing run). Thresholding takes the
+  mode and voxel size from the preprocessing manifest, and a config whose
+  `mode` differs from the run's raises `StageChainError` (it was a plain
+  `ValueError`). Exporting no longer warns when the config's `voxel_size`
+  differs from the run's: it never reads it.
+- **A dumped config did not load back with the same meaning.** The
+  config validator wrote the mode default into `threshold`, so a dumped
+  config (`config_snapshot.json`, or one a client keeps) ignored a later
+  `carve_fraction` change and failed validation when switched to
+  time-based or tilted_plane. `threshold` now keeps what was written (None
+  = the mode default); `resolve_threshold` (and
+  `UserConfig.resolved_threshold()`) resolves it in one place, and the
+  thresholding manifest records the resolved strategy with the score
+  smoothing radius and slope limit the run applied
+  (`resolved_threshold`, `score_smoothing_m`, `max_slope_deg`). An
+  explicit `carve_fraction` that the strategy does not read (headtail, a
+  numeric cutoff, time-based, tilted_plane) now gives a warning instead
+  of being ignored silently.
+
+### Changed (stage contract)
+
+- **One sequencer.** `run_pipeline(config, out_dir, produce=("exporting",),
+  start_from="preprocessing", context=None)` runs `start_from` and every
+  later stage on the path to the stages named in `produce` (any of
+  `preprocessing`, `thresholding`, `exporting`, `massing`; producing
+  exporting and massing thresholds once). A stage before `start_from` is not
+  run: the next stage reads its output from `<out_dir>/<stage>`. The
+  function returns a `PipelineResult` with one attribute per stage (the
+  Result of a stage that ran in this call, None for the others) and
+  `issues`. `stage_folder(run_folder, stage)` is the one definition of the
+  folder layout, and `stages_to_rerun(previous_config, new_config, produce)`
+  lists the stages whose own settings differ between two configs (it
+  compares settings only, not input files).
+- **Errors.** Errors raised on purpose derive from `UrbanSolarCarverError`:
+  `ConfigError` (a `ValueError`; its `errors` list holds a
+  `ConfigFieldError(field, message)` per problem), `InputError` (a
+  `ValueError`; a mesh or EPW file that is missing or unusable, an empty
+  voxel grid, no sample points), `StageChainError` (a `ValueError`; a
+  missing, unreadable or stale upstream output, including a missing or
+  wrong-shaped `scores.npy`, `voxel_grid.npy` or `mask.npy` and a missing or
+  damaged `footprint.json`) and `RunCancelled`. Some
+  `FileNotFoundError`, `RuntimeError` and plain `ValueError` raised before
+  are now `InputError`, `StageChainError` or `ConfigError`, all `ValueError`
+  subclasses: a caller that caught `FileNotFoundError` or `RuntimeError` for
+  these cases catches `InputError` or `ValueError` instead.
+- **Issues, progress and cancel.** Conditions the engine used to report with
+  `warnings.warn` (settings the mode ignores, nothing carved, zero patch
+  weights, a footprint that could not be read, ...) are issues with a code:
+  `report_issue(code, message)` records an `Issue(stage, code, message)` on
+  the active `RunContext`. Every stage Result has `issues`, `PipelineResult`
+  has the issues of the whole call, and a direct call without a context
+  still emits the warning. A `RunContext` also carries an `on_progress`
+  callback (stage, done, total) and `cancel()`, which stops the run at the
+  next batch of rays or stage boundary; stages that finished keep their
+  output. `errors.py` and `run_context.py` import nothing outside the
+  standard library.
+- **`build_config(values, base_folder=None)`** validates typed values
+  (what a client such as Grasshopper holds) into a `UserConfig`, raising
+  `ConfigError` with a `ConfigFieldError` per problem. `load_config` reads
+  the YAML and calls it.
+- **Mode facts and archetype defaults live in the engine.** `ModeSpec` gains
+  `description` and `starting_values`; `MODES` follows Grasshopper's menu
+  order (time-based, irradiance, benefit, daylight, radiative_cooling,
+  tilted_plane); `MODE_ALIASES` and `canonical_mode_name(name)` hold the
+  accepted spellings. The starting values are what differs from the schema
+  defaults: the analysis period (benefit 15 Oct 07:00 to 15 Apr 19:00,
+  irradiance the full year, time-based 21 Dec 10:00 to 14:00),
+  `tilted_plane_angle_deg: 45` and `carve_fraction: 0.35` for
+  radiative_cooling. They fill a new config only; schema defaults and
+  validation do not change. `configs/config_<mode>.yaml` stay hand-written
+  examples for CLI users, a test checks that their values agree with the
+  starting values, and the UTF-8 byte order marks of three of them are gone.
+  The shoebox defaults moved from `carver_cli.py`, `USC_Archetype.py` and
+  `simulated_weights.py` to `archetype_defaults.py` (standard library only,
+  like `mode_registry.py`).
+- **Diagnostics are written after compute.** Each stage builds its summary
+  and ends with one call into `_diagnostics.py`, which writes
+  `diagnostic.json` and, with `diagnostic_plots`, the plots. `diagnostic.json` keys keep their names, with one exception:
+  thresholding's `upstream_hash` is now `upstream_run_id`. The `timings` in
+  `diagnostic.json` now cover compute only: drawing the plots and loading
+  the config and the upstream output are not counted. The preprocessing
+  step label `diagnostic_plots_done` now marks the end of compute. matplotlib
+  is no longer imported with `_diagnostics`; it loads when a plot is drawn.
+- **Daemon `run` command.** Request keys: `produce` (list of stages),
+  `run_folder`, optional `start_from`, `config` (a YAML path) and
+  `overrides` (`key=value` strings or a mapping). Without `config`, the
+  daemon builds the config in memory from the starting values of the mode
+  named in the overrides (`mode` is required) plus the overrides; no file is
+  written. The reply has `stage_folders` (stage to folder, for the stages
+  that ran in this call), `manifest` (of the last of them), `issues` (a list
+  of `{stage, code, message}`), and `export_path`, `plates_path` and
+  `mesh_path` for the stages that produced them. Every stage-command reply
+  carries `issues`, and an error reply adds `error_type` (the exception class
+  name) and, for a `ConfigError`, `config_errors` (`{field, message}`). The
+  older `preprocessing`, `thresholding`, `exporting`, `massing` and
+  `run_pipeline` commands remain and keep accepting any `from` and
+  `out_dir`; only `run` goes through the sequencer.
+- **CLI.** `usc run` takes `--produce` (repeatable, default `exporting`) and
+  `--start-from` (default `preprocessing`), locally or through `--daemon`.
+  Issues print after each command as `Issues:` with `stage: code: message`.
+  An `UrbanSolarCarverError` prints `Error: <message>` and exits with 1,
+  without a traceback. `--dry-run` uses `grid_planning.estimate_grid_memory`
+  (moved from `_reporting`), and `usc archetype` takes its defaults from
+  `archetype_defaults.py`.
+- **Grasshopper.** USC_Preprocess, USC_ThresholdStage, USC_Export,
+  USC_Massing and USC_RunPipeline send the daemon's `run` command and read
+  stage folders from the reply, and each engine issue appears as a warning
+  on the component (`<stage>: <message>`; `config: <message>` for a
+  configuration check). A stage component reads its upstream stage from
+  `<out_dir>/<stage>` of its Config, not from the path on its `pre_result`
+  or `thr_result` input (the input still has to be connected); when that
+  path is in another folder the component shows an error naming both
+  folders. USC_Config sends no YAML path when none is given, so the daemon
+  starts from the mode's starting values and Grasshopper no longer reads
+  `configs/`; without a YAML the stage components send
+  `<out_dir>/incoming/max_volume.ply` and `test_surfaces.ply` (written by
+  USC_Preprocess) as `max_volume_path` and `test_surface_path`. Grasshopper
+  takes mode spellings from the mode registry. USC_Mode and
+  USC_Archetype read the mode list, descriptions and archetype defaults from
+  the engine, which they find through the USC helpers that USC_Session
+  loads: when they solve before USC_Session (a saved file opened in a new
+  Rhino session), they show a message that says so and solve once more
+  after the current solution. The `.ghuser` files of USC_Config, USC_Mode, USC_Archetype,
+  USC_Preprocess, USC_ThresholdStage, USC_Export, USC_Massing and
+  USC_RunPipeline are rebuilt; run USC_SyncCanvas on existing canvases.
+  Component inputs and outputs are unchanged.
+- **Migration.** Each existing run folder needs one re-run from
+  preprocessing (old manifests lack `run_id`; see "Fixed (stage chain)").
+  A daemon that was started before this update has to be restarted
+  (USC_Session, or `usc daemon stop` and `usc daemon start`): an old daemon
+  answers the `run` command with "Unknown command: 'run'", and USC_Session's
+  helpers then say to restart it.
+  `run_pipeline` returns a `PipelineResult`: `result.export_path` is now
+  `result.exporting.export_path`, and the same goes for the other fields of
+  the exporting Result (`retention_pct`, `faces`, ...); the quick start and
+  the five tutorial notebooks are updated. `PreprocessingResult.hash` and
+  `ThresholdingResult.hash` are `run_id`.
+
 ### Changed (weighted modes; results change)
 
 - **carve_fraction counts what carve_above removes.** The cutoff was

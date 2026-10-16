@@ -8,7 +8,7 @@ The main entry points for running USC, in one call or stage by stage.
 
 | Module | Contents |
 |--------|----------|
-| [Pipeline](pipeline.md) | `run_pipeline()`, `preprocessing()`, `thresholding()`, `exporting()`, result dataclasses |
+| [Pipeline](pipeline.md) | `run_pipeline()` (`produce`, `start_from`, `context`), `PipelineResult`, `stages_to_rerun()`, `preprocessing()`, `thresholding()`, `exporting()`, `massing()`, result dataclasses, `RunContext` and issues, the error classes |
 
 ## Geometry & Ray Tracing
 
@@ -38,7 +38,7 @@ YAML loading, validation, and schema definitions.
 
 | Module | Contents |
 |--------|----------|
-| [Configuration](config.md) | `load_config()`, `parse_override_value()`, `UserConfig` (Pydantic model), `ThresholdSpec`, manifest schemas |
+| [Configuration](config.md) | `load_config()`, `build_config()`, `parse_override_value()`, `UserConfig` (Pydantic model), `ThresholdSpec`, manifest schemas, mode starting values |
 
 ## Infrastructure
 
@@ -47,5 +47,5 @@ Compute sessions, the Grasshopper daemon, and the CLI.
 | Module | Contents |
 |--------|----------|
 | [Session](session.md) | `CarverSession` (CUDA context and value cache), `session_cache` decorator |
-| [Daemon](daemon.md) | Persistent localhost server for Grasshopper requests, authkey authentication |
-| [CLI](cli.md) | `urbansolarcarver` / `usc` command: `run`, `preprocessing`, `thresholding`, `exporting`, `validate`, `schema`, `warmup`, `simulate-weights`, `archetype`, `daemon start/stop/status` |
+| [Daemon](daemon.md) | Persistent localhost server for Grasshopper requests, authkey authentication, the `run` command |
+| [CLI](cli.md) | `urbansolarcarver` / `usc` command: `run` (`--produce`, `--start-from`), `preprocessing`, `thresholding`, `exporting`, `validate`, `schema`, `warmup`, `simulate-weights`, `archetype`, `daemon start/stop/status` |

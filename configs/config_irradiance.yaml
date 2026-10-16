@@ -1,4 +1,4 @@
-﻿# UrbanSolarCarver: Irradiance mode
+# UrbanSolarCarver: Irradiance mode
 # Carves voxels based on cumulative solar irradiance (direct + diffuse)
 # reaching test surfaces via each sky patch. Uses Perez all-weather sky model.
 # Typical use: maximise total solar energy on facades/rooftops.

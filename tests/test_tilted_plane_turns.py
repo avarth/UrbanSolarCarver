@@ -34,6 +34,7 @@ def _carved_column_heights(panels, box_min_xy, box_max_xy, angle_deg=45.0):
     from urbansolarcarver.load_config import user_config
     from urbansolarcarver.grid import voxelize, sample_surface
     from urbansolarcarver.carving import carve_with_planes
+    from urbansolarcarver.stage_settings import PreprocessingSettings
 
     size = np.subtract(box_max_xy, box_min_xy)
     max_volume = trimesh.creation.box(extents=(size[0], size[1], 20.0))
@@ -43,9 +44,11 @@ def _carved_column_heights(panels, box_min_xy, box_max_xy, angle_deg=45.0):
         mode="tilted_plane", tilted_plane_angle_deg=angle_deg,
         voxel_size=1.0, grid_step=1.0, device="cpu",
     )
-    grid, origin, extent, resolution = voxelize(max_volume, cfg, device=torch.device("cpu"))
-    points, normals, *_ = sample_surface(trimesh.util.concatenate(panels), cfg)
-    carved, _, _ = carve_with_planes(grid, origin, extent, resolution, points, normals, cfg)
+    settings = PreprocessingSettings.from_config(cfg)
+    grid, origin, extent, resolution = voxelize(max_volume, settings, device=torch.device("cpu"))
+    points, normals, *_ = sample_surface(trimesh.util.concatenate(panels), settings)
+    carved, _, _ = carve_with_planes(grid, origin, extent, resolution, points, normals, settings,
+                                     ray_batch_size=cfg.ray_batch_size)
 
     occupied = grid.numpy().astype(bool)
     kept = carved.numpy().astype(bool)

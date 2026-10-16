@@ -68,6 +68,20 @@ def footprint_polygons(mesh, offset_xy) -> list:
     return [orient(p, 1.0) for p in parts if isinstance(p, Polygon) and p.area > 0.0]
 
 
+def footprint_to_dict(polygons) -> dict:
+    """*polygons* as plain data for JSON: ``{"polygons": [{"exterior": [[x, y], ...],
+    "holes": [[[x, y], ...], ...]}, ...]}``."""
+    return {"polygons": [{
+        "exterior": np.asarray(p.exterior.coords).tolist(),
+        "holes": [np.asarray(ring.coords).tolist() for ring in p.interiors],
+    } for p in polygons]}
+
+
+def footprint_from_dict(data) -> list:
+    """The shapely Polygons of data written by :func:`footprint_to_dict`."""
+    return [Polygon(entry["exterior"], entry["holes"]) for entry in data["polygons"]]
+
+
 def footprint_from_columns(columns, voxel_size) -> list:
     """Fallback outline: the union of the occupied columns' squares (local xy),
     simplified to three quarters of a voxel.

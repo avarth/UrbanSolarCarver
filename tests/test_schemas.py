@@ -73,12 +73,12 @@ class TestGridStepValidation:
 
 class TestResolutionCap:
     def test_resolution_exceeds_cap(self):
-        """voxelize_mesh should reject a per-axis resolution above 4096."""
+        """voxelize_mesh should reject a grid above the voxel budget."""
         import trimesh
         from urbansolarcarver.grid import voxelize_mesh
-        # 100m cube / 0.01m voxel = 10000 resolution → should fail
+        # 100m cube / 0.01m voxel = 10000^3 voxels → should fail
         big_cube = trimesh.creation.box(extents=(100, 100, 100))
-        with pytest.raises(ValueError, match="per-axis limit"):
+        with pytest.raises(ValueError, match="Increase voxel_size"):
             voxelize_mesh(big_cube, voxel_size=0.01)
 
 
@@ -181,10 +181,12 @@ class TestThresholdValidation:
 
     def test_none_resolves_to_mode_default(self):
         """Unset threshold resolves to carve_fraction for weighted modes,
-        picking up the carve_fraction key as its value."""
+        picking up the carve_fraction key as its value; the stored field
+        stays unset."""
         cfg = self._benefit_base(threshold=None, carve_fraction=0.6)
-        assert cfg.threshold.method == "carve_fraction"
-        assert cfg.threshold.value == 0.6
+        assert cfg.threshold is None
+        assert cfg.resolved_threshold().method == "carve_fraction"
+        assert cfg.resolved_threshold().value == 0.6
 
     def test_canonical_mapping_accepted(self):
         cfg = self._benefit_base(threshold={"method": "carve_fraction", "value": 0.4})
@@ -194,7 +196,8 @@ class TestThresholdValidation:
     def test_carve_fraction_shorthand_fills_value(self):
         cfg = self._benefit_base(threshold="carve_fraction", carve_fraction=0.3)
         assert cfg.threshold.method == "carve_fraction"
-        assert cfg.threshold.value == 0.3
+        assert cfg.threshold.value is None
+        assert cfg.resolved_threshold().value == 0.3
 
     def test_headtail_with_value_rejected(self):
         with pytest.raises(ValidationError):
@@ -223,8 +226,8 @@ class TestThresholdValidation:
 
     def test_violation_mode_default_is_strict_cutoff(self):
         cfg = self._timebased_base(threshold=None)
-        assert cfg.threshold.method == "cutoff"
-        assert cfg.threshold.value == 0.0
+        assert cfg.resolved_threshold().method == "cutoff"
+        assert cfg.resolved_threshold().value == 0.0
 
     def test_violation_mode_rejects_strategy(self):
         with pytest.raises(ValidationError):
@@ -247,6 +250,63 @@ class TestThresholdValidation:
         """'otsu' is not a valid threshold method and must be rejected."""
         with pytest.raises(ValidationError):
             self._benefit_base(threshold="otsu")
+
+
+class TestThresholdRoundTrip:
+    """A dumped config (config_snapshot.json, or one a client keeps) loads
+    back with the same meaning: defaults stay unset, so a later change of
+    carve_fraction or mode applies."""
+
+    _PERIOD = dict(epw_path="dummy.epw", start_month=1, start_day=1, start_hour=8,
+                   end_month=1, end_day=1, end_hour=16)
+
+    def _reload(self, cfg, **changes):
+        from urbansolarcarver.pydantic_schemas import UserConfig
+        import warnings
+        dumped = cfg.model_dump()
+        dumped.update(changes)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # dumps set every mode-specific field
+            return UserConfig(**dumped)
+
+    def test_a_dumped_config_follows_a_later_carve_fraction(self):
+        cfg = _make_config(mode="benefit", **self._PERIOD)
+        reloaded = self._reload(cfg, carve_fraction=0.2)
+        assert reloaded.resolved_threshold().value == 0.2
+
+    def test_a_dumped_weighted_config_switches_to_time_based(self):
+        cfg = _make_config(mode="benefit", **self._PERIOD)
+        reloaded = self._reload(cfg, mode="time-based")
+        assert reloaded.resolved_threshold().method == "cutoff"
+        assert reloaded.resolved_threshold().value == 0.0
+
+
+class TestUnusedCarveFraction:
+    """carve_fraction set explicitly where the threshold method or the mode
+    does not read it gives a warning."""
+
+    _PERIOD = TestThresholdRoundTrip._PERIOD
+
+    def test_headtail_warns(self):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="carve_fraction"):
+            _make_config(mode="benefit", threshold="headtail", carve_fraction=0.5, **self._PERIOD)
+
+    def test_numeric_cutoff_warns(self):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="carve_fraction"):
+            _make_config(mode="benefit", threshold=2.0, carve_fraction=0.5, **self._PERIOD)
+
+    def test_time_based_warns(self):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="carve_fraction"):
+            _make_config(mode="time-based", carve_fraction=0.5, **self._PERIOD)
+
+    def test_used_value_does_not_warn(self):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            _make_config(mode="benefit", carve_fraction=0.5, **self._PERIOD)
 
 
 class TestAnalysisPeriodMapping:
@@ -496,3 +556,53 @@ class TestLoadConfigOverridesAndPaths:
         assert Path(cfg.out_dir) == path.parent / "out"
         assert Path(cfg.max_volume_path) == path.parent / "v.ply"
         assert Path(cfg.epw_path) == path.parent / "w.epw"
+
+
+class TestBuildConfig:
+    def test_relative_paths_resolve_against_the_base_folder(self, tmp_path):
+        from urbansolarcarver.load_config import build_config
+        conf = build_config({"max_volume_path": "vol.ply", "test_surface_path": "srf.ply",
+                             "out_dir": "out", "mode": "daylight"}, base_folder=tmp_path)
+        assert conf.max_volume_path == str(tmp_path / "vol.ply")
+
+    def test_field_errors_are_structured(self):
+        from urbansolarcarver.load_config import build_config
+        from urbansolarcarver.errors import ConfigError
+        with pytest.raises(ConfigError) as caught:
+            build_config({"max_volume_path": "v", "test_surface_path": "s", "out_dir": "o",
+                          "mode": "daylight", "voxel_size": 0.0})
+        assert [e.field for e in caught.value.errors] == ["voxel_size"]
+
+    def test_whole_config_checks_have_no_field(self):
+        from urbansolarcarver.load_config import build_config
+        from urbansolarcarver.errors import ConfigError
+        with pytest.raises(ConfigError) as caught:
+            build_config({"max_volume_path": "v", "test_surface_path": "s", "out_dir": "o",
+                          "mode": "daylight", "voxel_size": 1.0, "grid_step": 2.0})
+        assert caught.value.errors[0].field is None and "grid_step" in caught.value.errors[0].message
+
+    def test_parse_overrides_reads_key_value_items_and_mappings(self):
+        from urbansolarcarver.load_config import parse_overrides
+        assert parse_overrides(["voxel_size=2.5", "mode = daylight"]) == {
+            "voxel_size": 2.5, "mode": "daylight"}
+        assert parse_overrides({"voxel_size": 2.5}) == {"voxel_size": 2.5}
+
+    def test_parse_overrides_expands_an_analysis_period_mapping(self):
+        from urbansolarcarver.load_config import parse_overrides
+        period = {"st_month": 12, "st_day": 21, "st_hour": 10,
+                  "end_month": 12, "end_day": 21, "end_hour": 14}
+        values = parse_overrides({"analysis_period": period})
+        assert "analysis_period" not in values
+        assert (values["start_month"], values["end_hour"]) == (12, 14)
+
+    @pytest.mark.parametrize("overrides", [
+        ["voxel_size"],
+        {"analysis_period": "not a mapping"},
+        ["analysis_period={\"st_month\": 1, \"st_minute\": 3}"],
+    ])
+    def test_parse_overrides_reports_a_malformed_item_as_a_config_error(self, overrides):
+        from urbansolarcarver.errors import ConfigError
+        from urbansolarcarver.load_config import parse_overrides
+        with pytest.raises(ConfigError) as caught:
+            parse_overrides(overrides)
+        assert caught.value.errors[0].field is None

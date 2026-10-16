@@ -26,14 +26,14 @@ Two meshing modes are supported:
 
 Pipeline entry points
 ---------------------
-voxelize(envelope_mesh, config, device=None)
-    voxelize_mesh with settings from the config; raises on an empty grid.
+voxelize(envelope_mesh, settings, device=None)
+    voxelize_mesh with the preprocessing settings; raises on an empty grid.
 
-sample_surface(insolation_mesh, config)
-    discretize_surface_with_normals with settings from the config; raises
+sample_surface(insolation_mesh, settings)
+    discretize_surface_with_normals with the preprocessing settings; raises
     when no sample points are produced.
 
-finalize_mesh(carved_grid, grid_origin, config)
+finalize_mesh(carved_grid, grid_origin, settings, voxel_size)
     Clean the carved grid and mesh it with the cubic or smoothed path.
 
 Public API
@@ -135,17 +135,20 @@ from shapely import contains_xy
 import trimesh
 from trimesh import repair
 from urbansolarcarver.session import session_cache
+from urbansolarcarver.grid_planning import check_voxel_grid_budget, plan_voxel_grid
 
-from .load_config import user_config
+from .stage_settings import ExportingSettings, PreprocessingSettings
+from .errors import InputError
+from .run_context import report_issue
 
-def voxelize(envelope_mesh, config: user_config, device: torch.device | None = None):
+def voxelize(envelope_mesh, settings: PreprocessingSettings, device: torch.device | None = None):
     """
     Rasterize the envelope into a padded cubic voxel grid.
 
     Parameters
     ----------
     envelope_mesh : trimesh.Trimesh
-    config : user_config
+    settings : PreprocessingSettings
         Supplies ``voxel_size`` and ``margin_frac``.
     device : torch.device or None
         Device for the returned grid; None picks CUDA when available.
@@ -163,22 +166,22 @@ def voxelize(envelope_mesh, config: user_config, device: torch.device | None = N
 
     Raises
     ------
-    RuntimeError
+    InputError
         If voxelization returns an empty grid.
     """
     voxel_grid, grid_origin, grid_extent, grid_resolution = voxelize_mesh(
         envelope_mesh,
-        voxel_size=config.voxel_size,
-        margin_frac=config.margin_frac,
+        voxel_size=settings.voxel_size,
+        margin_frac=settings.margin_frac,
         device=device                    
     )
 
     if voxel_grid.numel() == 0 or voxel_grid.sum() == 0:
-        raise RuntimeError("Voxel grid is empty after voxelization")
+        raise InputError("Voxel grid is empty after voxelization")
     
     return voxel_grid, grid_origin, grid_extent, grid_resolution
 
-def sample_surface(insolation_mesh, config: user_config):
+def sample_surface(insolation_mesh, settings: PreprocessingSettings):
     """
     Sample quasi-planar patches to produce point/normal sets for carving.
 
@@ -186,7 +189,7 @@ def sample_surface(insolation_mesh, config: user_config):
     ----------
     insolation_mesh : trimesh.Trimesh
         Test surfaces; each connected component should be one flat panel.
-    config : user_config
+    settings : PreprocessingSettings
         Supplies ``grid_step`` (sample spacing) and ``edge_taper``.
 
     Returns
@@ -197,24 +200,24 @@ def sample_surface(insolation_mesh, config: user_config):
         The analysis mesh whose face centroids are the sample points.
     sample_weights : np.ndarray (N,)
         Edge-taper design weights in [0, 1] (all ones when
-        ``config.edge_taper`` is 0).
+        ``settings.edge_taper`` is 0).
     taper_stats : list of dict
         Per-component taper statistics (empty when edge_taper is 0).
 
     Raises
     ------
-    RuntimeError
+    InputError
         If no points are sampled from the insolation surface.
     """
     sample_points, sample_normals, analysis_mesh, sample_weights, taper_stats = (
         discretize_surface_with_normals(
-            insolation_mesh, config.grid_step, edge_taper=config.edge_taper
+            insolation_mesh, settings.grid_step, edge_taper=settings.edge_taper
         )
     )
 
     if sample_points.size == 0:
         n_components = len(insolation_mesh.split(only_watertight=False))
-        raise RuntimeError(
+        raise InputError(
             "No points sampled from test surfaces (insolation mesh). "
             "The mesh has {:d} connected component(s), but none produced sample points. "
             "Most likely cause: test_surfaces is a joined polysurface (e.g. an extruded block "
@@ -222,11 +225,11 @@ def sample_surface(insolation_mesh, config: user_config):
             "one non-planar component and rejected. "
             "Fix: explode your polysurfaces into individual flat panels in Grasshopper before "
             "connecting to USC_Preprocess. Also check that grid_step ({:g} m) is smaller than "
-            "your smallest surface.".format(n_components, config.grid_step)
+            "your smallest surface.".format(n_components, settings.grid_step)
         )
     return sample_points, sample_normals, analysis_mesh, sample_weights, taper_stats
 
-def finalize_mesh(carved_grid, grid_origin, config: user_config):
+def finalize_mesh(carved_grid, grid_origin, settings: ExportingSettings, voxel_size: float):
     """
     Convert carved voxels to a mesh and clean results.
 
@@ -239,7 +242,7 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         `prune_voxels` (small-component prune),
         SDF presmooth + marching cubes, vertex weld, then `cleanup_mesh`
         (light mode when the welded mesh is watertight),
-        then `polish_mesh_taubin` with ``config.smooth_iters`` (0 to 6).
+        then `polish_mesh_taubin` with ``settings.smooth_iters`` (0 to 6).
 
     Parameters
     ----------
@@ -247,9 +250,12 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         Binary occupancy after carving.
     grid_origin : np.ndarray(3,)
         World-space min corner for index (0,0,0).
-    config : user_config
-        Supplies ``apply_smoothing``, ``min_voxels``, ``voxel_size``,
-        ``min_face_count`` and ``smooth_iters``.
+    settings : ExportingSettings
+        Supplies ``apply_smoothing``, ``min_voxels``, ``min_face_count`` and
+        ``smooth_iters``.
+    voxel_size : float
+        Edge length of a voxel in meters; it belongs to the preprocessing run
+        that built the grid, so it is not part of the exporting settings.
 
     Returns
     -------
@@ -260,12 +266,12 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
     final_mesh : trimesh.Trimesh
         Cleaned mesh, Taubin-polished on the smoothed path when smooth_iters > 0.
     """
-    use_smooth = bool(config.apply_smoothing)
+    use_smooth = bool(settings.apply_smoothing)
 
     if use_smooth:
         # Smooth path: prune → SDF smooth → marching cubes → cleanup → Taubin
-        cleaned_voxels = prune_voxels(carved_grid, config.min_voxels)
-        raw_mesh = mesh_from_voxels_smoothed(cleaned_voxels, grid_origin, config.voxel_size)
+        cleaned_voxels = prune_voxels(carved_grid, settings.min_voxels)
+        raw_mesh = mesh_from_voxels_smoothed(cleaned_voxels, grid_origin, voxel_size)
         initial_mesh = raw_mesh.copy()
         # Marching cubes on the padded SDF yields a watertight, consistently
         # wound mesh; the expensive full repair (fill_holes / fix_winding /
@@ -275,15 +281,15 @@ def finalize_mesh(carved_grid, grid_origin, config: user_config):
         # dropping those before welding would open pinholes.
         raw_mesh.merge_vertices()
         light = bool(raw_mesh.is_watertight)
-        filtered_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=light)
-        iters = int(config.smooth_iters)  # 0-6, validated by the config schema
+        filtered_mesh = cleanup_mesh(raw_mesh, settings.min_face_count, light=light)
+        iters = int(settings.smooth_iters)  # 0-6, validated by the config schema
         final_mesh = polish_mesh_taubin(filtered_mesh, iters=iters)
     else:
         # Cubic path: prune + neighbour-count filter, cubic meshing, then cleanup
-        cleaned_voxels = prune_voxels_morph(carved_grid, config.min_voxels)
-        raw_mesh = mesh_from_voxels(cleaned_voxels, grid_origin, config.voxel_size)
+        cleaned_voxels = prune_voxels_morph(carved_grid, settings.min_voxels)
+        raw_mesh = mesh_from_voxels(cleaned_voxels, grid_origin, voxel_size)
         initial_mesh = raw_mesh.copy()
-        final_mesh = cleanup_mesh(raw_mesh, config.min_face_count, light=True)
+        final_mesh = cleanup_mesh(raw_mesh, settings.min_face_count, light=True)
 
     return cleaned_voxels, initial_mesh, final_mesh
 
@@ -814,14 +820,13 @@ def discretize_surface_with_normals(
                 "near_zero_fraction": round(float((wts < 0.1).mean()), 4),
             })
             if max_w < 0.999:
-                import warnings
-                warnings.warn(
+                report_issue(
+                    "edge_taper_excluded_component",
                     f"edge_taper={edge_taper:g} m: test-surface component "
                     f"{component_index} never reaches full weight "
                     f"(max {max_w:.2f}); it is narrower than ~2x edge_taper "
                     f"and is partially or wholly excluded from the protected "
                     f"program.",
-                    stacklevel=2,
                 )
 
         # 3) Orient normals to agree with the component's area-weighted
@@ -842,13 +847,12 @@ def discretize_surface_with_normals(
     problems = [f"{len(idx)} {why} (components {idx[:10]}{'...' if len(idx) > 10 else ''})"
                 for why, idx in skipped.items() if idx]
     if problems:
-        import warnings
-        warnings.warn(
+        report_issue(
+            "test_surface_components_skipped",
             f"Test surface: {', '.join(problems)} of {len(submeshes)} components "
             f"were skipped and are not protected. Each panel must be a single "
             f"flat face (coplanarity tolerance {coplanarity_tol_deg:g} deg); "
             f"explode polysurfaces into planar faces.",
-            stacklevel=2,
         )
 
     if not all_points:
@@ -923,16 +927,19 @@ def voxelize_mesh(
     Raises
     ------
     ValueError
-        If voxel_size <= 0, margin_frac < 0, or D exceeds 4096.
+        If voxel_size <= 0, margin_frac < 0, or the grid would have more
+        than ``grid_planning.MAX_GRID_VOXELS`` voxels (checked before
+        anything is allocated).
     RuntimeError
-        If the trimesh fallback voxelization fails.
+        If the Warp voxelizer fails (for example out of memory), or the
+        trimesh voxelization fails.
 
     Notes
     -----
     - Uses the Warp parity voxelizer (``raytracer.voxelize_solid_warp``,
-      on CUDA or the Warp CPU device); if it is unavailable or fails, falls
-      back to trimesh voxelization plus fill.  Sealed interior cavities are
-      then filled with scipy's binary_fill_holes.
+      on CUDA or the Warp CPU device); only when Warp cannot run on
+      *device* does it use trimesh voxelization plus fill.  Sealed interior
+      cavities are then filled with scipy's binary_fill_holes.
     - The grid is axis-aligned, cubic, and centred on the mesh bounding box.
     - Results are cached per session (see `_voxelize_cache_key`).
     """
@@ -940,53 +947,25 @@ def voxelize_mesh(
     if device is None:
         device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
-    if voxel_size <= 0 or margin_frac < 0:
-        raise ValueError("voxelize_mesh: invalid voxel_size or margin_frac")
+    # Size the grid and check it against the budget before anything is
+    # allocated (the Warp voxelizer alone needs 8 bytes per voxel).
+    plan = plan_voxel_grid(mesh.bounds, voxel_size, margin_frac)
+    check_voxel_grid_budget(plan)
+    resolution, grid_extent, origin = plan.resolution, plan.extent, plan.origin
 
-    bmin, bmax = mesh.bounds
-    bbox = bmax - bmin
-    max_dim = float(np.max(bbox))
-    margin = max_dim * margin_frac
-    side = max_dim + 2*margin
-    resolution = int(np.ceil(side / voxel_size))
-    _MAX_RES = 4096  # per-axis cap; the 500M-voxel check below only logs a warning
-    if resolution > _MAX_RES:
-        raise ValueError(
-            f"Grid resolution {resolution} exceeds per-axis limit {_MAX_RES} "
-            f"(domain {side:.1f} m / voxel {voxel_size:g} m). Increase voxel_size."
-        )
-    total_voxels = resolution ** 3
-    if total_voxels > 500_000_000:
-        mem_est_gb = total_voxels * 5 / (1024**3)
-        _log.warning(
-            "Large grid: %d³ = %s voxels (~%.1f GB). "
-            "Consider increasing voxel_size for faster iteration.",
-            resolution, f"{total_voxels:,}", mem_est_gb,
-        )
-    grid_extent  = resolution * voxel_size
-    center = (bmin + bmax) / 2.0
-    origin = center - grid_extent/2.0
-
-    # --- Rasterize: Warp parity voxelizer first (CUDA or Warp CPU), with
-    # the trimesh rasterize-and-fill path as fallback.  The Warp kernel
-    # casts one ray per grid column along each axis and marks a voxel
-    # inside when at least 2 of the 3 parities agree.  It is much faster
-    # than trimesh's CPU rasterizer and does not need the fill fallbacks
-    # used below.
-    grid_np = None
-    try:
-        from .raytracer import voxelize_solid_warp
-        grid_np = voxelize_solid_warp(
-            mesh.vertices, mesh.faces, origin, voxel_size, resolution, device
-        )
-    except Exception as exc:
-        import warnings
-        warnings.warn(
-            f"Warp voxelization failed ({type(exc).__name__}: {exc}); falling back to "
-            f"trimesh's rasterizer, which can classify boundary voxels differently.",
-            stacklevel=2,
-        )
-        grid_np = None
+    # --- Rasterize: Warp parity voxelizer (CUDA or Warp CPU), or the
+    # trimesh rasterize-and-fill path when Warp cannot run on *device*.
+    # The Warp kernel casts one ray per grid column along each axis and
+    # marks a voxel inside when at least 2 of the 3 parities agree.  It is
+    # much faster than trimesh's CPU rasterizer and does not need the fill
+    # fallbacks used below.  A Warp run that fails (out of memory, a driver
+    # error) raises instead of switching to trimesh: trimesh classifies
+    # boundary voxels differently, and the session cache would keep that
+    # other grid for this geometry.
+    from .raytracer import voxelize_solid_warp
+    grid_np = voxelize_solid_warp(
+        mesh.vertices, mesh.faces, origin, voxel_size, resolution, device
+    )
 
     if grid_np is None:
         # Voxelize with trimesh.  The default 'subdivide' method produces
@@ -1670,12 +1649,11 @@ def cleanup_mesh(
     if not large and parts:
         # Every part is below min_face_count: keep the largest one rather
         # than everything (which would ignore the setting) or nothing.
-        import warnings
         largest = max(parts, key=lambda p: len(p.faces))
-        warnings.warn(
+        report_issue(
+            "mesh_cleanup_kept_largest_part",
             f"cleanup_mesh: no mesh part has min_face_count={min_face_count} faces; "
             f"keeping only the largest ({len(largest.faces)} faces) of {len(parts)}.",
-            stacklevel=2,
         )
         return largest
     return trimesh.util.concatenate(large) if large else mesh

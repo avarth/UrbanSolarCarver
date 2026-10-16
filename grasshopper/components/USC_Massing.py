@@ -111,17 +111,16 @@ elif thr_result is None:
 else:
     t_start = time.perf_counter()
     gh = _usc_gh(config.session.root)
-    m_out = Path(config.out_dir) / "massing"
     # Massing settings are merged here, not in Config, so changing them
     # re-runs only Massing.
-    overrides = dict(config.overrides, **gh.parse_overrides(massing_overrides))
     try:
-        reply = gh.call_daemon(config.session, "massing", {
-            "from": str(thr_result),
-            "config": config.yaml_path,
-            "overrides": gh.override_list(overrides),
-            "out_dir": str(m_out),
-        })
+        mismatch = gh.stage_folder_mismatch(config, thr_result, "thresholding")
+        if mismatch:
+            raise ValueError(mismatch)
+        reply = gh.run_stages(config.session, config, ["massing"], "massing",
+                              gh.parse_overrides(massing_overrides))
+        gh.show_issues(ghenv.Component, reply)
+        m_out = Path(reply["stage_folders"]["massing"])
         plates_path = reply["plates_path"]
         for plate in gh.read_plates(plates_path):
             brep = _plate_brep(plate)

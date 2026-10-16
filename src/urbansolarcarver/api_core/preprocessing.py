@@ -1,22 +1,38 @@
 from __future__ import annotations
-import json, time, hashlib
+import json, logging, time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple, Union
 import numpy as np
 from ..load_config import user_config
-from ._util import _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, device_summary, dump_config_snapshot
+from ._util import _resolve_cfg, dump_config_snapshot, ensure_diag, resolve_device, device_summary
+from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
 from ._diagnostics import (
-    save_sky_patch_weights, save_sky_patch_comparison, save_histogram,
-    score_statistics, warn_score_anomalies,
+    PreprocessingPlotInputs, score_statistics, warn_score_anomalies,
+    write_preprocessing_diagnostics,
 )
-from ..pydantic_schemas import PreprocessingManifest, schema_to_json
+from .. import floor_plates
+from ..pydantic_schemas import PreprocessingManifest
+from ..errors import InputError
+from ..run_context import Issue, RunContext, report_issue, stage_context
+from ..stage_settings import PreprocessingSettings, RunOptions
 from ..carving import (
     carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes,
     load_meshes, sample_period, validate_inputs,
 )
 from ..grid import voxelize, sample_surface
 from ..mode_registry import MODES, MODES_NEEDING_PERIOD
+
+log = logging.getLogger(__name__)
+
+# Everything preprocessing writes into its folder, besides manifest.json.
+_PREPROCESSING_OUTPUTS = (
+    "scores.npy", "voxel_grid.npy", "patch_weights.npy", "test_points.npy",
+    "test_normals.npy", "analysis_mesh.json", "footprint.json",
+    "diagnostics/diagnostic.json", "diagnostics/config_snapshot.json",
+    "diagnostics/score_histogram.png", "diagnostics/sky_patch_weights.png",
+    "diagnostics/sky_patch_weights_intensity.png", "diagnostics/sky_patch_comparison.png",
+)
 
 @dataclass(frozen=True)
 class PreprocessingResult:
@@ -33,8 +49,9 @@ class PreprocessingResult:
     volume_path: Path
     volume_shape: Tuple[int, int, int]
     dtype: str
-    hash: str
+    run_id: str
     device_info: str = ""
+    issues: tuple[Issue, ...] = ()
     @property
     def manifest_path(self) -> Path:
        return self.out_dir / "manifest.json"
@@ -42,7 +59,7 @@ class PreprocessingResult:
         return str(self.manifest_path)
 
 def _check_radiative_cooling_surface(norms: np.ndarray) -> None:
-    """Raise ValueError unless the test surfaces face mostly upward.
+    """Raise InputError unless the test surfaces face mostly upward.
 
     The radiative_cooling view-factor weighting (cos θ / π) is only valid for
     surfaces facing the sky, so reject test surfaces whose mean normal is
@@ -52,7 +69,7 @@ def _check_radiative_cooling_surface(norms: np.ndarray) -> None:
     mean_normal /= (np.linalg.norm(mean_normal) + 1e-12)
     z_component = float(mean_normal[2])
     if z_component < 0.7:  # cos(45.6°) = 0.7
-        raise ValueError(
+        raise InputError(
             f"radiative_cooling mode requires a horizontal, upward-facing test surface "
             f"(mean normal Z-component = {z_component:.2f}, expected > 0.7). "
             f"This mode's view-factor weighting (cos θ / π) is only valid for "
@@ -60,9 +77,30 @@ def _check_radiative_cooling_surface(norms: np.ndarray) -> None:
         )
 
 
-def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf,
+def _max_volume_footprint(max_volume_mesh) -> list:
+    """The plan projection of the max volume (world xy), for massing.
+
+    Returns an empty list, and reports ``footprint_unreadable``, when the
+    projection fails or covers no area; massing then uses the voxel footprint.
+    """
+    try:
+        polygons = floor_plates.footprint_polygons(max_volume_mesh, (0.0, 0.0))
+    except Exception as exc:  # a broken mesh must not fail the scoring run
+        log.warning("preprocessing: could not project the maximum volume: %s", exc)
+        polygons = []
+    if not polygons:
+        report_issue(
+            "footprint_unreadable",
+            "preprocessing: the maximum volume's footprint could not be computed; "
+            "massing will use the voxel footprint",
+        )
+    return polygons
+
+
+def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms,
+                        settings: PreprocessingSettings, options: RunOptions,
                         point_weights=None):
-    """Run the carver for ``conf.mode`` and return the per-voxel scores.
+    """Run the carver for ``settings.mode`` and return the per-voxel scores.
 
     Parameters
     ----------
@@ -77,15 +115,15 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
     patch_weights : np.ndarray | torch.Tensor | None
         Per-sky-patch weights (weighted modes only).
     """
-    mode = conf.mode
+    mode = settings.mode
     spec = MODES.get(mode)
     if spec is None:
         raise ValueError(
             f"Unknown mode '{mode}': not registered in mode_registry.MODES"
         )
     if mode in MODES_NEEDING_PERIOD:
-        steps = conf.sun_steps_per_hour if mode == "time-based" else 1
-        datetimes, hoys = sample_period(conf, steps_per_hour=steps)
+        steps = settings.sun_steps_per_hour if mode == "time-based" else 1
+        datetimes, hoys = sample_period(settings, steps_per_hour=steps)
     else:
         datetimes, hoys = [], []
 
@@ -95,19 +133,19 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
     if spec.score_kind == "violation_count":
         if mode == "time-based":
             _carved, _ro, _rd, counts = carve_with_sun_rays(
-                voxel_grid, origin, extent, resolution, pts, norms, conf,
-                datetimes, return_counts=True,
+                voxel_grid, origin, extent, resolution, pts, norms, settings,
+                datetimes, return_counts=True, ray_batch_size=options.ray_batch_size,
             )
             # Each count is one (sample point, sun position) ray the voxel
             # blocks. A sample point stands for ~grid_step² of protected
             # surface and a sun position for 1/sun_steps_per_hour h, so the
             # score is shaded area x duration (m²·h): a numeric threshold
             # then means the same at any sampling density.
-            counts = counts * (float(conf.grid_step) ** 2 / float(conf.sun_steps_per_hour))
+            counts = counts * (float(settings.grid_step) ** 2 / float(settings.sun_steps_per_hour))
         elif mode == "tilted_plane":
             _carved, _ro, _rd, counts = carve_with_planes(
-                voxel_grid, origin, extent, resolution, pts, norms, conf,
-                return_counts=True,
+                voxel_grid, origin, extent, resolution, pts, norms, settings,
+                return_counts=True, ray_batch_size=options.ray_batch_size,
             )
         else:
             raise NotImplementedError(
@@ -118,8 +156,8 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf
 
     # weighted_sum: all sky-patch modes share one carver.
     carve_out = carve_with_sky_patch_rays(
-        voxel_grid, origin, extent, resolution, pts, norms, conf, hoys,
-        point_weights=point_weights,
+        voxel_grid, origin, extent, resolution, pts, norms, settings, hoys,
+        point_weights=point_weights, ray_batch_size=options.ray_batch_size,
     )
     return carve_out.raw_voxel_scores, spec.score_kind, carve_out.patch_weights
 
@@ -175,14 +213,14 @@ def preprocessing(
 
     Raises
     ------
-    FileNotFoundError
-        If the mesh or required EPW file is missing.
-    ValueError
-        If the grid is too large (more than 4096 voxels per side or
-        500,000,000 in total) or, in radiative_cooling mode, the test
-        surfaces do not face up.
-    RuntimeError
-        If the voxel grid is empty or no test-surface points are sampled.
+    InputError
+        If the mesh or required EPW file is missing, the voxel grid is empty,
+        no test-surface points are sampled, or, in radiative_cooling mode,
+        the test surfaces do not face up.
+    ConfigError
+        If the grid is too large (more than
+        ``grid_planning.MAX_GRID_VOXELS``, 500,000,000, checked before it is
+        allocated).
 
     Persisted artifacts
     -------------------
@@ -192,19 +230,44 @@ def preprocessing(
     ``voxel_grid.npy``
         Occupancy grid (uint8, 1 = inside the max volume) so downstream
         stages can skip re-voxelization.
+    ``footprint.json``
+        The max volume's plan projection in world xy (``{"polygons": [{"exterior":
+        [[x, y], ...], "holes": [...]}, ...]}``), which massing reads instead of
+        the input mesh.  An empty list when the projection failed; massing then
+        uses the voxel footprint.
     ``test_points.npy``, ``test_normals.npy``, ``analysis_mesh.json``
         Sample points (world coordinates), their normals, and the analysis
         mesh, for diagnostics and Grasshopper display.
     ``patch_weights.npy``
         Per-sky-patch weights (sky-patch modes only).
     ``manifest.json``
-        Machine-readable manifest (``PreprocessingManifest``) recording grid
-        shape, world origin, voxel size, mode, score kind, and file paths.
-        Written last, so a failed run leaves no manifest.
+        Machine-readable manifest (``PreprocessingManifest``) recording a
+        random ``run_id`` (new on every run), grid shape, world origin, voxel
+        size, mode, score kind, and file paths relative to the manifest's
+        folder.  Written last, so a failed run leaves no manifest.
     ``diagnostics/``
         ``diagnostic.json`` (summary statistics and wall/CPU timings),
         ``config_snapshot.json``, and, with ``cfg.diagnostic_plots``, the
         score histogram and sky-patch weight plots.
+    """
+    with stage_context("preprocessing") as context:
+        conf = _resolve_cfg(cfg)
+        settings = PreprocessingSettings.from_config(conf)
+        options = RunOptions.from_config(conf)
+        validate_inputs(settings)  # fail fast on missing mesh/EPW files
+        # A run that fails midway must not leave the previous manifest pointing
+        # at half-overwritten arrays: the manifest is written last.
+        out_path = begin_stage(out_dir, _PREPROCESSING_OUTPUTS)
+        # The snapshot holds the whole config, which the stage itself does not read.
+        dump_config_snapshot(conf, ensure_diag(out_path))
+        return _run_preprocessing(settings, options, out_path, context)
+
+
+def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out_path: Path,
+                       context: RunContext) -> PreprocessingResult:
+    """The computation of :func:`preprocessing`, from its own settings only.
+
+    *out_path* is the stage folder, already cleared by :func:`begin_stage`.
     """
     _t0_wall = time.perf_counter()
     _t0_cpu = time.process_time()
@@ -212,21 +275,11 @@ def preprocessing(
     def _mark(label):
         _step_times[label] = time.perf_counter() - _t0_wall
 
-    conf = _resolve_cfg(cfg)
-    validate_inputs(conf)  # fail fast on missing mesh/EPW files
-    out_path = _ensure_out_dir(out_dir, "preprocessing")
-    # A run that fails midway must not leave the previous manifest pointing
-    # at half-overwritten arrays: the manifest is written last.
-    (out_path / "manifest.json").unlink(missing_ok=True)
-
-    full_cfg = conf.model_dump()
-    stage_hash = hashlib.sha256(json.dumps(full_cfg, sort_keys=True).encode()).hexdigest()[:8]
-
-    resolved_device = resolve_device(conf.device)
+    resolved_device = resolve_device(options.device)
     device_info = device_summary(resolved_device)
     _mark("config_and_device")
 
-    mesh_env, mesh_insol = load_meshes(conf)
+    mesh_env, mesh_insol = load_meshes(settings)
     # Work in a local frame anchored at the max volume's min corner.  Rays,
     # voxelization and sampling run in float32; georeferenced coordinates
     # (UTM northings ~4.5e6 m) leave float32 a resolution of ~0.5 m.  Every
@@ -236,30 +289,27 @@ def preprocessing(
     # that lie exactly on panel edges, so the same scene placed elsewhere
     # would sample (and carve) slightly differently.
     frame = np.asarray(mesh_env.bounds[0], dtype=np.float64)
+    footprint = _max_volume_footprint(mesh_env)   # world xy, before the shift
     mesh_env = mesh_env.copy()
     mesh_env.vertices = np.round(mesh_env.vertices - frame, 6)
     mesh_insol = mesh_insol.copy()
     mesh_insol.vertices = np.round(mesh_insol.vertices - frame, 6)
     _mark("load_meshes")
 
-    voxel_grid, origin, extent, resolution = voxelize(mesh_env, conf, device=resolved_device)
+    # voxelize checks the grid size against grid_planning.MAX_GRID_VOXELS
+    # before allocating anything.
+    voxel_grid, origin, extent, resolution = voxelize(mesh_env, settings, device=resolved_device)
     _mark("voxelize")
-    total_voxels = int(np.prod(voxel_grid.shape))
-    if total_voxels > 500_000_000:
-        raise ValueError(
-            f"Voxel grid has {total_voxels:,} voxels, too many to score in memory. "
-            f"Increase voxel_size (currently {conf.voxel_size}m) or reduce geometry extent."
-        )
-    pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, conf)
+    pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, settings)
     _mark("sample_surface")
     if pts.shape[0] == 0:
-        raise ValueError(
+        raise InputError(
             "No sample points were generated from the test surface. "
             "Check that test_surface_path contains valid geometry and that "
             "grid_step is not larger than the surface extent."
         )
 
-    mode = conf.mode
+    mode = settings.mode
     if mode == "radiative_cooling":
         _check_radiative_cooling_surface(norms)
 
@@ -267,20 +317,19 @@ def preprocessing(
     # violation-count modes count rays without weights, so there it is
     # ignored with a warning.
     point_weights = None
-    if conf.edge_taper > 0.0:
+    if settings.edge_taper > 0.0:
         if MODES[mode].score_kind == "violation_count":
-            import warnings
-            warnings.warn(
-                f"edge_taper={conf.edge_taper:g} m is ignored by mode "
+            report_issue(
+                "edge_taper_ignored",
+                f"edge_taper={settings.edge_taper:g} m is ignored by mode "
                 f"'{mode}': violation-count carving is binary per ray and "
                 f"has no per-point weighting.",
-                stacklevel=2,
             )
         else:
             point_weights = sample_weights
 
     raw_scores, scores_kind, patch_weights = _compute_raw_scores(
-        voxel_grid, origin, extent, resolution, pts, norms, conf,
+        voxel_grid, origin, extent, resolution, pts, norms, settings, options,
         point_weights=point_weights,
     )
     warn_score_anomalies(raw_scores, context="preprocessing")
@@ -299,6 +348,7 @@ def preprocessing(
         np.save(pw_path, pw_np, allow_pickle=False)
     else:
         pw_path = None
+        pw_np = None
 
     # Persist test points and normals for diagnostics and GH visualization
     test_points_path = out_path / "test_points.npy"
@@ -321,29 +371,34 @@ def preprocessing(
         )
     else:
         analysis_mesh_path = None
+    footprint_path = out_path / "footprint.json"
+    footprint_path.write_text(json.dumps(floor_plates.footprint_to_dict(footprint)), encoding="utf-8")
     _mark("save_npy_and_mesh")
 
+    run_id = new_run_id()
     pm = PreprocessingManifest(
-        hash=stage_hash,
-        scores_path=str(scores_path),
+        run_id=run_id,
+        scores_path=stored_path(scores_path, out_path),
         scores_kind=scores_kind,
         shape=tuple(voxel_grid.shape),
         origin=tuple(map(float, world_origin)),
-        voxel_grid_path=str(voxel_grid_path),
-        voxel_size=float(conf.voxel_size),
+        voxel_grid_path=stored_path(voxel_grid_path, out_path),
+        voxel_size=float(settings.voxel_size),
         mode=mode,
-        patch_weights_path=str(pw_path) if pw_path else None,
+        patch_weights_path=stored_path(pw_path, out_path) if pw_path else None,
         sample_point_count=int(pts.shape[0]),
+        footprint_path=stored_path(footprint_path, out_path),
     )
 
-    # Per-stage diagnostics
+    # Per-stage diagnostics: the stage builds the summary and the writer puts
+    # it (and the plots) on disk. The public preprocessing function writes
+    # the config snapshot.
     diag_dir = ensure_diag(out_path)
-    dump_config_snapshot(conf, diag_dir)
     rs = np.asarray(raw_scores)
     summary = {
         "mode": mode,
         "scores_kind": scores_kind,
-        "voxel_size": float(conf.voxel_size),
+        "voxel_size": float(settings.voxel_size),
         "grid_shape": [int(x) for x in voxel_grid.shape],
         "grid_origin": [float(o) for o in world_origin],
         "grid_extent": float(extent),
@@ -355,68 +410,35 @@ def preprocessing(
         "analysis_mesh_path": str(analysis_mesh_path) if analysis_mesh_path else None,
         "test_normals_path": str(test_normals_path),
         "scores_path": str(scores_path),
-        "score_stats": score_statistics(rs, detailed=conf.diagnostics),
+        "score_stats": score_statistics(rs, detailed=options.diagnostics),
     }
-    if conf.edge_taper > 0.0:
+    if settings.edge_taper > 0.0:
         # Taper transparency: record what the design constraint excluded.
         sw = np.asarray(sample_weights)
         summary["edge_taper"] = {
-            "meters": float(conf.edge_taper),
+            "meters": float(settings.edge_taper),
             "applied": point_weights is not None,
             "mean_weight": round(float(sw.mean()), 4) if sw.size else None,
             "near_zero_fraction": round(float((sw < 0.1).mean()), 4) if sw.size else None,
             "components": taper_stats,
         }
-    if conf.mode == "radiative_cooling" and conf.min_sky_elevation_deg > 0.0:
-        summary["min_sky_elevation_deg"] = float(conf.min_sky_elevation_deg)
-    if conf.mode == "benefit" and conf.simulated_weights_path:
+    if settings.mode == "radiative_cooling" and settings.min_sky_elevation_deg > 0.0:
+        summary["min_sky_elevation_deg"] = float(settings.min_sky_elevation_deg)
+    if settings.mode == "benefit" and settings.simulated_weights_path:
         # Provenance: which physics-derived schedule weighted this carve.
         from ..simulated_weights import read_simulated_weights
-        _b, _h, u_meta = read_simulated_weights(conf.simulated_weights_path)
+        _b, _h, u_meta = read_simulated_weights(settings.simulated_weights_path)
         summary["simulated_weights"] = {
-            "path": str(conf.simulated_weights_path),
+            "path": str(settings.simulated_weights_path),
             "method": u_meta.get("method"),
             "generated": u_meta.get("generated"),
             "archetype": u_meta.get("archetype"),
         }
     summary["device"] = device_info
     _mark("build_summary")
-    xlabel = MODES[mode].weight_unit if mode in MODES else "Score"
-
-    # Diagnostic plots only when diagnostic_plots is set, so matplotlib is
-    # not loaded otherwise.
-    if conf.diagnostic_plots:
-        if patch_weights is not None and hasattr(patch_weights, 'size') and patch_weights.size > 0:
-            summary["sky_patch_images"] = [
-                str(diag_dir / "sky_patch_weights.png"),
-                str(diag_dir / "sky_patch_weights_intensity.png"),
-            ]
-            save_sky_patch_weights(patch_weights, diag_dir, weight_unit=xlabel)
-            if conf.mode == "benefit" and conf.simulated_weights_path:
-                # How the simulated weights shifted the sky relative to the
-                # simple balance-point rule under the same config.
-                import torch
-                from ..scoring import get_weights
-                _, cf_hoys = sample_period(conf)
-                simple = get_weights(
-                    "benefit", device=torch.device("cpu"),
-                    epw_file=conf.epw_path, hoys=cf_hoys,
-                    balance_temperature=conf.balance_temperature,
-                    balance_offset=conf.balance_offset,
-                    north_deg=conf.north_deg,
-                    include_harm=conf.include_harm,
-                ).cpu().numpy()
-                comparison = save_sky_patch_comparison(
-                    simple, np.asarray(patch_weights, dtype=float), diag_dir,
-                    labels=("simple (balance point)", "simulated"),
-                )
-                if comparison is not None:
-                    cmp_path, cmp_stats = comparison
-                    summary["sky_patch_comparison_image"] = str(cmp_path)
-                    summary["sky_patch_comparison_stats"] = cmp_stats
-        summary["score_histogram"] = str(diag_dir / "score_histogram.png")
-        save_histogram(rs, diag_dir, "score_histogram.png",
-                       title=f"Raw Scores ({mode})", xlabel=xlabel)
+    weight_unit = MODES[mode].weight_unit if mode in MODES else "Score"
+    # Plots are drawn by the writer after this point, so the timings below
+    # cover the computation; the step label is kept for readers of the report.
     _mark("diagnostic_plots_done")
     # One diagnostic file per stage. Step timings are cumulative (seconds
     # since the stage started); subtract consecutive entries to get the
@@ -426,15 +448,19 @@ def preprocessing(
         "cpu_seconds": float(time.process_time() - _t0_cpu),
         "steps": {k: round(v, 3) for k, v in _step_times.items()},
     }
-    write_json(diag_dir, "diagnostic.json", summary)
-    # Manifest last (see the unlink at the start of this function).
-    (out_path / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
+    write_preprocessing_diagnostics(
+        summary, diag_dir, settings, options,
+        PreprocessingPlotInputs(raw_scores=rs, patch_weights=pw_np, weight_unit=weight_unit),
+    )
+    # Manifest last (see begin_stage at the start).
+    commit_manifest(out_path, pm)
 
     return PreprocessingResult(
         out_dir=out_path,
         volume_path=scores_path,
         volume_shape=tuple(voxel_grid.shape),
         dtype=str(raw_scores.dtype),
-        hash=stage_hash,
+        run_id=run_id,
         device_info=device_info,
+        issues=context.issues_of("preprocessing"),
     )

@@ -16,11 +16,12 @@ the daemon, do not re-read or rebuild them.
 import os
 from functools import lru_cache
 from typing import Sequence
-import warnings
 import torch
 from ladybug.dt import DateTime
 from ladybug.epw import EPW
 from ladybug.sunpath import Sunpath
+
+from .run_context import report_issue
 
 @lru_cache(maxsize=16)
 def _load_epw_file(weather_file_path: str, mtime_ns: int, size: int) -> EPW:
@@ -118,7 +119,7 @@ def get_sun_vectors(
                     below it are dropped.
       device      : Torch device for the result.
       north_deg   : Model north in degrees clockwise from the +Y axis
-                    (USC convention, same as ``cfg.north_deg``).  Sun
+                    (USC convention, same as the ``north_deg`` setting).  Sun
                     vectors are returned in model coordinates.
 
     Returns:
@@ -195,10 +196,9 @@ def get_sun_vectors(
                 )
 
     if not sun_vectors:
-        warnings.warn(
+        report_issue(
+            "no_sun_vectors",
             f"get_sun_vectors: no sun vectors above {min_altitude:.1f}° for file '{epw_file}'",
-            UserWarning,
-            stacklevel=2,
         )
     result_array = (
         torch.tensor(

@@ -2,6 +2,8 @@
 
 USC uses YAML configuration files. Mode-specific templates are in `configs/`. Relative paths inside a config file (meshes, EPW, `out_dir`, `simulated_weights_path`) are resolved against the folder that contains the YAML file.
 
+From Python, `load_config(path, overrides)` reads a file and `build_config(values)` validates values you already hold; both raise `ConfigError`, which lists the field and message of every problem. A client with no YAML file (the Grasshopper components, through the daemon) starts from the starting values of the chosen mode and applies its overrides. The starting values are the analysis period for `time-based` (21 Dec, 10:00 to 14:00), `irradiance` (the full year) and `benefit` (15 Oct 07:00 to 15 Apr 19:00), `tilted_plane_angle_deg: 45` for `tilted_plane` and `carve_fraction: 0.35` for `radiative_cooling`; the templates in `configs/` repeat them. They do not change the schema defaults.
+
 ## Minimal configs by mode
 
 Required parameters vary by mode. Every config needs `max_volume_path`, `test_surface_path`, and `out_dir`; `mode` defaults to `time-based`. The weather-dependent modes (`time-based`, `irradiance`, `benefit`) also require `epw_path` and an analysis period. `daylight`, `tilted_plane` and `radiative_cooling` need neither, and USC warns if you set settings the chosen mode does not use.
@@ -179,18 +181,22 @@ Relative paths given in overrides are resolved against the current directory, no
 
 ## Output structure
 
-With the default output folders (`<out_dir>/preprocessing`, `<out_dir>/thresholding`, `<out_dir>/exporting`):
+With the default output folders (`<out_dir>/preprocessing`, `<out_dir>/thresholding`, `<out_dir>/exporting`, and `<out_dir>/massing` when massing runs):
 
 ```
 outputs/
   preprocessing/
-    scores.npy, voxel_grid.npy, test_points.npy, test_normals.npy, manifest.json, diagnostics/
+    scores.npy, voxel_grid.npy, footprint.json, test_points.npy, test_normals.npy, manifest.json, diagnostics/
   thresholding/
     mask.npy, manifest.json, diagnostics/
   exporting/
-    export.ply (or .obj/.stl/.glb), diagnostics/
+    export.ply (or .obj/.stl/.glb), manifest.json, diagnostics/
+  massing/
+    plates.json, plates.obj, manifest.json, diagnostics/
   run_report.md
 ```
+
+Every manifest carries a `run_id`, new on each run of its stage, and the manifests after preprocessing record the `run_id` they were built from. A stage refuses an upstream that was re-run since (`StageChainError`, naming the stage to re-run), so re-run preprocessing once for a run folder written by an earlier version.
 
 Weighted modes also write `preprocessing/patch_weights.npy`.
 

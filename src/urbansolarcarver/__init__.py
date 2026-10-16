@@ -9,6 +9,8 @@ triggers the heavy imports (torch, warp, api_core) on first access, but
 
 __all__ = [
     "run_pipeline",
+    "PipelineResult",
+    "stages_to_rerun",
     "preprocessing",
     "thresholding",
     "exporting",
@@ -18,11 +20,12 @@ __all__ = [
     "ExportingResult",
     "MassingResult",
     "load_config",
+    "build_config",
     "user_config",
 ]
 
 # Light imports that don't touch torch/warp
-from .load_config import load_config, user_config  # noqa: F401
+from .load_config import build_config, load_config, user_config  # noqa: F401
 
 # Static-analysis-only imports: give IDEs/type checkers the lazy names
 # without triggering the heavy torch/warp imports at runtime.
@@ -30,7 +33,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     from .api import (  # noqa: F401
-        run_pipeline,
+        run_pipeline, PipelineResult, stages_to_rerun,
         preprocessing, thresholding, exporting, massing,
         PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
     )
@@ -59,12 +62,14 @@ def _ensure_api():
             "See https://pytorch.org/get-started/locally/ for details."
         ) from _e
     from .api import (
-        run_pipeline,
+        run_pipeline, PipelineResult, stages_to_rerun,
         preprocessing, thresholding, exporting, massing,
         PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
     )
     _api_names.update({
         "run_pipeline": run_pipeline,
+        "PipelineResult": PipelineResult,
+        "stages_to_rerun": stages_to_rerun,
         "preprocessing": preprocessing,
         "thresholding": thresholding,
         "exporting": exporting,

@@ -19,8 +19,9 @@ out_dir : str
     Output directory for all pipeline artifacts. A relative path is taken
     relative to the saved .gh file.
 config_yaml : str, optional
-    Path to a base YAML config. If None, uses the mode-specific default
-    from <carver_root>/configs/.
+    Path to a base YAML config. If None, the engine starts from the
+    mode's starting values (for example the analysis period of the
+    benefit, irradiance and time-based modes) and applies the overrides.
 overrides : list of str, optional
     Key=value override strings from parameter components.
     Multiple sources are merged (last wins for duplicate keys); mode,
@@ -65,7 +66,7 @@ try:
     ii[1].Name, ii[1].Description = "mode", "Carving algorithm. Options: 'benefit' (heating-benefit envelope; hour weighting via balance point or, with USC_SimulateWeights, a 5R1C building simulation), 'time-based' (shadow-hour envelope), 'irradiance' (total solar radiation envelope), 'daylight' (CIE overcast daylight envelope), 'tilted_plane' (geometric daylight access angle), 'radiative_cooling' (experimental night-sky cooling)."
     ii[2].Name, ii[2].Description = "epw_path", "Path to an EnergyPlus Weather (.epw) file for your location. Required for 'time-based', 'irradiance' and 'benefit'. A relative path is taken relative to the saved .gh file. Download from climate.onebuilding.org or ladybug.tools."
     ii[3].Name, ii[3].Description = "out_dir", "Folder where all results will be saved. A subfolder structure (preprocessing/, thresholding/, exporting/) is created automatically. A relative path is taken relative to the saved .gh file. Tip: use a fresh folder for each experiment."
-    ii[4].Name, ii[4].Description = "config_yaml", "Optional. Path to a base YAML configuration file. If omitted, the default file for the chosen mode in <carver_root>/configs/ is used. Only needed for advanced customisation."
+    ii[4].Name, ii[4].Description = "config_yaml", "Optional. Path to a base YAML configuration file. If omitted, the engine starts from the starting values of the chosen mode (for example its analysis period). Only needed for advanced customisation."
     ii[5].Name, ii[5].Description = "overrides", "Optional parameter overrides from other USC components (Period, Grid, Threshold, etc.). Connect several override wires here; they are merged, and the last one wins for a repeated key."
     oo[0].Name, oo[0].Description = "config", "Configuration handle passed to pipeline components (USC_Preprocess, USC_RunPipeline, etc.). Contains all settings for the run. Do not modify."
     oo[1].Name, oo[1].Description = "summary", "Human-readable text showing the active mode, config file, output folder, and all override parameters. Check this to verify your setup before running."
@@ -73,19 +74,6 @@ except Exception:
     pass
 
 # -- Helpers -----------------------------------------------------------------
-
-def _mode_default_yaml(root, mode_str):
-    """Return the mode's default config YAML path (mode_str already canonical)."""
-    fname = {
-        "time-based": "config_time_based.yaml",
-        "irradiance": "config_irradiance.yaml",
-        "benefit": "config_benefit.yaml",
-        "daylight": "config_daylight.yaml",
-        "tilted_plane": "config_tilted_plane.yaml",
-        "radiative_cooling": "config_radiative_cooling.yaml",
-    }.get(mode_str)
-    return Path(root) / "configs" / fname if fname else None
-
 
 def _usc_gh(root):
     """Shared helpers from <carver_root>/grasshopper/usc_gh.py, reloaded when that file changes."""
@@ -123,17 +111,11 @@ elif out_dir is None:
     summary = _error("Specify an output directory")
 else:
     root = session.root
-    mode_str = str(mode).strip().lower()
-
-    # Map alternative spellings to the mode names the config schema accepts.
-    _mode_canonical = {
-        "timebased": "time-based", "time_based": "time-based",
-        "tiltedplane": "tilted_plane", "tilted-plane": "tilted_plane",
-        "radiativecooling": "radiative_cooling", "radiative-cooling": "radiative_cooling",
-    }
-    mode_str = _mode_canonical.get(mode_str, mode_str)
-
     gh = _usc_gh(root)
+    registry = gh.engine_module(root, "mode_registry")
+    # Alternative spellings map to the mode names the config schema accepts.
+    mode_str = registry.canonical_mode_name(mode)
+
     try:
         out_dir_abs = gh.resolve_path(ghenv.Component, out_dir)
         yaml_path = (gh.resolve_path(ghenv.Component, config_yaml)
@@ -144,12 +126,8 @@ else:
         out_dir_abs = yaml_path = epw_abs = None
         summary = _error(str(exc))
 
-    if not summary and yaml_path is None:
-        _default = _mode_default_yaml(root, mode_str)
-        if _default is None:
-            summary = _error("Unknown mode '{}'".format(mode_str))
-        else:
-            yaml_path = str(_default)
+    if not summary and yaml_path is None and mode_str not in registry.MODES:
+        summary = _error("Unknown mode '{}'; choose one of: {}".format(mode_str, ", ".join(registry.MODES)))
 
     if not summary:
         overrides_dict = gh.parse_overrides(overrides)  # last one wins
@@ -181,7 +159,7 @@ else:
 
         lines = [
             f"Mode: {mode_str}",
-            f"YAML: {Path(yaml_path).name}",
+            f"YAML: {Path(yaml_path).name}" if yaml_path else "YAML: none (starting values of the mode)",
             f"Output: {out_dir_abs}",
         ]
         if epw_path:

@@ -776,8 +776,9 @@ def voxelize_solid_warp(
     centre inside (a majority vote, so one axis confused by a small hole or
     a grazing ray does not decide the result; trimesh's orthographic fill
     uses the same idea), or when the mesh surface passes through it.  Runs
-    on CUDA or the Warp CPU device; grid.py falls back to trimesh's slower
-    rasterize-and-fill when this returns None or raises.
+    on CUDA or the Warp CPU device; grid.py uses trimesh's slower
+    rasterize-and-fill only when this returns None, and lets anything it
+    raises propagate.
 
     Returns
     -------
@@ -1245,11 +1246,9 @@ def trace_multi_hit_grid(
     if origins.shape[0] == 0:
         empty1 = torch.empty((0,), dtype=torch.long, device=origins.device)
         return empty1, empty1, torch.empty((0, 3), dtype=torch.long, device=origins.device)
-    import warnings
-    warnings.warn(
+    log.warning(
         "Warp is not available: using the fixed-step ray marcher, which is "
-        "slower and can miss voxels that oblique rays only clip.",
-        stacklevel=2,
+        "slower and can miss voxels that oblique rays only clip."
     )
     return _trace_fixed_step(min_corner, float(scale), resolution, origins, ray_dirs,
                              sky_patch_ids, voxel_size, ray_length)
