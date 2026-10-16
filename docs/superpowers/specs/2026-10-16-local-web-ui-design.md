@@ -3,7 +3,7 @@
 - Date: 2026-10-16
 - Implementation: not started (the UI work belongs to the main development session)
 - Engine baseline: `main` at `f2947fd` (stage contract restructure, request core, module split, one device rule, cached sky weights)
-- Status: draft for review
+- Status: reviewed and amended on 2026-10-16 (front-end delivery, several input files per role, changes during a run, score layer cap, packaged examples, missing results, tiers note); awaiting approval
 
 ## 1. Goal and scope
 
@@ -35,7 +35,8 @@ Platform: machines with an NVIDIA GPU (Windows or Linux) run at full speed. Othe
 | Order | Browser UI first; the desktop window and installer wrap the same front-end later. |
 | Repository | Same repo. The front-end lives in `app/`; the service lives in `src/urbansolarcarver/`. The front-end uses only the HTTP API and never reads Python files. |
 | Service framework | FastAPI and uvicorn, in an optional `ui` extra, so CLI and Grasshopper users do not install them. |
-| Files | Inputs are uploaded into a project folder; the service never takes paths from the browser. |
+| Files | Inputs are uploaded into a project folder; the service never takes paths from the browser. The maximum volume and the test surfaces may each come as several files, which the service joins (section 5.3). |
+| Front-end delivery | The built front-end is committed in the repository (section 8), so a `git clone` install has it, offline and always matching the code of that commit. Node is needed only to change the front-end. |
 | Concurrency | One run at a time per service process. |
 | Settings tiers | The essential/advanced split lives only in `app/`. |
 | Mode starting values | Taken from the engine (`ModeSpec.starting_values`), not duplicated in `app/`. |
@@ -76,12 +77,12 @@ Done, and on `main` since `830a1f0`:
 | Module | Responsibility |
 |---|---|
 | `server.py` | FastAPI app, routes, token and Host checks, static files |
-| `projects.py` | Project folder layout, uploads, stored settings, input-change tracking |
+| `projects.py` | Project folder layout, uploads, joining several files per role, stored settings, input-change tracking |
 | `run_worker.py` | The worker thread, the run context, event forwarding, cancel |
 | `score_points.py` | Builds the score layer data from the preprocessing and thresholding outputs |
 | `api_models.py` | Pydantic request, reply and event models (the OpenAPI schema comes from these) |
 
-Command: `usc ui [--port PORT] [--projects-folder PATH] [--no-browser] [--device auto|cpu|cuda]`. It starts uvicorn on `127.0.0.1` and opens the browser at `http://127.0.0.1:PORT/?token=...` unless `--no-browser` is given. The default projects folder is `~/UrbanSolarCarver/projects`.
+Command: `usc ui [--port PORT] [--projects-folder PATH] [--no-browser] [--device auto|cpu|cuda]`. It starts uvicorn on `127.0.0.1` and opens the browser at `http://127.0.0.1:PORT/?token=...` unless `--no-browser` is given. The default projects folder is `~/UrbanSolarCarver/projects`. If `ui_static/index.html` is missing (a damaged checkout), `usc ui` stops with a message that names the folder and the rebuild command (section 8). If the `ui` extra is not installed, it stops with the `pip install` command that adds it.
 
 Optional extra `ui` in `pyproject.toml`: `fastapi`, `uvicorn`, `python-multipart` (needed by FastAPI for uploads). Importing the service must not import torch until the first run; `GET health` imports it to report the device.
 
@@ -98,13 +99,17 @@ Optional extra `ui` in `pyproject.toml`: `fastapi`, `uvicorn`, `python-multipart
 ```
 <projects folder>/<project name>/
   project.json                      name, created, input file names, inputs_changed_since_last_run
-  inputs/max_volume.<ext>           ply, obj, stl or glb, as uploaded
-  inputs/test_surface.<ext>
+  inputs/max_volume/<file>          one or more of ply, obj, stl or glb, as uploaded
+  inputs/test_surfaces/<file>       one or more, as uploaded
   inputs/weather.epw                when the mode needs one
+  inputs/joined/max_volume.ply      written by the service from the files above
+  inputs/joined/test_surfaces.ply
   config.yaml                       the settings as the user set them, paths relative to the project
   last_completed_run_config.yaml    the config of the last run that finished; absent otherwise
   run/                              the run folder: preprocessing/, thresholding/, exporting/, massing/, run_report.md
 ```
+
+**Joining several files.** After every upload or removal the service rebuilds the joined file of that role, the way the Grasshopper components join several objects: the maximum volume files are concatenated and identical vertices welded, so each closed body stays closed; the test surface files are concatenated without welding, because welding across neighbouring panels averages their normals and can flip panels. The config's `max_volume_path` and `test_surface_path` point to the joined files. File names are kept as uploaded after removing path parts and characters other than letters, digits, `-`, `_` and `.`; a name that already exists in the role is replaced.
 
 `config.yaml` holds the values as set (unresolved "None means auto" fields stay None), so it rebuilds to the same config. It loads with `usc run -c config.yaml --out run --produce exporting --produce massing`.
 
@@ -121,8 +126,10 @@ All paths are under `/api`. Replies are JSON unless noted.
 | `GET modes` | For each mode: name, `description`, `needs_epw`, `needs_period`, `experimental`, `score_kind`, `weight_unit`, `starting_values` |
 | `GET projects`, `POST projects`, `GET projects/{name}` | List, create, open |
 | `POST projects/{name}/examples/{example}` | Create a project from a bundled example (section 7) |
-| `PUT projects/{name}/inputs/{role}` | Upload `max_volume`, `test_surface` or `weather`; checked with `load_mesh` (meshes) and stored; replies with the mesh bounds |
-| `GET projects/{name}/inputs/{role}` | The stored file, for the 3D view |
+| `POST projects/{name}/inputs/{role}` | Add a file to `max_volume` or `test_surfaces` (checked with `load_mesh`, then the joined file is rebuilt), or set `weather` (replaces the EPW); replies with the role's file list and the joined mesh bounds |
+| `DELETE projects/{name}/inputs/{role}/{file_name}` | Remove one file of a role and rebuild the joined file |
+| `GET projects/{name}/inputs/{role}` | The role's file list |
+| `GET projects/{name}/inputs/{role}/{file_name}` | One stored file, for the 3D view |
 | `PUT projects/{name}/config` | Validate with `build_config_from_mode_starting_values`; on success store `config.yaml` and reply with the grid plan; on `ConfigError` reply 422 with its field errors |
 | `POST projects/{name}/runs` | Body: `produce` (default `["exporting", "massing"]`). Starts a run or replies that results are up to date (section 5.5) |
 | `WS runs/{run_id}/events` | Run events (section 5.5) |
@@ -157,7 +164,9 @@ with `context = RunContext(on_progress=forward_progress)`. `run_pipeline` activa
 
 On success the worker writes `last_completed_run_config.yaml` and sets `inputs_changed_since_last_run` to false. On failure or cancel it leaves `last_completed_run_config.yaml` absent, so the next run is complete. After every run it calls `release_memory()` on the session.
 
-An upload sets `inputs_changed_since_last_run` to true. The engine compares settings only and does not detect a changed file at an unchanged path, so this flag is how the service knows.
+While a project's run is active, uploads, removals and `PUT config` for that project reply 409: the files and settings a run reads stay fixed until it ends, and `last_completed_run_config.yaml` is always the config the run actually used.
+
+An upload or removal sets `inputs_changed_since_last_run` to true. The engine compares settings only and does not detect a changed file at an unchanged path, so this flag is how the service knows.
 
 Events, each a JSON object with a `type`:
 
@@ -189,6 +198,8 @@ Events, each a JSON object with a `type`:
 
 The browser rebuilds positions from the index, origin and voxel size. Without a thresholding output the kept/carved array is omitted.
 
+**Cap.** At most 1,000,000 voxels are sent (about 9 MB); a city-scale grid can hold ten times more, which a browser draws slowly. Above the cap the service keeps every k-th occupied voxel in index order, with k the smallest whole number that brings the count under the cap, so the thinning is even across the grid. The header reports `thinning_step` (k, 1 when nothing was thinned) and the total count, and the view states "showing 1 of every k voxels".
+
 ## 6. Settings in the browser
 
 - **Form source.** Field types, defaults, limits and descriptions come from `GET schema`. Mode choices, descriptions and starting values come from `GET modes`.
@@ -212,11 +223,11 @@ The browser rebuilds positions from the index, origin and voxel size. Without a 
 
 One page: a left panel with the steps and their forms, and a 3D view on the right that is always visible.
 
-1. **Project.** Create, open, or open an example. Examples are bundled as package data from `examples/test_inputs` (`basic_perimeter_block`, `new_building`, `multiple_buildings`) with the Golden EPW from `examples/weather`, under 2 MB in total.
-2. **Inputs.** Upload the maximum volume and the test surface; the EPW appears once the mode needs one. Each mesh is drawn on arrival. The view shows the bounding-box size and warns when it looks wrong for meters (longest side over 10 km or under 1 m).
+1. **Project.** Create, open, or open an example. The examples (`basic_perimeter_block`, `new_building`, `multiple_buildings`, from `examples/test_inputs`, with the Golden EPW from `examples/weather`, under 2 MB in total) are copied into the package as `src/urbansolarcarver/example_projects/`, so a non-editable install has them too; a test checks that the copies match `examples/`. `new_building` has two test surface files and exercises joining.
+2. **Inputs.** Add one or more files for the maximum volume and for the test surfaces, and remove them one by one; the EPW appears once the mode needs one. Each mesh is drawn on arrival. The view shows the bounding-box size and warns when it looks wrong for meters (longest side over 10 km or under 1 m).
 3. **Mode and settings.** Mode picker with descriptions; choosing a mode fills its starting values. The essential settings, then the folded advanced sections. Each change is sent with `PUT config`; the grid size and the budget check update with it, and a grid over the budget disables Run.
 4. **Run.** A progress bar per stage, with batch progress during ray tracing; Cancel; issues listed as they arrive.
-5. **Review.** Toggle layers: maximum volume (transparent), carved envelope, floor plates, test surfaces, and scores (voxel points colored by score, carved ones marked). Next to the view: `run_report.md`. Changing a setting and pressing Run again reruns only the stages the change affects; "up to date" is shown when nothing changed.
+5. **Review.** Toggle layers: maximum volume (transparent), carved envelope, floor plates, test surfaces, and scores (voxel points colored by score, carved ones marked). Next to the view: `run_report.md`. A layer whose file is missing (the engine clears a stage's outputs before rerunning it, so a failed or cancelled run leaves some missing) is shown as "no result for this stage: the last run stopped before it", not as an error. Changing a setting and pressing Run again reruns only the stages the change affects; "up to date" is shown when nothing changed.
 6. **Export.** Download the carved mesh, `plates.obj` and `plates.json`, `config.yaml`, or the project as a zip. The mesh format is the `final_mesh_format` setting; choosing another format reruns exporting only.
 
 3D view: Z axis up; every object is shifted by one local origin (the maximum volume's minimum corner) so georeferenced models do not lose precision in float32; a north arrow from `north_deg`; three.js loaders for PLY, OBJ, STL and GLB.
@@ -233,9 +244,10 @@ app/
     steps/            the six steps
 ```
 
-- `npm run build` writes into `src/urbansolarcarver/ui_static/`, which is in `.gitignore` and included in the wheel as package data. The build output is never committed.
+- `npm run build` writes into `src/urbansolarcarver/ui_static/`, which **is committed** and included in the wheel as package data. Installs are `git clone` plus `setup_env.py` (editable), so committing the build is what gives every install a working front-end that matches its own code, without Node and without a download. The minified build is a few megabytes and changes only when `app/` changes.
+- The build also writes `ui_static/build_info.json` with a SHA-256 of the files under `app/src`, `package.json` and the lock file. A Python test recomputes it and fails when `app/` changed without a rebuild, naming the command to run.
 - In development, the Vite dev server forwards `/api` to a running `usc ui --no-browser`.
-- Python users never need Node: the wheel carries the built files.
+- Python users never need Node; only changing the front-end does.
 
 ## 9. Testing
 
@@ -249,7 +261,11 @@ app/
 - A second run while one is active gets 409.
 - A missing or wrong token gets 401; a foreign `Host` header gets 403.
 - An invalid setting gets 422 with the field name; an oversized grid gets a field error on `voxel_size`.
-- `score-points` returns arrays whose lengths match the header.
+- `score-points` returns arrays whose lengths match the header; above the cap the step and counts are reported and the thinning is even.
+- Two test surface files uploaded to one project give one joined file whose triangle count is the sum, and removing one rebuilds it; two closed maximum volume files stay two closed bodies after joining.
+- An upload, a removal or `PUT config` during an active run of that project gets 409.
+- The packaged example projects match `examples/`; `ui_static/build_info.json` matches the hash of `app/` (both are fast tests, without the `slow` marker).
+- `usc ui` without `ui_static/index.html` stops with the message that names the rebuild command.
 
 The end-to-end service tests take seconds, so they get the `slow` marker (registered in `pyproject.toml`; `pytest -m "not slow"` leaves them out). There is no CI: hosted runners have no GPU, so the tests run locally, and a fresh install is checked from time to time as `CONTRIBUTING.md` describes.
 
@@ -261,3 +277,4 @@ The end-to-end service tests take seconds, so they get the `slow` marker (regist
 - Desktop window and first-run installer, reusing `setup_env.py`.
 - Live Rhino bridge, likely through this HTTP service.
 - Possibly: Grasshopper moves from the pickle daemon to the HTTP service, and the daemon is retired.
+- If the CLI (an `init` wizard) or Grasshopper should show the same essential and advanced settings, the tier lists move from `app/` into the engine (for example as schema metadata), so all clients read one list.
