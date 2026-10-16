@@ -138,6 +138,7 @@ from urbansolarcarver.session import session_cache
 from urbansolarcarver.grid_planning import check_voxel_grid_budget, plan_voxel_grid
 
 from .load_config import user_config
+from .errors import InputError
 from .run_context import report_issue
 
 def voxelize(envelope_mesh, config: user_config, device: torch.device | None = None):
@@ -165,7 +166,7 @@ def voxelize(envelope_mesh, config: user_config, device: torch.device | None = N
 
     Raises
     ------
-    RuntimeError
+    InputError
         If voxelization returns an empty grid.
     """
     voxel_grid, grid_origin, grid_extent, grid_resolution = voxelize_mesh(
@@ -176,7 +177,7 @@ def voxelize(envelope_mesh, config: user_config, device: torch.device | None = N
     )
 
     if voxel_grid.numel() == 0 or voxel_grid.sum() == 0:
-        raise RuntimeError("Voxel grid is empty after voxelization")
+        raise InputError("Voxel grid is empty after voxelization")
     
     return voxel_grid, grid_origin, grid_extent, grid_resolution
 
@@ -216,7 +217,7 @@ def sample_surface(insolation_mesh, config: user_config):
 
     if sample_points.size == 0:
         n_components = len(insolation_mesh.split(only_watertight=False))
-        raise RuntimeError(
+        raise InputError(
             "No points sampled from test surfaces (insolation mesh). "
             "The mesh has {:d} connected component(s), but none produced sample points. "
             "Most likely cause: test_surfaces is a joined polysurface (e.g. an extruded block "

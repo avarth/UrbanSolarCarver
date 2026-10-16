@@ -54,6 +54,7 @@ from .load_config import user_config
 from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
 from .sun import get_sun_vectors
+from .errors import InputError
 from .run_context import report_issue
 from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
@@ -100,7 +101,7 @@ def validate_inputs(config: user_config):
 
     Raises
     ------
-    FileNotFoundError
+    InputError
         If the max-volume or test-surface mesh is missing, or the EPW file is
         missing for a mode that needs one.
     ValueError
@@ -112,11 +113,11 @@ def validate_inputs(config: user_config):
         (config.test_surface_path,    'test_surface'),
     ]:
         if not filepath or not os.path.isfile(filepath):
-            raise FileNotFoundError(f"{name} file missing: {filepath!r}")
+            raise InputError(f"{name} file missing: {filepath!r}")
     # EPW is required for modes that use weather data
     if config.mode in MODES_NEEDING_EPW:
         if not config.epw_path or not os.path.isfile(config.epw_path):
-            raise FileNotFoundError(f"EPW file missing: {config.epw_path!r}")
+            raise InputError(f"EPW file missing: {config.epw_path!r}")
     if config.mode not in ALL_MODE_NAMES:
         raise ValueError(f"Unsupported mode: {config.mode!r}")
 

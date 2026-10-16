@@ -14,6 +14,7 @@ from ._diagnostics import (
     score_statistics, warn_score_anomalies,
 )
 from ..pydantic_schemas import PreprocessingManifest, schema_to_json
+from ..errors import InputError
 from ..run_context import Issue, report_issue, stage_context
 from ..carving import (
     carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes,
@@ -56,7 +57,7 @@ class PreprocessingResult:
         return str(self.manifest_path)
 
 def _check_radiative_cooling_surface(norms: np.ndarray) -> None:
-    """Raise ValueError unless the test surfaces face mostly upward.
+    """Raise InputError unless the test surfaces face mostly upward.
 
     The radiative_cooling view-factor weighting (cos θ / π) is only valid for
     surfaces facing the sky, so reject test surfaces whose mean normal is
@@ -66,7 +67,7 @@ def _check_radiative_cooling_surface(norms: np.ndarray) -> None:
     mean_normal /= (np.linalg.norm(mean_normal) + 1e-12)
     z_component = float(mean_normal[2])
     if z_component < 0.7:  # cos(45.6°) = 0.7
-        raise ValueError(
+        raise InputError(
             f"radiative_cooling mode requires a horizontal, upward-facing test surface "
             f"(mean normal Z-component = {z_component:.2f}, expected > 0.7). "
             f"This mode's view-factor weighting (cos θ / π) is only valid for "
@@ -189,15 +190,14 @@ def preprocessing(
 
     Raises
     ------
-    FileNotFoundError
-        If the mesh or required EPW file is missing.
-    ValueError
+    InputError
+        If the mesh or required EPW file is missing, the voxel grid is empty,
+        no test-surface points are sampled, or, in radiative_cooling mode,
+        the test surfaces do not face up.
+    ConfigError
         If the grid is too large (more than
         ``grid_planning.MAX_GRID_VOXELS``, 500,000,000, checked before it is
-        allocated) or, in radiative_cooling mode, the test surfaces do not
-        face up.
-    RuntimeError
-        If the voxel grid is empty or no test-surface points are sampled.
+        allocated).
 
     Persisted artifacts
     -------------------
@@ -265,7 +265,7 @@ def preprocessing(
         pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, conf)
         _mark("sample_surface")
         if pts.shape[0] == 0:
-            raise ValueError(
+            raise InputError(
                 "No sample points were generated from the test surface. "
                 "Check that test_surface_path contains valid geometry and that "
                 "grid_step is not larger than the surface extent."

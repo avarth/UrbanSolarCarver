@@ -556,3 +556,27 @@ class TestLoadConfigOverridesAndPaths:
         assert Path(cfg.out_dir) == path.parent / "out"
         assert Path(cfg.max_volume_path) == path.parent / "v.ply"
         assert Path(cfg.epw_path) == path.parent / "w.epw"
+
+
+class TestBuildConfig:
+    def test_relative_paths_resolve_against_the_base_folder(self, tmp_path):
+        from urbansolarcarver.load_config import build_config
+        conf = build_config({"max_volume_path": "vol.ply", "test_surface_path": "srf.ply",
+                             "out_dir": "out", "mode": "daylight"}, base_folder=tmp_path)
+        assert conf.max_volume_path == str(tmp_path / "vol.ply")
+
+    def test_field_errors_are_structured(self):
+        from urbansolarcarver.load_config import build_config
+        from urbansolarcarver.errors import ConfigError
+        with pytest.raises(ConfigError) as caught:
+            build_config({"max_volume_path": "v", "test_surface_path": "s", "out_dir": "o",
+                          "mode": "daylight", "voxel_size": 0.0})
+        assert [e.field for e in caught.value.errors] == ["voxel_size"]
+
+    def test_whole_config_checks_have_no_field(self):
+        from urbansolarcarver.load_config import build_config
+        from urbansolarcarver.errors import ConfigError
+        with pytest.raises(ConfigError) as caught:
+            build_config({"max_volume_path": "v", "test_surface_path": "s", "out_dir": "o",
+                          "mode": "daylight", "voxel_size": 1.0, "grid_step": 2.0})
+        assert caught.value.errors[0].field is None and "grid_step" in caught.value.errors[0].message

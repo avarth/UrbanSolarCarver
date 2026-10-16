@@ -18,11 +18,12 @@ __all__ = [
     "ExportingResult",
     "MassingResult",
     "load_config",
+    "build_config",
     "user_config",
 ]
 
 # Light imports that don't touch torch/warp
-from .load_config import load_config, user_config  # noqa: F401
+from .load_config import build_config, load_config, user_config  # noqa: F401
 
 # Static-analysis-only imports: give IDEs/type checkers the lazy names
 # without triggering the heavy torch/warp imports at runtime.

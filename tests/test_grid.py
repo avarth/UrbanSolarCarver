@@ -323,6 +323,7 @@ class TestVoxelGridPlan:
         np.testing.assert_allclose(plan.origin, origin)
 
     def test_budget_check_accepts_a_small_grid_and_rejects_a_large_one(self):
+        from urbansolarcarver.errors import ConfigError
         from urbansolarcarver.grid_planning import (
             MAX_GRID_VOXELS, check_voxel_grid_budget, plan_voxel_grid,
         )
@@ -330,8 +331,9 @@ class TestVoxelGridPlan:
         check_voxel_grid_budget(plan_voxel_grid(bounds, voxel_size=1.0, margin_frac=0.0))
         side = int(np.ceil(MAX_GRID_VOXELS ** (1 / 3))) + 1
         too_fine = 10.0 / side
-        with pytest.raises(ValueError, match="voxel_size"):
+        with pytest.raises(ConfigError) as caught:
             check_voxel_grid_budget(plan_voxel_grid(bounds, voxel_size=too_fine, margin_frac=0.0))
+        assert caught.value.errors[0].field == "voxel_size"
 
     def test_voxelize_mesh_rejects_an_oversized_grid_before_allocating(self, monkeypatch):
         import trimesh

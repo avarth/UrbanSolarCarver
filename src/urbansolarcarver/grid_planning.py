@@ -12,6 +12,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .errors import ConfigError, ConfigFieldError
+
 # Largest grid preprocessing accepts.  The Warp voxelizer alone holds 8 bytes
 # per voxel on the device (two int32 counters), and scoring adds a float32
 # score per voxel, so 500 million voxels is about 4 GB before scoring starts.
@@ -54,11 +56,13 @@ def plan_voxel_grid(bounds, voxel_size: float, margin_frac: float) -> VoxelGridP
 
 
 def check_voxel_grid_budget(plan: VoxelGridPlan) -> None:
-    """Raise ValueError if *plan* has more than MAX_GRID_VOXELS voxels."""
+    """Raise ConfigError (field ``voxel_size``) if *plan* has more than
+    MAX_GRID_VOXELS voxels."""
     if plan.total_voxels > MAX_GRID_VOXELS:
-        raise ValueError(
+        message = (
             f"The voxel grid would have {plan.resolution}^3 = {plan.total_voxels:,} "
             f"voxels, more than the {MAX_GRID_VOXELS:,} preprocessing can score. "
             f"Increase voxel_size (currently {plan.voxel_size:g} m) or reduce the "
             f"maximum volume's extent."
         )
+        raise ConfigError(message, [ConfigFieldError("voxel_size", message)])

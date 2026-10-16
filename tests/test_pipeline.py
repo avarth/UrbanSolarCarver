@@ -584,3 +584,13 @@ def test_curved_own_facade_is_not_shaded_by_its_own_skin(tmp_path):
     scores = np.load(pre.volume_path)
     occ = np.load(tmp_path / "out" / "preprocessing" / "voxel_grid.npy").astype(bool).ravel()
     assert scores[occ].max() == 0.0
+
+
+def test_missing_max_volume_file_is_an_input_error(tmp_path):
+    from _stage_scene import daylight_cube_config
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.errors import InputError
+    conf = daylight_cube_config(tmp_path)
+    Path(conf.max_volume_path).unlink()
+    with pytest.raises(InputError, match="max_volume file missing"):
+        preprocessing(conf, tmp_path / "run" / "preprocessing")
