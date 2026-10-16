@@ -41,6 +41,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   caller. The code is unchanged; `test_raytracer.py` is now
   `test_ray_tracing.py`, with the warmup tests in `test_warp_kernels.py`,
   and the API page "Ray Tracer" is now "Ray Tracing".
+- **`carving.py` keeps the ray carving only.** `validate_inputs`,
+  `load_meshes` and the float32 input check moved to `io.py`;
+  `sample_period` moved to `sun.py`; the column rules thresholding applies
+  (`carve_above_columns`, `carve_above_scores`, `limit_column_slope` and
+  their numba kernels) moved to the new `column_postprocessing.py`. The
+  code is unchanged.
 
 ### Changed (engine requests)
 

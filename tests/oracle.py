@@ -339,7 +339,7 @@ def score_agreement(run: Run) -> dict:
 # ----------------------------------------------------------------- checks
 def kept_grid(run: Run) -> np.ndarray:
     """Occupied voxels kept after thresholding and carve_above (pre-cleanup)."""
-    from urbansolarcarver.carving import carve_above_columns
+    from urbansolarcarver.column_postprocessing import carve_above_columns
     m = run.mask
     if run.cfg.get("carve_above", True):
         m = carve_above_columns(m, run.occ, run.cfg.get("carve_above_min_consecutive", 1))

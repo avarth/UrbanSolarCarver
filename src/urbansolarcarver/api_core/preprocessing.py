@@ -16,10 +16,9 @@ from ..pydantic_schemas import PreprocessingManifest
 from ..errors import InputError
 from ..run_context import Issue, RunContext, report_issue, stage_context
 from ..stage_settings import PreprocessingSettings, RunOptions
-from ..carving import (
-    carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes,
-    load_meshes, sample_period, validate_inputs,
-)
+from ..carving import carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes
+from ..io import load_meshes, validate_inputs
+from ..sun import sample_period
 from ..voxelization import voxelize
 from ..surface_sampling import sample_surface
 from ..mode_registry import MODES, MODES_NEEDING_PERIOD

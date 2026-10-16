@@ -115,7 +115,7 @@ def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
         explained = must
         if run.cfg.get("carve_above"):
             # mask.npy includes carve_above: apply it to the reference too.
-            from urbansolarcarver.carving import carve_above_columns
+            from urbansolarcarver.column_postprocessing import carve_above_columns
             expected = carve_above_columns(occ & ~must, occ, run.cfg.get("carve_above_min_consecutive", 1))
             explained = must | (occ & ~expected)
         unexplained, carved = oracle.unexplained_carving(run, explained)

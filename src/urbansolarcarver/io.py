@@ -1,8 +1,11 @@
-"""Mesh file input and output.
+"""Mesh file input and output, and the preprocessing inputs.
 
 ``load_mesh`` reads a mesh file (PLY, OBJ, STL...) into a trimesh mesh;
 ``save_mesh`` writes one, switching PLY to double-precision vertices when
-float32 would round georeferenced coordinates.
+float32 would round georeferenced coordinates.  ``validate_inputs`` checks
+that the files a preprocessing run needs exist, and ``load_meshes`` loads
+the maximum volume and the test surfaces, reporting coordinates that a
+float32 file has rounded.
 """
 
 import os
@@ -10,6 +13,9 @@ import numpy as np
 import trimesh
 
 from .errors import InputError
+from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
+from .run_context import report_issue
+from .stage_settings import PreprocessingSettings
 
 def _ensure_dir(path: str) -> None:
     """Create parent directory if it doesn’t exist."""
@@ -97,3 +103,78 @@ def save_mesh(mesh: trimesh.Trimesh, path: str) -> str:
     else:
         mesh.export(path)
     return os.path.abspath(path)
+
+
+def validate_inputs(settings: PreprocessingSettings):
+    """
+    Validate file paths and supported modes.
+
+    Raises
+    ------
+    InputError
+        If the max-volume or test-surface mesh is missing, or the EPW file is
+        missing for a mode that needs one.
+    ValueError
+        If `settings.mode` is not one of:
+        {'time-based','irradiance','benefit','daylight','radiative_cooling','tilted_plane'}.
+    """
+    for filepath, name in [
+        (settings.max_volume_path, 'max_volume'),
+        (settings.test_surface_path,    'test_surface'),
+    ]:
+        if not filepath or not os.path.isfile(filepath):
+            raise InputError(f"{name} file missing: {filepath!r}")
+    # EPW is required for modes that use weather data
+    if settings.mode in MODES_NEEDING_EPW:
+        if not settings.epw_path or not os.path.isfile(settings.epw_path):
+            raise InputError(f"EPW file missing: {settings.epw_path!r}")
+    if settings.mode not in ALL_MODE_NAMES:
+        raise ValueError(f"Unsupported mode: {settings.mode!r}")
+
+
+def load_meshes(settings: PreprocessingSettings):
+    """
+    Load the maximum envelope mesh and the insolation sampling surface.
+
+    Warns when a PLY file stores large (georeferenced) coordinates as float32,
+    because that rounding happened on disk and cannot be undone here.
+
+    Returns
+    -------
+    envelope_mesh : trimesh.Trimesh
+    insolation_mesh : trimesh.Trimesh
+    """
+    envelope_mesh = load_mesh(settings.max_volume_path)
+    insolation_mesh = load_mesh(settings.test_surface_path)
+    for path, mesh in ((settings.max_volume_path, envelope_mesh),
+                       (settings.test_surface_path, insolation_mesh)):
+        _warn_float32_input(path, mesh, settings.voxel_size)
+    return envelope_mesh, insolation_mesh
+
+
+def _stores_float32_vertices(path: str) -> bool:
+    """True if *path* is a PLY file whose header declares float32 x coordinates."""
+    if not str(path).lower().endswith(".ply"):
+        return False
+    with open(path, "rb") as fh:
+        header = fh.read(4096).split(b"end_header")[0].decode("ascii", errors="replace")
+    return any(line.split()[:3] in (["property", "float", "x"], ["property", "float32", "x"])
+               for line in header.splitlines())
+
+
+def _warn_float32_input(path: str, mesh, voxel_size: float) -> None:
+    """Warn if the file's float32 vertices are rounded by more than 1 % of a voxel.
+
+    Large (georeferenced) coordinates stored as float32 lose precision when
+    the file is written, so the rounding cannot be recovered on load.
+    """
+    res = float32_resolution(mesh.vertices)
+    if res > 0.01 * float(voxel_size) and _stores_float32_vertices(path):
+        report_issue(
+            "float32_coordinates",
+            f"{os.path.basename(path)}: coordinates reach "
+            f"{float(np.abs(mesh.vertices).max()):,.0f} m and the file stores "
+            f"float32 vertices, so its geometry is rounded to ~{res:.2g} m on disk "
+            f"({100 * res / voxel_size:.0f}% of a voxel). Move the model near the "
+            f"origin before export, or export PLY with double-precision vertices.",
+        )
