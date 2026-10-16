@@ -59,6 +59,23 @@ versioning follows [Semantic Versioning](https://semver.org/).
   Applies to every mode (Warp kernels, the fixed-step fallback and the
   test reference).
 
+### Fixed (tilted_plane; results change)
+
+- **The tilted plane rotates around convex corners of the test surfaces.**
+  Each sample point cast one ray along its own normal, so where two facade
+  panels meet at an outside corner or a convex kink the two panels' rays
+  diverged, and columns between them were crossed by no ray and stayed at
+  full height: one-voxel spires at convex corners and vertical strips
+  beyond kinks (a 6.7 degree kink left strips from about 8 m out; a 90
+  degree corner left the whole outside wedge uncarved). Present since
+  0.9.0. Neighbouring sample points whose normals turn convexly now also
+  cast rays at headings swept between the two normals, so the wedge is
+  capped by the plane rotated around the corner (at 45 degrees: height =
+  distance from the corner). Concave corners are unchanged. In the
+  full_blocks example at 1 m voxels the 45 degree envelope keeps 3.0% less
+  volume (octant table: 3.5% less) and tilted-plane carving takes about
+  0.7 s instead of 0.1 s on the CPU. No new parameter.
+
 ### Added
 
 - **Floor-plate massing (stage 4, `massing`).** Turns the carved envelope into

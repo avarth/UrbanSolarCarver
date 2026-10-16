@@ -14,7 +14,8 @@ Supports:
   returns per-voxel scores; the threshold is applied later, in
   api_core/thresholding.py.
 • Tilted-plane daylight carving (single or per-octant plane angle): every
-  voxel at or above a visited voxel in its column is removed.
+  voxel at or above a visited voxel in its column is removed; extra rays
+  rotate the plane around convex turns of the test-surface outline.
 
 Raytracing contract
 -------------------
@@ -698,6 +699,155 @@ def carve_with_sky_patch_rays(
     )
 
 
+def _tilt_angles_deg(horizontal_dirs, spec, north_deg) -> np.ndarray:
+    """Tilt angle, in degrees above the horizon, for each horizontal unit
+    direction (N, 2): the single angle, or the compass-octant entry of an
+    8-element table [N, NE, E, SE, S, SW, W, NW].
+
+    Raises
+    ------
+    ValueError
+        If *spec* is neither a number nor 8 values.
+    """
+    if isinstance(spec, (int, float)) or np.isscalar(spec):
+        return np.full((horizontal_dirs.shape[0],), float(spec), dtype=np.float64)
+    table = np.asarray(spec, dtype=np.float64)
+    if table.shape != (8,):
+        raise ValueError(
+            "tilted_plane_angle_deg must be a single number or an 8-length list [N, NE, E, SE, S, SW, W, NW]"
+        )
+    # Compute the model-space azimuth from +Y clockwise toward +X, then
+    # subtract north_deg (model north, degrees clockwise from +Y) to get
+    # the true compass azimuth of each direction.
+    phi = (np.degrees(np.arctan2(horizontal_dirs[:, 0], horizontal_dirs[:, 1])) - float(north_deg) + 360.0) % 360.0
+    # Octant bins are 45° wide (360° / 8). Adding half a bin (22.5°)
+    # centres each bin on its direction (N = 0°, NE = 45°, E = 90°, ...),
+    # so N covers 337.5° to 22.5°.
+    idx = np.floor(((phi + 22.5) % 360.0) / 45.0).astype(np.int64)
+    return table[idx]
+
+
+def _tilted_directions(horizontal_dirs, alpha_deg) -> np.ndarray:
+    """d = cos(a)*h + sin(a)*z_hat for horizontal unit directions h (N, 2):
+    horizontal at a = 0, vertical at a = 90 deg."""
+    alpha_rad = np.radians(alpha_deg)
+    dirs = np.empty((horizontal_dirs.shape[0], 3), dtype=np.float64)
+    dirs[:, :2] = np.cos(alpha_rad)[:, None] * horizontal_dirs
+    dirs[:, 2] = np.sin(alpha_rad)
+    return dirs
+
+
+# Sample points closer than this many grid steps (in plan, on the same row)
+# are neighbours on the test-surface outline; a pair whose normals differ is
+# a turn of the outline.
+_CORNER_NEIGHBOUR_STEPS = 1.5
+# Neighbours closer than this many grid steps lie on the same corner edge
+# (both panels seed sample points along their shared edge).
+_CORNER_SAME_EDGE_STEPS = 0.25
+# Normals this close to opposite (back-to-back faces of a thin wall) have no
+# corner to rotate around.
+_CORNER_MAX_TURN_DEG = 179.0
+
+
+def _corner_fan_rays(points, horizontal_normals, usable, spec, north_deg,
+                     grid_step, cell_size, grid_top_z, grid_extent, ray_length):
+    """Extra rays that rotate the tilted plane around convex turns of the
+    test-surface outline.
+
+    One ray per sample point along its own normal leaves a wedge between
+    the rays of two panels that meet at a convex turn: the rays diverge,
+    and columns between them are crossed by none. For every pair of
+    neighbouring sample points (same row, at most 1.5 grid steps apart in
+    plan) whose horizontal normals turn convexly, this casts rays at headings
+    swept from the first point's normal to its neighbour's, spaced so that
+    neighbouring rays are at most 0.9 voxels apart where they leave the
+    grid. Rays in the first half of the sweep start at the first point, the
+    rest at its neighbour, and each skips the voxels its source facade's
+    plane passes through (the same own-skin rule as the sample points' own
+    rays). Each ray takes the tilt angle of its own heading. Concave
+    turns (rays converge) are skipped, except for neighbours on the same
+    corner edge, whose offset cannot tell the two apart: on a concave
+    corner their swept rays lie above the two planes and carve nothing more.
+    A swept ray from point p caps a column at distance t at
+    z_p + tan(angle) * t, never lower than the same angle measured from the
+    nearest sample point.
+
+    Parameters
+    ----------
+    points : (N, 3) float64
+    horizontal_normals : (N, 2) float64
+        Unit horizontal normals.
+    usable : (N,) bool
+        False for (nearly) horizontal surfaces, which have no facing direction.
+
+    Returns
+    -------
+    directions : (F, 3) float64
+    source_ids : (F,) int64
+        Sample point each ray starts from (its origin and its facade plane).
+    """
+    from scipy.spatial import cKDTree
+
+    empty = (np.zeros((0, 3), dtype=np.float64), np.zeros(0, dtype=np.int64))
+    candidate_ids = np.nonzero(usable)[0]
+    if candidate_ids.size < 2:
+        return empty
+    tree = cKDTree(points[candidate_ids, :2])
+    pairs = tree.query_pairs(_CORNER_NEIGHBOUR_STEPS * grid_step, output_type="ndarray")
+    if pairs.size == 0:
+        return empty
+    first, second = candidate_ids[pairs[:, 0]], candidate_ids[pairs[:, 1]]
+    same_row = np.abs(points[first, 2] - points[second, 2]) <= 0.5 * grid_step
+    first, second = first[same_row], second[same_row]
+
+    heading = np.arctan2(horizontal_normals[:, 1], horizontal_normals[:, 0])
+    turn = (heading[second] - heading[first] + np.pi) % (2.0 * np.pi) - np.pi
+    offset = points[second, :2] - points[first, :2]
+    same_edge = np.linalg.norm(offset, axis=1) <= _CORNER_SAME_EDGE_STEPS * grid_step
+    # Convex: the two rays move apart, i.e. the normals turn toward the side
+    # the neighbour lies on.
+    diverging = ((horizontal_normals[second] - horizontal_normals[first]) * offset).sum(axis=1) > 0.0
+
+    # Horizontal reach of a ray before it leaves the grid (its top, its
+    # plan diagonal, or ray_length), at the lowest tilt angle in use; the
+    # angular step keeps rays within 0.9 voxels of each other out to that
+    # reach.
+    alpha_min = float(np.min(np.atleast_1d(np.asarray(spec, dtype=np.float64))))
+    tan_min = np.tan(np.radians(alpha_min))
+    reach = np.full(first.shape, min(float(ray_length) * np.cos(np.radians(alpha_min)),
+                                     np.sqrt(2.0) * grid_extent))
+    if tan_min > 1e-6:
+        reach = np.minimum(reach, (grid_top_z - points[first, 2]) / tan_min)
+    angular_step = 0.9 * cell_size / np.maximum(reach, 1e-9)
+
+    keep = ((same_edge | diverging)
+            & (np.abs(turn) < np.radians(_CORNER_MAX_TURN_DEG))
+            & (np.abs(turn) > angular_step)
+            & (reach > 0.0))
+    first, second = first[keep], second[keep]
+    turn, angular_step = turn[keep], angular_step[keep]
+    if first.size == 0:
+        return empty
+
+    # Interior headings only: m = 1 .. k-1 of k equal steps (the end
+    # headings are the two points' own rays).
+    steps = np.ceil(np.abs(turn) / angular_step).astype(np.int64)
+    rays_per_pair = steps - 1
+    pair_of_ray = np.repeat(np.arange(first.size), rays_per_pair)
+    starts = np.cumsum(rays_per_pair) - rays_per_pair
+    m = np.arange(pair_of_ray.size) - starts[pair_of_ray] + 1
+    fraction = m / steps[pair_of_ray]
+    fan_heading = heading[first][pair_of_ray] + turn[pair_of_ray] * fraction
+    fan_horizontal = np.stack([np.cos(fan_heading), np.sin(fan_heading)], axis=1)
+
+    # The first half of the sweep starts at the first point, the second half
+    # at its neighbour: every ray is within half the turn of its source
+    # point's normal and leaves from in front of that point's facade.
+    source_ids = np.where(fraction <= 0.5, first[pair_of_ray], second[pair_of_ray])
+    directions = _tilted_directions(fan_horizontal, _tilt_angles_deg(fan_horizontal, spec, north_deg))
+    return directions, source_ids
+
+
 def carve_with_planes(
     voxel_grid,
     grid_origin,
@@ -719,6 +869,12 @@ def carve_with_planes(
     the ray traces the plane's section through that column, and everything
     above the plane is forbidden, not only the cells the ray crosses.
 
+    Where the test-surface outline turns convexly (two panels meeting at an
+    outside corner or a kink), the rays of the two panels diverge. Extra
+    rays from the corner sweep the headings between the two normals, so the
+    plane rotates around the corner instead of leaving the columns between
+    the diverging rays standing (see :func:`_corner_fan_rays`).
+
     Parameters
     ----------
     voxel_grid, grid_origin, grid_extent, grid_resolution,
@@ -737,7 +893,7 @@ def carve_with_planes(
     -------
     carved_grid : torch.Tensor, shape (D, D, D)
     ray_origins : np.ndarray, shape (R, 3)
-        The sample points (one ray each).
+        The sample points (one ray each; the corner rays are not included).
     ray_directions : np.ndarray, shape (R, 3)
     counts : np.ndarray, shape (D*D*D,), int32, optional
         Only returned when *return_counts* is True.
@@ -788,24 +944,7 @@ def carve_with_planes(
     # 8-element list: each surface gets an angle based on the compass octant
     # its horizontal normal faces ([N, NE, E, SE, S, SW, W, NW]).
     spec = config.tilted_plane_angle_deg
-    if isinstance(spec, (int, float)) or np.isscalar(spec):
-        alpha_deg = np.full((n_xy.shape[0],), float(spec), dtype=np.float32)
-    else:
-        table = np.asarray(spec, dtype=np.float32)
-        if table.shape != (8,):
-            raise ValueError(
-                "tilted_plane_angle_deg must be a single number or an 8-length list [N, NE, E, SE, S, SW, W, NW]"
-            )
-        # Compute the model-space azimuth from +Y clockwise toward +X, then
-        # subtract north_deg (model north, degrees clockwise from +Y) to get
-        # the true compass azimuth of each surface normal.
-        north_deg = float(config.north_deg)
-        phi = (np.degrees(np.arctan2(n_xy[:, 0], n_xy[:, 1])) - north_deg + 360.0) % 360.0
-        # Octant bins are 45° wide (360° / 8). Adding half a bin (22.5°)
-        # centres each bin on its direction (N = 0°, NE = 45°, E = 90°, ...),
-        # so N covers 337.5° to 22.5°.
-        idx = np.floor(((phi + 22.5) % 360.0) / 45.0).astype(np.int64)
-        alpha_deg = table[idx]
+    alpha_deg = _tilt_angles_deg(n_xy[:, :2], spec, config.north_deg).astype(np.float32)
 
     alpha_rad = np.radians(alpha_deg).astype(np.float32)
 
@@ -818,14 +957,26 @@ def carve_with_planes(
     dirs_np /= np.maximum(np.linalg.norm(dirs_np, axis=1, keepdims=True), 1e-9)
     dirs_np = dirs_np.astype(np.float32)
 
-    origins_tensor = torch.from_numpy(pts_np).to(device, non_blocking=True)
-    dirs_tensor = torch.from_numpy(dirs_np).to(device, non_blocking=True)
+    # Rotate the plane around convex turns of the outline: without these
+    # rays, columns between the diverging rays of two panels stay standing.
+    cell_size = float(grid_extent) / side_len
+    fan_dirs, fan_source_ids = _corner_fan_rays(
+        pts_np.astype(np.float64), n_xy[:, :2].astype(np.float64), ~flat,
+        spec, config.north_deg, float(config.grid_step), cell_size,
+        float(grid_origin[2]) + float(grid_extent), float(grid_extent),
+        float(config.ray_length),
+    )
+    source_ids = np.concatenate([np.arange(pts_np.shape[0]), fan_source_ids])
+    all_dirs = np.concatenate([dirs_np, fan_dirs.astype(np.float32)])
+
+    origins_tensor = torch.from_numpy(pts_np[source_ids]).to(device, non_blocking=True)
+    dirs_tensor = torch.from_numpy(all_dirs).to(device, non_blocking=True)
 
     grid_min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
     counts = _count_ray_hits(
         voxel_grid, grid_min_corner, float(grid_extent), side_len,
         origins_tensor, dirs_tensor, config,
-        torch.arange(pts_np.shape[0], device=device),
+        torch.from_numpy(source_ids).to(device),
         torch.from_numpy(norms_np).to(device),
     )
     # Propagate counts up each (x, y) column (running maximum along z), so

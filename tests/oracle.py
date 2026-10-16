@@ -193,10 +193,66 @@ def time_based_hits(run: Run, epw: str, minutes: int = 5) -> np.ndarray:
     return time_based_shading(run, epw, minutes) > 0
 
 
+def tilted_corner_rays(run: Run):
+    """Rays that rotate the tilted plane around convex turns of the outline.
+
+    Specification (from carving._corner_fan_rays): neighbouring sample
+    points, at most 1.5 grid steps apart in plan and 0.5 apart in z, whose
+    horizontal normals turn by more than one angular step and less than
+    179 degrees, and either lie within 0.25 grid steps of each other or move
+    apart ((n_j - n_i) . (p_j - p_i) > 0). Headings at m / k of the turn
+    from n_i for m = 1 .. k-1, with k = ceil(|turn| / step),
+    step = 0.9 voxel / reach, and reach the horizontal distance from p_i to
+    the grid top at the smallest tilt angle, capped by
+    ray_length * cos(angle) and the grid's plan diagonal. A ray with
+    m / k <= 0.5 starts at p_i with p_i's surface plane as its "in front"
+    test, the others at p_j with p_j's.
+    """
+    from scipy.spatial import cKDTree
+
+    c = run.cfg
+    spec = c["tilted_plane_angle_deg"]
+    step_m = float(c.get("grid_step", 1.0))
+    p = run.points
+    nxy = run.normals[:, :2].copy()
+    ln = np.linalg.norm(nxy, axis=1)
+    usable = np.nonzero(ln >= 0.05)[0]
+    nxy = nxy / np.maximum(ln, 1e-9)[:, None]
+    i, j = np.asarray(sorted(cKDTree(p[usable, :2]).query_pairs(1.5 * step_m)), int).reshape(-1, 2).T
+    i, j = usable[i], usable[j]
+    row = np.abs(p[i, 2] - p[j, 2]) <= 0.5 * step_m
+    i, j = i[row], j[row]
+    th = np.arctan2(nxy[:, 1], nxy[:, 0])
+    turn = (th[j] - th[i] + math.pi) % (2 * math.pi) - math.pi
+    off = p[j, :2] - p[i, :2]
+    ok = (np.hypot(off[:, 0], off[:, 1]) <= 0.25 * step_m) | (np.einsum("ij,ij->i", nxy[j] - nxy[i], off) > 0)
+    a_min = float(np.min(np.atleast_1d(spec)))
+    extent = run.shape[0] * run.vs
+    top = run.origin[2] + run.shape[2] * run.vs
+    reach = np.full(len(i), min(c.get("ray_length", 300.0) * math.cos(math.radians(a_min)),
+                                math.sqrt(2.0) * extent))
+    if math.tan(math.radians(a_min)) > 1e-6:
+        reach = np.minimum(reach, (top - p[i, 2]) / math.tan(math.radians(a_min)))
+    dstep = 0.9 * run.vs / np.maximum(reach, 1e-9)
+    ok &= (np.abs(turn) < math.radians(179.0)) & (np.abs(turn) > dstep) & (reach > 0)
+    sources, heads = [], []
+    for a, b, t, s in zip(i[ok], j[ok], turn[ok], dstep[ok]):
+        k = int(math.ceil(abs(t) / s))
+        frac = np.arange(1, k) / k
+        h = th[a] + t * frac
+        sources.append(np.where(frac <= 0.5, a, b))
+        heads.append(np.stack([np.cos(h), np.sin(h), np.zeros_like(h)], axis=1))
+    if not sources:
+        return np.zeros((0, 3)), np.zeros((0, 3)), np.zeros((0, 3))
+    src, heads = np.concatenate(sources), np.concatenate(heads)
+    return p[src], run.normals[src], tilted_directions(heads, spec, c.get("north_deg", 0.0))
+
+
 def tilted_hits(run: Run) -> np.ndarray:
     c = run.cfg
     d = tilted_directions(run.normals, c["tilted_plane_angle_deg"], c.get("north_deg", 0.0))
-    return march(run, run.points, run.normals, d, ray_length=c.get("ray_length", 300.0)) > 0
+    o, n, d = (np.concatenate(a) for a in zip((run.points, run.normals, d), tilted_corner_rays(run)))
+    return march(run, o, n, d, ray_length=c.get("ray_length", 300.0)) > 0
 
 
 def sky_scores(run: Run, substeps: int = 10) -> np.ndarray:
