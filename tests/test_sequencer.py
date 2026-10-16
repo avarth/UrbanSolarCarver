@@ -132,6 +132,7 @@ def test_cancel_stops_parallel_cpu_batches(tmp_path):
     context = RunContext(on_progress=lambda s, d, t: context.cancel() if (s, d) == ("preprocessing", 1) and t > 2 else None)
     with pytest.raises(RunCancelled):
         run_pipeline(daylight_cube_config(tmp_path, ray_batch_size=200), tmp_path / "run", context=context)
+    assert not (tmp_path / "run" / "preprocessing" / "manifest.json").exists()
 
 
 def test_cancelled_batches_launch_nothing_more(tmp_path):
@@ -145,3 +146,64 @@ def test_cancelled_batches_launch_nothing_more(tmp_path):
         _run_batches(batches, lambda start, end, buf: launched.append(start),
                      torch.zeros(4), torch.device("cpu"), parallel=True)
     assert launched == [0]
+
+
+def _parallel_batches_need_two_workers():
+    import os
+    if (os.cpu_count() or 1) < 2:
+        pytest.skip("the threaded batch loop needs at least two CPU cores")
+
+
+def test_final_progress_call_survives_a_late_finished_batch(monkeypatch):
+    """The calling thread can see an empty queue just before the last tokens
+    arrive; those tokens are still reported, so (total, total) is never lost."""
+    import queue
+    import time
+    import types
+
+    import torch
+    from urbansolarcarver import carving
+    from urbansolarcarver.run_context import run_context
+
+    _parallel_batches_need_two_workers()
+
+    class LateQueue(queue.Queue):
+        first_get = True
+
+        def get(self, block=True, timeout=None):
+            if LateQueue.first_get:
+                LateQueue.first_get = False
+                time.sleep(0.5)  # the workers finish every batch meanwhile
+                raise queue.Empty
+            return super().get(block, timeout)
+
+    monkeypatch.setattr(carving, "queue", types.SimpleNamespace(Queue=LateQueue, Empty=queue.Empty))
+    calls = []
+    context = RunContext(on_progress=lambda stage, done, total: calls.append((done, total)))
+    batches = [(i, i + 1) for i in range(9)]
+    with run_context(context):
+        carving._run_batches(batches, lambda start, end, buf: None,
+                             torch.zeros(4), torch.device("cpu"), parallel=True)
+    assert calls[-1] == (9, 9)
+    assert [done for done, _ in calls] == list(range(1, 10))
+
+
+def test_a_failing_worker_stops_the_other_workers():
+    import time
+
+    import torch
+    from urbansolarcarver.carving import _run_batches
+
+    _parallel_batches_need_two_workers()
+    launched = []
+
+    def launch(start, end, buffer):
+        launched.append(start)
+        if start == 1:
+            raise RuntimeError("batch failed")
+        time.sleep(0.05)
+
+    batches = [(i, i + 1) for i in range(41)]
+    with pytest.raises(RuntimeError, match="batch failed"):
+        _run_batches(batches, launch, torch.zeros(4), torch.device("cpu"), parallel=True)
+    assert len(launched) < 20

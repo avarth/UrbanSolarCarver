@@ -290,13 +290,17 @@ def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
     stop_workers = threading.Event()
 
     def _work(i):
-        for start, end in chunks[i]:
-            if stop_workers.is_set():
-                return
-            if context is not None:
-                context.raise_if_cancelled()
-            launch(start, end, buffers[i])
-            finished_batches.put(1)
+        try:
+            for start, end in chunks[i]:
+                if stop_workers.is_set():
+                    return
+                if context is not None:
+                    context.raise_if_cancelled()
+                launch(start, end, buffers[i])
+                finished_batches.put(1)
+        except BaseException:
+            stop_workers.set()  # cancelled or failed: the other workers stop at their next batch
+            raise
 
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
         futures = [pool.submit(_work, i) for i in range(n_workers)]
@@ -313,6 +317,15 @@ def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
         except BaseException:
             stop_workers.set()  # a failing progress callback must not leave the pool running
             raise
+        # The loop can end on an empty queue just before the last batches of
+        # finished workers arrive in it; report those too.
+        while True:
+            try:
+                finished_batches.get_nowait()
+            except queue.Empty:
+                break
+            done += 1
+            report_progress(done, total)
     for future in futures:
         future.result()  # re-raises the first worker exception, RunCancelled included
     for buf in buffers:
