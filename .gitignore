@@ -76,8 +76,6 @@ benchmarks/
 # Project vault (internal, not for public repo)
 vault/
 
-# Superpowers plans (internal development)
-docs/superpowers/
 
 # Backups
 src.zip
