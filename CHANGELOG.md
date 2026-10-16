@@ -7,6 +7,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (sky weights cache)
+
+- **Sky-patch weights are cached in the `CarverSession`.** `get_weights`
+  is keyed by every argument and by the contents of the EPW and
+  simulated-weights files, so a file rewritten at the same path still
+  gets new weights. A preprocessing run with unchanged weather settings
+  (a Grasshopper re-solve after a geometry edit, a daemon or service
+  rerun) skips the sky matrix: on the `multiple_buildings` example at 1 m
+  voxels on CUDA, a repeated irradiance preprocessing run went from
+  7.1 s to 5.1 s and a benefit run from 6.1 s to 5.3 s. Without a session
+  nothing changes.
+
 ### Changed (compute device)
 
 - **One rule chooses the compute device.** The new
