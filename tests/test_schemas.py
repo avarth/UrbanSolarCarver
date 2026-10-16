@@ -580,3 +580,29 @@ class TestBuildConfig:
             build_config({"max_volume_path": "v", "test_surface_path": "s", "out_dir": "o",
                           "mode": "daylight", "voxel_size": 1.0, "grid_step": 2.0})
         assert caught.value.errors[0].field is None and "grid_step" in caught.value.errors[0].message
+
+    def test_parse_overrides_reads_key_value_items_and_mappings(self):
+        from urbansolarcarver.load_config import parse_overrides
+        assert parse_overrides(["voxel_size=2.5", "mode = daylight"]) == {
+            "voxel_size": 2.5, "mode": "daylight"}
+        assert parse_overrides({"voxel_size": 2.5}) == {"voxel_size": 2.5}
+
+    def test_parse_overrides_expands_an_analysis_period_mapping(self):
+        from urbansolarcarver.load_config import parse_overrides
+        period = {"st_month": 12, "st_day": 21, "st_hour": 10,
+                  "end_month": 12, "end_day": 21, "end_hour": 14}
+        values = parse_overrides({"analysis_period": period})
+        assert "analysis_period" not in values
+        assert (values["start_month"], values["end_hour"]) == (12, 14)
+
+    @pytest.mark.parametrize("overrides", [
+        ["voxel_size"],
+        {"analysis_period": "not a mapping"},
+        ["analysis_period={\"st_month\": 1, \"st_minute\": 3}"],
+    ])
+    def test_parse_overrides_reports_a_malformed_item_as_a_config_error(self, overrides):
+        from urbansolarcarver.errors import ConfigError
+        from urbansolarcarver.load_config import parse_overrides
+        with pytest.raises(ConfigError) as caught:
+            parse_overrides(overrides)
+        assert caught.value.errors[0].field is None

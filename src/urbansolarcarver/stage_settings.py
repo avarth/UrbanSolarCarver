@@ -40,22 +40,47 @@ _STAGES_NEEDED_BY = {
 }
 
 
-def applied_smoothing_radius_m(kind: str, voxel_size: float, score_smoothing: Optional[float]) -> float:
-    """The Gaussian radius in meters that score smoothing applies, 0 when off.
+def stages_needed_for(produce: Iterable[str]) -> List[str]:
+    """The stages that have to be current to produce *produce*, in pipeline order.
+
+    Each produced stage brings the stages it reads (exporting and massing
+    read thresholding, which reads preprocessing).  Raises ValueError for a
+    name that is not in :data:`PIPELINE_STAGES`.
+    """
+    produced = set(produce)
+    unknown = produced - set(PIPELINE_STAGES)
+    if unknown:
+        raise ValueError(
+            f"unknown stage(s) {sorted(unknown)}; expected names from {list(PIPELINE_STAGES)}")
+    needed = set().union(*(_STAGES_NEEDED_BY[name] for name in produced)) if produced else set()
+    return [name for name in PIPELINE_STAGES if name in needed]
+
+
+def requested_smoothing_radius_m(kind: str, voxel_size: float, score_smoothing: Optional[float]) -> float:
+    """The Gaussian radius in meters that was asked for, before clipping; 0 when off.
 
     Violation-count scores are never smoothed.  For weighted-sum scores,
     ``score_smoothing`` None means 1.1 x ``voxel_size``, 0 means off and a
-    positive value is the radius in meters.  The radius in voxels is clipped
-    to 0.5 to 8 and converted back to meters.  With no usable ``voxel_size``
-    the radius cannot be converted to voxels and nothing is applied.
+    positive value is the radius in meters.  With no usable ``voxel_size``
+    the radius cannot be converted to voxels and nothing is requested.
     """
     if kind != "weighted_sum" or not voxel_size or voxel_size <= 0:
         return 0.0
     if score_smoothing is None:
-        requested_m = 1.1 * voxel_size
-    elif score_smoothing > 0:
-        requested_m = float(score_smoothing)
-    else:
+        return 1.1 * voxel_size
+    if score_smoothing > 0:
+        return float(score_smoothing)
+    return 0.0
+
+
+def applied_smoothing_radius_m(kind: str, voxel_size: float, score_smoothing: Optional[float]) -> float:
+    """The Gaussian radius in meters that score smoothing applies, 0 when off.
+
+    This is :func:`requested_smoothing_radius_m` with its radius in voxels
+    clipped to 0.5 to 8 and converted back to meters.
+    """
+    requested_m = requested_smoothing_radius_m(kind, voxel_size, score_smoothing)
+    if requested_m <= 0:
         return 0.0
     requested_voxels = requested_m / voxel_size
     clipped_voxels = float(np.clip(requested_voxels, 0.5, 8.0))
@@ -182,11 +207,7 @@ def stages_to_rerun(previous_config: Optional[UserConfig], new_config: UserConfi
     in :data:`PIPELINE_STAGES`.
     """
     produced = set(produce)
-    unknown = produced - set(PIPELINE_STAGES)
-    if unknown:
-        raise ValueError(
-            f"unknown stage(s) {sorted(unknown)}; expected names from {list(PIPELINE_STAGES)}")
-    needed = set().union(*(_STAGES_NEEDED_BY[name] for name in produced)) if produced else set()
+    needed = set(stages_needed_for(produced))
     leaves = [name for name in _LEAF_STAGES if name in produced]
 
     if previous_config is None:

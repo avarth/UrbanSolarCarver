@@ -134,3 +134,41 @@ def test_stage_folder_is_the_run_folder_plus_the_stage_name():
     from pathlib import Path
     from urbansolarcarver.stage_settings import stage_folder
     assert stage_folder("run", "massing") == Path("run") / "massing"
+
+
+def test_stages_needed_for_lists_the_path_in_pipeline_order():
+    from urbansolarcarver.stage_settings import stages_needed_for
+    assert stages_needed_for(["preprocessing"]) == ["preprocessing"]
+    assert stages_needed_for(("massing",)) == ["preprocessing", "thresholding", "massing"]
+    assert stages_needed_for({"massing", "exporting"}) == list(PIPELINE_STAGES)
+    assert stages_needed_for(stage for stage in ["exporting"]) == [
+        "preprocessing", "thresholding", "exporting"]
+
+
+def test_stages_needed_for_refuses_an_unknown_stage():
+    from urbansolarcarver.stage_settings import stages_needed_for
+    with pytest.raises(ValueError, match="rendering"):
+        stages_needed_for(["exporting", "rendering"])
+
+
+def test_no_module_but_stage_settings_reads_the_private_stage_table():
+    from pathlib import Path
+    import urbansolarcarver
+    package = Path(urbansolarcarver.__file__).parent
+    readers = [path.name for path in package.rglob("*.py")
+               if path.name != "stage_settings.py"
+               and "_STAGES_NEEDED_BY" in path.read_text(encoding="utf-8")]
+    assert readers == []
+
+
+@pytest.mark.parametrize("kind, voxel_size, smoothing, expected", [
+    ("violation_count", 1.0, 2.0, 0.0),
+    ("weighted_sum", 2.0, None, 2.2),
+    ("weighted_sum", 1.0, 0.0, 0.0),
+    ("weighted_sum", 1.0, 0.1, 0.1),      # the request, before any clipping
+    ("weighted_sum", 0.5, 10.0, 10.0),
+    ("weighted_sum", 0.0, 1.0, 0.0),
+])
+def test_requested_smoothing_radius_is_the_radius_before_clipping(kind, voxel_size, smoothing, expected):
+    from urbansolarcarver.stage_settings import requested_smoothing_radius_m
+    assert requested_smoothing_radius_m(kind, voxel_size, smoothing) == pytest.approx(expected)

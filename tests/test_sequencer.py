@@ -219,3 +219,10 @@ def test_a_failing_worker_stops_the_other_workers():
     with pytest.raises(RuntimeError, match="batch failed"):
         _run_batches(batches, launch, torch.zeros(4), torch.device("cpu"), parallel=True)
     assert len(launched) < 20
+
+
+def test_start_from_error_names_the_stages_of_a_one_shot_produce(tmp_path):
+    produce = (stage for stage in ["preprocessing"])
+    with pytest.raises(ValueError, match=r"path to \['preprocessing'\]:"):
+        run_pipeline(daylight_cube_config(tmp_path), tmp_path / "run", produce=produce,
+                     start_from="massing")

@@ -14,7 +14,7 @@ from .api_core import (
     PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
 )
 from .run_context import Issue, RunContext, report_progress, run_context, stage_context
-from .stage_settings import _STAGES_NEEDED_BY, PIPELINE_STAGES, stage_folder, stages_to_rerun
+from .stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 
 # The stage whose output each stage reads.
 _UPSTREAM_STAGE = {
@@ -37,19 +37,6 @@ class PipelineResult:
     exporting: Optional[ExportingResult]
     massing: Optional[MassingResult]
     issues: tuple[Issue, ...]
-
-
-def _stages_on_the_path(produce: Iterable[str]) -> tuple[str, ...]:
-    """The stages needed to produce *produce*, in pipeline order."""
-    wanted = [produce] if isinstance(produce, str) else list(produce)
-    unknown = sorted(set(wanted) - set(PIPELINE_STAGES))
-    if unknown or not wanted:
-        raise ValueError(
-            f"produce must name at least one of {list(PIPELINE_STAGES)}, got {wanted}")
-    needed = set()
-    for stage in wanted:
-        needed.update(_STAGES_NEEDED_BY[stage])
-    return tuple(stage for stage in PIPELINE_STAGES if stage in needed)
 
 
 def run_pipeline(
@@ -99,10 +86,14 @@ def run_pipeline(
     RunCancelled
         If the context is cancelled; stages that finished keep their output.
     """
-    path = _stages_on_the_path(produce)
+    wanted = [produce] if isinstance(produce, str) else list(produce)
+    if not wanted or not set(wanted) <= set(PIPELINE_STAGES):
+        raise ValueError(
+            f"produce must name at least one of {list(PIPELINE_STAGES)}, got {wanted}")
+    path = stages_needed_for(wanted)
     if start_from not in path:
         raise ValueError(
-            f"start_from must be one of the stages on the path to {list(produce)}: "
+            f"start_from must be one of the stages on the path to {wanted}: "
             f"{list(path)}; got {start_from!r}")
     if context is None:
         context = RunContext(forward_issues_to_warnings=True)

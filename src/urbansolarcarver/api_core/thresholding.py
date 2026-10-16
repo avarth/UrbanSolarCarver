@@ -11,7 +11,9 @@ from ..run_context import Issue, RunContext, report_issue, stage_context
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..carving import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
-from ..stage_settings import RunOptions, ThresholdingSettings, applied_smoothing_radius_m
+from ..stage_settings import (
+    RunOptions, ThresholdingSettings, applied_smoothing_radius_m, requested_smoothing_radius_m,
+)
 from ._util import _resolve_cfg, ensure_diag, load_occupancy
 from ._stage_io import (
     LoadedManifest, begin_stage, commit_manifest, load_upstream, new_run_id, stored_path,
@@ -76,12 +78,7 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     if kind != "weighted_sum":
         return raw, False, 0.0, 0.0
 
-    requested_m = 0.0
-    if score_smoothing is None:
-        requested_m = 1.1 * voxel_size  # auto-default
-    elif score_smoothing > 0:
-        requested_m = float(score_smoothing)
-
+    requested_m = requested_smoothing_radius_m(kind, voxel_size, score_smoothing)
     if requested_m <= 0:
         return raw, False, 0.0, 0.0
 

@@ -231,3 +231,33 @@ def test_massing_with_a_missing_or_damaged_footprint_asks_for_a_preprocessing_re
         footprint.write_text(json.dumps({"shapes": []}), encoding="utf-8")
     with pytest.raises(StageChainError, match="Re-run preprocessing"):
         massing(thr, conf, tmp_path / "run" / "massing")
+
+
+def test_massing_with_a_footprint_ring_too_short_to_close_asks_for_a_preprocessing_rerun(tmp_path):
+    from urbansolarcarver import massing
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    pre, thr = _run_pre_and_thr(tmp_path, conf)
+    (pre.out_dir / "footprint.json").write_text(
+        json.dumps({"polygons": [{"exterior": [[0.0, 0.0], [1.0, 1.0]], "holes": []}]}),
+        encoding="utf-8")
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
+        massing(thr, conf, tmp_path / "run" / "massing")
+
+
+def test_massing_with_a_footprint_shapely_rejects_asks_for_a_preprocessing_rerun(tmp_path, monkeypatch):
+    """Every malformed polygon built by hand raised ValueError or TypeError in
+    this shapely version; a GEOSException is simulated, since shapely documents
+    it for geometries GEOS refuses."""
+    from shapely.errors import GEOSException
+    from urbansolarcarver import floor_plates, massing
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    _pre, thr = _run_pre_and_thr(tmp_path, conf)
+
+    def refuse(data):
+        raise GEOSException("IllegalArgumentException: invalid ring")
+
+    monkeypatch.setattr(floor_plates, "footprint_from_dict", refuse)
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
+        massing(thr, conf, tmp_path / "run" / "massing")

@@ -36,9 +36,8 @@ import traceback
 
 log = logging.getLogger(__name__)
 from urbansolarcarver.errors import ConfigError, ConfigFieldError
-from urbansolarcarver.load_config import _parse_overrides, _wrap_value_error, build_config, load_config
+from urbansolarcarver.load_config import build_config, load_config, parse_overrides
 from urbansolarcarver.mode_registry import MODES, canonical_mode_name
-from urbansolarcarver.pydantic_schemas import expand_analysis_period
 from urbansolarcarver.run_context import RunContext, run_context
 from urbansolarcarver.session import CarverSession
 from urbansolarcarver.stage_settings import PIPELINE_STAGES, stage_folder
@@ -139,6 +138,11 @@ def _error_reply(exc: BaseException) -> dict:
     return reply
 
 
+def _bad_request_reply(message: str) -> dict:
+    """The error reply for a malformed request (the type name is ValueError)."""
+    return {"status": "error", "error": message, "error_type": "ValueError"}
+
+
 def _issues_of(context: RunContext) -> list:
     """The issues of *context* as reply dicts."""
     return [{"stage": issue.stage, "code": issue.code, "message": issue.message}
@@ -157,10 +161,7 @@ def _build_request_config(msg):
     overrides = msg.get("overrides") or []
     if msg.get("config") is not None:
         return load_config(msg["config"], overrides)
-    try:
-        values = dict(expand_analysis_period(_parse_overrides(overrides)))
-    except ValueError as exc:
-        raise _wrap_value_error(exc) from exc
+    values = parse_overrides(overrides)
     if values.get("mode") is None:
         raise ConfigError(
             "mode: required when no config file is given",
@@ -209,7 +210,7 @@ def _handle_stage_command(cmd, msg, sess):
             return {"status": "ok", "export_path": str(result.exporting.export_path),
                     "issues": _issues_of(context)}
 
-        out_dir = msg.get("out_dir") or (Path(cfg.out_dir) / cmd)
+        out_dir = msg.get("out_dir") or stage_folder(cfg.out_dir, cmd)
         if cmd == "preprocessing":
             result = api.preprocessing(cfg, out_dir)
             reply = {"status": "ok", "manifest": str(result.out_dir / "manifest.json")}
@@ -273,13 +274,13 @@ def _dispatch(msg, sess) -> dict:
     caller.
     """
     if not isinstance(msg, dict):
-        return {"status": "error", "error": "Expected a dict message"}
+        return _bad_request_reply("Expected a dict message")
     cmd = msg.get("cmd")
     if cmd not in _REQUIRED_KEYS:
-        return {"status": "error", "error": f"Unknown command: {cmd!r}"}
+        return _bad_request_reply(f"Unknown command: {cmd!r}")
     missing = [k for k in _REQUIRED_KEYS[cmd] if k not in msg]
     if missing:
-        return {"status": "error", "error": f"Missing required keys for {cmd!r}: {missing}"}
+        return _bad_request_reply(f"Missing required keys for {cmd!r}: {missing}")
     if cmd == "ping":
         return {"status": "ok", "pid": os.getpid()}
     if cmd == "simulate_weights":

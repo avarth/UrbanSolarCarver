@@ -13,6 +13,7 @@ bottom of this file update automatically.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Dict, FrozenSet, Literal, Mapping, Set
 
 
@@ -57,6 +58,10 @@ class ModeSpec:
     experimental: bool = False
     description: str = ""
     starting_values: Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self):
+        # A read-only copy: the registry is shared by every caller.
+        object.__setattr__(self, "starting_values", MappingProxyType(dict(self.starting_values)))
 
 
 _PERIOD_FIELDS = frozenset({

@@ -336,3 +336,10 @@ def test_simulated_weights_read_the_archetype_defaults():
     assert zone.t_set_cooling == ARCHETYPE_DEFAULTS["t_set_cooling"]
     shoebox = expand_shoebox({"width": 10, "length": 10, "height": 3, "wwr": {"south": 0.3}})
     assert shoebox["windows"][0][2] == ARCHETYPE_DEFAULTS["g_value"]
+
+
+def test_starting_values_cannot_be_changed_in_place():
+    from urbansolarcarver.mode_registry import MODES
+    for spec in MODES.values():
+        with pytest.raises(TypeError):
+            spec.starting_values["voxel_size"] = 99.0

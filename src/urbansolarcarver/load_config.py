@@ -67,20 +67,36 @@ def parse_override_value(raw: str) -> Any:
     return raw
 
 
-def _parse_overrides(overrides: Union[List[str], Mapping[str, Any]]) -> Dict[str, Any]:
-    if isinstance(overrides, Mapping):
-        return dict(overrides)
-    parsed = {}
-    for item in overrides:
-        if "=" not in item:
-            raise ValueError(f"Invalid override '{item}', expecting key=value")
-        key, val = item.split("=", 1)
-        parsed[key.strip()] = parse_override_value(val.strip())
-    return parsed
-
-
 def _wrap_value_error(exc: ValueError) -> ConfigError:
     return ConfigError(str(exc), [ConfigFieldError(None, str(exc))])
+
+
+def parse_overrides(overrides: Union[List[str], Mapping[str, Any]]) -> Dict[str, Any]:
+    """The settings named by *overrides*: ``key=value`` strings or a mapping.
+
+    String values are parsed by :func:`parse_override_value`.  An
+    ``analysis_period`` mapping is expanded into the six flat period fields,
+    so the result can replace the values of a YAML file or of a mode's
+    starting values field by field.
+
+    Raises
+    ------
+    ConfigError
+        For an item without ``=`` or an ``analysis_period`` that is not a
+        valid period (``errors`` holds one entry whose field is None).
+    """
+    try:
+        if isinstance(overrides, Mapping):
+            return dict(expand_analysis_period(dict(overrides)))
+        parsed = {}
+        for item in overrides:
+            if "=" not in item:
+                raise ValueError(f"Invalid override '{item}', expecting key=value")
+            key, val = item.split("=", 1)
+            parsed[key.strip()] = parse_override_value(val.strip())
+        return dict(expand_analysis_period(parsed))
+    except ValueError as exc:
+        raise _wrap_value_error(exc) from exc
 
 
 def _resolve_path_fields(data: Dict[str, Any], base_folder: Path) -> None:
@@ -183,8 +199,8 @@ def load_config(
         # The YAML's own period block is expanded before the overrides are
         # applied, so that flat start_*/end_* overrides replace it.
         _resolve_path_fields(data, Path(path).resolve().parent)
-        if overrides:
-            data.update(expand_analysis_period(_parse_overrides(overrides)))
     except ValueError as exc:
         raise _wrap_value_error(exc) from exc
+    if overrides:
+        data.update(parse_overrides(overrides))
     return build_config(data)

@@ -84,16 +84,18 @@ def test_client_leaving_before_reply(daemon):
     _alive(addr, key, proc)
 
 
-@pytest.mark.parametrize("msg, fragment", [
-    ({"cmd": "nope"}, "Unknown command"),
-    ({"cmd": "thresholding", "config": "x.yaml"}, "Missing required keys"),
-    (["not", "a", "dict"], "Expected a dict"),
-    ({"cmd": "preprocessing", "config": "does_not_exist.yaml"}, "FileNotFoundError"),
+@pytest.mark.parametrize("msg, fragment, error_type", [
+    ({"cmd": "nope"}, "Unknown command", "ValueError"),
+    ({"cmd": "thresholding", "config": "x.yaml"}, "Missing required keys", "ValueError"),
+    (["not", "a", "dict"], "Expected a dict", "ValueError"),
+    ({"cmd": "preprocessing", "config": "does_not_exist.yaml"}, "FileNotFoundError",
+     "FileNotFoundError"),
 ])
-def test_bad_requests_get_error_replies(daemon, msg, fragment):
+def test_bad_requests_get_error_replies(daemon, msg, fragment, error_type):
     addr, key, proc = daemon
     reply = _call(addr, key, msg)
     assert reply["status"] == "error" and fragment in reply["error"]
+    assert reply["error_type"] == error_type
     _alive(addr, key, proc)
 
 
@@ -286,3 +288,26 @@ def test_run_from_thresholding_without_a_yaml_after_a_preprocessing_run(tmp_path
     assert reply["status"] == "ok", reply
     assert set(reply["stage_folders"]) == {"thresholding"}
     assert (run_folder / "thresholding" / "manifest.json").is_file()
+
+
+def test_run_without_yaml_takes_an_analysis_period_override_over_the_starting_values(tmp_path):
+    from urbansolarcarver.daemon import _build_request_config
+    overrides = {"mode": "time-based", "epw_path": "w.epw", "out_dir": str(tmp_path),
+                 "max_volume_path": "v.ply", "test_surface_path": "s.ply",
+                 "analysis_period": {"st_month": 6, "st_day": 1, "st_hour": 9,
+                                     "end_month": 6, "end_day": 30, "end_hour": 15}}
+    cfg = _build_request_config({"overrides": overrides})
+    assert (cfg.start_month, cfg.start_day, cfg.start_hour) == (6, 1, 9)
+    assert (cfg.end_month, cfg.end_day, cfg.end_hour) == (6, 30, 15)
+
+
+@pytest.mark.parametrize("overrides", [
+    ["mode"],
+    {"mode": "daylight", "analysis_period": "not a mapping"},
+])
+def test_run_without_yaml_reports_malformed_overrides_as_a_config_error(overrides):
+    from urbansolarcarver.daemon import _build_request_config
+    from urbansolarcarver.errors import ConfigError
+    with pytest.raises(ConfigError) as caught:
+        _build_request_config({"overrides": overrides})
+    assert caught.value.errors[0].field is None

@@ -17,6 +17,7 @@ from typing import List, Union
 import numpy as np
 import shapely
 import shapely.affinity
+from shapely.errors import GEOSException
 
 from .. import floor_plates as mg
 from ..errors import StageChainError
@@ -66,7 +67,7 @@ def _read_footprint(pre):
         )
     try:
         return mg.footprint_from_dict(json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, GEOSException) as exc:
         raise StageChainError(
             f"Footprint file {path} is damaged ({type(exc).__name__}: {exc}). "
             f"Re-run preprocessing."
