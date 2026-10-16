@@ -479,13 +479,13 @@ git commit -m "feat(ui): run worker with stage choice, buffered events, cancel a
   - Static files from `static_folder` (default `ui_static/` next to the package) at `/`, without the token; `index.html` for `/`.
   - The WebSocket sends every buffered event from index 0, then new ones, and closes after `run_finished`, `run_failed` or `run_cancelled`.
 
-- [ ] **Step 1: Write the failing tests** (fake worker handle as in Task 5; `TestClient(create_app(tmp_path, TOKEN, 8765), base_url="http://127.0.0.1:8765")`)
+- [ ] **Step 1: Write the failing tests** (fake worker handle as in Task 5; `TestClient(create_app(tmp_path, TOKEN, 8770), base_url="http://127.0.0.1:8770")`)
 
 ```python
 def test_token_and_host_are_checked(client):
     assert client.get("/api/health").status_code == 401
     assert client.get("/api/health", headers={"X-USC-Token": "wrong"}).status_code == 401
-    assert client.get("/api/health", headers={"X-USC-Token": TOKEN, "Host": "evil.example:8765"}).status_code == 403
+    assert client.get("/api/health", headers={"X-USC-Token": TOKEN, "Host": "evil.example:8770"}).status_code == 403
     assert client.get("/api/modes", headers=AUTH).status_code == 200
 
 def test_static_index_needs_no_token(client_with_static):
@@ -578,7 +578,7 @@ git commit -m "feat(ui): example projects packaged with the service"
 
 **Interfaces:**
 - Consumes: `create_app` (Task 6).
-- Produces: `usc ui [--port 8765] [--projects-folder ~/UrbanSolarCarver/projects] [--no-browser] [--device auto]`. Steps: (1) import `fastapi` and `uvicorn`; on `ImportError` print `The browser UI needs the ui extra: <python> -m pip install -e "<repo>[ui]"` (the repository folder when the package is an editable install, `urbansolarcarver[ui]` otherwise) and exit 1; (2) if `ui_static/index.html` is missing, print the folder and `cd app && npm install && npm run build` and exit 1; (3) token `secrets.token_hex(32)`; (4) open `http://127.0.0.1:PORT/?token=...` with `webbrowser.open` unless `--no-browser` (and print it either way); (5) `uvicorn.run(app, host="127.0.0.1", port=port)`.
+- Produces: `usc ui [--port 8770] [--projects-folder ~/UrbanSolarCarver/projects] [--no-browser] [--device auto]`. Steps: (1) import `fastapi` and `uvicorn`; on `ImportError` print `The browser UI needs the ui extra: <python> -m pip install -e "<repo>[ui]"` (the repository folder when the package is an editable install, `urbansolarcarver[ui]` otherwise) and exit 1; (2) if `ui_static/index.html` is missing, print the folder and `cd app && npm install && npm run build` and exit 1; (3) token `secrets.token_hex(32)`; (4) open `http://127.0.0.1:PORT/?token=...` with `webbrowser.open` unless `--no-browser` (and print it either way); (5) `uvicorn.run(app, host="127.0.0.1", port=port)`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -591,7 +591,7 @@ def test_ui_without_the_front_end_names_the_build_command(monkeypatch, tmp_path)
 
 def test_ui_starts_uvicorn_on_localhost_with_a_token(monkeypatch): ...
     # monkeypatch uvicorn.run to record host/port and webbrowser.open to record the URL;
-    # host == "127.0.0.1", URL starts with "http://127.0.0.1:8765/?token=" followed by 64 hex characters
+    # host == "127.0.0.1", URL starts with "http://127.0.0.1:8770/?token=" followed by 64 hex characters
 ```
 
 - [ ] **Step 2: Run them to verify they fail.** Run: `.venv/Scripts/python -m pytest tests/test_cli.py -q -p no:cacheprovider -k ui`. Expected: FAIL (`No such command 'ui'`).
@@ -618,7 +618,7 @@ git commit -m "feat(ui): usc ui command; the installer adds the ui extra"
 
 **Interfaces:**
 - Produces:
-  - npm scripts: `dev` (Vite, proxy `/api` with `ws: true` to `http://127.0.0.1:8765`), `api-types` (`python -c "import json; from urbansolarcarver.local_web_service.server import openapi_document; print(json.dumps(openapi_document()))" > openapi.json && openapi-typescript openapi.json -o src/api_client/generated_types.ts`), `build` (`vite build --outDir ../src/urbansolarcarver/ui_static --emptyOutDir && node scripts/write_build_info.mjs`), `test` (`vitest run`).
+  - npm scripts: `dev` (Vite, proxy `/api` with `ws: true` to `http://127.0.0.1:8770`), `api-types` (`python -c "import json; from urbansolarcarver.local_web_service.server import openapi_document; print(json.dumps(openapi_document()))" > openapi.json && openapi-typescript openapi.json -o src/api_client/generated_types.ts`), `build` (`vite build --outDir ../src/urbansolarcarver/ui_static --emptyOutDir && node scripts/write_build_info.mjs`), `test` (`vitest run`).
   - `client.ts`: `readTokenFromLaunchUrl(): string` (reads `?token=`, then removes it from the address bar with `history.replaceState`), and one typed function per route, each sending `X-USC-Token`; non-2xx replies throw `ApiError {status, body}`.
   - `events.ts`: `subscribeToRunEvents(runId, token, onEvent): () => void` over `ws://<host>/api/runs/<id>/events?token=`.
   - Build hash (both sides identical): files = `app/package.json`, `app/package-lock.json` and every file under `app/src`, sorted by their path relative to `app/` written with `/`; for each, update SHA-256 with `relative_path + "\n"` then the file bytes with every `\r\n` replaced by `\n`; `build_info.json` = `{"app_source_sha256": "<hex>"}`.
