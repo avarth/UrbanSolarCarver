@@ -94,7 +94,7 @@ class ThresholdSpec(BaseModel):
 def _normalize_threshold(v):
     """Accept threshold shorthands and return the canonical form.
 
-    * ``None``: left as is; ``UserConfig`` fills in the mode default later.
+    * ``None``: left as is; :func:`resolve_threshold` gives the mode default.
     * number: ``{method: cutoff, value: n}``. Booleans are rejected.
     * ``'headtail'`` / ``'carve_fraction'``: ``{method: <name>}``.
     * mapping or :class:`ThresholdSpec`: passed on to :class:`ThresholdSpec`
@@ -120,6 +120,41 @@ def _normalize_threshold(v):
             "'carve_fraction', or a mapping like {method: carve_fraction, value: 0.7}"
         )
     return v
+
+
+def resolve_threshold(mode: str, threshold: Optional[ThresholdSpec],
+                      carve_fraction: float) -> ThresholdSpec:
+    """The complete thresholding strategy for *mode*.
+
+    *threshold* is the config's field as written: None takes the mode
+    default (carve_fraction with the *carve_fraction* value for the
+    weighted modes, cutoff 0 for the violation-count modes), and
+    ``carve_fraction`` without a value takes *carve_fraction*.  Raises
+    ValueError for a method the mode cannot use: violation-count scores
+    take only a cutoff, and tilted_plane only cutoff 0.
+    """
+    if MODES[mode].score_kind == "violation_count":
+        spec = threshold if threshold is not None else ThresholdSpec(method="cutoff", value=0.0)
+        if spec.method != "cutoff":
+            raise ValueError(
+                f"threshold method '{spec.method}' is not valid for mode "
+                f"'{mode}': its scores count blocked rays instead of "
+                f"weighting sky patches. Use a non-negative number (for "
+                f"time-based, the tolerated shading in m²·h; 0 = none) or "
+                f"leave threshold unset."
+            )
+        if mode == "tilted_plane" and spec.value != 0.0:
+            # tilted_plane is binary: a voxel either protrudes above a
+            # plane or it does not, so a tolerance has no meaning.
+            raise ValueError(
+                "tilted_plane mode is binary: threshold must be unset or 0. "
+                "A voxel either protrudes above the daylight plane (culled) "
+                "or it does not (kept)."
+            )
+        return spec
+    if threshold is None or (threshold.method == "carve_fraction" and threshold.value is None):
+        return ThresholdSpec(method="carve_fraction", value=carve_fraction)
+    return threshold
 
 
 # Keys of an analysis_period mapping: Ladybug's AnalysisPeriod.to_dict() keys
@@ -366,8 +401,9 @@ class UserConfig(BaseModel):
             "(inspect the score histogram first); for time-based this is the "
             "tolerated shading in m²·h (shaded test-surface area x duration). "
             "Unset: mode default (carve_fraction for weighted modes, 0 for "
-            "violation-count modes). After validation this field is always a "
-            "ThresholdSpec."
+            "violation-count modes). The field keeps what was written (None or a "
+            "ThresholdSpec); UserConfig.resolved_threshold() gives the strategy "
+            "applied, which thresholding records in its manifest."
         ),
     )
     carve_fraction: float = Field(
@@ -383,7 +419,9 @@ class UserConfig(BaseModel):
             "taller, slimmer volumes). "
             "0.3 = conservative (removes 30%; bulkier volumes, more floor area). "
             "Used by the carve_fraction threshold method when the threshold gives no value "
-            "of its own, which includes the default for weighted modes."
+            "of its own, which includes the default for weighted modes; set explicitly "
+            "where it is not used (headtail, a numeric cutoff, time-based, tilted_plane), "
+            "it gives a warning."
         ),
     )
     # benefit parameters
@@ -506,52 +544,40 @@ class UserConfig(BaseModel):
             return None if self.max_slope_deg >= 90.0 else float(self.max_slope_deg)
         return 75.0 if MODES[self.mode].score_kind == "weighted_sum" else None
 
+    def resolved_threshold(self) -> ThresholdSpec:
+        """The thresholding strategy this config applies; see :func:`resolve_threshold`."""
+        return resolve_threshold(self.mode, self.threshold, self.carve_fraction)
+
     @model_validator(mode='after')
-    def _resolve_threshold_spec(self) -> 'UserConfig':
-        """Resolve ``threshold`` to a concrete :class:`ThresholdSpec`.
+    def _check_threshold(self) -> 'UserConfig':
+        """Check ``threshold`` against the mode, and warn about an unused
+        ``carve_fraction``.
 
-        After this validator the field is never None and never a shorthand:
-        the mode default is filled in (carve_fraction for weighted modes,
-        cutoff 0 for violation-count modes) and the method is cross-checked
-        against the mode's score kind.
+        ``threshold`` keeps the value as written (None = the mode default),
+        so a dumped config loads back with the same meaning; the strategy
+        is resolved by :meth:`resolved_threshold`.  An explicit
+        ``carve_fraction`` that the resolved strategy does not read gives a
+        warning.
         """
-        kind = MODES[self.mode].score_kind
-        spec = self.threshold
-
-        if kind == "violation_count":
-            if spec is None:
-                spec = ThresholdSpec(method="cutoff", value=0.0)
-            elif spec.method != "cutoff":
-                raise ValueError(
-                    f"threshold method '{spec.method}' is not valid for mode "
-                    f"'{self.mode}': its scores count blocked rays instead of "
-                    f"weighting sky patches. Use a non-negative number (for "
-                    f"time-based, the tolerated shading in m²·h; 0 = none) or "
-                    f"leave threshold unset."
-                )
-            if self.mode == "tilted_plane" and spec.value != 0.0:
-                # tilted_plane is binary: a voxel either protrudes above a
-                # plane or it does not, so a tolerance has no meaning.
-                raise ValueError(
-                    "tilted_plane mode is binary: threshold must be unset or 0. "
-                    "A voxel either protrudes above the daylight plane (culled) "
-                    "or it does not (kept)."
-                )
-        else:  # weighted_sum
-            if spec is None:
-                spec = ThresholdSpec(method="carve_fraction", value=self.carve_fraction)
-            elif spec.method == "carve_fraction" and spec.value is None:
-                spec = ThresholdSpec(method="carve_fraction", value=self.carve_fraction)
-            elif (spec.method == "carve_fraction" and "carve_fraction" in self.model_fields_set
-                  and spec.value != self.carve_fraction):
-                warnings.warn(
-                    f"threshold value {spec.value} and carve_fraction={self.carve_fraction} "
-                    f"disagree; using the threshold value {spec.value}.",
-                    UrbanSolarCarverWarning,
-                    stacklevel=2,
-                )
-
-        self.threshold = spec
+        spec = self.resolved_threshold()  # raises for a method the mode cannot use
+        reads_carve_fraction = self.threshold is None or (
+            self.threshold.method == "carve_fraction" and self.threshold.value is None)
+        if (spec.method == "carve_fraction" and not reads_carve_fraction
+                and "carve_fraction" in self.model_fields_set
+                and spec.value != self.carve_fraction):
+            warnings.warn(
+                f"threshold value {spec.value} and carve_fraction={self.carve_fraction} "
+                f"disagree; using the threshold value {spec.value}.",
+                UrbanSolarCarverWarning,
+                stacklevel=2,
+            )
+        elif spec.method != "carve_fraction" and "carve_fraction" in self.model_fields_set:
+            warnings.warn(
+                f"carve_fraction={self.carve_fraction} is unused: mode '{self.mode}' "
+                f"thresholds with '{spec}'.",
+                UrbanSolarCarverWarning,
+                stacklevel=2,
+            )
         return self
 
     @model_validator(mode='after')
@@ -683,6 +709,13 @@ class ThresholdingManifest(BaseModel):
     mask_path: str
     upstream_manifest: str
     upstream_hash: str
+    # The settings this run applied after resolving the config's "None =
+    # auto" values: the threshold strategy (not the score-dependent
+    # cutoff), the score smoothing radius in meters (0 = none) and the
+    # slope limit (None = off).
+    resolved_threshold: ThresholdSpec
+    score_smoothing_m: float
+    max_slope_deg: Optional[float]
 
 class ExportingManifest(BaseModel):
     """Manifest written by exporting."""

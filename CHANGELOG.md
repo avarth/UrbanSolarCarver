@@ -66,6 +66,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
   preprocessing run's `config_snapshot.json` instead of the config passed
   to exporting or massing; smoothing moved to the Export section, read
   from exporting's diagnostics.
+- **A dumped config did not load back with the same meaning.** The
+  config validator wrote the mode default into `threshold`, so a dumped
+  config (`config_snapshot.json`, or one a client keeps) ignored a later
+  `carve_fraction` change and failed validation when switched to
+  time-based or tilted_plane. `threshold` now keeps what was written (None
+  = the mode default); `resolve_threshold` (and
+  `UserConfig.resolved_threshold()`) resolves it in one place, and the
+  thresholding manifest records the resolved strategy with the score
+  smoothing radius and slope limit the run applied
+  (`resolved_threshold`, `score_smoothing_m`, `max_slope_deg`). An
+  explicit `carve_fraction` that the strategy does not read (headtail, a
+  numeric cutoff, time-based, tilted_plane) now gives a warning instead
+  of being ignored silently.
 
 ### Changed (weighted modes; results change)
 

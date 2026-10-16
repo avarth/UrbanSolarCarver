@@ -181,10 +181,12 @@ class TestThresholdValidation:
 
     def test_none_resolves_to_mode_default(self):
         """Unset threshold resolves to carve_fraction for weighted modes,
-        picking up the carve_fraction key as its value."""
+        picking up the carve_fraction key as its value; the stored field
+        stays unset."""
         cfg = self._benefit_base(threshold=None, carve_fraction=0.6)
-        assert cfg.threshold.method == "carve_fraction"
-        assert cfg.threshold.value == 0.6
+        assert cfg.threshold is None
+        assert cfg.resolved_threshold().method == "carve_fraction"
+        assert cfg.resolved_threshold().value == 0.6
 
     def test_canonical_mapping_accepted(self):
         cfg = self._benefit_base(threshold={"method": "carve_fraction", "value": 0.4})
@@ -194,7 +196,8 @@ class TestThresholdValidation:
     def test_carve_fraction_shorthand_fills_value(self):
         cfg = self._benefit_base(threshold="carve_fraction", carve_fraction=0.3)
         assert cfg.threshold.method == "carve_fraction"
-        assert cfg.threshold.value == 0.3
+        assert cfg.threshold.value is None
+        assert cfg.resolved_threshold().value == 0.3
 
     def test_headtail_with_value_rejected(self):
         with pytest.raises(ValidationError):
@@ -223,8 +226,8 @@ class TestThresholdValidation:
 
     def test_violation_mode_default_is_strict_cutoff(self):
         cfg = self._timebased_base(threshold=None)
-        assert cfg.threshold.method == "cutoff"
-        assert cfg.threshold.value == 0.0
+        assert cfg.resolved_threshold().method == "cutoff"
+        assert cfg.resolved_threshold().value == 0.0
 
     def test_violation_mode_rejects_strategy(self):
         with pytest.raises(ValidationError):
@@ -247,6 +250,63 @@ class TestThresholdValidation:
         """'otsu' is not a valid threshold method and must be rejected."""
         with pytest.raises(ValidationError):
             self._benefit_base(threshold="otsu")
+
+
+class TestThresholdRoundTrip:
+    """A dumped config (config_snapshot.json, or one a client keeps) loads
+    back with the same meaning: defaults stay unset, so a later change of
+    carve_fraction or mode applies."""
+
+    _PERIOD = dict(epw_path="dummy.epw", start_month=1, start_day=1, start_hour=8,
+                   end_month=1, end_day=1, end_hour=16)
+
+    def _reload(self, cfg, **changes):
+        from urbansolarcarver.pydantic_schemas import UserConfig
+        import warnings
+        dumped = cfg.model_dump()
+        dumped.update(changes)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # dumps set every mode-specific field
+            return UserConfig(**dumped)
+
+    def test_a_dumped_config_follows_a_later_carve_fraction(self):
+        cfg = _make_config(mode="benefit", **self._PERIOD)
+        reloaded = self._reload(cfg, carve_fraction=0.2)
+        assert reloaded.resolved_threshold().value == 0.2
+
+    def test_a_dumped_weighted_config_switches_to_time_based(self):
+        cfg = _make_config(mode="benefit", **self._PERIOD)
+        reloaded = self._reload(cfg, mode="time-based")
+        assert reloaded.resolved_threshold().method == "cutoff"
+        assert reloaded.resolved_threshold().value == 0.0
+
+
+class TestUnusedCarveFraction:
+    """carve_fraction set explicitly where the threshold method or the mode
+    does not read it gives a warning."""
+
+    _PERIOD = TestThresholdRoundTrip._PERIOD
+
+    def test_headtail_warns(self):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="carve_fraction"):
+            _make_config(mode="benefit", threshold="headtail", carve_fraction=0.5, **self._PERIOD)
+
+    def test_numeric_cutoff_warns(self):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="carve_fraction"):
+            _make_config(mode="benefit", threshold=2.0, carve_fraction=0.5, **self._PERIOD)
+
+    def test_time_based_warns(self):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="carve_fraction"):
+            _make_config(mode="time-based", carve_fraction=0.5, **self._PERIOD)
+
+    def test_used_value_does_not_warn(self):
+        import warnings
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            _make_config(mode="benefit", carve_fraction=0.5, **self._PERIOD)
 
 
 class TestAnalysisPeriodMapping:

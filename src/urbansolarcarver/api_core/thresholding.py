@@ -119,8 +119,8 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
 def _resolve_threshold(scores, spec, removal_scores=None):
     """Resolve a validated :class:`ThresholdSpec` into a numeric cutoff.
 
-    The config layer guarantees the spec is complete and valid for the
-    mode (see ``UserConfig._resolve_threshold_spec``), so this only
+    *spec* is complete and valid for the mode
+    (``UserConfig.resolved_threshold``), so this only
     dispatches: ``cutoff`` is the value itself; ``headtail`` (Jiang 2013
     head/tail breaks) and ``carve_fraction`` (a score-mass cutoff, not a
     percentile of voxel counts) compute it from *scores*.
@@ -163,7 +163,9 @@ def thresholding(
     a numeric threshold (``cutoff``) is accepted and applied directly.
 
     Threshold strategies (set via ``cfg.threshold``; the config layer
-    normalizes every accepted spelling into a ``ThresholdSpec``):
+    normalizes every accepted spelling into a ``ThresholdSpec``, and
+    ``cfg.resolved_threshold()`` fills in the mode default when it is
+    unset):
 
     * ``cutoff`` (shorthand: a bare number): a literal cutoff; voxels with
       ``score <= value`` are kept.
@@ -230,7 +232,9 @@ def thresholding(
         3-D Boolean array (same shape as the voxel grid), True = keep.
     ``manifest.json``
         ``ThresholdingManifest`` recording the stage hash, the mask path and
-        the path and hash of the upstream preprocessing manifest.  The
+        the path and hash of the upstream preprocessing manifest, and the
+        resolved threshold strategy, score smoothing radius (m) and slope
+        limit this run applied.  The
         outputs of an earlier run in *out_dir* are deleted first and the
         manifest is written last, after the diagnostics.
     ``diagnostics/``
@@ -307,7 +311,7 @@ def thresholding(
 
     scores = raw.astype(np.float32, copy=False)
     occ_scores = scores[occ]
-    spec = conf.threshold
+    spec = conf.resolved_threshold()
     # Standalone re-thresholding (CLI, daemon, Grasshopper) can pair a config
     # with scores from a run in another mode; the threshold defaults and
     # units differ per mode, so refuse instead of carving with the wrong rule.
@@ -457,6 +461,9 @@ def thresholding(
         mask_path=str(mask_path),
         upstream_manifest=str(pre_manifest_path),
         upstream_hash=upstream_hash,
+        resolved_threshold=spec,
+        score_smoothing_m=_smooth_radius_m,
+        max_slope_deg=max_slope,
     )
     (out_path / "manifest.json").write_text(schema_to_json(tm), encoding="utf-8")
 

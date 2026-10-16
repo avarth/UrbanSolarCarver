@@ -110,7 +110,11 @@ def load_occupancy(pre_manifest):
 
 
 def dump_config_snapshot(conf, diag_dir) -> Path:
-    """Write the full resolved config to diagnostics for reproducibility."""
+    """Write the full config to diagnostics for reproducibility.
+
+    "None = auto" settings stay unset, so the snapshot loads back with the
+    same meaning; the thresholding manifest records what they resolved to.
+    """
     snapshot = conf.model_dump()
     return write_json(diag_dir, "config_snapshot.json", snapshot)
 

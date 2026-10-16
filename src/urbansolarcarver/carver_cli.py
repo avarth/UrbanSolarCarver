@@ -370,7 +370,7 @@ def cmd_thresholding(
         return
 
     if not quiet:
-        typer.secho(f"  Thresholding [{cfg.threshold}] -> {out_dir}", fg="yellow")
+        typer.secho(f"  Thresholding [{cfg.resolved_threshold()}] -> {out_dir}", fg="yellow")
 
     t0 = time.perf_counter()
     res = _api("thresholding")(from_manifest, cfg, out_dir)
@@ -778,7 +778,7 @@ def validate(
     typer.secho("  Config OK", fg="green", bold=True)
     typer.echo(f"    mode:       {cfg.mode}")
     typer.echo(f"    voxel_size: {cfg.voxel_size}")
-    typer.echo(f"    threshold:  {cfg.threshold}")
+    typer.echo(f"    threshold:  {cfg.resolved_threshold()}")
     typer.echo(f"    device:     {cfg.device}")
     typer.echo(f"    out_dir:    {cfg.out_dir}")
 

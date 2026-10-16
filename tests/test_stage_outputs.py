@@ -119,7 +119,8 @@ class TestRunReport:
         conf, thr = thresholded_run
         run = tmp_path / "run"
         _quietly(massing, thr, conf, run / "massing")
-        stricter = conf.model_copy(update={"threshold": conf.threshold.model_copy(update={"value": 0.3})})
+        from urbansolarcarver.pydantic_schemas import ThresholdSpec
+        stricter = conf.model_copy(update={"threshold": ThresholdSpec(method="carve_fraction", value=0.3)})
         rethresholded = _quietly(thresholding, thr.upstream_manifest, stricter, run / "thresholding")
         assert rethresholded.hash != thr.hash
         _quietly(exporting, rethresholded, stricter, run / "exporting")
@@ -136,3 +137,16 @@ def test_run_report_shows_the_settings_preprocessing_ran_with(tmp_path, threshol
              tmp_path / "run" / "exporting")
     report = (tmp_path / "run" / "run_report.md").read_text(encoding="utf-8")
     assert "| Ray length | 50.0 m |" in report
+
+
+def test_thresholding_manifest_records_the_resolved_settings(tmp_path, thresholded_run):
+    """The config keeps the "None = auto" settings unset; the thresholding
+    manifest records what they resolved to for this run."""
+    from urbansolarcarver.pydantic_schemas import ThresholdingManifest
+    conf, thr = thresholded_run
+    assert conf.threshold is None and conf.score_smoothing is None and conf.max_slope_deg is None
+    manifest = ThresholdingManifest.model_validate_json(thr.manifest_path.read_text(encoding="utf-8"))
+    assert manifest.resolved_threshold.method == "carve_fraction"
+    assert manifest.resolved_threshold.value == conf.carve_fraction
+    assert manifest.score_smoothing_m == pytest.approx(1.1 * conf.voxel_size)
+    assert manifest.max_slope_deg == 75.0
