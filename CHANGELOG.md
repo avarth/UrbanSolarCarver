@@ -58,6 +58,48 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ground for nothing. Flat facades aligned with the grid are unaffected.
   Applies to every mode (Warp kernels, the fixed-step fallback and the
   test reference).
+- **A test surface's skin goes with the mass behind it (all modes).** The
+  voxelizer marks every voxel the max volume's surface passes through as
+  occupied, and a surface's own rays skip the voxels its plane passes
+  through (its skin). So a test surface on a max volume face, or inside
+  the max volume, sat in occupied voxels only other surfaces' rays could
+  remove, and where none reached them they stood as one-voxel fins: in
+  front of a neighbour's facade on the plot line, in slots narrower than
+  a voxel between two facing facades, and at block corners. Now a skin
+  occupied skin voxel with nothing of the max volume behind it obstructs
+  the surface like any voxel in front of it, and an occupied skin voxel
+  with max volume behind it is still not counted by the surface's rays
+  but takes the count or score of the voxel behind it, so it is removed
+  whenever that mass is. Empty skin voxels are never counted (in
+  tilted_plane a count would carve the column above them, such as a
+  bridge flush with a protected passage mouth). A lone building
+  protecting its own facades is unchanged. full_blocks example,
+  tilted_plane 45 degrees, 1 m voxels: 0.35% fewer kept voxels (152,229
+  to 151,691), thin columns standing 3 or more voxels above both
+  neighbours 52 to 36; the 19 skin fins found there (up to 92 voxels,
+  20 to 30 above their neighbours) now stand at most one voxel above a
+  neighbour, and most of the remaining thin columns are convex-turn
+  gaps. Same rule in the Warp kernels (new
+  `follow_mass_behind_skin_dda` pass), the fixed-step fallback and the
+  test reference. Rays of zero-weight sample points (edge_taper) are
+  dropped before tracing, so their skin does not follow.
+
+### Fixed (tilted_plane; results change)
+
+- **The tilted plane rotates around convex corners of the test surfaces.**
+  Each sample point cast one ray along its own normal, so where two facade
+  panels meet at an outside corner or a convex kink the two panels' rays
+  diverged, and columns between them were crossed by no ray and stayed at
+  full height: one-voxel spires at convex corners and vertical strips
+  beyond kinks (a 6.7 degree kink left strips from about 8 m out; a 90
+  degree corner left the whole outside wedge uncarved). Present since
+  0.9.0. Neighbouring sample points whose normals turn convexly now also
+  cast rays at headings swept between the two normals, so the wedge is
+  capped by the plane rotated around the corner (at 45 degrees: height =
+  distance from the corner). Concave corners are unchanged. In the
+  full_blocks example at 1 m voxels the 45 degree envelope keeps 3.0% less
+  volume (octant table: 3.5% less) and tilted-plane carving takes about
+  0.7 s instead of 0.1 s on the CPU. No new parameter.
 
 ### Added
 

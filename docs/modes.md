@@ -108,7 +108,7 @@ Weights sky patches using the CIE standard overcast sky luminance distribution. 
 
 ## tilted_plane
 
-Traditional geometric solar envelope method. Every voxel above a tilted plane at a fixed angle from each test surface is carved. No weather data is involved. Each sample point casts one ray at the plane angle, outward along the facade's horizontal normal, and every voxel at or above that ray in its (x, y) column is removed: the whole half-space above the plane, not only the band the rays cross.
+Traditional geometric solar envelope method. Every voxel above a tilted plane at a fixed angle from each test surface is carved. No weather data is involved. Each sample point casts one ray at the plane angle, outward along the facade's horizontal normal, and every voxel at or above that ray in its (x, y) column is removed: the whole half-space above the plane, not only the band the rays cross. Where two test-surface panels meet at a convex corner or kink, their rays diverge; extra rays from the corner sweep the headings between the two normals, so the plane rotates around the corner (at 45 degrees, a column outside a right-angle corner is capped at its distance from the corner). Concave corners need no extra rays: the two planes already meet there.
 
 The angle can be a single float (applied uniformly) or a list of 8 floats (one per compass octant N, NE, E, SE, S, SW, W, NW, chosen by the direction each facade faces).
 
