@@ -24,6 +24,24 @@
 - Writing rules (code comments, docs, UI copy): long descriptive names, no em dashes, no cliché labels, they/them for people.
 - Tests that take seconds get the `slow` marker; there is no CI, tests run locally.
 
+## Execution Guardrails
+
+**The engine is off limits.** Implementers may create or change only these paths:
+
+- `src/urbansolarcarver/local_web_service/**`, `src/urbansolarcarver/example_projects/**`, `src/urbansolarcarver/ui_static/**`
+- `app/**`
+- `tests/test_local_web_*.py`, and in `tests/test_cli.py` only tests for the `ui` command
+- `src/urbansolarcarver/carver_cli.py`: only the new `ui` command and its helpers, nothing in existing commands
+- `pyproject.toml`: only the `ui` extra, `httpx` in `dev`, and `[tool.setuptools.package-data]`
+- `setup_env.py`: only installing the `ui` extra and the `--no-ui` flag
+- `.gitignore`, `docs/ui.md`, `docs/getting-started/installation.md`, `docs/project-map.md`, `mkdocs.yml`, `README.md`, `CHANGELOG.md`
+
+Every other file under `src/urbansolarcarver/` is engine code. An implementer who finds that a task needs an engine change (a missing function, a wrong signature, a bug) **stops**, reports `NEEDS_ENGINE_CHANGE` with the file, the change and the reason, and does not work around it in service code. The controller passes that report to the user and waits for their decision. After every task the controller compares `git diff --name-only BASE..HEAD` with the list above and treats any other path as a stop.
+
+**Models.** Implementers of Tasks 1 to 8 and 13: Sonnet. One combined review per task (spec compliance and code quality): Opus. Tasks 9 to 12 (front-end): Opus.
+
+**Front-end blocked on the UX design.** Tasks 9 to 12 start only after a UX design spec (layout, first-run experience, how settings and results are presented, visual language) is written and approved; that spec may rewrite those tasks. Tasks 1 to 8 do not depend on it.
+
 ## Review Focus
 
 1. A project name with path parts or odd characters (`../x`, `a/b`, empty, 200 characters): 422, and nothing is written outside the projects folder. Test in Task 1.
