@@ -184,7 +184,7 @@ With the default output folders (`<out_dir>/preprocessing`, `<out_dir>/threshold
 ```
 outputs/
   preprocessing/
-    scores.npy, voxel_grid.npy, test_points.npy, test_normals.npy, manifest.json, diagnostics/
+    scores.npy, voxel_grid.npy, footprint.json, test_points.npy, test_normals.npy, manifest.json, diagnostics/
   thresholding/
     mask.npy, manifest.json, diagnostics/
   exporting/

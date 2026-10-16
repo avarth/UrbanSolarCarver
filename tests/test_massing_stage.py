@@ -96,19 +96,6 @@ def test_raised_part_warns_and_follows_stacking(tmp_path):
     assert any(np.array(p["outline"])[:, 0].min() > 0 for p in plates)    # high block too
 
 
-def test_unreadable_outline_falls_back_to_voxels(tmp_path, monkeypatch):
-    from urbansolarcarver import floor_plates as mg
-    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
-    _set_mask(thr, lambda occ: occ)
-    monkeypatch.setattr(mg, "footprint_polygons", lambda mesh, offset_xy: [])
-    with pytest.warns(UserWarning, match="voxel footprint"):
-        res = _massing(cfg, thr, tmp_path / "m")
-    assert res.n_plates == 6
-    # The voxel footprint covers every column the box touches: between the
-    # true 30 x 12 m and one voxel more on each axis (31 x 13 m).
-    assert 30 * 12 - 1e-6 <= res.floor_areas[0] <= 31 * 13 + 1e-6
-
-
 def test_nothing_buildable_gives_valid_empty_outputs(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
 
@@ -163,23 +150,52 @@ def test_uneven_base_still_builds_plates(tmp_path):
     assert res.floor_areas[0] == pytest.approx(30 * 12, rel=0.02)
 
 
-def test_outline_not_matching_the_voxels_falls_back(tmp_path):
+def test_massing_ignores_a_max_volume_file_edited_after_preprocessing(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
     _set_mask(thr, lambda occ: occ)
-    # The file preprocessing read is replaced by a different, shifted volume.
-    _box([30, 12, 20], center_xy=(25.0, 0.0)).export(tmp_path / "max_volume.ply")
+    _box([36, 18, 20]).export(tmp_path / "max_volume.ply")      # edited in place
+    res = _massing(cfg, thr, tmp_path / "m")
+    assert res.floor_areas[0] == pytest.approx(30 * 12, rel=1e-6)
+
+
+def test_preprocessing_saves_the_footprint_in_world_coordinates(tmp_path):
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.0, 4200000.0)))
+    saved = json.loads((tmp_path / "out" / "preprocessing" / "footprint.json").read_text(encoding="utf-8"))
+    assert len(saved["polygons"]) == 1
+    polygon = saved["polygons"][0]
+    exterior = np.array(polygon["exterior"])
+    assert polygon["holes"] == []
+    assert np.allclose(exterior.min(0), [499985.0, 4199994.0], atol=1e-6)
+    assert np.allclose(exterior.max(0), [500015.0, 4200006.0], atol=1e-6)
+    manifest = json.loads((tmp_path / "out" / "preprocessing" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["footprint_path"] == "footprint.json"
+    assert "max_volume_path" not in manifest
+
+
+def test_footprint_not_matching_the_voxels_falls_back(tmp_path):
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
+    _set_mask(thr, lambda occ: occ)
+    # The saved footprint is replaced by a shifted one, as if from another volume.
+    path = tmp_path / "out" / "preprocessing" / "footprint.json"
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    for polygon in saved["polygons"]:
+        polygon["exterior"] = [[x + 25.0, y] for x, y in polygon["exterior"]]
+    path.write_text(json.dumps(saved), encoding="utf-8")
     with pytest.warns(UserWarning, match="does not match"):
         res = _massing(cfg, thr, tmp_path / "m")
     assert res.n_plates == 6
 
 
-def test_footprint_comes_from_the_mesh_preprocessing_read(tmp_path):
-    """A config passed to massing later may name another max volume (in
-    Grasshopper it names none of the preprocessed geometry); the footprint
-    is the maximum volume recorded in the preprocessing manifest."""
-    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
+def test_empty_footprint_falls_back_to_voxels(tmp_path, monkeypatch):
+    from urbansolarcarver import floor_plates as mg
+    monkeypatch.setattr(mg, "footprint_polygons", lambda mesh, offset_xy: [])
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))     # preprocessing writes []
+    saved = json.loads((tmp_path / "out" / "preprocessing" / "footprint.json").read_text(encoding="utf-8"))
+    assert saved == {"polygons": []}
     _set_mask(thr, lambda occ: occ)
-    larger = tmp_path / "larger.ply"
-    _box([36, 18, 20]).export(larger)
-    res = _massing(cfg, thr, tmp_path / "m", max_volume_path=str(larger))
-    assert res.floor_areas[0] == pytest.approx(30 * 12, rel=1e-6)
+    with pytest.warns(UserWarning, match="voxel footprint"):
+        res = _massing(cfg, thr, tmp_path / "m")
+    assert res.n_plates == 6
+    # The voxel footprint covers every column the box touches: between the
+    # true 30 x 12 m and one voxel more on each axis (31 x 13 m).
+    assert 30 * 12 - 1e-6 <= res.floor_areas[0] <= 31 * 13 + 1e-6

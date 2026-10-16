@@ -79,13 +79,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
   without any warning when the voxel columns fell inside it (a 30 x 12 m
   volume got 594 m² of ground-floor plates from a 36 x 18 m mesh); in
   Grasshopper the massing config does not name the preprocessed geometry
-  at all. The preprocessing manifest now records `max_volume_path`, and
-  massing reads it from there. `load_occupancy` no longer re-voxelizes the
-  config's mesh when `voxel_grid.npy` is missing; it raises
-  `FileNotFoundError`. The run report's configuration table comes from the
-  preprocessing run's `config_snapshot.json` instead of the config passed
-  to exporting or massing; smoothing moved to the Export section, read
-  from exporting's diagnostics.
+  at all. Preprocessing now saves the plan projection of the mesh it
+  voxelized as `footprint.json` (world xy, listed in the manifest as
+  `footprint_path`), and massing reads that file, never the input mesh, so
+  editing or replacing the mesh afterwards cannot change the plates. When
+  the projection fails or covers no area, preprocessing reports a
+  `footprint_unreadable` issue, saves an empty list, and massing uses the
+  voxel footprint with its existing warning. `load_occupancy` no longer
+  re-voxelizes the config's mesh when `voxel_grid.npy` is missing; it
+  raises `FileNotFoundError`. The run report's configuration table comes
+  from the preprocessing run's `config_snapshot.json` instead of the
+  config passed to exporting or massing; smoothing moved to the Export
+  section, read from exporting's diagnostics.
 - **A dumped config did not load back with the same meaning.** The
   config validator wrote the mode default into `threshold`, so a dumped
   config (`config_snapshot.json`, or one a client keeps) ignored a later

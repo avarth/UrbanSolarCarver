@@ -160,6 +160,7 @@ class TestStageBoundaryValidation:
             run_id="t", scores_path=str(scores_path), scores_kind="weighted_sum",
             shape=manifest_shape, origin=(0.0, 0.0, 0.0), voxel_size=1.0,
             mode="irradiance", voxel_grid_path="voxel_grid.npy", sample_point_count=1,
+            footprint_path="footprint.json",
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
         return pre_dir
@@ -389,6 +390,7 @@ class TestDefaultThresholdReporting:
             mode="irradiance",
             voxel_grid_path=str(vg_path),
             sample_point_count=1,
+            footprint_path="footprint.json",
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
@@ -471,6 +473,7 @@ class TestScoreSmoothing:
             mode="irradiance" if kind == "weighted_sum" else "time-based",
             voxel_grid_path=str(vg_path),
             sample_point_count=1,
+            footprint_path="footprint.json",
         )
         manifest_path = pre_dir / "manifest.json"
         manifest_path.write_text(schema_to_json(pm), encoding="utf-8")

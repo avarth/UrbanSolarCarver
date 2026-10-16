@@ -1,14 +1,14 @@
 """Massing stage: stacked floor plates from the carved envelope.
 
 Reads the thresholding manifest, builds floor plates that follow the
-maximum volume's footprint (``urbansolarcarver.floor_plates``), and writes them
+maximum volume's footprint, which preprocessing saved as ``footprint.json``
+(``urbansolarcarver.floor_plates``), and writes them
 as ``plates.json`` (outlines in world coordinates) and ``plates.obj`` (one
 closed prism per plate), with a manifest, diagnostics and the run report.
 """
 from __future__ import annotations
 
 import json
-import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,15 +19,12 @@ import shapely
 import shapely.affinity
 
 from .. import floor_plates as mg
-from ..io import load_mesh
 from ..load_config import user_config
 from ..pydantic_schemas import MassingManifest
 from ..run_context import Issue, report_issue, stage_context
 from ._reporting import write_run_report
 from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
 from ._util import _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
-
-log = logging.getLogger(__name__)
 
 # Everything massing writes into its folder, besides manifest.json.
 _MASSING_OUTPUTS = ("plates.json", "plates.obj", "diagnostics/diagnostic.json")
@@ -53,23 +50,27 @@ class MassingResult:
         return str(self.plates_path)
 
 
-def _footprint(max_volume_path, origin, columns, voxel_size):
+def _read_footprint(pre):
+    """The footprint polygons preprocessing saved (world xy); empty when it saved none."""
+    path = pre.resolve(pre.manifest.footprint_path)
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"Footprint file not found: {path} (named by the preprocessing manifest). "
+            f"Re-run preprocessing."
+        )
+    return mg.footprint_from_dict(json.loads(path.read_text(encoding="utf-8")))
+
+
+def _footprint(world_polygons, origin, columns, voxel_size):
     """Footprint polygons (local xy) and their source ("mesh" or "voxels").
 
-    The mesh footprint is the plan projection of the maximum volume at
-    *max_volume_path*, the mesh the preprocessing run voxelized.  It is used
-    only when it matches the voxel grid: at most FOOTPRINT_MISMATCH_SHARE
-    of the occupied columns may have their centre more than one voxel
-    outside it.  Otherwise (or without a path) the voxel footprint is used,
-    with a warning.
+    *world_polygons* is the plan projection of the maximum volume that
+    preprocessing saved, in world xy.  It is used only when it matches the
+    voxel grid: at most FOOTPRINT_MISMATCH_SHARE of the occupied columns may
+    have their centre more than one voxel outside it.  Otherwise (or when
+    preprocessing saved none) the voxel footprint is used, with a warning.
     """
-    try:
-        if max_volume_path is None:
-            raise ValueError("the preprocessing manifest names no maximum volume")
-        polygons = mg.footprint_polygons(load_mesh(max_volume_path), origin[:2])
-    except Exception as exc:  # no path, unreadable or broken mesh
-        log.warning("massing: could not project the maximum volume: %s", exc)
-        polygons = []
+    polygons = [shapely.affinity.translate(p, -origin[0], -origin[1]) for p in world_polygons]
     if not polygons:
         report_issue(
             "footprint_unreadable",
@@ -113,8 +114,8 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
 
     Floors are ``ground_floor_height`` then ``floor_height`` tall, counted
     from the lowest point of the maximum volume.  The footprint (the plan
-    projection of the maximum volume named in the preprocessing manifest,
-    not in *cfg*) is split into faces, one per
+    projection of the maximum volume that preprocessing saved as
+    ``footprint.json``, not the mesh named in *cfg*) is split into faces, one per
     facade, and each face into bays ``min_plate_dimension`` wide, cut
     perpendicular to its facade.  A bay is built on a floor when it stays in
     the maximum volume over the floor's full height, at most
@@ -174,7 +175,7 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         columns = occ.any(axis=2)
         cells_ij = np.argwhere(columns)
         xy = (cells_ij + 0.5) * vs
-        polygons, footprint_source = _footprint(chain.pre.manifest.max_volume_path, origin, columns, vs)
+        polygons, footprint_source = _footprint(_read_footprint(chain.pre), origin, columns, vs)
         facades, corners = mg.split_facades(polygons)
         # A facade shorter than two bays (a chamfer, a small step) would get a
         # face of at most one bay; its columns go to the neighbouring facades.

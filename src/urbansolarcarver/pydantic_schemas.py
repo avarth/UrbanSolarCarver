@@ -693,8 +693,8 @@ class PreprocessingManifest(BaseModel):
     # Absent in the violation-count modes, which have no sky patches.
     patch_weights_path: Optional[str] = None
     sample_point_count: int
-    # The maximum volume mesh this run voxelized; massing reads its footprint.
-    max_volume_path: Optional[str] = None
+    # The max volume's plan projection in world xy; massing reads it.
+    footprint_path: str
 
 class ThresholdingManifest(BaseModel):
     """Manifest written by thresholding, read by exporting and massing."""

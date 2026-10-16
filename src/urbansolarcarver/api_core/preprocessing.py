@@ -1,5 +1,5 @@
 from __future__ import annotations
-import json, time
+import json, logging, time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple, Union
@@ -11,6 +11,7 @@ from ._diagnostics import (
     PreprocessingPlotInputs, score_statistics, warn_score_anomalies,
     write_preprocessing_diagnostics,
 )
+from .. import floor_plates
 from ..pydantic_schemas import PreprocessingManifest
 from ..errors import InputError
 from ..run_context import Issue, report_issue, stage_context
@@ -21,10 +22,12 @@ from ..carving import (
 from ..grid import voxelize, sample_surface
 from ..mode_registry import MODES, MODES_NEEDING_PERIOD
 
+log = logging.getLogger(__name__)
+
 # Everything preprocessing writes into its folder, besides manifest.json.
 _PREPROCESSING_OUTPUTS = (
     "scores.npy", "voxel_grid.npy", "patch_weights.npy", "test_points.npy",
-    "test_normals.npy", "analysis_mesh.json",
+    "test_normals.npy", "analysis_mesh.json", "footprint.json",
     "diagnostics/diagnostic.json", "diagnostics/config_snapshot.json",
     "diagnostics/score_histogram.png", "diagnostics/sky_patch_weights.png",
     "diagnostics/sky_patch_weights_intensity.png", "diagnostics/sky_patch_comparison.png",
@@ -71,6 +74,26 @@ def _check_radiative_cooling_surface(norms: np.ndarray) -> None:
             f"This mode's view-factor weighting (cos θ / π) is only valid for "
             f"surfaces facing the sky. For vertical facades, use a different mode."
         )
+
+
+def _max_volume_footprint(max_volume_mesh) -> list:
+    """The plan projection of the max volume (world xy), for massing.
+
+    Returns an empty list, and reports ``footprint_unreadable``, when the
+    projection fails or covers no area; massing then uses the voxel footprint.
+    """
+    try:
+        polygons = floor_plates.footprint_polygons(max_volume_mesh, (0.0, 0.0))
+    except Exception as exc:  # a broken mesh must not fail the scoring run
+        log.warning("preprocessing: could not project the maximum volume: %s", exc)
+        polygons = []
+    if not polygons:
+        report_issue(
+            "footprint_unreadable",
+            "preprocessing: the maximum volume's footprint could not be computed; "
+            "massing will use the voxel footprint",
+        )
+    return polygons
 
 
 def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms, conf,
@@ -205,6 +228,11 @@ def preprocessing(
     ``voxel_grid.npy``
         Occupancy grid (uint8, 1 = inside the max volume) so downstream
         stages can skip re-voxelization.
+    ``footprint.json``
+        The max volume's plan projection in world xy (``{"polygons": [{"exterior":
+        [[x, y], ...], "holes": [...]}, ...]}``), which massing reads instead of
+        the input mesh.  An empty list when the projection failed; massing then
+        uses the voxel footprint.
     ``test_points.npy``, ``test_normals.npy``, ``analysis_mesh.json``
         Sample points (world coordinates), their normals, and the analysis
         mesh, for diagnostics and Grasshopper display.
@@ -247,6 +275,7 @@ def preprocessing(
         # that lie exactly on panel edges, so the same scene placed elsewhere
         # would sample (and carve) slightly differently.
         frame = np.asarray(mesh_env.bounds[0], dtype=np.float64)
+        footprint = _max_volume_footprint(mesh_env)   # world xy, before the shift
         mesh_env = mesh_env.copy()
         mesh_env.vertices = np.round(mesh_env.vertices - frame, 6)
         mesh_insol = mesh_insol.copy()
@@ -328,6 +357,8 @@ def preprocessing(
             )
         else:
             analysis_mesh_path = None
+        footprint_path = out_path / "footprint.json"
+        footprint_path.write_text(json.dumps(floor_plates.footprint_to_dict(footprint)), encoding="utf-8")
         _mark("save_npy_and_mesh")
 
         run_id = new_run_id()
@@ -342,7 +373,7 @@ def preprocessing(
             mode=mode,
             patch_weights_path=stored_path(pw_path, out_path) if pw_path else None,
             sample_point_count=int(pts.shape[0]),
-            max_volume_path=str(Path(conf.max_volume_path).resolve()),
+            footprint_path=stored_path(footprint_path, out_path),
         )
 
         # Per-stage diagnostics: the stage builds the summary, the writer puts
