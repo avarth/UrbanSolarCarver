@@ -20,7 +20,7 @@ By default the updates come from the installed user objects (Grasshopper's User 
 
 The `.ghuser` files are generated from the sources in `grasshopper/components/`; edit the `.py`, never the `.ghuser`. Each source declares its own ports: names and descriptions in its "GH UI" block, order and types in the numpydoc `Inputs` / `Outputs` docstring. `grasshopper/components.json` holds the ribbon subcategory and the stable user-object GUID; icons are `grasshopper/icons/<source name>.png` (24x24).
 
-Code shared by several components (daemon calls, PLY reading and writing, mesh conversion, override parsing) lives in `grasshopper/usc_gh.py`. The components load it at run time from `<carver_root>/grasshopper/`, where `carver_root` is the repository folder given to USC_Session, so editing it takes effect on the next solve without rebuilding any `.ghuser`. It uses only the standard library, RhinoCommon and the Grasshopper SDK, because the component scripts run in Rhino's own Python, not in the USC environment.
+Code shared by several components (daemon calls, the `run` command wrapper `run_stages`, engine issues shown as warnings by `show_issues`, loading the engine's `mode_registry.py` and `archetype_defaults.py` by path with `engine_module`, PLY reading and writing, mesh conversion, override parsing) lives in `grasshopper/usc_gh.py`. The components load it at run time from `<carver_root>/grasshopper/`, where `carver_root` is the repository folder given to USC_Session, so editing it takes effect on the next solve without rebuilding any `.ghuser`. It uses only the standard library, RhinoCommon and the Grasshopper SDK, because the component scripts run in Rhino's own Python, not in the USC environment.
 
 ```bash
 pip install -e .[ghbuild]                       # pythonnet
@@ -55,8 +55,8 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 
 **Configuration** (`1::Config`)
 
-- **USC_Config**: builds a pipeline configuration from a mode, an EPW path, an output folder, an optional base YAML and the override strings of the parameter components below
-- **USC_Mode**: selects the carving mode by number and outputs its name for USC_Config's `mode` input
+- **USC_Config**: builds a pipeline configuration from a mode, an EPW path, an output folder, an optional base YAML and the override strings of the parameter components below. With no YAML, the daemon starts from the mode's starting values (for example the analysis period of the benefit, irradiance and time-based modes) and applies the overrides; `configs/` is not read. Spellings such as `time_based` or `tilted-plane` are accepted.
+- **USC_Mode**: selects the carving mode by number and outputs its name for USC_Config's `mode` input. The mode list and descriptions come from the engine (`mode_registry.py`), so solve USC_Session first; without it the component shows a message that says so.
 - **USC_EPW** (*USC EPW Path*): passes the EPW file path
 - **USC_AnalysisPeriod**: defines the analysis date/time range
 - **USC_GridSettings**: voxel size, surface sampling spacing (`grid_step`), grid padding (`margin_frac`)
@@ -72,6 +72,9 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 
 - **USC_RunPipeline**: runs all three stages in one go (quick prototyping)
 - **USC_Preprocess**: runs preprocessing only (ray tracing + scoring). Errors turn the component red.
+
+The stage components send the daemon's `run` command, each producing its own stage, and read the stage folders from the reply. A stage reads the output of the stage before it from `<out_dir>/<stage>` of its Config, so Preprocess and the stages after it need the same Config `out_dir`; the `pre_result` and `thr_result` inputs order the solve and still have to be connected. Conditions the engine reports (a setting the mode ignores, nothing carved, a footprint that could not be read, ...) appear as warnings on the component, one per issue, as `<stage>: <message>`. Re-running preprocessing makes the stages after it refuse their old output until they run again (the error names the stage to re-run).
+
 - **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.
 - **USC_Export**: runs exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
 - **USC_Massing**: stage 4, builds floor plates from the carving mask (inputs `config`, `thr_result`, `massing_overrides`, `run`; outputs closed Breps, floor areas per floor and in total, and the `plates.json` path). See [Floor-plate massing](massing.md).
@@ -79,7 +82,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 
 **Simulated weights** (`3::Weights`)
 
-- **USC_Archetype**: assembles a typical building for the simulated weights from the five parameter families below; every input is optional (neutral defaults)
+- **USC_Archetype**: assembles a typical building for the simulated weights from the five parameter families below; every input is optional (neutral defaults, read from the engine's `archetype_defaults.py`, so solve USC_Session first)
 - **USC_ZoneGeometry / USC_ZoneFabric / USC_ZoneVent / USC_ZoneOperation / USC_ZoneShading**: Honeybee-style family feeders for USC_Archetype: shoebox dimensions + per-facade window-to-wall ratio, envelope U-values + g-value + mass class, air-change rates + heat recovery, setpoints + internal gains, and declared shading coefficients. Each family is one wire into USC_Archetype.
 - **USC_SimulateWeights**: runs the ISO 13790 5R1C simulation through the daemon; outputs the `simulated_weights.json` path (wire into USC_BenefitParams) and a heatmap preview image
 

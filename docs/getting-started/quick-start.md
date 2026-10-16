@@ -9,7 +9,7 @@ from urbansolarcarver import load_config, run_pipeline
 
 cfg = load_config("config.yaml")
 result = run_pipeline(cfg, out_dir="./outputs")
-print(f"Carved mesh: {result.export_path}")
+print(f"Carved mesh: {result.exporting.export_path}")
 ```
 
 Or run stages individually for finer control:

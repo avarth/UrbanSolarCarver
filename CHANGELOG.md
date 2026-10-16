@@ -116,6 +116,113 @@ versioning follows [Semantic Versioning](https://semver.org/).
   numeric cutoff, time-based, tilted_plane) now gives a warning instead
   of being ignored silently.
 
+### Changed (stage contract)
+
+- **One sequencer.** `run_pipeline(config, out_dir, produce=("exporting",),
+  start_from="preprocessing", context=None)` runs `start_from` and every
+  later stage on the path to the stages named in `produce` (any of
+  `preprocessing`, `thresholding`, `exporting`, `massing`; producing
+  exporting and massing thresholds once). A stage before `start_from` is not
+  run: the next stage reads its output from `<out_dir>/<stage>`. The
+  function returns a `PipelineResult` with one attribute per stage (the
+  Result of a stage that ran in this call, None for the others) and
+  `issues`. `stage_folder(run_folder, stage)` is the one definition of the
+  folder layout, and `stages_to_rerun(previous_config, new_config, produce)`
+  lists the stages whose own settings differ between two configs (it
+  compares settings only, not input files).
+- **Errors.** Errors raised on purpose derive from `UrbanSolarCarverError`:
+  `ConfigError` (a `ValueError`; its `errors` list holds a
+  `ConfigFieldError(field, message)` per problem), `InputError` (a
+  `ValueError`; a mesh or EPW file that is missing or unusable, an empty
+  voxel grid, no sample points), `StageChainError` (a `ValueError`; a
+  missing, unreadable or stale upstream output) and `RunCancelled`. Some
+  `FileNotFoundError`, `RuntimeError` and plain `ValueError` raised before
+  are now `InputError`, `StageChainError` or `ConfigError`, all `ValueError`
+  subclasses: a caller that caught `FileNotFoundError` or `RuntimeError` for
+  these cases catches `InputError` or `ValueError` instead.
+- **Issues, progress and cancel.** Conditions the engine used to report with
+  `warnings.warn` (settings the mode ignores, nothing carved, zero patch
+  weights, a footprint that could not be read, ...) are issues with a code:
+  `report_issue(code, message)` records an `Issue(stage, code, message)` on
+  the active `RunContext`. Every stage Result has `issues`, `PipelineResult`
+  has the issues of the whole call, and a direct call without a context
+  still emits the warning. A `RunContext` also carries an `on_progress`
+  callback (stage, done, total) and `cancel()`, which stops the run at the
+  next batch of rays or stage boundary; stages that finished keep their
+  output. `errors.py` and `run_context.py` import nothing outside the
+  standard library.
+- **`build_config(values, base_folder=None)`** validates typed values
+  (what a client such as Grasshopper holds) into a `UserConfig`, raising
+  `ConfigError` with a `ConfigFieldError` per problem. `load_config` reads
+  the YAML and calls it.
+- **Mode facts and archetype defaults live in the engine.** `ModeSpec` gains
+  `description` and `starting_values`; `MODES` follows Grasshopper's menu
+  order (time-based, irradiance, benefit, daylight, radiative_cooling,
+  tilted_plane); `MODE_ALIASES` and `canonical_mode_name(name)` hold the
+  accepted spellings. The starting values are what differs from the schema
+  defaults: the analysis period (benefit 15 Oct 07:00 to 15 Apr 19:00,
+  irradiance the full year, time-based 21 Dec 10:00 to 14:00),
+  `tilted_plane_angle_deg: 45` and `carve_fraction: 0.35` for
+  radiative_cooling. They fill a new config only; schema defaults and
+  validation do not change. `configs/config_<mode>.yaml` stay hand-written
+  examples for CLI users, a test checks that their values agree with the
+  starting values, and the UTF-8 byte order marks of three of them are gone.
+  The shoebox defaults moved from `carver_cli.py`, `USC_Archetype.py` and
+  `simulated_weights.py` to `archetype_defaults.py` (standard library only,
+  like `mode_registry.py`).
+- **Diagnostics are written after compute.** Each stage builds its summary
+  and ends with one call into `_diagnostics.py`, which writes
+  `diagnostic.json` and, with `diagnostic_plots`, the plots. `diagnostic.json` keys keep their names, with one exception:
+  thresholding's `upstream_hash` is now `upstream_run_id`. The `timings` in
+  `diagnostic.json` now cover compute only: drawing the plots and loading
+  the config and the upstream output are not counted. The preprocessing
+  step label `diagnostic_plots_done` now marks the end of compute. matplotlib
+  is no longer imported with `_diagnostics`; it loads when a plot is drawn.
+- **Daemon `run` command.** Request keys: `produce` (list of stages),
+  `run_folder`, optional `start_from`, `config` (a YAML path) and
+  `overrides` (`key=value` strings or a mapping). Without `config`, the
+  daemon builds the config in memory from the starting values of the mode
+  named in the overrides (`mode` is required) plus the overrides; no file is
+  written. The reply has `stage_folders` (stage to folder, for the stages
+  that ran in this call), `manifest` (of the last of them), `issues` (a list
+  of `{stage, code, message}`), and `export_path`, `plates_path` and
+  `mesh_path` for the stages that produced them. Every stage-command reply
+  carries `issues`, and an error reply adds `error_type` (the exception class
+  name) and, for a `ConfigError`, `config_errors` (`{field, message}`). The
+  older `preprocessing`, `thresholding`, `exporting`, `massing` and
+  `run_pipeline` commands remain and keep accepting any `from` and
+  `out_dir`; only `run` goes through the sequencer.
+- **CLI.** `usc run` takes `--produce` (repeatable, default `exporting`) and
+  `--start-from` (default `preprocessing`), locally or through `--daemon`.
+  Issues print after each command as `Issues:` with `stage: code: message`.
+  An `UrbanSolarCarverError` prints `Error: <message>` and exits with 1,
+  without a traceback. `--dry-run` uses `grid_planning.estimate_grid_memory`
+  (moved from `_reporting`), and `usc archetype` takes its defaults from
+  `archetype_defaults.py`.
+- **Grasshopper.** USC_Preprocess, USC_ThresholdStage, USC_Export,
+  USC_Massing and USC_RunPipeline send the daemon's `run` command and read
+  stage folders from the reply, and each engine issue appears as a warning
+  on the component (`<stage>: <message>`). A stage component reads its
+  upstream stage from `<out_dir>/<stage>` of its Config, not from the path
+  on its `pre_result` or `thr_result` input (the input still has to be
+  connected). USC_Config sends no YAML path when none is given, so the daemon
+  starts from the mode's starting values and Grasshopper no longer reads
+  `configs/`; it takes mode spellings from the mode registry. USC_Mode and
+  USC_Archetype read the mode list, descriptions and archetype defaults from
+  the engine, which they find through the USC helpers that USC_Session
+  loads: solve USC_Session before them, otherwise they show a message that
+  says so. The `.ghuser` files of USC_Config, USC_Mode, USC_Archetype,
+  USC_Preprocess, USC_ThresholdStage, USC_Export, USC_Massing and
+  USC_RunPipeline are rebuilt; run USC_SyncCanvas on existing canvases.
+  Component inputs and outputs are unchanged.
+- **Migration.** Each existing run folder needs one re-run from
+  preprocessing (old manifests lack `run_id`; see "Fixed (stage chain)").
+  `run_pipeline` returns a `PipelineResult`: `result.export_path` is now
+  `result.exporting.export_path`, and the same goes for the other fields of
+  the exporting Result (`retention_pct`, `faces`, ...); the quick start and
+  the five tutorial notebooks are updated. `PreprocessingResult.hash` and
+  `ThresholdingResult.hash` are `run_id`.
+
 ### Changed (weighted modes; results change)
 
 - **carve_fraction counts what carve_above removes.** The cutoff was

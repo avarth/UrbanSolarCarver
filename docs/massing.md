@@ -15,8 +15,8 @@ simulation input (one closed prism per floor and plate).
    voxelized; massing reads that file, not the mesh in the config passed to
    massing and not the mesh file on disk, so later edits to either change
    nothing. If preprocessing could not compute a footprint, massing uses the
-   outline of the occupied voxel columns and warns. Its outline is split into facades wherever it
-   turns by more than 30 degrees. Curved or faceted outlines with smaller
+   outline of the occupied voxel columns and warns. The footprint outline is split into facades
+   wherever it turns by more than 30 degrees. Curved or faceted outlines with smaller
    turns stay one facade.
 2. **Faces.** Every footprint column belongs to its nearest facade. Facades
    shorter than two bays (`2 * min_plate_dimension`: chamfers, small steps)

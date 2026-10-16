@@ -29,17 +29,17 @@ UrbanSolarCarver/
 
 | File | Purpose |
 |------|---------|
-| `__init__.py` | Package entry point. `load_config` and `user_config` are imported directly; `run_pipeline`, the three stage functions and their result types are loaded from `api.py` on first access, so `import urbansolarcarver` and light CLI commands do not import torch or Warp. |
-| `api.py` | Public facade. Defines `run_pipeline()` (one-shot full pipeline, writing into `<out_dir>/preprocessing`, `thresholding` and `exporting`) and re-exports `preprocessing()`, `thresholding()`, `exporting()`, their result types, and `load_config()`. |
+| `__init__.py` | Package entry point. `load_config`, `build_config` and `user_config` are imported directly; `run_pipeline`, `PipelineResult`, `stages_to_rerun`, the four stage functions and their result types are loaded from `api.py` on first access, so `import urbansolarcarver` and light CLI commands do not import torch or Warp. |
+| `api.py` | Public facade. Defines `run_pipeline(config, out_dir, produce, start_from, context)`, the sequencer: it runs the stages needed for `produce`, each writing into `<out_dir>/<stage>`, and returns a `PipelineResult` (one Result per stage that ran, plus the run's issues). Re-exports `stages_to_rerun()`, `preprocessing()`, `thresholding()`, `exporting()`, `massing()`, their result types, `load_config()` and `build_config()`. |
 | `api_core/__init__.py` | Collects the three stage modules and their result types into one importable sub-package. |
-| `api_core/preprocessing.py` | **Stage 1.** Voxelizes the max-volume mesh into a dense 3D grid, samples test surfaces into evenly spaced points with outward normals, generates rays toward sky patches (or sun positions, or the tilted-plane direction, depending on mode), traces them through the grid with the DDA kernel, and writes the per-voxel obstruction scores to `scores.npy`. Also writes `voxel_grid.npy`, the sample points and normals, the manifest, and diagnostics (JSON always; plots with `diagnostic_plots: true`). |
+| `api_core/preprocessing.py` | **Stage 1.** Voxelizes the max-volume mesh into a dense 3D grid, samples test surfaces into evenly spaced points with outward normals, generates rays toward sky patches (or sun positions, or the tilted-plane direction, depending on mode), traces them through the grid with the DDA kernel, and writes the per-voxel obstruction scores to `scores.npy`. Also writes `voxel_grid.npy`, `footprint.json` (the plan projection of the voxelized mesh, which massing reads), the sample points and normals, the manifest, and diagnostics (JSON always; plots with `diagnostic_plots: true`). |
 | `api_core/thresholding.py` | **Stage 2.** Loads `scores.npy` from Stage 1, optionally applies Gaussian score smoothing (weighted modes), applies the selected thresholding strategy (`carve_fraction`, `headtail`, or a numeric cutoff) to the raw scores of the occupied voxels together with `carve_above` (`carving.carve_above_scores`, so `carve_fraction` counts what carve_above removes), applies the slope limit (`carving.limit_column_slope`; 75 degrees by default for the weighted modes), and writes the binary mask `mask.npy`. Can be re-run with different threshold parameters without re-computing scores. |
 | `api_core/massing.py` | **Stage 4.** Reads the thresholding chain, builds floor plates with `floor_plates.py`, writes `plates.json` (world outlines), `plates.obj` (one closed prism per plate), the manifest, diagnostics and the run report with a Massing section. |
 | `floor_plates.py` | Floor-plate massing geometry: base outline and facades split at corners, faces by nearest facade with squared corners, bays cut perpendicular to the facades, floor-by-floor bay selection (tolerance, maximum volume, stacking, minimum width), plate outlines and closed prisms. |
 | `api_core/exporting.py` | **Stage 3.** Loads the binary mask from Stage 2, removes small disconnected voxel clusters, reconstructs a triangle mesh (cubic voxel faces, or SDF-smoothed marching cubes with Taubin polishing), writes `export.<format>`, and writes `run_report.md` for the whole run. |
 | `api_core/_stage_io.py` | The start and end of a stage (`begin_stage`, `commit_manifest`), manifest paths relative to the manifest's folder (`stored_path`) and reading an upstream manifest with its run ID check (`load_upstream`). |
 | `api_core/_util.py` | Helpers shared by the stages: config resolution, device resolution (`"auto"` → `"cuda"` or `"cpu"`), JSON writing, reloading the occupancy grid, config snapshots. |
-| `api_core/_diagnostics.py` | Diagnostic plots and statistics: score histograms, sky-patch hemisphere plots, the simple-vs-simulated weight comparison dome, score statistics, NaN/Inf warnings. |
+| `api_core/_diagnostics.py` | Writes each stage's `diagnostic.json` and, with `diagnostic_plots`, its plots (`write_preprocessing_diagnostics`, `write_thresholding_diagnostics`) after the stage's compute; score histograms, sky-patch hemisphere plots, the simple-vs-simulated weight comparison dome, score statistics, NaN/Inf issues. matplotlib loads when a plot is drawn. |
 | `api_core/_reporting.py` | `run_report.md` generation. |
 
 ### Geometry
@@ -69,8 +69,12 @@ UrbanSolarCarver/
 
 | File | Purpose |
 |------|---------|
-| `mode_registry.py` | One `ModeSpec` per carving mode: whether it needs an EPW and an analysis period, its score kind (`weighted_sum` or `violation_count`), its weight unit, and the mode-specific settings it reads. Validation, the CLI `schema` command and the stages read their mode rules from here. |
-| `load_config.py` | Reads a YAML configuration file and returns a validated `UserConfig` object. **`load_config`**: loads the YAML, expands an `analysis_period:` mapping, resolves relative paths against the YAML's folder, applies flat `key=value` overrides, and validates with Pydantic (all errors reported in one message). **`parse_override_value`**: converts override strings into Python values (booleans, None, JSON lists and objects, numbers). |
+| `mode_registry.py` | One `ModeSpec` per carving mode, in Grasshopper's menu order: whether it needs an EPW and an analysis period, its score kind (`weighted_sum` or `violation_count`), its weight unit, the mode-specific settings it reads, its description and its starting values (what differs from the schema defaults: analysis period, tilted-plane angle, carve fraction). Also `MODE_ALIASES` and `canonical_mode_name()`. Validation, the CLI `schema` command, the stages and the Grasshopper components read their mode facts from here. Standard library only. |
+| `archetype_defaults.py` | The shoebox archetype defaults (`ARCHETYPE_DEFAULTS`, `WINDOW_TO_WALL_DEFAULTS`, `ARCHETYPE_OPTIONAL_KEYS`) read by `usc archetype`, `simulated_weights.py` and the USC_Archetype component. Standard library only. |
+| `errors.py` | `UrbanSolarCarverError` and its subclasses `ConfigError` (with `ConfigFieldError`), `InputError`, `StageChainError` and `RunCancelled`, plus `UrbanSolarCarverWarning`. Standard library only. |
+| `run_context.py` | `RunContext` (issues, progress callback, cancel flag), `Issue`, `report_issue()`, `report_progress()` and `run_context()` / `stage_context()`. Standard library only. |
+| `stage_settings.py` | The per-stage settings models (`PreprocessingSettings`, `ThresholdingSettings`, `ExportingSettings`, `MassingSettings`, `RunOptions`), `stages_to_rerun()` and `stage_folder()` (the one definition of the `<run_folder>/<stage>` layout). Does not import torch. |
+| `load_config.py` | Reads a YAML configuration file and returns a validated `UserConfig` object. **`load_config`**: loads the YAML, expands an `analysis_period:` mapping, resolves relative paths against the YAML's folder, applies flat `key=value` overrides, and validates with Pydantic (all errors reported in one message). **`build_config`**: validates typed values (what a client holds) into a `UserConfig` and raises `ConfigError` with a `ConfigFieldError` per problem; `load_config` calls it. **`parse_override_value`**: converts override strings into Python values (booleans, None, JSON lists and objects, numbers). |
 | `pydantic_schemas.py` | Data schemas. **`UserConfig`**: the Pydantic v2 model defining every pipeline parameter with types, defaults and value ranges (e.g. `voxel_size` must be 0.01-100); unknown keys are rejected. It normalizes `threshold` into a **`ThresholdSpec`**, checks mode requirements, and emits `UrbanSolarCarverWarning` for settings the mode ignores and when `ray_batch_size` is clamped. **`PreprocessingManifest`** / **`ThresholdingManifest`**: schemas for the JSON manifests written by the first two stages, so a later stage can be re-run from an earlier run's output. |
 
 ### Infrastructure
@@ -78,8 +82,8 @@ UrbanSolarCarver/
 | File | Purpose |
 |------|---------|
 | `session.py` | Compute-session lifecycle. **`CarverSession`**: a long-lived object that keeps the CUDA context alive across pipeline calls and holds a value cache (voxelized grids, Tregenza patch directions and solid angles). Keys cover the geometry, settings and device, so entries stay valid across runs; the cache holds at most 1 GiB (`max_cache_bytes`) and drops the least recently used entries beyond that. The daemon opens one session and keeps its cache between commands, returning only unused GPU memory after each; the Python API and CLI run without a session unless you open one (`with CarverSession():`). Compiled Warp kernels are cached by Warp itself, on disk. **`get_active_session`**: returns the session registered for a device, or `None`. **`session_cache`**: a decorator that stores a function's return value in the active session's cache under a key built from its arguments. |
-| `daemon.py` | Persistent background process for Grasshopper and other clients. **`serve`**: listens on `127.0.0.1` (localhost only) with Python's `multiprocessing.connection`, authenticated with a random key stored in `~/.urbansolarcarver/.daemon_authkey`. Creates a `CarverSession` on startup and keeps it for the daemon's lifetime, answering stage, pipeline and `simulate_weights` requests. Started and stopped with the CLI (`urbansolarcarver daemon start/stop`) or from Grasshopper with the `USC_Session` component. |
-| `carver_cli.py` | Command-line interface built with Typer, registered in `pyproject.toml` as both `urbansolarcarver` and `usc`. Commands: `run` (full pipeline), `preprocessing`, `thresholding`, `exporting` (each with a config file `-c`, overrides `-o`, and optional `--daemon`), `validate`, `schema` (prints the config parameter table, filterable by `--mode` or `--search`), `warmup`, `simulate-weights`, `archetype`, and `daemon start/stop/status`. |
+| `daemon.py` | Persistent background process for Grasshopper and other clients. **`serve`**: listens on `127.0.0.1` (localhost only) with Python's `multiprocessing.connection`, authenticated with a random key stored in `~/.urbansolarcarver/.daemon_authkey`. Creates a `CarverSession` on startup and keeps it for the daemon's lifetime, answering `run` (the sequencer: `produce`, `start_from`, `run_folder`, with a config from a YAML path or from the mode's starting values plus overrides), the older stage and pipeline commands, and `simulate_weights` requests. Replies carry the run's `issues`; error replies carry `error_type` and, for config errors, `config_errors`. Started and stopped with the CLI (`urbansolarcarver daemon start/stop`) or from Grasshopper with the `USC_Session` component. |
+| `carver_cli.py` | Command-line interface built with Typer, registered in `pyproject.toml` as both `urbansolarcarver` and `usc`. Commands: `run` (the sequencer, with `--produce` and `--start-from`), `preprocessing`, `thresholding`, `exporting`, `massing` (each with a config file `-c`, overrides `-o`, and optional `--daemon`), `validate`, `schema` (prints the config parameter table, filterable by `--mode` or `--search`), `warmup`, `simulate-weights`, `archetype`, and `daemon start/stop/status`. |
 
 ## Grasshopper plugin (`grasshopper/`)
 
@@ -118,6 +122,7 @@ tuned defaults commented at the bottom.
 ```
 tests/
 ├── conftest.py              Shared fixtures (temporary directories, small meshes and configs)
+├── _stage_scene.py          A 10 m cube scene in daylight mode on the CPU: the smallest scene that runs every stage
 ├── _epw.py                  EPW lookup for tests: USC_EPW_PATH, else the bundled file
 ├── typologies.py            Procedural urban-block scenes for end-to-end checks
 ├── oracle.py                Independent CPU reference implementation of the carving
@@ -139,11 +144,16 @@ tests/
 ├── test_preprocessing.py    Preprocessing helpers and manifest keys
 ├── test_raytracer.py        Fixed-step marcher, Warp DDA kernels, ray generation, warmup, batch size
 ├── test_schemas.py          Config schema validation, grid resolution cap, overrides, relative paths
+├── test_run_context.py      RunContext: issues, progress, cancel, and the error classes
 ├── test_scoring.py          Head/tail and carve-fraction thresholds
+├── test_sequencer.py        run_pipeline: produce, start_from, collected issues, progress, cancel
 ├── test_session.py          CarverSession caching and the session_cache decorator
 ├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
 │                            steady-state closure, attribution, shoebox expansion, artifact I/O
+├── test_stage_chain.py      Run IDs, upstream checks, relative manifest paths
+├── test_stage_outputs.py    Outputs cleared before a stage, manifest written last, run report sections
+├── test_stage_settings.py   Per-stage settings models and stages_to_rerun
 ├── test_typologies.py       End-to-end carving checks on procedural urban typologies
-├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino
+├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
 └── test_util.py             Diagnostics helpers and the grid memory estimate
 ```
