@@ -35,48 +35,6 @@ description : str
     Human-readable summary of the selected mode.
 """
 
-_MODES = [
-    "time-based",
-    "irradiance",
-    "benefit",
-    "daylight",
-    "radiative_cooling",
-    "tilted_plane",
-]
-
-_DESCRIPTIONS = {
-    "time-based": (
-        "Classical solar envelope: traces actual sun-position rays for the "
-        "selected hours of year and carves any voxel that shades a test "
-        "point during those hours. Requires EPW + analysis period."
-    ),
-    "irradiance": (
-        "Cumulative solar irradiation (kWh/m\u00b2). Patches weighted by "
-        "direct + diffuse radiation from EPW. Requires EPW + analysis period."
-    ),
-    "benefit": (
-        "Net heating benefit (kWh/m\u00b2). Solar gain weighted by outdoor "
-        "temperature relative to a balance point (simple weights), or by an "
-        "ISO 13790 5R1C building simulation via USC_SimulateWeights "
-        "(simulated weights). Requires EPW + analysis period; Benefit Params "
-        "optional."
-    ),
-    "daylight": (
-        "CIE overcast sky obstruction score (dimensionless). Geometry-only model: "
-        "no weather data needed. Good for daylight access studies."
-    ),
-    "radiative_cooling": (
-        "Long-wave radiative cooling potential (relative weights). Patches weighted "
-        "by sky temperature depression from a dew point (no EPW needed). "
-        "[Experimental]"
-    ),
-    "tilted_plane": (
-        "Geometric daylight envelope sweep. Carves every voxel above a tilted "
-        "plane at user-defined angles. Not a weighted evaluation: it "
-        "produces a binary mask. Requires Tilted Plane params."
-    ),
-}
-
 try:
     ghenv.Component.Name = "USC Mode"
     ghenv.Component.NickName = "USC_Mode"
@@ -103,22 +61,45 @@ try:
 except Exception:
     pass
 
+def _mode_registry():
+    """The engine's mode registry, or None while no USC component has loaded usc_gh.
+
+    This component has no session input. USC_Session loads usc_gh.py from the
+    carver root, and the root is taken from there.
+    """
+    import sys
+    from pathlib import Path
+    gh = sys.modules.get("usc_gh")
+    if gh is None:
+        return None
+    return gh.engine_module(Path(gh.__file__).resolve().parent.parent, "mode_registry")
+
+
+def _warn(msg):
+    """Show a warning on the component and return msg."""
+    try:
+        from Grasshopper.Kernel import GH_RuntimeMessageLevel
+        ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Warning, msg)
+    except Exception:
+        pass
+    return msg
+
+
 mode_name = None
 description = ""
 
 if mode is None:
     description = "Connect an integer (0-5) to select a mode."
 else:
-    idx = int(mode)
-    if idx < 0 or idx >= len(_MODES):
-        description = "Invalid mode index: {}. Use 0-{}.".format(idx, len(_MODES) - 1)
-        try:
-            from Grasshopper.Kernel import GH_RuntimeMessageLevel
-            ghenv.Component.AddRuntimeMessage(
-                GH_RuntimeMessageLevel.Warning, description
-            )
-        except Exception:
-            pass
+    registry = _mode_registry()
+    if registry is None:
+        description = _warn("The mode list comes from the engine: solve USC_Session first, "
+                            "then this component again")
     else:
-        mode_name = _MODES[idx]
-        description = "{}: {}".format(mode_name, _DESCRIPTIONS[mode_name])
+        names = list(registry.MODES)
+        idx = int(mode)
+        if idx < 0 or idx >= len(names):
+            description = _warn("Invalid mode index: {}. Use 0-{}.".format(idx, len(names) - 1))
+        else:
+            mode_name = names[idx]
+            description = "{}: {}".format(mode_name, registry.MODES[mode_name].description)

@@ -78,25 +78,35 @@ def _add_error(msg):
     return msg
 
 
-# Values used for every family that is not wired.
-_DEFAULTS = {
-    "width": 10.0, "length": 10.0, "height": 3.0,
-    "g_value": 0.6,
-    "u_opaque": 0.6, "u_window": 1.6,
-    "ach_vent": 0.8, "ach_infiltration": 0.3, "heat_recovery": 0.0,
-    "mass_class": "medium",
-    "t_set_heating": 20.0, "t_set_cooling": 26.0,
-    "internal_gains_w_m2": 5.0,
-}
-_WWR_DEFAULTS = {"south": 0.35, "east": 0.15, "west": 0.15, "north": 0.0}
+def _archetype_defaults():
+    """The engine's archetype defaults module, or None while no USC component has loaded usc_gh.
+
+    This component has no session input. USC_Session loads usc_gh.py from the
+    carver root, and the root is taken from there.
+    """
+    import sys
+    from pathlib import Path
+    gh = sys.modules.get("usc_gh")
+    if gh is None:
+        return None
+    return gh.engine_module(Path(gh.__file__).resolve().parent.parent, "archetype_defaults")
+
+
 _FAMILIES = ("geometry", "fabric", "ventilation", "operation", "shading")
 
 archetype = None
 summary = ""
 
-data = dict(_DEFAULTS)
-wwr = dict(_WWR_DEFAULTS)
-for index, name in enumerate(_FAMILIES):
+engine_defaults = _archetype_defaults()
+if engine_defaults is None:
+    summary = _add_error("The archetype defaults come from the engine: solve USC_Session "
+                         "first, then this component again")
+    data, wwr = {}, {}
+else:
+    # Values used for every family that is not wired.
+    data = dict(engine_defaults.ARCHETYPE_DEFAULTS)
+    wwr = dict(engine_defaults.WINDOW_TO_WALL_DEFAULTS)
+for index, name in enumerate(() if summary else _FAMILIES):
     handle = globals().get(name)
     if handle is None:
         # Wired but empty means the upstream USC_Zone* component failed;

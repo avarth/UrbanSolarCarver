@@ -95,17 +95,13 @@ elif thr_result is None:
 else:
     t_start = time.perf_counter()
     gh = _usc_gh(config.session.root)
-    exp_out = Path(config.out_dir) / "exporting"
     # Postprocess settings are merged here, not in Config, so changing them
     # re-runs only Export.
-    overrides = dict(config.overrides, **gh.parse_overrides(postprocess_overrides))
     try:
-        reply = gh.call_daemon(config.session, "exporting", {
-            "from": str(thr_result),
-            "config": config.yaml_path,
-            "overrides": gh.override_list(overrides),
-            "out_dir": str(exp_out),
-        })
+        reply = gh.run_stages(config.session, config, ["exporting"], "exporting",
+                              gh.parse_overrides(postprocess_overrides))
+        gh.show_issues(ghenv.Component, reply)
+        exp_out = Path(reply["stage_folders"]["exporting"])
         export_path = reply["export_path"]
         if not os.path.isfile(export_path):
             raise RuntimeError("the daemon reported success but wrote no mesh at " + export_path)

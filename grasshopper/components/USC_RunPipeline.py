@@ -99,12 +99,10 @@ else:
     out_dir = Path(config.out_dir)
     try:
         vol_path, srf_path = gh.write_input_geometry(max_volume, test_surfaces, out_dir / "incoming")
-        overrides = dict(config.overrides, max_volume_path=vol_path, test_surface_path=srf_path)
-        reply = gh.call_daemon(config.session, "run_pipeline", {
-            "config": config.yaml_path,
-            "overrides": gh.override_list(overrides),
-            "out_dir": str(out_dir),
-        })
+        reply = gh.run_stages(config.session, config, ["exporting"], "preprocessing",
+                              {"max_volume_path": vol_path, "test_surface_path": srf_path})
+        gh.show_issues(ghenv.Component, reply)
+        folders = reply["stage_folders"]
         export_path = reply["export_path"]
         if not os.path.isfile(export_path):
             raise RuntimeError("the daemon reported success but wrote no mesh at " + export_path)
@@ -115,17 +113,17 @@ else:
                       "(set final_mesh_format=ply to preview)".format(export_path), "remark")
 
         lines = ["Total time: {:.1f}s".format(time.perf_counter() - t_start)]
-        pre = gh.read_diagnostics(out_dir / "preprocessing")
+        pre = gh.read_diagnostics(folders["preprocessing"])
         if pre:
             stats = pre.get("score_stats", {})
             lines.append("Preprocessing: {} voxels, scores [{:.4g} - {:.4g}]".format(
                 pre.get("voxels_filled", "?"), stats.get("min", 0), stats.get("max", 0)))
-        thr = gh.read_diagnostics(out_dir / "thresholding")
+        thr = gh.read_diagnostics(folders["thresholding"])
         if thr:
             lines.append("Thresholding: {} (value={}), kept {}%".format(
                 thr.get("threshold_method", "?"), thr.get("threshold_value", "?"),
                 thr.get("retention_pct", "?")))
-        exp = gh.read_diagnostics(out_dir / "exporting")
+        exp = gh.read_diagnostics(folders["exporting"])
         if exp:
             vol = exp.get("mesh_volume_m3")
             lines.append("Exporting: {} verts, {} faces{}".format(

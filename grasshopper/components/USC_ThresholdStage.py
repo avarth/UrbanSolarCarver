@@ -97,17 +97,13 @@ elif pre_result is None:
 else:
     t_start = time.perf_counter()
     gh = _usc_gh(config.session.root)
-    thr_out = Path(config.out_dir) / "thresholding"
     # Threshold settings are merged here, not in Config, so changing them
     # re-runs only this stage and not Preprocess.
-    overrides = dict(config.overrides, **gh.parse_overrides(threshold_overrides))
     try:
-        reply = gh.call_daemon(config.session, "thresholding", {
-            "from": str(pre_result),
-            "config": config.yaml_path,
-            "overrides": gh.override_list(overrides),
-            "out_dir": str(thr_out),
-        })
+        reply = gh.run_stages(config.session, config, ["thresholding"], "thresholding",
+                              gh.parse_overrides(threshold_overrides))
+        gh.show_issues(ghenv.Component, reply)
+        thr_out = Path(reply["stage_folders"]["thresholding"])
         thr_result = reply["manifest"]
         if not Path(thr_result).is_file():
             raise RuntimeError("the daemon reported success but wrote no manifest at " + thr_result)

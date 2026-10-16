@@ -136,3 +136,130 @@ def test_read_plates(tmp_path, gh):
                                 "floor_area_m2_per_floor": [0.5], "total_floor_area_m2": 0.5}))
     plates = gh.read_plates(path)
     assert len(plates) == 1 and plates[0]["z_top"] == 5.0
+
+
+REPO_ROOT = GH_DIR.parent
+
+
+def test_engine_module_loads_the_mode_registry_by_path(gh):
+    registry = gh.engine_module(REPO_ROOT, "mode_registry")
+    assert list(registry.MODES) == ["time-based", "irradiance", "benefit", "daylight",
+                                    "radiative_cooling", "tilted_plane"]
+    assert registry.canonical_mode_name(" Tilted-Plane ") == "tilted_plane"
+    assert gh.engine_module(REPO_ROOT, "mode_registry") is registry
+
+
+def test_engine_module_loads_the_archetype_defaults_by_path(gh):
+    defaults = gh.engine_module(REPO_ROOT, "archetype_defaults")
+    assert defaults.WINDOW_TO_WALL_DEFAULTS["south"] == 0.35
+    assert defaults.ARCHETYPE_DEFAULTS["mass_class"] == "medium"
+
+
+def _engine_source(root, name, text):
+    engine_dir = root / "src" / "urbansolarcarver"
+    engine_dir.mkdir(parents=True, exist_ok=True)
+    source = engine_dir / f"{name}.py"
+    source.write_text(text, encoding="utf-8")
+    return source
+
+
+def test_engine_module_registers_the_module_before_running_it(gh, tmp_path):
+    # A dataclass looks its module up in sys.modules while the class is built.
+    _engine_source(tmp_path, "probe_module", (
+        "from dataclasses import dataclass\n\n"
+        "@dataclass(frozen=True)\n"
+        "class Probe:\n"
+        "    value: int = 1\n\n"
+        "VALUE = Probe().value\n"))
+    module = gh.engine_module(tmp_path, "probe_module")
+    assert module.VALUE == 1
+    assert sys.modules["usc_engine_probe_module"] is module
+
+
+def test_engine_module_reloads_when_the_file_changes(gh, tmp_path):
+    import os
+    source = _engine_source(tmp_path, "reload_probe", "VALUE = 1\n")
+    assert gh.engine_module(tmp_path, "reload_probe").VALUE == 1
+    source.write_text("VALUE = 2\n", encoding="utf-8")
+    os.utime(source, (source.stat().st_atime, source.stat().st_mtime + 5))
+    assert gh.engine_module(tmp_path, "reload_probe").VALUE == 2
+
+
+class _FakeComponent:
+    def __init__(self):
+        self.messages = []
+
+    def AddRuntimeMessage(self, level, text):
+        self.messages.append((level, text))
+
+
+@pytest.fixture
+def fake_grasshopper(monkeypatch):
+    levels = types.SimpleNamespace(Error="error", Warning="warning", Remark="remark")
+    kernel = types.ModuleType("Grasshopper.Kernel")
+    kernel.GH_RuntimeMessageLevel = levels
+    package = types.ModuleType("Grasshopper")
+    package.Kernel = kernel
+    monkeypatch.setitem(sys.modules, "Grasshopper", package)
+    monkeypatch.setitem(sys.modules, "Grasshopper.Kernel", kernel)
+
+
+def test_show_issues_adds_one_warning_per_issue(gh, fake_grasshopper):
+    component = _FakeComponent()
+    reply = {"status": "ok", "issues": [
+        {"stage": "preprocessing", "code": "a", "message": "first problem"},
+        {"stage": "thresholding", "code": "b", "message": "second problem"}]}
+    lines = gh.show_issues(component, reply)
+    assert lines == ["preprocessing: first problem", "thresholding: second problem"]
+    assert component.messages == [("warning", "preprocessing: first problem"),
+                                  ("warning", "thresholding: second problem")]
+
+
+def test_show_issues_without_issues_adds_nothing(gh, fake_grasshopper):
+    component = _FakeComponent()
+    assert gh.show_issues(component, {"status": "ok"}) == []
+    assert gh.show_issues(component, {"status": "ok", "issues": []}) == []
+    assert component.messages == []
+
+
+def _config(yaml_path):
+    return types.SimpleNamespace(yaml_path=yaml_path, out_dir="C:/runs/one",
+                                 overrides={"mode": "irradiance", "start_month": "3"})
+
+
+def test_run_stages_sends_the_run_command(gh, monkeypatch):
+    sent = []
+
+    def fake_call_daemon(session, cmd, payload=None, timeout=None):
+        sent.append((session, cmd, payload))
+        return {"status": "ok", "stage_folders": {"thresholding": "C:/runs/one/thresholding"}}
+
+    monkeypatch.setattr(gh, "call_daemon", fake_call_daemon)
+    reply = gh.run_stages("the-session", _config("C:/base.yaml"), ["thresholding"], "thresholding",
+                          {"start_month": "5", "threshold_method": "quantile"})
+    assert reply["stage_folders"]["thresholding"] == "C:/runs/one/thresholding"
+    ((session, cmd, payload),) = sent
+    assert session == "the-session" and cmd == "run"
+    assert payload["produce"] == ["thresholding"] and payload["start_from"] == "thresholding"
+    assert payload["run_folder"] == "C:/runs/one"
+    assert payload["config"] == "C:/base.yaml"
+    assert sorted(payload["overrides"]) == ["mode=irradiance", "start_month=5",
+                                            "threshold_method=quantile"]
+
+
+def test_run_stages_omits_config_when_no_yaml_was_given(gh, monkeypatch):
+    sent = []
+    monkeypatch.setattr(gh, "call_daemon",
+                        lambda session, cmd, payload=None, timeout=None: sent.append(payload) or {"status": "ok"})
+    gh.run_stages("s", _config(None), ["exporting"], "preprocessing", None)
+    (payload,) = sent
+    assert "config" not in payload
+    assert payload["overrides"] == ["mode=irradiance", "start_month=3"]
+
+
+def test_components_no_longer_use_the_replaced_helpers_or_stage_commands():
+    for src in sorted((GH_DIR / "components").glob("USC_*.py")):
+        text = src.read_text(encoding="utf-8")
+        assert "_mode_default_yaml" not in text and "_mode_canonical" not in text, src.name
+        for command in ("preprocessing", "thresholding", "exporting", "massing", "run_pipeline"):
+            assert f'call_daemon(config.session, "{command}"' not in text, f"{src.name} still sends {command}"
