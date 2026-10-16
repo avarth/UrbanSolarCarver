@@ -60,12 +60,16 @@ def _free_port():
         return s.getsockname()[1]
 
 
-def test_call_daemon_against_a_real_daemon(gh):
+def test_call_daemon_against_a_real_daemon(gh, tmp_path):
+    from _daemon_home import isolated_home_env
     from urbansolarcarver.daemon import _resolve_authkey
+    # A temporary home keeps the test away from the real ~/.urbansolarcarver/.daemon_authkey.
+    authkey = _resolve_authkey(tmp_path / ".urbansolarcarver" / ".daemon_authkey")
     port = _free_port()
     proc = subprocess.Popen([sys.executable, "-m", "urbansolarcarver.daemon", "--port", str(port),
-                             "--device", "cpu"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    session = types.SimpleNamespace(authkey=_resolve_authkey(), host="localhost", port=port)
+                             "--device", "cpu"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            env=isolated_home_env(tmp_path))
+    session = types.SimpleNamespace(authkey=authkey, host="localhost", port=port)
     try:
         for _ in range(240):
             if gh.ping(session, timeout=1):

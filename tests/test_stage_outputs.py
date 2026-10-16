@@ -159,3 +159,25 @@ def test_thresholding_result_carries_its_issues(tmp_path, thresholded_run):
     keep_everything = conf.model_copy(update={"threshold": ThresholdSpec(method="cutoff", value=1e9)})
     result = _quietly(thresholding, thr.upstream_manifest, keep_everything, thr.out_dir)
     assert [i.code for i in result.issues] == ["nothing_carved"]
+
+
+def test_preprocessing_reports_an_empty_footprint_projection(tmp_path, monkeypatch):
+    from urbansolarcarver import floor_plates, preprocessing
+    monkeypatch.setattr(floor_plates, "footprint_polygons", lambda mesh, offset_xy: [])
+    result = _quietly(preprocessing, daylight_cube_config(tmp_path), tmp_path / "run" / "preprocessing")
+    assert "footprint_unreadable" in [issue.code for issue in result.issues]
+
+
+def test_ray_batch_size_reaches_the_carvers(tmp_path, monkeypatch):
+    from urbansolarcarver import carving, preprocessing
+    received = []
+    resolve_batch_size = carving._resolve_batch_size
+
+    def recording_resolve_batch_size(resolution, device, *, ray_batch_size):
+        received.append(ray_batch_size)
+        return resolve_batch_size(resolution, device, ray_batch_size=ray_batch_size)
+
+    monkeypatch.setattr(carving, "_resolve_batch_size", recording_resolve_batch_size)
+    _quietly(preprocessing, daylight_cube_config(tmp_path, ray_batch_size=7),
+             tmp_path / "run" / "preprocessing")
+    assert received and set(received) == {7}

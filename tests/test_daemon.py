@@ -8,6 +8,7 @@ from multiprocessing.connection import Client
 
 import pytest
 
+from _daemon_home import isolated_home_env
 from urbansolarcarver.daemon import _resolve_authkey
 
 
@@ -18,13 +19,18 @@ def _free_port() -> int:
 
 
 @pytest.fixture(scope="module")
-def daemon():
+def daemon(tmp_path_factory):
+    # The daemon reads its key from the home folder; a temporary home keeps
+    # the tests away from the real ~/.urbansolarcarver/.daemon_authkey.
+    home = tmp_path_factory.mktemp("home")
+    key = _resolve_authkey(home / ".urbansolarcarver" / ".daemon_authkey")
     port = _free_port()
     proc = subprocess.Popen(
         [sys.executable, "-m", "urbansolarcarver.daemon", "--port", str(port), "--device", "cpu"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        env=isolated_home_env(home),
     )
-    addr, key = ("localhost", port), _resolve_authkey()
+    addr = ("localhost", port)
     try:
         for _ in range(240):
             if proc.poll() is not None:
@@ -241,9 +247,19 @@ def test_error_reply_keeps_the_text_and_adds_the_type():
                      "error_type": "FileNotFoundError"}
 
 
+class _CountingSession:
+    """Stands in for a CarverSession: counts the release_memory calls."""
+
+    def __init__(self):
+        self.release_calls = 0
+
+    def release_memory(self):
+        self.release_calls += 1
+
+
 def test_run_requires_produce_and_run_folder(tmp_path):
     from urbansolarcarver.daemon import _dispatch
-    reply = _dispatch({"cmd": "run", "produce": ["exporting"]}, None)
+    reply = _dispatch({"cmd": "run", "produce": ["exporting"]}, _CountingSession())
     assert reply["status"] == "error" and "run_folder" in reply["error"]
 
 
@@ -311,3 +327,11 @@ def test_run_without_yaml_reports_malformed_overrides_as_a_config_error(override
     with pytest.raises(ConfigError) as caught:
         _build_request_config({"overrides": overrides})
     assert caught.value.errors[0].field is None
+
+
+def test_memory_is_released_when_a_stage_command_fails(tmp_path):
+    from urbansolarcarver.daemon import _dispatch
+    session = _CountingSession()
+    with pytest.raises(FileNotFoundError):
+        _dispatch({"cmd": "preprocessing", "config": str(tmp_path / "missing.yaml")}, session)
+    assert session.release_calls == 1

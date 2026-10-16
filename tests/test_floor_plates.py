@@ -383,3 +383,15 @@ def test_corner_square_of_a_curved_facade_is_cut_into_bays():
     for b in np.flatnonzero(bay_face == bent):
         x = xy[bay == b, 0]
         assert np.ptp(x) < 2 * 3.0
+
+
+def test_footprint_with_a_hole_survives_the_json_round_trip():
+    import json
+    courtyard = Polygon([(0, 0), (20, 0), (20, 20), (0, 20)],
+                        [[(5, 5), (5, 15), (15, 15), (15, 5)]])
+    data = json.loads(json.dumps(mg.footprint_to_dict([courtyard])))
+    (restored,) = mg.footprint_from_dict(data)
+    assert restored.area == pytest.approx(courtyard.area) == pytest.approx(300.0)
+    assert len(restored.interiors) == 1
+    assert Polygon(restored.interiors[0]).area == pytest.approx(100.0)
+    assert restored.equals(courtyard)

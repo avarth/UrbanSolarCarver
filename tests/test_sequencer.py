@@ -226,3 +226,16 @@ def test_start_from_error_names_the_stages_of_a_one_shot_produce(tmp_path):
     with pytest.raises(ValueError, match=r"path to \['preprocessing'\]:"):
         run_pipeline(daylight_cube_config(tmp_path), tmp_path / "run", produce=produce,
                      start_from="massing")
+
+
+def test_start_from_exporting_with_both_leaves_runs_both_on_the_stored_thresholding(tmp_path):
+    conf = daylight_cube_config(tmp_path)
+    first = run_pipeline(conf, tmp_path / "run", produce={"exporting", "massing"})
+    again = run_pipeline(conf, tmp_path / "run", produce={"exporting", "massing"},
+                         start_from="exporting")
+    assert again.preprocessing is None and again.thresholding is None
+    assert again.exporting is not None and again.massing is not None
+    for stage in ("exporting", "massing"):
+        manifest = json.loads(
+            (tmp_path / "run" / stage / "manifest.json").read_text(encoding="utf-8"))
+        assert manifest["upstream_run_id"] == first.thresholding.run_id
