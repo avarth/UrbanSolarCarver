@@ -1,6 +1,6 @@
 # Grasshopper Plugin (Rhino 3D)
 
-USC provides 25 custom Grasshopper components for visual parametric workflows in Rhino.
+USC provides 27 custom Grasshopper components for visual parametric workflows in Rhino.
 
 ## Installation
 
