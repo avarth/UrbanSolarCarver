@@ -6,10 +6,14 @@ from Ladybug's Sunpath at 5-minute resolution, and model north is applied
 from first principles. Only the Tregenza patch directions and patch
 weights are reused, since those are inputs rather than the code under test.
 
-A voxel counts as an obstruction of sample p only when it lies entirely in
+A voxel counts as an obstruction of sample p when it lies entirely in
 front of p's surface plane (n . (c - p) greater than the voxel's half-extent
-along n): a voxel the plane passes through is the building's own skin, not
-an obstruction of it.
+along n). An occupied voxel the plane passes through is skin: it obstructs p
+too when the voxel behind it is empty or outside the grid (p's building is
+not in the max volume). Otherwise it is p's own skin, which p's rays do not
+count but which goes whenever the voxel behind it goes (its value is raised
+to that voxel's value). Empty skin is never counted. The voxel behind is the first voxel wholly behind the plane
+reached by stepping one voxel length at a time against n (at most 3 steps).
 
 Fixed-step marching can miss voxels a ray only clips at a corner, so the
 oracle's hit set is a subset of the exact one. Soundness checks (every
@@ -65,12 +69,41 @@ class Run:
 
 
 # ----------------------------------------------------------------- marching
+def _behind_voxel(run: Run, skin_idx, origins, normals):
+    """Index (3,) of the voxel behind each skin voxel, and whether it is
+    inside the grid and occupied."""
+    shape = np.array(run.shape)
+    half = 0.5 * run.vs * np.abs(normals).sum(axis=1)
+    centre = run.origin + (skin_idx + 0.5) * run.vs
+    out = np.empty_like(skin_idx)
+    pending = np.ones(len(skin_idx), bool)
+    for k in (1, 2, 3):
+        idx = np.floor((centre - k * run.vs * normals - run.origin) / run.vs).astype(np.int64)
+        out[pending] = idx[pending]
+        c = run.origin + (idx + 0.5) * run.vs
+        behind = np.einsum("rj,rj->r", c - origins, normals) <= -half + 1e-9
+        pending &= ~behind
+    inside = np.all((out >= 0) & (out < shape), axis=1)
+    occupied = np.zeros(len(out), bool)
+    occupied[inside] = run.occ[tuple(out[inside].T)]
+    return out, occupied
+
+
+def follow_own_skin(values: np.ndarray, own_skin) -> np.ndarray:
+    """Raise each own-skin voxel to the value of the voxel behind it."""
+    skin_flat, behind_flat = own_skin
+    out = values.copy().ravel()
+    np.maximum.at(out, skin_flat, values.ravel()[behind_flat])
+    return out.reshape(values.shape)
+
+
 def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
           substeps: int = 10, chunk: int = 4096):
-    """Trace rays and return per-voxel hit counts (or weight sums).
+    """Trace rays and return per-voxel hit counts (or weight sums), and the
+    own-skin pairs ``(skin_flat, behind_flat)`` for :func:`follow_own_skin`.
 
-    Each (ray, voxel) pair is counted once. Only voxels in front of the
-    ray's source surface are recorded.
+    Each (ray, voxel) pair is counted once. Voxels in front of the ray's
+    source surface are recorded, and skin voxels with nothing behind them.
     """
     origins = np.asarray(origins, float)
     normals = np.asarray(normals, float)
@@ -79,6 +112,7 @@ def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
     shape = np.array(run.shape)
     n_vox = int(np.prod(shape))
     out = np.zeros(n_vox, dtype=np.float64)
+    own_skin_flat, own_behind_flat = [], []
     lo = run.origin
     hi = run.origin + shape * run.vs
     step = run.vs / substeps
@@ -111,8 +145,16 @@ def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
         inb = valid & np.all((idx >= 0) & (idx < shape), axis=2)
         centre = lo + (idx + 0.5) * run.vs
         half_extent = 0.5 * run.vs * np.abs(n).sum(axis=1)
-        front = np.einsum("rkj,rj->rk", centre - o[:, None, :], n) > half_extent[:, None] + 1e-9
+        dist = np.einsum("rkj,rj->rk", centre - o[:, None, :], n)
+        front = dist > half_extent[:, None] + 1e-9
+        skin = inb & ~front & (dist > -half_extent[:, None] + 1e-9)
+        skin[inb] &= run.occ[tuple(idx[inb].T)]
+        sr, sk = np.nonzero(skin)
+        behind, has_mass = _behind_voxel(run, idx[sr, sk], o[sr], n[sr])
         keep = inb & front
+        keep[sr[~has_mass], sk[~has_mass]] = True
+        own_skin_flat.append(np.ravel_multi_index(tuple(idx[sr, sk][has_mass].T), tuple(shape)))
+        own_behind_flat.append(np.ravel_multi_index(tuple(behind[has_mass].T), tuple(shape)))
         ray_id, kk = np.nonzero(keep)
         if ray_id.size == 0:
             continue
@@ -120,7 +162,8 @@ def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
         pair = np.unique(ray_id.astype(np.int64) * n_vox + flat)
         r, v = np.divmod(pair, n_vox)
         np.add.at(out, v, 1.0 if w is None else w[r])
-    return out.reshape(tuple(shape))
+    cat = lambda parts: np.concatenate(parts) if parts else np.zeros(0, np.int64)
+    return out.reshape(tuple(shape)), (cat(own_skin_flat), cat(own_behind_flat))
 
 
 # ----------------------------------------------------------------- directions
@@ -186,7 +229,8 @@ def time_based_shading(run: Run, epw: str, minutes: int = 5) -> np.ndarray:
     suns = sun_directions(epw, period, c.get("north_deg", 0.0), c.get("min_altitude", 5.0), minutes)
     o, n, d, _, _ = pairs(run.points, run.normals, suns)
     area = float(c.get("grid_step", 1.0)) ** 2
-    return march(run, o, n, d, ray_length=c.get("ray_length", 300.0)) * (area * minutes / 60.0)
+    hits, own_skin = march(run, o, n, d, ray_length=c.get("ray_length", 300.0))
+    return follow_own_skin(hits, own_skin) * (area * minutes / 60.0)
 
 
 def time_based_hits(run: Run, epw: str, minutes: int = 5) -> np.ndarray:
@@ -194,9 +238,11 @@ def time_based_hits(run: Run, epw: str, minutes: int = 5) -> np.ndarray:
 
 
 def tilted_hits(run: Run) -> np.ndarray:
+    """Voxels the tilted plane removes, already carried up each column."""
     c = run.cfg
     d = tilted_directions(run.normals, c["tilted_plane_angle_deg"], c.get("north_deg", 0.0))
-    return march(run, run.points, run.normals, d, ray_length=c.get("ray_length", 300.0)) > 0
+    hits, own_skin = march(run, run.points, run.normals, d, ray_length=c.get("ray_length", 300.0))
+    return column_above(follow_own_skin(column_above(hits > 0), own_skin))
 
 
 def sky_scores(run: Run, substeps: int = 10) -> np.ndarray:
@@ -205,8 +251,9 @@ def sky_scores(run: Run, substeps: int = 10) -> np.ndarray:
     dirs = fetch_tregenza_patch_directions(torch.device("cpu")).numpy().astype(float)
     pw = np.load(run.pre / "patch_weights.npy").astype(float)
     o, n, d, _, di = pairs(run.points, run.normals, dirs)
-    return march(run, o, n, d, weights=pw[di], ray_length=run.cfg.get("ray_length", 300.0),
-                 substeps=substeps)
+    scores, own_skin = march(run, o, n, d, weights=pw[di],
+                             ray_length=run.cfg.get("ray_length", 300.0), substeps=substeps)
+    return follow_own_skin(scores, own_skin)
 
 
 def score_agreement(run: Run) -> dict:
