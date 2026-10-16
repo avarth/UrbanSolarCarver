@@ -14,7 +14,8 @@ Supports:
   returns per-voxel scores; the threshold is applied later, in
   api_core/thresholding.py.
 • Tilted-plane daylight carving (single or per-octant plane angle): every
-  voxel at or above a visited voxel in its column is removed.
+  voxel at or above a visited voxel in its column is removed; extra rays
+  rotate the plane around convex turns of the test-surface outline.
 
 Raytracing contract
 -------------------
@@ -24,8 +25,12 @@ accumulate counts or scores in place.  Without Warp, `trace_multi_hit_grid`
 lists the (ray, voxel) pairs with a fixed-step PyTorch march (each pair at
 most once) and the scores are accumulated here with torch; that path is
 slower and can miss voxels that oblique rays only clip.  Both paths count
-only voxels that lie entirely in front of the surface a ray starts from
-(see `_front_of_surface`).
+voxels that lie entirely in front of the surface a ray starts from (see
+`_front_of_surface`), plus the surface's skin voxels (crossed by its plane)
+that are occupied and have nothing of the max volume behind them.
+Occupied skin voxels with max volume behind them are the surface's own skin: not counted, but raised to
+the value of the voxel behind them once tracing is done
+(`_follow_mass_behind_skin`), so they never outlast the mass behind them.
 
 Coordinate/scale conventions
 ----------------------------
@@ -62,6 +67,11 @@ from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
     trace_and_count_dda, auto_batch_size, dda_backend_available,
 )
+# The own-skin pass exists only when Warp is installed.
+try:
+    from .raytracer import follow_mass_behind_skin_dda
+except ImportError:
+    follow_mass_behind_skin_dda = None
 # The fused score kernel exists only when Warp is installed.
 try:
     from .raytracer import trace_and_score_dda as _fused_dda
@@ -241,6 +251,81 @@ def _front_of_surface(min_corner, cell, voxel_idx, origins, normals) -> torch.Te
     return ((centre - origins) * normals).sum(dim=1) > half_extent
 
 
+def _voxel_behind_skin(min_corner, cell, res, voxel_idx, origins, normals) -> torch.Tensor:
+    """Flat index of the voxel behind each skin voxel, or -1 outside the grid.
+
+    Steps from the voxel's centre one cell length at a time against the
+    normal, up to three steps, until the voxel containing the stepped point
+    lies wholly behind the plane.  Same rule as the Warp kernels'
+    ``_voxel_behind_skin``, for the fixed-step fallback.
+    """
+    corner = torch.tensor(min_corner, dtype=torch.float32, device=voxel_idx.device)
+    centre = corner + (voxel_idx.float() + 0.5) * cell
+    half_extent = 0.5 * cell * normals.abs().sum(dim=1)
+    behind = voxel_idx.clone()
+    found = torch.zeros(voxel_idx.shape[0], dtype=torch.bool, device=voxel_idx.device)
+    for k in (1, 2, 3):
+        stepped = torch.floor((centre - normals * (k * cell) - corner) / cell).long()
+        stepped_centre = corner + (stepped.float() + 0.5) * cell
+        wholly_behind = ((stepped_centre - origins) * normals).sum(dim=1) <= -half_extent
+        behind[~found] = stepped[~found]
+        found |= wholly_behind
+    inside = ((behind >= 0) & (behind < res)).all(dim=1)
+    flat = behind[:, 0] * res * res + behind[:, 1] * res + behind[:, 2]
+    return torch.where(inside, flat, torch.full_like(flat, -1))
+
+
+def _split_hits_at_surface(min_corner, cell, res, voxel_idx, origins, normals, occupancy):
+    """Classify fixed-step hits against each ray's source surface.
+
+    Returns ``(counted, skin_flat, behind_flat)``: *counted* masks hits
+    that obstruct the surface (voxel wholly in front, or occupied skin with
+    nothing of the max volume behind it); *skin_flat* and *behind_flat*
+    list the occupied skin voxels that have occupied mass behind them, with
+    that voxel, for :func:`_follow_mass_behind_skin`.  Empty skin is
+    neither.  Same rule as the Warp kernels.
+    """
+    front = _front_of_surface(min_corner, cell, voxel_idx, origins, normals)
+    corner = torch.tensor(min_corner, dtype=torch.float32, device=voxel_idx.device)
+    centre = corner + (voxel_idx.float() + 0.5) * cell
+    half_extent = 0.5 * cell * normals.abs().sum(dim=1)
+    skin = ~front & (((centre - origins) * normals).sum(dim=1) > -half_extent)
+    skin &= occupancy[voxel_idx[:, 0] * res * res + voxel_idx[:, 1] * res + voxel_idx[:, 2]] != 0
+    skin_ids = torch.nonzero(skin).squeeze(1)
+    behind = _voxel_behind_skin(min_corner, cell, res, voxel_idx[skin_ids],
+                                origins[skin_ids], normals[skin_ids])
+    has_mass = (behind >= 0) & (occupancy[behind.clamp(min=0)] != 0)
+    counted = front.clone()
+    counted[skin_ids[~has_mass]] = True
+    own = voxel_idx[skin_ids[has_mass]]
+    skin_flat = own[:, 0] * res * res + own[:, 1] * res + own[:, 2]
+    return counted, skin_flat, behind[has_mass]
+
+
+def _follow_mass_behind_skin(values, skin_pairs, min_corner, scale, res,
+                             origins, directions, point_ids, surface_normals,
+                             occupancy, ray_length):
+    """Raise every own-skin voxel to the value of the voxel behind it.
+
+    A voxel the source surface's plane passes through, with occupied max
+    volume behind it, is the surface's own skin: the surface's rays do not
+    count it, but it must not outlast the mass behind it.  *values* are the
+    finished flat counts or scores.  *skin_pairs* is ``(skin_flat,
+    behind_flat)`` collected by the fixed-step fallback, or None to run the
+    Warp pass over the rays.  Returns a new tensor.
+    """
+    if skin_pairs is None:
+        return follow_mass_behind_skin_dda(
+            min_corner, scale, res, origins, directions, point_ids,
+            surface_normals, occupancy, values, ray_length,
+        )
+    skin_flat, behind_flat = skin_pairs
+    out = values.clone()
+    if skin_flat.numel() > 0:
+        out.scatter_reduce_(0, skin_flat, values[behind_flat], reduce="amax")
+    return out
+
+
 _CPU_BUFFER_BUDGET_BYTES = 1 << 30  # 1 GiB cap on the per-thread accumulation buffers
 
 
@@ -333,14 +418,20 @@ def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
 
 
 def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions,
-                    settings: PreprocessingSettings, point_ids, surface_normals,
+                    settings: PreprocessingSettings, point_ids, surface_normals, occupancy,
                     *, ray_batch_size: int):
-    """Count how many rays visit each voxel; returns a flat int32 tensor.
+    """Count how many rays visit each voxel.
 
     Uses the fused Warp count kernel when available; otherwise the
     fixed-step :func:`trace_multi_hit_grid` fallback.  Both count each
     (ray, voxel) pair at most once, and skip voxels behind the ray's source
-    surface (*point_ids* maps rays to rows of *surface_normals*).
+    surface (*point_ids* maps rays to rows of *surface_normals*) and its
+    own skin (crossed by its plane, with max volume behind it; *occupancy*
+    is the flat uint8 grid).
+
+    Returns ``(counts, skin_pairs)``: a flat int32 tensor, and the
+    fallback's own-skin pairs for :func:`_follow_mass_behind_skin` (None
+    on the Warp path, which finds them itself).
     """
     device = voxel_grid.device
     counts = torch.zeros(voxel_grid.numel(), dtype=torch.int32, device=device)
@@ -359,6 +450,7 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions,
                 origins[start:end], directions[start:end],
                 buf, float(settings.ray_length),
                 point_ids=point_ids[start:end], surface_normals=surface_normals,
+                occupancy=occupancy,
             )
 
         _run_batches(batch_ranges, _count_batch, counts, device, parallel=True)
@@ -366,7 +458,9 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions,
         # shared zero-copy with torch, so synchronize before torch reads it.
         if device.type == "cuda":
             torch.cuda.synchronize()
-        return counts
+        return counts, None
+
+    skin_flat, behind_flat = [], []
 
     for i in range(0, origins.shape[0], batch_size):
         o_batch = origins[i: i + batch_size]
@@ -384,14 +478,24 @@ def _count_ray_hits(voxel_grid, min_corner, scale, res, origins, directions,
             ray_length=float(settings.ray_length),
         )
         if voxel_idx.numel() > 0:
-            front = _front_of_surface(min_corner, scale / res, voxel_idx, o_batch[ray_idx],
-                                      surface_normals[point_ids[i: i + batch_size][ray_idx]])
-            voxel_idx = voxel_idx[front]
+            counted, own_skin, behind = _split_hits_at_surface(
+                min_corner, scale / res, res, voxel_idx, o_batch[ray_idx],
+                surface_normals[point_ids[i: i + batch_size][ray_idx]], occupancy)
+            skin_flat.append(own_skin)
+            behind_flat.append(behind)
+            voxel_idx = voxel_idx[counted]
         if voxel_idx.numel() > 0:
             # 3D → 1D index in row-major (C) order: x*(res²) + y*res + z
             flat_idx = voxel_idx[:, 0] * res_sq + voxel_idx[:, 1] * res + voxel_idx[:, 2]
             counts.index_add_(0, flat_idx, torch.ones_like(flat_idx, dtype=torch.int32))
-    return counts
+    empty = torch.zeros(0, dtype=torch.long, device=device)
+    return counts, (torch.cat(skin_flat) if skin_flat else empty,
+                    torch.cat(behind_flat) if behind_flat else empty)
+
+
+def _occupancy_flat(voxel_grid) -> torch.Tensor:
+    """Flat contiguous uint8 copy of the max volume occupancy (1 = occupied)."""
+    return (voxel_grid.reshape(-1) != 0).to(torch.uint8).contiguous()
 
 
 def _carve_by_counts(voxel_grid, counts) -> torch.Tensor:
@@ -514,10 +618,14 @@ def carve_with_sun_rays(
 
     # scale is the cubic grid extent in world units (meters), not per-voxel size
     min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-    counts = _count_ray_hits(
+    occupancy = _occupancy_flat(voxel_grid)
+    counts, skin_pairs = _count_ray_hits(
         voxel_grid, min_corner, float(grid_extent), res, origins, directions, settings,
-        point_idx, surface_normals, ray_batch_size=ray_batch_size,
+        point_idx, surface_normals, occupancy, ray_batch_size=ray_batch_size,
     )
+    counts = _follow_mass_behind_skin(
+        counts, skin_pairs, min_corner, float(grid_extent), res, origins, directions,
+        point_idx, surface_normals, occupancy, float(settings.ray_length))
     carved_grid = _carve_by_counts(voxel_grid, counts)
 
     if not return_counts:
@@ -635,6 +743,7 @@ def carve_with_sky_patch_rays(
         )
     )
     surface_normals = torch.as_tensor(sample_normals, dtype=torch.float32, device=device)
+    occupancy = _occupancy_flat(voxel_grid)
 
     # --- 2b) Per-point design weights (edge_taper) -------------------------
     # Fold sample-point weights into per-ray weighting; rays from
@@ -684,6 +793,10 @@ def carve_with_sky_patch_rays(
     batch_size = _resolve_batch_size(res, device, ray_batch_size=ray_batch_size)
     use_fused = (_fused_dda is not None and dda_backend_available(device))
 
+    # Own-skin pairs found by the fallback tracer (the Warp path finds them
+    # in its own pass after scoring).
+    skin_flat, behind_flat = [], []
+
     def _score_batch(start: int, end: int, buf) -> None:
         origins_batch = ray_origins[start:end]
         directions_batch = ray_directions[start:end]
@@ -698,6 +811,7 @@ def carve_with_sky_patch_rays(
                 point_ids=ray_point_ids[start:end],
                 point_weights=pw_t,
                 surface_normals=surface_normals,
+                occupancy=occupancy,
             )
             return
 
@@ -709,12 +823,14 @@ def carve_with_sky_patch_rays(
         )
         if hit_voxel_idxs.numel() == 0:
             return
-        front = _front_of_surface(
-            grid_origin, grid_extent_m / res, hit_voxel_idxs, origins_batch[hit_ray_ids],
-            surface_normals[point_idx[start:end][hit_ray_ids]],
+        counted, own_skin, behind = _split_hits_at_surface(
+            grid_origin, grid_extent_m / res, res, hit_voxel_idxs, origins_batch[hit_ray_ids],
+            surface_normals[point_idx[start:end][hit_ray_ids]], occupancy,
         )
+        skin_flat.append(own_skin)
+        behind_flat.append(behind)
         hit_ray_ids, hit_patch_ids, hit_voxel_idxs = (
-            hit_ray_ids[front], hit_patch_ids[front], hit_voxel_idxs[front])
+            hit_ray_ids[counted], hit_patch_ids[counted], hit_voxel_idxs[counted])
         if hit_voxel_idxs.numel() == 0:
             return
 
@@ -747,6 +863,19 @@ def carve_with_sky_patch_rays(
     if device.type == "cuda":
         torch.cuda.synchronize()
 
+    # Own skin scores at least as much as the mass behind it, so it is
+    # never kept once that mass is carved.
+    skin_pairs = None
+    if not use_fused:
+        empty = torch.zeros(0, dtype=torch.long, device=device)
+        skin_pairs = (torch.cat(skin_flat) if skin_flat else empty,
+                      torch.cat(behind_flat) if behind_flat else empty)
+    with torch.no_grad():
+        scores = _follow_mass_behind_skin(
+            scores, skin_pairs, grid_origin, grid_extent_m, res, ray_origins,
+            ray_directions, ray_point_ids, surface_normals, occupancy,
+            float(settings.ray_length))
+
     raw_voxel_scores = scores.cpu().numpy()
 
     # Thresholding lives in api_core.thresholding, so users can re-threshold
@@ -757,6 +886,155 @@ def carve_with_sky_patch_rays(
         raw_voxel_scores=raw_voxel_scores,
         patch_weights=patch_weights.cpu().numpy(),
     )
+
+
+def _tilt_angles_deg(horizontal_dirs, spec, north_deg) -> np.ndarray:
+    """Tilt angle, in degrees above the horizon, for each horizontal unit
+    direction (N, 2): the single angle, or the compass-octant entry of an
+    8-element table [N, NE, E, SE, S, SW, W, NW].
+
+    Raises
+    ------
+    ValueError
+        If *spec* is neither a number nor 8 values.
+    """
+    if isinstance(spec, (int, float)) or np.isscalar(spec):
+        return np.full((horizontal_dirs.shape[0],), float(spec), dtype=np.float64)
+    table = np.asarray(spec, dtype=np.float64)
+    if table.shape != (8,):
+        raise ValueError(
+            "tilted_plane_angle_deg must be a single number or an 8-length list [N, NE, E, SE, S, SW, W, NW]"
+        )
+    # Compute the model-space azimuth from +Y clockwise toward +X, then
+    # subtract north_deg (model north, degrees clockwise from +Y) to get
+    # the true compass azimuth of each direction.
+    phi = (np.degrees(np.arctan2(horizontal_dirs[:, 0], horizontal_dirs[:, 1])) - float(north_deg) + 360.0) % 360.0
+    # Octant bins are 45° wide (360° / 8). Adding half a bin (22.5°)
+    # centres each bin on its direction (N = 0°, NE = 45°, E = 90°, ...),
+    # so N covers 337.5° to 22.5°.
+    idx = np.floor(((phi + 22.5) % 360.0) / 45.0).astype(np.int64)
+    return table[idx]
+
+
+def _tilted_directions(horizontal_dirs, alpha_deg) -> np.ndarray:
+    """d = cos(a)*h + sin(a)*z_hat for horizontal unit directions h (N, 2):
+    horizontal at a = 0, vertical at a = 90 deg."""
+    alpha_rad = np.radians(alpha_deg)
+    dirs = np.empty((horizontal_dirs.shape[0], 3), dtype=np.float64)
+    dirs[:, :2] = np.cos(alpha_rad)[:, None] * horizontal_dirs
+    dirs[:, 2] = np.sin(alpha_rad)
+    return dirs
+
+
+# Sample points closer than this many grid steps (in plan, on the same row)
+# are neighbours on the test-surface outline; a pair whose normals differ is
+# a turn of the outline.
+_CORNER_NEIGHBOUR_STEPS = 1.5
+# Neighbours closer than this many grid steps lie on the same corner edge
+# (both panels seed sample points along their shared edge).
+_CORNER_SAME_EDGE_STEPS = 0.25
+# Normals this close to opposite (back-to-back faces of a thin wall) have no
+# corner to rotate around.
+_CORNER_MAX_TURN_DEG = 179.0
+
+
+def _corner_fan_rays(points, horizontal_normals, usable, spec, north_deg,
+                     grid_step, cell_size, grid_top_z, grid_extent, ray_length):
+    """Extra rays that rotate the tilted plane around convex turns of the
+    test-surface outline.
+
+    One ray per sample point along its own normal leaves a wedge between
+    the rays of two panels that meet at a convex turn: the rays diverge,
+    and columns between them are crossed by none. For every pair of
+    neighbouring sample points (same row, at most 1.5 grid steps apart in
+    plan) whose horizontal normals turn convexly, this casts rays at headings
+    swept from the first point's normal to its neighbour's, spaced so that
+    neighbouring rays are at most 0.9 voxels apart where they leave the
+    grid. Rays in the first half of the sweep start at the first point, the
+    rest at its neighbour, and each skips the voxels its source facade's
+    plane passes through (the same own-skin rule as the sample points' own
+    rays). Each ray takes the tilt angle of its own heading. Concave
+    turns (rays converge) are skipped, except for neighbours on the same
+    corner edge, whose offset cannot tell the two apart: on a concave
+    corner their swept rays lie above the two planes and carve nothing more.
+    A swept ray from point p caps a column at distance t at
+    z_p + tan(angle) * t, never lower than the same angle measured from the
+    nearest sample point.
+
+    Parameters
+    ----------
+    points : (N, 3) float64
+    horizontal_normals : (N, 2) float64
+        Unit horizontal normals.
+    usable : (N,) bool
+        False for (nearly) horizontal surfaces, which have no facing direction.
+
+    Returns
+    -------
+    directions : (F, 3) float64
+    source_ids : (F,) int64
+        Sample point each ray starts from (its origin and its facade plane).
+    """
+    from scipy.spatial import cKDTree
+
+    empty = (np.zeros((0, 3), dtype=np.float64), np.zeros(0, dtype=np.int64))
+    candidate_ids = np.nonzero(usable)[0]
+    if candidate_ids.size < 2:
+        return empty
+    tree = cKDTree(points[candidate_ids, :2])
+    pairs = tree.query_pairs(_CORNER_NEIGHBOUR_STEPS * grid_step, output_type="ndarray")
+    if pairs.size == 0:
+        return empty
+    first, second = candidate_ids[pairs[:, 0]], candidate_ids[pairs[:, 1]]
+    same_row = np.abs(points[first, 2] - points[second, 2]) <= 0.5 * grid_step
+    first, second = first[same_row], second[same_row]
+
+    heading = np.arctan2(horizontal_normals[:, 1], horizontal_normals[:, 0])
+    turn = (heading[second] - heading[first] + np.pi) % (2.0 * np.pi) - np.pi
+    offset = points[second, :2] - points[first, :2]
+    same_edge = np.linalg.norm(offset, axis=1) <= _CORNER_SAME_EDGE_STEPS * grid_step
+    # Convex: the two rays move apart, i.e. the normals turn toward the side
+    # the neighbour lies on.
+    diverging = ((horizontal_normals[second] - horizontal_normals[first]) * offset).sum(axis=1) > 0.0
+
+    # Horizontal reach of a ray before it leaves the grid (its top, its
+    # plan diagonal, or ray_length), at the lowest tilt angle in use; the
+    # angular step keeps rays within 0.9 voxels of each other out to that
+    # reach.
+    alpha_min = float(np.min(np.atleast_1d(np.asarray(spec, dtype=np.float64))))
+    tan_min = np.tan(np.radians(alpha_min))
+    reach = np.full(first.shape, min(float(ray_length) * np.cos(np.radians(alpha_min)),
+                                     np.sqrt(2.0) * grid_extent))
+    if tan_min > 1e-6:
+        reach = np.minimum(reach, (grid_top_z - points[first, 2]) / tan_min)
+    angular_step = 0.9 * cell_size / np.maximum(reach, 1e-9)
+
+    keep = ((same_edge | diverging)
+            & (np.abs(turn) < np.radians(_CORNER_MAX_TURN_DEG))
+            & (np.abs(turn) > angular_step)
+            & (reach > 0.0))
+    first, second = first[keep], second[keep]
+    turn, angular_step = turn[keep], angular_step[keep]
+    if first.size == 0:
+        return empty
+
+    # Interior headings only: m = 1 .. k-1 of k equal steps (the end
+    # headings are the two points' own rays).
+    steps = np.ceil(np.abs(turn) / angular_step).astype(np.int64)
+    rays_per_pair = steps - 1
+    pair_of_ray = np.repeat(np.arange(first.size), rays_per_pair)
+    starts = np.cumsum(rays_per_pair) - rays_per_pair
+    m = np.arange(pair_of_ray.size) - starts[pair_of_ray] + 1
+    fraction = m / steps[pair_of_ray]
+    fan_heading = heading[first][pair_of_ray] + turn[pair_of_ray] * fraction
+    fan_horizontal = np.stack([np.cos(fan_heading), np.sin(fan_heading)], axis=1)
+
+    # The first half of the sweep starts at the first point, the second half
+    # at its neighbour: every ray is within half the turn of its source
+    # point's normal and leaves from in front of that point's facade.
+    source_ids = np.where(fraction <= 0.5, first[pair_of_ray], second[pair_of_ray])
+    directions = _tilted_directions(fan_horizontal, _tilt_angles_deg(fan_horizontal, spec, north_deg))
+    return directions, source_ids
 
 
 def carve_with_planes(
@@ -782,6 +1060,12 @@ def carve_with_planes(
     the ray traces the plane's section through that column, and everything
     above the plane is forbidden, not only the cells the ray crosses.
 
+    Where the test-surface outline turns convexly (two panels meeting at an
+    outside corner or a kink), the rays of the two panels diverge. Extra
+    rays from the corner sweep the headings between the two normals, so the
+    plane rotates around the corner instead of leaving the columns between
+    the diverging rays standing (see :func:`_corner_fan_rays`).
+
     Parameters
     ----------
     voxel_grid, grid_origin, grid_extent, grid_resolution,
@@ -802,7 +1086,7 @@ def carve_with_planes(
     -------
     carved_grid : torch.Tensor, shape (D, D, D)
     ray_origins : np.ndarray, shape (R, 3)
-        The sample points (one ray each).
+        The sample points (one ray each; the corner rays are not included).
     ray_directions : np.ndarray, shape (R, 3)
     counts : np.ndarray, shape (D*D*D,), int32, optional
         Only returned when *return_counts* is True.
@@ -853,24 +1137,7 @@ def carve_with_planes(
     # 8-element list: each surface gets an angle based on the compass octant
     # its horizontal normal faces ([N, NE, E, SE, S, SW, W, NW]).
     spec = settings.tilted_plane_angle_deg
-    if isinstance(spec, (int, float)) or np.isscalar(spec):
-        alpha_deg = np.full((n_xy.shape[0],), float(spec), dtype=np.float32)
-    else:
-        table = np.asarray(spec, dtype=np.float32)
-        if table.shape != (8,):
-            raise ValueError(
-                "tilted_plane_angle_deg must be a single number or an 8-length list [N, NE, E, SE, S, SW, W, NW]"
-            )
-        # Compute the model-space azimuth from +Y clockwise toward +X, then
-        # subtract north_deg (model north, degrees clockwise from +Y) to get
-        # the true compass azimuth of each surface normal.
-        north_deg = float(settings.north_deg)
-        phi = (np.degrees(np.arctan2(n_xy[:, 0], n_xy[:, 1])) - north_deg + 360.0) % 360.0
-        # Octant bins are 45° wide (360° / 8). Adding half a bin (22.5°)
-        # centres each bin on its direction (N = 0°, NE = 45°, E = 90°, ...),
-        # so N covers 337.5° to 22.5°.
-        idx = np.floor(((phi + 22.5) % 360.0) / 45.0).astype(np.int64)
-        alpha_deg = table[idx]
+    alpha_deg = _tilt_angles_deg(n_xy[:, :2], spec, settings.north_deg).astype(np.float32)
 
     alpha_rad = np.radians(alpha_deg).astype(np.float32)
 
@@ -883,21 +1150,47 @@ def carve_with_planes(
     dirs_np /= np.maximum(np.linalg.norm(dirs_np, axis=1, keepdims=True), 1e-9)
     dirs_np = dirs_np.astype(np.float32)
 
-    origins_tensor = torch.from_numpy(pts_np).to(device, non_blocking=True)
-    dirs_tensor = torch.from_numpy(dirs_np).to(device, non_blocking=True)
+    # Rotate the plane around convex turns of the outline: without these
+    # rays, columns between the diverging rays of two panels stay standing.
+    cell_size = float(grid_extent) / side_len
+    fan_dirs, fan_source_ids = _corner_fan_rays(
+        pts_np.astype(np.float64), n_xy[:, :2].astype(np.float64), ~flat,
+        spec, settings.north_deg, float(settings.grid_step), cell_size,
+        float(grid_origin[2]) + float(grid_extent), float(grid_extent),
+        float(settings.ray_length),
+    )
+    source_ids = np.concatenate([np.arange(pts_np.shape[0]), fan_source_ids])
+    all_dirs = np.concatenate([dirs_np, fan_dirs.astype(np.float32)])
+
+    origins_tensor = torch.from_numpy(pts_np[source_ids]).to(device, non_blocking=True)
+    dirs_tensor = torch.from_numpy(all_dirs).to(device, non_blocking=True)
 
     grid_min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-    counts = _count_ray_hits(
+    occupancy = _occupancy_flat(voxel_grid)
+    # Corner rays use their source sample point's facade plane, for both the
+    # in-front test and the own-skin rule.
+    ray_point_ids = torch.from_numpy(source_ids).to(device)
+    surface_normals = torch.from_numpy(norms_np).to(device)
+    counts, skin_pairs = _count_ray_hits(
         voxel_grid, grid_min_corner, float(grid_extent), side_len,
         origins_tensor, dirs_tensor, settings,
-        torch.arange(pts_np.shape[0], device=device),
-        torch.from_numpy(norms_np).to(device),
+        ray_point_ids, surface_normals, occupancy,
         ray_batch_size=ray_batch_size,
     )
+
     # Propagate counts up each (x, y) column (running maximum along z), so
     # every cell at or above a visited cell is carved. Visits to empty cells
     # count too: a ray passing over a low roof still bounds the mass above it.
-    counts = torch.cummax(counts.view(side_len, side_len, side_len), dim=2).values.reshape(-1)
+    def _up_columns(c):
+        return torch.cummax(c.view(side_len, side_len, side_len), dim=2).values.reshape(-1)
+
+    counts = _up_columns(counts)
+    # Own skin goes with the mass behind it (that mass's final state, so
+    # after the column pass), and then takes its own column with it.
+    counts = _up_columns(_follow_mass_behind_skin(
+        counts, skin_pairs, grid_min_corner, float(grid_extent), side_len,
+        origins_tensor, dirs_tensor, ray_point_ids, surface_normals, occupancy,
+        float(settings.ray_length)))
     carved_grid = _carve_by_counts(voxel_grid, counts)
 
     if not return_counts:

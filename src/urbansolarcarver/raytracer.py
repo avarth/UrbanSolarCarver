@@ -40,7 +40,7 @@ import math
 
 import torch
 import numpy as np
-from typing import Tuple
+from typing import Any, Tuple
 import logging
 
 log = logging.getLogger(__name__)
@@ -341,10 +341,11 @@ if _warp_available:
         """1 if the whole current voxel lies in front of the ray's source
         surface (the plane through *o* with normal *n*), else 0.
 
-        A voxel the surface's plane passes through is the building's own skin
-        (a test surface on a facade sits inside the boundary voxels of its own
-        mass), not something that shades it.  The voxel is entirely in front
-        when its centre is further in front than its half-extent along *n*.
+        A voxel the surface's plane passes through is skin (a test surface on
+        a facade sits inside the boundary voxels of its own mass); see
+        `_skin_without_mass_behind` for when skin still counts.  The voxel is
+        entirely in front when its centre is further in front than its
+        half-extent along *n*.
         """
         c = wp.vec3(
             grid_origin[0] + (float(s.vx) + 0.5) * cell_size,
@@ -353,6 +354,81 @@ if _warp_available:
         )
         half_extent = 0.5 * cell_size * (wp.abs(n[0]) + wp.abs(n[1]) + wp.abs(n[2]))
         if wp.dot(n, c - o) > half_extent:
+            return 1
+        return 0
+
+    @wp.func
+    def _voxel_behind_skin(vx: int, vy: int, vz: int, grid_origin: wp.vec3,
+                           cell_size: float, resolution: int,
+                           o: wp.vec3, n: wp.vec3) -> int:
+        """Flat index of the voxel behind skin voxel (vx, vy, vz) of the
+        surface through *o* with unit normal *n*, or -1 if it is outside
+        the grid.
+
+        Steps from the skin voxel's centre one cell length at a time
+        against *n* and takes the first voxel containing the stepped point
+        that lies wholly behind the plane (centre at least its half-extent
+        behind).  A skin voxel's centre is within one half-extent of the
+        plane, so the third step always qualifies.
+        """
+        c = wp.vec3(
+            grid_origin[0] + (float(vx) + 0.5) * cell_size,
+            grid_origin[1] + (float(vy) + 0.5) * cell_size,
+            grid_origin[2] + (float(vz) + 0.5) * cell_size,
+        )
+        half_extent = 0.5 * cell_size * (wp.abs(n[0]) + wp.abs(n[1]) + wp.abs(n[2]))
+        bx = int(0)
+        by = int(0)
+        bz = int(0)
+        for k in range(1, 4):
+            q = c - n * (float(k) * cell_size)
+            bx = int(wp.floor((q[0] - grid_origin[0]) / cell_size))
+            by = int(wp.floor((q[1] - grid_origin[1]) / cell_size))
+            bz = int(wp.floor((q[2] - grid_origin[2]) / cell_size))
+            bc = wp.vec3(
+                grid_origin[0] + (float(bx) + 0.5) * cell_size,
+                grid_origin[1] + (float(by) + 0.5) * cell_size,
+                grid_origin[2] + (float(bz) + 0.5) * cell_size,
+            )
+            if wp.dot(n, bc - o) <= -half_extent:
+                break
+        if (bx < 0 or bx >= resolution or by < 0 or by >= resolution
+                or bz < 0 or bz >= resolution):
+            return -1
+        return bx * resolution * resolution + by * resolution + bz
+
+    @wp.func
+    def _skin_without_mass_behind(s: _DDAState, grid_origin: wp.vec3, cell_size: float,
+                                  resolution: int, o: wp.vec3, n: wp.vec3,
+                                  skin_rule: int, occupancy: wp.array(dtype=wp.uint8)) -> int:
+        """1 if the current voxel is occupied skin of the ray's source
+        surface (its plane passes through the voxel) and the voxel behind it
+        is outside the grid or empty, else 0.
+
+        Such a voxel is not the surface's own mass: the building behind the
+        surface is not part of the max volume, so the voxel obstructs the
+        surface like any voxel in front of it.  Empty skin obstructs nothing
+        and is not counted (in tilted_plane a count would also carve the
+        column above it).  Always 0 when *skin_rule* is 0 (no occupancy
+        grid given).
+        """
+        if skin_rule == 0:
+            return 0
+        if occupancy[s.vx * resolution * resolution + s.vy * resolution + s.vz] == wp.uint8(0):
+            return 0
+        c = wp.vec3(
+            grid_origin[0] + (float(s.vx) + 0.5) * cell_size,
+            grid_origin[1] + (float(s.vy) + 0.5) * cell_size,
+            grid_origin[2] + (float(s.vz) + 0.5) * cell_size,
+        )
+        half_extent = 0.5 * cell_size * (wp.abs(n[0]) + wp.abs(n[1]) + wp.abs(n[2]))
+        dist = wp.dot(n, c - o)
+        if dist > half_extent or dist <= -half_extent:
+            return 0
+        b = _voxel_behind_skin(s.vx, s.vy, s.vz, grid_origin, cell_size, resolution, o, n)
+        if b < 0:
+            return 1
+        if occupancy[b] == wp.uint8(0):
             return 1
         return 0
 
@@ -365,6 +441,8 @@ if _warp_available:
         ray_point_ids: wp.array(dtype=int),
         point_normals: wp.array(dtype=wp.vec3),
         front_test: int,                        # 1 = skip voxels behind the source surface
+        skin_rule: int,                         # 1 = count skin voxels with no mass behind them
+        occupancy: wp.array(dtype=wp.uint8),    # max volume occupancy [res^3] (placeholder if skin_rule == 0)
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -401,7 +479,9 @@ if _warp_available:
                 return
             if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
                     and s.vy < resolution and s.vz >= 0 and s.vz < resolution
-                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
+                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1
+                         or _skin_without_mass_behind(s, grid_origin, cell_size, resolution,
+                                                      o, n, skin_rule, occupancy) == 1)):
                 # 3D to flat index in row-major (C) order: x*res^2 + y*res + z
                 flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
                 wp.atomic_add(scores, flat_idx, w)
@@ -416,6 +496,8 @@ if _warp_available:
         ray_point_ids: wp.array(dtype=int),
         point_normals: wp.array(dtype=wp.vec3),
         front_test: int,                        # 1 = skip voxels behind the source surface
+        skin_rule: int,                         # 1 = count skin voxels with no mass behind them
+        occupancy: wp.array(dtype=wp.uint8),    # max volume occupancy [res^3] (placeholder if skin_rule == 0)
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -451,7 +533,9 @@ if _warp_available:
                 return
             if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
                     and s.vy < resolution and s.vz >= 0 and s.vz < resolution
-                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
+                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1
+                         or _skin_without_mass_behind(s, grid_origin, cell_size, resolution,
+                                                      o, n, skin_rule, occupancy) == 1)):
                 flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
                 wp.atomic_add(scores, flat_idx, w)
             s = _dda_step(s, resolution, max_t)
@@ -464,6 +548,8 @@ if _warp_available:
         ray_point_ids: wp.array(dtype=int),
         point_normals: wp.array(dtype=wp.vec3),
         front_test: int,                        # 1 = skip voxels behind the source surface
+        skin_rule: int,                         # 1 = count skin voxels with no mass behind them
+        occupancy: wp.array(dtype=wp.uint8),    # max volume occupancy [res^3] (placeholder if skin_rule == 0)
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -494,10 +580,81 @@ if _warp_available:
                 return
             if (s.vx >= 0 and s.vx < resolution and s.vy >= 0
                     and s.vy < resolution and s.vz >= 0 and s.vz < resolution
-                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1)):
+                    and (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1
+                         or _skin_without_mass_behind(s, grid_origin, cell_size, resolution,
+                                                      o, n, skin_rule, occupancy) == 1)):
                 flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
                 wp.atomic_add(counts, flat_idx, 1)
             s = _dda_step(s, resolution, max_t)
+
+    @wp.kernel
+    def _skin_follows_mass_behind_kernel(
+        # Ray data
+        ray_origins: wp.array(dtype=wp.vec3),
+        ray_dirs: wp.array(dtype=wp.vec3),
+        ray_point_ids: wp.array(dtype=int),
+        point_normals: wp.array(dtype=wp.vec3),
+        # Grid parameters
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        max_t: float,
+        occupancy: wp.array(dtype=wp.uint8),   # max volume occupancy [res^3]
+        values_in: wp.array(dtype=Any),        # finished counts or scores [res^3], read only
+        values_out: wp.array(dtype=Any),       # starts as a copy of values_in; raised in place
+    ):
+        """Raise each own-skin voxel a ray visits to the value of the voxel
+        behind it.
+
+        An occupied skin voxel (the source surface's plane passes through
+        it) whose voxel behind is occupied is the surface's own mass and is not
+        counted by the surface's rays; it should go when that mass goes.
+        Taking the maximum of its value and the value behind it does that
+        for counts (removed when non-zero) and for scores (removed when
+        above the threshold).
+
+        The point at parameter t lies t * (n . d) in front of the plane, and
+        a voxel can be skin only if one of its points lies within twice its
+        half-extent of it.  Voxel centre distances along a ray are not
+        monotone (an oblique ray can step back toward the plane), so the
+        walk stops only once the current voxel's exit parameter puts every
+        later voxel beyond that bound.
+        """
+        tid = wp.tid()
+        o = ray_origins[tid]
+        d = ray_dirs[tid]
+        n = point_normals[ray_point_ids[tid]]
+        res_sq = resolution * resolution
+        half_extent = 0.5 * cell_size * (wp.abs(n[0]) + wp.abs(n[1]) + wp.abs(n[2]))
+        rise_per_t = wp.dot(n, d)
+        s = _dda_init(o, d, grid_origin, cell_size, resolution, max_t)
+        max_steps = 3 * resolution
+        for _step in range(max_steps):
+            if s.active == 0:
+                return
+            c = wp.vec3(
+                grid_origin[0] + (float(s.vx) + 0.5) * cell_size,
+                grid_origin[1] + (float(s.vy) + 0.5) * cell_size,
+                grid_origin[2] + (float(s.vz) + 0.5) * cell_size,
+            )
+            dist = wp.dot(n, c - o)
+            if dist > half_extent:
+                t_exit = wp.min(s.t_max_x, wp.min(s.t_max_y, s.t_max_z))
+                if t_exit * rise_per_t > 2.0 * half_extent + 1.0e-4 * cell_size:
+                    return
+            elif dist > -half_extent:
+                flat = s.vx * res_sq + s.vy * resolution + s.vz
+                if occupancy[flat] != wp.uint8(0):
+                    b = _voxel_behind_skin(s.vx, s.vy, s.vz, grid_origin, cell_size,
+                                           resolution, o, n)
+                    if b >= 0:
+                        if occupancy[b] != wp.uint8(0):
+                            wp.atomic_max(values_out, flat, values_in[b])
+            s = _dda_step(s, resolution, max_t)
+
+    for _dtype in (wp.int32, wp.float32):
+        wp.overload(_skin_follows_mass_behind_kernel,
+                    {"values_in": wp.array(dtype=_dtype), "values_out": wp.array(dtype=_dtype)})
 
     @wp.kernel
     def _parity_voxelize_kernel(
@@ -665,20 +822,37 @@ def voxelize_solid_warp(
     return (v >= 2) | (s > 0)
 
 
-def _surface_args(num_rays, point_ids, surface_normals, device_str, who):
-    """Warp inputs for the behind-surface voxel filter.
+def _surface_args(num_rays, point_ids, surface_normals, occupancy, device_str, who):
+    """Warp inputs for the behind-surface voxel filter and the skin rule.
 
-    Returns ``(point_ids, normals, front_test)``.  Without *surface_normals*
-    the normals are a 1-element placeholder and ``front_test`` is 0, so the
-    kernels skip the filter; missing *point_ids* become zeros.
+    Returns ``(point_ids, normals, front_test, skin_rule, occupancy)``.
+    Without *surface_normals* the normals are a 1-element placeholder and
+    ``front_test`` is 0, so the kernels skip the filter; missing
+    *point_ids* become zeros.  Without *occupancy* the grid is a 1-element
+    placeholder and ``skin_rule`` is 0, so skin voxels are never counted.
     """
     if surface_normals is not None and point_ids is None:
         raise ValueError(f"{who}: surface_normals and point_ids must be provided together")
+    if occupancy is not None and surface_normals is None:
+        raise ValueError(f"{who}: occupancy requires surface_normals and point_ids")
     ids = (wp.from_torch(point_ids.contiguous().int()) if point_ids is not None
            else wp.zeros(num_rays, dtype=int, device=device_str))
+    if occupancy is None:
+        occ, skin_rule = wp.zeros(1, dtype=wp.uint8, device=device_str), 0
+    else:
+        occ, skin_rule = _occupancy_array(occupancy), 1
     if surface_normals is None:
-        return ids, wp.zeros(1, dtype=wp.vec3, device=device_str), 0
-    return ids, wp.from_torch(surface_normals.contiguous().float(), dtype=wp.vec3), 1
+        return ids, wp.zeros(1, dtype=wp.vec3, device=device_str), 0, skin_rule, occ
+    return (ids, wp.from_torch(surface_normals.contiguous().float(), dtype=wp.vec3), 1,
+            skin_rule, occ)
+
+
+def _occupancy_array(occupancy: torch.Tensor):
+    """Flat uint8 Warp view of a max volume occupancy grid (any dtype, nonzero = occupied)."""
+    flat = occupancy.reshape(-1)
+    if flat.dtype != torch.uint8:
+        flat = (flat != 0).to(torch.uint8)
+    return wp.from_torch(flat.contiguous(), dtype=wp.uint8)
 
 
 def trace_and_score_dda(
@@ -694,6 +868,7 @@ def trace_and_score_dda(
     point_ids: "torch.Tensor | None" = None,
     point_weights: "torch.Tensor | None" = None,
     surface_normals: "torch.Tensor | None" = None,
+    occupancy: "torch.Tensor | None" = None,
 ) -> None:
     """Trace rays with the Warp DDA kernel and add each ray's weight to every
     voxel it visits, directly into ``scores``.
@@ -731,6 +906,13 @@ def trace_and_score_dda(
         Normal of each ray's source surface.  When given, only voxels that
         lie entirely in front of that surface are scored; voxels behind it
         or crossed by its plane (the surface's own mass and skin) are not.
+    occupancy : torch.Tensor, shape (resolution**3,) or (res, res, res), optional
+        Max volume occupancy (nonzero = occupied); requires
+        ``surface_normals``.  When given, a voxel crossed by the source
+        surface's plane is scored too if the voxel behind it (see
+        :func:`follow_mass_behind_skin_dda`) is empty or outside the grid:
+        the surface's building is then not part of the max volume, so the
+        voxel is not its skin.
 
     Raises
     ------
@@ -738,7 +920,8 @@ def trace_and_score_dda(
         If ``scores`` is not a contiguous float32 tensor (Warp would then
         write into a copy), if ``point_ids`` is given with neither
         ``point_weights`` nor ``surface_normals``, or if either of those
-        is given without ``point_ids``.
+        is given without ``point_ids``, or if ``occupancy`` is given
+        without ``surface_normals``.
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
@@ -768,8 +951,8 @@ def trace_and_score_dda(
     wp_scores = wp.from_torch(scores)
     wp_weights = wp.from_torch(patch_weights.contiguous().float())
     grid_origin_wp = wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2]))
-    wp_point_ids, wp_normals, front = _surface_args(
-        num_rays, point_ids, surface_normals, device_str, "trace_and_score_dda")
+    wp_point_ids, wp_normals, front, skin_rule, wp_occ = _surface_args(
+        num_rays, point_ids, surface_normals, occupancy, device_str, "trace_and_score_dda")
 
     if point_weights is not None:
         wp_point_weights = wp.from_torch(point_weights.contiguous().float())
@@ -778,6 +961,7 @@ def trace_and_score_dda(
             dim=num_rays,
             inputs=[
                 wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
+                skin_rule, wp_occ,
                 grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
                 wp_scores, wp_weights, wp_point_weights,
             ],
@@ -790,7 +974,7 @@ def trace_and_score_dda(
         dim=num_rays,
         inputs=[
             wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
-            grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
+            skin_rule, wp_occ, grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
             wp_scores, wp_weights,
         ],
         device=device_str,
@@ -807,6 +991,7 @@ def trace_and_count_dda(
     ray_length: float,
     point_ids: "torch.Tensor | None" = None,
     surface_normals: "torch.Tensor | None" = None,
+    occupancy: "torch.Tensor | None" = None,
 ) -> None:
     """Trace rays with the Warp DDA kernel and add 1 to ``counts`` for every
     voxel each ray visits, in place.
@@ -822,12 +1007,16 @@ def trace_and_count_dda(
         Per-ray sample-point index and per-point surface normal; when both
         are given, voxels behind the ray's source surface are not counted.
         ``point_ids`` alone is accepted and ignored.
+    occupancy : torch.Tensor, optional
+        Max volume occupancy; skin voxels with nothing behind them are
+        counted, as in :func:`trace_and_score_dda`.
 
     Raises
     ------
     ValueError
         If ``counts`` is not a contiguous int32 tensor, or
-        ``surface_normals`` is given without ``point_ids``.
+        ``surface_normals`` is given without ``point_ids``, or ``occupancy``
+        without ``surface_normals``.
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
@@ -844,20 +1033,101 @@ def trace_and_count_dda(
     wp_dirs = wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3)
     wp_counts = wp.from_torch(counts)
     grid_origin_wp = wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2]))
-    wp_point_ids, wp_normals, front = _surface_args(
-        num_rays, point_ids, surface_normals, device_str, "trace_and_count_dda")
+    wp_point_ids, wp_normals, front, skin_rule, wp_occ = _surface_args(
+        num_rays, point_ids, surface_normals, occupancy, device_str, "trace_and_count_dda")
 
     wp.launch(
         _dda_fused_count_kernel,
         dim=num_rays,
         inputs=[
             wp_origins, wp_dirs, wp_point_ids, wp_normals, front,
-            grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
+            skin_rule, wp_occ, grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
             wp_counts,
         ],
         device=device_str,
     )
 
+
+
+def follow_mass_behind_skin_dda(
+    min_corner: Tuple[float, float, float],
+    scale: float,
+    resolution: int,
+    origins: torch.Tensor,
+    ray_dirs: torch.Tensor,
+    point_ids: torch.Tensor,
+    surface_normals: torch.Tensor,
+    occupancy: torch.Tensor,
+    values: torch.Tensor,
+    ray_length: float,
+) -> torch.Tensor:
+    """Return *values* with every own-skin voxel raised to the value of the
+    voxel behind it.
+
+    A voxel the source surface's plane passes through is that surface's
+    skin.  When the skin voxel and the voxel behind it are both occupied,
+    the skin belongs to the mass behind the surface: its own rays do not count it, but it must not
+    outlast that mass.  So each skin voxel a ray visits takes the maximum
+    of its value and the value of the voxel behind it (counts: removed when
+    the mass behind is removed; scores: never below the mass behind).
+
+    The voxel behind a skin voxel is found by stepping from the skin
+    voxel's centre one cell length at a time against the surface normal,
+    up to three steps, until the voxel containing the stepped point lies
+    wholly behind the plane.
+
+    Parameters
+    ----------
+    min_corner, scale, resolution, origins, ray_dirs, ray_length :
+        As in :func:`trace_and_count_dda`; pass the same rays.
+    point_ids : torch.Tensor, shape (R,)
+        Sample-point index per ray.
+    surface_normals : torch.Tensor, shape (num_points, 3)
+        Unit normal of each sample point's surface.
+    occupancy : torch.Tensor
+        Max volume occupancy, resolution**3 voxels (nonzero = occupied).
+    values : torch.Tensor, shape (resolution**3,)
+        Finished int32 counts or float32 scores; not modified.
+
+    Returns
+    -------
+    torch.Tensor
+        A new flat tensor like *values*.
+
+    Raises
+    ------
+    ValueError
+        If *values* is not int32 or float32.
+    """
+    if values.dtype not in (torch.int32, torch.float32):
+        raise ValueError("follow_mass_behind_skin_dda: values must be int32 or float32")
+    values_in = values.reshape(-1).contiguous()
+    values_out = values_in.clone()
+    num_rays = origins.shape[0]
+    if num_rays == 0:
+        return values_out
+    device_str = f"cuda:{origins.device.index or 0}" if origins.is_cuda else "cpu"
+    wp_dtype = wp.int32 if values.dtype == torch.int32 else wp.float32
+    wp.launch(
+        _skin_follows_mass_behind_kernel,
+        dim=num_rays,
+        inputs=[
+            wp.from_torch(origins.contiguous().float(), dtype=wp.vec3),
+            wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3),
+            wp.from_torch(point_ids.contiguous().int()),
+            wp.from_torch(surface_normals.contiguous().float(), dtype=wp.vec3),
+            wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2])),
+            float(scale / resolution), int(resolution), float(ray_length),
+            _occupancy_array(occupancy),
+            wp.from_torch(values_in, dtype=wp_dtype),
+            wp.from_torch(values_out, dtype=wp_dtype),
+        ],
+        device=device_str,
+    )
+    # Warp launches run on Warp's own CUDA stream; wait before torch reads.
+    if origins.is_cuda:
+        torch.cuda.synchronize()
+    return values_out
 
 def generate_sky_patch_rays(
     pts: np.ndarray,
