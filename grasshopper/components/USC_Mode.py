@@ -85,6 +85,33 @@ def _warn(msg):
     return msg
 
 
+def _solve_again_once(engine_found):
+    """Schedule one more solve of this component after the current solution.
+
+    A saved file opened in a fresh Rhino session can solve this component before
+    USC_Session has loaded usc_gh.py; USC_Session solves in the same solution, so
+    one more solve afterwards finds the engine.  The re-solve is scheduled once
+    per component until the engine is found, so a canvas without a USC_Session
+    does not re-solve forever.
+    """
+    try:
+        import scriptcontext as sc
+        from Grasshopper.Kernel import GH_Document
+        component = ghenv.Component
+        key = "usc_resolve_scheduled_" + str(component.InstanceGuid)
+        if engine_found:
+            sc.sticky.pop(key, None)
+            return
+        doc = component.OnPingDocument()
+        if doc is None or sc.sticky.get(key):
+            return
+        sc.sticky[key] = True
+        doc.ScheduleSolution(1, GH_Document.GH_ScheduleDelegate(
+            lambda d: component.ExpireSolution(False)))
+    except Exception:
+        pass
+
+
 mode_name = None
 description = ""
 
@@ -92,6 +119,7 @@ if mode is None:
     description = "Connect an integer (0-5) to select a mode."
 else:
     registry = _mode_registry()
+    _solve_again_once(registry is not None)
     if registry is None:
         description = _warn("The mode list comes from the engine: solve USC_Session first, "
                             "then this component again")
