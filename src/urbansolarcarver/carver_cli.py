@@ -21,7 +21,8 @@ Design decisions
 All heavy imports (torch, warp, api_core) are deferred to function bodies so
 that lightweight commands (``--help``, ``schema``, ``validate``, ``daemon``)
 start quickly without initialising CUDA or compiling Warp kernels.
-The ``_api()`` helper loads ``urbansolarcarver.api`` lazily on first access.
+Pipeline commands import ``urbansolarcarver.api`` inside their bodies, and
+the daemon commands use the standard-library ``daemon_client``.
 
 The ``--daemon`` flag on each pipeline command sends the job to a running
 daemon over localhost TCP (``multiprocessing.connection``), sharing the same
@@ -62,64 +63,21 @@ for _stream in (sys.stdout, sys.stderr):
         except Exception:
             pass
 
-# ---------------------------------------------------------------------------
-# Version: read from installed package metadata; the fallback is used when
-# the package is run from source without being installed.
-# ---------------------------------------------------------------------------
-try:
-    from importlib.metadata import version as _pkg_version
-    __version__ = _pkg_version("urbansolarcarver")
-except Exception:
-    __version__ = "0.9.0"
+from . import __version__
+from .daemon_client import DEFAULT_DAEMON_HOST, DEFAULT_DAEMON_PORT, send_daemon_request
 
 # ---------------------------------------------------------------------------
 # Daemon connection defaults (localhost-only, not network-accessible).
 # ---------------------------------------------------------------------------
-daemon_host = "localhost"
-daemon_port = 6000
-
-# ---------------------------------------------------------------------------
-# Lazy API accessor
-# ---------------------------------------------------------------------------
-_api_mod = None
-
-
-def _api(attr: str):
-    """Return an attribute from ``urbansolarcarver.api``, imported lazily.
-
-    First call triggers the heavy import chain (torch -> warp -> api_core).
-    Subsequent calls reuse the cached module.
-    """
-    global _api_mod
-    if _api_mod is None:
-        from urbansolarcarver import api as mod
-        _api_mod = mod
-    return getattr(_api_mod, attr)
-
+daemon_host = DEFAULT_DAEMON_HOST
+daemon_port = DEFAULT_DAEMON_PORT
 
 # ---------------------------------------------------------------------------
 # Daemon helpers
 # ---------------------------------------------------------------------------
-def _daemon_authkey() -> bytes:
-    """Read the shared authkey used to authenticate daemon connections."""
-    from .daemon import _resolve_authkey
-    return _resolve_authkey()
-
-
 def _daemon_send(payload: dict) -> dict:
-    """Send an RPC command to the daemon and return its response.
-
-    Uses ``multiprocessing.connection.Client`` over localhost TCP.
-    Raises ``ConnectionRefusedError`` if the daemon is not running and
-    ``multiprocessing.AuthenticationError`` if the authkeys do not match.
-    """
-    from multiprocessing.connection import Client
-    conn = Client((daemon_host, daemon_port), authkey=_daemon_authkey())
-    try:
-        conn.send(payload)
-        return conn.recv()
-    finally:
-        conn.close()
+    """Send one request to the daemon (see :func:`daemon_client.send_daemon_request`)."""
+    return send_daemon_request(payload, daemon_host, daemon_port)
 
 
 def _absolute_overrides(overrides: List[str]) -> List[str]:
@@ -317,7 +275,7 @@ def run(
         typer.secho(f"  Voxel size: {cfg.voxel_size}m")
         typer.secho(f"  Output: {out}\n")
 
-    run_pipeline = _api("run_pipeline")
+    from .api import run_pipeline
 
     if not quiet:
         typer.secho(f"  Running pipeline (produce {', '.join(produce)}; "
@@ -403,7 +361,8 @@ def cmd_preprocessing(
 
     t0 = time.perf_counter()
     with run_context(context):
-        res = _api("preprocessing")(cfg, out_dir)
+        from .api import preprocessing
+        res = preprocessing(cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Preprocessing", {
@@ -455,7 +414,8 @@ def cmd_thresholding(
 
     t0 = time.perf_counter()
     with run_context(context):
-        res = _api("thresholding")(from_manifest, cfg, out_dir)
+        from .api import thresholding
+        res = thresholding(from_manifest, cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Thresholding", {
@@ -504,7 +464,8 @@ def cmd_exporting(
 
     t0 = time.perf_counter()
     with run_context(context):
-        res = _api("exporting")(from_manifest, cfg, out_dir)
+        from .api import exporting
+        res = exporting(from_manifest, cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Exporting", {
@@ -552,7 +513,8 @@ def cmd_massing(
 
     t0 = time.perf_counter()
     with run_context(context):
-        res = _api("massing")(from_manifest, cfg, out_dir)
+        from .api import massing
+        res = massing(from_manifest, cfg, out_dir)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Massing", {

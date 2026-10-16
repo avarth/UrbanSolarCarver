@@ -89,6 +89,7 @@ UrbanSolarCarver/
 | `session.py` | Compute-session lifecycle. **`CarverSession`**: a long-lived object that keeps the CUDA context alive across pipeline calls and holds a value cache (voxelized grids, Tregenza patch directions and solid angles, and the sky-patch weights of the weighted modes). Keys cover the geometry, settings and device, so entries stay valid across runs; the cache holds at most 1 GiB (`max_cache_bytes`) and drops the least recently used entries beyond that. The daemon opens one session and keeps its cache between commands, returning only unused GPU memory after each; the Python API and CLI run without a session unless you open one (`with CarverSession():`). Compiled Warp kernels are cached by Warp itself, on disk. **`get_active_session`**: returns the session registered for a device, or `None`. **`session_cache`**: a decorator that stores a function's return value in the active session's cache under a key built from its arguments. |
 | `engine_requests.py` | The request core every transport uses. **`parse_engine_request`** validates a message into a typed request (`run`, the stage commands, `run_pipeline`, `simulate_weights`, `ping`); **`config_for_engine_request`** builds its config from a YAML path or from the mode's starting values plus overrides; **`handle_engine_request`** runs it in a run context and returns a typed reply with the run's `issues`; **`answer_engine_message`** does all of this for dict transports and turns any failure into an error reply with `error_type` and, for config errors, `config_errors`. Does not import torch until a request runs. |
 | `daemon.py` | Persistent background process for Grasshopper and the CLI's `--daemon` flag, a transport over `engine_requests`. **`serve`**: listens on `127.0.0.1` (localhost only) with Python's `multiprocessing.connection`, authenticated with a random key stored in `~/.urbansolarcarver/.daemon_authkey`. Creates a `CarverSession` on startup and keeps it for the daemon's lifetime; each request goes to `answer_engine_message`, and only `shutdown` is handled by the daemon itself. Started and stopped with the CLI (`urbansolarcarver daemon start/stop`) or from Grasshopper with the `USC_Session` component. |
+| `daemon_client.py` | The client side of the daemon, standard library only: the authkey file (`resolve_daemon_authkey`), the default host and port, and `send_daemon_request`. The CLI's daemon commands use it, so they do not load torch; the daemon reads its key through it too. |
 | `carver_cli.py` | Command-line interface built with Typer, registered in `pyproject.toml` as both `urbansolarcarver` and `usc`. Commands: `run` (the sequencer, with `--produce` and `--start-from`), `preprocessing`, `thresholding`, `exporting`, `massing` (each with a config file `-c`, overrides `-o`, and optional `--daemon`), `validate`, `schema` (prints the config parameter table, filterable by `--mode` or `--search`), `warmup`, `simulate-weights`, `archetype`, and `daemon start/stop/status`. |
 
 ## Grasshopper plugin (`grasshopper/`)
@@ -148,6 +149,7 @@ tests/
 ├── test_modes.py            End-to-end smoke tests per mode, benefit weight formula
 ├── test_montecarlo.py       Fixed Monte Carlo seeds in the regular suite
 ├── test_north.py            north_deg convention (clockwise from +Y) at every Ladybug boundary
+├── test_package_imports.py  Every public name resolves; importing the package and `usc daemon status` do not load torch
 ├── test_pipeline.py         Full runs, stage-boundary validation, overrides, simulated weights
 ├── test_preprocessing.py    Preprocessing helpers and manifest keys
 ├── test_ray_tracing.py      Warp DDA kernel launches, ray generation, batch size
@@ -155,6 +157,7 @@ tests/
 ├── test_run_context.py      RunContext: issues, progress, cancel, and the error classes
 ├── test_scoring.py          Head/tail and carve-fraction thresholds
 ├── test_sequencer.py        run_pipeline: produce, start_from, collected issues, progress, cancel
+├── test_setup_env.py        setup_env.py: choosing the PyTorch wheel index for the driver
 ├── test_session.py          CarverSession caching and the session_cache decorator
 ├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
 │                            steady-state closure, attribution, shoebox expansion, artifact I/O
@@ -166,6 +169,7 @@ tests/
 ├── test_typologies.py       End-to-end carving checks on procedural urban typologies
 ├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
 ├── test_util.py             Diagnostics helpers and the grid memory estimate
+├── test_version.py          The version in pyproject.toml, the package, the CLI and CITATION.cff
 ├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
 └── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
 ```

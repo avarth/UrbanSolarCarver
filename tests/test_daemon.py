@@ -12,7 +12,7 @@ from multiprocessing.connection import Client
 import pytest
 
 from _daemon_home import isolated_home_env
-from urbansolarcarver.daemon import _resolve_authkey
+from urbansolarcarver.daemon_client import resolve_daemon_authkey
 
 
 def _free_port() -> int:
@@ -26,7 +26,7 @@ def daemon(tmp_path_factory):
     # The daemon reads its key from the home folder; a temporary home keeps
     # the tests away from the real ~/.urbansolarcarver/.daemon_authkey.
     home = tmp_path_factory.mktemp("home")
-    key = _resolve_authkey(home / ".urbansolarcarver" / ".daemon_authkey")
+    key = resolve_daemon_authkey(home / ".urbansolarcarver" / ".daemon_authkey")
     port = _free_port()
     proc = subprocess.Popen(
         [sys.executable, "-m", "urbansolarcarver.daemon", "--port", str(port), "--device", "cpu"],
@@ -110,8 +110,8 @@ def test_bad_requests_get_error_replies(daemon, msg, fragment, error_type):
 
 def test_authkey_created_once_and_reused(tmp_path):
     keyfile = tmp_path / "sub" / ".daemon_authkey"
-    key = _resolve_authkey(keyfile)
+    key = resolve_daemon_authkey(keyfile)
     assert len(key) == 64 and keyfile.read_bytes() == key
-    assert _resolve_authkey(keyfile) == key
+    assert resolve_daemon_authkey(keyfile) == key
     if sys.platform != "win32":
         assert keyfile.stat().st_mode & 0o077 == 0

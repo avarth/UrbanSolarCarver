@@ -7,6 +7,28 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (installation and clients)
+
+- **`setup_env.py` asks the PyTorch wheel indexes which torch they offer**
+  and installs from the index with the newest torch the driver can run.
+  It sent CUDA 12.6 and 12.8 drivers to the cu124 index, whose newest
+  torch is 2.6.0.
+- **`urbansolarcarver.__version__`** reads the version from the installed
+  metadata, so it is written once, in `pyproject.toml`; the CLI's
+  hardcoded fallback is gone, and a test checks that `CITATION.cff` names
+  the same version. An editable install keeps the version it was
+  installed with: refresh it with `pip install -e . --no-deps`.
+- **The `cuda` extra is removed.** It repeated the base `torch` dependency.
+- **`daemon_client.py`**, standard library only, holds the daemon's key
+  file, default host and port and `send_daemon_request`. The CLI's daemon
+  commands use it instead of importing `daemon.py`, so `usc daemon status`
+  and `--daemon` runs no longer load torch in the client.
+- **One lazy-import mechanism.** The package's `__getattr__` imports
+  `api` on first use of a name in `__all__`, and the CLI imports `api`
+  inside its commands; the CLI's own `_api()` helper and the package's
+  name table are gone. When torch is missing, the error now points to
+  `setup_env.py` instead of a fixed CUDA 12.1 index.
+
 ### Changed (sky weights cache)
 
 - **Sky-patch weights are cached in the `CarverSession`.** `get_weights`

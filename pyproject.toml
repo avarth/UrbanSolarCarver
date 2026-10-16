@@ -49,9 +49,6 @@ Repository = "https://github.com/avarth/UrbanSolarCarver"
 Issues = "https://github.com/avarth/UrbanSolarCarver/issues"
 
 [project.optional-dependencies]
-cuda = [
-  "torch>=2.0",
-]
 dev = ["pytest>=7.0", "mapbox-earcut"]
 # Rebuild the Grasshopper .ghuser files (grasshopper/build_ghuser.py)
 ghbuild = ["pythonnet>=3.0"]

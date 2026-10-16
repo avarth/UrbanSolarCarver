@@ -39,44 +39,10 @@ import traceback
 log = logging.getLogger(__name__)
 from urbansolarcarver.engine_requests import answer_engine_message, error_reply_for
 from urbansolarcarver.compute_device import resolve_compute_device
+from urbansolarcarver.daemon_client import (
+    DAEMON_AUTHKEY_PATH, DEFAULT_DAEMON_PORT, resolve_daemon_authkey,
+)
 from urbansolarcarver.session import CarverSession
-
-# Per-user key file shared by the daemon and its clients.
-_DEFAULT_KEYFILE = Path.home() / ".urbansolarcarver" / ".daemon_authkey"
-
-
-def _resolve_authkey(keyfile: Path = _DEFAULT_KEYFILE) -> bytes:
-    """Read the authkey from *keyfile*, creating it if it does not exist.
-
-    Whichever process calls this first (the daemon or a client) generates
-    the key: 32 bytes from ``secrets``, hex-encoded to 64 ASCII bytes.  All
-    later calls return the same key.  After creating the file, access is
-    restricted to the current user: on Linux and macOS the file is created
-    with mode 0o600; on Windows ``icacls`` is run afterwards, and if that
-    fails a warning is logged and the key is still used.
-    """
-    if keyfile.is_file():
-        return keyfile.read_bytes().strip()
-    key = secrets.token_hex(32).encode()
-    keyfile.parent.mkdir(parents=True, exist_ok=True)
-    # O_EXCL: if another process created the file in the meantime, use its key.
-    try:
-        fd = os.open(keyfile, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        return keyfile.read_bytes().strip()
-    with os.fdopen(fd, "wb") as f:
-        f.write(key)
-    if sys.platform == "win32":
-        try:
-            subprocess.run(
-                ["icacls", str(keyfile), "/inheritance:r",
-                 "/grant:r", f"{os.getlogin()}:(R,W)"],
-                capture_output=True, check=True,
-            )
-        except (OSError, subprocess.CalledProcessError) as exc:
-            log.warning("Could not restrict authkey file permissions (Windows): %s", exc)
-    return key
-
 
 _LOOPBACK = frozenset({"127.0.0.1", "::1"})
 
@@ -166,15 +132,15 @@ def serve(address, authkey, device_arg="auto"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="localhost")
-    parser.add_argument("--port", type=int, default=6000)
+    parser.add_argument("--port", type=int, default=DEFAULT_DAEMON_PORT)
     parser.add_argument("--device", choices=["auto", "cpu", "cuda"], default="auto")
     args = parser.parse_args()
     # Failed requests are logged with their traceback (engine_requests); they
     # go to the daemon's console or log file with the other [daemon] lines.
     logging.basicConfig(level=logging.INFO, format="[daemon] %(levelname)s %(name)s: %(message)s")
-    key = _resolve_authkey()
+    key = resolve_daemon_authkey()
     _validate_localhost(args.host)
-    print(f"[daemon] authkey file: {_DEFAULT_KEYFILE}", flush=True)
+    print(f"[daemon] authkey file: {DAEMON_AUTHKEY_PATH}", flush=True)
     print(f"[daemon] starting on {args.host}:{args.port} (device={args.device}) ...", flush=True)
     try:
         serve((args.host, args.port), authkey=key, device_arg=args.device)
