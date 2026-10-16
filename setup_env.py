@@ -319,7 +319,7 @@ def main():
     # compute time instead of compilation.
     log("Precompiling Warp compute kernels (one-time, cached)...")
     r = run([str(vpy), "-c",
-             "from urbansolarcarver.raytracer import warmup_kernels; "
+             "from urbansolarcarver.warp_kernels import warmup_kernels; "
              "print('warm' if warmup_kernels() else 'skipped')"],
             capture=True, check=False)
     if r.returncode == 0 and "warm" in r.stdout:

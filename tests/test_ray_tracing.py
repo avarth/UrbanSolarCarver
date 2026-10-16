@@ -1,11 +1,11 @@
-"""Tests for the raytracer module: fixed-step marcher, Warp DDA kernels, ray
-generation, kernel warmup and auto batch size."""
+"""Tests for ray_tracing.py: fixed-step marcher, Warp DDA kernel launches, ray
+generation and auto batch size."""
 import math
 import pytest
 import numpy as np
 import torch
 
-from urbansolarcarver.raytracer import (
+from urbansolarcarver.ray_tracing import (
     _trace_fixed_step,
     trace_multi_hit_grid,
     generate_sky_patch_rays,
@@ -151,7 +151,7 @@ class TestTraceMultiHitGrid:
             direction=(1.0, 0.0, 0.0),
             resolution=5, voxel_size=1.0,
         )
-        with caplog.at_level("WARNING", logger="urbansolarcarver.raytracer"):
+        with caplog.at_level("WARNING", logger="urbansolarcarver.ray_tracing"):
             ray_ids, p_ids, voxels = trace_multi_hit_grid(*args)
         assert "fixed-step ray marcher" in caplog.text
         assert ray_ids.shape[0] > 0
@@ -211,7 +211,7 @@ class TestGenerateSunRays:
 
 class TestFusedCountKernel:
     @pytest.mark.skipif(
-        not __import__("urbansolarcarver.raytracer", fromlist=["dda_backend_available"])
+        not __import__("urbansolarcarver.warp_kernels", fromlist=["dda_backend_available"])
         .dda_backend_available(torch.device("cpu")),
         reason="Warp CPU unavailable",
     )
@@ -223,7 +223,7 @@ class TestFusedCountKernel:
         miss corner clips shorter than that; the exact DDA must count at
         least what the reference counts and at most a sliver more.
         """
-        from urbansolarcarver.raytracer import trace_and_count_dda
+        from urbansolarcarver.ray_tracing import trace_and_count_dda
 
         res, scale, voxel, ray_len = 20, 20.0, 1.0, 60.0
         rng = np.random.default_rng(3)
@@ -256,13 +256,13 @@ class TestFusedCountKernel:
 
 class TestFusedScorePointWeighted:
     @pytest.mark.skipif(
-        not __import__("urbansolarcarver.raytracer", fromlist=["dda_backend_available"])
+        not __import__("urbansolarcarver.warp_kernels", fromlist=["dda_backend_available"])
         .dda_backend_available(torch.device("cpu")),
         reason="Warp CPU unavailable",
     )
     def test_point_weights_scale_scores(self):
         """Per-ray contribution must be patch_weight × point_weight."""
-        from urbansolarcarver.raytracer import trace_and_score_dda
+        from urbansolarcarver.ray_tracing import trace_and_score_dda
 
         res, scale, ray_len = 8, 8.0, 20.0
         # Two vertical rays in different columns, same patch, different points.
@@ -291,9 +291,8 @@ class TestFusedScorePointWeighted:
         torch.testing.assert_close(w[5, 5, :], b[5, 5, :] * 0.25)
 
     def test_point_args_must_come_together(self):
-        from urbansolarcarver.raytracer import (
-            trace_and_score_dda, dda_backend_available,
-        )
+        from urbansolarcarver.ray_tracing import trace_and_score_dda
+        from urbansolarcarver.warp_kernels import dda_backend_available
         if not dda_backend_available(torch.device("cpu")):
             pytest.skip("Warp CPU unavailable")
         with pytest.raises(ValueError, match="together"):
@@ -304,23 +303,6 @@ class TestFusedScorePointWeighted:
                 torch.ones(1), torch.zeros(512), 10.0,
                 point_ids=torch.zeros(1, dtype=torch.int32),
             )
-
-
-# ---------------------------------------------------------------------------
-# Kernel warmup
-# ---------------------------------------------------------------------------
-
-class TestWarmupKernels:
-    def test_warmup_matches_backend_availability(self):
-        """warmup_kernels succeeds exactly when the Warp backend exists on
-        the device, and must never raise."""
-        from urbansolarcarver.raytracer import warmup_kernels, dda_backend_available
-        expected = dda_backend_available(torch.device("cpu"))
-        assert warmup_kernels("cpu") == expected
-
-    def test_warmup_auto_device(self):
-        from urbansolarcarver.raytracer import warmup_kernels
-        assert isinstance(warmup_kernels(), bool)  # must not raise
 
 
 # ---------------------------------------------------------------------------
@@ -345,7 +327,7 @@ class TestFixedStepChunking:
     def test_chunked_matches_unchunked(self):
         """A batch of rays should produce the same hits whether processed
         in one chunk or many small chunks."""
-        import urbansolarcarver.raytracer as rt
+        import urbansolarcarver.ray_tracing as rt
 
         resolution = 20
         voxel_size = 1.0
@@ -395,7 +377,7 @@ class TestFixedStepChunking:
 
     def test_single_ray_still_works(self):
         """Edge case: a single ray should work regardless of chunk size."""
-        import urbansolarcarver.raytracer as rt
+        import urbansolarcarver.ray_tracing as rt
         args = _axis_aligned_ray(
             origin=(-0.5, 0.5, 0.5),
             direction=(1.0, 0.0, 0.0),

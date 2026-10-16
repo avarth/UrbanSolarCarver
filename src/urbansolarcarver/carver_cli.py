@@ -586,7 +586,7 @@ def warmup(
 
     typer.secho(f"  Compiling Warp kernels (device={device})...", fg="yellow")
     t0 = time.perf_counter()
-    from .raytracer import warmup_kernels
+    from .warp_kernels import warmup_kernels
     ok = warmup_kernels(None if device == "auto" else device)
     elapsed = time.perf_counter() - t0
     if ok:

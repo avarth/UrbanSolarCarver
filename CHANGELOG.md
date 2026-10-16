@@ -31,6 +31,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
   imports from the new modules. `test_grid.py` is split the same way, and
   the EPW cache test moved to `test_sun.py`. The API page "Grid Operations"
   is now "Geometry".
+- **`raytracer.py` is split** into `warp_kernels.py` (Warp setup,
+  `dda_backend_available`, `warmup_kernels` and every Warp kernel, kept in
+  one module so Warp compiles and caches them as one unit) and
+  `ray_tracing.py` (the kernel launches `trace_and_score_dda`,
+  `trace_and_count_dda`, `follow_mass_behind_skin_dda`, ray generation, the
+  fixed-step PyTorch fallback and `auto_batch_size`).
+  `voxelize_solid_warp` moved to `voxelization.py`, next to its only
+  caller. The code is unchanged; `test_raytracer.py` is now
+  `test_ray_tracing.py`, with the warmup tests in `test_warp_kernels.py`,
+  and the API page "Ray Tracer" is now "Ray Tracing".
 
 ### Changed (engine requests)
 

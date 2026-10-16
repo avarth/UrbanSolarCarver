@@ -146,7 +146,7 @@ def serve(address, authkey, device_arg="auto"):
         print(f"[daemon] listening on {address[0]}:{address[1]} "
               f"(device={device}, pid={os.getpid()}), warming up...", flush=True)
         try:
-            from urbansolarcarver.raytracer import warmup_kernels
+            from urbansolarcarver.warp_kernels import warmup_kernels
             warmed = warmup_kernels(device)
             print(f"[daemon] kernel warmup {'done' if warmed else 'skipped (no Warp backend)'}", flush=True)
         except Exception as exc:

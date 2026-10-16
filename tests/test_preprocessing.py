@@ -64,7 +64,7 @@ class TestEmptySamplePoints:
     def test_generate_sky_patch_rays_with_empty_points(self):
         """generate_sky_patch_rays with 0 points should return 0 rays (no crash)."""
         import torch
-        from urbansolarcarver.raytracer import generate_sky_patch_rays
+        from urbansolarcarver.ray_tracing import generate_sky_patch_rays
         pts = np.empty((0, 3), dtype=np.float32)
         norms = np.empty((0, 3), dtype=np.float32)
         patch_dirs = torch.tensor([[0, 0, 1]], dtype=torch.float32)

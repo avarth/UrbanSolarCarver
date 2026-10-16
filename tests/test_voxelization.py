@@ -20,7 +20,7 @@ class TestVoxelizeInvariants:
 
 
 def _warp_cpu_available():
-    from urbansolarcarver.raytracer import dda_backend_available
+    from urbansolarcarver.warp_kernels import dda_backend_available
     return dda_backend_available(torch.device("cpu"))
 
 
@@ -29,16 +29,16 @@ class TestWarpVoxelizer:
 
     def _trimesh_reference(self, mesh, voxel_size, margin_frac):
         """Run voxelize_mesh with the Warp path disabled."""
-        import urbansolarcarver.raytracer as rt
+        import urbansolarcarver.voxelization as voxelization
         from urbansolarcarver.voxelization import voxelize_mesh
-        saved = rt.voxelize_solid_warp
-        rt.voxelize_solid_warp = lambda *a, **k: None
+        saved = voxelization.voxelize_solid_warp
+        voxelization.voxelize_solid_warp = lambda *a, **k: None
         try:
             grid, origin, _, res = voxelize_mesh.__wrapped__(
                 mesh, voxel_size=voxel_size, margin_frac=margin_frac
             )
         finally:
-            rt.voxelize_solid_warp = saved
+            voxelization.voxelize_solid_warp = saved
         return grid.cpu().numpy().astype(bool), origin, res
 
     @pytest.mark.skipif(not _warp_cpu_available(), reason="Warp CPU unavailable")
@@ -46,7 +46,7 @@ class TestWarpVoxelizer:
         """On a boundary-aligned cube, the parity voxelizer must reproduce
         the center-inside ground truth voxel for voxel."""
         import trimesh
-        from urbansolarcarver.raytracer import voxelize_solid_warp
+        from urbansolarcarver.voxelization import voxelize_solid_warp
         cube = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
         res, vs = 7, 2.0
         origin = np.array([-7.0, -7.0, -7.0])
@@ -71,7 +71,7 @@ class TestWarpVoxelizer:
         voxel of the surface (center-based vs conservative shell)."""
         import trimesh
         from scipy.ndimage import binary_dilation
-        from urbansolarcarver.raytracer import voxelize_solid_warp
+        from urbansolarcarver.voxelization import voxelize_solid_warp
 
         if shape == "sphere":
             mesh = trimesh.creation.icosphere(subdivisions=3, radius=8.0)
@@ -94,14 +94,14 @@ def test_warp_voxelizer_failure_raises_instead_of_switching_to_trimesh(monkeypat
     would cache that other grid for the geometry.  The trimesh path is only
     for when Warp cannot run on the device at all."""
     import trimesh
-    import urbansolarcarver.raytracer as rt
+    import urbansolarcarver.voxelization as voxelization
     from urbansolarcarver.voxelization import voxelize_mesh
     from urbansolarcarver.session import CarverSession
 
     def failing_warp_voxelizer(*args, **kwargs):
         raise RuntimeError("simulated CUDA out of memory")
 
-    monkeypatch.setattr(rt, "voxelize_solid_warp", failing_warp_voxelizer)
+    monkeypatch.setattr(voxelization, "voxelize_solid_warp", failing_warp_voxelizer)
     cube = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
     with CarverSession("cpu") as session:
         with pytest.raises(RuntimeError, match="simulated CUDA out of memory"):
@@ -142,14 +142,14 @@ class TestVoxelGridPlan:
 
     def test_voxelize_mesh_rejects_an_oversized_grid_before_allocating(self, monkeypatch):
         import trimesh
-        import urbansolarcarver.raytracer as rt
+        import urbansolarcarver.voxelization as voxelization
         from urbansolarcarver.voxelization import voxelize_mesh
         from urbansolarcarver.grid_planning import MAX_GRID_VOXELS
 
         def voxelizer_must_not_run(*args, **kwargs):
             pytest.fail("the voxelizer ran (and allocated) for a grid over the budget")
 
-        monkeypatch.setattr(rt, "voxelize_solid_warp", voxelizer_must_not_run)
+        monkeypatch.setattr(voxelization, "voxelize_solid_warp", voxelizer_must_not_run)
         cube = trimesh.creation.box(extents=(10.0, 10.0, 10.0))
         side = int(np.ceil(MAX_GRID_VOXELS ** (1 / 3))) + 1
         with pytest.raises(ValueError, match="voxel_size"):

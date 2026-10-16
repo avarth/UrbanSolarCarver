@@ -47,7 +47,7 @@ UrbanSolarCarver/
 | File | Purpose |
 |------|---------|
 | `surface_sampling.py` | Test-surface sampling. Discretizes each planar test-surface component into a regular grid of points with outward normals, projecting each face into its local 2D plane and using Shapely `contains_xy` for the in-polygon test; also computes the `edge_taper` weights and the analysis-mesh quads (`AnalysisMesh`). **`sample_surface`** is the preprocessing entry point. |
-| `voxelization.py` | Converts a watertight mesh into a dense cubic boolean grid at the configured `voxel_size`, using the Warp parity voxelizer in `raytracer.py` (trimesh's rasterize-and-fill when Warp cannot run on the device) and filling enclosed cavities; the grid is cached in the active `CarverSession`. **`voxelize`** is the preprocessing entry point. |
+| `voxelization.py` | Converts a watertight mesh into a dense cubic boolean grid at the configured `voxel_size`, using the Warp parity voxelizer (`voxelize_solid_warp`, kernel in `warp_kernels.py`) (trimesh's rasterize-and-fill when Warp cannot run on the device) and filling enclosed cavities; the grid is cached in the active `CarverSession`. **`voxelize`** is the preprocessing entry point. |
 | `meshing.py` | Mesh reconstruction. Removes small disconnected voxel clusters with `scipy.ndimage.label` and converts carved voxel masks back to triangle meshes, either as cubic voxel faces or through signed-distance-field smoothing, marching cubes, and Taubin polishing. **`finalize_mesh`** is the exporting entry point. |
 | `io.py` | Mesh file I/O. **`load_mesh`**: reads a mesh through Trimesh (PLY, OBJ, STL...), rejects files without triangles, and runs `fix_normals` on meshes that are not watertight. **`save_mesh`**: writes a mesh; PLY files switch to double-precision vertices when float32 would round the coordinates. |
 
@@ -56,7 +56,8 @@ UrbanSolarCarver/
 | File | Purpose |
 |------|---------|
 | `carving.py` | The three carving strategies. **`carve_with_sun_rays`** (`time-based`): traces rays from test-surface points toward the sun positions of the analysis period and returns the carved grid and per-voxel hit counts. **`carve_with_sky_patch_rays`** (`irradiance`, `benefit`, `daylight`, `radiative_cooling`): traces rays toward the 145 Tregenza sky patches, weights each ray by its patch's mode-specific value, and returns the accumulated per-voxel scores. **`carve_with_planes`** (`tilted_plane`): traces one ray per sample point at the plane angle (per-octant angles supported) and removes every voxel at or above it in its column. Also `carve_above_columns()` (the `carve_above` post-processing), `validate_inputs()` (checks that input files exist), `load_meshes()` (loads max volume + test surfaces), and `sample_period()` (builds the analysis date/time list with Ladybug's `AnalysisPeriod`). |
-| `raytracer.py` | Ray generation and voxel traversal. **`trace_and_score_dda`** / **`trace_and_count_dda`**: Digital Differential Analyzer (DDA) kernels in NVIDIA Warp that step each ray through the voxel grid cell by cell and add the ray's weight (or a count of 1) to every voxel it crosses. They run on CUDA or on Warp's CPU backend; without Warp, a fixed-step PyTorch marcher (`trace_multi_hit_grid`, approximate) is used. **`generate_sky_patch_rays`** / **`generate_sun_rays`**: expand sample points × directions into flat ray arrays, keeping only directions the surface faces. **`voxelize_solid_warp`**: the parity voxelizer used by `voxelization.py`. **`auto_batch_size`**: picks a ray batch size from the free GPU memory. **`warmup_kernels`**: precompiles the Warp kernels. |
+| `ray_tracing.py` | Ray generation and voxel traversal. **`trace_and_score_dda`** / **`trace_and_count_dda`**: launch the Digital Differential Analyzer (DDA) kernels that step each ray through the voxel grid cell by cell and add the ray's weight (or a count of 1) to every voxel it crosses; they run on CUDA or on Warp's CPU backend, and without Warp a fixed-step PyTorch marcher (`trace_multi_hit_grid`, approximate) is used. **`follow_mass_behind_skin_dda`**: the skin rule. **`generate_sky_patch_rays`** / **`generate_sun_rays`**: expand sample points × directions into flat ray arrays, keeping only directions the surface faces. **`auto_batch_size`**: picks a ray batch size from the free GPU memory. |
+| `warp_kernels.py` | Warp setup and every Warp kernel of the package (DDA traversal, skin rule, parity voxelizer), kept in one module so Warp compiles and caches them as one unit. **`dda_backend_available`**: whether the exact DDA backend can run on a device. **`warmup_kernels`**: precompiles the kernels. |
 
 ### Sky and sun models
 
@@ -146,7 +147,7 @@ tests/
 ├── test_north.py            north_deg convention (clockwise from +Y) at every Ladybug boundary
 ├── test_pipeline.py         Full runs, stage-boundary validation, overrides, simulated weights
 ├── test_preprocessing.py    Preprocessing helpers and manifest keys
-├── test_raytracer.py        Fixed-step marcher, Warp DDA kernels, ray generation, warmup, batch size
+├── test_ray_tracing.py      Fixed-step marcher, Warp DDA kernel launches, ray generation, batch size
 ├── test_schemas.py          Config schema validation, grid resolution cap, overrides, relative paths
 ├── test_run_context.py      RunContext: issues, progress, cancel, and the error classes
 ├── test_scoring.py          Head/tail and carve-fraction thresholds
@@ -162,5 +163,6 @@ tests/
 ├── test_typologies.py       End-to-end carving checks on procedural urban typologies
 ├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
 ├── test_util.py             Diagnostics helpers and the grid memory estimate
-└── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
+├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
+└── test_warp_kernels.py     Warp availability and kernel warmup
 ```

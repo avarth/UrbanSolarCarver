@@ -16,7 +16,7 @@ import pytest
 import torch
 import trimesh
 
-from urbansolarcarver.raytracer import dda_backend_available
+from urbansolarcarver.warp_kernels import dda_backend_available
 from urbansolarcarver.stage_settings import PreprocessingSettings
 
 WARP_CPU = dda_backend_available(torch.device("cpu"))
@@ -168,7 +168,7 @@ class TestSkinRuleKernels:
         return 1 * self.res * self.res + y * self.res + 1
 
     def _counts(self, occupancy):
-        from urbansolarcarver.raytracer import trace_and_count_dda
+        from urbansolarcarver.ray_tracing import trace_and_count_dda
         counts = torch.zeros(self.res ** 3, dtype=torch.int32)
         trace_and_count_dda((0.0, 0.0, 0.0), self.scale, self.res, self.origin, self.direction,
                             counts, self.ray_length, point_ids=self.point_ids,
@@ -191,7 +191,7 @@ class TestSkinRuleKernels:
 
     @pytest.mark.parametrize("dtype", [torch.int32, torch.float32])
     def test_own_skin_takes_the_value_of_the_voxel_behind(self, dtype):
-        from urbansolarcarver.raytracer import follow_mass_behind_skin_dda
+        from urbansolarcarver.ray_tracing import follow_mass_behind_skin_dda
         values = torch.zeros(self.res ** 3, dtype=dtype)
         values[self._flat(0)] = 7
         values[self._flat(3)] = 5
@@ -205,7 +205,7 @@ class TestSkinRuleKernels:
         assert values[self._flat(1)] == 0  # input untouched
 
     def test_skin_with_empty_voxel_behind_keeps_its_value(self):
-        from urbansolarcarver.raytracer import follow_mass_behind_skin_dda
+        from urbansolarcarver.ray_tracing import follow_mass_behind_skin_dda
         occupancy = torch.ones(self.res ** 3, dtype=torch.uint8)
         occupancy[self._flat(0)] = 0
         values = torch.zeros(self.res ** 3, dtype=torch.int32)

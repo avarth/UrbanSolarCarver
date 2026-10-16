@@ -19,8 +19,8 @@ Supports:
 
 Raytracing contract
 -------------------
-With Warp installed, rays are traced by the fused DDA kernels in
-raytracer.py, which visit every voxel a ray crosses exactly once and
+With Warp installed, rays are traced by the fused DDA kernels of
+warp_kernels.py (launched from ray_tracing.py), which visit every voxel a ray crosses exactly once and
 accumulate counts or scores in place.  Without Warp, `trace_multi_hit_grid`
 lists the (ray, voxel) pairs with a fixed-step PyTorch march (each pair at
 most once) and the scores are accumulated here with torch; that path is
@@ -63,18 +63,19 @@ from .sky_patches import fetch_tregenza_patch_directions
 from .sun import get_sun_vectors
 from .errors import InputError
 from .run_context import active_context, report_issue, report_progress
-from .raytracer import (
+from .ray_tracing import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
-    trace_and_count_dda, auto_batch_size, dda_backend_available,
+    trace_and_count_dda, auto_batch_size,
 )
+from .warp_kernels import dda_backend_available
 # The own-skin pass exists only when Warp is installed.
 try:
-    from .raytracer import follow_mass_behind_skin_dda
+    from .ray_tracing import follow_mass_behind_skin_dda
 except ImportError:
     follow_mass_behind_skin_dda = None
 # The fused score kernel exists only when Warp is installed.
 try:
-    from .raytracer import trace_and_score_dda as _fused_dda
+    from .ray_tracing import trace_and_score_dda as _fused_dda
 except ImportError:
     _fused_dda = None
 from typing import NamedTuple, Sequence

@@ -16,6 +16,10 @@ voxelize_mesh(mesh, voxel_size=1.0, margin_frac=0.2, device=None)
     result is cached in the active CarverSession under a key made of the
     mesh arrays, voxel size, margin and device (_voxelize_cache_key).
 
+voxelize_solid_warp(vertices, faces, grid_origin, voxel_size, resolution, device)
+    The Warp parity voxelizer voxelize_mesh uses (kernel in warp_kernels);
+    None when Warp cannot run on the device.
+
 Data types and units
 --------------------
 - Voxel grids: torch.Tensor, shape (D, D, D), uint8/bool, 1 = inside.
@@ -34,6 +38,11 @@ from .errors import InputError
 from .grid_planning import check_voxel_grid_budget, plan_voxel_grid
 from .session import session_cache
 from .stage_settings import PreprocessingSettings
+from .warp_kernels import _warp_available, dda_backend_available
+
+if _warp_available:
+    import warp as wp
+    from .warp_kernels import _parity_voxelize_kernel
 
 _log = logging.getLogger(__name__)
 
@@ -139,7 +148,7 @@ def voxelize_mesh(
 
     Notes
     -----
-    - Uses the Warp parity voxelizer (``raytracer.voxelize_solid_warp``,
+    - Uses the Warp parity voxelizer (``voxelize_solid_warp`` below,
       on CUDA or the Warp CPU device); only when Warp cannot run on
       *device* does it use trimesh voxelization plus fill.  Sealed interior
       cavities are then filled with scipy's binary_fill_holes.
@@ -165,7 +174,6 @@ def voxelize_mesh(
     # error) raises instead of switching to trimesh: trimesh classifies
     # boundary voxels differently, and the session cache would keep that
     # other grid for this geometry.
-    from .raytracer import voxelize_solid_warp
     grid_np = voxelize_solid_warp(
         mesh.vertices, mesh.faces, origin, voxel_size, resolution, device
     )
@@ -249,3 +257,64 @@ def voxelize_mesh(
 
     voxels = torch.from_numpy(filled.astype(np.uint8)).to(device)
     return voxels, origin, grid_extent, resolution
+
+
+def voxelize_solid_warp(
+    vertices: np.ndarray,
+    faces: np.ndarray,
+    grid_origin,
+    voxel_size: float,
+    resolution: int,
+    device,
+) -> "np.ndarray | None":
+    """Solid-voxelize a triangle mesh by parity ray casting along x, y and z
+    against a Warp BVH (bounding volume hierarchy).
+
+    A voxel is occupied when at least 2 of the 3 axis parity tests find its
+    centre inside (a majority vote, so one axis confused by a small hole or
+    a grazing ray does not decide the result; trimesh's orthographic fill
+    uses the same idea), or when the mesh surface passes through it.  Runs
+    on CUDA or the Warp CPU device; voxelization.py uses trimesh's slower
+    rasterize-and-fill only when this returns None, and lets anything it
+    raises propagate.
+
+    Returns
+    -------
+    np.ndarray | None
+        (resolution, resolution, resolution) bool occupancy array, or None
+        when the Warp backend is unavailable on *device*.
+
+    Raises
+    ------
+    ValueError
+        If the mesh has no vertices or no faces.
+    """
+    if not dda_backend_available(device):
+        return None
+    if len(vertices) == 0 or len(faces) == 0:
+        raise ValueError("voxelize_solid_warp: mesh has no vertices or faces")
+    device_str = f"cuda:{device.index or 0}" if device.type == "cuda" else "cpu"
+
+    pts = wp.array(np.ascontiguousarray(vertices, dtype=np.float32), dtype=wp.vec3, device=device_str)
+    idx = wp.array(np.ascontiguousarray(faces, dtype=np.int32).ravel(), dtype=wp.int32, device=device_str)
+    wp_mesh = wp.Mesh(points=pts, indices=idx)
+
+    n = resolution ** 3
+    votes = wp.zeros(n, dtype=wp.int32, device=device_str)
+    surface = wp.zeros(n, dtype=wp.int32, device=device_str)
+    origin_wp = wp.vec3(float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
+
+    for axis in (0, 1, 2):
+        wp.launch(
+            _parity_voxelize_kernel,
+            dim=resolution * resolution,
+            inputs=[wp_mesh.id, axis, origin_wp, float(voxel_size), int(resolution),
+                    votes, surface],
+            device=device_str,
+        )
+    wp.synchronize()
+
+    shape = (resolution, resolution, resolution)
+    v = votes.numpy().reshape(shape)
+    s = surface.numpy().reshape(shape)
+    return (v >= 2) | (s > 0)
