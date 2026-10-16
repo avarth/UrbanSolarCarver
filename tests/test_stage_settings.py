@@ -128,3 +128,9 @@ def test_preprocessing_effective_values_leave_out_unread_mode_fields(tmp_path):
 ])
 def test_applied_smoothing_radius(kind, voxel_size, smoothing, expected):
     assert applied_smoothing_radius_m(kind, voxel_size, smoothing) == pytest.approx(expected)
+
+
+def test_stage_folder_is_the_run_folder_plus_the_stage_name():
+    from pathlib import Path
+    from urbansolarcarver.stage_settings import stage_folder
+    assert stage_folder("run", "massing") == Path("run") / "massing"

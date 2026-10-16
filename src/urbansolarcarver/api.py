@@ -13,9 +13,8 @@ from .api_core import (
     preprocessing, thresholding, exporting, massing,
     PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
 )
-from .api_core._stage_io import stage_folder
 from .run_context import Issue, RunContext, report_progress, run_context, stage_context
-from .stage_settings import _STAGES_NEEDED_BY, PIPELINE_STAGES, stages_to_rerun
+from .stage_settings import _STAGES_NEEDED_BY, PIPELINE_STAGES, stage_folder, stages_to_rerun
 
 # The stage whose output each stage reads.
 _UPSTREAM_STAGE = {

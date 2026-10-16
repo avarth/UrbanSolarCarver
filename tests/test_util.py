@@ -1,5 +1,5 @@
 """Tests for api_core/_diagnostics.py (histograms, score statistics) and the
-grid memory estimate in api_core/_reporting.py."""
+grid memory estimate in grid_planning.py."""
 import numpy as np
 import pytest
 from pathlib import Path
@@ -12,7 +12,7 @@ class TestEstimateGridMemory:
         """The dry-run estimate must mirror voxelize_mesh, which always
         builds a CUBIC grid sized to the longest bounding-box side."""
         import trimesh
-        from urbansolarcarver.api_core._reporting import estimate_grid_memory
+        from urbansolarcarver.grid_planning import estimate_grid_memory
         from urbansolarcarver.grid import voxelize_mesh
 
         slab = trimesh.creation.box(extents=(40.0, 10.0, 5.0))

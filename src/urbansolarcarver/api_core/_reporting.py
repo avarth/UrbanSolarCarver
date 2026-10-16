@@ -1,8 +1,4 @@
-"""Run-report generation and grid memory estimation.
-
-Used by the exporting and massing stages (run report) and by
-``urbansolarcarver preprocessing --dry-run`` (memory estimate).
-"""
+"""Run-report generation, used by the exporting and massing stages."""
 import logging
 from pathlib import Path
 from typing import Union
@@ -10,41 +6,12 @@ from typing import Union
 import json
 
 from ..mode_registry import MODES_NEEDING_EPW
-from ._stage_io import stage_folder
+from ..stage_settings import stage_folder
 
 log = logging.getLogger(__name__)
 
 # Stages that read the thresholding output and add a section to the report.
 _REPORTED_LEAF_STAGES = ("exporting", "massing")
-
-
-def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float = 0.01) -> dict:
-    """Estimate voxel grid dimensions and memory without running the full pipeline.
-
-    Plans the grid with :func:`~urbansolarcarver.grid_planning.plan_voxel_grid`,
-    the same function :func:`~urbansolarcarver.grid.voxelize_mesh` uses.
-
-    Returns dict with keys: grid_dims, total_voxels, memory_mb, warning.
-    """
-    import trimesh
-    from ..grid_planning import check_voxel_grid_budget, plan_voxel_grid
-    mesh = trimesh.load(mesh_path, force='mesh')
-    plan = plan_voxel_grid(mesh.bounds, voxel_size, margin_frac)
-    resolution, total = plan.resolution, plan.total_voxels
-    # 4 bytes (float32 score) + 1 byte (uint8 occupancy) per voxel
-    mem_mb = total * 5 / (1024**2)
-    warning = None
-    try:
-        check_voxel_grid_budget(plan)
-    except ValueError as exc:
-        warning = f"{exc} Preprocessing refuses this grid."
-    else:
-        if total > 50_000_000:
-            warning = (
-                f"Grid contains {total:,} voxels ({mem_mb:,.0f} MB). "
-                f"This is large and may be slow. Consider voxel_size > {voxel_size}m for faster iteration."
-            )
-    return {"grid_dims": (resolution,) * 3, "total_voxels": total, "memory_mb": mem_mb, "warning": warning}
 
 
 def write_run_report(stage: str, stage_out_path: Path, pre_dir: Path, thr_dir: Path,

@@ -10,6 +10,7 @@ This module must not import ``api_core`` (it pulls in torch).
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Iterable, List, Optional, Union
 
 import numpy as np
@@ -21,6 +22,11 @@ from .pydantic_schemas import (
 )
 
 PIPELINE_STAGES = ("preprocessing", "thresholding", "exporting", "massing")
+
+
+def stage_folder(run_folder: Union[Path, str], stage: str) -> Path:
+    """The folder of *stage* in a run folder: ``<run_folder>/<stage>``."""
+    return Path(run_folder) / stage
 
 # The stages nothing else reads: they are what a run produces for the user.
 _LEAF_STAGES = ("exporting", "massing")

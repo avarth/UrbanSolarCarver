@@ -41,7 +41,7 @@ from urbansolarcarver.mode_registry import MODES, canonical_mode_name
 from urbansolarcarver.pydantic_schemas import expand_analysis_period
 from urbansolarcarver.run_context import RunContext, run_context
 from urbansolarcarver.session import CarverSession
-from urbansolarcarver.stage_settings import PIPELINE_STAGES
+from urbansolarcarver.stage_settings import PIPELINE_STAGES, stage_folder
 
 # Per-user key file shared by the daemon and its clients.
 _DEFAULT_KEYFILE = Path.home() / ".urbansolarcarver" / ".daemon_authkey"
@@ -230,8 +230,6 @@ def _handle_stage_command(cmd, msg, sess):
 def _run_reply(run_folder, result, context) -> dict:
     """The reply of a ``run`` command: the folders of the stages that ran, the
     manifest of the last of them, the paths it produced, and the issues."""
-    from urbansolarcarver.api_core._stage_io import stage_folder
-
     ran = [stage for stage in PIPELINE_STAGES if getattr(result, stage) is not None]
     reply = {
         "status": "ok",

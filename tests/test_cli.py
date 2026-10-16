@@ -127,3 +127,138 @@ def test_massing_command_exists():
     from urbansolarcarver.carver_cli import app
     result = CliRunner().invoke(app, ["massing", "--help"], env={"COLUMNS": "200"})
     assert result.exit_code == 0 and "--from" in result.output and "--config" in result.output
+
+
+# ---------------------------------------------------------------------------
+# The run contract: produce / start-from, issues printed, clean errors
+# ---------------------------------------------------------------------------
+def _write_cube_config(tmp_path, **overrides):
+    import yaml
+    from _stage_scene import daylight_cube_config
+    conf = daylight_cube_config(tmp_path, **overrides)
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.safe_dump(conf.model_dump(mode="json", exclude_none=True)),
+                    encoding="utf-8")
+    return path
+
+
+def _invoke(args):
+    from typer.testing import CliRunner
+    from urbansolarcarver.carver_cli import app
+    return CliRunner().invoke(app, args, env={"COLUMNS": "200"})
+
+
+def test_run_produce_massing_skips_exporting(tmp_path):
+    config = _write_cube_config(tmp_path)
+    result = _invoke(["run", "-c", str(config), "--produce", "massing"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "run" / "massing" / "plates.json").is_file()
+    assert not (tmp_path / "run" / "exporting").exists()
+    assert "plates.json" in result.output
+
+
+def test_run_defaults_to_exporting(tmp_path):
+    config = _write_cube_config(tmp_path)
+    result = _invoke(["run", "-c", str(config)])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "run" / "exporting").is_dir()
+    assert not (tmp_path / "run" / "massing").exists()
+
+
+def test_run_start_from_reuses_the_earlier_stages(tmp_path):
+    config = _write_cube_config(tmp_path)
+    assert _invoke(["run", "-c", str(config), "--produce", "thresholding"]).exit_code == 0
+    scores_modified = (tmp_path / "run" / "preprocessing" / "scores.npy").stat().st_mtime_ns
+    result = _invoke(["run", "-c", str(config), "--produce", "exporting",
+                      "--start-from", "thresholding"])
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / "run" / "preprocessing" / "scores.npy").stat().st_mtime_ns == scores_modified
+    assert (tmp_path / "run" / "exporting").is_dir()
+
+
+def test_run_unknown_stage_is_a_usage_error(tmp_path):
+    config = _write_cube_config(tmp_path)
+    result = _invoke(["run", "-c", str(config), "--produce", "rendering"])
+    assert result.exit_code == 2 and "rendering" in result.output
+
+
+def test_invalid_config_prints_a_clean_error(tmp_path):
+    config = _write_cube_config(tmp_path, voxel_size=2.0)
+    text = config.read_text(encoding="utf-8").replace("voxel_size: 2.0", "voxel_size: 0")
+    config.write_text(text, encoding="utf-8")
+    result = _invoke(["run", "-c", str(config)])
+    assert result.exit_code == 1
+    assert "Error:" in result.output and "voxel_size" in result.output
+    assert "Traceback" not in result.output
+    assert isinstance(result.exception, SystemExit)
+
+
+def test_error_without_manifest_to_start_from_is_clean(tmp_path):
+    config = _write_cube_config(tmp_path)
+    result = _invoke(["run", "-c", str(config), "--produce", "exporting",
+                      "--start-from", "thresholding"])
+    assert result.exit_code == 1
+    assert "Error:" in result.output and "Traceback" not in result.output
+
+
+def test_thresholding_prints_the_issues_of_the_stage(tmp_path):
+    config = _write_cube_config(tmp_path)
+    assert _invoke(["preprocessing", "-c", str(config)]).exit_code == 0
+    result = _invoke(["thresholding", "-c", str(config), "-o", "threshold=1e9"])
+    assert result.exit_code == 0, result.output
+    assert "nothing_carved" in result.output
+
+
+def test_config_issues_are_printed_and_a_clean_run_prints_none(tmp_path):
+    import yaml
+    config = _write_cube_config(tmp_path)
+    result = _invoke(["preprocessing", "-c", str(config)])
+    assert result.exit_code == 0, result.output
+    assert "settings_unused_by_mode" in result.output  # the YAML sets weather fields daylight ignores
+    minimal = yaml.safe_load(config.read_text(encoding="utf-8"))
+    kept = {k: minimal[k] for k in ("max_volume_path", "test_surface_path", "out_dir", "mode",
+                                    "voxel_size", "grid_step", "ray_length", "device")}
+    config.write_text(yaml.safe_dump(kept), encoding="utf-8")
+    result = _invoke(["preprocessing", "-c", str(config)])
+    assert result.exit_code == 0, result.output
+    assert "Issues" not in result.output
+
+
+def test_run_on_the_daemon_sends_the_run_command(tmp_path, monkeypatch):
+    from urbansolarcarver import carver_cli
+    config = _write_cube_config(tmp_path)
+    sent = []
+
+    def fake_send(payload):
+        sent.append(payload)
+        return {"status": "ok", "stage_folders": {}, "manifest": "m.json",
+                "issues": [{"stage": "thresholding", "code": "nothing_carved", "message": "all kept"}]}
+
+    monkeypatch.setattr(carver_cli, "_daemon_send", fake_send)
+    result = _invoke(["run", "-c", str(config), "--daemon", "--produce", "massing",
+                      "--produce", "exporting", "--start-from", "thresholding"])
+    assert result.exit_code == 0, result.output
+    payload = sent[0]
+    assert payload["cmd"] == "run"
+    assert payload["produce"] == ["massing", "exporting"]
+    assert payload["start_from"] == "thresholding"
+    assert payload["run_folder"] == str((tmp_path / "run").resolve())
+    assert payload["config"] == str(config.resolve())
+    assert "nothing_carved" in result.output
+
+
+def test_daemon_error_reply_is_reported(tmp_path, monkeypatch):
+    from urbansolarcarver import carver_cli
+    config = _write_cube_config(tmp_path)
+    monkeypatch.setattr(carver_cli, "_daemon_send", lambda payload: {
+        "status": "error", "error": "ConfigError: bad", "error_type": "ConfigError"})
+    result = _invoke(["run", "-c", str(config), "--daemon"])
+    assert result.exit_code == 1 and "ConfigError: bad" in result.output
+
+
+def test_importing_the_cli_does_not_load_torch():
+    import subprocess
+    import sys
+    code = ("import sys; import urbansolarcarver.carver_cli as c; "
+            "sys.exit(1 if 'torch' in sys.modules else 0)")
+    assert subprocess.run([sys.executable, "-c", code]).returncode == 0

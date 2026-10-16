@@ -37,10 +37,10 @@ UrbanSolarCarver/
 | `api_core/massing.py` | **Stage 4.** Reads the thresholding chain, builds floor plates with `floor_plates.py`, writes `plates.json` (world outlines), `plates.obj` (one closed prism per plate), the manifest, diagnostics and the run report with a Massing section. |
 | `floor_plates.py` | Floor-plate massing geometry: base outline and facades split at corners, faces by nearest facade with squared corners, bays cut perpendicular to the facades, floor-by-floor bay selection (tolerance, maximum volume, stacking, minimum width), plate outlines and closed prisms. |
 | `api_core/exporting.py` | **Stage 3.** Loads the binary mask from Stage 2, removes small disconnected voxel clusters, reconstructs a triangle mesh (cubic voxel faces, or SDF-smoothed marching cubes with Taubin polishing), writes `export.<format>`, and writes `run_report.md` for the whole run. |
-| `api_core/_stage_io.py` | Run-folder layout (`stage_folder`), the start and end of a stage (`begin_stage`, `commit_manifest`), manifest paths relative to the manifest's folder (`stored_path`) and reading an upstream manifest with its run ID check (`load_upstream`). |
+| `api_core/_stage_io.py` | The start and end of a stage (`begin_stage`, `commit_manifest`), manifest paths relative to the manifest's folder (`stored_path`) and reading an upstream manifest with its run ID check (`load_upstream`). |
 | `api_core/_util.py` | Helpers shared by the stages: config resolution, device resolution (`"auto"` → `"cuda"` or `"cpu"`), JSON writing, reloading the occupancy grid, config snapshots. |
 | `api_core/_diagnostics.py` | Diagnostic plots and statistics: score histograms, sky-patch hemisphere plots, the simple-vs-simulated weight comparison dome, score statistics, NaN/Inf warnings. |
-| `api_core/_reporting.py` | `run_report.md` generation and the grid-memory estimate used by `preprocessing --dry-run`. |
+| `api_core/_reporting.py` | `run_report.md` generation. |
 
 ### Geometry
 

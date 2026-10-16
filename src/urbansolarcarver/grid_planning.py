@@ -66,3 +66,32 @@ def check_voxel_grid_budget(plan: VoxelGridPlan) -> None:
             f"maximum volume's extent."
         )
         raise ConfigError(message, [ConfigFieldError("voxel_size", message)])
+
+
+def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float = 0.01) -> dict:
+    """Estimate voxel grid dimensions and memory without running the full pipeline.
+
+    Plans the grid with :func:`plan_voxel_grid`, the same function
+    :func:`~urbansolarcarver.grid.voxelize_mesh` uses.  The mesh is loaded
+    with trimesh (imported here, so this module needs only numpy to import).
+
+    Returns dict with keys: grid_dims, total_voxels, memory_mb, warning.
+    """
+    import trimesh
+    mesh = trimesh.load(mesh_path, force='mesh')
+    plan = plan_voxel_grid(mesh.bounds, voxel_size, margin_frac)
+    resolution, total = plan.resolution, plan.total_voxels
+    # 4 bytes (float32 score) + 1 byte (uint8 occupancy) per voxel
+    mem_mb = total * 5 / (1024**2)
+    warning = None
+    try:
+        check_voxel_grid_budget(plan)
+    except ValueError as exc:
+        warning = f"{exc} Preprocessing refuses this grid."
+    else:
+        if total > 50_000_000:
+            warning = (
+                f"Grid contains {total:,} voxels ({mem_mb:,.0f} MB). "
+                f"This is large and may be slow. Consider voxel_size > {voxel_size}m for faster iteration."
+            )
+    return {"grid_dims": (resolution,) * 3, "total_voxels": total, "memory_mb": mem_mb, "warning": warning}

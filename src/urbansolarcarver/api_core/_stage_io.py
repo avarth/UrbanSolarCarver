@@ -29,6 +29,7 @@ from ..pydantic_schemas import (
     ExportingManifest, MassingManifest, PreprocessingManifest, ThresholdingManifest,
     schema_from_json, schema_to_json,
 )
+from ..stage_settings import stage_folder  # noqa: F401 (the run-folder layout, re-exported)
 
 MANIFEST_NAME = "manifest.json"
 
@@ -45,11 +46,6 @@ _UPSTREAM_STAGE = {
     "exporting": "thresholding",
     "massing": "thresholding",
 }
-
-
-def stage_folder(run_folder: Union[Path, str], stage: str) -> Path:
-    """The folder of *stage* in a run folder: ``<run_folder>/<stage>``."""
-    return Path(run_folder) / stage
 
 
 def new_run_id() -> str:
