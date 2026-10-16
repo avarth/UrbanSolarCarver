@@ -39,6 +39,11 @@ class StageChainError(UrbanSolarCarverError, ValueError):
     """A stage's upstream output is missing, stale or from a different run."""
 
 
+class MalformedEngineRequest(UrbanSolarCarverError, ValueError):
+    """A request to the engine is not a mapping, names an unknown command,
+    or lacks or misuses a key (see ``engine_requests``)."""
+
+
 class RunCancelled(UrbanSolarCarverError):
     """The run was cancelled through its run context."""
 

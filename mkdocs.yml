@@ -46,6 +46,7 @@ nav:
     - I/O: api/io.md
     - Configuration: api/config.md
     - Session: api/session.md
+    - Engine Requests: api/engine-requests.md
     - Daemon: api/daemon.md
     - CLI: api/cli.md
 

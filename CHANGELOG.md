@@ -7,6 +7,32 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (engine requests)
+
+- **`engine_requests`: one request core for every transport.** Parsing a
+  request, building its config, running it and shaping the reply moved out
+  of the daemon into `urbansolarcarver.engine_requests`, with typed request
+  models (`RunRequest`, `StageRequest`, `RunPipelineRequest`,
+  `SimulateWeightsRequest`, `PingRequest`) and reply models. The daemon is
+  now a transport over it (`answer_engine_message`); a local HTTP service
+  can use the same core. The wire format the daemon accepts and sends is
+  unchanged, except below.
+- **`load_config.build_config_from_mode_starting_values(values,
+  base_folder=None)`** builds a config from the starting values of the mode
+  *values* names, with *values* on top. It was private to the daemon.
+
+### Changed (engine requests)
+
+- **A malformed daemon request reports `error_type` `MalformedEngineRequest`**
+  (a `ValueError`) instead of `ValueError`: an unknown command, a missing
+  key, or a message that is not a dict.
+- **`load_mesh` raises `InputError`** (a `ValueError`) for a missing file, a
+  file without triangles, and a file trimesh cannot parse. A missing file
+  raised `FileNotFoundError`, and a corrupt file let trimesh's own
+  exception (`IndexError`, `KeyError`...) through.
+- **The daemon logs failed requests** with their traceback through
+  `logging` instead of printing them.
+
 ### Removed
 
 - **protect_share and recovered_sky.** Thresholding offers
