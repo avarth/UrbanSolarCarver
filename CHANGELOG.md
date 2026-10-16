@@ -7,6 +7,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed (compute device)
+
+- **One rule chooses the compute device.** The new
+  `compute_device.resolve_compute_device` replaces eight separate copies of
+  "CUDA if available, else CPU" (the stages, `CarverSession`,
+  `get_active_session`, the daemon, `scoring.get_weights`, the sky matrix,
+  `voxelize_mesh` and `warmup_kernels`), and `warp_device_name` replaces
+  five copies of the Warp device name. `api_core._util.resolve_device` and
+  the daemon's `_pick_device` are removed. Asking for `"cuda"` on a machine
+  without CUDA now raises `RuntimeError` everywhere at once: before, the
+  stages raised but `CarverSession("cuda")` and `daemon --device cuda`
+  accepted it and failed later. `CarverSession` now also accepts
+  `"cuda:N"`.
+
 ### Removed (fallback tracer)
 
 - **The fixed-step PyTorch fallback tracer** (`trace_multi_hit_grid`,

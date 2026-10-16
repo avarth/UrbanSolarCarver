@@ -19,6 +19,8 @@ Sky-patch weight computation and threshold selection for voxel carving.
 """
 import numpy as np
 import torch
+
+from .compute_device import resolve_compute_device
 from .sky_patches import compute_EPW_based_weights, compute_radiative_cooling_weights
 from typing import Sequence
 
@@ -100,8 +102,7 @@ def get_weights(
     if not isinstance(mode, str) or not mode.strip():
         raise TypeError(f"get_weights: mode must be a non-empty string, got {mode!r}")
     mode_key = mode.strip().lower()
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = resolve_compute_device(device)
 
     if mode_key == 'radiative_cooling':
         return compute_radiative_cooling_weights(

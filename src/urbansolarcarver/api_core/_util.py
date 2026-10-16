@@ -37,20 +37,6 @@ def write_json(dirpath: Union[str, Path], filename: str, obj: dict) -> Path:
         json.dump(obj, f, indent=2)
     return p
 
-def resolve_device(device_str: str = "auto"):
-    """Turn 'auto', 'cpu' or 'cuda' into a torch.device.
-
-    'auto' picks CUDA when available, else CPU.  Raises RuntimeError if
-    'cuda' is requested but not available.
-    """
-    import torch
-    pref = device_str.lower() if isinstance(device_str, str) else "auto"
-    if pref == "auto":
-        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if pref == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("cfg.device='cuda' but CUDA is not available")
-    return torch.device(pref)
-
 def device_summary(device) -> str:
     """Human-readable device string, e.g. 'CUDA (NVIDIA RTX 3080, 10.0 GB)' or 'CPU'."""
     import torch

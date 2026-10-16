@@ -25,6 +25,8 @@ from typing import Any, Callable, Dict, Optional, Union
 
 import torch
 
+from .compute_device import resolve_compute_device
+
 _log = logging.getLogger(__name__)
 
 
@@ -63,21 +65,14 @@ class CarverSession(contextlib.AbstractContextManager["CarverSession"]):
 
     def __init__(self, device: Union[str, torch.device, None] = None,
                  max_cache_bytes: int = DEFAULT_CACHE_BYTES):
-        """*device*: "auto" or None (CUDA if available, else CPU), "cuda", "cpu", or a torch.device.
+        """*device*: "auto" or None (CUDA if available, else CPU), "cpu",
+        "cuda", "cuda:N" or a torch.device, resolved by
+        :func:`~urbansolarcarver.compute_device.resolve_compute_device`.
 
         *max_cache_bytes*: memory the cache may hold; a value larger than this
         on its own is returned but not cached.
         """
-        if device is None or (isinstance(device, str) and device.lower() == "auto"):
-            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        elif isinstance(device, str):
-            if device.lower() not in ("cuda", "cpu"):
-                raise ValueError(f"Unknown device preference: {device!r}")
-            self.device = torch.device(device.lower())
-        elif isinstance(device, torch.device):
-            self.device = device
-        else:
-            raise TypeError(f"device must be str, torch.device, or None, not {type(device)}")
+        self.device = resolve_compute_device(device)
 
         self.max_cache_bytes = int(max_cache_bytes)
         self.tensors: "OrderedDict[str, Any]" = OrderedDict()  # oldest use first
@@ -148,9 +143,9 @@ def get_active_session(device: Union[str, torch.device, None] = None) -> Optiona
     if device is None or (isinstance(device, str) and device == "auto"):
         if len(CarverSession._sessions) == 1:
             return next(iter(CarverSession._sessions.values()))
-        dev = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        dev = resolve_compute_device(None)
     else:
-        dev = torch.device(device)
+        dev = resolve_compute_device(device)
     return CarverSession._sessions.get(_device_key(dev))
 
 

@@ -38,6 +38,7 @@ import traceback
 
 log = logging.getLogger(__name__)
 from urbansolarcarver.engine_requests import answer_engine_message, error_reply_for
+from urbansolarcarver.compute_device import resolve_compute_device
 from urbansolarcarver.session import CarverSession
 
 # Per-user key file shared by the daemon and its clients.
@@ -96,22 +97,6 @@ def _validate_localhost(host: str) -> None:
         )
 
 
-def _pick_device(arg: str) -> str:
-    """Turn the ``--device`` argument into ``'cpu'`` or ``'cuda'``.
-
-    ``'cpu'`` and ``'cuda'`` are returned as given.  For ``'auto'``, returns
-    ``'cuda'`` if PyTorch is installed and sees a CUDA GPU, otherwise ``'cpu'``.
-    """
-    if arg == "cpu":
-        return "cpu"
-    if arg == "cuda":
-        return "cuda"
-    try:
-        import torch
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    except (ImportError, RuntimeError):
-        return "cpu"
-
 def _reply(conn, obj) -> None:
     """Send *obj* and close the connection.
 
@@ -137,7 +122,7 @@ def serve(address, authkey, device_arg="auto"):
     ``shutdown``.  Requests are handled one at a time; a failing request
     becomes an error reply and the server keeps running.
     """
-    device = _pick_device(device_arg)
+    device = resolve_compute_device(device_arg)
     with CarverSession(device) as sess:
         # Bind before the (possibly slow) kernel warmup: clients polling for
         # readiness can connect at once, and their ping waits for the accept

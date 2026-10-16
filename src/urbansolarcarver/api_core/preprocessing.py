@@ -5,7 +5,8 @@ from pathlib import Path
 from typing import Tuple, Union
 import numpy as np
 from ..load_config import user_config
-from ._util import _resolve_cfg, dump_config_snapshot, ensure_diag, resolve_device, device_summary
+from ._util import _resolve_cfg, dump_config_snapshot, ensure_diag, device_summary
+from ..compute_device import resolve_compute_device
 from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
 from ._diagnostics import (
     PreprocessingPlotInputs, score_statistics, warn_score_anomalies,
@@ -275,7 +276,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
     def _mark(label):
         _step_times[label] = time.perf_counter() - _t0_wall
 
-    resolved_device = resolve_device(options.device)
+    resolved_device = resolve_compute_device(options.device)
     device_info = device_summary(resolved_device)
     _mark("config_and_device")
 

@@ -23,6 +23,7 @@ from typing import Tuple
 import numpy as np
 import torch
 
+from .compute_device import warp_device_name
 from .warp_kernels import _warp_available
 
 if _warp_available:
@@ -150,7 +151,7 @@ def trace_and_score_dda(
             "provided together"
         )
     # Warp requires explicit device index (e.g. "cuda:0", not just "cuda")
-    device_str = f"cuda:{origins.device.index or 0}" if origins.is_cuda else "cpu"
+    device_str = warp_device_name(origins.device)
     cell_size = scale / resolution
 
     if not scores.is_contiguous() or scores.dtype != torch.float32:
@@ -234,7 +235,7 @@ def trace_and_count_dda(
     num_rays = origins.shape[0]
     if num_rays == 0:
         return
-    device_str = f"cuda:{origins.device.index or 0}" if origins.is_cuda else "cpu"
+    device_str = warp_device_name(origins.device)
     cell_size = scale / resolution
 
     if not counts.is_contiguous() or counts.dtype != torch.int32:
@@ -319,7 +320,7 @@ def follow_mass_behind_skin_dda(
     num_rays = origins.shape[0]
     if num_rays == 0:
         return values_out
-    device_str = f"cuda:{origins.device.index or 0}" if origins.is_cuda else "cpu"
+    device_str = warp_device_name(origins.device)
     wp_dtype = wp.int32 if values.dtype == torch.int32 else wp.float32
     wp.launch(
         _skin_follows_mass_behind_kernel,

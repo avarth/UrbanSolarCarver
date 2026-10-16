@@ -17,12 +17,13 @@ import numpy as np
 log = logging.getLogger(__name__)
 from ..load_config import user_config
 from ._util import (
-    ThresholdedGrid, _resolve_cfg, ensure_diag, write_json, resolve_device, load_thresholded_grid,
+    ThresholdedGrid, _resolve_cfg, ensure_diag, write_json, load_thresholded_grid,
 )
 from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
 from ._reporting import write_run_report
 from ..pydantic_schemas import ExportingManifest
 from ..io import save_mesh
+from ..compute_device import resolve_compute_device
 from ..run_context import Issue, RunContext, stage_context
 from ..stage_settings import ExportingSettings, RunOptions
 from ..meshing import finalize_mesh
@@ -155,7 +156,7 @@ def _run_exporting(settings: ExportingSettings, options: RunOptions, upstream: T
     mask = chain.mask
 
     import torch  # lazy
-    resolved_device = resolve_device(options.device)
+    resolved_device = resolve_compute_device(options.device)
     mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
     voxel_grid = torch.as_tensor(chain.occupancy, device=resolved_device)

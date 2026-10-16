@@ -35,6 +35,7 @@ import trimesh
 from scipy import ndimage as ndi
 
 from .errors import InputError
+from .compute_device import resolve_compute_device, warp_device_name
 from .grid_planning import check_voxel_grid_budget, plan_voxel_grid
 from .session import session_cache
 from .stage_settings import PreprocessingSettings
@@ -156,8 +157,7 @@ def voxelize_mesh(
     - Results are cached per session (see `_voxelize_cache_key`).
     """
 
-    if device is None:
-        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    device = resolve_compute_device(device)
 
     # Size the grid and check it against the budget before anything is
     # allocated (the Warp voxelizer alone needs 8 bytes per voxel).
@@ -293,7 +293,7 @@ def voxelize_solid_warp(
         return None
     if len(vertices) == 0 or len(faces) == 0:
         raise ValueError("voxelize_solid_warp: mesh has no vertices or faces")
-    device_str = f"cuda:{device.index or 0}" if device.type == "cuda" else "cpu"
+    device_str = warp_device_name(device)
 
     pts = wp.array(np.ascontiguousarray(vertices, dtype=np.float32), dtype=wp.vec3, device=device_str)
     idx = wp.array(np.ascontiguousarray(faces, dtype=np.int32).ravel(), dtype=wp.int32, device=device_str)

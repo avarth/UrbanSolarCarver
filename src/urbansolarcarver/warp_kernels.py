@@ -36,9 +36,8 @@ Coordinate conventions
 import logging
 from typing import Any
 
-import torch
-
 from .errors import WarpBackendUnavailableError
+from .compute_device import resolve_compute_device, warp_device_name
 
 log = logging.getLogger(__name__)
 
@@ -102,15 +101,11 @@ def warmup_kernels(device=None) -> bool:
     if not _warp_available:
         return False
     try:
-        if device is None:
-            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        elif isinstance(device, str):
-            device = torch.device(device)
+        device = resolve_compute_device(device)
         if not dda_backend_available(device):
             return False
-        device_str = f"cuda:{device.index or 0}" if device.type == "cuda" else "cpu"
         import sys
-        wp.load_module(module=sys.modules[__name__], device=device_str)
+        wp.load_module(module=sys.modules[__name__], device=warp_device_name(device))
         return True
     except Exception as exc:
         log.warning("Warp kernel warmup failed (%s); kernels will compile "

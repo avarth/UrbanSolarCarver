@@ -49,7 +49,7 @@ class TestCarverSessionLifecycle:
         sess.close()
 
     def test_invalid_device_raises(self):
-        with pytest.raises(ValueError, match="Unknown device"):
+        with pytest.raises(ValueError, match="tpu"):
             CarverSession(device="tpu")
 
     def test_wrong_type_device_raises(self):
