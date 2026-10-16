@@ -1,29 +1,33 @@
-"""Diagnostics visualisation helpers for pipeline stages.
+"""Diagnostics for pipeline stages: summary statistics, plots and the
+writers that put a stage's diagnostics on disk.
 
-Histogram plots, sky-patch hemisphere charts, and score summary
-statistics.  Used by preprocessing and thresholding.
+Stages compute their ``summary`` dict and hand it to
+:func:`write_preprocessing_diagnostics` or :func:`write_thresholding_diagnostics`,
+which write ``diagnostic.json``, the config snapshot (preprocessing) and, when
+plots are on, the plot images.
 
-If no matplotlib backend has been selected yet, fall back to Agg so
-plots render correctly from background threads (no tkinter dependency).
-An already-chosen backend (e.g. a notebook's inline backend) is kept,
-because forcing Agg here would silently break plotting for notebook users.
+matplotlib is imported inside the plot helpers only, so importing the package
+does not load it.  Plots draw on :class:`matplotlib.figure.Figure` and save
+through the Agg canvas, so no pyplot state or interactive backend is involved
+and plots render correctly from background threads and in notebooks.
 """
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Union, Optional
 
 import numpy as np
+from ..pydantic_schemas import UserConfig
 from ..run_context import report_issue
+from ._util import write_json, dump_config_snapshot
 
-try:
-    import matplotlib
-    try:
-        _backend_chosen = matplotlib.rcParams._get_backend_or_none() is not None
-    except AttributeError:  # matplotlib < 3.6
-        _backend_chosen = "matplotlib.pyplot" in __import__("sys").modules
-    if not _backend_chosen:
-        matplotlib.use("Agg")
-except ImportError:
-    pass
+
+def _new_figure(**kwargs):
+    """A matplotlib Figure with the Agg canvas attached (imports matplotlib)."""
+    from matplotlib.figure import Figure
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    fig = Figure(**kwargs)
+    FigureCanvasAgg(fig)
+    return fig
 
 
 def save_histogram(
@@ -41,7 +45,7 @@ def save_histogram(
     matplotlib is missing or there are no finite values.
     """
     try:
-        import matplotlib.pyplot as plt
+        import matplotlib  # noqa: F401
     except ImportError:
         return None
     d = Path(out_dir); d.mkdir(parents=True, exist_ok=True)
@@ -50,7 +54,8 @@ def save_histogram(
     flat = flat[np.isfinite(flat)]
     if flat.size == 0:
         return None
-    fig, ax = plt.subplots(figsize=(6, 3))
+    fig = _new_figure(figsize=(6, 3))
+    ax = fig.subplots()
     zero_count = int((flat == 0).sum())
     positive = flat[flat > 0]
     ax.hist(positive if positive.size > 0 else flat, bins=80, color="#4c72b0", edgecolor="none", alpha=0.85)
@@ -69,7 +74,6 @@ def save_histogram(
     ax.set_ylabel("Count")
     fig.tight_layout()
     fig.savefig(str(path), dpi=120)
-    plt.close(fig)
     return path
 
 
@@ -163,7 +167,6 @@ def _plot_tregenza_hemisphere(
     -------
     Path to the saved PNG.
     """
-    import matplotlib.pyplot as plt
     import matplotlib as _mpl
 
     ring_counts = [30, 30, 24, 24, 18, 12, 6]  # patches per Tregenza ring
@@ -171,9 +174,9 @@ def _plot_tregenza_hemisphere(
     wmin = float(w.min()) if vmin is None else float(vmin)
     wmax = float(w.max()) if vmax is None else float(vmax)
     _norm = _mpl.colors.Normalize(vmin=wmin, vmax=wmax)
-    _cmap = plt.get_cmap(cmap)
+    _cmap = _mpl.colormaps[cmap]
 
-    fig = plt.figure(figsize=(5, 5))
+    fig = _new_figure(figsize=(5, 5))
     ax = fig.add_subplot(111, projection="polar")
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1)
@@ -217,7 +220,6 @@ def _plot_tregenza_hemisphere(
     cbar.set_label(cbar_label)
     ax.set_title(title, fontsize=10, pad=15)
     fig.savefig(str(path), bbox_inches="tight", dpi=120)
-    plt.close(fig)
     return path
 
 
@@ -263,7 +265,7 @@ def save_sky_patch_weights(
     d = Path(out_dir)
     d.mkdir(parents=True, exist_ok=True)
     try:
-        import matplotlib.pyplot as plt
+        import matplotlib  # noqa: F401
     except ImportError:
         return None
 
@@ -294,13 +296,13 @@ def save_sky_patch_weights(
 
     # Fallback: simple line plot for non-Tregenza
     path = d / fname
-    fig, ax = plt.subplots(figsize=(6, 3))
+    fig = _new_figure(figsize=(6, 3))
+    ax = fig.subplots()
     ax.plot(np.arange(n), w)
     ax.set_title("Sky patch weights")
     ax.set_xlabel("Patch index")
     ax.set_ylabel(f"Weight [{weight_unit}]")
     fig.savefig(str(path), bbox_inches="tight", dpi=120)
-    plt.close(fig)
     return [path]
 
 
@@ -380,3 +382,98 @@ def save_sky_patch_comparison(
         cmap="RdBu_r", vmin=-lim, vmax=lim,
     )
     return path, stats
+
+
+@dataclass(frozen=True)
+class PreprocessingPlotInputs:
+    """What the preprocessing plots draw: the raw score volume, the sky-patch
+    weights (None for modes without them) and the score unit label."""
+    raw_scores: np.ndarray
+    patch_weights: Optional[np.ndarray]
+    weight_unit: str
+
+
+@dataclass(frozen=True)
+class ThresholdingPlotInputs:
+    """What the thresholding plot draws: the scores of the occupied voxels,
+    the threshold applied and its method, and the score unit label."""
+    occupied_scores: np.ndarray
+    threshold_value: float
+    method: str
+    weight_unit: str
+
+
+def write_preprocessing_diagnostics(summary: dict, folder: Path, config: UserConfig,
+                                    plot_inputs: PreprocessingPlotInputs) -> None:
+    """Write preprocessing's diagnostics into *folder* (its ``diagnostics`` folder).
+
+    Writes the config snapshot and ``diagnostic.json`` from *summary*, plus,
+    with ``config.diagnostic_plots``, the score histogram, the sky-patch
+    weight plots and, for a benefit run with simulated weights, the plot
+    comparing them with the simple balance-point weights.  The paths of the
+    plots written are added to the ``diagnostic.json`` content.
+    """
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    dump_config_snapshot(config, folder)
+    summary = dict(summary)
+    if config.diagnostic_plots:
+        patch_weights = plot_inputs.patch_weights
+        if patch_weights is not None and patch_weights.size > 0:
+            summary["sky_patch_images"] = [
+                str(folder / "sky_patch_weights.png"),
+                str(folder / "sky_patch_weights_intensity.png"),
+            ]
+            save_sky_patch_weights(patch_weights, folder, weight_unit=plot_inputs.weight_unit)
+            if config.mode == "benefit" and config.simulated_weights_path:
+                _write_simulated_weights_comparison(summary, folder, config, patch_weights)
+        summary["score_histogram"] = str(folder / "score_histogram.png")
+        save_histogram(plot_inputs.raw_scores, folder, "score_histogram.png",
+                       title=f"Raw Scores ({config.mode})", xlabel=plot_inputs.weight_unit)
+    write_json(folder, "diagnostic.json", summary)
+
+
+def _write_simulated_weights_comparison(summary: dict, folder: Path, config: UserConfig,
+                                        patch_weights: np.ndarray) -> None:
+    """Plot how the simulated weights shifted the sky relative to the simple
+    balance-point rule under the same config.  Parses the EPW a second time to
+    get the simple weights."""
+    import torch
+    from ..carving import sample_period
+    from ..scoring import get_weights
+    _, hours_of_year = sample_period(config)
+    simple = get_weights(
+        "benefit", device=torch.device("cpu"),
+        epw_file=config.epw_path, hoys=hours_of_year,
+        balance_temperature=config.balance_temperature,
+        balance_offset=config.balance_offset,
+        north_deg=config.north_deg,
+        include_harm=config.include_harm,
+    ).cpu().numpy()
+    comparison = save_sky_patch_comparison(
+        simple, np.asarray(patch_weights, dtype=float), folder,
+        labels=("simple (balance point)", "simulated"),
+    )
+    if comparison is not None:
+        comparison_path, comparison_stats = comparison
+        summary["sky_patch_comparison_image"] = str(comparison_path)
+        summary["sky_patch_comparison_stats"] = comparison_stats
+
+
+def write_thresholding_diagnostics(summary: dict, folder: Path, plot_inputs: ThresholdingPlotInputs,
+                                   diagnostic_plots: bool) -> None:
+    """Write thresholding's diagnostics into *folder* (its ``diagnostics`` folder):
+    ``diagnostic.json`` from *summary* and, with *diagnostic_plots*, the
+    threshold histogram."""
+    folder = Path(folder)
+    folder.mkdir(parents=True, exist_ok=True)
+    summary = dict(summary)
+    if diagnostic_plots:
+        summary["threshold_histogram"] = str(folder / "threshold_histogram.png")
+        save_histogram(
+            plot_inputs.occupied_scores, folder, "threshold_histogram.png",
+            threshold_line=plot_inputs.threshold_value,
+            title=f"Voxel scores, threshold={plot_inputs.threshold_value:.4g} ({plot_inputs.method})",
+            xlabel=plot_inputs.weight_unit,
+        )
+    write_json(folder, "diagnostic.json", summary)

@@ -259,6 +259,45 @@ def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
     assert diag["simulated_weights"]["archetype"]["mass_class"] == "medium"
 
 
+@_SKIP_EPW
+def test_benefit_with_weights_artifact_writes_the_comparison_plot(tmp_path, tiny_cube_mesh,
+                                                                  tiny_surface_mesh):
+    """With diagnostic_plots, a benefit run with simulated weights also plots
+    them against the simple balance-point weights and records the result."""
+    import numpy as _np
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.load_config import user_config
+    from urbansolarcarver.simulated_weights import write_simulated_weights
+
+    vol_path = tmp_path / "vol.ply"
+    srf_path = tmp_path / "srf.ply"
+    tiny_cube_mesh.export(str(vol_path))
+    tiny_surface_mesh.export(str(srf_path))
+    artifact = write_simulated_weights(
+        tmp_path / "u.json", _np.full(8760, 0.8), _np.zeros(8760),
+        {"method": "test-schedule", "generated": "2026", "archetype": {"mass_class": "medium"}},
+    )
+    cfg = user_config(
+        max_volume_path=str(vol_path), test_surface_path=str(srf_path),
+        out_dir=str(tmp_path / "out"), mode="benefit", epw_path=_EPW,
+        start_month=1, start_day=1, start_hour=8,
+        end_month=1, end_day=5, end_hour=16,
+        voxel_size=2.0, grid_step=2.0, ray_length=50.0,
+        min_voxels=1, min_face_count=1, device="cpu",
+        simulated_weights_path=str(artifact), diagnostic_plots=True,
+    )
+    result = preprocessing(cfg, tmp_path / "out")
+    diag_dir = result.out_dir / "diagnostics"
+    diag = json.loads((diag_dir / "diagnostic.json").read_text())
+    for name in ("sky_patch_weights.png", "sky_patch_weights_intensity.png",
+                 "sky_patch_comparison.png", "score_histogram.png", "config_snapshot.json"):
+        assert (diag_dir / name).is_file(), name
+    assert diag["sky_patch_comparison_image"].endswith("sky_patch_comparison.png")
+    assert set(diag["sky_patch_comparison_stats"]) == {
+        "mass_redistributed_pct", "patches_over_20pct", "rel_change_min_pct", "rel_change_max_pct"}
+    assert len(diag["sky_patch_images"]) == 2 and diag["score_histogram"].endswith("score_histogram.png")
+
+
 # ---------------------------------------------------------------------------
 # edge_taper end-to-end (daylight mode needs no EPW)
 # ---------------------------------------------------------------------------

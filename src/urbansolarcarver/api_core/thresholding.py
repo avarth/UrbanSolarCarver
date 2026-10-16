@@ -19,10 +19,13 @@ from ..carving import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
 from ..stage_settings import applied_smoothing_radius_m
 from ._util import (
-    _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, load_occupancy,
+    _resolve_cfg, _ensure_out_dir, ensure_diag, load_occupancy,
     remove_previous_stage_outputs,
 )
-from ._diagnostics import save_histogram, score_statistics, warn_score_anomalies
+from ._diagnostics import (
+    ThresholdingPlotInputs, score_statistics, warn_score_anomalies,
+    write_thresholding_diagnostics,
+)
 
 # Everything thresholding writes into its folder, besides manifest.json.
 _THRESHOLDING_OUTPUTS = (
@@ -438,22 +441,19 @@ def thresholding(
                 summary["mean_obstruction_carved_per_sample"] = round(score_mass_carved / n_samples, 2)
                 summary["sample_point_count"] = n_samples
 
-        # Histogram with threshold line, only when diagnostic plots are enabled.
-        if conf.diagnostic_plots:
-            summary["threshold_histogram"] = str(diag_dir / "threshold_histogram.png")
-            save_histogram(
-                nn, diag_dir, "threshold_histogram.png",
-                threshold_line=thr_val,
-                title=f"Voxel scores, threshold={thr_val:.4g} ({threshold_method})",
-                xlabel=weight_unit,
-            )
-
-        # One diagnostic file per stage.
+        # One diagnostic file per stage; the writer also draws the histogram
+        # with the threshold line when diagnostic plots are enabled.
         summary["timings"] = {
             "wall_seconds": float(time.perf_counter() - t0_wall),
             "cpu_seconds": float(time.process_time() - t0_cpu),
         }
-        write_json(diag_dir, "diagnostic.json", summary)
+        write_thresholding_diagnostics(
+            summary, diag_dir,
+            ThresholdingPlotInputs(
+                occupied_scores=nn, threshold_value=float(thr_val),
+                method=threshold_method, weight_unit=weight_unit),
+            conf.diagnostic_plots,
+        )
 
         # Manifest last (see remove_previous_stage_outputs at the start).
         tm = ThresholdingManifest(

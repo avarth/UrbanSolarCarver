@@ -6,12 +6,12 @@ from typing import Tuple, Union
 import numpy as np
 from ..load_config import user_config
 from ._util import (
-    _resolve_cfg, _ensure_out_dir, ensure_diag, write_json, resolve_device, device_summary,
-    dump_config_snapshot, remove_previous_stage_outputs,
+    _resolve_cfg, _ensure_out_dir, ensure_diag, resolve_device, device_summary,
+    remove_previous_stage_outputs,
 )
 from ._diagnostics import (
-    save_sky_patch_weights, save_sky_patch_comparison, save_histogram,
-    score_statistics, warn_score_anomalies,
+    PreprocessingPlotInputs, score_statistics, warn_score_anomalies,
+    write_preprocessing_diagnostics,
 )
 from ..pydantic_schemas import PreprocessingManifest, schema_to_json
 from ..errors import InputError
@@ -310,6 +310,7 @@ def preprocessing(
             np.save(pw_path, pw_np, allow_pickle=False)
         else:
             pw_path = None
+            pw_np = None
 
         # Persist test points and normals for diagnostics and GH visualization
         test_points_path = out_path / "test_points.npy"
@@ -348,9 +349,9 @@ def preprocessing(
             max_volume_path=str(Path(conf.max_volume_path).resolve()),
         )
 
-        # Per-stage diagnostics
+        # Per-stage diagnostics: the stage builds the summary, the writer puts
+        # it (and the config snapshot and plots) on disk.
         diag_dir = ensure_diag(out_path)
-        dump_config_snapshot(conf, diag_dir)
         rs = np.asarray(raw_scores)
         summary = {
             "mode": mode,
@@ -393,42 +394,9 @@ def preprocessing(
             }
         summary["device"] = device_info
         _mark("build_summary")
-        xlabel = MODES[mode].weight_unit if mode in MODES else "Score"
-
-        # Diagnostic plots only when diagnostic_plots is set, so matplotlib is
-        # not loaded otherwise.
-        if conf.diagnostic_plots:
-            if patch_weights is not None and hasattr(patch_weights, 'size') and patch_weights.size > 0:
-                summary["sky_patch_images"] = [
-                    str(diag_dir / "sky_patch_weights.png"),
-                    str(diag_dir / "sky_patch_weights_intensity.png"),
-                ]
-                save_sky_patch_weights(patch_weights, diag_dir, weight_unit=xlabel)
-                if conf.mode == "benefit" and conf.simulated_weights_path:
-                    # How the simulated weights shifted the sky relative to the
-                    # simple balance-point rule under the same config.
-                    import torch
-                    from ..scoring import get_weights
-                    _, cf_hoys = sample_period(conf)
-                    simple = get_weights(
-                        "benefit", device=torch.device("cpu"),
-                        epw_file=conf.epw_path, hoys=cf_hoys,
-                        balance_temperature=conf.balance_temperature,
-                        balance_offset=conf.balance_offset,
-                        north_deg=conf.north_deg,
-                        include_harm=conf.include_harm,
-                    ).cpu().numpy()
-                    comparison = save_sky_patch_comparison(
-                        simple, np.asarray(patch_weights, dtype=float), diag_dir,
-                        labels=("simple (balance point)", "simulated"),
-                    )
-                    if comparison is not None:
-                        cmp_path, cmp_stats = comparison
-                        summary["sky_patch_comparison_image"] = str(cmp_path)
-                        summary["sky_patch_comparison_stats"] = cmp_stats
-            summary["score_histogram"] = str(diag_dir / "score_histogram.png")
-            save_histogram(rs, diag_dir, "score_histogram.png",
-                           title=f"Raw Scores ({mode})", xlabel=xlabel)
+        weight_unit = MODES[mode].weight_unit if mode in MODES else "Score"
+        # Plots are drawn by the writer after this point, so the timings below
+        # cover the computation; the step label is kept for readers of the report.
         _mark("diagnostic_plots_done")
         # One diagnostic file per stage. Step timings are cumulative (seconds
         # since the stage started); subtract consecutive entries to get the
@@ -438,7 +406,10 @@ def preprocessing(
             "cpu_seconds": float(time.process_time() - _t0_cpu),
             "steps": {k: round(v, 3) for k, v in _step_times.items()},
         }
-        write_json(diag_dir, "diagnostic.json", summary)
+        write_preprocessing_diagnostics(
+            summary, diag_dir, conf,
+            PreprocessingPlotInputs(raw_scores=rs, patch_weights=pw_np, weight_unit=weight_unit),
+        )
         # Manifest last (see remove_previous_stage_outputs at the start).
         (out_path / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
