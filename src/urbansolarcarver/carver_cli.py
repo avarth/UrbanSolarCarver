@@ -332,7 +332,7 @@ def cmd_preprocessing(
         "Device": res.device_info,
         "Grid": f"{res.volume_shape}",
         "Scores": str(res.volume_path),
-        "Hash": res.hash[:12],
+        "Run ID": res.run_id[:12],
         "Time": f"{elapsed:.1f}s",
     })
 
@@ -380,7 +380,7 @@ def cmd_thresholding(
         "Method": f"{res.threshold_method} -> {res.threshold_value:.4g}",
         "Carved": f"{res.voxels_removed:,} voxels ({100 - res.retention_pct:.1f}% of volume)",
         "Retained": f"{res.voxels_kept:,} voxels ({res.retention_pct:.1f}%)",
-        "Hash": res.hash[:12],
+        "Run ID": res.run_id[:12],
         "Time": f"{elapsed:.1f}s",
     })
 

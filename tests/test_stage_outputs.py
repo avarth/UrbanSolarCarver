@@ -28,15 +28,15 @@ def _quietly(stage, *args):
 
 
 class TestExporting:
-    def test_writes_a_manifest_with_the_thresholding_hash(self, tmp_path, thresholded_run):
+    def test_writes_a_manifest_with_the_thresholding_run_id(self, tmp_path, thresholded_run):
         from urbansolarcarver import exporting
         from urbansolarcarver.pydantic_schemas import ExportingManifest
         conf, thr = thresholded_run
         result = _quietly(exporting, thr, conf, tmp_path / "run" / "exporting")
         manifest = ExportingManifest.model_validate_json(
             (result.out_dir / "manifest.json").read_text(encoding="utf-8"))
-        assert manifest.upstream_hash == thr.hash
-        assert manifest.mesh_path == str(result.export_path)
+        assert manifest.upstream_run_id == thr.run_id
+        assert manifest.mesh_path == result.export_path.name
 
     def test_another_mesh_format_removes_the_previous_export(self, tmp_path, thresholded_run):
         from urbansolarcarver import exporting
@@ -122,7 +122,7 @@ class TestRunReport:
         from urbansolarcarver.pydantic_schemas import ThresholdSpec
         stricter = conf.model_copy(update={"threshold": ThresholdSpec(method="carve_fraction", value=0.3)})
         rethresholded = _quietly(thresholding, thr.upstream_manifest, stricter, run / "thresholding")
-        assert rethresholded.hash != thr.hash
+        assert rethresholded.run_id != thr.run_id
         _quietly(exporting, rethresholded, stricter, run / "exporting")
         report = (run / "run_report.md").read_text(encoding="utf-8")
         assert "## Export" in report and "## Massing" not in report

@@ -37,7 +37,8 @@ UrbanSolarCarver/
 | `api_core/massing.py` | **Stage 4.** Reads the thresholding chain, builds floor plates with `floor_plates.py`, writes `plates.json` (world outlines), `plates.obj` (one closed prism per plate), the manifest, diagnostics and the run report with a Massing section. |
 | `floor_plates.py` | Floor-plate massing geometry: base outline and facades split at corners, faces by nearest facade with squared corners, bays cut perpendicular to the facades, floor-by-floor bay selection (tolerance, maximum volume, stacking, minimum width), plate outlines and closed prisms. |
 | `api_core/exporting.py` | **Stage 3.** Loads the binary mask from Stage 2, removes small disconnected voxel clusters, reconstructs a triangle mesh (cubic voxel faces, or SDF-smoothed marching cubes with Taubin polishing), writes `export.<format>`, and writes `run_report.md` for the whole run. |
-| `api_core/_util.py` | Helpers shared by the stages: config resolution, output-directory creation, device resolution (`"auto"` → `"cuda"` or `"cpu"`), JSON writing, reloading the occupancy grid, config snapshots. |
+| `api_core/_stage_io.py` | Run-folder layout (`stage_folder`), the start and end of a stage (`begin_stage`, `commit_manifest`), manifest paths relative to the manifest's folder (`stored_path`) and reading an upstream manifest with its run ID check (`load_upstream`). |
+| `api_core/_util.py` | Helpers shared by the stages: config resolution, device resolution (`"auto"` → `"cuda"` or `"cpu"`), JSON writing, reloading the occupancy grid, config snapshots. |
 | `api_core/_diagnostics.py` | Diagnostic plots and statistics: score histograms, sky-patch hemisphere plots, the simple-vs-simulated weight comparison dome, score statistics, NaN/Inf warnings. |
 | `api_core/_reporting.py` | `run_report.md` generation and the grid-memory estimate used by `preprocessing --dry-run`. |
 
@@ -126,7 +127,7 @@ tests/
 ├── test_carve_above.py      carve_above_columns, carve_above_scores, limit_column_slope
 ├── test_cli.py              CLI commands and the schema table
 ├── test_daemon.py           Daemon survives misbehaving clients and failing requests
-├── test_exporting.py        Stage-hash scheme
+├── test_exporting.py        Exporting stage: mesh placement, diagnostics, run report
 ├── test_floor_plates.py     Floor-plate geometry: facades, faces, bays, floors, outlines, prisms
 ├── test_massing_stage.py    Massing stage end to end on synthetic scenes
 ├── test_gh_components.py    Grasshopper sources stay buildable into .ghuser files

@@ -1,6 +1,6 @@
 # Pipeline
 
-USC runs in three stages: preprocessing, thresholding, exporting, with massing as an optional fourth that reads the thresholding output like exporting. Each stage writes a manifest, last, after all its other outputs; the next stage reads it, so you can re-run thresholding with different parameters without recomputing scores. Every manifest after preprocessing records the hash of the manifest it was built from (`upstream_hash`), and a stage refuses an upstream that has changed since (`UpstreamMismatchError`). A stage first deletes the manifest and the outputs of its previous run in its folder, so a failed run leaves no manifest.
+USC runs in three stages: preprocessing, thresholding, exporting, with massing as an optional fourth that reads the thresholding output like exporting. Each stage writes a manifest, last, after all its other outputs; the next stage reads it, so you can re-run thresholding with different parameters without recomputing scores. Every manifest has a random `run_id`, new on every run of its stage, and every manifest after preprocessing records the `run_id` of the manifest it was built from (`upstream_run_id`); a stage refuses an upstream that was re-run since (`StageChainError`). Manifests store paths relative to their own folder, so a run folder can be moved or copied. A stage first deletes the manifest and the outputs of its previous run in its folder, so a failed run leaves no manifest.
 
 `run_pipeline()` chains all three stages in one call. For finer control, call each stage individually.
 

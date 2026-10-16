@@ -1,8 +1,9 @@
-"""Shared utilities for the three pipeline stages (preprocessing, thresholding, exporting).
+"""Shared utilities for the pipeline stages (preprocessing, thresholding, exporting, massing).
 
-Provides config resolution, output-directory setup, device selection,
-occupancy-grid loading, and diagnostics I/O helpers (JSON writing,
-directory creation, config snapshot).
+Provides config resolution, device selection, occupancy-grid and
+thresholding-chain loading, and diagnostics I/O helpers (JSON writing,
+directory creation, config snapshot).  Stage folders and manifests are
+handled by ``_stage_io``.
 
 Visualization helpers live in ``_diagnostics``, reporting in ``_reporting``.
 """
@@ -13,34 +14,12 @@ from typing import Union
 import json
 
 from ..load_config import load_config, user_config
+from ._stage_io import LoadedManifest, load_upstream
 
 
 def _resolve_cfg(cfg: Union[user_config, str, Path]) -> user_config:
     """Coerce *cfg* to a :class:`user_config`, loading from path if needed."""
     return load_config(str(cfg)) if not isinstance(cfg, user_config) else cfg
-
-
-def _ensure_out_dir(out_dir: Union[str, Path], stage: str) -> Path:
-    """Create *out_dir* and return it as a :class:`Path`.  *stage* is used only in the error message."""
-    if out_dir is None:
-        raise ValueError(f"An explicit out_dir must be provided for {stage}")
-    path = Path(out_dir)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-def remove_previous_stage_outputs(out_path: Path, output_names) -> None:
-    """Delete the manifest and the outputs of an earlier run of a stage in *out_path*.
-
-    *output_names* are the paths, relative to *out_path*, that the stage
-    writes (diagnostics included).  The manifest goes first and each stage
-    writes it last, so a run that fails midway leaves no manifest, and an
-    output the new run does not write (another mesh format, a plot that is
-    now off) does not survive beside the new ones.  Only these names are
-    deleted; other files in *out_path* are left alone.
-    """
-    (out_path / "manifest.json").unlink(missing_ok=True)
-    for name in output_names:
-        (out_path / name).unlink(missing_ok=True)
 
 
 def ensure_diag(base_out_dir: Union[str, Path]) -> Path:
@@ -83,26 +62,27 @@ def device_summary(device) -> str:
             return "CUDA"
     return "CPU"
 
-def load_occupancy(pre_manifest):
+def load_occupancy(pre):
     """Return the boolean occupancy grid (numpy) of a preprocessing run.
 
-    Loads the persisted ``voxel_grid.npy``.  Raises FileNotFoundError if the
-    manifest names none or the file is gone (the grid is not rebuilt from a
-    config, which may describe other geometry), and ValueError if the grid
-    shape differs from the manifest's.
+    *pre* is the :class:`LoadedManifest` of the preprocessing run.  Loads
+    the persisted ``voxel_grid.npy``.  Raises FileNotFoundError if the
+    file is gone (the grid is not rebuilt from a config, which may describe
+    other geometry), and ValueError if the grid shape differs from the
+    manifest's.
     """
     import numpy as np
-    vg_path = pre_manifest.voxel_grid_path
-    if not vg_path or not Path(vg_path).is_file():
+    vg_path = pre.resolve(pre.manifest.voxel_grid_path)
+    if not vg_path.is_file():
         raise FileNotFoundError(
             f"Occupancy grid not found: {vg_path} (named by the preprocessing "
             f"manifest). Re-run preprocessing."
         )
     occ = np.load(vg_path, allow_pickle=False).astype(bool)
-    if tuple(occ.shape) != tuple(pre_manifest.shape):
+    if tuple(occ.shape) != tuple(pre.manifest.shape):
         raise ValueError(
             f"Voxel grid shape {tuple(occ.shape)} does not match the grid shape "
-            f"{tuple(pre_manifest.shape)} recorded in the preprocessing manifest; "
+            f"{tuple(pre.manifest.shape)} recorded in the preprocessing manifest; "
             f"the occupancy grid is from a different run (check voxel_size / "
             f"margin_frac consistency)."
         )
@@ -122,70 +102,30 @@ def dump_config_snapshot(conf, diag_dir) -> Path:
 @dataclass(frozen=True)
 class ThresholdedGrid:
     """The thresholding chain of a run: manifests, mask and occupancy grid."""
-    thr_path: Path
-    thr_manifest: object
-    pre_path: Path
-    pre_manifest: object
+    thr: LoadedManifest
+    pre: LoadedManifest
     mask: "np.ndarray"
     occupancy: "np.ndarray"
     origin: "np.ndarray"
     voxel_size: float
 
 
-def verify_upstream_hash(recorded_upstream_hash: str, upstream_manifest, upstream_manifest_path,
-                         upstream_stage: str) -> None:
-    """Raise UpstreamMismatchError unless *upstream_manifest* is the run a
-    downstream manifest was built from.
-
-    *recorded_upstream_hash* is the ``upstream_hash`` stored in the
-    downstream manifest; *upstream_manifest* is the manifest now at
-    *upstream_manifest_path*, written by stage *upstream_stage*.
-    """
-    from ..pydantic_schemas import UpstreamMismatchError
-    if recorded_upstream_hash != upstream_manifest.hash:
-        raise UpstreamMismatchError(
-            f"The {upstream_stage} run at {upstream_manifest_path} has changed since "
-            f"this output was built from it (hash {upstream_manifest.hash}, expected "
-            f"{recorded_upstream_hash}). Re-run the stages after {upstream_stage}."
-        )
-
-
-def load_thresholded_grid(threshold_manifest, conf) -> ThresholdedGrid:
+def load_thresholded_grid(threshold_manifest) -> ThresholdedGrid:
     """Load a thresholding manifest, its preprocessing manifest, the mask and
     the occupancy grid.  *threshold_manifest* is a ThresholdingResult or a
     path to its folder or manifest.json.
 
-    Raises UpstreamMismatchError if preprocessing was re-run after this
-    thresholding run.
+    Raises StageChainError if a manifest cannot be read or preprocessing was
+    re-run after this thresholding run.
     """
     import numpy as np
-    from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest, schema_from_json
-    thr_path = Path(threshold_manifest)
-    if thr_path.is_dir():
-        thr_path = thr_path / "manifest.json"
-    try:
-        thr_manifest = schema_from_json(ThresholdingManifest, thr_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise ValueError(
-            f"Unable to load thresholding manifest {thr_path}; pass a ThresholdingResult "
-            f"or a path to its manifest.json. A manifest written by an older version "
-            f"(without upstream_hash) needs thresholding to be re-run."
-        ) from exc
-    pre_path = Path(thr_manifest.upstream_manifest)
-    try:
-        pre_manifest = schema_from_json(PreprocessingManifest, pre_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise ValueError(
-            f"Unable to load the preprocessing manifest referenced by the "
-            f"thresholding manifest ({pre_path}). Re-run preprocessing, "
-            f"or fix the manifest chain."
-        ) from exc
-    verify_upstream_hash(thr_manifest.upstream_hash, pre_manifest, pre_path, "preprocessing")
-    grid_shape = tuple(pre_manifest.shape)
-    mask_path = Path(thr_manifest.mask_path)
+    thr = load_upstream(threshold_manifest, "thresholding")
+    pre = load_upstream(thr.resolve(thr.manifest.upstream_manifest), "preprocessing")
+    grid_shape = tuple(pre.manifest.shape)
+    mask_path = thr.resolve(thr.manifest.mask_path)
     if not mask_path.is_file():
         raise FileNotFoundError(
-            f"Mask file not found: {mask_path} (referenced by {thr_path}). "
+            f"Mask file not found: {mask_path} (referenced by {thr.manifest_path}). "
             f"Re-run thresholding."
         )
     mask = np.load(mask_path, allow_pickle=False)
@@ -194,13 +134,11 @@ def load_thresholded_grid(threshold_manifest, conf) -> ThresholdedGrid:
     elif tuple(mask.shape) != grid_shape:
         raise ValueError(
             f"Mask shape {tuple(mask.shape)} does not match the grid shape "
-            f"{grid_shape} recorded in {pre_path}; the mask and manifest "
+            f"{grid_shape} recorded in {pre.manifest_path}; the mask and manifest "
             f"are from different runs."
         )
     return ThresholdedGrid(
-        thr_path=thr_path, thr_manifest=thr_manifest, pre_path=pre_path,
-        pre_manifest=pre_manifest, mask=mask,
-        occupancy=load_occupancy(pre_manifest),
-        origin=np.asarray(pre_manifest.origin, dtype=np.float64),
-        voxel_size=float(pre_manifest.voxel_size or conf.voxel_size),
+        thr=thr, pre=pre, mask=mask, occupancy=load_occupancy(pre),
+        origin=np.asarray(pre.manifest.origin, dtype=np.float64),
+        voxel_size=float(pre.manifest.voxel_size),
     )

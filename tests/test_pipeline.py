@@ -157,9 +157,9 @@ class TestStageBoundaryValidation:
         scores_path = pre_dir / "scores.npy"
         np.save(scores_path, scores, allow_pickle=False)
         pm = PreprocessingManifest(
-            hash="t", scores_path=str(scores_path), scores_kind="weighted_sum",
+            run_id="t", scores_path=str(scores_path), scores_kind="weighted_sum",
             shape=manifest_shape, origin=(0.0, 0.0, 0.0), voxel_size=1.0,
-            mode="irradiance",
+            mode="irradiance", voxel_grid_path="voxel_grid.npy", sample_point_count=1,
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
         return pre_dir
@@ -369,8 +369,7 @@ class TestEdgeTaperPipeline:
 
 class TestDefaultThresholdReporting:
     """With threshold unset on weighted scores, the default strategy must be
-    recorded by name ('carve_fraction'), and the stage hash must depend on
-    the strategy, not on the score-dependent resolved cutoff."""
+    recorded by name ('carve_fraction')."""
 
     def _run_thresholding(self, tmp_path, sub, scores, **overrides):
         pre_dir = tmp_path / sub / "preprocessing"
@@ -381,7 +380,7 @@ class TestDefaultThresholdReporting:
         np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
         pm = PreprocessingManifest(
-            hash="test1234",
+            run_id="test1234",
             scores_path=str(scores_path),
             scores_kind="weighted_sum",
             shape=tuple(scores.shape),
@@ -389,6 +388,7 @@ class TestDefaultThresholdReporting:
             voxel_size=1.0,
             mode="irradiance",
             voxel_grid_path=str(vg_path),
+            sample_point_count=1,
         )
         (pre_dir / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
@@ -433,18 +433,6 @@ class TestDefaultThresholdReporting:
         share = scores[~mask].sum(dtype=np.float64) / scores.sum(dtype=np.float64)
         assert 0.4 - 0.03 < share <= 0.4 + 1e-9
 
-    def test_stage_hash_independent_of_score_data(self, tmp_path):
-        """Same config + same upstream hash → same stage hash, even when the
-        score data (and therefore the resolved cutoff) differ."""
-        rng = np.random.default_rng(12)
-        r1 = self._run_thresholding(
-            tmp_path, "run1", rng.uniform(0, 100, size=(8, 8, 8)).astype(np.float32))
-        r2 = self._run_thresholding(
-            tmp_path, "run2", rng.uniform(0, 500, size=(8, 8, 8)).astype(np.float32))
-        h1 = json.loads((r1.out_dir / "manifest.json").read_text())["hash"]
-        h2 = json.loads((r2.out_dir / "manifest.json").read_text())["hash"]
-        assert h1 == h2
-
     def test_thresholding_warns_on_nonfinite_scores(self, tmp_path):
         """Standalone thresholding (CLI/daemon/GH) must warn about NaN/Inf
         scores loaded from disk (preprocessing's guard does not cover this
@@ -474,7 +462,7 @@ class TestScoreSmoothing:
         np.save(vg_path, np.ones(scores.shape, dtype=bool), allow_pickle=False)
         from urbansolarcarver.pydantic_schemas import PreprocessingManifest, schema_to_json
         pm = PreprocessingManifest(
-            hash="test1234",
+            run_id="test1234",
             scores_path=str(scores_path),
             scores_kind=kind,
             shape=tuple(scores.shape),
@@ -482,6 +470,7 @@ class TestScoreSmoothing:
             voxel_size=voxel_size,
             mode="irradiance" if kind == "weighted_sum" else "time-based",
             voxel_grid_path=str(vg_path),
+            sample_point_count=1,
         )
         manifest_path = pre_dir / "manifest.json"
         manifest_path.write_text(schema_to_json(pm), encoding="utf-8")
@@ -579,12 +568,12 @@ class TestScoreSmoothing:
 def test_missing_occupancy_grid_is_an_error(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
     """Without voxel_grid.npy the preprocessing run is incomplete: the grid
     is not rebuilt from a config that may describe other geometry."""
+    from urbansolarcarver.api_core._stage_io import load_upstream
     from urbansolarcarver.api_core._util import load_occupancy
-    from urbansolarcarver.pydantic_schemas import PreprocessingManifest
     run = TestEdgeTaperPipeline()._run_preprocessing(
         tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)
-    pre = PreprocessingManifest.model_validate_json(run.manifest_path.read_text())
-    Path(pre.voxel_grid_path).unlink()
+    pre = load_upstream(run, "preprocessing")
+    pre.resolve(pre.manifest.voxel_grid_path).unlink()
     with pytest.raises(FileNotFoundError, match="Re-run preprocessing"):
         load_occupancy(pre)
 

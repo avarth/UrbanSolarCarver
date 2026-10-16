@@ -1,27 +1,18 @@
 from __future__ import annotations
 import time
-import json
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Union, overload
 import numpy as np
 from ..load_config import user_config
-from ..pydantic_schemas import (
-    PreprocessingManifest,
-    ThresholdingManifest,
-    schema_from_json,
-    schema_to_json,
-)
+from ..pydantic_schemas import ThresholdingManifest
 from ..run_context import Issue, report_issue, stage_context
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..carving import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
 from ..stage_settings import applied_smoothing_radius_m
-from ._util import (
-    _resolve_cfg, _ensure_out_dir, ensure_diag, load_occupancy,
-    remove_previous_stage_outputs,
-)
+from ._util import _resolve_cfg, ensure_diag, load_occupancy
+from ._stage_io import begin_stage, commit_manifest, load_upstream, new_run_id, stored_path
 from ._diagnostics import (
     ThresholdingPlotInputs, score_statistics, warn_score_anomalies,
     write_thresholding_diagnostics,
@@ -37,15 +28,15 @@ class ThresholdingResult:
     """Immutable record returned by :func:`thresholding`.
 
     Stores the path to the binary mask, the provenance chain back to the
-    upstream preprocessing run (``upstream`` hash and ``upstream_manifest``
+    upstream preprocessing run (``upstream_run_id`` and ``upstream_manifest``
     path), the resolved threshold, and voxel counts over occupied voxels.
     Implements ``__fspath__`` (returning the manifest path) so it can be
     passed directly as a path-like to :func:`exporting`.
     """
     out_dir: Path
     mask_path: Path
-    hash: str
-    upstream: str
+    run_id: str
+    upstream_run_id: str
     upstream_manifest: Path
     threshold_method: str = ""
     threshold_value: float = 0.0
@@ -235,9 +226,10 @@ def thresholding(
     ``mask.npy``
         3-D Boolean array (same shape as the voxel grid), True = keep.
     ``manifest.json``
-        ``ThresholdingManifest`` recording the stage hash, the mask path and
-        the path and hash of the upstream preprocessing manifest, and the
-        resolved threshold strategy, score smoothing radius (m) and slope
+        ``ThresholdingManifest`` recording a random ``run_id`` (new on every
+        run), the mask path, the path and ``run_id`` of the upstream
+        preprocessing manifest (paths relative to the manifest's folder), and
+        the resolved threshold strategy, score smoothing radius (m) and slope
         limit this run applied.  The
         outputs of an earlier run in *out_dir* are deleted first and the
         manifest is written last, after the diagnostics.
@@ -248,11 +240,12 @@ def thresholding(
 
     Raises
     ------
+    StageChainError
+        If the preprocessing manifest cannot be read (a ValueError).
     ValueError
-        If the preprocessing manifest cannot be read, the scores do not
-        match its grid shape, the config's mode differs from the
-        preprocessing run's, or a non-numeric threshold is used with
-        violation-count scores.
+        If the scores do not match the manifest's grid shape, the config's
+        mode differs from the preprocessing run's, or a non-numeric
+        threshold is used with violation-count scores.
     FileNotFoundError
         If the scores file named in the manifest is missing.
     """
@@ -260,23 +253,11 @@ def thresholding(
         t0_wall = time.perf_counter()
         t0_cpu = time.process_time()
         conf = _resolve_cfg(cfg)
-        out_path = _ensure_out_dir(out_dir, "thresholding")
-        remove_previous_stage_outputs(out_path, _THRESHOLDING_OUTPUTS)
+        out_path = begin_stage(out_dir, _THRESHOLDING_OUTPUTS)
 
-        # Resolve upstream manifest.
-        if isinstance(volume, (str, Path)):
-            pre_manifest_path = Path(volume)
-            if pre_manifest_path.is_dir():
-                pre_manifest_path = pre_manifest_path / "manifest.json"
-        else:
-            pre_manifest_path = volume.manifest_path
-        try:
-            pre_manifest = schema_from_json(PreprocessingManifest, pre_manifest_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise ValueError("Unable to load preprocessing manifest") from exc
-
-        scores_path = Path(pre_manifest.scores_path)
-        upstream_hash = pre_manifest.hash
+        pre = load_upstream(volume, "preprocessing")
+        pre_manifest, pre_manifest_path = pre.manifest, pre.manifest_path
+        scores_path = pre.resolve(pre_manifest.scores_path)
         grid_shape = tuple(pre_manifest.shape)
         kind = pre_manifest.scores_kind
 
@@ -308,7 +289,7 @@ def thresholding(
         # score mass can sit there, so every statistic below is taken over the
         # building alone; otherwise carve_fraction/headtail would depend on how
         # much air the grid happens to contain.
-        occ = load_occupancy(pre_manifest)
+        occ = load_occupancy(pre)
 
         raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
             raw, kind, pre_manifest.voxel_size, conf.score_smoothing, occ=occ
@@ -373,18 +354,6 @@ def thresholding(
         mask_path = out_path / "mask.npy"
         np.save(mask_path, mask, allow_pickle=False)
 
-        # Stable stage hash for reproducibility: method + configured value,
-        # never the resolved (score-dependent) cutoff.
-        snippet = {
-            "threshold_method": spec.method,
-            "threshold_value": spec.value,
-            "score_smoothing": conf.score_smoothing,
-            "carve_above": conf.carve_above,
-            "carve_above_min_consecutive": conf.carve_above_min_consecutive,
-            "max_slope_deg": max_slope,
-        }
-        stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
-
         # Per-stage diagnostics
         diag_dir = ensure_diag(out_path)
         nn = occ_scores
@@ -401,7 +370,7 @@ def thresholding(
             "voxels_removed": removed,
             "retention_pct": round(100.0 * kept / max(occupied, 1), 2),
             "mask_shape": [int(x) for x in grid_shape],
-            "upstream_hash": upstream_hash,
+            "upstream_run_id": pre_manifest.run_id,
             "carve_above_applied": conf.carve_above,
             "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
             "carve_above_extra_voxels_removed": carve_above_removed,
@@ -421,8 +390,8 @@ def thresholding(
         # Load patch weights if available
         pw_path = pre_manifest.patch_weights_path
         n_samples = pre_manifest.sample_point_count
-        if pw_path and Path(pw_path).is_file():
-            patch_weights = np.load(pw_path, allow_pickle=False)
+        if pw_path and pre.resolve(pw_path).is_file():
+            patch_weights = np.load(pre.resolve(pw_path), allow_pickle=False)
             total_weight = float(patch_weights.sum())
             summary["total_patch_weight"] = total_weight
             summary["weight_unit"] = weight_unit
@@ -455,23 +424,23 @@ def thresholding(
             conf.diagnostic_plots,
         )
 
-        # Manifest last (see remove_previous_stage_outputs at the start).
-        tm = ThresholdingManifest(
-            hash=stage_hash,
-            mask_path=str(mask_path),
-            upstream_manifest=str(pre_manifest_path),
-            upstream_hash=upstream_hash,
+        # Manifest last (see begin_stage at the start).
+        run_id = new_run_id()
+        commit_manifest(out_path, ThresholdingManifest(
+            run_id=run_id,
+            mask_path=stored_path(mask_path, out_path),
+            upstream_manifest=stored_path(pre_manifest_path, out_path),
+            upstream_run_id=pre_manifest.run_id,
             resolved_threshold=spec,
             score_smoothing_m=_smooth_radius_m,
             max_slope_deg=max_slope,
-        )
-        (out_path / "manifest.json").write_text(schema_to_json(tm), encoding="utf-8")
+        ))
 
         return ThresholdingResult(
             out_dir=out_path,
             mask_path=mask_path,
-            hash=stage_hash,
-            upstream=upstream_hash,
+            run_id=run_id,
+            upstream_run_id=pre_manifest.run_id,
             upstream_manifest=pre_manifest_path,
             threshold_method=threshold_method,
             threshold_value=float(thr_val),

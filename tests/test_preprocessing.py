@@ -93,8 +93,8 @@ def test_manifest_written_by_preprocessing(tmp_path, tmp_mesh_files):
 
     assert m.mode == "daylight" and m.voxel_size == 2.0
     assert m.scores_kind == "weighted_sum"
-    scores = np.load(m.scores_path)
-    grid = np.load(m.voxel_grid_path)
+    scores = np.load(result.out_dir / m.scores_path)
+    grid = np.load(result.out_dir / m.voxel_grid_path)
     assert grid.shape == tuple(m.shape)
     assert scores.size == int(np.prod(m.shape))
     assert m.sample_point_count == len(np.load(tmp_path / "out" / "test_points.npy"))

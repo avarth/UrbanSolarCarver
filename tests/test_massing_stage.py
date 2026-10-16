@@ -37,9 +37,10 @@ def _run_upstream(tmp_path, volume, voxel=1.0, **cfg_over):
 def _set_mask(thr_dir, fn):
     """Replace mask.npy with fn(occupancy) for deterministic tests."""
     man = json.loads((thr_dir / "manifest.json").read_text())
-    pre = json.loads(open(man["upstream_manifest"]).read())
-    occ = np.load(pre["voxel_grid_path"]).astype(bool)
-    np.save(man["mask_path"], fn(occ))
+    pre_manifest = thr_dir / man["upstream_manifest"]
+    pre = json.loads(pre_manifest.read_text())
+    occ = np.load(pre_manifest.parent / pre["voxel_grid_path"]).astype(bool)
+    np.save(thr_dir / man["mask_path"], fn(occ))
 
 
 def _box(extents, center_xy=(0.0, 0.0), z0=0.0):

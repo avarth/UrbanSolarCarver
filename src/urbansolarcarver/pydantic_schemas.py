@@ -2,10 +2,10 @@
 
 Defines :class:`UserConfig` (the pipeline configuration model, imported
 elsewhere as ``user_config``), :class:`ThresholdSpec` (the normalized
-threshold setting), two stage manifest schemas
-(:class:`PreprocessingManifest`, :class:`ThresholdingManifest`), the
-project-specific warning class :class:`UrbanSolarCarverWarning`, and
-:class:`UpstreamMismatchError`.
+threshold setting), the four stage manifest schemas
+(:class:`PreprocessingManifest`, :class:`ThresholdingManifest`,
+:class:`ExportingManifest`, :class:`MassingManifest`) and the
+project-specific warning class :class:`UrbanSolarCarverWarning`.
 
 The config schemas use ``extra='forbid'`` so that typos in YAML keys are
 caught at load time rather than silently ignored. The manifest schemas use
@@ -35,15 +35,6 @@ def schema_from_json(cls, text: str):
 def schema_to_json(model: BaseModel, *, indent: int = 2) -> str:
     """Serialize a Pydantic model to a JSON string."""
     return model.model_dump_json(indent=indent)
-
-class UpstreamMismatchError(ValueError):
-    """A stage's output was built from an upstream run that has since changed.
-
-    Each manifest records the hash of the upstream manifest it was built
-    from; a consumer raises this when that hash no longer matches the
-    upstream manifest on disk (for example after preprocessing was re-run
-    in place), instead of combining outputs of different runs.
-    """
 
 # ---------- Threshold specification ----------
 class ThresholdSpec(BaseModel):
@@ -681,30 +672,37 @@ class UserConfig(BaseModel):
 # ---------- Stage manifests ----------
 # Manifests hold only the fields a downstream stage reads. Provenance and
 # statistics go to each stage's diagnostics/diagnostic.json instead.
+#
+# Every manifest has a ``run_id`` (random, new on every run of that stage);
+# a downstream manifest also records the ``run_id`` of the upstream manifest
+# it was built from, so a consumer can tell that the upstream was re-run.
+# Paths are stored relative to the manifest's own folder with forward
+# slashes (the absolute path when no relative one exists).
 
 class PreprocessingManifest(BaseModel):
     """Manifest written by preprocessing, read by thresholding and exporting."""
 
-    hash: str
+    run_id: str
     scores_path: str
     scores_kind: Literal["weighted_sum", "violation_count"]
     shape: Tuple[int, int, int]
     origin: Tuple[float, float, float]
-    voxel_grid_path: Optional[str] = None
-    voxel_size: Optional[float] = None
-    mode: Optional[str] = None
+    voxel_size: float
+    mode: str
+    voxel_grid_path: str
+    # Absent in the violation-count modes, which have no sky patches.
     patch_weights_path: Optional[str] = None
-    sample_point_count: Optional[int] = None
+    sample_point_count: int
     # The maximum volume mesh this run voxelized; massing reads its footprint.
     max_volume_path: Optional[str] = None
 
 class ThresholdingManifest(BaseModel):
-    """Manifest written by thresholding, read by exporting."""
+    """Manifest written by thresholding, read by exporting and massing."""
 
-    hash: str
+    run_id: str
     mask_path: str
     upstream_manifest: str
-    upstream_hash: str
+    upstream_run_id: str
     # The settings this run applied after resolving the config's "None =
     # auto" values: the threshold strategy (not the score-dependent
     # cutoff), the score smoothing radius in meters (0 = none) and the
@@ -716,17 +714,16 @@ class ThresholdingManifest(BaseModel):
 class ExportingManifest(BaseModel):
     """Manifest written by exporting."""
 
-    hash: str
+    run_id: str
     mesh_path: str
     upstream_manifest: str
-    upstream_hash: str
+    upstream_run_id: str
 
 class MassingManifest(BaseModel):
     """Manifest written by massing."""
 
-    hash: str
+    run_id: str
     plates_path: str
     mesh_path: str
     upstream_manifest: str
-    upstream_hash: str
-
+    upstream_run_id: str

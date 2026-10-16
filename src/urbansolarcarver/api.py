@@ -12,6 +12,7 @@ from .api_core import (
     preprocessing, thresholding, exporting, massing,
     PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
 )
+from .api_core._stage_io import stage_folder
 
 
 def run_pipeline(
@@ -30,10 +31,9 @@ def run_pipeline(
     """
     if not isinstance(cfg, user_config):
         cfg = load_config(str(cfg))
-    base = Path(out_dir)
-    pre = preprocessing(cfg, base / "preprocessing")
-    thr = thresholding(pre, cfg, base / "thresholding")
-    return exporting(thr, cfg, base / "exporting")
+    pre = preprocessing(cfg, stage_folder(out_dir, "preprocessing"))
+    thr = thresholding(pre, cfg, stage_folder(out_dir, "thresholding"))
+    return exporting(thr, cfg, stage_folder(out_dir, "exporting"))
 
 
 __all__ = [

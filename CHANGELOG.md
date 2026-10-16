@@ -20,12 +20,32 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **Exporting and massing could combine outputs of two different
   preprocessing runs.** Re-running preprocessing in place (another EPW or
   analysis period, same grid shape) left the old `mask.npy` beside the new
-  occupancy grid, and the only check was the grid shape. The thresholding
-  and massing manifests now record `upstream_hash`, the hash of the
-  manifest they were built from, and exporting and massing raise
-  `UpstreamMismatchError` (a `ValueError`) when it no longer matches.
-  Thresholding manifests written before this change lack the field and
-  need thresholding to be re-run.
+  occupancy grid, and the only check was the grid shape. Every manifest
+  now has a random `run_id`, new on every run of its stage, and every
+  downstream manifest records `upstream_run_id`, the `run_id` of the
+  manifest it was built from. Thresholding, exporting and massing raise
+  `StageChainError` (a `ValueError`) naming the stage to re-run when the
+  upstream manifest is missing, unreadable or has another `run_id`. A
+  re-run with identical settings is refused too, which a hash of the
+  settings could not tell apart. Stage hashes are gone: `hash` and
+  `upstream_hash` are removed from the manifests, `PreprocessingResult.hash`
+  and `ThresholdingResult.hash` are now `run_id`, and
+  `ThresholdingResult.upstream` is now `upstream_run_id`. The CLI prints
+  `Run ID` instead of `Hash`.
+- **A run folder could not be moved.** Manifests stored absolute paths.
+  They now store paths relative to the manifest's own folder, with forward
+  slashes (`scores.npy`, `../preprocessing/manifest.json`; the absolute
+  path when no relative one exists), so a run folder can be copied or moved
+  and still loads. Absolute paths in a manifest still load. The new
+  `api_core/_stage_io.py` holds the stage folder layout, the start and end
+  of a stage (`begin_stage`, `commit_manifest`) and the reading of an
+  upstream (`load_upstream`); `PreprocessingManifest` now requires
+  `voxel_size`, `mode`, `voxel_grid_path` and `sample_point_count`, which
+  it always held.
+- **Migration.** Run folders written before this change have manifests
+  without `run_id`. Re-run the stages from preprocessing once for each
+  existing run folder; until then thresholding, exporting and massing
+  refuse them with a `StageChainError` that names the stage to re-run.
 - **A failed Warp voxelization switched to trimesh and was cached.** Any
   exception from the Warp voxelizer (including CUDA out-of-memory) made
   `voxelize_mesh` use trimesh's rasterizer, which classifies boundary
@@ -48,9 +68,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `plates.json` before `plates.obj`; and exporting and massing each
   rewrote `run_report.md` with only their own leaf section, so running
   one dropped the other's. Every stage now deletes its manifest and the
-  outputs of its previous run first (`remove_previous_stage_outputs`, only
-  the file names the stage writes) and writes its manifest last. Exporting
-  writes an `ExportingManifest` with `upstream_hash`. The run report keeps
+  outputs of its previous run first (`begin_stage`, only the file names
+  the stage writes) and writes its manifest last. Exporting writes an
+  `ExportingManifest` with `upstream_run_id`. The run report keeps
   the Export and Massing sections whose manifests were built from the
   same thresholding run and leaves out sections of an earlier one.
 - **Later stages took facts of the preprocessing run from the current

@@ -1,19 +1,17 @@
 from __future__ import annotations
-import json, time, hashlib
+import json, time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Tuple, Union
 import numpy as np
 from ..load_config import user_config
-from ._util import (
-    _resolve_cfg, _ensure_out_dir, ensure_diag, resolve_device, device_summary,
-    remove_previous_stage_outputs,
-)
+from ._util import _resolve_cfg, ensure_diag, resolve_device, device_summary
+from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
 from ._diagnostics import (
     PreprocessingPlotInputs, score_statistics, warn_score_anomalies,
     write_preprocessing_diagnostics,
 )
-from ..pydantic_schemas import PreprocessingManifest, schema_to_json
+from ..pydantic_schemas import PreprocessingManifest
 from ..errors import InputError
 from ..run_context import Issue, report_issue, stage_context
 from ..carving import (
@@ -47,7 +45,7 @@ class PreprocessingResult:
     volume_path: Path
     volume_shape: Tuple[int, int, int]
     dtype: str
-    hash: str
+    run_id: str
     device_info: str = ""
     issues: tuple[Issue, ...] = ()
     @property
@@ -213,9 +211,10 @@ def preprocessing(
     ``patch_weights.npy``
         Per-sky-patch weights (sky-patch modes only).
     ``manifest.json``
-        Machine-readable manifest (``PreprocessingManifest``) recording grid
-        shape, world origin, voxel size, mode, score kind, and file paths.
-        Written last, so a failed run leaves no manifest.
+        Machine-readable manifest (``PreprocessingManifest``) recording a
+        random ``run_id`` (new on every run), grid shape, world origin, voxel
+        size, mode, score kind, and file paths relative to the manifest's
+        folder.  Written last, so a failed run leaves no manifest.
     ``diagnostics/``
         ``diagnostic.json`` (summary statistics and wall/CPU timings),
         ``config_snapshot.json``, and, with ``cfg.diagnostic_plots``, the
@@ -230,13 +229,9 @@ def preprocessing(
 
         conf = _resolve_cfg(cfg)
         validate_inputs(conf)  # fail fast on missing mesh/EPW files
-        out_path = _ensure_out_dir(out_dir, "preprocessing")
         # A run that fails midway must not leave the previous manifest pointing
         # at half-overwritten arrays: the manifest is written last.
-        remove_previous_stage_outputs(out_path, _PREPROCESSING_OUTPUTS)
-
-        full_cfg = conf.model_dump()
-        stage_hash = hashlib.sha256(json.dumps(full_cfg, sort_keys=True).encode()).hexdigest()[:8]
+        out_path = begin_stage(out_dir, _PREPROCESSING_OUTPUTS)
 
         resolved_device = resolve_device(conf.device)
         device_info = device_summary(resolved_device)
@@ -335,16 +330,17 @@ def preprocessing(
             analysis_mesh_path = None
         _mark("save_npy_and_mesh")
 
+        run_id = new_run_id()
         pm = PreprocessingManifest(
-            hash=stage_hash,
-            scores_path=str(scores_path),
+            run_id=run_id,
+            scores_path=stored_path(scores_path, out_path),
             scores_kind=scores_kind,
             shape=tuple(voxel_grid.shape),
             origin=tuple(map(float, world_origin)),
-            voxel_grid_path=str(voxel_grid_path),
+            voxel_grid_path=stored_path(voxel_grid_path, out_path),
             voxel_size=float(conf.voxel_size),
             mode=mode,
-            patch_weights_path=str(pw_path) if pw_path else None,
+            patch_weights_path=stored_path(pw_path, out_path) if pw_path else None,
             sample_point_count=int(pts.shape[0]),
             max_volume_path=str(Path(conf.max_volume_path).resolve()),
         )
@@ -410,15 +406,15 @@ def preprocessing(
             summary, diag_dir, conf,
             PreprocessingPlotInputs(raw_scores=rs, patch_weights=pw_np, weight_unit=weight_unit),
         )
-        # Manifest last (see remove_previous_stage_outputs at the start).
-        (out_path / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
+        # Manifest last (see begin_stage at the start).
+        commit_manifest(out_path, pm)
 
         return PreprocessingResult(
             out_dir=out_path,
             volume_path=scores_path,
             volume_shape=tuple(voxel_grid.shape),
             dtype=str(raw_scores.dtype),
-            hash=stage_hash,
+            run_id=run_id,
             device_info=device_info,
             issues=context.issues_of("preprocessing"),
         )

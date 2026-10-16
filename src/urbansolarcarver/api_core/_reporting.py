@@ -10,6 +10,7 @@ from typing import Union
 import json
 
 from ..mode_registry import MODES_NEEDING_EPW
+from ._stage_io import stage_folder
 
 log = logging.getLogger(__name__)
 
@@ -47,21 +48,21 @@ def estimate_grid_memory(voxel_size: float, mesh_path: str, margin_frac: float =
 
 
 def write_run_report(stage: str, stage_out_path: Path, pre_dir: Path, thr_dir: Path,
-                     thresholding_hash: str):
+                     thresholding_run_id: str):
     """Write ``run_report.md`` at the end of the exporting or massing *stage*.
 
     The report goes to the run folder in the standard ``<run>/<stage>``
     layout, otherwise into *stage_out_path*.  Besides the finishing stage,
     it has a section for the other one (exporting or massing) when that
     stage's folder in the run folder holds a manifest built from the same
-    thresholding run (*thresholding_hash*); a section of an earlier
+    thresholding run (*thresholding_run_id*); a section of an earlier
     thresholding run is left out.  The old report is removed first, so a
     failed regeneration leaves none instead of stale numbers; a failure is
     logged, not raised.  Returns the report path, or None.
     """
     report_folder = stage_out_path.parent if stage_out_path.name == stage else stage_out_path
     (report_folder / "run_report.md").unlink(missing_ok=True)
-    leaf_stage_dirs = {name: _leaf_stage_dir(report_folder / name, thresholding_hash)
+    leaf_stage_dirs = {name: _leaf_stage_dir(stage_folder(report_folder, name), thresholding_run_id)
                        for name in _REPORTED_LEAF_STAGES if name != stage}
     leaf_stage_dirs[stage] = stage_out_path
     try:
@@ -73,16 +74,16 @@ def write_run_report(stage: str, stage_out_path: Path, pre_dir: Path, thr_dir: P
         return None
 
 
-def _leaf_stage_dir(stage_dir: Path, thresholding_hash: str):
+def _leaf_stage_dir(stage_dir: Path, thresholding_run_id: str):
     """*stage_dir* if its manifest was built from the given thresholding run, else None."""
     manifest_path = stage_dir / "manifest.json"
     if not manifest_path.is_file():
         return None
     try:
-        upstream_hash = json.loads(manifest_path.read_text(encoding="utf-8")).get("upstream_hash")
+        upstream_run_id = json.loads(manifest_path.read_text(encoding="utf-8")).get("upstream_run_id")
     except (OSError, ValueError):
         return None
-    return stage_dir if upstream_hash == thresholding_hash else None
+    return stage_dir if upstream_run_id == thresholding_run_id else None
 
 
 def generate_run_report(

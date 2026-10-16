@@ -7,7 +7,6 @@ closed prism per plate), with a manifest, diagnostics and the run report.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import time
@@ -22,13 +21,11 @@ import shapely.affinity
 from .. import floor_plates as mg
 from ..io import load_mesh
 from ..load_config import user_config
-from ..pydantic_schemas import MassingManifest, schema_to_json
+from ..pydantic_schemas import MassingManifest
 from ..run_context import Issue, report_issue, stage_context
 from ._reporting import write_run_report
-from ._util import (
-    _ensure_out_dir, _resolve_cfg, ensure_diag, load_thresholded_grid,
-    remove_previous_stage_outputs, write_json,
-)
+from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
+from ._util import _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
 
 log = logging.getLogger(__name__)
 
@@ -155,19 +152,17 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
 
     Raises
     ------
+    StageChainError
+        If a manifest cannot be read, or preprocessing was re-run after the
+        thresholding run (a ValueError).
     ValueError
-        If a manifest cannot be read, or a massing size is smaller than the
-        preprocessing run's voxel size.
-    UpstreamMismatchError
-        If preprocessing was re-run after the thresholding run (a
-        ValueError).
+        If a massing size is smaller than the preprocessing run's voxel size.
     """
     with stage_context("massing") as context:
         t0_wall, t0_cpu = time.perf_counter(), time.process_time()
         conf = _resolve_cfg(cfg)
-        out_path = _ensure_out_dir(out_dir, "massing")
-        remove_previous_stage_outputs(out_path, _MASSING_OUTPUTS)
-        chain = load_thresholded_grid(threshold_manifest, conf)
+        out_path = begin_stage(out_dir, _MASSING_OUTPUTS)
+        chain = load_thresholded_grid(threshold_manifest)
         vs, origin = chain.voxel_size, chain.origin
         for name in ("min_plate_dimension", "ground_floor_height", "floor_height"):
             if getattr(conf, name) < vs - 1e-9:
@@ -179,7 +174,7 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         columns = occ.any(axis=2)
         cells_ij = np.argwhere(columns)
         xy = (cells_ij + 0.5) * vs
-        polygons, footprint_source = _footprint(chain.pre_manifest.max_volume_path, origin, columns, vs)
+        polygons, footprint_source = _footprint(chain.pre.manifest.max_volume_path, origin, columns, vs)
         facades, corners = mg.split_facades(polygons)
         # A facade shorter than two bays (a chamfer, a small step) would get a
         # face of at most one bay; its columns go to the neighbouring facades.
@@ -261,16 +256,15 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
             "timings": {"wall_seconds": float(time.perf_counter() - t0_wall),
                         "cpu_seconds": float(time.process_time() - t0_cpu)},
         })
-        upstream = chain.thr_manifest.hash
-        write_run_report("massing", out_path, chain.pre_path.parent, chain.thr_path.parent,
-                         upstream)
+        thr_run_id = chain.thr.manifest.run_id
+        write_run_report("massing", out_path, chain.pre.folder, chain.thr.folder, thr_run_id)
 
-        stage_hash = hashlib.sha256((json.dumps(settings, sort_keys=True) + upstream).encode()).hexdigest()[:8]
-        manifest = MassingManifest(hash=stage_hash, plates_path=str(plates_path),
-                                   mesh_path=str(mesh_path), upstream_manifest=str(chain.thr_path),
-                                   upstream_hash=upstream)
-        # Manifest last (see remove_previous_stage_outputs at the start).
-        (out_path / "manifest.json").write_text(schema_to_json(manifest), encoding="utf-8")
+        # Manifest last (see begin_stage at the start).
+        commit_manifest(out_path, MassingManifest(
+            run_id=new_run_id(), plates_path=stored_path(plates_path, out_path),
+            mesh_path=stored_path(mesh_path, out_path),
+            upstream_manifest=stored_path(chain.thr.manifest_path, out_path),
+            upstream_run_id=thr_run_id))
 
         return MassingResult(out_dir=out_path, plates_path=plates_path, mesh_path=mesh_path,
                              floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates),
