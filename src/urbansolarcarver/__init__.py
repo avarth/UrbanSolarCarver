@@ -9,6 +9,8 @@ triggers the heavy imports (torch, warp, api_core) on first access, but
 
 __all__ = [
     "run_pipeline",
+    "PipelineResult",
+    "stages_to_rerun",
     "preprocessing",
     "thresholding",
     "exporting",
@@ -31,7 +33,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:  # pragma: no cover
     from .api import (  # noqa: F401
-        run_pipeline,
+        run_pipeline, PipelineResult, stages_to_rerun,
         preprocessing, thresholding, exporting, massing,
         PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
     )
@@ -60,12 +62,14 @@ def _ensure_api():
             "See https://pytorch.org/get-started/locally/ for details."
         ) from _e
     from .api import (
-        run_pipeline,
+        run_pipeline, PipelineResult, stages_to_rerun,
         preprocessing, thresholding, exporting, massing,
         PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
     )
     _api_names.update({
         "run_pipeline": run_pipeline,
+        "PipelineResult": PipelineResult,
+        "stages_to_rerun": stages_to_rerun,
         "preprocessing": preprocessing,
         "thresholding": thresholding,
         "exporting": exporting,

@@ -152,7 +152,7 @@ def _handle_stage_command(cmd, msg, sess):
 
     if cmd == "run_pipeline":
         result = api.run_pipeline(cfg, msg.get("out_dir") or cfg.out_dir)
-        return {"status": "ok", "export_path": str(result.export_path)}
+        return {"status": "ok", "export_path": str(result.exporting.export_path)}
 
     out_dir = msg.get("out_dir") or (Path(cfg.out_dir) / cmd)
     if cmd == "preprocessing":

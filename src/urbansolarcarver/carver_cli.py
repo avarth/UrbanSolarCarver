@@ -262,7 +262,7 @@ def run(
     if not quiet:
         typer.secho("  Running pipeline (preprocessing + thresholding + exporting)...", fg="yellow")
     t0 = time.perf_counter()
-    res = run_pipeline(cfg, out)
+    res = run_pipeline(cfg, out).exporting
     elapsed = time.perf_counter() - t0
 
     _echo_result("Pipeline", {

@@ -44,6 +44,8 @@ the `ray_batch_size` run option (0 = sized from free GPU memory) on the device o
 input voxel grid.
 """
 
+import queue
+import threading
 import warnings
 import torch
 import numpy as np
@@ -55,7 +57,7 @@ from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
 from .sun import get_sun_vectors
 from .errors import InputError
-from .run_context import report_issue
+from .run_context import active_context, report_issue, report_progress
 from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
     trace_and_count_dda, auto_batch_size, dda_backend_available,
@@ -250,32 +252,69 @@ def _run_batches(batch_ranges, launch, out, device, parallel: bool) -> None:
     read-modify-write, not atomic across threads, so each thread writes its
     own buffer and the buffers are summed at the end. The first batch runs
     alone because it triggers Warp's one-time module compile.
+
+    The active run context is checked for cancellation before each batch and
+    told how many batches are done after each one.  Context variables do not
+    reach worker threads, so the context is read here, on the calling thread,
+    and handed to the workers; progress is reported from the calling thread.
     """
-    if not parallel or device.type != "cpu" or len(batch_ranges) < 2:
-        for start, end in batch_ranges:
-            launch(start, end, out)
+    context = active_context()
+    total = len(batch_ranges)
+
+    def run_in_order(ranges, buffer, done):
+        for start, end in ranges:
+            if context is not None:
+                context.raise_if_cancelled()
+            launch(start, end, buffer)
+            done += 1
+            report_progress(done, total)
+        return done
+
+    if not parallel or device.type != "cpu" or total < 2:
+        run_in_order(batch_ranges, out, 0)
         return
 
-    launch(*batch_ranges[0], out)
+    done = run_in_order(batch_ranges[:1], out, 0)
     rest = batch_ranges[1:]
     buffer_bytes = out.numel() * out.element_size()
     n_workers = min(4, os.cpu_count() or 1, len(rest),
                     max(1, _CPU_BUFFER_BUDGET_BYTES // max(buffer_bytes, 1)))
     if n_workers < 2:
-        for start, end in rest:
-            launch(start, end, out)
+        run_in_order(rest, out, done)
         return
 
     from concurrent.futures import ThreadPoolExecutor
     buffers = [torch.zeros_like(out) for _ in range(n_workers)]
     chunks = [rest[i::n_workers] for i in range(n_workers)]
+    finished_batches = queue.Queue()
+    stop_workers = threading.Event()
 
     def _work(i):
         for start, end in chunks[i]:
+            if stop_workers.is_set():
+                return
+            if context is not None:
+                context.raise_if_cancelled()
             launch(start, end, buffers[i])
+            finished_batches.put(1)
 
     with ThreadPoolExecutor(max_workers=n_workers) as pool:
-        list(pool.map(_work, range(n_workers)))  # list() re-raises worker exceptions
+        futures = [pool.submit(_work, i) for i in range(n_workers)]
+        try:
+            while done < total:
+                try:
+                    finished_batches.get(timeout=0.05)
+                except queue.Empty:
+                    if all(future.done() for future in futures):
+                        break  # a worker stopped early: cancelled or failed
+                    continue
+                done += 1
+                report_progress(done, total)
+        except BaseException:
+            stop_workers.set()  # a failing progress callback must not leave the pool running
+            raise
+    for future in futures:
+        future.result()  # re-raises the first worker exception, RunCancelled included
     for buf in buffers:
         out += buf
 

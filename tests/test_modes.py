@@ -35,7 +35,7 @@ def _write_config(tmp_path, vol_path, srf_path, epw_path, mode, **extra):
 
 
 def _run_mode(tmp_path, vol_path, srf_path, epw_path, mode, **extra):
-    """Run full pipeline for a mode and return export result."""
+    """Run full pipeline for a mode and return the PipelineResult."""
     from urbansolarcarver import run_pipeline
     cfg = _write_config(tmp_path, vol_path, srf_path, epw_path, mode, **extra)
     return run_pipeline(cfg, tmp_path / "pipeline_out")
@@ -50,9 +50,9 @@ def test_smoke_tilted_plane(tmp_path, tmp_mesh_files):
         mode="tilted_plane", tilted_plane_angle_deg=45.0,
         threshold=None,
     )
-    assert result.export_path.exists()
+    assert result.exporting.export_path.exists()
     import trimesh
-    mesh = trimesh.load(str(result.export_path))
+    mesh = trimesh.load(str(result.exporting.export_path))
     assert len(mesh.vertices) > 0
 
 
@@ -73,9 +73,9 @@ def test_smoke_epw_modes(tmp_path, tmp_mesh_files, example_epw_path, mode, extra
         tmp_path, vol_path, srf_path, example_epw_path,
         mode=mode, **extra,
     )
-    assert result.export_path.exists()
+    assert result.exporting.export_path.exists()
     import trimesh
-    mesh = trimesh.load(str(result.export_path))
+    mesh = trimesh.load(str(result.exporting.export_path))
     assert len(mesh.vertices) > 0
 
 

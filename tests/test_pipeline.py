@@ -129,7 +129,7 @@ def test_run_pipeline_convenience(tmp_path, tiny_cube_mesh, tiny_surface_mesh):
 
     cfg = load_config(str(cfg_path))
     result = run_pipeline(cfg, tmp_path / "pipeline_out")
-    assert result.export_path.exists()
+    assert result.exporting.export_path.exists()
 
 
 # ---------------------------------------------------------------------------
