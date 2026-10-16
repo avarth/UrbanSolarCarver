@@ -244,13 +244,12 @@ def thresholding(
     Raises
     ------
     StageChainError
-        If the preprocessing manifest cannot be read, or the config's mode
-        differs from the preprocessing run's (a ValueError).
+        If the preprocessing manifest cannot be read, the config's mode
+        differs from the preprocessing run's, or the scores or the occupancy
+        grid it names are missing or do not match its grid shape (a
+        ValueError; the message names the stage to re-run).
     ValueError
-        If the scores do not match the manifest's grid shape, or a
-        non-numeric threshold is used with violation-count scores.
-    FileNotFoundError
-        If the scores file named in the manifest is missing.
+        If a non-numeric threshold is used with violation-count scores.
     """
     with stage_context("thresholding") as context:
         conf = _resolve_cfg(cfg)
@@ -290,18 +289,18 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     # Load scores and check them against the manifest so a stale or mismatched
     # artifact fails here with a clear message instead of deep in numpy.
     if not scores_path.is_file():
-        raise FileNotFoundError(
+        raise StageChainError(
             f"Scores file not found: {scores_path} (referenced by manifest "
-            f"{pre_manifest_path}). Re-run preprocessing, or fix the manifest path."
+            f"{pre_manifest_path}). Re-run preprocessing."
         )
     raw = np.load(scores_path, allow_pickle=False)
     if raw.ndim == 1:
         raw = raw.reshape(grid_shape)
     elif tuple(raw.shape) != grid_shape:
-        raise ValueError(
+        raise StageChainError(
             f"Scores array shape {tuple(raw.shape)} does not match the grid shape "
             f"{grid_shape} recorded in {pre_manifest_path}; the scores file and "
-            f"manifest are from different runs."
+            f"manifest are from different runs. Re-run preprocessing."
         )
 
     # Guard the consumer side too: thresholding can run standalone (CLI,

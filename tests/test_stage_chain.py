@@ -148,3 +148,86 @@ def test_run_ids_are_new_every_time():
     from urbansolarcarver.api_core._stage_io import new_run_id
     first, second = new_run_id(), new_run_id()
     assert first != second and len(first) == 32
+
+
+# A missing or damaged output of an upstream stage is a StageChainError that
+# names the stage to re-run, not a FileNotFoundError, ValueError or KeyError.
+
+def test_thresholding_with_missing_scores_asks_for_a_preprocessing_rerun(tmp_path):
+    from urbansolarcarver import thresholding
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    pre, _thr = _run_pre_and_thr(tmp_path, conf)
+    (pre.out_dir / "scores.npy").unlink()
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
+        thresholding(pre, conf, tmp_path / "run" / "thresholding")
+
+
+def test_thresholding_with_scores_of_another_shape_asks_for_a_preprocessing_rerun(tmp_path):
+    import numpy as np
+    from urbansolarcarver import thresholding
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    pre, _thr = _run_pre_and_thr(tmp_path, conf)
+    np.save(pre.out_dir / "scores.npy", np.zeros((2, 2, 2), dtype=np.float32))
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
+        thresholding(pre, conf, tmp_path / "run" / "thresholding")
+
+
+def test_exporting_with_a_missing_voxel_grid_asks_for_a_preprocessing_rerun(tmp_path):
+    from urbansolarcarver import exporting
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    pre, thr = _run_pre_and_thr(tmp_path, conf)
+    (pre.out_dir / "voxel_grid.npy").unlink()
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
+        exporting(thr, conf, tmp_path / "run" / "exporting")
+
+
+def test_exporting_with_a_voxel_grid_of_another_shape_asks_for_a_preprocessing_rerun(tmp_path):
+    import numpy as np
+    from urbansolarcarver import exporting
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    pre, thr = _run_pre_and_thr(tmp_path, conf)
+    np.save(pre.out_dir / "voxel_grid.npy", np.zeros((2, 2, 2), dtype=bool))
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
+        exporting(thr, conf, tmp_path / "run" / "exporting")
+
+
+def test_exporting_with_a_missing_mask_asks_for_a_thresholding_rerun(tmp_path):
+    from urbansolarcarver import exporting
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    _pre, thr = _run_pre_and_thr(tmp_path, conf)
+    (thr.out_dir / "mask.npy").unlink()
+    with pytest.raises(StageChainError, match="Re-run thresholding"):
+        exporting(thr, conf, tmp_path / "run" / "exporting")
+
+
+def test_exporting_with_a_mask_of_another_shape_asks_for_a_thresholding_rerun(tmp_path):
+    import numpy as np
+    from urbansolarcarver import exporting
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    _pre, thr = _run_pre_and_thr(tmp_path, conf)
+    np.save(thr.out_dir / "mask.npy", np.zeros((2, 2, 2), dtype=bool))
+    with pytest.raises(StageChainError, match="Re-run thresholding"):
+        exporting(thr, conf, tmp_path / "run" / "exporting")
+
+
+@pytest.mark.parametrize("damage", ["missing", "not_json", "no_polygons"])
+def test_massing_with_a_missing_or_damaged_footprint_asks_for_a_preprocessing_rerun(tmp_path, damage):
+    from urbansolarcarver import massing
+    from urbansolarcarver.errors import StageChainError
+    conf = _config(tmp_path)
+    pre, thr = _run_pre_and_thr(tmp_path, conf)
+    footprint = pre.out_dir / "footprint.json"
+    if damage == "missing":
+        footprint.unlink()
+    elif damage == "not_json":
+        footprint.write_text("{not json", encoding="utf-8")
+    else:
+        footprint.write_text(json.dumps({"shapes": []}), encoding="utf-8")
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
+        massing(thr, conf, tmp_path / "run" / "massing")

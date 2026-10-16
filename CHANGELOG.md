@@ -135,7 +135,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `ConfigFieldError(field, message)` per problem), `InputError` (a
   `ValueError`; a mesh or EPW file that is missing or unusable, an empty
   voxel grid, no sample points), `StageChainError` (a `ValueError`; a
-  missing, unreadable or stale upstream output) and `RunCancelled`. Some
+  missing, unreadable or stale upstream output, including a missing or
+  wrong-shaped `scores.npy`, `voxel_grid.npy` or `mask.npy` and a missing or
+  damaged `footprint.json`) and `RunCancelled`. Some
   `FileNotFoundError`, `RuntimeError` and plain `ValueError` raised before
   are now `InputError`, `StageChainError` or `ConfigError`, all `ValueError`
   subclasses: a caller that caught `FileNotFoundError` or `RuntimeError` for

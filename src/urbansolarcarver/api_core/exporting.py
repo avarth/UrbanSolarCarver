@@ -126,12 +126,10 @@ def exporting(
     Raises
     ------
     StageChainError
-        If a manifest cannot be read, or preprocessing was re-run after the
-        thresholding run (a ValueError).
-    ValueError
-        If the mask does not match the grid shape.
-    FileNotFoundError
-        If the mask file named in the thresholding manifest is missing.
+        If a manifest cannot be read, preprocessing was re-run after the
+        thresholding run, or the mask or occupancy grid is missing or does
+        not match the grid shape (a ValueError; the message names the stage
+        to re-run).
     """
     with stage_context("exporting") as context:
         conf = _resolve_cfg(cfg)

@@ -13,6 +13,7 @@ from typing import Union
 
 import json
 
+from ..errors import StageChainError
 from ..load_config import load_config, user_config
 from ._stage_io import LoadedManifest, load_upstream
 
@@ -66,25 +67,24 @@ def load_occupancy(pre):
     """Return the boolean occupancy grid (numpy) of a preprocessing run.
 
     *pre* is the :class:`LoadedManifest` of the preprocessing run.  Loads
-    the persisted ``voxel_grid.npy``.  Raises FileNotFoundError if the
-    file is gone (the grid is not rebuilt from a config, which may describe
-    other geometry), and ValueError if the grid shape differs from the
-    manifest's.
+    the persisted ``voxel_grid.npy``.  Raises StageChainError if the file is
+    gone (the grid is not rebuilt from a config, which may describe other
+    geometry) or its shape differs from the manifest's; the message names
+    the stage to re-run.
     """
     import numpy as np
     vg_path = pre.resolve(pre.manifest.voxel_grid_path)
     if not vg_path.is_file():
-        raise FileNotFoundError(
+        raise StageChainError(
             f"Occupancy grid not found: {vg_path} (named by the preprocessing "
             f"manifest). Re-run preprocessing."
         )
     occ = np.load(vg_path, allow_pickle=False).astype(bool)
     if tuple(occ.shape) != tuple(pre.manifest.shape):
-        raise ValueError(
+        raise StageChainError(
             f"Voxel grid shape {tuple(occ.shape)} does not match the grid shape "
             f"{tuple(pre.manifest.shape)} recorded in the preprocessing manifest; "
-            f"the occupancy grid is from a different run (check voxel_size / "
-            f"margin_frac consistency)."
+            f"the occupancy grid is from a different run. Re-run preprocessing."
         )
     return occ
 
@@ -115,8 +115,9 @@ def load_thresholded_grid(threshold_manifest) -> ThresholdedGrid:
     the occupancy grid.  *threshold_manifest* is a ThresholdingResult or a
     path to its folder or manifest.json.
 
-    Raises StageChainError if a manifest cannot be read or preprocessing was
-    re-run after this thresholding run.
+    Raises StageChainError if a manifest cannot be read, preprocessing was
+    re-run after this thresholding run, or the mask or occupancy grid is
+    missing or does not match the grid shape.
     """
     import numpy as np
     thr = load_upstream(threshold_manifest, "thresholding")
@@ -124,7 +125,7 @@ def load_thresholded_grid(threshold_manifest) -> ThresholdedGrid:
     grid_shape = tuple(pre.manifest.shape)
     mask_path = thr.resolve(thr.manifest.mask_path)
     if not mask_path.is_file():
-        raise FileNotFoundError(
+        raise StageChainError(
             f"Mask file not found: {mask_path} (referenced by {thr.manifest_path}). "
             f"Re-run thresholding."
         )
@@ -132,10 +133,10 @@ def load_thresholded_grid(threshold_manifest) -> ThresholdedGrid:
     if mask.ndim == 1:
         mask = mask.reshape(grid_shape)
     elif tuple(mask.shape) != grid_shape:
-        raise ValueError(
+        raise StageChainError(
             f"Mask shape {tuple(mask.shape)} does not match the grid shape "
             f"{grid_shape} recorded in {pre.manifest_path}; the mask and manifest "
-            f"are from different runs."
+            f"are from different runs. Re-run thresholding."
         )
     return ThresholdedGrid(
         thr=thr, pre=pre, mask=mask, occupancy=load_occupancy(pre),

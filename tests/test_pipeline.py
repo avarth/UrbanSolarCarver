@@ -167,19 +167,21 @@ class TestStageBoundaryValidation:
 
     def test_scores_shape_mismatch_rejected(self, tmp_path):
         from urbansolarcarver.api_core.thresholding import thresholding
+        from urbansolarcarver.errors import StageChainError
         pre_dir = self._write_pre_manifest(
             tmp_path, np.zeros((8, 8, 8), dtype=np.float32), manifest_shape=(9, 9, 9),
         )
-        with pytest.raises(ValueError, match="does not match the grid shape"):
+        with pytest.raises(StageChainError, match="does not match the grid shape"):
             thresholding(pre_dir, self._cfg(tmp_path), tmp_path / "thr")
 
     def test_missing_scores_file_rejected(self, tmp_path):
         from urbansolarcarver.api_core.thresholding import thresholding
+        from urbansolarcarver.errors import StageChainError
         pre_dir = self._write_pre_manifest(
             tmp_path, np.zeros((8, 8, 8), dtype=np.float32), manifest_shape=(8, 8, 8),
         )
         (pre_dir / "scores.npy").unlink()
-        with pytest.raises(FileNotFoundError, match="Scores file not found"):
+        with pytest.raises(StageChainError, match="Scores file not found"):
             thresholding(pre_dir, self._cfg(tmp_path), tmp_path / "thr")
 
 
@@ -573,11 +575,12 @@ def test_missing_occupancy_grid_is_an_error(tmp_path, tiny_cube_mesh, tiny_surfa
     is not rebuilt from a config that may describe other geometry."""
     from urbansolarcarver.api_core._stage_io import load_upstream
     from urbansolarcarver.api_core._util import load_occupancy
+    from urbansolarcarver.errors import StageChainError
     run = TestEdgeTaperPipeline()._run_preprocessing(
         tmp_path, "fb", tiny_cube_mesh, tiny_surface_mesh)
     pre = load_upstream(run, "preprocessing")
     pre.resolve(pre.manifest.voxel_grid_path).unlink()
-    with pytest.raises(FileNotFoundError, match="Re-run preprocessing"):
+    with pytest.raises(StageChainError, match="Re-run preprocessing"):
         load_occupancy(pre)
 
 

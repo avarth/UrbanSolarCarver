@@ -19,6 +19,7 @@ import shapely
 import shapely.affinity
 
 from .. import floor_plates as mg
+from ..errors import StageChainError
 from ..load_config import user_config
 from ..pydantic_schemas import MassingManifest
 from ..run_context import Issue, RunContext, report_issue, stage_context
@@ -52,14 +53,24 @@ class MassingResult:
 
 
 def _read_footprint(pre):
-    """The footprint polygons preprocessing saved (world xy); empty when it saved none."""
+    """The footprint polygons preprocessing saved (world xy); empty when it saved none.
+
+    Raises StageChainError, naming preprocessing as the stage to re-run, when
+    the file is missing or cannot be read as a footprint.
+    """
     path = pre.resolve(pre.manifest.footprint_path)
     if not path.is_file():
-        raise FileNotFoundError(
+        raise StageChainError(
             f"Footprint file not found: {path} (named by the preprocessing manifest). "
             f"Re-run preprocessing."
         )
-    return mg.footprint_from_dict(json.loads(path.read_text(encoding="utf-8")))
+    try:
+        return mg.footprint_from_dict(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise StageChainError(
+            f"Footprint file {path} is damaged ({type(exc).__name__}: {exc}). "
+            f"Re-run preprocessing."
+        ) from exc
 
 
 def _footprint(world_polygons, origin, columns, voxel_size):
@@ -155,8 +166,9 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     Raises
     ------
     StageChainError
-        If a manifest cannot be read, or preprocessing was re-run after the
-        thresholding run (a ValueError).
+        If a manifest cannot be read, preprocessing was re-run after the
+        thresholding run, or the mask, occupancy grid or footprint is missing
+        or damaged (a ValueError; the message names the stage to re-run).
     ValueError
         If a massing size is smaller than the preprocessing run's voxel size.
     """
