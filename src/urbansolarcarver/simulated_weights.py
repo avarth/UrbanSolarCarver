@@ -35,12 +35,14 @@ helper imports Ladybug lazily.
 from __future__ import annotations
 
 import json
-import warnings
+import logging
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Sequence, Tuple
 
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 HOURS = 8760
 
@@ -344,10 +346,9 @@ def attribute_solar_gains(p: ZoneParams, t_out, phi_int, phi_sol,
     for name, arr in (("benefit", benefit), ("harm", harm)):
         low, high = float(arr.min()), float(arr.max())
         if low < -tol or high > 1.0 + tol:
-            warnings.warn(
-                f"attribute_solar_gains: {name} outside [0, 1] beyond switching "
-                f"tolerance (min {low:.3f}, max {high:.3f}); check inputs.",
-                stacklevel=2,
+            log.warning(
+                "attribute_solar_gains: %s outside [0, 1] beyond switching "
+                "tolerance (min %.3f, max %.3f); check inputs.", name, low, high,
             )
     return np.clip(benefit, 0.0, 1.0), np.clip(harm, 0.0, 1.0)
 

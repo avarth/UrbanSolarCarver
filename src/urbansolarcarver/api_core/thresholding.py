@@ -13,6 +13,7 @@ from ..pydantic_schemas import (
     schema_from_json,
     schema_to_json,
 )
+from ..run_context import Issue, report_issue, stage_context
 from ..scoring import carve_fraction_threshold, headtail_threshold
 from ..carving import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
@@ -47,6 +48,7 @@ class ThresholdingResult:
     voxels_kept: int = 0
     voxels_removed: int = 0
     retention_pct: float = 0.0
+    issues: tuple[Issue, ...] = ()
     @property
     def manifest_path(self) -> Path:
         return self.out_dir / "manifest.json"
@@ -86,12 +88,11 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     if radius_m <= 0:
         return raw, False, 0.0, 0.0
     if not voxel_size or voxel_size <= 0:
-        import warnings
-        warnings.warn(
+        report_issue(
+            "smoothing_skipped",
             "score_smoothing requested but the preprocessing manifest has no "
             "voxel_size, so meters cannot be converted to voxels; skipping smoothing. "
             "Re-run preprocessing to regenerate the manifest.",
-            stacklevel=3,
         )
         return raw, False, 0.0, 0.0
 
@@ -99,11 +100,10 @@ def _apply_score_smoothing(raw, kind, voxel_size, score_smoothing, occ=None):
     requested = radius_m / voxel_size
     sigma_voxels = float(np.clip(requested, 0.5, 8.0))
     if sigma_voxels != requested:
-        import warnings
-        warnings.warn(
+        report_issue(
+            "smoothing_radius_clipped",
             f"score_smoothing={radius_m:g} m is {requested:.2g} voxels; clipped to "
             f"{sigma_voxels:g} voxels ({sigma_voxels * voxel_size:g} m).",
-            stacklevel=3,
         )
         radius_m = sigma_voxels * voxel_size
     if occ is None:
@@ -252,230 +252,230 @@ def thresholding(
     FileNotFoundError
         If the scores file named in the manifest is missing.
     """
-    t0_wall = time.perf_counter()
-    t0_cpu = time.process_time()
-    conf = _resolve_cfg(cfg)
-    out_path = _ensure_out_dir(out_dir, "thresholding")
-    remove_previous_stage_outputs(out_path, _THRESHOLDING_OUTPUTS)
+    with stage_context("thresholding") as context:
+        t0_wall = time.perf_counter()
+        t0_cpu = time.process_time()
+        conf = _resolve_cfg(cfg)
+        out_path = _ensure_out_dir(out_dir, "thresholding")
+        remove_previous_stage_outputs(out_path, _THRESHOLDING_OUTPUTS)
 
-    # Resolve upstream manifest.
-    if isinstance(volume, (str, Path)):
-        pre_manifest_path = Path(volume)
-        if pre_manifest_path.is_dir():
-            pre_manifest_path = pre_manifest_path / "manifest.json"
-    else:
-        pre_manifest_path = volume.manifest_path
-    try:
-        pre_manifest = schema_from_json(PreprocessingManifest, pre_manifest_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise ValueError("Unable to load preprocessing manifest") from exc
+        # Resolve upstream manifest.
+        if isinstance(volume, (str, Path)):
+            pre_manifest_path = Path(volume)
+            if pre_manifest_path.is_dir():
+                pre_manifest_path = pre_manifest_path / "manifest.json"
+        else:
+            pre_manifest_path = volume.manifest_path
+        try:
+            pre_manifest = schema_from_json(PreprocessingManifest, pre_manifest_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise ValueError("Unable to load preprocessing manifest") from exc
 
-    scores_path = Path(pre_manifest.scores_path)
-    upstream_hash = pre_manifest.hash
-    grid_shape = tuple(pre_manifest.shape)
-    kind = pre_manifest.scores_kind
+        scores_path = Path(pre_manifest.scores_path)
+        upstream_hash = pre_manifest.hash
+        grid_shape = tuple(pre_manifest.shape)
+        kind = pre_manifest.scores_kind
 
-    # Load scores and check them against the manifest so a stale or mismatched
-    # artifact fails here with a clear message instead of deep in numpy.
-    if not scores_path.is_file():
-        raise FileNotFoundError(
-            f"Scores file not found: {scores_path} (referenced by manifest "
-            f"{pre_manifest_path}). Re-run preprocessing, or fix the manifest path."
-        )
-    raw = np.load(scores_path, allow_pickle=False)
-    if raw.ndim == 1:
-        raw = raw.reshape(grid_shape)
-    elif tuple(raw.shape) != grid_shape:
-        raise ValueError(
-            f"Scores array shape {tuple(raw.shape)} does not match the grid shape "
-            f"{grid_shape} recorded in {pre_manifest_path}; the scores file and "
-            f"manifest are from different runs."
-        )
+        # Load scores and check them against the manifest so a stale or mismatched
+        # artifact fails here with a clear message instead of deep in numpy.
+        if not scores_path.is_file():
+            raise FileNotFoundError(
+                f"Scores file not found: {scores_path} (referenced by manifest "
+                f"{pre_manifest_path}). Re-run preprocessing, or fix the manifest path."
+            )
+        raw = np.load(scores_path, allow_pickle=False)
+        if raw.ndim == 1:
+            raw = raw.reshape(grid_shape)
+        elif tuple(raw.shape) != grid_shape:
+            raise ValueError(
+                f"Scores array shape {tuple(raw.shape)} does not match the grid shape "
+                f"{grid_shape} recorded in {pre_manifest_path}; the scores file and "
+                f"manifest are from different runs."
+            )
 
-    # Guard the consumer side too: thresholding can run standalone (CLI,
-    # daemon, Grasshopper) on a scores.npy that never went through this
-    # process's preprocessing, and `score <= thr` silently carves every
-    # NaN voxel.
-    warn_score_anomalies(raw, context="thresholding")
+        # Guard the consumer side too: thresholding can run standalone (CLI,
+        # daemon, Grasshopper) on a scores.npy that never went through this
+        # process's preprocessing, and `score <= thr` silently carves every
+        # NaN voxel.
+        warn_score_anomalies(raw, context="thresholding")
 
-    # Only occupied voxels can be kept or carved. Empty cells still hold
-    # score (rays cross streets and courtyards), and 60-80% of the total
-    # score mass can sit there, so every statistic below is taken over the
-    # building alone; otherwise carve_fraction/headtail would depend on how
-    # much air the grid happens to contain.
-    occ = load_occupancy(pre_manifest)
+        # Only occupied voxels can be kept or carved. Empty cells still hold
+        # score (rays cross streets and courtyards), and 60-80% of the total
+        # score mass can sit there, so every statistic below is taken over the
+        # building alone; otherwise carve_fraction/headtail would depend on how
+        # much air the grid happens to contain.
+        occ = load_occupancy(pre_manifest)
 
-    raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
-        raw, kind, pre_manifest.voxel_size, conf.score_smoothing, occ=occ
-    )
-
-    scores = raw.astype(np.float32, copy=False)
-    occ_scores = scores[occ]
-    spec = conf.resolved_threshold()
-    # Standalone re-thresholding (CLI, daemon, Grasshopper) can pair a config
-    # with scores from a run in another mode; the threshold defaults and
-    # units differ per mode, so refuse instead of carving with the wrong rule.
-    if pre_manifest.mode and pre_manifest.mode != conf.mode:
-        raise ValueError(
-            f"The scores in {scores_path} come from a '{pre_manifest.mode}' run, but "
-            f"the config's mode is '{conf.mode}'. Re-run preprocessing or use a "
-            f"config with mode '{pre_manifest.mode}'."
-        )
-    if kind == "violation_count" and spec.method != "cutoff":
-        raise ValueError(
-            f"Scores in {scores_path} are violation counts (preprocessing mode "
-            f"'{pre_manifest.mode}'), but the config requests threshold method "
-            f"'{spec.method}'. Use a numeric threshold (a raw-score cutoff) "
-            f"or match the config mode to the preprocessing run."
-        )
-    # With carve_above, each voxel goes at the cutoff of the lowest
-    # carved run below it; comparing that value with the cutoff gives the
-    # mask after carve_above, and lets carve_fraction count what it removes.
-    removal_scores = (carve_above_scores(scores.reshape(grid_shape), occ,
-                                         conf.carve_above_min_consecutive)
-                      if conf.carve_above else None)
-    thr_val = _resolve_threshold(
-        occ_scores, spec, None if removal_scores is None else removal_scores[occ])
-
-    # Threshold to mask. Empty cells are False: there is nothing to keep.
-    mask = occ & (scores <= thr_val).reshape(grid_shape)
-    if mask.sum() == occ.sum():
-        import warnings
-        warnings.warn(
-            f"Thresholding produced an all-True mask (nothing carved). "
-            f"Threshold value {thr_val:.4g} may be too high.",
-            stacklevel=2,
-        )
-    elif not mask.any():
-        import warnings
-        warnings.warn(
-            f"Thresholding produced an all-False mask (everything carved). "
-            f"Threshold value {thr_val:.4g} may be too low.",
-            stacklevel=2,
-        )
-    # Column post-processing belongs to the mask, so that mask.npy and the
-    # retention reported below describe the envelope that gets exported.
-    carve_above_removed = 0
-    if conf.carve_above:
-        kept_before = int(mask.sum())
-        mask = occ & (removal_scores <= thr_val)
-        carve_above_removed = kept_before - int(mask.sum())
-    # Slope limit: turns cliffs and spires left by per-voxel cutoffs into ramps.
-    max_slope = conf.effective_max_slope_deg()
-    mask_before_slope = mask
-    if max_slope is not None:
-        mask = limit_column_slope(mask, occ, max_slope)
-    slope_removed = int(mask_before_slope.sum()) - int(mask.sum())
-
-    mask_path = out_path / "mask.npy"
-    np.save(mask_path, mask, allow_pickle=False)
-
-    # Stable stage hash for reproducibility: method + configured value,
-    # never the resolved (score-dependent) cutoff.
-    snippet = {
-        "threshold_method": spec.method,
-        "threshold_value": spec.value,
-        "score_smoothing": conf.score_smoothing,
-        "carve_above": conf.carve_above,
-        "carve_above_min_consecutive": conf.carve_above_min_consecutive,
-        "max_slope_deg": max_slope,
-    }
-    stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
-
-    # Per-stage diagnostics
-    diag_dir = ensure_diag(out_path)
-    nn = occ_scores
-    occupied = int(occ.sum())
-    kept = int(mask.sum())
-    removed = occupied - kept
-    threshold_method = spec.method
-    summary = {
-        "threshold_method": threshold_method,
-        "threshold_value": float(thr_val),
-        "voxels_grid": int(np.prod(grid_shape)),
-        "voxels_occupied": occupied,
-        "voxels_kept": kept,
-        "voxels_removed": removed,
-        "retention_pct": round(100.0 * kept / max(occupied, 1), 2),
-        "mask_shape": [int(x) for x in grid_shape],
-        "upstream_hash": upstream_hash,
-        "carve_above_applied": conf.carve_above,
-        "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
-        "carve_above_extra_voxels_removed": carve_above_removed,
-        "max_slope_deg": max_slope,
-        "slope_limit_extra_voxels_removed": slope_removed,
-        "score_smooth_applied": _smooth_applied,
-        "score_smoothing_m": _smooth_radius_m,
-        "score_smoothing_sigma_voxels": _sigma_voxels,
-        # Scores the threshold was compared with: occupied voxels only, after
-        # score smoothing when it is applied.
-        "occupied_score_stats": score_statistics(nn, detailed=conf.diagnostics),
-    }
-    # Performance reporting, with the score unit from the mode registry
-    mode_name = pre_manifest.mode or "unknown"
-    mode_spec = MODES.get(mode_name)
-    weight_unit = mode_spec.weight_unit if mode_spec else "dimensionless"
-    # Load patch weights if available
-    pw_path = pre_manifest.patch_weights_path
-    n_samples = pre_manifest.sample_point_count
-    if pw_path and Path(pw_path).is_file():
-        patch_weights = np.load(pw_path, allow_pickle=False)
-        total_weight = float(patch_weights.sum())
-        summary["total_patch_weight"] = total_weight
-        summary["weight_unit"] = weight_unit
-        # Obstruction removed: score mass of carved voxels / building score mass
-        carved_mask = ~mask[occ]  # aligned with nn (occupied voxels)
-        score_mass_carved = float(nn[carved_mask].sum())
-        score_mass_total = float(nn.sum())
-        if score_mass_total > 0:
-            summary["obstruction_fraction_carved"] = round(score_mass_carved / score_mass_total, 4)
-            by_slope = float(nn[mask_before_slope[occ] & ~mask[occ]].sum())
-            summary["obstruction_fraction_carved_by_slope_limit"] = round(
-                by_slope / score_mass_total, 4)
-        if n_samples and n_samples > 0:
-            # Score mass divided by the number of sample points
-            summary["mean_obstruction_per_sample"] = round(score_mass_total / n_samples, 2)
-            summary["mean_obstruction_carved_per_sample"] = round(score_mass_carved / n_samples, 2)
-            summary["sample_point_count"] = n_samples
-
-    # Histogram with threshold line, only when diagnostic plots are enabled.
-    if conf.diagnostic_plots:
-        summary["threshold_histogram"] = str(diag_dir / "threshold_histogram.png")
-        save_histogram(
-            nn, diag_dir, "threshold_histogram.png",
-            threshold_line=thr_val,
-            title=f"Voxel scores, threshold={thr_val:.4g} ({threshold_method})",
-            xlabel=weight_unit,
+        raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
+            raw, kind, pre_manifest.voxel_size, conf.score_smoothing, occ=occ
         )
 
-    # One diagnostic file per stage.
-    summary["timings"] = {
-        "wall_seconds": float(time.perf_counter() - t0_wall),
-        "cpu_seconds": float(time.process_time() - t0_cpu),
-    }
-    write_json(diag_dir, "diagnostic.json", summary)
+        scores = raw.astype(np.float32, copy=False)
+        occ_scores = scores[occ]
+        spec = conf.resolved_threshold()
+        # Standalone re-thresholding (CLI, daemon, Grasshopper) can pair a config
+        # with scores from a run in another mode; the threshold defaults and
+        # units differ per mode, so refuse instead of carving with the wrong rule.
+        if pre_manifest.mode and pre_manifest.mode != conf.mode:
+            raise ValueError(
+                f"The scores in {scores_path} come from a '{pre_manifest.mode}' run, but "
+                f"the config's mode is '{conf.mode}'. Re-run preprocessing or use a "
+                f"config with mode '{pre_manifest.mode}'."
+            )
+        if kind == "violation_count" and spec.method != "cutoff":
+            raise ValueError(
+                f"Scores in {scores_path} are violation counts (preprocessing mode "
+                f"'{pre_manifest.mode}'), but the config requests threshold method "
+                f"'{spec.method}'. Use a numeric threshold (a raw-score cutoff) "
+                f"or match the config mode to the preprocessing run."
+            )
+        # With carve_above, each voxel goes at the cutoff of the lowest
+        # carved run below it; comparing that value with the cutoff gives the
+        # mask after carve_above, and lets carve_fraction count what it removes.
+        removal_scores = (carve_above_scores(scores.reshape(grid_shape), occ,
+                                             conf.carve_above_min_consecutive)
+                          if conf.carve_above else None)
+        thr_val = _resolve_threshold(
+            occ_scores, spec, None if removal_scores is None else removal_scores[occ])
 
-    # Manifest last (see remove_previous_stage_outputs at the start).
-    tm = ThresholdingManifest(
-        hash=stage_hash,
-        mask_path=str(mask_path),
-        upstream_manifest=str(pre_manifest_path),
-        upstream_hash=upstream_hash,
-        resolved_threshold=spec,
-        score_smoothing_m=_smooth_radius_m,
-        max_slope_deg=max_slope,
-    )
-    (out_path / "manifest.json").write_text(schema_to_json(tm), encoding="utf-8")
+        # Threshold to mask. Empty cells are False: there is nothing to keep.
+        mask = occ & (scores <= thr_val).reshape(grid_shape)
+        if mask.sum() == occ.sum():
+            report_issue(
+                "nothing_carved",
+                f"Thresholding produced an all-True mask (nothing carved). "
+                f"Threshold value {thr_val:.4g} may be too high.",
+            )
+        elif not mask.any():
+            report_issue(
+                "everything_carved",
+                f"Thresholding produced an all-False mask (everything carved). "
+                f"Threshold value {thr_val:.4g} may be too low.",
+            )
+        # Column post-processing belongs to the mask, so that mask.npy and the
+        # retention reported below describe the envelope that gets exported.
+        carve_above_removed = 0
+        if conf.carve_above:
+            kept_before = int(mask.sum())
+            mask = occ & (removal_scores <= thr_val)
+            carve_above_removed = kept_before - int(mask.sum())
+        # Slope limit: turns cliffs and spires left by per-voxel cutoffs into ramps.
+        max_slope = conf.effective_max_slope_deg()
+        mask_before_slope = mask
+        if max_slope is not None:
+            mask = limit_column_slope(mask, occ, max_slope)
+        slope_removed = int(mask_before_slope.sum()) - int(mask.sum())
 
-    return ThresholdingResult(
-        out_dir=out_path,
-        mask_path=mask_path,
-        hash=stage_hash,
-        upstream=upstream_hash,
-        upstream_manifest=pre_manifest_path,
-        threshold_method=threshold_method,
-        threshold_value=float(thr_val),
-        voxels_kept=kept,
-        voxels_removed=removed,
-        retention_pct=round(100.0 * kept / max(occupied, 1), 2),
-    )
+        mask_path = out_path / "mask.npy"
+        np.save(mask_path, mask, allow_pickle=False)
+
+        # Stable stage hash for reproducibility: method + configured value,
+        # never the resolved (score-dependent) cutoff.
+        snippet = {
+            "threshold_method": spec.method,
+            "threshold_value": spec.value,
+            "score_smoothing": conf.score_smoothing,
+            "carve_above": conf.carve_above,
+            "carve_above_min_consecutive": conf.carve_above_min_consecutive,
+            "max_slope_deg": max_slope,
+        }
+        stage_hash = hashlib.sha256((json.dumps(snippet, sort_keys=True) + upstream_hash).encode()).hexdigest()[:8]
+
+        # Per-stage diagnostics
+        diag_dir = ensure_diag(out_path)
+        nn = occ_scores
+        occupied = int(occ.sum())
+        kept = int(mask.sum())
+        removed = occupied - kept
+        threshold_method = spec.method
+        summary = {
+            "threshold_method": threshold_method,
+            "threshold_value": float(thr_val),
+            "voxels_grid": int(np.prod(grid_shape)),
+            "voxels_occupied": occupied,
+            "voxels_kept": kept,
+            "voxels_removed": removed,
+            "retention_pct": round(100.0 * kept / max(occupied, 1), 2),
+            "mask_shape": [int(x) for x in grid_shape],
+            "upstream_hash": upstream_hash,
+            "carve_above_applied": conf.carve_above,
+            "carve_above_min_consecutive": conf.carve_above_min_consecutive if conf.carve_above else None,
+            "carve_above_extra_voxels_removed": carve_above_removed,
+            "max_slope_deg": max_slope,
+            "slope_limit_extra_voxels_removed": slope_removed,
+            "score_smooth_applied": _smooth_applied,
+            "score_smoothing_m": _smooth_radius_m,
+            "score_smoothing_sigma_voxels": _sigma_voxels,
+            # Scores the threshold was compared with: occupied voxels only, after
+            # score smoothing when it is applied.
+            "occupied_score_stats": score_statistics(nn, detailed=conf.diagnostics),
+        }
+        # Performance reporting, with the score unit from the mode registry
+        mode_name = pre_manifest.mode or "unknown"
+        mode_spec = MODES.get(mode_name)
+        weight_unit = mode_spec.weight_unit if mode_spec else "dimensionless"
+        # Load patch weights if available
+        pw_path = pre_manifest.patch_weights_path
+        n_samples = pre_manifest.sample_point_count
+        if pw_path and Path(pw_path).is_file():
+            patch_weights = np.load(pw_path, allow_pickle=False)
+            total_weight = float(patch_weights.sum())
+            summary["total_patch_weight"] = total_weight
+            summary["weight_unit"] = weight_unit
+            # Obstruction removed: score mass of carved voxels / building score mass
+            carved_mask = ~mask[occ]  # aligned with nn (occupied voxels)
+            score_mass_carved = float(nn[carved_mask].sum())
+            score_mass_total = float(nn.sum())
+            if score_mass_total > 0:
+                summary["obstruction_fraction_carved"] = round(score_mass_carved / score_mass_total, 4)
+                by_slope = float(nn[mask_before_slope[occ] & ~mask[occ]].sum())
+                summary["obstruction_fraction_carved_by_slope_limit"] = round(
+                    by_slope / score_mass_total, 4)
+            if n_samples and n_samples > 0:
+                # Score mass divided by the number of sample points
+                summary["mean_obstruction_per_sample"] = round(score_mass_total / n_samples, 2)
+                summary["mean_obstruction_carved_per_sample"] = round(score_mass_carved / n_samples, 2)
+                summary["sample_point_count"] = n_samples
+
+        # Histogram with threshold line, only when diagnostic plots are enabled.
+        if conf.diagnostic_plots:
+            summary["threshold_histogram"] = str(diag_dir / "threshold_histogram.png")
+            save_histogram(
+                nn, diag_dir, "threshold_histogram.png",
+                threshold_line=thr_val,
+                title=f"Voxel scores, threshold={thr_val:.4g} ({threshold_method})",
+                xlabel=weight_unit,
+            )
+
+        # One diagnostic file per stage.
+        summary["timings"] = {
+            "wall_seconds": float(time.perf_counter() - t0_wall),
+            "cpu_seconds": float(time.process_time() - t0_cpu),
+        }
+        write_json(diag_dir, "diagnostic.json", summary)
+
+        # Manifest last (see remove_previous_stage_outputs at the start).
+        tm = ThresholdingManifest(
+            hash=stage_hash,
+            mask_path=str(mask_path),
+            upstream_manifest=str(pre_manifest_path),
+            upstream_hash=upstream_hash,
+            resolved_threshold=spec,
+            score_smoothing_m=_smooth_radius_m,
+            max_slope_deg=max_slope,
+        )
+        (out_path / "manifest.json").write_text(schema_to_json(tm), encoding="utf-8")
+
+        return ThresholdingResult(
+            out_dir=out_path,
+            mask_path=mask_path,
+            hash=stage_hash,
+            upstream=upstream_hash,
+            upstream_manifest=pre_manifest_path,
+            threshold_method=threshold_method,
+            threshold_value=float(thr_val),
+            voxels_kept=kept,
+            voxels_removed=removed,
+            retention_pct=round(100.0 * kept / max(occupied, 1), 2),
+            issues=context.issues_of("thresholding"),
+        )

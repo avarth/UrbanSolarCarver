@@ -39,3 +39,13 @@ def test_exception_classes_keep_their_builtin_bases():
     assert issubclass(StageChainError, ValueError)
     assert ConfigError("bad", [ConfigFieldError("voxel_size", "too small")]).errors[0].field == "voxel_size"
     assert all(issubclass(c, UrbanSolarCarverError) for c in (ConfigError, InputError, StageChainError, RunCancelled))
+
+def test_config_warnings_land_in_an_active_run_context():
+    from urbansolarcarver.pydantic_schemas import UserConfig
+    context = RunContext()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        with run_context(context):
+            UserConfig(max_volume_path="v", test_surface_path="s", out_dir="o",
+                       mode="radiative_cooling")
+    assert [i.code for i in context.issues] == ["experimental_mode"]

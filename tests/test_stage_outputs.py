@@ -150,3 +150,12 @@ def test_thresholding_manifest_records_the_resolved_settings(tmp_path, threshold
     assert manifest.resolved_threshold.value == conf.carve_fraction
     assert manifest.score_smoothing_m == pytest.approx(1.1 * conf.voxel_size)
     assert manifest.max_slope_deg == 75.0
+
+
+def test_thresholding_result_carries_its_issues(tmp_path, thresholded_run):
+    from urbansolarcarver import thresholding
+    from urbansolarcarver.pydantic_schemas import ThresholdSpec
+    conf, thr = thresholded_run
+    keep_everything = conf.model_copy(update={"threshold": ThresholdSpec(method="cutoff", value=1e9)})
+    result = _quietly(thresholding, thr.upstream_manifest, keep_everything, thr.out_dir)
+    assert [i.code for i in result.issues] == ["nothing_carved"]

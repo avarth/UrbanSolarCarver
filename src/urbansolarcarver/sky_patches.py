@@ -34,6 +34,7 @@ import torch
 from typing import List, Sequence          
 import math
 from urbansolarcarver.session import session_cache
+from urbansolarcarver.run_context import report_issue
 
 # Ladybug objects are imported on first use, so importing this module does
 # not require Ladybug, and are then kept for reuse.
@@ -221,11 +222,10 @@ def compute_radiative_cooling_weights(
     # The Martin-Berdahl fit (Eq. 1) is treated as valid for dew points from
     # -15 to +25 °C; outside that range warn, but still compute the weights.
     if dewpoint_celsius < -15.0 or dewpoint_celsius > 25.0:
-        import warnings
-        warnings.warn(
+        report_issue(
+            "dew_point_outside_fit",
             f"Dew point {dewpoint_celsius:.1f} °C is outside the Martin-Berdahl fit "
             f"range [−15, 25] °C; radiative cooling weights may be inaccurate.",
-            stacklevel=2,
         )
     # Eq. 1: clear-sky hemispherical emissivity, x = T_dp / 100 with T_dp in °C.
     # The upper clamp keeps (1 - eps_global) positive for the power in Eq. 2.
@@ -561,13 +561,12 @@ def compute_EPW_based_weights(
 
             w_ben = benefit_series * period_mask
             if not w_ben.any():
-                import warnings
-                warnings.warn(
+                report_issue(
+                    "zero_patch_weights",
                     "benefit mode (simulated_weights_path): the artifact's benefit "
                     "weights are zero everywhere in the analysis period, so "
                     "all patch weights are zero and the carve will be "
                     "degenerate. Widen the period or check the artifact.",
-                    stacklevel=2,
                 )
                 return torch.zeros(P, device=device)
 
@@ -582,13 +581,12 @@ def compute_EPW_based_weights(
                         0.0, None,
                     )
                     if not weights_np.any():
-                        import warnings
-                        warnings.warn(
+                        report_issue(
+                            "zero_patch_weights",
                             "benefit mode (simulated_weights_path, include_harm): "
                             "harm exceeds benefit for every sky patch, so all "
                             "weights are zero and the carve will be "
                             "degenerate.",
-                            stacklevel=2,
                         )
             return torch.from_numpy(
                 weights_np.astype(np.float32)).to(device)
@@ -611,14 +609,13 @@ def compute_EPW_based_weights(
         if not cold_hoys:
             # Return here: passing an empty hoys list to Ladybug would not
             # give zeros, because SkyMatrix treats [] as the whole year.
-            import warnings
-            warnings.warn(
+            report_issue(
+                "zero_patch_weights",
                 f"benefit mode: no hours in the analysis period are below "
                 f"balance_temperature - balance_offset = {t_cutoff:g} °C, "
                 f"so all patch weights are zero and the carve will be "
                 f"degenerate. Widen the analysis period or check "
                 f"balance_temperature.",
-                stacklevel=2,
             )
             return torch.zeros(P, device=device)
 
@@ -661,14 +658,13 @@ def compute_EPW_based_weights(
                     weights_np - _cumulative_patch_matrix(hot_hoys), 0.0, None
                 )
                 if not weights_np.any():
-                    import warnings
-                    warnings.warn(
+                    report_issue(
+                        "zero_patch_weights",
                         "benefit mode (include_harm=true): hot-hour harm "
                         "exceeds cold-hour benefit for every sky patch, so all "
                         "weights are zero and the carve will be degenerate. "
                         "Narrow the analysis period or use "
                         "include_harm=false.",
-                        stacklevel=2,
                     )
 
         return torch.from_numpy(weights_np).to(device)

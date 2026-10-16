@@ -144,15 +144,16 @@ class TestTraceMultiHitGrid:
         assert ray_ids.shape[0] == 0
         assert voxels.shape == (0, 3)
 
-    def test_cpu_path_produces_hits(self):
-        """The no-Warp fallback warns that it is approximate and still hits."""
+    def test_cpu_path_produces_hits(self, caplog):
+        """The no-Warp fallback logs that it is approximate and still hits."""
         args = _axis_aligned_ray(
             origin=(-0.5, 0.5, 0.5),
             direction=(1.0, 0.0, 0.0),
             resolution=5, voxel_size=1.0,
         )
-        with pytest.warns(UserWarning, match="fixed-step ray marcher"):
+        with caplog.at_level("WARNING", logger="urbansolarcarver.raytracer"):
             ray_ids, p_ids, voxels = trace_multi_hit_grid(*args)
+        assert "fixed-step ray marcher" in caplog.text
         assert ray_ids.shape[0] > 0
         # All voxel indices should be in [0, 5)
         assert (voxels >= 0).all()

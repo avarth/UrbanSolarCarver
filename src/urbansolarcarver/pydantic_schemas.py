@@ -15,10 +15,10 @@ from __future__ import annotations
 
 import calendar
 import os
-import warnings
 from typing import Annotated, Optional, Union, List, Tuple, Literal
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, field_validator, model_validator
 from .errors import UrbanSolarCarverWarning  # noqa: F401 (re-exported)
+from .run_context import report_issue
 from .mode_registry import (
     ALL_MODE_NAMES, EXPERIMENTAL_MODES, MODES, MODES_NEEDING_EPW, MODES_NEEDING_PERIOD,
 )
@@ -507,10 +507,9 @@ class UserConfig(BaseModel):
         if v not in ALL_MODE_NAMES:
             raise ValueError(f"mode must be one of {sorted(ALL_MODE_NAMES)}")
         if v in EXPERIMENTAL_MODES:
-            warnings.warn(
+            report_issue(
+                "experimental_mode",
                 f"Mode '{v}' is experimental and may change or be removed in future versions.",
-                UrbanSolarCarverWarning,
-                stacklevel=2,
             )
         return v
 
@@ -561,18 +560,16 @@ class UserConfig(BaseModel):
         if (spec.method == "carve_fraction" and not reads_carve_fraction
                 and "carve_fraction" in self.model_fields_set
                 and spec.value != self.carve_fraction):
-            warnings.warn(
+            report_issue(
+                "threshold_value_disagrees",
                 f"threshold value {spec.value} and carve_fraction={self.carve_fraction} "
                 f"disagree; using the threshold value {spec.value}.",
-                UrbanSolarCarverWarning,
-                stacklevel=2,
             )
         elif spec.method != "carve_fraction" and "carve_fraction" in self.model_fields_set:
-            warnings.warn(
+            report_issue(
+                "carve_fraction_unused",
                 f"carve_fraction={self.carve_fraction} is unused: mode '{self.mode}' "
                 f"thresholds with '{spec}'.",
-                UrbanSolarCarverWarning,
-                stacklevel=2,
             )
         return self
 
@@ -600,10 +597,9 @@ class UserConfig(BaseModel):
         used = MODES[self.mode].extra_params
         ignored = sorted((self.model_fields_set & _MODE_SPECIFIC_FIELDS) - used)
         if ignored:
-            warnings.warn(
+            report_issue(
+                "settings_unused_by_mode",
                 f"mode '{self.mode}' does not use: {', '.join(ignored)} (ignored)",
-                UrbanSolarCarverWarning,
-                stacklevel=2,
             )
         return self
 
@@ -616,12 +612,11 @@ class UserConfig(BaseModel):
                     f"(got mode '{self.mode}')"
                 )
             if {"balance_temperature", "balance_offset"} & self.model_fields_set:
-                warnings.warn(
+                report_issue(
+                    "balance_point_unused",
                     "balance_temperature/balance_offset are unused when "
                     "simulated_weights_path is set; the artifact's hourly weights "
                     "replace the balance-point filter.",
-                    UrbanSolarCarverWarning,
-                    stacklevel=2,
                 )
         return self
 
@@ -669,10 +664,9 @@ class UserConfig(BaseModel):
         except ValueError:
             safe_max = 2_000_000
         if self.ray_batch_size > safe_max:
-            warnings.warn(
+            report_issue(
+                "ray_batch_size_clamped",
                 f"ray_batch_size={self.ray_batch_size} is too large; clamping to {safe_max}.",
-                UrbanSolarCarverWarning,
-                stacklevel=2,
             )
             self.ray_batch_size = safe_max
         return self

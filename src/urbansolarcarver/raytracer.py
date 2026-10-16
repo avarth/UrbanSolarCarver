@@ -976,11 +976,9 @@ def trace_multi_hit_grid(
     if origins.shape[0] == 0:
         empty1 = torch.empty((0,), dtype=torch.long, device=origins.device)
         return empty1, empty1, torch.empty((0, 3), dtype=torch.long, device=origins.device)
-    import warnings
-    warnings.warn(
+    log.warning(
         "Warp is not available: using the fixed-step ray marcher, which is "
-        "slower and can miss voxels that oblique rays only clip.",
-        stacklevel=2,
+        "slower and can miss voxels that oblique rays only clip."
     )
     return _trace_fixed_step(min_corner, float(scale), resolution, origins, ray_dirs,
                              sky_patch_ids, voxel_size, ray_length)

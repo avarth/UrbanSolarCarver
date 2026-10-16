@@ -138,6 +138,7 @@ from urbansolarcarver.session import session_cache
 from urbansolarcarver.grid_planning import check_voxel_grid_budget, plan_voxel_grid
 
 from .load_config import user_config
+from .run_context import report_issue
 
 def voxelize(envelope_mesh, config: user_config, device: torch.device | None = None):
     """
@@ -815,14 +816,13 @@ def discretize_surface_with_normals(
                 "near_zero_fraction": round(float((wts < 0.1).mean()), 4),
             })
             if max_w < 0.999:
-                import warnings
-                warnings.warn(
+                report_issue(
+                    "edge_taper_excluded_component",
                     f"edge_taper={edge_taper:g} m: test-surface component "
                     f"{component_index} never reaches full weight "
                     f"(max {max_w:.2f}); it is narrower than ~2x edge_taper "
                     f"and is partially or wholly excluded from the protected "
                     f"program.",
-                    stacklevel=2,
                 )
 
         # 3) Orient normals to agree with the component's area-weighted
@@ -843,13 +843,12 @@ def discretize_surface_with_normals(
     problems = [f"{len(idx)} {why} (components {idx[:10]}{'...' if len(idx) > 10 else ''})"
                 for why, idx in skipped.items() if idx]
     if problems:
-        import warnings
-        warnings.warn(
+        report_issue(
+            "test_surface_components_skipped",
             f"Test surface: {', '.join(problems)} of {len(submeshes)} components "
             f"were skipped and are not protected. Each panel must be a single "
             f"flat face (coplanarity tolerance {coplanarity_tol_deg:g} deg); "
             f"explode polysurfaces into planar faces.",
-            stacklevel=2,
         )
 
     if not all_points:
@@ -1646,12 +1645,11 @@ def cleanup_mesh(
     if not large and parts:
         # Every part is below min_face_count: keep the largest one rather
         # than everything (which would ignore the setting) or nothing.
-        import warnings
         largest = max(parts, key=lambda p: len(p.faces))
-        warnings.warn(
+        report_issue(
+            "mesh_cleanup_kept_largest_part",
             f"cleanup_mesh: no mesh part has min_face_count={min_face_count} faces; "
             f"keeping only the largest ({len(largest.faces)} faces) of {len(parts)}.",
-            stacklevel=2,
         )
         return largest
     return trimesh.util.concatenate(large) if large else mesh

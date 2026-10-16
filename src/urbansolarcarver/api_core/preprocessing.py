@@ -14,6 +14,7 @@ from ._diagnostics import (
     score_statistics, warn_score_anomalies,
 )
 from ..pydantic_schemas import PreprocessingManifest, schema_to_json
+from ..run_context import Issue, report_issue, stage_context
 from ..carving import (
     carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes,
     load_meshes, sample_period, validate_inputs,
@@ -47,6 +48,7 @@ class PreprocessingResult:
     dtype: str
     hash: str
     device_info: str = ""
+    issues: tuple[Issue, ...] = ()
     @property
     def manifest_path(self) -> Path:
        return self.out_dir / "manifest.json"
@@ -219,232 +221,233 @@ def preprocessing(
         ``config_snapshot.json``, and, with ``cfg.diagnostic_plots``, the
         score histogram and sky-patch weight plots.
     """
-    _t0_wall = time.perf_counter()
-    _t0_cpu = time.process_time()
-    _step_times = {}
-    def _mark(label):
-        _step_times[label] = time.perf_counter() - _t0_wall
+    with stage_context("preprocessing") as context:
+        _t0_wall = time.perf_counter()
+        _t0_cpu = time.process_time()
+        _step_times = {}
+        def _mark(label):
+            _step_times[label] = time.perf_counter() - _t0_wall
 
-    conf = _resolve_cfg(cfg)
-    validate_inputs(conf)  # fail fast on missing mesh/EPW files
-    out_path = _ensure_out_dir(out_dir, "preprocessing")
-    # A run that fails midway must not leave the previous manifest pointing
-    # at half-overwritten arrays: the manifest is written last.
-    remove_previous_stage_outputs(out_path, _PREPROCESSING_OUTPUTS)
+        conf = _resolve_cfg(cfg)
+        validate_inputs(conf)  # fail fast on missing mesh/EPW files
+        out_path = _ensure_out_dir(out_dir, "preprocessing")
+        # A run that fails midway must not leave the previous manifest pointing
+        # at half-overwritten arrays: the manifest is written last.
+        remove_previous_stage_outputs(out_path, _PREPROCESSING_OUTPUTS)
 
-    full_cfg = conf.model_dump()
-    stage_hash = hashlib.sha256(json.dumps(full_cfg, sort_keys=True).encode()).hexdigest()[:8]
+        full_cfg = conf.model_dump()
+        stage_hash = hashlib.sha256(json.dumps(full_cfg, sort_keys=True).encode()).hexdigest()[:8]
 
-    resolved_device = resolve_device(conf.device)
-    device_info = device_summary(resolved_device)
-    _mark("config_and_device")
+        resolved_device = resolve_device(conf.device)
+        device_info = device_summary(resolved_device)
+        _mark("config_and_device")
 
-    mesh_env, mesh_insol = load_meshes(conf)
-    # Work in a local frame anchored at the max volume's min corner.  Rays,
-    # voxelization and sampling run in float32; georeferenced coordinates
-    # (UTM northings ~4.5e6 m) leave float32 a resolution of ~0.5 m.  Every
-    # persisted coordinate is shifted back to world space below.
-    # Local coordinates are rounded to 1 µm: subtracting a large frame leaves
-    # ~1e-9 m of rounding noise, enough to flip sampling decisions for points
-    # that lie exactly on panel edges, so the same scene placed elsewhere
-    # would sample (and carve) slightly differently.
-    frame = np.asarray(mesh_env.bounds[0], dtype=np.float64)
-    mesh_env = mesh_env.copy()
-    mesh_env.vertices = np.round(mesh_env.vertices - frame, 6)
-    mesh_insol = mesh_insol.copy()
-    mesh_insol.vertices = np.round(mesh_insol.vertices - frame, 6)
-    _mark("load_meshes")
+        mesh_env, mesh_insol = load_meshes(conf)
+        # Work in a local frame anchored at the max volume's min corner.  Rays,
+        # voxelization and sampling run in float32; georeferenced coordinates
+        # (UTM northings ~4.5e6 m) leave float32 a resolution of ~0.5 m.  Every
+        # persisted coordinate is shifted back to world space below.
+        # Local coordinates are rounded to 1 µm: subtracting a large frame leaves
+        # ~1e-9 m of rounding noise, enough to flip sampling decisions for points
+        # that lie exactly on panel edges, so the same scene placed elsewhere
+        # would sample (and carve) slightly differently.
+        frame = np.asarray(mesh_env.bounds[0], dtype=np.float64)
+        mesh_env = mesh_env.copy()
+        mesh_env.vertices = np.round(mesh_env.vertices - frame, 6)
+        mesh_insol = mesh_insol.copy()
+        mesh_insol.vertices = np.round(mesh_insol.vertices - frame, 6)
+        _mark("load_meshes")
 
-    # voxelize checks the grid size against grid_planning.MAX_GRID_VOXELS
-    # before allocating anything.
-    voxel_grid, origin, extent, resolution = voxelize(mesh_env, conf, device=resolved_device)
-    _mark("voxelize")
-    pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, conf)
-    _mark("sample_surface")
-    if pts.shape[0] == 0:
-        raise ValueError(
-            "No sample points were generated from the test surface. "
-            "Check that test_surface_path contains valid geometry and that "
-            "grid_step is not larger than the surface extent."
+        # voxelize checks the grid size against grid_planning.MAX_GRID_VOXELS
+        # before allocating anything.
+        voxel_grid, origin, extent, resolution = voxelize(mesh_env, conf, device=resolved_device)
+        _mark("voxelize")
+        pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, conf)
+        _mark("sample_surface")
+        if pts.shape[0] == 0:
+            raise ValueError(
+                "No sample points were generated from the test surface. "
+                "Check that test_surface_path contains valid geometry and that "
+                "grid_step is not larger than the surface extent."
+            )
+
+        mode = conf.mode
+        if mode == "radiative_cooling":
+            _check_radiative_cooling_surface(norms)
+
+        # edge_taper weights each sample point's contribution to the scores. The
+        # violation-count modes count rays without weights, so there it is
+        # ignored with a warning.
+        point_weights = None
+        if conf.edge_taper > 0.0:
+            if MODES[mode].score_kind == "violation_count":
+                report_issue(
+                    "edge_taper_ignored",
+                    f"edge_taper={conf.edge_taper:g} m is ignored by mode "
+                    f"'{mode}': violation-count carving is binary per ray and "
+                    f"has no per-point weighting.",
+                )
+            else:
+                point_weights = sample_weights
+
+        raw_scores, scores_kind, patch_weights = _compute_raw_scores(
+            voxel_grid, origin, extent, resolution, pts, norms, conf,
+            point_weights=point_weights,
         )
+        warn_score_anomalies(raw_scores, context="preprocessing")
+        _mark("ray_tracing")
 
-    mode = conf.mode
-    if mode == "radiative_cooling":
-        _check_radiative_cooling_surface(norms)
+        scores_path = out_path / "scores.npy"
+        np.save(scores_path, raw_scores, allow_pickle=False)
 
-    # edge_taper weights each sample point's contribution to the scores. The
-    # violation-count modes count rays without weights, so there it is
-    # ignored with a warning.
-    point_weights = None
-    if conf.edge_taper > 0.0:
-        if MODES[mode].score_kind == "violation_count":
-            import warnings
-            warnings.warn(
-                f"edge_taper={conf.edge_taper:g} m is ignored by mode "
-                f"'{mode}': violation-count carving is binary per ray and "
-                f"has no per-point weighting.",
-                stacklevel=2,
+        # Back to world coordinates for everything persisted.
+        world_origin = np.asarray(origin, dtype=np.float64) + frame
+
+        # Persist patch weights for downstream performance reporting
+        if patch_weights is not None:
+            pw_path = out_path / "patch_weights.npy"
+            pw_np = patch_weights.cpu().numpy() if hasattr(patch_weights, 'cpu') else np.asarray(patch_weights)
+            np.save(pw_path, pw_np, allow_pickle=False)
+        else:
+            pw_path = None
+
+        # Persist test points and normals for diagnostics and GH visualization
+        test_points_path = out_path / "test_points.npy"
+        test_normals_path = out_path / "test_normals.npy"
+        np.save(test_points_path, pts.astype(np.float64) + frame, allow_pickle=False)
+        np.save(test_normals_path, norms, allow_pickle=False)
+
+        # Persist voxel grid so thresholding and exporting can reuse it without
+        # re-voxelizing
+        import torch
+        voxel_grid_path = out_path / "voxel_grid.npy"
+        np.save(voxel_grid_path, voxel_grid.cpu().numpy() if isinstance(voxel_grid, torch.Tensor) else voxel_grid, allow_pickle=False)
+
+        # Persist analysis mesh for downstream visualization and diagnostics
+        if analysis_mesh is not None:
+            analysis_mesh.vertices = analysis_mesh.vertices + frame
+            analysis_mesh_path = out_path / "analysis_mesh.json"
+            analysis_mesh_path.write_text(
+                json.dumps(analysis_mesh.to_dict()), encoding="utf-8"
             )
         else:
-            point_weights = sample_weights
+            analysis_mesh_path = None
+        _mark("save_npy_and_mesh")
 
-    raw_scores, scores_kind, patch_weights = _compute_raw_scores(
-        voxel_grid, origin, extent, resolution, pts, norms, conf,
-        point_weights=point_weights,
-    )
-    warn_score_anomalies(raw_scores, context="preprocessing")
-    _mark("ray_tracing")
-
-    scores_path = out_path / "scores.npy"
-    np.save(scores_path, raw_scores, allow_pickle=False)
-
-    # Back to world coordinates for everything persisted.
-    world_origin = np.asarray(origin, dtype=np.float64) + frame
-
-    # Persist patch weights for downstream performance reporting
-    if patch_weights is not None:
-        pw_path = out_path / "patch_weights.npy"
-        pw_np = patch_weights.cpu().numpy() if hasattr(patch_weights, 'cpu') else np.asarray(patch_weights)
-        np.save(pw_path, pw_np, allow_pickle=False)
-    else:
-        pw_path = None
-
-    # Persist test points and normals for diagnostics and GH visualization
-    test_points_path = out_path / "test_points.npy"
-    test_normals_path = out_path / "test_normals.npy"
-    np.save(test_points_path, pts.astype(np.float64) + frame, allow_pickle=False)
-    np.save(test_normals_path, norms, allow_pickle=False)
-
-    # Persist voxel grid so thresholding and exporting can reuse it without
-    # re-voxelizing
-    import torch
-    voxel_grid_path = out_path / "voxel_grid.npy"
-    np.save(voxel_grid_path, voxel_grid.cpu().numpy() if isinstance(voxel_grid, torch.Tensor) else voxel_grid, allow_pickle=False)
-
-    # Persist analysis mesh for downstream visualization and diagnostics
-    if analysis_mesh is not None:
-        analysis_mesh.vertices = analysis_mesh.vertices + frame
-        analysis_mesh_path = out_path / "analysis_mesh.json"
-        analysis_mesh_path.write_text(
-            json.dumps(analysis_mesh.to_dict()), encoding="utf-8"
+        pm = PreprocessingManifest(
+            hash=stage_hash,
+            scores_path=str(scores_path),
+            scores_kind=scores_kind,
+            shape=tuple(voxel_grid.shape),
+            origin=tuple(map(float, world_origin)),
+            voxel_grid_path=str(voxel_grid_path),
+            voxel_size=float(conf.voxel_size),
+            mode=mode,
+            patch_weights_path=str(pw_path) if pw_path else None,
+            sample_point_count=int(pts.shape[0]),
+            max_volume_path=str(Path(conf.max_volume_path).resolve()),
         )
-    else:
-        analysis_mesh_path = None
-    _mark("save_npy_and_mesh")
 
-    pm = PreprocessingManifest(
-        hash=stage_hash,
-        scores_path=str(scores_path),
-        scores_kind=scores_kind,
-        shape=tuple(voxel_grid.shape),
-        origin=tuple(map(float, world_origin)),
-        voxel_grid_path=str(voxel_grid_path),
-        voxel_size=float(conf.voxel_size),
-        mode=mode,
-        patch_weights_path=str(pw_path) if pw_path else None,
-        sample_point_count=int(pts.shape[0]),
-        max_volume_path=str(Path(conf.max_volume_path).resolve()),
-    )
-
-    # Per-stage diagnostics
-    diag_dir = ensure_diag(out_path)
-    dump_config_snapshot(conf, diag_dir)
-    rs = np.asarray(raw_scores)
-    summary = {
-        "mode": mode,
-        "scores_kind": scores_kind,
-        "voxel_size": float(conf.voxel_size),
-        "grid_shape": [int(x) for x in voxel_grid.shape],
-        "grid_origin": [float(o) for o in world_origin],
-        "grid_extent": float(extent),
-        "grid_resolution": int(resolution),
-        "voxels_total": int(np.prod(voxel_grid.shape)),
-        "voxels_filled": int(voxel_grid.sum().item() if hasattr(voxel_grid, 'sum') else np.sum(voxel_grid)),
-        "test_surface_points": int(pts.shape[0]),
-        "test_points_path": str(test_points_path),
-        "analysis_mesh_path": str(analysis_mesh_path) if analysis_mesh_path else None,
-        "test_normals_path": str(test_normals_path),
-        "scores_path": str(scores_path),
-        "score_stats": score_statistics(rs, detailed=conf.diagnostics),
-    }
-    if conf.edge_taper > 0.0:
-        # Taper transparency: record what the design constraint excluded.
-        sw = np.asarray(sample_weights)
-        summary["edge_taper"] = {
-            "meters": float(conf.edge_taper),
-            "applied": point_weights is not None,
-            "mean_weight": round(float(sw.mean()), 4) if sw.size else None,
-            "near_zero_fraction": round(float((sw < 0.1).mean()), 4) if sw.size else None,
-            "components": taper_stats,
+        # Per-stage diagnostics
+        diag_dir = ensure_diag(out_path)
+        dump_config_snapshot(conf, diag_dir)
+        rs = np.asarray(raw_scores)
+        summary = {
+            "mode": mode,
+            "scores_kind": scores_kind,
+            "voxel_size": float(conf.voxel_size),
+            "grid_shape": [int(x) for x in voxel_grid.shape],
+            "grid_origin": [float(o) for o in world_origin],
+            "grid_extent": float(extent),
+            "grid_resolution": int(resolution),
+            "voxels_total": int(np.prod(voxel_grid.shape)),
+            "voxels_filled": int(voxel_grid.sum().item() if hasattr(voxel_grid, 'sum') else np.sum(voxel_grid)),
+            "test_surface_points": int(pts.shape[0]),
+            "test_points_path": str(test_points_path),
+            "analysis_mesh_path": str(analysis_mesh_path) if analysis_mesh_path else None,
+            "test_normals_path": str(test_normals_path),
+            "scores_path": str(scores_path),
+            "score_stats": score_statistics(rs, detailed=conf.diagnostics),
         }
-    if conf.mode == "radiative_cooling" and conf.min_sky_elevation_deg > 0.0:
-        summary["min_sky_elevation_deg"] = float(conf.min_sky_elevation_deg)
-    if conf.mode == "benefit" and conf.simulated_weights_path:
-        # Provenance: which physics-derived schedule weighted this carve.
-        from ..simulated_weights import read_simulated_weights
-        _b, _h, u_meta = read_simulated_weights(conf.simulated_weights_path)
-        summary["simulated_weights"] = {
-            "path": str(conf.simulated_weights_path),
-            "method": u_meta.get("method"),
-            "generated": u_meta.get("generated"),
-            "archetype": u_meta.get("archetype"),
+        if conf.edge_taper > 0.0:
+            # Taper transparency: record what the design constraint excluded.
+            sw = np.asarray(sample_weights)
+            summary["edge_taper"] = {
+                "meters": float(conf.edge_taper),
+                "applied": point_weights is not None,
+                "mean_weight": round(float(sw.mean()), 4) if sw.size else None,
+                "near_zero_fraction": round(float((sw < 0.1).mean()), 4) if sw.size else None,
+                "components": taper_stats,
+            }
+        if conf.mode == "radiative_cooling" and conf.min_sky_elevation_deg > 0.0:
+            summary["min_sky_elevation_deg"] = float(conf.min_sky_elevation_deg)
+        if conf.mode == "benefit" and conf.simulated_weights_path:
+            # Provenance: which physics-derived schedule weighted this carve.
+            from ..simulated_weights import read_simulated_weights
+            _b, _h, u_meta = read_simulated_weights(conf.simulated_weights_path)
+            summary["simulated_weights"] = {
+                "path": str(conf.simulated_weights_path),
+                "method": u_meta.get("method"),
+                "generated": u_meta.get("generated"),
+                "archetype": u_meta.get("archetype"),
+            }
+        summary["device"] = device_info
+        _mark("build_summary")
+        xlabel = MODES[mode].weight_unit if mode in MODES else "Score"
+
+        # Diagnostic plots only when diagnostic_plots is set, so matplotlib is
+        # not loaded otherwise.
+        if conf.diagnostic_plots:
+            if patch_weights is not None and hasattr(patch_weights, 'size') and patch_weights.size > 0:
+                summary["sky_patch_images"] = [
+                    str(diag_dir / "sky_patch_weights.png"),
+                    str(diag_dir / "sky_patch_weights_intensity.png"),
+                ]
+                save_sky_patch_weights(patch_weights, diag_dir, weight_unit=xlabel)
+                if conf.mode == "benefit" and conf.simulated_weights_path:
+                    # How the simulated weights shifted the sky relative to the
+                    # simple balance-point rule under the same config.
+                    import torch
+                    from ..scoring import get_weights
+                    _, cf_hoys = sample_period(conf)
+                    simple = get_weights(
+                        "benefit", device=torch.device("cpu"),
+                        epw_file=conf.epw_path, hoys=cf_hoys,
+                        balance_temperature=conf.balance_temperature,
+                        balance_offset=conf.balance_offset,
+                        north_deg=conf.north_deg,
+                        include_harm=conf.include_harm,
+                    ).cpu().numpy()
+                    comparison = save_sky_patch_comparison(
+                        simple, np.asarray(patch_weights, dtype=float), diag_dir,
+                        labels=("simple (balance point)", "simulated"),
+                    )
+                    if comparison is not None:
+                        cmp_path, cmp_stats = comparison
+                        summary["sky_patch_comparison_image"] = str(cmp_path)
+                        summary["sky_patch_comparison_stats"] = cmp_stats
+            summary["score_histogram"] = str(diag_dir / "score_histogram.png")
+            save_histogram(rs, diag_dir, "score_histogram.png",
+                           title=f"Raw Scores ({mode})", xlabel=xlabel)
+        _mark("diagnostic_plots_done")
+        # One diagnostic file per stage. Step timings are cumulative (seconds
+        # since the stage started); subtract consecutive entries to get the
+        # duration of each step.
+        summary["timings"] = {
+            "wall_seconds": float(time.perf_counter() - _t0_wall),
+            "cpu_seconds": float(time.process_time() - _t0_cpu),
+            "steps": {k: round(v, 3) for k, v in _step_times.items()},
         }
-    summary["device"] = device_info
-    _mark("build_summary")
-    xlabel = MODES[mode].weight_unit if mode in MODES else "Score"
+        write_json(diag_dir, "diagnostic.json", summary)
+        # Manifest last (see remove_previous_stage_outputs at the start).
+        (out_path / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
 
-    # Diagnostic plots only when diagnostic_plots is set, so matplotlib is
-    # not loaded otherwise.
-    if conf.diagnostic_plots:
-        if patch_weights is not None and hasattr(patch_weights, 'size') and patch_weights.size > 0:
-            summary["sky_patch_images"] = [
-                str(diag_dir / "sky_patch_weights.png"),
-                str(diag_dir / "sky_patch_weights_intensity.png"),
-            ]
-            save_sky_patch_weights(patch_weights, diag_dir, weight_unit=xlabel)
-            if conf.mode == "benefit" and conf.simulated_weights_path:
-                # How the simulated weights shifted the sky relative to the
-                # simple balance-point rule under the same config.
-                import torch
-                from ..scoring import get_weights
-                _, cf_hoys = sample_period(conf)
-                simple = get_weights(
-                    "benefit", device=torch.device("cpu"),
-                    epw_file=conf.epw_path, hoys=cf_hoys,
-                    balance_temperature=conf.balance_temperature,
-                    balance_offset=conf.balance_offset,
-                    north_deg=conf.north_deg,
-                    include_harm=conf.include_harm,
-                ).cpu().numpy()
-                comparison = save_sky_patch_comparison(
-                    simple, np.asarray(patch_weights, dtype=float), diag_dir,
-                    labels=("simple (balance point)", "simulated"),
-                )
-                if comparison is not None:
-                    cmp_path, cmp_stats = comparison
-                    summary["sky_patch_comparison_image"] = str(cmp_path)
-                    summary["sky_patch_comparison_stats"] = cmp_stats
-        summary["score_histogram"] = str(diag_dir / "score_histogram.png")
-        save_histogram(rs, diag_dir, "score_histogram.png",
-                       title=f"Raw Scores ({mode})", xlabel=xlabel)
-    _mark("diagnostic_plots_done")
-    # One diagnostic file per stage. Step timings are cumulative (seconds
-    # since the stage started); subtract consecutive entries to get the
-    # duration of each step.
-    summary["timings"] = {
-        "wall_seconds": float(time.perf_counter() - _t0_wall),
-        "cpu_seconds": float(time.process_time() - _t0_cpu),
-        "steps": {k: round(v, 3) for k, v in _step_times.items()},
-    }
-    write_json(diag_dir, "diagnostic.json", summary)
-    # Manifest last (see remove_previous_stage_outputs at the start).
-    (out_path / "manifest.json").write_text(schema_to_json(pm), encoding="utf-8")
-
-    return PreprocessingResult(
-        out_dir=out_path,
-        volume_path=scores_path,
-        volume_shape=tuple(voxel_grid.shape),
-        dtype=str(raw_scores.dtype),
-        hash=stage_hash,
-        device_info=device_info,
-    )
+        return PreprocessingResult(
+            out_dir=out_path,
+            volume_path=scores_path,
+            volume_shape=tuple(voxel_grid.shape),
+            dtype=str(raw_scores.dtype),
+            hash=stage_hash,
+            device_info=device_info,
+            issues=context.issues_of("preprocessing"),
+        )

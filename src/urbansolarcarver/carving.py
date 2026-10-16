@@ -54,6 +54,7 @@ from .load_config import user_config
 from .mode_registry import ALL_MODE_NAMES, MODES_NEEDING_EPW
 from .sky_patches import fetch_tregenza_patch_directions
 from .sun import get_sun_vectors
+from .run_context import report_issue
 from .raytracer import (
     generate_sun_rays, generate_sky_patch_rays, trace_multi_hit_grid,
     trace_and_count_dda, auto_batch_size, dda_backend_available,
@@ -181,13 +182,13 @@ def _warn_float32_input(path: str, mesh, voxel_size: float) -> None:
     from .io import float32_resolution
     res = float32_resolution(mesh.vertices)
     if res > 0.01 * float(voxel_size) and _stores_float32_vertices(path):
-        warnings.warn(
+        report_issue(
+            "float32_coordinates",
             f"{os.path.basename(path)}: coordinates reach "
             f"{float(np.abs(mesh.vertices).max()):,.0f} m and the file stores "
             f"float32 vertices, so its geometry is rounded to ~{res:.2g} m on disk "
             f"({100 * res / voxel_size:.0f}% of a voxel). Move the model near the "
             f"origin before export, or export PLY with double-precision vertices.",
-            stacklevel=3,
         )
 
 def _validate_cubic_resolution(grid_resolution, func_name: str):
@@ -429,10 +430,10 @@ def carve_with_sun_rays(
     else:
         sun_arr = torch.as_tensor(sun_dirs, dtype=torch.float32, device=voxel_grid.device)
     if sun_arr.numel() == 0:
-        warnings.warn(
+        report_issue(
+            "no_sun_vectors",
             "carve_with_sun_rays: no sun vectors above min_altitude; "
             "the grid is returned unmodified.",
-            stacklevel=2,
         )
         empty = np.empty((0, 3), dtype=np.float32) if return_rays else None
         if return_counts:
@@ -772,13 +773,13 @@ def carve_with_planes(
     # of vertical (roofs, courtyard floors): no usable facade direction.
     flat = lens[:, 0] < 0.05
     if flat.any():
-        warnings.warn(
+        report_issue(
+            "horizontal_test_surfaces",
             f"tilted_plane: {int(flat.sum())} of {len(lens)} sample points lie on "
             f"(nearly) horizontal test surfaces, which have no reliable facing "
             f"direction for a tilted plane. On exactly horizontal surfaces the ray "
             f"goes straight up and protects only the sky directly above; on nearly "
             f"horizontal ones it follows the small horizontal tilt of the normal.",
-            stacklevel=2,
         )
     np.maximum(lens, 1e-9, out=lens)
     n_xy[:, :2] /= lens
