@@ -247,3 +247,92 @@ class TestBenefitWeights:
             "benefit", str(example_epw_path), hoys, torch.device("cpu"),
             include_harm=True, **kw)
         torch.testing.assert_close(w_composite, w_default)
+
+
+# --- Light modules: mode facts and archetype defaults ---
+
+import subprocess
+import sys
+
+LIGHT_MODULES = ("mode_registry", "archetype_defaults", "errors", "run_context")
+
+
+@pytest.mark.parametrize("name", LIGHT_MODULES)
+def test_light_module_imports_with_the_standard_library_alone(name):
+    """Import the module with only the standard library on the path.
+
+    The module's folder is exposed as a bare package (without the package
+    ``__init__``, which imports numpy), so ``run_context`` can reach its
+    sibling ``errors`` module.
+    """
+    folder = Path(__file__).parents[1] / "src" / "urbansolarcarver"
+    code = ("import importlib, sys, types; "
+            "sys.path = [p for p in sys.path if 'site-packages' not in p]; "
+            f"pkg = types.ModuleType('bare'); pkg.__path__ = [r'{folder}']; "
+            "sys.modules['bare'] = pkg; "
+            f"importlib.import_module('bare.{name}')")
+    subprocess.run([sys.executable, "-I", "-c", code], check=True)
+
+
+@pytest.mark.parametrize("mode", ["benefit", "irradiance", "time-based",
+                                  "tilted_plane", "radiative_cooling", "daylight"])
+def test_example_configs_agree_with_the_starting_values(mode):
+    from urbansolarcarver.mode_registry import MODES
+    from urbansolarcarver.pydantic_schemas import expand_analysis_period
+    path = Path(__file__).parents[1] / "configs" / f"config_{mode.replace('-', '_')}.yaml"
+    raw = path.read_bytes()
+    assert not raw.startswith(b"\xef\xbb\xbf")
+    values = expand_analysis_period(yaml.safe_load(raw.decode("utf-8")))
+    for key, value in MODES[mode].starting_values.items():
+        assert values[key] == value
+
+
+def test_mode_order_matches_the_grasshopper_menu():
+    from urbansolarcarver.mode_registry import MODES
+    assert list(MODES) == ["time-based", "irradiance", "benefit", "daylight",
+                           "radiative_cooling", "tilted_plane"]
+
+
+def test_every_mode_has_a_description_and_the_listed_starting_values():
+    from urbansolarcarver.mode_registry import MODES
+    assert all(spec.description for spec in MODES.values())
+    assert MODES["time-based"].description.startswith("Classical solar envelope")
+    assert MODES["daylight"].starting_values == {}
+    assert MODES["tilted_plane"].starting_values == {"tilted_plane_angle_deg": 45.0}
+    assert MODES["radiative_cooling"].starting_values == {"carve_fraction": 0.35}
+    assert MODES["benefit"].starting_values == dict(
+        start_month=10, start_day=15, start_hour=7, end_month=4, end_day=15, end_hour=19)
+
+
+def test_canonical_mode_name_maps_the_alternative_spellings():
+    from urbansolarcarver.mode_registry import MODE_ALIASES, canonical_mode_name
+    assert canonical_mode_name("  TimeBased ") == "time-based"
+    assert canonical_mode_name("time_based") == "time-based"
+    assert canonical_mode_name("tilted-plane") == "tilted_plane"
+    assert canonical_mode_name("radiativecooling") == "radiative_cooling"
+    assert canonical_mode_name("Benefit") == "benefit"
+    assert canonical_mode_name("nonsense") == "nonsense"
+    assert set(MODE_ALIASES.values()) <= set(__import__(
+        "urbansolarcarver.mode_registry", fromlist=["MODES"]).MODES)
+
+
+def test_archetype_defaults_module_holds_the_shoebox_defaults():
+    from urbansolarcarver.archetype_defaults import (
+        ARCHETYPE_DEFAULTS, ARCHETYPE_OPTIONAL_KEYS, WINDOW_TO_WALL_DEFAULTS)
+    assert "wwr" not in ARCHETYPE_DEFAULTS
+    assert ARCHETYPE_DEFAULTS["internal_gains_w_m2"] == 5.0
+    assert ARCHETYPE_DEFAULTS["mass_class"] == "medium"
+    assert WINDOW_TO_WALL_DEFAULTS == {"south": 0.35, "east": 0.15, "west": 0.15, "north": 0.0}
+    assert ARCHETYPE_OPTIONAL_KEYS == ("shading_permanent", "shading_hot", "hot_months")
+
+
+def test_simulated_weights_read_the_archetype_defaults():
+    from urbansolarcarver.archetype_defaults import ARCHETYPE_DEFAULTS
+    from urbansolarcarver.simulated_weights import ZoneParams, expand_shoebox
+    zone = ZoneParams.from_archetype(
+        floor_area=100.0, volume=300.0, u_opaque=0.6, area_opaque=200.0,
+        u_window=1.6, area_window=20.0, ach_vent=0.8, ach_infiltration=0.3)
+    assert zone.t_set_heating == ARCHETYPE_DEFAULTS["t_set_heating"]
+    assert zone.t_set_cooling == ARCHETYPE_DEFAULTS["t_set_cooling"]
+    shoebox = expand_shoebox({"width": 10, "length": 10, "height": 3, "wwr": {"south": 0.3}})
+    assert shoebox["windows"][0][2] == ARCHETYPE_DEFAULTS["g_value"]

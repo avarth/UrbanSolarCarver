@@ -1,4 +1,4 @@
-﻿# UrbanSolarCarver: Time-based mode
+# UrbanSolarCarver: Time-based mode
 # Classic solar envelope: carves voxels that cast shadows on test surfaces
 # during the specified hours. Each voxel's score is the shading it causes
 # (m²·h); by default any shadow at all removes the voxel.

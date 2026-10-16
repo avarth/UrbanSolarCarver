@@ -42,6 +42,8 @@ from typing import Sequence, Tuple
 
 import numpy as np
 
+from .archetype_defaults import ARCHETYPE_DEFAULTS
+
 log = logging.getLogger(__name__)
 
 HOURS = 8760
@@ -84,8 +86,8 @@ class ZoneParams:
     c_m: float
     a_m: float
     a_t: float
-    t_set_heating: float = 20.0
-    t_set_cooling: float = 26.0
+    t_set_heating: float = ARCHETYPE_DEFAULTS["t_set_heating"]
+    t_set_cooling: float = ARCHETYPE_DEFAULTS["t_set_cooling"]
 
     @classmethod
     def from_archetype(
@@ -98,10 +100,10 @@ class ZoneParams:
         area_window: float,
         ach_vent: float,
         ach_infiltration: float,
-        heat_recovery: float = 0.0,
-        mass_class: str = "medium",
-        t_set_heating: float = 20.0,
-        t_set_cooling: float = 26.0,
+        heat_recovery: float = ARCHETYPE_DEFAULTS["heat_recovery"],
+        mass_class: str = ARCHETYPE_DEFAULTS["mass_class"],
+        t_set_heating: float = ARCHETYPE_DEFAULTS["t_set_heating"],
+        t_set_cooling: float = ARCHETYPE_DEFAULTS["t_set_cooling"],
     ) -> "ZoneParams":
         """Derive the network from archetype inputs per ISO 13790.
 
@@ -600,8 +602,8 @@ def expand_shoebox(archetype: dict) -> dict:
     if min(width, length, height) <= 0:
         raise ValueError("shoebox width, length and height must be positive")
     wwr = arch.pop("wwr", None) or {}
-    g_value = float(arch.pop("g_value", 0.6))
-    orientation = float(arch.pop("orientation", 0.0))
+    g_value = float(arch.pop("g_value", ARCHETYPE_DEFAULTS["g_value"]))
+    orientation = float(arch.pop("orientation", ARCHETYPE_DEFAULTS["orientation"]))
 
     unknown = set(wwr) - set(_FACADES)
     if unknown:
@@ -704,7 +706,8 @@ def generate_simulated_weights(
                 "internal_gains_profile_w_m2, not both"
             )
         internal_gains_w_m2 = (profile if profile is not None
-                               else flat if flat is not None else 5.0)
+                               else flat if flat is not None
+                               else ARCHETYPE_DEFAULTS["internal_gains_w_m2"])
     shading_permanent = arch.pop("shading_permanent", None)
     shading_hot = arch.pop("shading_hot", None)
     hot_months = arch.pop("hot_months", None)

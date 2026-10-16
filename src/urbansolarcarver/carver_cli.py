@@ -41,6 +41,9 @@ import typer
 from typer import Option
 
 # Light imports only: no torch, warp or api_core at module level.
+from .archetype_defaults import (
+    ARCHETYPE_DEFAULTS, ARCHETYPE_OPTIONAL_KEYS, WINDOW_TO_WALL_DEFAULTS,
+)
 from .load_config import load_config, user_config
 
 # Windows consoles may use legacy code pages (cp1252 and similar); when output
@@ -553,7 +556,7 @@ def simulate_weights(
 
 
 # Shoebox archetype template written by `usc archetype`. The values come from
-# _ARCHETYPE_DEFAULTS (or the --from file) with any -s overrides applied.
+# ARCHETYPE_DEFAULTS (or the --from file) with any -s overrides applied.
 _ARCHETYPE_TEMPLATE = """\
 # Building archetype for `usc simulate-weights` (simulated benefit weights).
 # Shoebox form: floor area, volume, facade and window areas are derived.
@@ -590,19 +593,7 @@ _SHADING_TEMPLATE = """\
 {hot_months_line}
 """
 
-_ARCHETYPE_DEFAULTS = {
-    "width": 10.0, "length": 10.0, "height": 3.0,
-    "wwr": {"south": 0.35, "east": 0.15, "west": 0.15},
-    "g_value": 0.6, "orientation": 0.0,
-    "u_opaque": 0.6, "u_window": 1.6,
-    "ach_vent": 0.8, "ach_infiltration": 0.3, "heat_recovery": 0.0,
-    "mass_class": "medium",
-    "t_set_heating": 20.0, "t_set_cooling": 26.0,
-    "internal_gains_w_m2": 5.0,
-}
 _WWR_SIDES = ("north", "east", "south", "west")
-# Optional keys with no default (absent = feature off).
-_ARCHETYPE_OPTIONAL = ("shading_permanent", "shading_hot", "hot_months")
 
 
 @app.command(help="Create and validate a shoebox archetype YAML for simulate-weights")
@@ -633,8 +624,8 @@ def archetype(
         ZoneParams, expand_shoebox,
     )
 
-    values = dict(_ARCHETYPE_DEFAULTS)
-    values["wwr"] = dict(values["wwr"])
+    values = dict(ARCHETYPE_DEFAULTS)
+    values["wwr"] = dict(WINDOW_TO_WALL_DEFAULTS)
 
     if from_ is not None:
         base = yaml.safe_load(from_.read_text(encoding="utf-8"))
@@ -648,8 +639,8 @@ def archetype(
                         "only shoebox-form archetypes can be edited here; "
                         "edit that YAML directly instead", fg="red")
             raise typer.Exit(1)
-        unknown = (set(base) - set(_ARCHETYPE_DEFAULTS) - {"wwr"}
-                   - set(_ARCHETYPE_OPTIONAL))
+        unknown = (set(base) - set(ARCHETYPE_DEFAULTS) - {"wwr"}
+                   - set(ARCHETYPE_OPTIONAL_KEYS))
         if unknown:
             typer.secho(f"  Unknown archetype keys in --from file: "
                         f"{sorted(unknown)}", fg="red")
@@ -681,7 +672,7 @@ def archetype(
         if key in ("shading_permanent", "shading_hot"):
             values[key] = float(raw)
             continue
-        if key not in _ARCHETYPE_DEFAULTS or key == "wwr":
+        if key not in ARCHETYPE_DEFAULTS:
             typer.secho(f"  Unknown archetype key {key!r}", fg="red")
             raise typer.Exit(1)
         if key == "mass_class":
@@ -697,13 +688,13 @@ def archetype(
     # arguments, so those keys are left out here (shading is checked
     # separately below); a zero orientation is the default and is dropped.
     arch = {k: v for k, v in values.items()
-            if k not in ("internal_gains_w_m2",) + _ARCHETYPE_OPTIONAL
+            if k not in ("internal_gains_w_m2",) + ARCHETYPE_OPTIONAL_KEYS
             and not (k == "orientation" and not v)}
     try:
         expanded = expand_shoebox(arch)
         windows = expanded.pop("windows")
         ZoneParams.from_archetype(**expanded)
-        if any(k in values for k in _ARCHETYPE_OPTIONAL):
+        if any(k in values for k in ARCHETYPE_OPTIONAL_KEYS):
             from urbansolarcarver.simulated_weights import _shading_factors
             _shading_factors(windows,
                              values.get("shading_permanent"),
@@ -743,7 +734,7 @@ def archetype(
         wwr_block=wwr_block, orientation_line=orientation_line,
         shading_block=shading_block,
         **{k: v for k, v in values.items()
-           if k not in ("wwr", "orientation") + _ARCHETYPE_OPTIONAL},
+           if k not in ("wwr", "orientation") + ARCHETYPE_OPTIONAL_KEYS},
     ), encoding="utf-8")
 
     typer.secho(f"  Wrote {out}", fg="green", bold=True)
