@@ -9,6 +9,8 @@ import os
 import numpy as np
 import trimesh
 
+from .errors import InputError
+
 def _ensure_dir(path: str) -> None:
     """Create parent directory if it doesn’t exist."""
     parent = os.path.dirname(path)
@@ -27,18 +29,24 @@ def load_mesh(path: str) -> trimesh.Trimesh:
 
     Raises
     ------
-    FileNotFoundError
-        If *path* is not a file.
-    ValueError
-        If the file has no triangles (empty, only points or curves, or not
-        parseable as a mesh).  Without this check the problem would only
-        show up later as an empty voxel grid.
+    InputError
+        If *path* is not a file, if trimesh cannot parse it, or if it has no
+        triangles (empty, or only points or curves).  Without the last check
+        the problem would only show up later as an empty voxel grid.
     """
     if not os.path.isfile(path):
-        raise FileNotFoundError(f"load_mesh: file not found: {path}")
-    mesh = trimesh.load(path, force="mesh")
+        raise InputError(f"load_mesh: file not found: {path}")
+    try:
+        mesh = trimesh.load(path, force="mesh")
+    except Exception as exc:
+        # trimesh's parsers fail with many unrelated exception types
+        # (IndexError, KeyError, struct.error...); callers get one.
+        raise InputError(
+            f"load_mesh: could not read {path!r} as a mesh "
+            f"({type(exc).__name__}: {exc})"
+        ) from exc
     if not isinstance(mesh, trimesh.Trimesh) or len(mesh.faces) == 0:
-        raise ValueError(
+        raise InputError(
             f"load_mesh: no triangle geometry found in {path!r}; the file is "
             f"empty, contains only points/curves, or could not be parsed as a mesh."
         )
