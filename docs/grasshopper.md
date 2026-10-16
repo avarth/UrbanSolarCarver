@@ -32,6 +32,20 @@ The builder uses `GH_IO.dll` from the Rhino 8 install (`--ghio <folder>` to poin
 
 A component already placed on a saved canvas keeps the code it was placed with; USC_SyncCanvas updates it (see above).
 
+## Smoke test in Rhino
+
+`tools/grasshopper_example_smoke_test.py` solves `examples/USC_components_for_grasshopper.gh` in a running Rhino 8 (through `RhinoCode.exe`) and compares two runs, for example main against a branch. It needs Rhino open, so it is not part of pytest. Run it with the USC environment's python:
+
+```bash
+python tools/grasshopper_example_smoke_test.py run main D:\path\to\urbanSolarCarver
+python tools/grasshopper_example_smoke_test.py run branch D:\path\to\worktree
+python tools/grasshopper_example_smoke_test.py compare main branch
+```
+
+`run` stops any running daemon, fills the template definition in memory (root panel, output folders, EPW, `start_daemon` and `run` toggles, pipeline 1's geometry from `examples/test_inputs/multiple_buildings`), solves it with the root's `usc_gh.py` and daemon, stops the daemon again and closes the definition without saving. A root without `.venv`, `venv` or `python_path.txt` (a worktree) gets a `python_path.txt` pointing at the python running the script. The report (messages and output counts of every USC component) and the output folders go to `~/.urbansolarcarver/gh_runs/<label>`, a short path because deep output folders exceed Windows' 260-character limit. With several Rhinos open, pass `--rhino <ID>` from `RhinoCode.exe list`.
+
+`compare` matches components by nickname and occurrence, compares their messages (paths, ids and timings removed) and output counts, the meshes byte for byte, integer and boolean arrays (masks) exactly and float arrays (scores) to a relative difference of 1e-5, since GPU atomic adds sum in a varying order (about 1e-7 between runs). It exits with 1 when anything differs.
+
 ## Daemon
 
 The components send their work to a persistent daemon process that keeps the CUDA context and compiled kernels loaded, so repeated runs skip the start-up cost:
