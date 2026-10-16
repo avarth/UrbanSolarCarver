@@ -58,6 +58,31 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ground for nothing. Flat facades aligned with the grid are unaffected.
   Applies to every mode (Warp kernels, the fixed-step fallback and the
   test reference).
+- **A test surface's skin goes with the mass behind it (all modes).** The
+  voxelizer marks every voxel the max volume's surface passes through as
+  occupied, and a surface's own rays skip the voxels its plane passes
+  through (its skin). So a test surface on a max volume face, or inside
+  the max volume, sat in occupied voxels only other surfaces' rays could
+  remove, and where none reached them they stood as one-voxel fins: in
+  front of a neighbour's facade on the plot line, in slots narrower than
+  a voxel between two facing facades, and at block corners. Now a skin
+  occupied skin voxel with nothing of the max volume behind it obstructs
+  the surface like any voxel in front of it, and an occupied skin voxel
+  with max volume behind it is still not counted by the surface's rays
+  but takes the count or score of the voxel behind it, so it is removed
+  whenever that mass is. Empty skin voxels are never counted (in
+  tilted_plane a count would carve the column above them, such as a
+  bridge flush with a protected passage mouth). A lone building
+  protecting its own facades is unchanged. full_blocks example,
+  tilted_plane 45 degrees, 1 m voxels: 0.35% fewer kept voxels (152,229
+  to 151,691), thin columns standing 3 or more voxels above both
+  neighbours 52 to 36; the 19 skin fins found there (up to 92 voxels,
+  20 to 30 above their neighbours) now stand at most one voxel above a
+  neighbour, and most of the remaining thin columns are convex-turn
+  gaps. Same rule in the Warp kernels (new
+  `follow_mass_behind_skin_dda` pass), the fixed-step fallback and the
+  test reference. Rays of zero-weight sample points (edge_taper) are
+  dropped before tracing, so their skin does not follow.
 
 ### Fixed (tilted_plane; results change)
 
