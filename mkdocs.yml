@@ -22,6 +22,10 @@ theme:
     - content.code.copy
     - toc.follow
 
+# Design specs and implementation plans are development records, not site pages.
+exclude_docs: |
+  superpowers/
+
 nav:
   - Home: index.md
   - Getting Started:
