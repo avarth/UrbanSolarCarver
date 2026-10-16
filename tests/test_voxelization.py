@@ -63,8 +63,7 @@ class TestWarpVoxelizer:
     @pytest.mark.parametrize("shape", ["sphere", "box"])
     @pytest.mark.parametrize(
         "device",
-        ["cpu", pytest.param("cuda", marks=pytest.mark.skipif(
-            not torch.cuda.is_available(), reason="CUDA unavailable"))],
+        ["cpu", pytest.param("cuda", marks=pytest.mark.gpu)],
     )
     def test_differences_confined_to_surface_shell(self, shape, device):
         """Warp and trimesh voxelizations may disagree only within one

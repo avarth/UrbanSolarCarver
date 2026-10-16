@@ -118,6 +118,7 @@ class TestSaveHistogram:
         # that it does not raise.
 
 
+@pytest.mark.slow
 def test_importing_the_api_does_not_import_matplotlib():
     import subprocess, sys
     code = "import sys, urbansolarcarver.api; print('matplotlib' in sys.modules)"

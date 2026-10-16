@@ -251,6 +251,7 @@ def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
 
 
 @_SKIP_EPW
+@pytest.mark.slow
 def test_benefit_with_weights_artifact_writes_the_comparison_plot(tmp_path, tiny_cube_mesh,
                                                                   tiny_surface_mesh):
     """With diagnostic_plots, a benefit run with simulated weights also plots

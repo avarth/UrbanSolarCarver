@@ -69,6 +69,7 @@ def _alive(addr, key, proc):
     assert _call(addr, key, {"cmd": "ping"})["status"] == "ok"
 
 
+@pytest.mark.slow
 def test_wrong_authkey_does_not_stop_server(daemon):
     addr, key, proc = daemon
     with pytest.raises(Exception):
@@ -76,6 +77,7 @@ def test_wrong_authkey_does_not_stop_server(daemon):
     _alive(addr, key, proc)
 
 
+@pytest.mark.slow
 def test_unpicklable_message_gets_error_reply(daemon):
     addr, key, proc = daemon
     with Client(addr, authkey=key) as c:
@@ -85,6 +87,7 @@ def test_unpicklable_message_gets_error_reply(daemon):
     _alive(addr, key, proc)
 
 
+@pytest.mark.slow
 def test_client_leaving_before_reply(daemon):
     addr, key, proc = daemon
     c = Client(addr, authkey=key)
@@ -100,6 +103,7 @@ def test_client_leaving_before_reply(daemon):
     ({"cmd": "preprocessing", "config": "does_not_exist.yaml"}, "FileNotFoundError",
      "FileNotFoundError"),
 ])
+@pytest.mark.slow
 def test_bad_requests_get_error_replies(daemon, msg, fragment, error_type):
     addr, key, proc = daemon
     reply = _call(addr, key, msg)

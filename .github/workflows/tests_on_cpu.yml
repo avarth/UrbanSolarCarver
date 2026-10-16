@@ -1,0 +1,40 @@
+# Runs the test suite on a CPU-only Linux runner (Warp's CPU backend), on
+# every push and pull request.  Tests marked `gpu` need CUDA and are left
+# out; `slow` tests run.  The irradiance and benefit modes call Radiance's
+# gendaymtx through ladybug-radiance, which finds it through BINPATH.
+name: tests on CPU
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    env:
+      BINPATH: /usr/bin
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Radiance (gendaymtx for the sky matrix)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y radiance
+
+      - name: Install PyTorch (CPU build) and UrbanSolarCarver
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e ".[dev]"
+
+      - name: Run the tests that do not need CUDA
+        run: python -m pytest -m "not gpu" --strict-markers -q

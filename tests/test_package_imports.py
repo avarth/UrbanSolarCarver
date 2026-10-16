@@ -1,4 +1,5 @@
 """What importing the package costs, and which names it offers."""
+import pytest
 import subprocess
 import sys
 
@@ -21,6 +22,7 @@ def test_importing_the_package_does_not_load_torch():
     assert "torch" not in _modules_loaded_by("import urbansolarcarver")
 
 
+@pytest.mark.slow
 def test_usc_daemon_status_does_not_load_torch(tmp_path):
     from _daemon_home import isolated_home_env
     code = ("from typer.testing import CliRunner\n"

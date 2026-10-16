@@ -168,7 +168,7 @@ class TestSessionCacheDecorator:
 
 
 class TestCacheRespectsDevice:
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+    @pytest.mark.gpu
     def test_cpu_request_inside_cuda_session_gets_cpu_tensor(self):
         """The daemon's session is on CUDA; a run configured for CPU must
         not receive cached CUDA tensors."""

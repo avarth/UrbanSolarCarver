@@ -7,6 +7,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (test markers and CI)
+
+- **`slow` and `gpu` pytest markers**, registered in `pyproject.toml`.
+  `pytest -m "not slow"` leaves out the 79 tests that take seconds
+  (end-to-end typology and Monte Carlo scenes, 5R1C simulations, tests
+  that start a daemon process) and runs in about 40 s instead of 3.5
+  minutes. Tests marked `gpu` are skipped by one rule in
+  `tests/conftest.py` when torch sees no CUDA, replacing separate
+  `skipif` lines.
+- **GitHub Actions workflow** `tests_on_cpu.yml`: on every push and pull
+  request, installs the CPU build of PyTorch and Radiance (for the sky
+  matrix) on Ubuntu and runs the tests not marked `gpu`, on Python 3.10
+  and 3.12.
+
 ### Changed (installation and clients)
 
 - **`setup_env.py` asks the PyTorch wheel indexes which torch they offer**

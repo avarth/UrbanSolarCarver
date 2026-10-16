@@ -48,3 +48,14 @@ def example_epw_path():
     if not epw:
         pytest.skip("No EPW file found; set USC_EPW_PATH env var to enable integration tests")
     return Path(epw)
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip the tests marked ``gpu`` when torch sees no CUDA GPU."""
+    import torch
+    if torch.cuda.is_available():
+        return
+    needs_cuda = pytest.mark.skip(reason="needs a CUDA GPU")
+    for item in items:
+        if "gpu" in item.keywords:
+            item.add_marker(needs_cuda)
