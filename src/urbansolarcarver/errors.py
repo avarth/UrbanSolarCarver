@@ -39,6 +39,16 @@ class StageChainError(UrbanSolarCarverError, ValueError):
     """A stage's upstream output is missing, stale or from a different run."""
 
 
+class WarpBackendUnavailableError(UrbanSolarCarverError, RuntimeError):
+    """NVIDIA Warp cannot run on the device, so rays cannot be traced; the
+    message says why and how to repair the installation."""
+
+
+class MalformedEngineRequest(UrbanSolarCarverError, ValueError):
+    """A request to the engine is not a mapping, names an unknown command,
+    or lacks or misuses a key (see ``engine_requests``)."""
+
+
 class RunCancelled(UrbanSolarCarverError):
     """The run was cancelled through its run context."""
 

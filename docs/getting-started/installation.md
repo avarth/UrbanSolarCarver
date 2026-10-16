@@ -8,7 +8,7 @@ cd UrbanSolarCarver
 python setup_env.py
 ```
 
-This creates a virtual environment (`.venv/` in the repository; on Windows it falls back to `~/.usc-venv` when the repository path is too long for the 260-character path limit), reads the CUDA version from your NVIDIA driver, installs the matching PyTorch wheels, installs USC in editable mode, and precompiles the Warp kernels.
+This creates a virtual environment (`.venv/` in the repository; on Windows it falls back to `~/.usc-venv` when the repository path is too long for the 260-character path limit), reads the CUDA version from your NVIDIA driver, asks the PyTorch wheel indexes that driver can run which torch they offer and installs the newest, installs USC in editable mode, and precompiles the Warp kernels.
 
 ```bash
 python setup_env.py --cpu             # force CPU-only (no CUDA)
@@ -23,9 +23,13 @@ python -m venv .venv
 .venv/Scripts/activate          # Windows
 # source .venv/bin/activate     # Linux/macOS
 
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install torch --index-url https://download.pytorch.org/whl/cu126
 pip install -e .[dev]
 ```
+
+Pick the PyTorch index for your driver on https://pytorch.org/get-started/locally/ (`nvidia-smi` shows the highest CUDA version the driver supports; `python setup_env.py --dry-run` shows the index the installer would choose). PyTorch stops publishing to older indexes, so prefer one that still receives releases.
+
+An editable install keeps the version number it was installed with. After pulling a new version, refresh it with `pip install -e . --no-deps` so `usc --version` reports it.
 
 ## Requirements
 

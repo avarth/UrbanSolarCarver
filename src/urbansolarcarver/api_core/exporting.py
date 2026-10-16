@@ -17,15 +17,16 @@ import numpy as np
 log = logging.getLogger(__name__)
 from ..load_config import user_config
 from ._util import (
-    ThresholdedGrid, _resolve_cfg, ensure_diag, write_json, resolve_device, load_thresholded_grid,
+    ThresholdedGrid, _resolve_cfg, ensure_diag, write_json, load_thresholded_grid,
 )
 from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
 from ._reporting import write_run_report
 from ..pydantic_schemas import ExportingManifest
 from ..io import save_mesh
+from ..compute_device import resolve_compute_device
 from ..run_context import Issue, RunContext, stage_context
 from ..stage_settings import ExportingSettings, RunOptions
-from ..grid import finalize_mesh
+from ..meshing import finalize_mesh
 import time
 
 # Everything exporting writes into its folder, besides manifest.json; every
@@ -72,7 +73,7 @@ def exporting(
     (logical AND), and converts the resulting carved voxel field into a
     triangle mesh suitable for downstream CAD / BIM / visualisation workflows.
 
-    Mesh extraction proceeds through :func:`~urbansolarcarver.grid.finalize_mesh`,
+    Mesh extraction proceeds through :func:`~urbansolarcarver.meshing.finalize_mesh`,
     which supports two strategies (selected by ``cfg.apply_smoothing``):
 
     * **cubic** (``apply_smoothing=False``, default): a 3x3x3 neighbour
@@ -155,7 +156,7 @@ def _run_exporting(settings: ExportingSettings, options: RunOptions, upstream: T
     mask = chain.mask
 
     import torch  # lazy
-    resolved_device = resolve_device(options.device)
+    resolved_device = resolve_compute_device(options.device)
     mask_tensor = torch.as_tensor(mask, dtype=torch.bool, device=resolved_device)
 
     voxel_grid = torch.as_tensor(chain.occupancy, device=resolved_device)

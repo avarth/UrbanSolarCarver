@@ -173,9 +173,9 @@ def test_ray_batch_size_reaches_the_carvers(tmp_path, monkeypatch):
     received = []
     resolve_batch_size = carving._resolve_batch_size
 
-    def recording_resolve_batch_size(resolution, device, *, ray_batch_size):
+    def recording_resolve_batch_size(device, *, ray_batch_size):
         received.append(ray_batch_size)
-        return resolve_batch_size(resolution, device, ray_batch_size=ray_batch_size)
+        return resolve_batch_size(device, ray_batch_size=ray_batch_size)
 
     monkeypatch.setattr(carving, "_resolve_batch_size", recording_resolve_batch_size)
     _quietly(preprocessing, daylight_cube_config(tmp_path, ray_batch_size=7),

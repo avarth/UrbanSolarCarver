@@ -123,6 +123,7 @@ class TestBenefitWeights:
         assert float(w.sum()) == 0.0
         assert w.shape[0] == 145
 
+    @pytest.mark.slow
     def test_include_harm_composite(self, example_epw_path):
         """include_harm=True must equal clip(cold-hour matrix − hot-hour
         matrix, 0), and can only reduce weights vs the default formula."""

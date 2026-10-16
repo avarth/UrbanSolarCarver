@@ -7,6 +7,137 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (test markers and CI)
+
+- **`slow` and `gpu` pytest markers**, registered in `pyproject.toml`.
+  `pytest -m "not slow"` leaves out the 79 tests that take seconds
+  (end-to-end typology and Monte Carlo scenes, 5R1C simulations, tests
+  that start a daemon process) and runs in about 40 s instead of 3.5
+  minutes. Tests marked `gpu` are skipped by one rule in
+  `tests/conftest.py` when torch sees no CUDA, replacing separate
+  `skipif` lines.
+- **GitHub Actions workflow** `tests_on_cpu.yml`: on every push and pull
+  request, installs the CPU build of PyTorch and Radiance (for the sky
+  matrix) on Ubuntu and runs the tests not marked `gpu`, on Python 3.10
+  and 3.12.
+
+### Changed (installation and clients)
+
+- **`setup_env.py` asks the PyTorch wheel indexes which torch they offer**
+  and installs from the index with the newest torch the driver can run.
+  It sent CUDA 12.6 and 12.8 drivers to the cu124 index, whose newest
+  torch is 2.6.0.
+- **`urbansolarcarver.__version__`** reads the version from the installed
+  metadata, so it is written once, in `pyproject.toml`; the CLI's
+  hardcoded fallback is gone, and a test checks that `CITATION.cff` names
+  the same version. An editable install keeps the version it was
+  installed with: refresh it with `pip install -e . --no-deps`.
+- **The `cuda` extra is removed.** It repeated the base `torch` dependency.
+- **`daemon_client.py`**, standard library only, holds the daemon's key
+  file, default host and port and `send_daemon_request`. The CLI's daemon
+  commands use it instead of importing `daemon.py`, so `usc daemon status`
+  and `--daemon` runs no longer load torch in the client.
+- **One lazy-import mechanism.** The package's `__getattr__` imports
+  `api` on first use of a name in `__all__`, and the CLI imports `api`
+  inside its commands; the CLI's own `_api()` helper and the package's
+  name table are gone. When torch is missing, the error now points to
+  `setup_env.py` instead of a fixed CUDA 12.1 index.
+
+### Changed (sky weights cache)
+
+- **Sky-patch weights are cached in the `CarverSession`.** `get_weights`
+  is keyed by every argument and by the contents of the EPW and
+  simulated-weights files, so a file rewritten at the same path still
+  gets new weights. A preprocessing run with unchanged weather settings
+  (a Grasshopper re-solve after a geometry edit, a daemon or service
+  rerun) skips the sky matrix: on the `multiple_buildings` example at 1 m
+  voxels on CUDA, a repeated irradiance preprocessing run went from
+  7.1 s to 5.1 s and a benefit run from 6.1 s to 5.3 s. Without a session
+  nothing changes.
+
+### Changed (compute device)
+
+- **One rule chooses the compute device.** The new
+  `compute_device.resolve_compute_device` replaces eight separate copies of
+  "CUDA if available, else CPU" (the stages, `CarverSession`,
+  `get_active_session`, the daemon, `scoring.get_weights`, the sky matrix,
+  `voxelize_mesh` and `warmup_kernels`), and `warp_device_name` replaces
+  five copies of the Warp device name. `api_core._util.resolve_device` and
+  the daemon's `_pick_device` are removed. Asking for `"cuda"` on a machine
+  without CUDA now raises `RuntimeError` everywhere at once: before, the
+  stages raised but `CarverSession("cuda")` and `daemon --device cuda`
+  accepted it and failed later. `CarverSession` now also accepts
+  `"cuda:N"`.
+
+### Removed (fallback tracer)
+
+- **The fixed-step PyTorch fallback tracer** (`trace_multi_hit_grid`,
+  `_trace_fixed_step`) and the torch copies of the surface and skin rules
+  in `carving.py`. It ran only when Warp could not run on the device, and
+  then gave approximate results (an oblique ray could skip a voxel corner)
+  with nothing but a log warning. Warp ships wheels for every platform
+  torch runs on, with a CPU backend for machines without an NVIDIA GPU,
+  so it only ever ran on a broken installation. Every carver now calls
+  `warp_kernels.require_dda_backend` first, which raises the new
+  `WarpBackendUnavailableError` (a `RuntimeError`) naming why Warp cannot
+  run and pointing to `setup_env.py`. `auto_batch_size` loses its
+  `resolution` argument, which only fed the fallback's estimate. The DDA
+  count-kernel test keeps its fine-sampling reference as a small helper
+  in the test file.
+
+### Added (engine requests)
+
+- **`engine_requests`: one request core for every transport.** Parsing a
+  request, building its config, running it and shaping the reply moved out
+  of the daemon into `urbansolarcarver.engine_requests`, with typed request
+  models (`RunRequest`, `StageRequest`, `RunPipelineRequest`,
+  `SimulateWeightsRequest`, `PingRequest`) and reply models. The daemon is
+  now a transport over it (`answer_engine_message`); a local HTTP service
+  can use the same core. The wire format the daemon accepts and sends is
+  unchanged, except below.
+- **`load_config.build_config_from_mode_starting_values(values,
+  base_folder=None)`** builds a config from the starting values of the mode
+  *values* names, with *values* on top. It was private to the daemon.
+
+### Changed (module layout)
+
+- **`grid.py` is split by responsibility** into `surface_sampling.py`
+  (test-surface sampling, `sample_surface`, `AnalysisMesh`),
+  `voxelization.py` (`voxelize`, `voxelize_mesh`) and `meshing.py`
+  (`finalize_mesh`, pruning, the cubic and smoothed meshers, cleanup).
+  The code is unchanged; code that imported from `urbansolarcarver.grid`
+  imports from the new modules. `test_grid.py` is split the same way, and
+  the EPW cache test moved to `test_sun.py`. The API page "Grid Operations"
+  is now "Geometry".
+- **`raytracer.py` is split** into `warp_kernels.py` (Warp setup,
+  `dda_backend_available`, `warmup_kernels` and every Warp kernel, kept in
+  one module so Warp compiles and caches them as one unit) and
+  `ray_tracing.py` (the kernel launches `trace_and_score_dda`,
+  `trace_and_count_dda`, `follow_mass_behind_skin_dda`, ray generation, the
+  fixed-step PyTorch fallback and `auto_batch_size`).
+  `voxelize_solid_warp` moved to `voxelization.py`, next to its only
+  caller. The code is unchanged; `test_raytracer.py` is now
+  `test_ray_tracing.py`, with the warmup tests in `test_warp_kernels.py`,
+  and the API page "Ray Tracer" is now "Ray Tracing".
+- **`carving.py` keeps the ray carving only.** `validate_inputs`,
+  `load_meshes` and the float32 input check moved to `io.py`;
+  `sample_period` moved to `sun.py`; the column rules thresholding applies
+  (`carve_above_columns`, `carve_above_scores`, `limit_column_slope` and
+  their numba kernels) moved to the new `column_postprocessing.py`. The
+  code is unchanged.
+
+### Changed (engine requests)
+
+- **A malformed daemon request reports `error_type` `MalformedEngineRequest`**
+  (a `ValueError`) instead of `ValueError`: an unknown command, a missing
+  key, or a message that is not a dict.
+- **`load_mesh` raises `InputError`** (a `ValueError`) for a missing file, a
+  file without triangles, and a file trimesh cannot parse. A missing file
+  raised `FileNotFoundError`, and a corrupt file let trimesh's own
+  exception (`IndexError`, `KeyError`...) through.
+- **The daemon logs failed requests** with their traceback through
+  `logging` instead of printing them.
+
 ### Removed
 
 - **protect_share and recovered_sky.** Thresholding offers

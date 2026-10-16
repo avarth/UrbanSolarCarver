@@ -7,6 +7,9 @@ Sky-patch weight computation and threshold selection for voxel carving.
    Per-patch weight vector for the specified mode.  Delegates to
    compute_EPW_based_weights (sky_patches.py) for irradiance, benefit and
    daylight, and to compute_radiative_cooling_weights for radiative_cooling.
+   Inside a CarverSession the result is cached, keyed by every argument
+   and by the contents of the EPW and simulated-weights files, so a
+   preprocessing run with unchanged weather settings skips the sky matrix.
 
 2. carve_fraction_threshold(scores, fraction) → float
    Score cutoff above which the highest-scoring voxels hold *fraction* of
@@ -17,11 +20,44 @@ Sky-patch weight computation and threshold selection for voxel carving.
    distribution at its arithmetic mean.  Suited to obstruction scores,
    which are usually heavy-tailed.
 """
+import hashlib
+import inspect
+import json
+from pathlib import Path
+
 import numpy as np
 import torch
+
+from .compute_device import resolve_compute_device
+from .session import session_cache
 from .sky_patches import compute_EPW_based_weights, compute_radiative_cooling_weights
 from typing import Sequence
 
+
+def _file_contents_digest(path) -> str:
+    """SHA-1 of a file's bytes ("none" without a path), so a file rewritten
+    at the same path gets a new digest."""
+    if not path:
+        return "none"
+    return hashlib.sha1(Path(path).read_bytes()).hexdigest()
+
+
+def _weights_cache_key(args, kwargs) -> str:
+    """Session cache key of a get_weights call: every argument, with the
+    device resolved, the hour list hashed, and the EPW and simulated-weights
+    files replaced by digests of their contents."""
+    call = inspect.signature(get_weights).bind(*args, **kwargs)
+    call.apply_defaults()
+    values = dict(call.arguments)
+    values["device"] = str(resolve_compute_device(values["device"]))
+    values["epw_file"] = _file_contents_digest(values["epw_file"])
+    values["simulated_weights_path"] = _file_contents_digest(values["simulated_weights_path"])
+    if values["hoys"] is not None:
+        values["hoys"] = hashlib.sha1(np.asarray(values["hoys"], dtype=np.int64).tobytes()).hexdigest()
+    return json.dumps(values, sort_keys=True, default=str)
+
+
+@session_cache(_weights_cache_key)
 def get_weights(
     mode: str,
     device: "torch.device | str | None" = None,
@@ -51,6 +87,9 @@ def get_weights(
 
     'time-based' and 'tilted_plane' do not use sky-patch weights and raise
     ValueError here.
+
+    Inside a CarverSession the weights are cached (see the module notes):
+    the returned tensor may be shared, so callers must not modify it.
 
     Parameters
     ----------
@@ -100,8 +139,7 @@ def get_weights(
     if not isinstance(mode, str) or not mode.strip():
         raise TypeError(f"get_weights: mode must be a non-empty string, got {mode!r}")
     mode_key = mode.strip().lower()
-    if device is None:
-        device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = resolve_compute_device(device)
 
     if mode_key == 'radiative_cooling':
         return compute_radiative_cooling_weights(

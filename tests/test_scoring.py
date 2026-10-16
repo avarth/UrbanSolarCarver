@@ -179,3 +179,67 @@ def test_headtail_all_equal():
     scores = np.full(200, 5.0)
     result = headtail_threshold(scores)
     assert result == pytest.approx(5.0)
+
+
+# --- Sky weights cached in the session ---
+
+class TestSkyWeightsCachedInTheSession:
+    """get_weights runs the sky matrix once per distinct request within a
+    CarverSession; a changed EPW file or setting computes new weights."""
+
+    HOURS_OF_ONE_SUMMER_DAY = list(range(4344, 4368))  # keeps the sky matrix small
+
+    @staticmethod
+    def _count_sky_matrix_runs(monkeypatch):
+        from urbansolarcarver import scoring
+        runs = []
+        compute = scoring.compute_EPW_based_weights
+
+        def counting(*args, **kwargs):
+            runs.append(1)
+            return compute(*args, **kwargs)
+
+        monkeypatch.setattr(scoring, "compute_EPW_based_weights", counting)
+        return runs
+
+    def _weights(self, epw, **settings):
+        from urbansolarcarver.scoring import get_weights
+        return get_weights("irradiance", device="cpu", epw_file=str(epw),
+                           hoys=self.HOURS_OF_ONE_SUMMER_DAY, **settings)
+
+    def test_the_same_request_reuses_the_weights(self, monkeypatch, example_epw_path):
+        from urbansolarcarver.session import CarverSession
+        runs = self._count_sky_matrix_runs(monkeypatch)
+        with CarverSession("cpu"):
+            first = self._weights(example_epw_path)
+            second = self._weights(example_epw_path)
+        assert len(runs) == 1
+        assert second is first
+
+    def test_a_changed_epw_at_the_same_path_is_read_again(self, tmp_path, monkeypatch, example_epw_path):
+        import shutil
+        from urbansolarcarver.session import CarverSession
+        epw = tmp_path / "weather.epw"
+        shutil.copy(example_epw_path, epw)
+        runs = self._count_sky_matrix_runs(monkeypatch)
+        with CarverSession("cpu"):
+            self._weights(epw)
+            lines = epw.read_text(encoding="utf-8", errors="replace").splitlines(True)
+            lines[0] = lines[0].replace(lines[0].split(",")[1], "Renamed City", 1)
+            epw.write_text("".join(lines), encoding="utf-8")
+            self._weights(epw)
+        assert len(runs) == 2
+
+    def test_a_changed_setting_computes_new_weights(self, monkeypatch, example_epw_path):
+        from urbansolarcarver.session import CarverSession
+        runs = self._count_sky_matrix_runs(monkeypatch)
+        with CarverSession("cpu"):
+            self._weights(example_epw_path, north_deg=0.0)
+            self._weights(example_epw_path, north_deg=30.0)
+        assert len(runs) == 2
+
+    def test_without_a_session_nothing_is_kept(self, monkeypatch, example_epw_path):
+        runs = self._count_sky_matrix_runs(monkeypatch)
+        self._weights(example_epw_path)
+        self._weights(example_epw_path)
+        assert len(runs) == 2

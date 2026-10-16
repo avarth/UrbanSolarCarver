@@ -16,21 +16,11 @@ import pytest
 import torch
 import trimesh
 
-from urbansolarcarver.raytracer import dda_backend_available
+from urbansolarcarver.warp_kernels import dda_backend_available
 from urbansolarcarver.stage_settings import PreprocessingSettings
 
 WARP_CPU = dda_backend_available(torch.device("cpu"))
-BACKENDS = [
-    pytest.param("warp", marks=pytest.mark.skipif(not WARP_CPU, reason="Warp CPU unavailable")),
-    "fixed_step",
-]
-
-
-def _use_backend(monkeypatch, backend):
-    if backend == "fixed_step":
-        import urbansolarcarver.carving as carving
-        monkeypatch.setattr(carving, "dda_backend_available", lambda device: False)
-        monkeypatch.setattr(carving, "_fused_dda", None)
+REQUIRES_WARP_CPU = pytest.mark.skipif(not WARP_CPU, reason="Warp CPU unavailable")
 
 
 def _vertical_panel_along_x(x_start, x_end, y, facing_positive_y, height=20.0):
@@ -47,7 +37,8 @@ def _box_grid_and_samples(panels, box_min_y, box_max_y, **config):
     """A 20 x (box_max_y - box_min_y) x 20 m box (x from 0 to 20), 1 m
     voxels, CPU: its grid, the panels' sample points and the config."""
     from urbansolarcarver.load_config import user_config
-    from urbansolarcarver.grid import voxelize, sample_surface
+    from urbansolarcarver.voxelization import voxelize
+    from urbansolarcarver.surface_sampling import sample_surface
 
     max_volume = trimesh.creation.box(extents=(20.0, box_max_y - box_min_y, 20.0))
     max_volume.apply_translation([10.0, (box_min_y + box_max_y) / 2.0, 10.0])
@@ -87,15 +78,14 @@ def _tilted_plane_heights_along_y(panels, box_min_y, box_max_y):
                         origin, extent / resolution)
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
+@REQUIRES_WARP_CPU
 @pytest.mark.parametrize("facade_y", [0.0, 0.3])
-def test_no_fin_in_front_of_a_facade_on_the_max_volume_face(monkeypatch, backend, facade_y):
+def test_no_fin_in_front_of_a_facade_on_the_max_volume_face(facade_y):
     """A neighbour's facade on the plot line faces into the max volume
     (box from y = facade_y to 20). In front of it the 45 degree plane rises
     one voxel per metre. The row the facade passes through is a surface
     voxel of the max volume, mostly in front of the facade, with nothing
     behind it; it used to stay at the full 20 m."""
-    _use_backend(monkeypatch, backend)
     panels = [_vertical_panel_along_x(0.0, 20.0, facade_y, facing_positive_y=True)]
     heights = _tilted_plane_heights_along_y(panels, facade_y, facade_y + 20.0)
     rows = sorted(heights)
@@ -104,15 +94,14 @@ def test_no_fin_in_front_of_a_facade_on_the_max_volume_face(monkeypatch, backend
     assert heights[row_through_facade] <= heights[row_in_front] + 1, heights
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_no_fin_in_a_slot_between_two_facing_facades(monkeypatch, backend):
+@REQUIRES_WARP_CPU
+def test_no_fin_in_a_slot_between_two_facing_facades():
     """Two existing buildings inside the max volume face each other across
     a 0.7 m slot (facades at y = 9.6 facing +y and y = 10.3 facing -y). Each
     facade's plane carves the other side to about one voxel near the slot.
     The voxel row holding the slot is skin of both facades with mass behind
     each, so neither counts it; it now goes with that mass instead of
     standing at 20 m."""
-    _use_backend(monkeypatch, backend)
     panels = [
         _vertical_panel_along_x(0.0, 20.0, 9.6, facing_positive_y=True),
         _vertical_panel_along_x(0.0, 20.0, 10.3, facing_positive_y=False),
@@ -126,15 +115,14 @@ def test_no_fin_in_a_slot_between_two_facing_facades(monkeypatch, backend):
     assert heights[slot_row] <= neighbour_height + 1, heights
 
 
-@pytest.mark.parametrize("backend", BACKENDS)
-def test_facade_on_the_max_volume_face_obstructed_in_sky_scores(monkeypatch, backend):
+@REQUIRES_WARP_CPU
+def test_facade_on_the_max_volume_face_obstructed_in_sky_scores():
     """Daylight scores: the max volume surface voxels in front of a
     neighbour's facade (nothing of the max volume behind them) obstruct
     that facade, so they score. Before the skin rule nothing counted them
     and they scored 0."""
     from urbansolarcarver.carving import carve_with_sky_patch_rays
 
-    _use_backend(monkeypatch, backend)
     panels = [_vertical_panel_along_x(0.0, 20.0, 0.3, facing_positive_y=True)]
     grid, origin, extent, resolution, points, normals, cfg = _box_grid_and_samples(
         panels, 0.3, 20.3, mode="daylight", ray_length=60.0)
@@ -167,7 +155,7 @@ class TestSkinRuleKernels:
         return 1 * self.res * self.res + y * self.res + 1
 
     def _counts(self, occupancy):
-        from urbansolarcarver.raytracer import trace_and_count_dda
+        from urbansolarcarver.ray_tracing import trace_and_count_dda
         counts = torch.zeros(self.res ** 3, dtype=torch.int32)
         trace_and_count_dda((0.0, 0.0, 0.0), self.scale, self.res, self.origin, self.direction,
                             counts, self.ray_length, point_ids=self.point_ids,
@@ -190,7 +178,7 @@ class TestSkinRuleKernels:
 
     @pytest.mark.parametrize("dtype", [torch.int32, torch.float32])
     def test_own_skin_takes_the_value_of_the_voxel_behind(self, dtype):
-        from urbansolarcarver.raytracer import follow_mass_behind_skin_dda
+        from urbansolarcarver.ray_tracing import follow_mass_behind_skin_dda
         values = torch.zeros(self.res ** 3, dtype=dtype)
         values[self._flat(0)] = 7
         values[self._flat(3)] = 5
@@ -204,7 +192,7 @@ class TestSkinRuleKernels:
         assert values[self._flat(1)] == 0  # input untouched
 
     def test_skin_with_empty_voxel_behind_keeps_its_value(self):
-        from urbansolarcarver.raytracer import follow_mass_behind_skin_dda
+        from urbansolarcarver.ray_tracing import follow_mass_behind_skin_dda
         occupancy = torch.ones(self.res ** 3, dtype=torch.uint8)
         occupancy[self._flat(0)] = 0
         values = torch.zeros(self.res ** 3, dtype=torch.int32)
@@ -213,18 +201,3 @@ class TestSkinRuleKernels:
             (0.0, 0.0, 0.0), self.scale, self.res, self.origin, self.direction,
             self.point_ids, self.normal, occupancy, values, self.ray_length)
         assert out[self._flat(1)] == 0
-
-    def test_fixed_step_fallback_classifies_like_the_kernel(self):
-        from urbansolarcarver.carving import _split_hits_at_surface
-        occupancy = torch.ones(self.res ** 3, dtype=torch.uint8)
-        voxels = torch.tensor([[1, 1, 1], [1, 2, 1]])
-        origins = self.origin.expand(2, 3)
-        normals = self.normal.expand(2, 3)
-        counted, skin_flat, behind_flat = _split_hits_at_surface(
-            (0.0, 0.0, 0.0), 1.0, self.res, voxels, origins, normals, occupancy)
-        assert counted.tolist() == [False, True]
-        assert skin_flat.tolist() == [self._flat(1)] and behind_flat.tolist() == [self._flat(0)]
-        occupancy[self._flat(0)] = 0
-        counted, skin_flat, _ = _split_hits_at_surface(
-            (0.0, 0.0, 0.0), 1.0, self.res, voxels, origins, normals, occupancy)
-        assert counted.tolist() == [True, True] and skin_flat.numel() == 0

@@ -18,6 +18,8 @@ import cases
 import oracle
 from typologies import TYPOLOGIES, SceneSpec, build
 
+pytestmark = pytest.mark.slow  # end-to-end scenes: tens of seconds in all
+
 BINARY_MODES = ("tilted_plane", "time-based")
 
 
@@ -197,7 +199,7 @@ def test_georeferenced_coordinates(tmp_path, epw, mode):
         assert oracle.soundness_violations(far, _must_carve(far, epw)) == 0
 
 
-@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+@pytest.mark.gpu
 @pytest.mark.parametrize("mode", ["tilted_plane", "time-based", "benefit"])
 def test_cpu_cuda_parity(tmp_path, epw, mode):
     scene = build(SceneSpec("freeform"))

@@ -6,6 +6,7 @@ triggers the heavy imports (torch, warp, api_core) on first access, but
 ``import urbansolarcarver`` alone does not. This keeps CLI commands like
 ``urbansolarcarver --help`` and ``urbansolarcarver schema`` fast.
 """
+from importlib.metadata import PackageNotFoundError, version as _distribution_version
 
 __all__ = [
     "run_pipeline",
@@ -24,12 +25,19 @@ __all__ = [
     "user_config",
 ]
 
+# The version is written once, in pyproject.toml, and read from the
+# installed distribution's metadata.
+try:
+    __version__ = _distribution_version("urbansolarcarver")
+except PackageNotFoundError:  # a source tree that was never installed
+    __version__ = "0+unknown"
+
 # Light imports that don't touch torch/warp
-from .load_config import build_config, load_config, user_config  # noqa: F401
+from .load_config import build_config, load_config, user_config  # noqa: E402,F401
 
 # Static-analysis-only imports: give IDEs/type checkers the lazy names
 # without triggering the heavy torch/warp imports at runtime.
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING  # noqa: E402
 
 if TYPE_CHECKING:  # pragma: no cover
     from .api import (  # noqa: F401
@@ -38,56 +46,24 @@ if TYPE_CHECKING:  # pragma: no cover
         PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
     )
 
-# Everything else is deferred until actually accessed.
-_api_loaded = False
-_api_names = {}
-
-
-def _ensure_api():
-    """Import ``.api`` (and with it torch, warp and api_core) on first use."""
-    global _api_loaded, _api_names
-    if _api_loaded:
-        return
-    # Check for torch first so a missing install gets install instructions
-    # instead of an ImportError from deep inside api_core.
-    try:
-        import torch as _torch  # noqa: F401
-    except ImportError as _e:
-        raise ImportError(
-            "UrbanSolarCarver requires PyTorch but it is not installed.\n"
-            "Install it before this package. Choose the command matching your CUDA version:\n"
-            "  CPU only:  pip install torch --index-url https://download.pytorch.org/whl/cpu\n"
-            "  CUDA 11.8: pip install torch --index-url https://download.pytorch.org/whl/cu118\n"
-            "  CUDA 12.x: pip install torch --index-url https://download.pytorch.org/whl/cu121\n"
-            "See https://pytorch.org/get-started/locally/ for details."
-        ) from _e
-    from .api import (
-        run_pipeline, PipelineResult, stages_to_rerun,
-        preprocessing, thresholding, exporting, massing,
-        PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
-    )
-    _api_names.update({
-        "run_pipeline": run_pipeline,
-        "PipelineResult": PipelineResult,
-        "stages_to_rerun": stages_to_rerun,
-        "preprocessing": preprocessing,
-        "thresholding": thresholding,
-        "exporting": exporting,
-        "massing": massing,
-        "PreprocessingResult": PreprocessingResult,
-        "ThresholdingResult": ThresholdingResult,
-        "ExportingResult": ExportingResult,
-        "MassingResult": MassingResult,
-    })
-    _api_loaded = True
-
 
 def __getattr__(name):
-    # load_config / user_config are imported eagerly at module level; if that
-    # import had failed, `import urbansolarcarver` itself would have raised,
-    # so only the heavy lazy names can reach this hook.
-    if name in __all__:
-        _ensure_api()
-        if name in _api_names:
-            return _api_names[name]
-    raise AttributeError(f"module 'urbansolarcarver' has no attribute {name!r}")
+    """Import ``.api`` (and with it torch, warp and api_core) on first use of
+    one of its names in ``__all__``; ``tests/test_package_imports.py`` checks
+    that every name in ``__all__`` resolves."""
+    if name not in __all__:
+        raise AttributeError(f"module 'urbansolarcarver' has no attribute {name!r}")
+    try:
+        import torch  # noqa: F401
+    except ImportError as exc:
+        # Install instructions instead of an ImportError from deep inside api_core.
+        raise ImportError(
+            "UrbanSolarCarver requires PyTorch, which is not installed. Run "
+            "`python setup_env.py` from the repository: it installs the PyTorch "
+            "build for your GPU driver (or the CPU build). See "
+            "https://pytorch.org/get-started/locally/ to install it by hand."
+        ) from exc
+    from . import api
+    value = getattr(api, name)
+    globals()[name] = value  # later lookups skip this hook
+    return value

@@ -11,17 +11,22 @@ sun, in model coordinates.
 Parsed EPW files (``_load_epw_file``) and Sunpath objects
 (``_initialize_sunpath``) are cached, so repeated calls, for example in
 the daemon, do not re-read or rebuild them.
+
+``sample_period`` turns the analysis period of the preprocessing settings
+into the Ladybug ``DateTime`` list the sun positions are computed for.
 """
 
 import os
 from functools import lru_cache
 from typing import Sequence
 import torch
+from ladybug.analysisperiod import AnalysisPeriod
 from ladybug.dt import DateTime
 from ladybug.epw import EPW
 from ladybug.sunpath import Sunpath
 
 from .run_context import report_issue
+from .stage_settings import PreprocessingSettings
 
 @lru_cache(maxsize=16)
 def _load_epw_file(weather_file_path: str, mtime_ns: int, size: int) -> EPW:
@@ -208,3 +213,27 @@ def get_sun_vectors(
         )
     )
     return result_array
+
+
+def sample_period(settings: PreprocessingSettings, steps_per_hour: int = 1):
+    """
+    Build analysis datetimes and HOYs via Ladybug's AnalysisPeriod.
+
+    Returns
+    -------
+    datetimes : list[datetime.datetime]
+        Start to end (inclusive) at ``1/steps_per_hour``-hour steps.
+    hoys : list[int]
+        Hour-of-year indices (0..8759, 0 = 1 January 00:00) of the period,
+        always hourly: they index EPW records, which are hourly.
+    """
+    def _ap(timestep):
+        return AnalysisPeriod(
+            st_month=settings.start_month, st_day=settings.start_day, st_hour=settings.start_hour,
+            end_month=settings.end_month,   end_day=settings.end_day,   end_hour=settings.end_hour,
+            timestep=timestep,
+        )
+    hourly = _ap(1)
+    if steps_per_hour == 1:
+        return hourly.datetimes, hourly.hoys_int
+    return _ap(steps_per_hour).datetimes, hourly.hoys_int

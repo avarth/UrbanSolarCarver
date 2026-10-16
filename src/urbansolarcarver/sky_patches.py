@@ -31,6 +31,8 @@ their own for diagnostics or custom weighting schemes.
 
 import numpy as np
 import torch
+
+from .compute_device import resolve_compute_device
 from typing import List, Sequence          
 import math
 from urbansolarcarver.session import session_cache
@@ -477,8 +479,7 @@ def compute_EPW_based_weights(
     """
     
     # --- 0. resolve device --------------------------------------------------------
-    if device is None:
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = resolve_compute_device(device)
 
     # --- 1. input validation ------------------------------------------------------
     if not isinstance(mode, str) or not mode.strip():

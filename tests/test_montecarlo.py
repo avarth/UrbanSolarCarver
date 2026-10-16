@@ -11,6 +11,8 @@ import pytest
 
 import montecarlo
 
+pytestmark = pytest.mark.slow  # end-to-end scenes: tens of seconds in all
+
 SEEDS = [
     1006,  # tilted_plane, octant table, carve_above, rotated, UTM
     1036,  # time-based, carve_above

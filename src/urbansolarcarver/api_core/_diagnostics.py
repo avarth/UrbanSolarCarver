@@ -438,7 +438,7 @@ def _write_simulated_weights_comparison(summary: dict, folder: Path, settings: P
     balance-point rule under the same settings.  Parses the EPW a second time to
     get the simple weights."""
     import torch
-    from ..carving import sample_period
+    from ..sun import sample_period
     from ..scoring import get_weights
     _, hours_of_year = sample_period(settings)
     simple = get_weights(

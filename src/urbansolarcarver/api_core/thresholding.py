@@ -9,7 +9,7 @@ from ..errors import StageChainError
 from ..pydantic_schemas import ThresholdingManifest, ThresholdSpec
 from ..run_context import Issue, RunContext, report_issue, stage_context
 from ..scoring import carve_fraction_threshold, headtail_threshold
-from ..carving import carve_above_scores, limit_column_slope
+from ..column_postprocessing import carve_above_scores, limit_column_slope
 from ..mode_registry import MODES
 from ..stage_settings import (
     RunOptions, ThresholdingSettings, applied_smoothing_radius_m, requested_smoothing_radius_m,
@@ -112,7 +112,7 @@ def _resolve_threshold(scores, spec, removal_scores=None):
 
     *removal_scores* (same shape as *scores*): the cutoff at which each
     voxel is removed once carve_above runs
-    (:func:`~urbansolarcarver.carving.carve_above_scores`).  carve_fraction
+    (:func:`~urbansolarcarver.column_postprocessing.carve_above_scores`).  carve_fraction
     then ranks by it and counts *scores*, so the fraction includes what
     carve_above removes.
     """
@@ -170,7 +170,7 @@ def thresholding(
     removed as well.  Then, for the score-cutoff methods of the weighted
     modes (or whenever ``max_slope_deg`` is set), columns that rise more
     steeply than ``max_slope_deg`` above their surroundings are cut down
-    (:func:`~urbansolarcarver.carving.limit_column_slope`); this removes
+    (:func:`~urbansolarcarver.column_postprocessing.limit_column_slope`); this removes
     some score beyond the fraction, reported as
     ``obstruction_fraction_carved_by_slope_limit``.  ``mask.npy`` is the
     final mask that gets exported.

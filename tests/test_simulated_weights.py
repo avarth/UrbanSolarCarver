@@ -174,6 +174,7 @@ def weight_series():
     return attribute_solar_gains(params, *_driving(name))
 
 
+@pytest.mark.slow
 class TestAttribution:
     def test_bounds_and_shape(self, weight_series):
         benefit, harm = weight_series
@@ -206,6 +207,7 @@ class TestAttribution:
 # ---------------------------------------------------------------------------
 
 class TestGenerateSimulatedWeights:
+    @pytest.mark.slow
     def test_example_archetype_end_to_end(self, tmp_path):
         import yaml
         from _epw import resolve_epw
@@ -235,6 +237,7 @@ class TestGenerateSimulatedWeights:
             generate_simulated_weights("dummy.epw", {"floor_area": 10.0},
                             tmp_path / "u.json")
 
+    @pytest.mark.slow
     def test_daily_occupancy_profile(self, tmp_path):
         """A 24-value profile is tiled over the year and recorded in meta;
         wrong lengths are rejected."""
@@ -358,6 +361,7 @@ class TestGainsFromArchetype:
         from tests._epw import resolve_epw
         return resolve_epw() or None
 
+    @pytest.mark.slow
     def test_gains_key_inside_archetype(self, tmp_path):
         epw = self._epw()
         if epw is None:
@@ -425,6 +429,7 @@ class TestShadingCoefficients:
         with pytest.raises(ValueError, match="no effect"):
             _shading_factors(windows, None, None, [7])
 
+    @pytest.mark.slow
     def test_hot_only_leaves_cold_season_untouched(self, tmp_path):
         from tests._epw import resolve_epw
         epw = resolve_epw()
@@ -448,6 +453,7 @@ class TestShadingCoefficients:
         # provenance recorded
         assert shaded[2]["archetype"]["hot_months"] == [7, 8]
 
+    @pytest.mark.slow
     def test_scalar_equals_uniform_mapping(self, tmp_path):
         from tests._epw import resolve_epw
         epw = resolve_epw()

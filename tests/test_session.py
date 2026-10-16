@@ -49,7 +49,7 @@ class TestCarverSessionLifecycle:
         sess.close()
 
     def test_invalid_device_raises(self):
-        with pytest.raises(ValueError, match="Unknown device"):
+        with pytest.raises(ValueError, match="tpu"):
             CarverSession(device="tpu")
 
     def test_wrong_type_device_raises(self):
@@ -168,7 +168,7 @@ class TestSessionCacheDecorator:
 
 
 class TestCacheRespectsDevice:
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA unavailable")
+    @pytest.mark.gpu
     def test_cpu_request_inside_cuda_session_gets_cpu_tensor(self):
         """The daemon's session is on CUDA; a run configured for CPU must
         not receive cached CUDA tensors."""

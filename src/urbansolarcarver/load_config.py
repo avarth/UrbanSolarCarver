@@ -17,6 +17,7 @@ from pydantic import ValidationError
 
 from .errors import ConfigError, ConfigFieldError
 from .errors import UrbanSolarCarverWarning  # noqa: F401 (re-exported)
+from .mode_registry import MODES, canonical_mode_name
 from .pydantic_schemas import UserConfig as user_config
 from .pydantic_schemas import expand_analysis_period
 
@@ -149,6 +150,37 @@ def build_config(
         raise ConfigError(
             "Configuration validation error:\n  " + "\n  ".join(lines), field_errors
         ) from exc
+
+
+def build_config_from_mode_starting_values(
+    values: Mapping[str, Any],
+    base_folder: Optional[Union[Path, str]] = None,
+) -> user_config:
+    """Validate *values* on top of the starting values of the mode they name.
+
+    This is how a client without a YAML file gets a complete config: the
+    mode's ``starting_values`` (see :mod:`mode_registry`) fill every setting
+    *values* leaves out, and every setting *values* gives wins.  The mode
+    name may be an alias (``tilted-plane``).  An ``analysis_period`` mapping
+    in *values* is expanded first, so it replaces the starting period field
+    by field.  *base_folder* resolves relative paths as in
+    :func:`build_config`.
+
+    Raises
+    ------
+    ConfigError
+        When *values* has no ``mode`` (the error is on field ``mode``), and
+        for every problem :func:`build_config` reports, an unknown mode
+        included.
+    """
+    given = parse_overrides(values)
+    if given.get("mode") is None:
+        message = "mode: required to choose the starting values"
+        raise ConfigError(message, [ConfigFieldError("mode", "required to choose the starting values")])
+    mode_name = canonical_mode_name(given["mode"])
+    if mode_name not in MODES:
+        return build_config(given, base_folder)  # the schema reports the unknown mode
+    return build_config({**MODES[mode_name].starting_values, **given, "mode": mode_name}, base_folder)
 
 
 def load_config(

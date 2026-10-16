@@ -185,18 +185,6 @@ class TestStageBoundaryValidation:
             thresholding(pre_dir, self._cfg(tmp_path), tmp_path / "thr")
 
 
-class TestLoadMeshGuards:
-    def test_empty_mesh_rejected(self, tmp_path):
-        """A PLY with no faces must fail at load, not as a cryptic
-        empty-voxel-grid error later."""
-        import trimesh
-        from urbansolarcarver.io import load_mesh
-        pc_path = tmp_path / "points_only.ply"
-        trimesh.points.PointCloud(np.random.rand(10, 3)).export(str(pc_path))
-        with pytest.raises(ValueError, match="no triangle geometry"):
-            load_mesh(str(pc_path))
-
-
 class TestOverrideParsing:
     def test_scientific_notation(self):
         from urbansolarcarver.load_config import parse_override_value
@@ -263,6 +251,7 @@ def test_benefit_with_weights_artifact(tmp_path, tiny_cube_mesh,
 
 
 @_SKIP_EPW
+@pytest.mark.slow
 def test_benefit_with_weights_artifact_writes_the_comparison_plot(tmp_path, tiny_cube_mesh,
                                                                   tiny_surface_mesh):
     """With diagnostic_plots, a benefit run with simulated weights also plots
