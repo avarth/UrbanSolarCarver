@@ -1,6 +1,10 @@
 """What the package carries for the local web app: the example projects, which must stay copies of examples/."""
 import json
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_FOLDER = REPOSITORY_ROOT / "src" / "urbansolarcarver"
@@ -49,3 +53,11 @@ def test_the_package_data_setting_includes_the_example_projects():
     pyproject_text = (REPOSITORY_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     package_data_section = pyproject_text.split("[tool.setuptools.package-data]")[1].split("\n[")[0]
     assert '"example_projects/**/*"' in package_data_section
+
+
+@pytest.mark.skipif(shutil.which("git") is None, reason="git is not installed")
+def test_no_packaged_example_file_is_ignored_by_git():
+    """A rule such as the one for *.epw files would leave a file out of a commit, and so out of a clone and a wheel."""
+    files = [str(path.relative_to(REPOSITORY_ROOT)) for path in EXAMPLE_PROJECTS_FOLDER.rglob("*") if path.is_file()]
+    result = subprocess.run(["git", "check-ignore", *files], cwd=REPOSITORY_ROOT, capture_output=True, text=True)
+    assert result.returncode == 1 and result.stdout == "", f"git ignores: {result.stdout}"    # 1 means no file matched

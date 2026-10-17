@@ -309,7 +309,7 @@ def test_every_example_creates_a_project_with_the_files_it_lists(client):
 def test_an_example_cannot_replace_a_project_or_use_a_bad_name(client):
     create_project(client, "p")
     assert client.post("/api/projects/p/examples/new_building").status_code == 409
-    assert client.post("/api/projects/..%2Fescape/examples/new_building").status_code in (404, 422)
+    assert client.post("/api/projects/not.a.name/examples/new_building").status_code == 422
     assert client.post("/api/projects/q/examples/no_such_example").status_code == 404
     assert [row["name"] for row in client.get("/api/projects").json()] == ["p"]      # no folder left behind
 

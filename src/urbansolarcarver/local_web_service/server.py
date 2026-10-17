@@ -220,13 +220,16 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
         if chosen is None:
             raise ProjectError(f"There is no example '{example}'.", status_code=404)
         example_folder = EXAMPLE_PROJECTS_FOLDER / chosen.name
+        files_to_add = [(role, file_name, (example_folder / file_name).read_bytes())    # all read before the project exists
+                        for role, file_names in (("max_volume", chosen.max_volume), ("test_surfaces", chosen.test_surfaces))
+                        for file_name in file_names]
+        if chosen.weather:
+            weather_path = EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME
+            files_to_add.append((WEATHER_ROLE, EXAMPLE_WEATHER_FILE_NAME, weather_path.read_bytes()))
         with store.project_lock(name):      # the new project is complete before another request can reach it
             store.create(name, chosen.mode)
-            for role, file_names in (("max_volume", chosen.max_volume), ("test_surfaces", chosen.test_surfaces)):
-                for file_name in file_names:
-                    store.add_input(name, role, file_name, (example_folder / file_name).read_bytes())
-            if chosen.weather:
-                store.add_input(name, WEATHER_ROLE, EXAMPLE_WEATHER_FILE_NAME, (EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME).read_bytes())
+            for role, file_name, data in files_to_add:
+                store.add_input(name, role, file_name, data)
             return project_detail(name)
 
     @router.get("/projects/{name}")
