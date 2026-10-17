@@ -61,6 +61,8 @@ export interface ViewerPaneProps {
   runProgress?: number | null;
   /** Shown over the view (the run report). */
   overlayContent?: ReactNode;
+  /** The project's mode: the sky dome legend says what its weights measure. */
+  mode?: string | null;
 }
 
 const NO_CAMERA: CameraState = { yawDegrees: 0, elevationDegrees: 90, metresPerPixel: 0 };
@@ -77,7 +79,7 @@ function storeyCountOf(massing: THREE.BufferGeometry): number {
 
 export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVolumeAppearance, shownByDefault, northDegrees, framingRequest,
                              centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
-                             missingLayers = NO_LAYERS, runProgress = null, overlayContent }: ViewerPaneProps) {
+                             missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
@@ -176,7 +178,7 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
           thinningStep: scorePoints.header.thinning_step }
       : undefined,
     skyDome: shown("sky_dome") && skyDome
-      ? { title: messages.skyDomeLegend(scorePoints?.header.weight_unit ?? ""), lowestWeight: Math.min(...skyDome.weights),
+      ? { title: messages.skyDomeLegend(mode), lowestWeight: Math.min(...skyDome.weights),
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,

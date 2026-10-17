@@ -6,6 +6,15 @@ import { groupedDigits } from "./steps/format_numbers";
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
+// What the sky patch weights of each weighted mode measure, for the sky dome legend (UX 8.2). The weights are read relative to
+// each other, as the scores of the weighted modes are ("Obstruction score (relative)"), so no unit of the engine is shown.
+const SKY_PATCH_WEIGHT_OF_MODE: Record<string, string> = {
+  irradiance: "solar energy",
+  benefit: "solar heat in hours that need heating",
+  daylight: "overcast sky light",
+  radiative_cooling: "night sky cooling",
+};
+
 /** "12-21" (month and day) as "21 Dec". */
 export function dayAndMonth(monthDay: string): string {
   const [month, day] = monthDay.split("-").map(Number);
@@ -290,7 +299,8 @@ export const messages = {
   keptVoxelsNote: (cutoff: string) => `Kept voxels. Carved voxels score above ${cutoff}.`,
   thinnedVoxels: (step: number) => `Showing 1 of every ${groupedDigits(step)} voxels`,
   sunPathLegend: (days: string, hours: string) => `Sun path, ${days}; sun at ${hours}\u00a0h`,
-  skyDomeLegend: (unit: string) => `Sky patch weight, ${unit}`,
+  skyDomeLegend: (mode: string | null) => mode !== null && Object.hasOwn(SKY_PATCH_WEIGHT_OF_MODE, mode)
+    ? `Sky patch weight, ${SKY_PATCH_WEIGHT_OF_MODE[mode]} (relative)` : "Sky patch weight (relative)",
   buildingMassingLegend: "Building massing, by storey",
   legend: "Legend",
 };

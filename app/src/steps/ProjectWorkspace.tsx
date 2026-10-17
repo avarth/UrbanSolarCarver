@@ -345,7 +345,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                     hemisphere={sunPathSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
-                    centreContent={emptyViewContent} localOrigin={origin} {...resultSteps.viewer} />
+                    centreContent={emptyViewContent} localOrigin={origin} mode={form.mode} {...resultSteps.viewer} />
       </section>
     </div>
   );
