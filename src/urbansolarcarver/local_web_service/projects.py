@@ -168,16 +168,21 @@ class ProjectStore:
             if not (project_folder / PROJECT_JSON_FILE_NAME).is_file():
                 continue
             try:
-                project_json = self.read_project_json(project_folder.name)
-                summaries.append(ProjectSummary(
-                    name=project_json.name,
-                    created=project_json.created,
-                    modified=self._modified(project_folder),
-                    mode=self._mode(project_folder),
-                ))
+                summaries.append(self.summary(project_folder.name))
             except ProjectError:
                 continue
         return summaries
+
+    def summary(self, name: str) -> ProjectSummary:
+        """The list row of one existing project."""
+        project_json = self.read_project_json(name)
+        project_folder = self.open(name)
+        return ProjectSummary(
+            name=project_json.name,
+            created=project_json.created,
+            modified=self._modified(project_folder),
+            mode=self._mode(project_folder),
+        )
 
     def read_project_json(self, name: str) -> ProjectJson:
         project_json_path = self.open(name) / PROJECT_JSON_FILE_NAME

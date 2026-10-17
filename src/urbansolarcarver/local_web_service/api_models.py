@@ -140,3 +140,71 @@ class SunPathDay(BaseModel):
 class SunPath(BaseModel):
     """The first and the last day of the analysis period; empty when the settings give no sun path."""
     days: list[SunPathDay]
+
+
+class WarmUpState(BaseModel):
+    """How far the background preparation of the compute device has come."""
+    state: Literal["not_started", "running", "ready", "cpu", "failed"]     # "cpu": no CUDA device, the CPU is used
+    device_name: str | None = None      # the CUDA device as torch names it; None until known and on the CPU
+    problem: str | None = None          # why the preparation failed
+
+
+class HealthReply(BaseModel):
+    """The version of the running service and the state of the device preparation."""
+    version: str
+    warm_up: WarmUpState
+
+
+class ModeInfo(BaseModel):
+    """One carving mode as the new-project and settings screens describe it."""
+    name: str
+    description: str
+    needs_epw: bool
+    needs_period: bool
+    experimental: bool
+    score_kind: Literal["weighted_sum", "violation_count"]
+    weight_unit: str
+    starting_values: dict       # the settings a new project of this mode starts with
+
+
+class CreateProjectRequest(BaseModel):
+    """The body of a request to create a project."""
+    name: str
+    mode: str = "time-based"
+
+
+class ConfigValuesRequest(BaseModel):
+    """The body of a settings save: the settings as the browser holds them."""
+    values: dict
+
+
+class StartRunRequest(BaseModel):
+    """The body of a request to run: the stages whose results are wanted."""
+    produce: list[str] = Field(default_factory=lambda: ["exporting", "massing"])
+
+
+class ProjectDetail(BaseModel):
+    """Everything the browser needs when it opens a project."""
+    name: str
+    created: str                # ISO 8601, UTC
+    modified: str               # ISO 8601, UTC
+    settings: dict              # without the paths and device the service owns
+    inputs: dict[str, list[InputFileInfo]]      # role -> files, for every role
+    joined_bounds: list[list[float]] | None     # as in InputFilesReply
+    weather_location: str | None
+    stage_status: StageStatusReply
+
+
+class CancelRunReply(BaseModel):
+    """Whether the run was stopped by this request; False when it had already ended."""
+    cancelled: bool
+
+
+class ErrorDetailReply(BaseModel):
+    """The body of a request the service refuses with a message."""
+    detail: str
+
+
+class MissingInputsReply(ErrorDetailReply):
+    """The body of a run request that lacks input files."""
+    missing_inputs: list[str]   # the roles: max_volume, test_surfaces, weather

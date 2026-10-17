@@ -98,6 +98,11 @@ class RunWorker:
         self._active: _ActiveRun | None = None
         self._run_states: dict[str, RunState] = {}
 
+    @property
+    def store(self) -> ProjectStore:
+        """The project store the worker reads; the HTTP service shares it so both use the same per-project locks."""
+        return self._store
+
     def active_project(self) -> str | None:
         """The project a run is active for, None when idle. Takes no lock, so a caller holding a project lock may ask."""
         active = self._active
