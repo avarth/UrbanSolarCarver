@@ -1,0 +1,218 @@
+/* The settings form in the left panel (UX 5.4 to 5.7, 7, 10, 11). Every colour, size and radius comes from tokens.css. */
+
+.setting-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+  margin-bottom: calc(var(--space-unit) * 4);
+}
+
+.setting-group-title {
+  margin: 0;
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  color: var(--colour-muted);
+  line-height: var(--line-height);
+}
+
+.setting-group-essential,
+.setting-group-folded {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+  align-self: stretch;
+}
+
+/* The fields sit on their bottom edge, so the inputs line up when a label takes two lines. */
+.setting-group-side-by-side {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.setting-group-side-by-side .setting-control { flex-wrap: nowrap; gap: var(--space-unit); }
+.setting-group-side-by-side .setting-number { flex: 1 1 auto; width: auto; min-width: 0; }
+
+/* The fold reads as a link: accent text, no box. */
+.setting-fold {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--colour-accent);
+  font: inherit;
+  font-size: var(--text-body);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.setting-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+}
+
+.setting-label-row {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+}
+
+.setting-label { font-size: var(--text-body); }
+
+.setting-control,
+.setting-choice-row,
+.setting-period-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.setting-unit { color: var(--colour-muted); }
+
+.setting-number,
+.setting-select {
+  box-sizing: border-box;
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  font: inherit;
+}
+
+.setting-number { width: 96px; }
+.setting-number-short { width: 64px; }
+
+/* An invalid field: a 2 px outline in the error colour (UX 11). */
+.setting-number[aria-invalid="true"],
+.setting-select[aria-invalid="true"],
+.setting-switch[aria-invalid="true"],
+.setting-choice-row[aria-invalid="true"] {
+  border-color: var(--colour-error);
+  outline: 2px solid var(--colour-error);
+  outline-offset: -1px;
+}
+
+.setting-number:disabled,
+.setting-select:disabled { color: var(--colour-muted); background: var(--colour-chrome); }
+
+.setting-range { flex: 1 1 120px; accent-color: var(--colour-accent); }
+
+.setting-period { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.setting-period-end { width: 36px; color: var(--colour-muted); }
+
+.setting-angles { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+/* Two directions per row, in the engine's order: N and NE, E and SE, S and SW, W and NW. */
+.setting-angle-grid { display: grid; grid-template-columns: repeat(2, max-content); align-items: center; gap: calc(var(--space-unit) * 2) calc(var(--space-unit) * 4); }
+.setting-angle-direction { display: flex; align-items: center; gap: var(--space-unit); }
+.setting-angle-direction > span:first-child { width: 20px; color: var(--colour-muted); }
+
+.setting-choice-row label { display: inline-flex; align-items: center; gap: var(--space-unit); }
+.setting-choice-row input[type="radio"] { accent-color: var(--colour-accent); margin: 0; }
+
+/* A switch: a track with a knob that moves to the right and fills with the accent colour when on. */
+.setting-switch {
+  appearance: none;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  margin: 0;
+  border: 1px solid var(--colour-line);
+  border-radius: 10px;
+  background: var(--colour-chrome);
+  cursor: pointer;
+}
+
+.setting-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--colour-muted);
+}
+
+.setting-switch:checked { background: var(--colour-accent); border-color: var(--colour-accent); }
+.setting-switch:checked::after { left: 18px; background: var(--colour-panel); }
+.setting-switch:disabled { cursor: default; opacity: 0.6; }
+
+.setting-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-unit);
+  margin: 0;
+  color: var(--colour-error);
+  font-size: var(--text-secondary);
+}
+
+.setting-error-icon { flex: none; margin-top: 2px; }
+
+/* The "i" and its tooltip (UX 7, screens). */
+.setting-info-anchor { display: inline-flex; }
+
+.setting-info {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--colour-line);
+  border-radius: 50%;
+  background: var(--colour-panel);
+  color: var(--colour-muted);
+  font: inherit;
+  font-size: var(--text-secondary);
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.setting-info[aria-expanded="true"] {
+  background: var(--colour-accent-soft);
+  border-color: var(--colour-accent);
+  color: var(--colour-accent);
+}
+
+.setting-tooltip {
+  position: fixed;
+  z-index: 10;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  width: 260px;
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+  font-size: var(--text-body);
+  line-height: var(--line-height);
+}
+
+/* The arrow on the tooltip's top edge, under the centre of its "i". */
+.setting-tooltip::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: calc(var(--setting-tooltip-arrow-left, 50%) - 5px);
+  width: 10px;
+  height: 10px;
+  border-top: 1px solid var(--colour-line);
+  border-left: 1px solid var(--colour-line);
+  background: var(--colour-panel);
+  transform: rotate(45deg);
+}
+
+.setting-tooltip-config,
+.setting-tooltip-extra {
+  font-size: var(--text-secondary);
+  color: var(--colour-muted);
+}
+
+.setting-tooltip code { font-family: var(--font-family-code); }

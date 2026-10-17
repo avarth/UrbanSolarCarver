@@ -1,4 +1,4 @@
-"""What the package carries for the local web app: the example projects, which must stay copies of examples/, and the built front-end, which must match app/."""
+"""What the package carries for the local web app: the example projects, which must stay copies of examples/, the built front-end, which must match app/, and the settings form's presentation file, which must match the engine's config."""
 import hashlib
 import json
 import shutil
@@ -6,6 +6,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
+
+from urbansolarcarver.mode_registry import MODES
+from urbansolarcarver.pydantic_schemas import UserConfig
+from urbansolarcarver.stage_settings import (
+    ExportingSettings, MassingSettings, PreprocessingSettings, RunOptions, ThresholdingSettings,
+)
 
 REPOSITORY_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_FOLDER = REPOSITORY_ROOT / "src" / "urbansolarcarver"
@@ -86,3 +92,35 @@ def app_source_sha256(app_folder: Path) -> str:
 def test_front_end_build_matches_its_sources():
     recorded = json.loads(BUILD_INFO_PATH.read_text(encoding="utf-8"))["app_source_sha256"]
     assert recorded == app_source_sha256(APP_FOLDER), "app/ changed without a rebuild: run `cd app && npm run build` and commit ui_static/"
+
+
+# ---- The settings form: setting_presentation.json against the engine's config and stages (UX 7) ----
+
+SETTING_PRESENTATION_PATH = APP_FOLDER / "src" / "settings_form" / "setting_presentation.json"
+STEP_STAGES = {"settings": {*PreprocessingSettings.model_fields, *RunOptions.model_fields},
+               "carving": set(ThresholdingSettings.model_fields),
+               "envelope_and_massing": {*ExportingSettings.model_fields, *MassingSettings.model_fields} - {"final_mesh_format"},
+               "export": {"final_mesh_format"}}
+# Set by the service, chosen in the Mode step, replaced by the in-app charts, or left for milestone 2: never in the form.
+NOT_IN_THE_FORM = {"max_volume_path", "test_surface_path", "epw_path", "out_dir", "device", "mode", "diagnostic_plots",
+                   "simulated_weights_path"}
+
+
+def presented_settings() -> dict:
+    return json.loads(SETTING_PRESENTATION_PATH.read_text(encoding="utf-8"))["settings"]
+
+
+def test_every_shown_setting_is_presented_exactly_once():
+    assert set(presented_settings()) == set(UserConfig.model_fields) - NOT_IN_THE_FORM
+
+
+def test_each_step_holds_only_settings_of_its_stage():
+    for name, entry in presented_settings().items():
+        assert name in STEP_STAGES[entry["step"]], (name, entry["step"])
+
+
+def test_mode_lists_name_engine_modes():
+    for name, entry in presented_settings().items():
+        for key in ("modes", "essential", "label_for_modes", "unit_for_modes", "help_for_modes"):
+            if isinstance(entry.get(key), (list, dict)):
+                assert set(entry[key]) <= set(MODES), (name, key)

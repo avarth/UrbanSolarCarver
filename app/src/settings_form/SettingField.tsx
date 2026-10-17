@@ -1,0 +1,163 @@
+// One setting in the form (UX 7, 11): its plain label with the "i" of its tooltip, the control with the unit beside the value,
+// and, after a rejected save, the message under it with a warning icon and the field outlined in the error colour.
+import { useId, type ReactNode } from "react";
+import { messages } from "../messages";
+import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
+import {
+  ANALYSIS_PERIOD_FIELDS, fromDisplayValue, thresholdIsShadowToleratedIn, toDisplayValue, unitBesideValue, type SettingView,
+} from "./presentation";
+import { SettingTooltip } from "./SettingTooltip";
+import { AnalysisPeriod, type AnalysisPeriodField } from "./widgets/AnalysisPeriod";
+import { MeshFormat } from "./widgets/MeshFormat";
+import { NumberInput, type ControlProps } from "./widgets/NumberInput";
+import { PercentSlider } from "./widgets/PercentSlider";
+import { SunStepsPerHour } from "./widgets/SunStepsPerHour";
+import { ThresholdRule, type ThresholdSpec } from "./widgets/ThresholdRule";
+import { TiltedPlaneAngles } from "./widgets/TiltedPlaneAngles";
+import "./settings_form.css";
+
+export interface SettingFieldProps {
+  view: SettingView;
+  form: FormState;
+  onChange: (values: Record<string, unknown>) => void;
+  disabled?: boolean;
+}
+
+// The words shown for the options of a choice the engine names in code.
+const CHOICE_NAMES: Record<string, Record<string, string>> = { plate_stacking: messages.floorStackingChoices };
+
+/** The settings a view stands for: the six period settings for the analysis period, else its own. */
+function settingNamesOf(view: SettingView): readonly string[] {
+  return view.widget === "analysis_period" ? ANALYSIS_PERIOD_FIELDS : [view.name];
+}
+
+/** The messages of the last rejected save for the settings of *view*, or undefined. */
+export function fieldErrorOf(form: FormState, view: SettingView): string | undefined {
+  const errors = settingNamesOf(view).map((name) => form.fieldErrors[name]).filter((error) => error !== undefined);
+  return errors.length === 0 ? undefined : errors.join(" ");
+}
+
+/** The types a schema property allows, its "anyOf" members included. */
+function typesOf(property: SchemaProperty | undefined): (string | undefined)[] {
+  if (property === undefined) return [];
+  return property.anyOf ? property.anyOf.map((member) => member.type) : [property.type];
+}
+
+function rangeOf(property: SchemaProperty | undefined): { minimum?: number; maximum?: number } {
+  const bounded = property?.anyOf?.find((member) => member.type === "number" || member.type === "integer") ?? property;
+  return { minimum: bounded?.minimum, maximum: bounded?.maximum };
+}
+
+/** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */
+export function defaultTextOf(view: SettingView, form: FormState, isShadowTolerated: boolean): string {
+  const unit = unitBesideValue(view);
+  const withUnit = (text: string) => (unit ? `${text} ${unit}` : text);
+  if (view.widget === "analysis_period") {
+    const period = ANALYSIS_PERIOD_FIELDS.map((name) => defaultValue(form, name));
+    return period.every((value) => typeof value === "number") ? messages.periodText(...(period as [number, number, number, number, number, number]))
+      : messages.automatic;
+  }
+  const value = toDisplayValue(view.name, defaultValue(form, view.name));
+  if (view.widget === "threshold" && value === null) return isShadowTolerated ? withUnit("0") : messages.carvingRuleChoices.carve_fraction;
+  if (value === null) return messages.automatic;
+  if (typeof value === "boolean") return value ? messages.switchedOn : messages.switchedOff;
+  if (typeof value === "string") return CHOICE_NAMES[view.name]?.[value] ?? value;
+  if (Array.isArray(value)) return withUnit(value.join(", "));
+  // A decimal setting reads like the engine's own default (1.0, not 1); a whole-number one stays whole.
+  const isDecimalSetting = typesOf(form.schemaProperties[view.name]).includes("number") && view.display !== "percent";
+  return withUnit(typeof value === "number" && isDecimalSetting && Number.isInteger(value) ? value.toFixed(1) : String(value));
+}
+
+function WarningIcon() {
+  return (
+    <svg className="setting-error-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path d="M8 1.5 15 14H1z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M8 6v4M8 11.5v1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function SettingField({ view, form, onChange, disabled = false }: SettingFieldProps) {
+  const inputId = useId();
+  const labelId = `${inputId}-label`;
+  const errorId = `${inputId}-error`;
+  const error = fieldErrorOf(form, view);
+  const control: ControlProps = { inputId, labelId, invalid: error !== undefined, describedBy: error === undefined ? undefined : errorId, disabled };
+  const property = form.schemaProperties[view.name];
+  const types = typesOf(property);
+  const unit = unitBesideValue(view);
+  const isShadowTolerated = thresholdIsShadowToleratedIn(form.mode);
+  const shown = toDisplayValue(view.name, shownValue(form, view.name));
+  const changeTo = (value: unknown) => onChange({ [view.name]: fromDisplayValue(view.name, value) });
+  // Controls made of several inputs are labelled as a group; the others are the target of their label.
+  const isGroupOfInputs = view.widget === "analysis_period" || view.widget === "tilted_plane_angles" || view.widget === "mesh_format";
+
+  let controlElement: ReactNode;
+  switch (view.widget) {
+    case "analysis_period":
+      controlElement = (
+        <AnalysisPeriod {...control} onChange={onChange}
+                        values={Object.fromEntries(ANALYSIS_PERIOD_FIELDS.map((name) => [name, shownValue(form, name)])) as Record<AnalysisPeriodField, number | null>} />
+      );
+      break;
+    case "threshold":
+      controlElement = <ThresholdRule {...control} value={shown as ThresholdSpec | null} isShadowTolerated={isShadowTolerated} unit={unit} onThreshold={changeTo} />;
+      break;
+    case "tilted_plane_angles":
+      controlElement = (
+        <TiltedPlaneAngles {...control} value={shown as number | number[] | null} unit={unit} onAngles={changeTo}
+                           startingAngle={typeof defaultValue(form, view.name) === "number" ? (defaultValue(form, view.name) as number) : null} />
+      );
+      break;
+    case "sun_steps_per_hour":
+      controlElement = <SunStepsPerHour {...control} value={shown as number | null} onSteps={changeTo} />;
+      break;
+    case "mesh_format":
+      controlElement = <MeshFormat {...control} value={shown as string | null} onFormat={changeTo} />;
+      break;
+    case "percent_slider":
+      controlElement = <PercentSlider {...control} percent={shown as number | null} unit={unit} onPercent={changeTo} />;
+      break;
+    default:
+      if (types.includes("boolean")) {
+        controlElement = (
+          <input id={inputId} type="checkbox" role="switch" className="setting-switch" checked={shown === true} disabled={disabled}
+                 aria-invalid={control.invalid} aria-describedby={control.describedBy} onChange={(event) => changeTo(event.target.checked)} />
+        );
+      } else if (property?.enum) {
+        controlElement = (
+          <select id={inputId} className="setting-select" value={String(shown ?? "")} disabled={disabled} aria-invalid={control.invalid}
+                  aria-describedby={control.describedBy} onChange={(event) => changeTo(event.target.value)}>
+            {property.enum.map((option) => (
+              <option key={String(option)} value={String(option)}>{CHOICE_NAMES[view.name]?.[String(option)] ?? String(option)}</option>
+            ))}
+          </select>
+        );
+      } else {
+        const range = rangeOf(property);
+        const isPercent = view.display === "percent";
+        controlElement = (
+          <div className="setting-control">
+            <NumberInput id={inputId} value={typeof shown === "number" ? shown : null} mayBeEmpty={types.includes("null")}
+                         wholeNumbers={types.includes("integer")} invalid={control.invalid} describedBy={control.describedBy} disabled={disabled}
+                         minimum={isPercent ? 0 : range.minimum} maximum={isPercent ? 100 : range.maximum} onValue={changeTo} />
+            {unit && <span className="setting-unit">{unit}</span>}
+          </div>
+        );
+      }
+  }
+
+  return (
+    <div className="setting-field">
+      <div className="setting-label-row">
+        {isGroupOfInputs ? <span id={labelId} className="setting-label">{view.label}</span>
+          : <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>}
+        <SettingTooltip settingLabel={view.label} help={view.help} defaultText={defaultTextOf(view, form, isShadowTolerated)}
+                        configName={view.widget === "analysis_period" ? messages.analysisPeriodConfigNames : view.name}
+                        extraLine={view.name === "voxel_size" && form.gridPlan ? messages.gridSize(form.gridPlan.resolution, form.gridPlan.total_voxels) : undefined} />
+      </div>
+      {controlElement}
+      {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon />{error}</p>}
+    </div>
+  );
+}

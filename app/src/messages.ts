@@ -1,4 +1,4 @@
-// The interface texts of UX spec sections 5.1, 6.1, 8 and 11, in one place. A text that takes values is a function.
+// The interface texts of UX spec sections 5.1, 5.4 to 5.7, 6.1, 7, 8 and 11, in one place. A text that takes values is a function.
 // Texts that the engine writes (a file that cannot be read, why Warp cannot run, the message of a failed run) are shown as the
 // engine gives them and have no entry here.
 
@@ -16,6 +16,7 @@ export function formattedNumber(value: number): string {
 }
 
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
 /** "12-21" (month and day) as "21 Dec". */
 export function dayAndMonth(monthDay: string): string {
@@ -74,6 +75,44 @@ export const messages = {
   resultsUpToDate: "Results are up to date",
   modelMoreThan10Km: "This model is more than 10 km across. Is it in meters?",
   modelLessThan1M: "This model is less than 1 m across. Is it in meters?",
+
+  // Settings form (5.4 to 5.7, 7). The labels, units and help texts of the settings are in settings_form/setting_presentation.json.
+  moreSettingsOfGroup: {
+    "When": "More sun settings",
+    "Mode specific": "More mode settings",
+    "Detail": "More detail settings",
+    "How much to carve": "More carving settings",
+    "Envelope": "More envelope settings",
+    "Building massing": "More massing settings",
+  },
+  aboutSetting: (settingLabel: string) => `About ${String(settingLabel).toLowerCase()}`,
+  configNameAndDefault: (configName: string, defaultText: string): MessagePart[] =>
+    ["Config name: ", { code: String(configName) }, `, default ${defaultText}`],
+  analysisPeriodConfigNames: "start_month ... end_hour",
+  gridSize: (voxelsPerSide: number, totalVoxels: number) => `${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
+  automatic: "automatic",
+  switchedOn: "on",
+  switchedOff: "off",
+  monthNames: MONTH_NAMES,
+  periodFrom: "From",
+  periodTo: "To",
+  periodFieldNames: {
+    start_day: "Start day", start_month: "Start month", start_hour: "Start hour",
+    end_day: "End day", end_month: "End month", end_hour: "End hour",
+  },
+  hourUnit: "h",
+  periodText: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) =>
+    `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} ${startHour} h to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]} ${endHour} h`,
+  oneAngle: "One angle",
+  oneAnglePerDirection: "One per direction",
+  compassDirections: ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
+  angleTowards: (direction: string) => `Plane angle for test surfaces facing ${direction}`,
+  sunStepsOption: (stepsPerHour: number) =>
+    stepsPerHour === 1 ? "1 (every hour)" : stepsPerHour === 60 ? "60 (every minute)" : `${stepsPerHour} (every ${60 / stepsPerHour} minutes)`,
+  meshFormatNames: { ply: "PLY", obj: "OBJ", stl: "STL", glb: "GLB" },
+  floorStackingChoices: { supported: "Supported", free: "Free" },
+  carvingRuleChoices: { carve_fraction: "Carve amount (recommended)", headtail: "Automatic split", cutoff: "Score cutoff" },
+  scoreCutoffValue: "Score cutoff value",
 
   // The 3D view (8)
   layerNames: {

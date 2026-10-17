@@ -62,6 +62,7 @@
   --colour-axis-z: #3b6ea5;
 
   --font-family: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --font-family-code: ui-monospace, "Cascadia Mono", Consolas, monospace;     /* config names in tooltips */
   --text-body: 14px;
   --text-secondary: 12px;
   --text-step-title: 16px;
