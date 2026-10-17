@@ -1,9 +1,14 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, type HealthReply } from "./api_client/client";
-import { freeProjectName, pollHealth } from "./App";
+import { DeviceStatus, freeProjectName, pollHealth } from "./App";
+import { renderForTest, type RenderedOverlay } from "./viewer_overlays/render_for_test";
+
+let rendered: RenderedOverlay | null = null;
 
 afterEach(() => {
   vi.useRealTimers();
+  rendered?.unmount();
+  rendered = null;
 });
 
 const RUNNING: HealthReply = { version: "1", warm_up: { state: "running" } };
@@ -63,4 +68,18 @@ test("an example's project is named after its title, numbered when that name is 
   expect(freeProjectName("Perimeter block", ["Other"])).toBe("Perimeter block");
   expect(freeProjectName("Perimeter block", ["perimeter block", "Perimeter block 2"])).toBe("Perimeter block 3");
   expect(freeProjectName("x".repeat(70), ["x".repeat(64)])).toBe(`${"x".repeat(62)} 2`);
+});
+
+test("the top bar in CPU mode: on a computer without a CUDA device it says CPU mode with the no-GPU sentence as its title", () => {
+  rendered = renderForTest(<DeviceStatus warmUp={{ state: "cpu", cuda_available: false }} />);
+  const status = rendered.container.querySelector(".device-status")!;
+  expect(status.textContent).toBe("CPU mode");
+  expect(status.getAttribute("title")).toBe("No CUDA-enabled GPU found. USC runs on the CPU, which is slower.");
+});
+
+test("the top bar in CPU mode chosen at launch (--device cpu on a computer with a CUDA device) says so, never that no GPU was found", () => {
+  rendered = renderForTest(<DeviceStatus warmUp={{ state: "cpu", cuda_available: true }} />);
+  const status = rendered.container.querySelector(".device-status")!;
+  expect(status.textContent).toBe("CPU mode, chosen at launch.");
+  expect(rendered.container.innerHTML).not.toContain("No CUDA-enabled GPU found");
 });

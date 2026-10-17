@@ -125,6 +125,7 @@ export const messages = {
   cpuMode: "CPU mode",
   gpuNotAvailable: "GPU not available",
   noCudaGpuFound: "No CUDA-enabled GPU found. USC runs on the CPU, which is slower.",
+  cpuModeChosenAtLaunch: "CPU mode, chosen at launch.",      // usc ui --device cpu on a computer that has a CUDA device
   runButtonWaitsForGpu: "Waiting for the GPU to be ready",
 
   // Empty, error and warning states (11)

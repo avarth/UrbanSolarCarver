@@ -36,8 +36,10 @@ test("while the GPU warms up, the device card has the spinner, Preparing the GPU
 test("after the warm-up the device line names the GPU, the CPU, or the engine's reason", () => {
   rendered = renderForTest(startScreen({ version: "1.4.0", warm_up: { state: "ready", device_name: "NVIDIA RTX 4070" } }));
   expect(rendered.container.querySelector(".start-device-line")!.textContent).toBe("GPU ready: NVIDIA RTX 4070");
-  rendered.rerender(startScreen({ version: "1.4.0", warm_up: { state: "cpu" } }));
+  rendered.rerender(startScreen({ version: "1.4.0", warm_up: { state: "cpu", cuda_available: false } }));
   expect(rendered.container.querySelector(".start-device-line")!.textContent).toBe("No CUDA-enabled GPU found. USC runs on the CPU, which is slower.");
+  rendered.rerender(startScreen({ version: "1.4.0", warm_up: { state: "cpu", cuda_available: true } }));      // usc ui --device cpu
+  expect(rendered.container.querySelector(".start-device-line")!.textContent).toBe("CPU mode, chosen at launch.");
   rendered.rerender(startScreen({ version: "1.4.0", warm_up: { state: "failed", problem: "Warp cannot run. Repair the environment with `python setup_env.py`." } }));
   expect(rendered.container.querySelector(".start-device-line")!.textContent).toContain("setup_env.py");
 });

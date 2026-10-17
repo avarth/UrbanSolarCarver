@@ -11,7 +11,7 @@ import { messages, type MessagePart } from "./messages";
 import { MessageParts } from "./settings_form/SettingTooltip";
 import { ProjectWorkspace } from "./steps/ProjectWorkspace";
 import { useRunLoop } from "./steps/run_state";
-import { isWarmingUp, Spinner, StartScreen } from "./steps/StartScreen";
+import { cpuChosenAtLaunch, isWarmingUp, Spinner, StartScreen } from "./steps/StartScreen";
 import "./App.css";
 
 const accessToken = readTokenFromLaunchUrl();
@@ -79,10 +79,11 @@ function MessageText({ parts }: { parts: MessagePart[] }) {
   return <p><MessageParts parts={parts} /></p>;
 }
 
-function DeviceStatus({ warmUp }: { warmUp: HealthReply["warm_up"] }) {
+export function DeviceStatus({ warmUp }: { warmUp: HealthReply["warm_up"] }) {
   const [reasonOpen, setReasonOpen] = useState(false);
   if (isWarmingUp(warmUp)) return <span className="device-status"><Spinner />{messages.gpuPreparing}</span>;
   if (warmUp.state === "ready") return <span className="device-status"><span className="device-dot device-dot-ready" />{messages.gpuReady}</span>;
+  if (cpuChosenAtLaunch(warmUp)) return <span className="device-status"><span className="device-dot" />{messages.cpuModeChosenAtLaunch}</span>;
   if (warmUp.state === "cpu") {
     return <span className="device-status" title={messages.noCudaGpuFound}><span className="device-dot" />{messages.cpuMode}</span>;
   }

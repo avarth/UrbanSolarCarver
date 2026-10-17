@@ -19,13 +19,21 @@ export function isWarmingUp(warmUp: HealthReply["warm_up"] | undefined): boolean
   return warmUp === undefined || warmUp.state === "not_started" || warmUp.state === "running";
 }
 
-/** The device line once the warm-up has ended: the GPU's name, the CPU, or why Warp cannot run (with the engine's repair). */
+/**
+ * The CPU was chosen when USC started (usc ui --device cpu) on a computer that has a CUDA device. A CPU state without
+ * cuda_available true means no CUDA device was found.
+ */
+export function cpuChosenAtLaunch(warmUp: HealthReply["warm_up"]): boolean {
+  return warmUp.state === "cpu" && warmUp.cuda_available === true;
+}
+
+/** The device line once the warm-up has ended: the GPU's name, the CPU and why, or why Warp cannot run (with the engine's repair). */
 function deviceLine(warmUp: HealthReply["warm_up"]): string {
   switch (warmUp.state) {
     case "ready":
       return warmUp.device_name ? messages.gpuReadyWithDevice(warmUp.device_name) : messages.gpuReady;
     case "cpu":
-      return messages.noCudaGpuFound;
+      return cpuChosenAtLaunch(warmUp) ? messages.cpuModeChosenAtLaunch : messages.noCudaGpuFound;
     default:
       return warmUp.problem ?? messages.gpuNotAvailable;
   }
