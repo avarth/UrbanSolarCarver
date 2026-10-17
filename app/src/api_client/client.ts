@@ -98,6 +98,11 @@ export function projectDownloadUrl(project: string): string {
   return `${projectPath(project)}/download`;
 }
 
+/** The address of the project's config.yaml as stored. A request for it needs the token header like any other. */
+export function projectConfigUrl(project: string): string {
+  return `${projectPath(project)}/config.yaml`;
+}
+
 async function send(token: string, address: string, method = "GET", body?: BodyInit, contentType?: string): Promise<Response> {
   const headers = new Headers({ [TOKEN_HEADER]: token });
   if (contentType) headers.set("Content-Type", contentType);
@@ -167,4 +172,30 @@ export const getSkyPatches = (token: string, project: string) => requestJson<Sky
 /** The score points of the last run as the service packs them (binary). */
 export async function getScorePoints(token: string, project: string): Promise<ArrayBuffer> {
   return (await send(token, `${projectPath(project)}/run/score-points`)).arrayBuffer();
+}
+
+/** A result file of the last run as text (the run report). */
+export async function getRunFileText(token: string, project: string, path: string): Promise<string> {
+  return (await send(token, runFileUrl(project, path))).text();
+}
+
+/** A result file of the last run as parsed JSON (plates.json). */
+export async function getRunFileJson<Reply>(token: string, project: string, path: string): Promise<Reply> {
+  return (await send(token, runFileUrl(project, path))).json() as Promise<Reply>;
+}
+
+/**
+ * Saves a file of the service to the computer under *fileName*. A plain link cannot send the token header, so the file is
+ * fetched with it and offered through a blob address.
+ */
+export async function downloadWithToken(token: string, address: string, fileName: string): Promise<void> {
+  const blob = await (await send(token, address)).blob();
+  const blobAddress = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = blobAddress;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(blobAddress), 0);    // after the browser has taken the click
 }

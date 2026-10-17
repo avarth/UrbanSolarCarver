@@ -13,6 +13,7 @@ import warnings
 import zipfile
 
 import pytest
+import yaml
 from starlette.websockets import WebSocketDisconnect
 
 with warnings.catch_warnings():     # newer Starlette versions announce that TestClient will need httpx2; the project pins httpx
@@ -490,6 +491,13 @@ def test_the_project_downloads_as_a_zip(client_after_fake_run):
     names = zipfile.ZipFile(io.BytesIO(reply.content)).namelist()
     assert {"p/project.json", "p/config.yaml", "p/run/run_report.md", "p/inputs/max_volume/volume.ply"} <= set(names)
     assert client_after_fake_run.get("/api/projects/missing/download").status_code == 404
+
+
+def test_the_settings_download_as_config_yaml(client_with_inputs):
+    reply = client_with_inputs.get("/api/projects/p/config.yaml")
+    assert reply.status_code == 200 and "config.yaml" in reply.headers["content-disposition"]
+    assert yaml.safe_load(reply.text)["mode"] == "daylight"
+    assert client_with_inputs.get("/api/projects/missing/config.yaml").status_code == 404
 
 
 # ---- Device warm-up ----

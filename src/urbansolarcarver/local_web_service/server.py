@@ -34,7 +34,7 @@ from .api_models import (
     ProjectSummary, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
 )
 from .gpu_warm_up import GpuWarmUp
-from .projects import MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, validate_project_name
+from .projects import CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, validate_project_name
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_score_points
@@ -335,6 +335,11 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
         if not inside_run_folder:
             raise ProjectError(f"There is no result file '{path}'.", status_code=404)
         return FileResponse(file_path, headers=NO_CACHE)
+
+    @router.get("/projects/{name}/config.yaml", response_class=FileResponse, responses={200: {"content": {"application/yaml": {}}}})
+    def download_config(name: str) -> FileResponse:
+        """The project's config.yaml as stored, for the Export step's settings download."""
+        return FileResponse(store.open(name) / CONFIG_FILE_NAME, media_type="application/yaml", filename=CONFIG_FILE_NAME, headers=NO_CACHE)
 
     @router.get("/projects/{name}/download", response_class=FileResponse, responses={200: {"content": {"application/zip": {}}}})
     def download_project(name: str) -> FileResponse:

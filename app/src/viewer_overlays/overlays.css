@@ -189,3 +189,24 @@
 
 .viewer-empty-state p { margin: 0; }
 .viewer-centre[data-viewport-theme="dark"] .link-button { color: var(--colour-test-surface-on-dark); }
+
+/* The progress of a run, a thin bar along the top edge of the view (UX 4, 6.3). */
+.viewer-run-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 3px;
+  background: color-mix(in srgb, var(--colour-accent) 20%, transparent);
+}
+
+.viewer-run-progress-bar {
+  height: 100%;
+  background: var(--colour-accent);
+  transition: width 150ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-run-progress-bar { transition: none; }
+}

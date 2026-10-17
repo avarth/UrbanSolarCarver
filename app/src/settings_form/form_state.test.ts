@@ -262,3 +262,25 @@ test("the form's flushSave sends a change at once, for a run that must use it", 
   form.unmount();
   vi.unstubAllGlobals();
 });
+
+test("changeAndSave sets values and saves them at once with the changes before them; the delay then sends nothing more", async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ settings: {}, grid_plan: GRID_PLAN })));
+  vi.stubGlobal("fetch", fetchMock);
+  const form = renderedForm("first", { mode: "daylight" });
+  act(() => form.current().dispatch({ type: "values_changed", values: { voxel_size: 2 } }));
+  let outcome: unknown;
+  await act(async () => { outcome = await form.current().changeAndSave({ carve_fraction: 0.5 }); });
+  expect(outcome).toBe("saved");
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ values: { voxel_size: 2, carve_fraction: 0.5, mode: "daylight" } });
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(form.current().form.userValues).toEqual({ voxel_size: 2, carve_fraction: 0.5 });
+  expect(form.current().pendingSave).toBe(false);
+  act(() => form.current().dispatch({ type: "values_changed", values: { north_deg: 10 } }));
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(fetchMock).toHaveBeenCalledTimes(2);                // a later change is saved after the delay as before
+  form.unmount();
+  vi.unstubAllGlobals();
+});

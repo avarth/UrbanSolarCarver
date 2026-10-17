@@ -13,6 +13,8 @@ export interface AccordionStep {
   /** Why the step cannot be used yet, shown in place of its content; null when it can. */
   notUsableYet: string | null;
   content: ReactNode;
+  /** Shown under the reason while the step cannot be used: how the last run the step started ended ("Cancelled."). */
+  feedbackWhenNotUsable?: ReactNode;
 }
 
 interface StepAccordionProps {
@@ -53,7 +55,7 @@ function StepRow({ step, open, onToggle }: { step: AccordionStep; open: boolean;
       </h2>
       {open && (
         <div id={contentId} className="step-content">
-          {step.notUsableYet !== null ? <p className="step-not-usable">{step.notUsableYet}</p> : step.content}
+          {step.notUsableYet !== null ? <><p className="step-not-usable">{step.notUsableYet}</p>{step.feedbackWhenNotUsable}</> : step.content}
         </div>
       )}
     </li>

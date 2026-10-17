@@ -1,6 +1,7 @@
 // The page (UX 4, 5.1, 6.1, 11): the top bar with the device status, then the start screen or the open project. The device
 // status is polled every second while the GPU warms up. A request that finds no engine is checked against GET health a few
-// times before the page says the engine stopped, so one lost request does not end the session.
+// times before the page says the engine stopped, so one lost request does not end the session. The runs are followed here, one
+// at a time as the engine runs them, so a run goes on being followed while the start screen or another project is open.
 import { useEffect, useRef, useState } from "react";
 import {
   createProject, createProjectFromExample, getExamples, getHealth, getModes, getProject, getSchema, listProjects, readTokenFromLaunchUrl,
@@ -9,6 +10,7 @@ import {
 import { messages, type MessagePart } from "./messages";
 import { MessageParts } from "./settings_form/SettingTooltip";
 import { ProjectWorkspace } from "./steps/ProjectWorkspace";
+import { useRunLoop } from "./steps/run_state";
 import { isWarmingUp, Spinner, StartScreen } from "./steps/StartScreen";
 import "./App.css";
 
@@ -101,6 +103,7 @@ export function App() {
   const [examples, setExamples] = useState<ExampleInfo[] | null>(null);
   const [openProject, setOpenProject] = useState<ProjectDetail | null>(null);
   const engineCheck = useRef<(() => void) | null>(null);
+  const runs = useRunLoop(accessToken, (error) => handleServiceProblem(error));
 
   /** A failed request: a lost token is said at once; a missing engine only once GET health finds none either. */
   const handleServiceProblem = (error: unknown) => {
@@ -169,9 +172,8 @@ export function App() {
       )}
       {openProject !== null && setup !== null && (
         <ProjectWorkspace key={openProject.name} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes}
-                          warmUpState={health?.warm_up.state ?? null} runActive={false} onServiceProblem={handleServiceProblem}
-                          onShowProjects={() => setOpenProject(null)}
-                          onRunAnalysis={() => { /* the run loop (POST runs, progress, results) comes with the Carving step */ }} />
+                          warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
+                          onShowProjects={() => setOpenProject(null)} />
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 // The Settings step (UX 5.4, 11): the settings the analysis reads in their groups, the grid under Voxel size, the grid-over-budget
 // message in place of the engine's, and messages that name no single setting. The step's Run analysis button sits pinned at the
-// bottom of the panel (RunAnalysisButton), disabled with the first reason that blocks the run.
-import { useId } from "react";
+// bottom of the panel (RunAnalysisButton), disabled with the first reason that blocks the run, its run's progress under it.
+import { useId, type ReactNode } from "react";
 import type { HealthReply } from "../api_client/client";
 import { messages } from "../messages";
 import type { FormState, SaveOutcome } from "../settings_form/form_state";
@@ -94,18 +94,23 @@ export function SettingsStep({ form, onChange, disabledReason }: SettingsStepPro
 interface RunAnalysisButtonProps {
   blocker: string | null;
   onRunAnalysis: () => void;
+  /** The button's text; Run analysis unless the step's button runs other stages (Build envelope and massing). */
+  label?: string;
+  /** The progress and outcome of the run the button started (RunProgress). */
+  feedback?: ReactNode;
 }
 
-/** Run analysis, pinned under the step list, with the reason it is disabled under it. */
-export function RunAnalysisButton({ blocker, onRunAnalysis }: RunAnalysisButtonProps) {
+/** A step's run button, pinned under the step list, with the reason it is disabled and the progress of its run under it. */
+export function RunAnalysisButton({ blocker, onRunAnalysis, label = messages.runAnalysis, feedback }: RunAnalysisButtonProps) {
   const reasonId = useId();
   return (
     <div className="run-button-area">
       <button type="button" className="primary-button" disabled={blocker !== null} aria-describedby={blocker !== null ? reasonId : undefined}
               onClick={onRunAnalysis}>
-        {messages.runAnalysis}
+        {label}
       </button>
       {blocker !== null && <p id={reasonId} className="run-button-reason">{blocker}</p>}
+      {feedback}
     </div>
   );
 }

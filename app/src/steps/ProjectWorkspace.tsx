@@ -1,16 +1,17 @@
 // An open project (UX 4): the step accordion in the left panel and the 3D view beside it. It holds what the steps share: the
-// input files, the settings form (the Mode step and the Settings step both change it), the stage status and run summary the
-// step summaries read, and the input meshes and sun path the 3D view draws.
+// input files, the settings form (the Mode step and the Settings step both change it), the stage status the step summaries
+// read, and the input meshes and sun path the 3D view draws. The steps that start runs and show their results (Carving,
+// Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
-  addInput, ApiError, getRunSummary, getStageStatus, getSunPath, inputFileUrl, refusalDetailOf, removeInput, serviceProblemOf,
-  type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail, type RunSummary, type SunPath,
+  addInput, ApiError, getStageStatus, getSunPath, inputFileUrl, refusalDetailOf, removeInput, serviceProblemOf,
+  type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail, type SunPath,
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
 import { shownValue, useSettingsForm, type FormState } from "../settings_form/form_state";
-import { ANALYSIS_PERIOD_FIELDS } from "../settings_form/presentation";
+import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { loadMesh } from "../viewer/loaders";
 import { localBounds, localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
@@ -18,6 +19,8 @@ import { hemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ModeStep } from "./ModeStep";
+import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
+import type { RunLoop } from "./run_state";
 import { RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SettingsStep, settingsToFixCount } from "./SettingsStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
@@ -34,9 +37,9 @@ const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   inputs: ["max_volume", "test_surfaces"],
   mode: ["max_volume", "test_surfaces"],
   settings: ["max_volume", "test_surfaces", "sun_path"],
-  carving: ["test_surfaces", "sun_path"],
-  envelope_and_massing: [],
-  export: [],
+  carving: ["test_surfaces", "sun_path", "kept_voxels", "carved_voxels", "sky_dome"],
+  envelope_and_massing: ["envelope", "building_massing"],
+  export: ["envelope", "building_massing"],
 };
 const MODE_WITH_SUN_PATH = "time-based";
 
@@ -46,12 +49,11 @@ interface ProjectWorkspaceProps {
   schema: Record<string, unknown>;
   modes: ModeInfo[];
   warmUpState: HealthReply["warm_up"]["state"] | null;
-  /** A run of this project is active; the service then refuses uploads, removals and saves of the settings. */
-  runActive: boolean;
+  /** The app's runs, one at a time: while one of this project is active the service refuses uploads, removals and saves. */
+  runs: RunLoop;
   /** A request failed: the app shows the engine-stopped or access-lost overlay when the failure is one of those. */
   onServiceProblem: (error: unknown) => void;
   onShowProjects: () => void;
-  onRunAnalysis: () => void;
 }
 
 function extensionOf(fileName: string): string {
@@ -117,23 +119,24 @@ function inputProblemText(error: unknown, fileName: string): string {
 }
 
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
-  const { token, project, modes, warmUpState, runActive, onServiceProblem } = props;
+  const { token, project, modes, warmUpState, runs, onServiceProblem } = props;
   const formStart = useMemo(() => ({ schema: props.schema, modes, settings: project.settings, gridPlan: project.grid_plan }), []);
-  const { form, dispatch, flushSave } = useSettingsForm(token, project.name, formStart);
+  const { form, dispatch, flushSave, changeAndSave } = useSettingsForm(token, project.name, formStart);
+  const runActive = runs.activeRun?.project === project.name;
   const [files, setFiles] = useState<Record<InputRole, InputFileInfo[]>>({
     max_volume: project.inputs.max_volume ?? [], test_surfaces: project.inputs.test_surfaces ?? [], weather: project.inputs.weather ?? [],
   });
   const [joinedBounds, setJoinedBounds] = useState<Bounds3 | null>(project.joined_bounds as Bounds3 | null);
   const [weatherLocation, setWeatherLocation] = useState(project.weather_location);
   const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0 });
-  const [stages, setStages] = useState(project.stage_status.stages);
-  const [runSummary, setRunSummary] = useState<RunSummary | null>(null);
+  const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
   const [openStep, setOpenStep] = useState<StepName | null>("inputs");
   const [viewStep, setViewStep] = useState<StepName>("inputs");     // the step whose layers the view shows: the last one opened
   const [sunPath, setSunPath] = useState<SunPath | null>(null);
   const [framingRequest, setFramingRequest] = useState(0);
   const panel = useRef<HTMLElement>(null);
   const [addFilesRequest, setAddFilesRequest] = useState(0);
+  const [settingToFocus, setSettingToFocus] = useState<{ name: string } | null>(null);
 
   const modeInfo = modes.find((candidate) => candidate.name === form.mode);
   const modeNeedsWeatherFile = modeInfo?.needs_epw ?? false;
@@ -147,14 +150,22 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const sunPathSphere = useMemo(() => (joinedBounds === null ? null : hemisphere(localBounds(joinedBounds, localOrigin(joinedBounds)))), [joinedBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
-  const refreshStageStatus = () => {
-    getStageStatus(token, project.name).then((reply) => setStages(reply.stages)).catch(onServiceProblem);
+  // A run removes the records of its stages when it starts and writes them when it ends, so the stage status read during a run
+  // says "missing" for results still on screen: a reply that comes while a run of this project is active, or that was asked
+  // for before one started, is not used. The run's end asks again.
+  const runsStarted = useRef(0);
+  const runActiveNow = useRef(runActive);
+  if (runActive && !runActiveNow.current) runsStarted.current += 1;
+  runActiveNow.current = runActive;
+  // *completedStages*: the stages a run just completed are current at once, so their layers are not dimmed until the reply.
+  const refreshStageStatus = (completedStages: readonly string[] = []) => {
+    if (completedStages.length > 0) setStages((current) => ({ ...current, ...Object.fromEntries(completedStages.map((stage) => [stage, "current"])) }));
+    const runsStartedBefore = runsStarted.current;
+    getStageStatus(token, project.name).then((reply) => {
+      if (runActiveNow.current || runsStarted.current !== runsStartedBefore) return;
+      setStages(reply.stages as Record<PipelineStage, StageState>);
+    }).catch(onServiceProblem);
   };
-
-  useEffect(() => {
-    if (stages.thresholding === "missing" && stages.massing === "missing") return;
-    getRunSummary(token, project.name).then(setRunSummary).catch(onServiceProblem);
-  }, []);
 
   // A save changes what the stages were run with; its reply is in once no save waits.
   useEffect(() => {
@@ -231,6 +242,28 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     if (step !== null) setViewStep(step);
   };
 
+  // A failed run's link to the setting it names: the step that holds the setting opens and the focus goes to its field.
+  const goToSetting = (settingName: string) => {
+    const shownName = (ANALYSIS_PERIOD_FIELDS as readonly string[]).includes(settingName) ? ANALYSIS_PERIOD_FIELDS[0] : settingName;
+    const step = SETTING_PRESENTATIONS[shownName]?.step;
+    if (step === undefined) return;
+    openTheStep(step);
+    setSettingToFocus({ name: shownName });
+  };
+  useEffect(() => {
+    if (settingToFocus === null) return;
+    panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"] :is(input, select)`)?.focus();
+  }, [settingToFocus]);
+
+  const runBlocker = runAnalysisBlocker({
+    runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length, testSurfaceFiles: files.test_surfaces.length, modeNeedsWeatherFile,
+    hasWeatherFile, form, warmUpState,
+  });
+  const resultSteps = useResultSteps({
+    token, project: project.name, form, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages,
+    refreshStageStatus, runs, runBlocker, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
+  });
+
   const viewState: ProjectViewState = {
     maxVolumeFiles: files.max_volume.length,
     testSurfaceFiles: files.test_surfaces.length,
@@ -239,10 +272,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     analysisPeriod: analysisPeriodOf(form, modeInfo?.needs_period ?? false),
     voxelSize: Number(shownValue(form, "voxel_size")),
     settingsToFix: settingsToFixCount(form),
-    stages: stages as Record<PipelineStage, StageState>,
-    keptPercent: runSummary?.carving?.retention_pct ?? null,
-    totalFloorArea: runSummary?.massing?.total_floor_area_m2 ?? null,
-    storeys: runSummary?.massing?.storeys_built ?? null,
+    stages,
+    keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
+    totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
+    storeys: resultSteps.results.summary?.massing?.storeys_built ?? null,
   };
 
   const weatherHint = messages.weatherNeededFor(listedWithAnd(modes.filter((mode) => mode.needs_epw).map((mode) => plainModeName(mode.name))));
@@ -260,23 +293,31 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                 weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} />
     ),
     settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason} />,
-    carving: null,      // the carving, envelope and export steps come with the run loop
-    envelope_and_massing: null,
-    export: null,
+    ...resultSteps.content,
+  };
+  const summaryOf = (name: StepName) => {
+    const warnings = resultSteps.warningsOfStep[name];
+    const summary = stepSummary(name, viewState);
+    return warnings === undefined ? summary : messages.summaryWithWarnings(summary, messages.warningCount(warnings));
   };
   const steps: AccordionStep[] = STEP_NAMES.map((name) => ({
     name,
     title: messages.stepTitles[name],
-    summary: stepSummary(name, viewState),
+    summary: summaryOf(name),
     mark: stepMark(name, viewState),
     notUsableYet: stepNotUsableYet(name, viewState),
     content: stepContent[name],
+    feedbackWhenNotUsable: resultSteps.feedbackWhenNotUsable[name],
   }));
 
-  const runBlocker = runAnalysisBlocker({
-    runActive, maxVolumeFiles: viewState.maxVolumeFiles, testSurfaceFiles: viewState.testSurfaceFiles, modeNeedsWeatherFile, hasWeatherFile,
-    form, warmUpState,
+  const runAnalysis = () => void runAnalysisAfterSaving(flushSave, () => {
+    void runs.start(project.name, ANALYSIS_STAGES, "settings_run_analysis").then((outcome) => { if (outcome === "finished") openTheStep("carving"); });
   });
+  const pinnedActions: Partial<Record<StepName, ReactNode>> = {
+    settings: <RunAnalysisButton blocker={runBlocker} onRunAnalysis={runAnalysis} feedback={resultSteps.feedback("settings_run_analysis")} />,
+    ...resultSteps.pinnedAction,
+  };
+  const openStepUsable = openStep !== null && stepNotUsableYet(openStep, viewState) === null;
 
   // The empty view's "Add files" leads to the Inputs step, where each role has its own box: the focus goes to the first one's button.
   useEffect(() => {
@@ -297,14 +338,14 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     <div className="workspace">
       <aside ref={panel} className="workspace-panel">
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}
-                       pinnedAction={openStep === "settings" ? <RunAnalysisButton blocker={runBlocker} onRunAnalysis={() => void runAnalysisAfterSaving(flushSave, props.onRunAnalysis)} /> : null} />
+                       pinnedAction={openStep !== null && openStepUsable ? (pinnedActions[openStep] ?? null) : null} />
       </aside>
       <section className="workspace-view">
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaces} sunPath={sunPath}
                     hemisphere={sunPathSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
-                    centreContent={emptyViewContent} />
+                    centreContent={emptyViewContent} localOrigin={origin} {...resultSteps.viewer} />
       </section>
     </div>
   );

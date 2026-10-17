@@ -209,13 +209,22 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
  * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project
  * starts its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown.
  * *flushSave* sends a waiting change at once and resolves, with how the save ended, when its reply is in the form, for a run
- * that must use it.
+ * that must use it. *changeAndSave* makes a change and saves it with the changes before it at once, without the delay (the
+ * carving threshold, whose run follows its save).
  */
 export function useSettingsForm(token: string, project: string, start: FormStart) {
-  const [form, dispatch] = useReducer(formReducer, start, initialFormState);
+  const [form, dispatchToReact] = useReducer(formReducer, start, initialFormState);
+  // The form after every action dispatched so far, ahead of the render that shows it, so a save made at once sends them all.
+  const latestForm = useRef(form);
+  const changeSavedAtOnce = useRef(0);
   const saver = useRef<ConfigSaver | null>(null);
   const currentToken = useRef(token);
   const formProject = useRef(project);
+
+  const dispatch = useCallback((action: FormAction) => {
+    latestForm.current = formReducer(latestForm.current, action);
+    dispatchToReact(action);
+  }, []);
 
   useEffect(() => {
     currentToken.current = token;      // a new token is used from the next save on; it starts no save of its own
@@ -234,14 +243,23 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   useEffect(() => {
     if (formProject.current === project) return;
     formProject.current = project;
+    changeSavedAtOnce.current = 0;
     dispatch({ type: "project_opened", start });     // the start given with the new project
   }, [project]);
 
   // Only a change starts a save: a reply changes the form too, but not its change count, and opening a project sets it to 0.
+  // A change changeAndSave has sent already is not scheduled again.
   useEffect(() => {
-    if (form.changeCount > 0) saver.current?.schedule(valuesToSend(form));
+    if (form.changeCount > changeSavedAtOnce.current) saver.current?.schedule(valuesToSend(form));
   }, [form.changeCount]);
 
   const flushSave = useCallback((): Promise<SaveOutcome> => saver.current?.flush() ?? Promise.resolve("none"), []);
-  return { form, dispatch, flushSave, pendingSave: form.pendingSave };
+  const changeAndSave = useCallback((values: Record<string, unknown>): Promise<SaveOutcome> => {
+    dispatch({ type: "values_changed", values });
+    if (saver.current === null) return Promise.resolve("none");
+    changeSavedAtOnce.current = latestForm.current.changeCount;
+    saver.current.schedule(valuesToSend(latestForm.current));
+    return saver.current.flush();
+  }, []);
+  return { form, dispatch, flushSave, changeAndSave, pendingSave: form.pendingSave };
 }

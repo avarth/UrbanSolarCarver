@@ -139,6 +139,68 @@ export const messages = {
   modelMoreThan10Km: "This model is more than 10\u00a0km across. Is it in meters?",
   modelLessThan1M: "This model is less than 1\u00a0m across. Is it in meters?",
 
+  // Runs and their progress (6.2 to 6.4, 11)
+  runProgress: "Run progress",
+  stageStates: { waiting: "waiting", running: "running", done: "done" },
+  rayBatches: (done: number, total: number) => `${groupedDigits(done)} of ${groupedDigits(total)} batches`,
+  elapsedTime: (secondsText: string) => `Elapsed ${secondsText}`,
+  cancelRun: "Cancel",
+  runFailed: "The run stopped on an error.",
+  errorType: (errorType: string) => `Error type: ${errorType}`,
+  goToSetting: (settingLabel: string) => `Go to ${String(settingLabel).toLowerCase()}`,
+  runConnectionLost: "The connection to the engine was lost during the run.",
+  warningsTitle: "Warnings",
+  warningCount: (count: number) => `${count} ${count === 1 ? "warning" : "warnings"}`,
+  summaryWithWarnings: (summary: string, warningsText: string) => `${summary}, ${warningsText}`,
+
+  // Carving (5.5)
+  angleRuleHasNoThreshold: "The angle rule has no threshold: everything above the planes is removed. Change the angle in Settings.",
+  analysisOutOfDate: "Settings changed since the analysis. Run the analysis again to update the carving.",
+  sliderLowestEnd: "0",
+  sliderHighestScore: (highestText: string) => `${highestText}, the highest score`,
+  updateWhenThresholdChanges: "Update when I change the threshold",
+  updateCarving: "Update carving",
+  buildEnvelopeAndMassing: "Build envelope and massing",
+  histogramTitle: "Scores of the voxels",
+  histogramScaleLabel: "Scale of the counts",
+  logScale: "Log",
+  linearScale: "Linear",
+  histogramAxisShadowTolerated: "Shadow tolerated at which a voxel is carved, m²·h",
+  histogramAxisRelative: "Score compared with the cutoff (relative)",
+  histogramKept: "Kept",
+  histogramCarved: "Carved",
+  histogramBinRange: (lowerText: string, upperText: string, unit: string) => `${lowerText} to ${upperText}${unit ? ` ${unit}` : ""}`,
+  histogramBinCounts: (kept: number, carved: number) => `${groupedDigits(kept)} kept, ${groupedDigits(carved)} carved`,
+  histogramDescription: (voxelCount: number, cutoffText: string) =>
+    `Histogram of the scores of ${groupedDigits(voxelCount)} voxels, cutoff at ${cutoffText}. Use the arrow keys to read each bar.`,
+  slopeLimitNote: (count: number) => `The slope limit removed ${groupedDigits(count)} voxels below the cutoff.`,
+  volumeKept: "Volume kept",
+  volumeCarved: "Volume carved",
+  keptVolume: "Kept volume",
+  obstructionRemoved: "Obstruction removed",
+  lastAnalysisTook: "Last analysis took",
+
+  // Envelope and massing (5.6)
+  grossFloorArea: "Gross floor area",
+  storeys: "Storeys",
+  envelopeVolume: "Envelope volume",
+  floorAreaPerStorey: "Floor area per storey",
+  storeyColumns: { storey: "Storey", bottom: "Bottom, m", top: "Top, m", area: "Area, m²" },
+  storeyRowLabel: (storeyNumber: number) => (storeyNumber === 1 ? "1, ground" : String(storeyNumber)),
+  totalRow: "Total",
+  outOfDateForCarving: "Out of date for the current carving",
+  openRunReport: "Open the run report",
+  runReportTitle: "Run report",
+  closePanel: "Close",
+
+  // Export (5.7)
+  envelopeMeshDownload: (formatName: string) => `Carved envelope (${formatName})`,
+  massingObjDownload: "Building massing (OBJ)",
+  massingJsonDownload: "Building massing data (JSON)",
+  settingsDownload: "Settings (config.yaml)",
+  projectZipDownload: "Whole project (zip)",
+  outOfDateFile: "Out of date",
+
   // Settings form (5.4 to 5.7, 7). The labels, units and help texts of the settings are in settings_form/setting_presentation.json.
   moreSettingsOfGroup: {
     "When": "More sun settings",

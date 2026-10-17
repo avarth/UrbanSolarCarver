@@ -156,7 +156,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   }
 
   return (
-    <div className="setting-field">
+    <div className="setting-field" data-setting={view.name}>
       <div className="setting-label-row">
         {isGroupOfInputs ? <span id={labelId} className="setting-label">{view.label}</span>
           : <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>}
