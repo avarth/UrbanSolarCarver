@@ -2,7 +2,7 @@
 // progress under the button that started a run, and what the 3D view draws of the results (dimmed while out of date or
 // replaced, listed as missing after a run that stopped before their stage). ProjectWorkspace gives them the project's form,
 // stage status and run loop; the results are fetched here and again as each stage of a run is done.
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { downloadWithToken, refusalDetailOf, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
 import { shownValue, type FormState, type FormAction, type SaveOutcome } from "../settings_form/form_state";
@@ -147,14 +147,25 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const startAfterSaving = (produce: string[], origin: RunOrigin) =>
     runAnalysisAfterSaving(flushSave, () => void runs.start(project, produce, origin));
 
+  // When the last threshold value ended without a run (its save was not stored, its run did not start, or the service had nothing
+  // to run), the run before it is no longer superseded, but its results were not fetched: the carving the service holds is
+  // fetched and the stage status asked again, so the panel neither stays dimmed nor shows the carving from before that run.
+  const showCarvingTheServiceHolds = useRef(() => {});
+  showCarvingTheServiceHolds.current = () => {
+    reloadResults(CARVING_STAGES);
+    context.refreshStageStatus();
+  };
+
   // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value next. A run whose value
   // the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the carving stays dimmed.
   const thresholdQueue = useMemo(() => createThresholdUpdateQueue(async (shownNumber, isSuperseded) => {
     const view = thresholdControlOf(form.mode);
-    if (view === null) return;
+    if (view === null) return false;
     const outcome = await changeAndSave(thresholdControlValues(view, shownNumber));
-    if (outcome === "saved" || outcome === "none") await runs.start(project, CARVING_STAGES, "carving_update", isSuperseded);
-  }), [form.mode]);
+    if (outcome !== "saved" && outcome !== "none") return false;
+    const runOutcome = await runs.start(project, CARVING_STAGES, "carving_update", isSuperseded);
+    return runOutcome !== "up_to_date" && runOutcome !== "not_started";
+  }, () => showCarvingTheServiceHolds.current()), [form.mode]);
 
   const feedback = (origin: RunOrigin) => (
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} />

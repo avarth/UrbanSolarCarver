@@ -9,44 +9,55 @@ export interface ThresholdUpdateQueue {
   busy: () => boolean;
 }
 
+/** One submitted value; each submission is its own object, so two submissions of one value stay apart. */
 interface Submission {
   value: number;
-  serial: number;     // counts the values submitted
 }
 
 /**
  * At most one *applyAndRun* at a time. *applyAndRun* saves the value, starts the carving run and resolves at the run's last
- * event; it reports its own failures, and a rejection only ends that call, so a value waiting behind it still runs.
- * *isSuperseded* tells, at any time, whether a value has been submitted since this one: the user has left this value, so the
- * results of its run are not the ones to show.
+ * event, with whether a run was started for the value (false when the save was not stored, the run did not start or the
+ * service had nothing to run); it reports its own failures, and a rejection only ends that call, so a value waiting behind it
+ * still runs. *isSuperseded* tells, at any time, whether a newer value is waiting or being applied: the user has left this
+ * value, so the results of its run are not the ones to show, and the newer value's run brings them.
+ * *onLastValueEndedWithoutRun* is called when the last value submitted ended without a run: no newer run follows any more,
+ * so the run before it is not superseded now, and the results the service holds are the ones to show.
  */
-export function createThresholdUpdateQueue(applyAndRun: (value: number, isSuperseded: () => boolean) => Promise<void>): ThresholdUpdateQueue {
-  let running = false;
+export function createThresholdUpdateQueue(applyAndRun: (value: number, isSuperseded: () => boolean) => Promise<boolean>,
+                                           onLastValueEndedWithoutRun: () => void): ThresholdUpdateQueue {
+  let applying: Submission | null = null;
   let waiting: Submission | null = null;
-  let submissionCount = 0;
 
-  const run = async ({ value, serial }: Submission): Promise<void> => {
-    running = true;
+  const newerValueToCome = (submission: Submission) => {
+    const newest = waiting ?? applying;
+    return newest !== null && newest !== submission;
+  };
+
+  const run = async (submission: Submission): Promise<void> => {
+    applying = submission;
+    let runStarted = false;
     try {
-      await applyAndRun(value, () => submissionCount > serial);
+      runStarted = await applyAndRun(submission.value, () => newerValueToCome(submission));
     } catch {
       // applyAndRun has shown what went wrong; the next value still gets its run
     } finally {
-      running = false;
+      applying = null;
     }
     if (waiting !== null) {
       const next = waiting;
       waiting = null;
       void run(next);
+    } else if (!runStarted) {
+      onLastValueEndedWithoutRun();
     }
   };
 
   return {
     submit: (value) => {
-      const submission = { value, serial: ++submissionCount };
-      if (running) waiting = submission;
+      const submission = { value };
+      if (applying !== null) waiting = submission;
       else void run(submission);
     },
-    busy: () => running || waiting !== null,
+    busy: () => applying !== null || waiting !== null,
   };
 }

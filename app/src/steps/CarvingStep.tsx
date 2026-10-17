@@ -3,7 +3,8 @@
 // histogram, the numbers of the last carving, and the "Update when I change the threshold" switch, remembered per project.
 // With the switch on, letting go of the slider or leaving the number field reruns the carving, as does a change of another
 // carving setting (a switch or a choice at once, a number field when the user leaves it); off, Update carving does.
-// When the analysis is out of date the carving is shown dimmed, its controls disabled, with Run analysis in the step.
+// When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with Run
+// analysis in the step.
 import { useEffect, useId, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import type { RunSummary } from "../api_client/client";
 import { messages } from "../messages";
@@ -103,7 +104,9 @@ interface ThresholdControlProps {
 
 /**
  * The slider and number field of the threshold. With auto-update on, the number moved or typed is held here until the user lets
- * go of the slider or leaves the field, then handed on to run; it shows until the form holds it.
+ * go of the slider or leaves the field, then handed on to run; it shows until the form holds it. A number handed on reaches the
+ * form only when its run is next (it may wait behind a run in progress), so going back to the stored number is handed on too
+ * while an earlier one is still on its way: it replaces the waiting one, and the run uses the number the user is at.
  */
 function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reasonId, onChangeValue, onCommit }: ThresholdControlProps) {
   const inputId = useId();
@@ -111,6 +114,7 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   const errorId = `${inputId}-error`;
   const stored = thresholdControlNumber(form, view);
   const [heldNumber, setHeldNumber] = useState<number | null>(null);
+  const lastNumberHandedOn = useRef<number | null>(null);
   useEffect(() => {
     if (heldNumber === stored) setHeldNumber(null);
   }, [stored]);
@@ -121,8 +125,12 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   const change = (value: number) => (autoUpdate ? setHeldNumber(value) : onChangeValue(value));
   const commit = () => {
     if (heldNumber === null) return;
+    const earlierNumberOnItsWay = lastNumberHandedOn.current !== null && lastNumberHandedOn.current !== stored;
+    if (heldNumber !== stored || earlierNumberOnItsWay) {
+      lastNumberHandedOn.current = heldNumber;
+      onCommit(heldNumber);
+    }
     if (heldNumber === stored) setHeldNumber(null);
-    else onCommit(heldNumber);
   };
   const describedBy = [error === undefined ? null : errorId, reasonId ?? null].filter((id) => id !== null).join(" ") || undefined;
   return (
@@ -258,7 +266,7 @@ export function CarvingStep(props: CarvingStepProps) {
   const disabledReason = analysisOutOfDate ? null : (props.thresholdDisabledReason ?? props.settingsDisabledReason);
   const carveAmountReason = thresholdView === null ? null : carveAmountUnusedReason(form, thresholdView);
   const updateBlocker = analysisOutOfDate ? null : runBlocker;
-  const contentClassName = props.carvingDimmed || analysisOutOfDate ? "carving-content carving-content-dimmed" : "carving-content";
+  const resultsClassName = props.carvingDimmed || analysisOutOfDate ? "carving-content carving-content-dimmed" : "carving-content";
   const comparedScores = scorePoints?.comparedScores ?? null;
   const kept = scorePoints?.kept ?? null;
   return (
@@ -274,10 +282,11 @@ export function CarvingStep(props: CarvingStepProps) {
         </div>
       )}
       {props.analysisFeedback}
-      {/* The reasons, the Update carving button and the run's progress stay outside the dimmed parts, so their text keeps its contrast (UX 12). */}
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
       {carveAmountReason !== null && <p id={carveAmountReasonId} className="step-reason">{carveAmountReason}</p>}
-      <div className={contentClassName}>
+      {/* Only the results of the carving are dimmed (UX 5.5, 6.3); the controls are disabled instead, so their labels, the reasons
+          and the messages of settings to fix keep their contrast next to what they explain (UX 12). */}
+      <div className="carving-content">
         {thresholdView === null ? <p className="step-reason">{messages.angleRuleHasNoThreshold}</p> : (
           <ThresholdControl view={thresholdView} form={form} highestScore={scorePoints?.header.score_max ?? null} autoUpdate={autoUpdating}
                             disabled={thresholdDisabled || analysisOutOfDate || carveAmountReason !== null}
@@ -309,7 +318,7 @@ export function CarvingStep(props: CarvingStepProps) {
       )}
       {props.carvingFeedback}
       {summary !== null && (
-        <div className={contentClassName}>
+        <div className={resultsClassName}>
           {thresholdView !== null && comparedScores !== null && kept !== null && (
             <ScoreHistogram comparedScores={comparedScores} kept={kept} cutoff={summary.threshold_value} isShadowTolerated={isShadowTolerated}
                             slopeLimitVoxelsRemoved={summary.slope_limit_extra_voxels_removed} />

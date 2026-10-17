@@ -188,3 +188,63 @@ test("threshold moves during a carving run: one more run with the last value, an
   expect(carvingDimmed()).toBe(false);
   expect(refreshStageStatus).toHaveBeenLastCalledWith(["thresholding"]);
 });
+
+test("a threshold run whose follow-up brings no run (a failed save, results up to date) does not leave the carving dimmed with old results", async () => {
+  FakeWebSocket.opened = [];
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const startReplies = [STARTED("r1"), { status: "up_to_date", run_id: null, stages: [] }];
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    requests.push(`${method} ${address}`);
+    if (method === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(startReplies.shift()));
+    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, massing: null }));
+    return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
+  }));
+  const resultFetches = () => requests.filter((request) => request.endsWith("/run/summary") || request.endsWith("/run/score-points")).length;
+  // The save of 4 fails (a run in another tab answers 409); the others are stored.
+  const changeAndSave = vi.fn(async (values: Record<string, unknown>): Promise<SaveOutcome> =>
+    (values.threshold as { value: number }).value === 4 ? "failed" : "saved");
+  const refreshStageStatus = vi.fn();
+  const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
+  const form = initialFormState({ schema: { properties: { mode: { default: "time-based" }, threshold: { default: null } } }, modes: [],
+                                  settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
+  let latest: ResultSteps | null = null;
+  function Workspace() {
+    const runs = useRunLoop("token", vi.fn());
+    latest = useResultSteps({
+      token: "token", project: "p", form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
+      refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+    });
+    return <>{latest.content.carving}</>;
+  }
+  rendered = renderForTest(<Workspace />);
+  await settle();
+  const fetchesAtOpen = resultFetches();
+  const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
+  const carvingDimmed = () => latest!.viewer.dimmedLayers!.includes("kept_voxels");
+
+  typeAndLeave(field(), "1");
+  await settle();
+  typeAndLeave(field(), "4");                             // waits behind run A, for 1
+  FakeWebSocket.opened[0].send({ type: "stage_progress", stage: "thresholding", done: 0, total: 1 });
+  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["thresholding"], files: [] });
+  await settle();
+  // The save of 4 failed, so no run follows A: A's carving, the one the service holds, is fetched and shown undimmed.
+  expect(changeAndSave).toHaveBeenCalledTimes(2);
+  expect(FakeWebSocket.opened).toHaveLength(1);
+  expect(resultFetches()).toBe(fetchesAtOpen + 2);
+  expect(carvingDimmed()).toBe(false);
+  expect(refreshStageStatus).toHaveBeenLastCalledWith();
+
+  typeAndLeave(field(), "1");                             // stored; the service has nothing to run
+  await settle();
+  expect(requests.filter((request) => request.startsWith("POST") && request.endsWith("/runs"))).toHaveLength(2);
+  expect(FakeWebSocket.opened).toHaveLength(1);
+  expect(rendered.container.textContent).toContain("Results are up to date");
+  expect(resultFetches()).toBe(fetchesAtOpen + 4);
+  expect(carvingDimmed()).toBe(false);
+  expect(refreshStageStatus).toHaveBeenCalledTimes(3);    // at A's end, after the failed save, after "up to date"
+  expect(refreshStageStatus).toHaveBeenLastCalledWith();
+});

@@ -1,7 +1,7 @@
-import { act } from "react";
+import { act, useMemo, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo, RunSummary } from "../api_client/client";
-import { initialFormState, type FormState } from "../settings_form/form_state";
+import { formReducer, initialFormState, type FormState } from "../settings_form/form_state";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { CarvingStep, readAutoUpdate, type CarvingStepProps } from "./CarvingStep";
@@ -11,6 +11,7 @@ import { RunProgress } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
 import { initialRunState, runReducer, type RunLoop, type RunRecord } from "./run_state";
 import { ScoreHistogram } from "./ScoreHistogram";
+import { createThresholdUpdateQueue } from "./threshold_queue";
 
 const SCHEMA = {
   properties: {
@@ -103,6 +104,34 @@ test("with auto-update on the threshold runs when the user leaves the field; off
   expect(onChange).toHaveBeenCalledWith({ threshold: { method: "cutoff", value: 3 } });
   click([...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Update carving")!);
   expect(onUpdateCarving).toHaveBeenCalledOnce();
+});
+
+test("a threshold typed back to the stored value while another value waits behind a run replaces that value", async () => {
+  // The control and the queue as result_steps joins them: the queue applies a value to the form, then runs it until told to end.
+  const appliedValues: number[] = [];
+  const endRuns: (() => void)[] = [];
+  function CarvingWithQueue() {
+    const [form, dispatch] = useReducer(formReducer, carvingProps().form);
+    const queue = useMemo(() => createThresholdUpdateQueue((value) => {
+      appliedValues.push(value);
+      dispatch({ type: "values_changed", values: { threshold: { method: "cutoff", value } } });
+      return new Promise<boolean>((resolve) => { endRuns.push(() => resolve(true)); });
+    }, vi.fn()), []);
+    return <CarvingStep {...carvingProps({ form, onThresholdCommit: (shownNumber) => queue.submit(shownNumber) })} />;
+  }
+  rendered = renderForTest(<CarvingWithQueue />);
+  const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
+  const typeAndLeave = (text: string) => {
+    typeInto(field(), text);
+    act(() => field().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  };
+  typeAndLeave("1");                  // run A, for 1: the form holds 1
+  typeAndLeave("2");                  // waits behind A
+  typeAndLeave("1");                  // back to the stored value: 1 waits instead of 2
+  expect(field().value).toBe("1");
+  await act(async () => { endRuns.shift()!(); await new Promise((resolve) => setTimeout(resolve, 0)); });
+  expect(appliedValues).toEqual([1, 1]);
+  expect(field().value).toBe("1");
 });
 
 test("a weighted mode shows Carve amount in % and Obstruction removed; the angle rule says it has no threshold and no histogram", () => {
@@ -298,6 +327,25 @@ test("disabled carving controls say why, outside the dimmed carving: the run in 
   rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, runBlocker: "Waiting for the GPU to be ready" })} />);
   expect(rendered.container.querySelector(".carving-step > .step-reason")).toBeNull();
   expect(rendered.container.querySelector(".update-carving .run-button-reason")!.textContent).toBe("Waiting for the GPU to be ready");
+  rendered.unmount();
+
+  // The angle rule's message, in place of the threshold control, is not dimmed either.
+  rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("tilted_plane"), carvingDimmed: true })} />);
+  expect(rendered.container.querySelector(".carving-content-dimmed")).not.toBeNull();
+  const angleRuleMessage = [...rendered.container.querySelectorAll(".step-reason")].find((reason) => reason.textContent!.startsWith("The angle rule has no threshold"))!;
+  expect(angleRuleMessage.closest(".carving-content-dimmed")).toBeNull();
+  expect(angleRuleMessage.nextElementSibling!.className).toBe("carving-settings");      // still where the threshold control would be
+  rendered.unmount();
+
+  // Nor are the messages of carving settings a failed run found invalid, each still under its field.
+  const formWithErrors = formReducer(carvingProps().form, { type: "save_rejected", reply: { grid_plan: null, field_errors: [
+    { field: "threshold", message: "Input should be greater than or equal to 0" },
+    { field: "carve_above_min_consecutive", message: "Input should be greater than or equal to 1" }] } });
+  rendered = renderForTest(<CarvingStep {...carvingProps({ form: formWithErrors, carvingDimmed: true })} />);
+  expect(rendered.container.querySelector(".carving-content-dimmed")).not.toBeNull();
+  const fieldErrors = [...rendered.container.querySelectorAll(".setting-error")];
+  expect(fieldErrors.map((error) => error.closest(".setting-field")!.getAttribute("data-setting"))).toEqual(["threshold", "carve_above_min_consecutive"]);
+  expect(rendered.container.querySelectorAll(".carving-content-dimmed .setting-error, .carving-content-dimmed .step-reason")).toHaveLength(0);
 });
 
 test("Carve amount is disabled, saying why, when the carving rule is Automatic split or Score cutoff", () => {
