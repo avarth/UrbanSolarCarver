@@ -1,0 +1,84 @@
+/* Colour, type and spacing of the interface: UX spec section 10, with the rows added in the screen review (section 17).
+   Components read these properties and hold no values of their own. */
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./fonts/atkinson-hyperlegible-next-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("./fonts/atkinson-hyperlegible-next-latin-600-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Atkinson Hyperlegible Next";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./fonts/atkinson-hyperlegible-next-latin-700-normal.woff2") format("woff2");
+}
+
+:root {
+  --colour-chrome: #eef1ef;
+  --colour-panel: #ffffff;
+  --colour-ink: #1f2a30;
+  --colour-muted: #5e6b72;
+  --colour-line: #d5dbdb;
+  --colour-accent: #2f5d7c;
+  --colour-accent-soft: #e3edf3;
+  --colour-sun: #f2b632;
+  --colour-carved: #c8553d;
+  --colour-ready: #3f8f5a;
+  --colour-error: #a3271c;
+
+  --colour-viewport-light: #e3e8e7;
+  --colour-viewport-dark: #22303a;
+  --colour-grid-minor-light: #cfd6d6;
+  --colour-grid-major-light: #a9b4b5;
+  --colour-grid-minor-dark: #2f3e48;
+  --colour-grid-major-dark: #4b5d69;
+
+  /* On the dark viewport */
+  --colour-overlay-on-dark: #2b3a45;
+  --colour-ink-on-dark: #e6ecee;
+  --colour-muted-on-dark: #a9b6bc;
+  --colour-line-on-dark: #3b4b56;
+  --colour-test-surface-on-dark: #6fa0c4;
+
+  /* The axis gizmo only */
+  --colour-axis-x: #b0603a;
+  --colour-axis-y: #4f8a5b;
+  --colour-axis-z: #3b6ea5;
+
+  --font-family: "Atkinson Hyperlegible Next", system-ui, sans-serif;
+  --text-body: 14px;
+  --text-secondary: 12px;
+  --text-step-title: 16px;
+  --text-key-number: 20px;
+  --line-height: 1.4;
+
+  --space-unit: 4px;
+  --radius-large: 6px;     /* steps, tiles, overlays */
+  --radius-small: 4px;     /* inputs */
+}
+
+body {
+  margin: 0;
+  background: var(--colour-chrome);
+  color: var(--colour-ink);
+  font-family: var(--font-family);
+  font-size: var(--text-body);
+  line-height: var(--line-height);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--colour-accent);
+}

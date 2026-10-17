@@ -1,0 +1,28 @@
+{
+  "name": "urbansolarcarver-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "api-types": "python -c \"import json; from urbansolarcarver.local_web_service.server import openapi_document; print(json.dumps(openapi_document()))\" > openapi.json && openapi-typescript openapi.json -o src/api_client/generated_types.ts",
+    "build": "vite build --outDir ../src/urbansolarcarver/ui_static --emptyOutDir && node scripts/write_build_info.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@fontsource/atkinson-hyperlegible-next": "^5.3.0",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^29.1.1",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  }
+}

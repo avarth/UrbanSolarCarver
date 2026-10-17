@@ -1,4 +1,5 @@
-"""What the package carries for the local web app: the example projects, which must stay copies of examples/."""
+"""What the package carries for the local web app: the example projects, which must stay copies of examples/, and the built front-end, which must match app/."""
+import hashlib
 import json
 import shutil
 import subprocess
@@ -11,6 +12,8 @@ PACKAGE_FOLDER = REPOSITORY_ROOT / "src" / "urbansolarcarver"
 EXAMPLE_PROJECTS_FOLDER = PACKAGE_FOLDER / "example_projects"
 WEATHER_FILE_NAME = "USA_CO_Golden-NREL.724666_TMY3.epw"
 MAXIMUM_EXAMPLE_PROJECTS_BYTES = 2_000_000
+APP_FOLDER = REPOSITORY_ROOT / "app"
+BUILD_INFO_PATH = PACKAGE_FOLDER / "ui_static" / "build_info.json"
 
 
 def source_of(packaged_file: Path) -> Path:
@@ -61,3 +64,24 @@ def test_no_packaged_example_file_is_ignored_by_git():
     files = [str(path.relative_to(REPOSITORY_ROOT)) for path in EXAMPLE_PROJECTS_FOLDER.rglob("*") if path.is_file()]
     result = subprocess.run(["git", "check-ignore", *files], cwd=REPOSITORY_ROOT, capture_output=True, text=True)
     assert result.returncode == 1 and result.stdout == "", f"git ignores: {result.stdout}"    # 1 means no file matched
+
+
+def app_source_sha256(app_folder: Path) -> str:
+    """The hash that app/scripts/write_build_info.mjs records: package.json, package-lock.json and every file under src/.
+
+    Files are taken in the order of their paths relative to app/ (written with "/"); each adds its relative path,
+    a newline, and its bytes with every CRLF turned into LF, so a Windows checkout gives the same hash as a Linux one.
+    """
+    source_files = [app_folder / "package.json", app_folder / "package-lock.json",
+                    *(path for path in (app_folder / "src").rglob("*") if path.is_file())]
+    relative_paths = sorted(path.relative_to(app_folder).as_posix() for path in source_files)
+    digest = hashlib.sha256()
+    for relative_path in relative_paths:
+        digest.update((relative_path + "\n").encode("utf-8"))
+        digest.update((app_folder / relative_path).read_bytes().replace(b"\r\n", b"\n"))
+    return digest.hexdigest()
+
+
+def test_front_end_build_matches_its_sources():
+    recorded = json.loads(BUILD_INFO_PATH.read_text(encoding="utf-8"))["app_source_sha256"]
+    assert recorded == app_source_sha256(APP_FOLDER), "app/ changed without a rebuild: run `cd app && npm run build` and commit ui_static/"

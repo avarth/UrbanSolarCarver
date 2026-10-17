@@ -89,3 +89,7 @@ src.zip
 
 # Private files
 fullText.pdf
+
+# Front-end (app/): installed packages and the intermediate OpenAPI file; the build goes to src/urbansolarcarver/ui_static/ and is committed
+app/node_modules/
+app/openapi.json
