@@ -233,7 +233,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   }));
 
   const runAnalysis = () => void runAnalysisAfterSaving(flushSave, () => {
-    void runs.start(project.name, ANALYSIS_STAGES, "settings_run_analysis").then((outcome) => { if (outcome === "finished") openTheStep("carving"); });
+    void resultSteps.startRun(ANALYSIS_STAGES, "settings_run_analysis").then((outcome) => { if (outcome === "finished") openTheStep("carving"); });
   });
   const pinnedActions: Partial<Record<StepName, ReactNode>> = {
     settings: <RunAnalysisButton blocker={runBlocker} onRunAnalysis={runAnalysis} feedback={resultSteps.feedback("settings_run_analysis")} />,

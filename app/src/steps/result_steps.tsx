@@ -15,15 +15,16 @@ import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
 import { RunProgress } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
 import { runAnalysisAfterSaving, RunAnalysisButton } from "./SettingsStep";
-import { runProgressShare, type RunLoop, type RunOrigin, type RunRecord } from "./run_state";
+import { runProgressShare, type RunLoop, type RunOrigin, type RunOutcome, type RunRecord } from "./run_state";
 import { useResultsFollowingRun, useRunResults, type RunResults } from "./run_results";
 import type { PipelineStage, StageState, StepName } from "./step_summaries";
 import { createThresholdUpdateQueue } from "./threshold_queue";
 
-export const ANALYSIS_STAGES = ["thresholding"];                 // Run analysis: preprocessing is added when it is out of date
-export const CARVING_STAGES = ["thresholding"];
-export const BUILD_STAGES = ["exporting", "massing"];
-export const ENVELOPE_MESH_STAGES = ["exporting"];
+export const ANALYSIS_STAGES: PipelineStage[] = ["thresholding"];     // Run analysis: preprocessing is added when it is out of date
+export const CARVING_STAGES: PipelineStage[] = ["thresholding"];
+export const BUILD_STAGES: PipelineStage[] = ["exporting", "massing"];
+export const ENVELOPE_MESH_STAGES: PipelineStage[] = ["exporting"];
+const PIPELINE_STAGES: readonly PipelineStage[] = ["preprocessing", "thresholding", "exporting", "massing"];
 
 /** The step whose summary counts the warnings of a run started by each button. */
 const STEP_OF_ORIGIN: Record<RunOrigin, StepName> = {
@@ -87,6 +88,17 @@ export function missingLayersOf(record: RunRecord | null, results: RunResults, i
     .filter((layer) => (layer !== "sky_dome" || isWeightedMode) && !layerHasData(layer, results));
 }
 
+/**
+ * The stages whose results to fetch when the service answers that *produce* is up to date: the stages asked for, and the
+ * earlier ones the page does not hold as current. "Up to date" says all of them are current, and a page that did not follow
+ * the run that made them (it was reloaded during the run, or the run was started in another tab) holds an older status and
+ * no results or older ones for them.
+ */
+export function stagesToFetchWhenUpToDate(produce: readonly string[], stages: Record<PipelineStage, StageState>): PipelineStage[] {
+  const lastAskedFor = Math.max(...produce.map((stage) => PIPELINE_STAGES.indexOf(stage as PipelineStage)));
+  return PIPELINE_STAGES.filter((stage, index) => produce.includes(stage) || (index < lastAskedFor && stages[stage] !== "current"));
+}
+
 export interface ResultStepsContext {
   token: string;
   project: string;
@@ -120,6 +132,8 @@ export interface ResultSteps {
   feedback: (origin: RunOrigin) => ReactNode;
   /** How the last run a step started ended, for a step that cannot be used now (a cancelled first analysis). */
   feedbackWhenNotUsable: Partial<Record<StepName, ReactNode>>;
+  /** Starts a run of the project from a button; when the service has nothing to run, the results it holds are fetched. */
+  startRun: (produce: string[], origin: RunOrigin) => Promise<RunOutcome>;
 }
 
 export function useResultSteps(context: ResultStepsContext): ResultSteps {
@@ -133,7 +147,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const [lastAnalysisSeconds, setLastAnalysisSeconds] = useState<number | null>(null);
   const [runReportOpen, setRunReportOpen] = useState(false);
   const [downloadProblem, setDownloadProblem] = useState<string | null>(null);
-  const [carvingFetchesUnderWay, setCarvingFetchesUnderWay] = useState(0);
+  const [fetchesUnderWay, setFetchesUnderWay] = useState<Partial<Record<PipelineStage, number>>>({});
   const record: RunRecord | null = runs.current?.project === project ? runs.current : null;
   const running = record !== null && record.state.final === null && record.refusal === null;
 
@@ -150,20 +164,29 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     }
   });
 
-  const startAfterSaving = (produce: string[], origin: RunOrigin) =>
-    runAnalysisAfterSaving(flushSave, () => void runs.start(project, produce, origin));
-
-  // When the last threshold value ended without a run (its save was not stored, its run did not start, or the service had nothing
-  // to run), the run before it is no longer superseded, but its results were not fetched: the carving the service holds is
-  // fetched and the stage status asked again. The carving stays dimmed until those fetches have ended, so the carving from
-  // before that run is never shown as current.
-  const showCarvingTheServiceHolds = useRef(() => {});
-  showCarvingTheServiceHolds.current = () => {
-    setCarvingFetchesUnderWay((count) => count + 1);
-    void reloadResults(CARVING_STAGES).then(() => setCarvingFetchesUnderWay((count) => count - 1));
+  // The results the service holds, fetched again with the stage status, when the page may show older ones. After the last
+  // threshold value ended without a run (its save was not stored, its run did not start, or the service had nothing to run),
+  // the run before it is no longer superseded, but its results were not fetched; and "up to date" may come to a page that did
+  // not follow the run that made the results. The stages stay dimmed until those fetches have ended, so results from before
+  // are never shown as current.
+  const showResultsTheServiceHolds = useRef((_stagesToFetch: readonly PipelineStage[]) => {});
+  showResultsTheServiceHolds.current = (stagesToFetch) => {
+    const countFetches = (change: number) => setFetchesUnderWay((current) => ({
+      ...current, ...Object.fromEntries(stagesToFetch.map((stage) => [stage, (current[stage] ?? 0) + change])),
+    }));
+    countFetches(1);
+    void reloadResults(stagesToFetch).then(() => countFetches(-1));
     context.refreshStageStatus();
   };
-  const stagesBeingFetched: PipelineStage[] = carvingFetchesUnderWay > 0 ? ["thresholding"] : [];
+  const stagesBeingFetched = PIPELINE_STAGES.filter((stage) => (fetchesUnderWay[stage] ?? 0) > 0);
+
+  // On "up to date" the steps would otherwise go on saying, from an old stage status, that a stage has not run.
+  const startRun = async (produce: string[], origin: RunOrigin): Promise<RunOutcome> => {
+    const outcome = await runs.start(project, produce, origin);
+    if (outcome === "up_to_date") showResultsTheServiceHolds.current(stagesToFetchWhenUpToDate(produce, stages));
+    return outcome;
+  };
+  const startAfterSaving = (produce: string[], origin: RunOrigin) => runAnalysisAfterSaving(flushSave, () => void startRun(produce, origin));
 
   // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value next. A run whose value
   // the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the carving stays dimmed
@@ -175,7 +198,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     if (outcome !== "saved" && outcome !== "none") return false;
     const runOutcome = await runs.start(project, CARVING_STAGES, "carving_update", isSuperseded);
     return runOutcome !== "up_to_date" && runOutcome !== "not_started";
-  }, () => showCarvingTheServiceHolds.current()), [form.mode]);
+  }, () => showResultsTheServiceHolds.current(CARVING_STAGES)), [form.mode]);
 
   const feedback = (origin: RunOrigin) => (
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} />
@@ -207,7 +230,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   };
   const changeMeshFormat = async (format: string) => {
     const outcome = await changeAndSave({ final_mesh_format: format });
-    if ((outcome === "saved" || outcome === "none") && stages.exporting !== "missing") void runs.start(project, ENVELOPE_MESH_STAGES, "export_format");
+    if ((outcome === "saved" || outcome === "none") && stages.exporting !== "missing") void startRun(ENVELOPE_MESH_STAGES, "export_format");
   };
 
   const content = {
@@ -256,5 +279,6 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     warningsOfStep,
     feedback,
     feedbackWhenNotUsable: { carving: <>{feedback("carving_run_analysis")}{feedback("carving_update")}</>, envelope_and_massing: feedback("build") },
+    startRun,
   };
 }

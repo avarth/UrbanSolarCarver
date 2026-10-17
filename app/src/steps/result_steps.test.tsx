@@ -303,3 +303,40 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
   expect(carvingDimmed()).toBe(false);
   expect(carvingStepDimmed()).toBe(false);
 });
+
+test("Run analysis answered with up to date asks for the stage status again and fetches the results the service holds (a run the page did not follow)", async () => {
+  FakeWebSocket.opened = [];
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    requests.push(`${method} ${address}`);
+    if (method === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify({ status: "up_to_date", run_id: null, stages: [] }));
+    return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
+  }));
+  // The page was reloaded while a run went on: the stage status it opened with said "missing" for the stages that run rewrote.
+  const stages: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "current", massing: "current" };
+  const refreshStageStatus = vi.fn();
+  const form = initialFormState({ schema: { properties: { mode: { default: "daylight" } } }, modes: [], settings: { mode: "daylight" }, gridPlan: null });
+  function Workspace() {
+    const runs = useRunLoop("token", vi.fn());
+    const steps = useResultSteps({
+      token: "token", project: "p", form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
+      stages, refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+    });
+    return <>{steps.content.carving}</>;
+  }
+  rendered = renderForTest(<Workspace />);
+  await settle();
+  const requestsAtOpen = requests.length;
+  const runAnalysis = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Run analysis")!;
+  await act(async () => runAnalysis.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+  await settle();
+  expect(rendered.container.textContent).toContain("Results are up to date");
+  expect(FakeWebSocket.opened).toHaveLength(0);
+  expect(refreshStageStatus).toHaveBeenCalledOnce();
+  // The carving asked for, and the analysis before it that the page did not hold as current; not the envelope or the massing.
+  expect(requests.slice(requestsAtOpen).filter((request) => request.startsWith("GET")).map((request) => request.split("/api/projects/p/")[1]).sort())
+    .toEqual(["run/score-points", "run/sky-patches", "run/summary"]);
+});
