@@ -2,9 +2,9 @@
 // and the voxel grid it planned. The service stores only the settings that were given (the engine warns about a setting the
 // mode does not read), so the form sends the mode and the values the user set, never every field; the mode's starting values
 // and the schema defaults fill the rest, on the service as in the form.
-import { useEffect, useMemo, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError, putConfig, type ConfigErrorReply, type ConfigReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
-import { settingIsReadBy } from "./presentation";
+import { presentedSettingOf, settingIsReadBy } from "./presentation";
 
 export const SAVE_DELAY_MILLISECONDS = 400;
 
@@ -55,7 +55,8 @@ export type FormAction =
   | { type: "mode_chosen"; mode: string }
   | { type: "save_succeeded"; reply: ConfigReply }
   | { type: "save_rejected"; reply: ConfigErrorReply }
-  | { type: "save_failed"; error: unknown };
+  | { type: "save_failed"; error: unknown }
+  | { type: "project_opened"; start: FormStart };
 
 const sameValue = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
 
@@ -101,13 +102,18 @@ export function formReducer(state: FormState, action: FormAction): FormState {
       const fieldErrors: Record<string, string> = {};
       const stepErrors: string[] = [];
       for (const { field, message } of action.reply.field_errors) {
-        if (field === null) stepErrors.push(message);
-        else fieldErrors[field] = field in fieldErrors ? `${fieldErrors[field]} ${message}` : message;
+        // The engine names a part of a setting after a dot ("threshold.value"); the error goes under the setting the form shows.
+        // An error of a setting the form does not show ("mode") is shown for the step, with the engine's name for it.
+        const shownSetting = field === null ? null : presentedSettingOf(field);
+        if (shownSetting === null) stepErrors.push(field === null ? message : `${field}: ${message}`);
+        else fieldErrors[shownSetting] = shownSetting in fieldErrors ? `${fieldErrors[shownSetting]} ${message}` : message;
       }
       return { ...state, fieldErrors, stepErrors, gridPlan: action.reply.grid_plan, pendingSave: false, saveFailure: null };
     }
     case "save_failed":
       return { ...state, pendingSave: false, saveFailure: action.error };
+    case "project_opened":
+      return initialFormState(action.start);
   }
 }
 
@@ -134,6 +140,8 @@ function isConfigErrorReply(body: unknown): body is ConfigErrorReply {
 export interface ConfigSaver {
   /** Saves *values* once no other change has come for the delay. */
   schedule: (values: Record<string, unknown>) => void;
+  /** Sends the waiting save now; resolves once the last save sent has had its reply passed on (at once when none was sent). */
+  flush: () => Promise<void>;
   /** Drops the waiting save and any reply still to come. */
   cancel: () => void;
 }
@@ -146,6 +154,8 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
                                   delayMilliseconds = SAVE_DELAY_MILLISECONDS): ConfigSaver {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let latestChange = 0;
+  let waitingSave: { values: Record<string, unknown>; change: number } | null = null;
+  let lastSave: Promise<void> = Promise.resolve();
   const send = async (values: Record<string, unknown>, change: number) => {
     try {
       const reply = await save(values);
@@ -156,27 +166,65 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
       else dispatch({ type: "save_failed", error });
     }
   };
+  const sendWaitingSave = () => {
+    clearTimeout(timer);
+    if (waitingSave !== null) {
+      lastSave = send(waitingSave.values, waitingSave.change);
+      waitingSave = null;
+    }
+    return lastSave;
+  };
   return {
     schedule: (values) => {
       clearTimeout(timer);
-      const change = ++latestChange;
-      timer = setTimeout(() => send(values, change), delayMilliseconds);
+      waitingSave = { values, change: ++latestChange };
+      timer = setTimeout(sendWaitingSave, delayMilliseconds);
     },
+    flush: sendWaitingSave,
     cancel: () => {
       clearTimeout(timer);
+      waitingSave = null;
       latestChange++;
     },
   };
 }
 
-/** The form of one project: every change is saved with PUT config 400 ms after the last one. */
+/**
+ * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project
+ * starts its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown.
+ * *flushSave* sends a waiting change at once and resolves when its reply is in the form, for a run that must use it.
+ */
 export function useSettingsForm(token: string, project: string, start: FormStart) {
   const [form, dispatch] = useReducer(formReducer, start, initialFormState);
-  const saver = useMemo(() => createConfigSaver((values) => putConfig(token, project, values), dispatch), [token, project]);
-  useEffect(() => saver.cancel, [saver]);
-  // Only a change starts a save: a reply changes the form too, but not its change count.
+  const saver = useRef<ConfigSaver | null>(null);
+  const currentToken = useRef(token);
+  const formProject = useRef(project);
+
   useEffect(() => {
-    if (form.changeCount > 0) saver.schedule(valuesToSend(form));
-  }, [form.changeCount, saver]);
-  return { form, dispatch };
+    currentToken.current = token;      // a new token is used from the next save on; it starts no save of its own
+  }, [token]);
+
+  useEffect(() => {
+    const projectSaver: ConfigSaver = createConfigSaver((values) => putConfig(currentToken.current, project, values),
+      (action) => { if (saver.current === projectSaver) dispatch(action); });
+    saver.current = projectSaver;
+    return () => {
+      saver.current = null;
+      void projectSaver.flush();
+    };
+  }, [project]);
+
+  useEffect(() => {
+    if (formProject.current === project) return;
+    formProject.current = project;
+    dispatch({ type: "project_opened", start });     // the start given with the new project
+  }, [project]);
+
+  // Only a change starts a save: a reply changes the form too, but not its change count, and opening a project sets it to 0.
+  useEffect(() => {
+    if (form.changeCount > 0) saver.current?.schedule(valuesToSend(form));
+  }, [form.changeCount]);
+
+  const flushSave = useCallback(() => saver.current?.flush() ?? Promise.resolve(), []);
+  return { form, dispatch, flushSave, pendingSave: form.pendingSave };
 }

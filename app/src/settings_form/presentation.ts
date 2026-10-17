@@ -47,7 +47,9 @@ export const SETTING_PRESENTATIONS: Readonly<Record<string, SettingPresentation>
 export const ANALYSIS_PERIOD_FIELDS = ["start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour"] as const;
 
 // Units that name the kind of control rather than a unit of the value; the control itself shows them.
-const UNITS_NAMING_THE_CONTROL = new Set(["on/off", "choice", "dates, hours", "0 to 6"]);
+const UNITS_NAMING_THE_CONTROL = new Set(["on/off", "choice", "dates, hours"]);
+// A range given in the unit column: shown beside the value, but not a unit of a value ("default 2", not "default 2 0 to 6").
+const RANGES_IN_THE_UNIT_COLUMN = new Set(["0 to 6"]);
 
 export function settingIsReadBy(name: string, mode: string): boolean {
   const modes = SETTING_PRESENTATIONS[name]?.modes;
@@ -73,6 +75,21 @@ export function settingView(name: string, mode: string): SettingView {
 /** The unit written beside the value, or "" when the unit only names the kind of control (on/off, choice). */
 export function unitBesideValue(view: SettingView): string {
   return UNITS_NAMING_THE_CONTROL.has(view.unit) ? "" : view.unit;
+}
+
+/** The unit written after a value of the setting, as its default in the tooltip: neither a control kind nor a range. */
+export function unitOfValue(view: SettingView): string {
+  return RANGES_IN_THE_UNIT_COLUMN.has(view.unit) ? "" : unitBesideValue(view);
+}
+
+/**
+ * The setting the form shows for a field the engine names: the name itself, or the name before a dot ("threshold.value",
+ * "tilted_plane_angle_deg.float"); null when the form shows no such setting ("mode").
+ */
+export function presentedSettingOf(field: string): string | null {
+  if (field in SETTING_PRESENTATIONS) return field;
+  const settingName = field.split(".")[0];
+  return settingName in SETTING_PRESENTATIONS ? settingName : null;
 }
 
 /** The fold under a group's essential settings; a group without essential settings is one fold titled with the group name. */

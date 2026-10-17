@@ -170,3 +170,82 @@ test("the form of a project saves each change with PUT config 400 ms later", asy
   rendered.unmount();
   vi.unstubAllGlobals();
 });
+
+test("an error the engine names after a dot goes under its setting, and one of a setting not in the form goes to the step", () => {
+  let state = storedProjectState({ mode: "time-based" });
+  state = formReducer(state, {
+    type: "save_rejected",
+    reply: { field_errors: [{ field: "threshold.value", message: "cutoff threshold must be >= 0" },
+                            { field: "tilted_plane_angle_deg.float", message: "Input should be a valid number" },
+                            { field: "mode", message: "mode must be one of the six modes" }], grid_plan: null },
+  });
+  expect(state.fieldErrors).toEqual({ threshold: "cutoff threshold must be >= 0", tilted_plane_angle_deg: "Input should be a valid number" });
+  expect(state.stepErrors).toEqual(["mode: mode must be one of the six modes"]);
+});
+
+test("flushing the saver sends a waiting save at once and resolves once its reply is passed on", async () => {
+  vi.useFakeTimers();
+  const actions: FormAction[] = [];
+  const reply: ConfigReply = { settings: { voxel_size: 2 }, grid_plan: GRID_PLAN };
+  const save = vi.fn().mockResolvedValue(reply);
+  const saver = createConfigSaver(save, (action) => actions.push(action));
+  await saver.flush();                                       // nothing waiting: resolves without a request
+  expect(save).not.toHaveBeenCalled();
+  saver.schedule({ voxel_size: 2 });
+  await saver.flush();
+  expect(save).toHaveBeenCalledExactlyOnceWith({ voxel_size: 2 });
+  expect(actions).toEqual([{ type: "save_succeeded", reply }]);
+  await vi.advanceTimersByTimeAsync(400);
+  expect(save).toHaveBeenCalledOnce();                       // the timer of the flushed save sends nothing more
+});
+
+function renderedForm(project: string, settings: Record<string, unknown>) {
+  let latest: ReturnType<typeof useSettingsForm> | null = null;
+  function FormProbe({ projectName, projectSettings }: { projectName: string; projectSettings: Record<string, unknown> }) {
+    latest = useSettingsForm("launch token", projectName, { schema: SCHEMA, modes: MODES, settings: projectSettings, gridPlan: null });
+    return null;
+  }
+  const rendered = renderForTest(createElement(FormProbe, { projectName: project, projectSettings: settings }));
+  return {
+    current: () => latest!,
+    openProject: (name: string, nameSettings: Record<string, unknown>) => rendered.rerender(createElement(FormProbe, { projectName: name, projectSettings: nameSettings })),
+    unmount: rendered.unmount,
+  };
+}
+
+test("opening another project shows its settings and sends it nothing; a change still waiting goes to the project it was made in", async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ settings: {}, grid_plan: GRID_PLAN })));
+  vi.stubGlobal("fetch", fetchMock);
+  const form = renderedForm("first", { mode: "daylight" });
+  act(() => form.current().dispatch({ type: "values_changed", values: { voxel_size: 2 } }));
+  await act(() => vi.advanceTimersByTimeAsync(100));
+  form.openProject("second", { mode: "irradiance", voxel_size: 3 });
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchMock.mock.calls.map(([address]) => address)).toEqual(["/api/projects/first/config"]);
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ values: { voxel_size: 2, mode: "daylight" } });
+  expect(form.current().form.mode).toBe("irradiance");
+  expect(form.current().form.userValues).toEqual({ voxel_size: 3 });
+  expect(form.current().form.gridPlan).toBeNull();          // the first project's reply is not shown in the second's form
+  expect(form.current().pendingSave).toBe(false);
+  act(() => form.current().dispatch({ type: "values_changed", values: { north_deg: 10 } }));
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(fetchMock.mock.calls[1][0]).toBe("/api/projects/second/config");
+  form.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the form's flushSave sends a change at once, for a run that must use it", async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ settings: {}, grid_plan: GRID_PLAN })));
+  vi.stubGlobal("fetch", fetchMock);
+  const form = renderedForm("first", { mode: "daylight" });
+  act(() => form.current().dispatch({ type: "values_changed", values: { voxel_size: 2 } }));
+  expect(form.current().pendingSave).toBe(true);
+  await act(() => form.current().flushSave());
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(form.current().pendingSave).toBe(false);
+  expect(form.current().form.gridPlan).toEqual(GRID_PLAN);
+  form.unmount();
+  vi.unstubAllGlobals();
+});

@@ -4,7 +4,7 @@ import { useId, type ReactNode } from "react";
 import { messages } from "../messages";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
-  ANALYSIS_PERIOD_FIELDS, fromDisplayValue, thresholdIsShadowToleratedIn, toDisplayValue, unitBesideValue, type SettingView,
+  ANALYSIS_PERIOD_FIELDS, fromDisplayValue, thresholdIsShadowToleratedIn, toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
 } from "./presentation";
 import { SettingTooltip } from "./SettingTooltip";
 import { AnalysisPeriod, type AnalysisPeriodField } from "./widgets/AnalysisPeriod";
@@ -50,7 +50,7 @@ function rangeOf(property: SchemaProperty | undefined): { minimum?: number; maxi
 
 /** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */
 export function defaultTextOf(view: SettingView, form: FormState, isShadowTolerated: boolean): string {
-  const unit = unitBesideValue(view);
+  const unit = unitOfValue(view);
   const withUnit = (text: string) => (unit ? `${text} ${unit}` : text);
   if (view.widget === "analysis_period") {
     const period = ANALYSIS_PERIOD_FIELDS.map((name) => defaultValue(form, name));

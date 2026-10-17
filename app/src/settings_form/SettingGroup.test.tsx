@@ -27,6 +27,7 @@ const SCHEMA = {
     end_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
     end_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
     end_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
+    smooth_iters: { default: 2, minimum: 0, maximum: 6, type: "integer" },
     ground_floor_height: { default: 5.0, type: "number" },
     floor_height: { default: 3.0, type: "number" },
     min_plate_dimension: { default: 3.0, type: "number" },
@@ -211,4 +212,47 @@ test("the settings form styles take every colour from the tokens", () => {
   expect(formCss).not.toMatch(/#[0-9a-f]{3,6}\b|rgb\(/i);
   expect(formCss).toMatch(/\.setting-info\[aria-expanded="true"\]\s*{[^}]*background: var\(--colour-accent-soft\)/);
   expect(formCss).toMatch(/\.setting-group-title\s*{[^}]*font-size: var\(--text-secondary\);[^}]*font-weight: 600;[^}]*color: var\(--colour-muted\)/);
+});
+
+test("an invalid field is marked without the outline, which stays the focus mark", () => {
+  const formCss = readFileSync("src/settings_form/settings_form.css", "utf8");
+  const invalidRules = formCss.match(/[^}]*\[aria-invalid="true"\][^{]*{[^}]*}/g)!;
+  expect(invalidRules.length).toBeGreaterThan(0);
+  for (const rule of invalidRules) {
+    expect(rule).not.toMatch(/outline(-offset)?\s*:/);
+    expect(rule).toMatch(/box-shadow:[^;]*var\(--colour-error\)/);
+  }
+  expect(formCss).not.toMatch(/outline\s*:/);       // nothing in the form replaces the focus outline of tokens.css
+});
+
+test("the tooltip stays open while the pointer moves from the i onto it, over a strip across the gap", () => {
+  rendered = renderForTest(<SettingField view={viewOf("settings", "daylight", "voxel_size")} form={formFor("daylight")} onChange={() => {}} />);
+  const infoButton = rendered.container.querySelector<HTMLButtonElement>("button.setting-info")!;
+  act(() => { infoButton.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); });
+  const tooltip = rendered.container.querySelector("[role='tooltip']")!;
+  act(() => { infoButton.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: tooltip })); });
+  act(() => { tooltip.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, relatedTarget: infoButton })); });
+  expect(rendered.container.querySelector("[role='tooltip']")).not.toBeNull();
+  act(() => { tooltip.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: document.body })); });
+  expect(rendered.container.querySelector("[role='tooltip']")).toBeNull();
+  const formCss = readFileSync("src/settings_form/settings_form.css", "utf8");
+  expect(formCss).toMatch(/\.setting-tooltip::after\s*{[^}]*top: -9px;[^}]*height: 9px;/);
+});
+
+test("a tooltip opened by a click closes when the pointer presses elsewhere", () => {
+  rendered = renderForTest(<SettingField view={viewOf("settings", "daylight", "voxel_size")} form={formFor("daylight")} onChange={() => {}} />);
+  const infoButton = rendered.container.querySelector<HTMLButtonElement>("button.setting-info")!;
+  click(infoButton);
+  act(() => { rendered!.container.querySelector("[role='tooltip']")!.dispatchEvent(new Event("pointerdown", { bubbles: true })); });
+  expect(rendered.container.querySelector("[role='tooltip']")).not.toBeNull();      // a press on the tooltip itself keeps it
+  act(() => { document.body.dispatchEvent(new Event("pointerdown", { bubbles: true })); });
+  expect(rendered.container.querySelector("[role='tooltip']")).toBeNull();
+});
+
+test("a range given as the unit is shown beside the value but not after the default", () => {
+  rendered = renderForTest(<SettingField view={viewOf("envelope_and_massing", "daylight", "smooth_iters")} form={formFor("daylight")} onChange={() => {}} />);
+  expect(rendered.container.querySelector(".setting-unit")!.textContent).toBe("0 to 6");
+  click(rendered.container.querySelector("button.setting-info")!);
+  expect(rendered.container.querySelector("[role='tooltip']")!.textContent).toContain("Config name: smooth_iters, default 2");
+  expect(rendered.container.querySelector("[role='tooltip']")!.textContent).not.toContain("default 2 0 to 6");
 });

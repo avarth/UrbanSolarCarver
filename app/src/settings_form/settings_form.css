@@ -87,14 +87,18 @@
 .setting-number { width: 96px; }
 .setting-number-short { width: 64px; }
 
-/* An invalid field: a 2 px outline in the error colour (UX 11). */
+/* An invalid field: a 2 px edge in the error colour (UX 11), the 1 px border and a 1 px inner ring. It leaves the outline
+   to the focus mark of tokens.css, so focusing an invalid field still shows (UX 12). */
 .setting-number[aria-invalid="true"],
 .setting-select[aria-invalid="true"],
-.setting-switch[aria-invalid="true"],
-.setting-choice-row[aria-invalid="true"] {
+.setting-switch[aria-invalid="true"] {
   border-color: var(--colour-error);
-  outline: 2px solid var(--colour-error);
-  outline-offset: -1px;
+  box-shadow: inset 0 0 0 1px var(--colour-error);
+}
+
+.setting-choice-row[aria-invalid="true"] {
+  border-radius: var(--radius-small);
+  box-shadow: 0 0 0 2px var(--colour-error);
 }
 
 .setting-number:disabled,
@@ -207,6 +211,17 @@
   border-left: 1px solid var(--colour-line);
   background: var(--colour-panel);
   transform: rotate(45deg);
+}
+
+/* A transparent strip over the gap between the "i" and the tooltip: the pointer crossing it stays on the tooltip, so the
+   tooltip stays open on its way there. As tall as the gap set in SettingTooltip.tsx, plus the border. */
+.setting-tooltip::after {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: 0;
+  right: 0;
+  height: 9px;
 }
 
 .setting-tooltip-config,

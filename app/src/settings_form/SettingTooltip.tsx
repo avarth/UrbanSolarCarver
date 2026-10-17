@@ -1,6 +1,7 @@
 // The "i" beside a setting and its tooltip (UX 7, 12): the help text, then the config name and default in 12 px muted with the
 // name in monospace, then an extra line (the grid of the voxel size). It opens on hover, focus and click and closes with Escape;
-// a click opens it until the next click. It is placed in the window, under its "i", so the panel's scrolling never clips it.
+// a click opens it until the next click or a press elsewhere. The pointer may move from the "i" onto the tooltip without
+// closing it. It is placed in the window, under its "i", so the panel's scrolling never clips it.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { messages, type MessagePart } from "../messages";
 import "./settings_form.css";
@@ -45,17 +46,27 @@ export function SettingTooltip({ settingLabel, help, configName, defaultText, ex
   const tooltipId = useId();
   const infoButton = useRef<HTMLButtonElement>(null);
   const tooltip = useRef<HTMLSpanElement>(null);
+  const anchor = useRef<HTMLSpanElement>(null);     // the "i" and the tooltip: the pointer over either keeps the tooltip open
   const open = pinnedByClick || ((hovered || focused) && !dismissed);
 
   useEffect(() => {
     if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+    const close = () => {
       setPinnedByClick(false);
       setDismissed(true);
     };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close();
+    };
+    const closeOnPointerDownElsewhere = (event: Event) => {
+      if (!(event.target instanceof Node && anchor.current?.contains(event.target))) close();
+    };
     document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnPointerDownElsewhere);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnPointerDownElsewhere);
+    };
   }, [open]);
 
   useLayoutEffect(() => {
@@ -80,7 +91,7 @@ export function SettingTooltip({ settingLabel, help, configName, defaultText, ex
     : { top: placement.top, left: placement.left, "--setting-tooltip-arrow-left": `${placement.arrowLeft}px` } as CSSProperties;
 
   return (
-    <span className="setting-info-anchor"
+    <span ref={anchor} className="setting-info-anchor"
           onMouseEnter={() => { setHovered(true); setDismissed(false); }}
           onMouseLeave={() => setHovered(false)}>
       <button ref={infoButton} type="button" className="setting-info" aria-label={messages.aboutSetting(settingLabel)}
