@@ -15,10 +15,18 @@ test("cividis is matplotlib's at the middle and clamps outside 0 to 1", () => {
 
 test("kept voxels are coloured over 0 to the cutoff", () => { expect(keptScoreRange(1.5)).toEqual([0, 1.5]); });
 
-test("storeys run from light to slate", () => {
+test("storeys run from the storey-low token to the storey-high token", () => {
+  document.documentElement.style.setProperty("--colour-storey-low", "#dfe6ea");
+  document.documentElement.style.setProperty("--colour-storey-high", "#2f5d7c");
   expect(storeyColour(0, 7)).toBe("#dfe6ea");
   expect(storeyColour(6, 7)).toBe("#2f5d7c");
   expect(storeyColour(0, 1)).toBe("#dfe6ea");
+  // The ramp follows the tokens: no storey colour is held in the code.
+  document.documentElement.style.setProperty("--colour-storey-low", "#000000");
+  document.documentElement.style.setProperty("--colour-storey-high", "#ffffff");
+  expect(storeyColour(0, 3)).toBe("#000000");
+  expect(storeyColour(1, 3)).toBe("#808080");
+  expect(storeyColour(2, 3)).toBe("#ffffff");
 });
 
 test("the sun ramp runs from the viewport background to the sun colour", () => {

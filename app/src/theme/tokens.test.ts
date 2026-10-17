@@ -6,7 +6,8 @@ const tokensCss = readFileSync("src/theme/tokens.css", "utf8");
 test("tokens hold the UX spec colours", () => {
   for (const [name, hex] of [["--colour-accent", "#2f5d7c"], ["--colour-sun", "#f2b632"], ["--colour-carved", "#c8553d"],
                              ["--colour-viewport-light", "#e3e8e7"], ["--colour-viewport-dark", "#22303a"],
-                             ["--colour-overlay-on-dark", "#2b3a45"], ["--colour-test-surface-on-dark", "#6fa0c4"]])
+                             ["--colour-overlay-on-dark", "#2b3a45"], ["--colour-test-surface-on-dark", "#6fa0c4"],
+                             ["--colour-storey-low", "#dfe6ea"], ["--colour-storey-high", "#2f5d7c"]])
     expect(tokensCss).toMatch(new RegExp(`${name}:\\s*${hex}`, "i"));
 });
 

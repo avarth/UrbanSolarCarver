@@ -1,5 +1,5 @@
 // The data colours of the 3D view (UX 10.1): cividis for scores, the sun ramp for sky patch weights, the storey ramp for the
-// building massing. The theme colours themselves live in theme/tokens.css and are read from there.
+// building massing. The theme colours and the ends of the storey ramp live in theme/tokens.css and are read from there.
 
 export type ViewportTheme = "light" | "dark";
 
@@ -22,9 +22,6 @@ const CIVIDIS_HEX = (
   "dec958 dfca57 e0cb56 e1cc55 e2cd54 e4ce53 e5cf52 e6d051 e7d150 e8d24f e9d34e ead34c ebd44b edd54a eed649 efd748 " +
   "f0d846 f1d945 f2da44 f3db42 f5dc41 f6dd3f f7de3e f8df3c f9e03a fbe138 fce236 fde334 fee434 fee535 fee636 fee838"
 ).split(" ").map((hex) => `#${hex}`);
-
-const STOREY_RAMP_START = "#dfe6ea";      // UX 10.1: storeys run from this light grey to slate
-const STOREY_RAMP_END = "#2f5d7c";
 
 function clampedShare(t: number): number {
   return Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0));
@@ -70,7 +67,7 @@ export function sunRamp(t: number, viewportTheme: ViewportTheme): string {
   return mixedColour(viewportBackground(viewportTheme), colourToken("sun"), t);
 }
 
-/** The colour of a storey (0 for the ground storey) of the building massing. */
+/** The colour of a storey (0 for the ground storey) of the building massing: the storey ramp, from light grey to slate (UX 10.1). */
 export function storeyColour(storeyIndex: number, storeyCount: number): string {
-  return mixedColour(STOREY_RAMP_START, STOREY_RAMP_END, storeyCount > 1 ? storeyIndex / (storeyCount - 1) : 0);
+  return mixedColour(colourToken("storey-low"), colourToken("storey-high"), storeyCount > 1 ? storeyIndex / (storeyCount - 1) : 0);
 }

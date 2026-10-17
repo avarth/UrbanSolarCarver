@@ -56,6 +56,10 @@
   --colour-line-on-dark: #3b4b56;
   --colour-test-surface-on-dark: #6fa0c4;
 
+  /* The building massing: storeys run from the low colour (the ground storey) to the high colour (the top storey) */
+  --colour-storey-low: #dfe6ea;
+  --colour-storey-high: #2f5d7c;
+
   /* The axis gizmo only */
   --colour-axis-x: #b0603a;
   --colour-axis-y: #4f8a5b;
