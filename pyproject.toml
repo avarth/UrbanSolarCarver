@@ -72,6 +72,9 @@ include = ["urbansolarcarver*"]
 package-dir = {"" = "src"}
 include-package-data = true
 
+[tool.setuptools.package-data]
+urbansolarcarver = ["ui_static/**/*", "example_projects/**/*"]
+
 [tool.pytest.ini_options]
 markers = [
   "slow: takes seconds (end-to-end scenes, simulations, a daemon process); skip with -m 'not slow'",

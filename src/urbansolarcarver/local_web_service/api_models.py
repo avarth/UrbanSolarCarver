@@ -167,6 +167,24 @@ class ModeInfo(BaseModel):
     starting_values: dict       # the settings a new project of this mode starts with
 
 
+class ExampleProject(BaseModel):
+    """One entry of example_projects/examples.json: an example project and the packaged files it is made of."""
+    name: str                   # the folder under example_projects/
+    title: str
+    description: str            # one plain sentence for the start screen
+    mode: str
+    max_volume: list[str]       # file names in the example's folder
+    test_surfaces: list[str]
+    weather: bool               # whether the project gets the packaged weather file
+
+
+class ExampleInfo(BaseModel):
+    """One example as the start screen lists it."""
+    name: str
+    title: str
+    description: str
+
+
 class CreateProjectRequest(BaseModel):
     """The body of a request to create a project."""
     name: str

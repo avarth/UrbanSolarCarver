@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import json
 import os
 import tempfile
 import zipfile
@@ -29,7 +30,7 @@ from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
 from .api_models import (
     CancelRunReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateProjectRequest, ErrorDetailReply,
-    FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
+    ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
     ProjectSummary, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
 )
 from .gpu_warm_up import GpuWarmUp
@@ -48,6 +49,8 @@ WEBSOCKET_CLOSE_UNKNOWN_RUN = 4404
 LAST_EVENT_TYPES = ("run_finished", "run_failed", "run_cancelled")
 EVENT_WAIT_SECONDS = 1.0
 DEFAULT_STATIC_FOLDER = Path(__file__).resolve().parent.parent / "ui_static"
+EXAMPLE_PROJECTS_FOLDER = Path(__file__).resolve().parent.parent / "example_projects"
+EXAMPLE_WEATHER_FILE_NAME = "USA_CO_Golden-NREL.724666_TMY3.epw"    # in example_projects/weather/
 NO_CACHE = {"Cache-Control": "no-cache"}    # a result file is rewritten by the next run, so the browser asks each time
 
 _ERROR_RESPONSES = {
@@ -151,6 +154,12 @@ def _add_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(reply.model_dump(mode="json"), status_code=422)
 
 
+def _read_examples() -> list[ExampleProject]:
+    """The packaged example projects, in the order of examples.json."""
+    entries = json.loads((EXAMPLE_PROJECTS_FOLDER / "examples.json").read_text(encoding="utf-8"))
+    return [ExampleProject.model_validate(entry) for entry in entries]
+
+
 def _same_project(first_name: str, second_name: str) -> bool:
     """Whether two request names address one project folder (Windows folder names ignore letter case)."""
     return validate_project_name(first_name).lower() == validate_project_name(second_name).lower()
@@ -199,6 +208,26 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
     def create_project(request: CreateProjectRequest) -> ProjectDetail:
         store.create(request.name, request.mode)
         return project_detail(request.name)
+
+    @router.get("/examples")
+    def examples() -> list[ExampleInfo]:
+        return [ExampleInfo(name=example.name, title=example.title, description=example.description) for example in _read_examples()]
+
+    @router.post("/projects/{name}/examples/{example}", responses={404: {"model": ErrorDetailReply, "description": "There is no such example."}, **_ERROR_RESPONSES})
+    def create_example_project(name: str, example: str) -> ProjectDetail:
+        """A new project named *name* with the mode and the input files of a packaged example."""
+        chosen = next((candidate for candidate in _read_examples() if candidate.name == example), None)
+        if chosen is None:
+            raise ProjectError(f"There is no example '{example}'.", status_code=404)
+        example_folder = EXAMPLE_PROJECTS_FOLDER / chosen.name
+        with store.project_lock(name):      # the new project is complete before another request can reach it
+            store.create(name, chosen.mode)
+            for role, file_names in (("max_volume", chosen.max_volume), ("test_surfaces", chosen.test_surfaces)):
+                for file_name in file_names:
+                    store.add_input(name, role, file_name, (example_folder / file_name).read_bytes())
+            if chosen.weather:
+                store.add_input(name, WEATHER_ROLE, EXAMPLE_WEATHER_FILE_NAME, (EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME).read_bytes())
+            return project_detail(name)
 
     @router.get("/projects/{name}")
     def open_project(name: str) -> ProjectDetail:

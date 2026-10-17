@@ -280,6 +280,40 @@ def test_project_inputs_config_run_and_files(client):
     assert start_run(client)["status"] == "up_to_date"
 
 
+def test_the_examples_are_listed_with_a_description(client):
+    examples = client.get("/api/examples").json()
+    assert [example["name"] for example in examples] == ["basic_perimeter_block", "new_building", "multiple_buildings"]
+    assert all(set(example) == {"name", "title", "description"} and example["title"] and example["description"] for example in examples)
+
+
+def test_example_project_joins_two_test_surface_files(client):
+    created = client.post("/api/projects/nb/examples/new_building")
+    assert created.status_code == 200, created.text
+    detail = created.json()
+    assert [file["name"] for file in detail["inputs"]["max_volume"]] == ["max_volume.ply"]
+    assert [file["name"] for file in detail["inputs"]["test_surfaces"]] == ["neighbor_roofs.ply", "neighbor_windows.ply"]
+    assert [file["name"] for file in detail["inputs"]["weather"]] == ["weather.epw"]
+    assert detail["settings"]["mode"] == "irradiance" and detail["joined_bounds"] is not None and detail["weather_location"]
+    triangle_counts = [file["triangle_count"] for file in detail["inputs"]["test_surfaces"]]
+    assert all(triangle_counts) and client.get("/api/projects/nb/inputs/test_surfaces").json() == detail["inputs"]["test_surfaces"]
+    assert [row["name"] for row in client.get("/api/projects").json()] == ["nb"]
+
+
+def test_every_example_creates_a_project_with_the_files_it_lists(client):
+    for example in client.get("/api/examples").json():
+        detail = client.post(f"/api/projects/{example['name']}/examples/{example['name']}").json()
+        assert detail["inputs"]["max_volume"] and detail["inputs"]["test_surfaces"] and detail["inputs"]["weather"]
+        assert detail["settings"]["mode"] in MODES
+
+
+def test_an_example_cannot_replace_a_project_or_use_a_bad_name(client):
+    create_project(client, "p")
+    assert client.post("/api/projects/p/examples/new_building").status_code == 409
+    assert client.post("/api/projects/..%2Fescape/examples/new_building").status_code in (404, 422)
+    assert client.post("/api/projects/q/examples/no_such_example").status_code == 404
+    assert [row["name"] for row in client.get("/api/projects").json()] == ["p"]      # no folder left behind
+
+
 def test_input_files_can_be_listed_fetched_and_removed(client_with_inputs):
     client = client_with_inputs
     assert client.get("/api/projects/p/inputs/max_volume").json() == [{"name": "volume.ply", "triangle_count": 12}]
