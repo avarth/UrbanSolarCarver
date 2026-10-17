@@ -136,6 +136,11 @@ export const messages = {
   engineStopped: ["The USC engine stopped. Start it again with ", { code: "usc ui" }, ", then reload this page."] as MessagePart[],
   accessLost: ["This page has lost its access to the engine. Open it again from the link that ", { code: "usc ui" }, " printed."] as MessagePart[],
   resultsUpToDate: "Results are up to date",
+  settingsNotSaved: "The last change to the settings was not saved.",
+  runOfProjectElsewhere: "A run of this project is in progress, perhaps in another tab.",
+  saveAgainAfterThatRun: "Save again once it has ended.",
+  saveAgainOrRun: "Save again, or start a run: it saves the settings first.",
+  saveAgain: "Save again",
   modelMoreThan10Km: "This model is more than 10\u00a0km across. Is it in meters?",
   modelLessThan1M: "This model is less than 1\u00a0m across. Is it in meters?",
 
@@ -241,6 +246,8 @@ export const messages = {
   meshFormatNames: { ply: "PLY", obj: "OBJ", stl: "STL", glb: "GLB" },
   floorStackingChoices: { supported: "Supported", free: "Free" },
   carvingRuleChoices: { carve_fraction: "Carve amount (recommended)", headtail: "Automatic split", cutoff: "Score cutoff" },
+  carveAmountNotUsed: (ruleName: string) =>
+    `Carve amount is not used with the carving rule ${ruleName}. Choose Carve amount under More carving settings to use it.`,
   scoreCutoffValue: "Score cutoff value",
 
   // The 3D view (8)

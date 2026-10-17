@@ -21,7 +21,8 @@ export interface StageProgress {
 }
 
 export interface RunIssue {
-  stage: string;
+  /** The stage that raised it; null for an issue raised before any stage began (the config loading). */
+  stage: string | null;
   code: string;
   message: string;
 }
@@ -132,6 +133,11 @@ export interface RunRecord {
   state: RunState;
   /** The service's reason when it refused to start the run (a run already active, inputs missing); null otherwise. */
   refusal: string | null;
+  /**
+   * Whether the user has left the value the run was started for (a threshold moved again while it ran): its results are then
+   * neither fetched nor shown as current, since the run that follows brings the value the user is at. Absent: never.
+   */
+  isSuperseded?: () => boolean;
 }
 
 /** How a request to run ended: as the run ended, with nothing to run, or with no run started (refused, or a run active). */
@@ -147,8 +153,8 @@ export interface RunLoop {
    * progress" when the button was pressed while a run was starting or under way.
    */
   notice: RunNotice | null;
-  /** Brings *produce* up to date; resolves at the run's last event. */
-  start: (project: string, produce: string[], origin: RunOrigin) => Promise<RunOutcome>;
+  /** Brings *produce* up to date; resolves at the run's last event. *isSuperseded* goes into the run's record. */
+  start: (project: string, produce: string[], origin: RunOrigin, isSuperseded?: () => boolean) => Promise<RunOutcome>;
   cancel: () => void;
   /**
    * Made before a request about *project* (its stage status), it tells when the reply comes whether the reply still holds: not
@@ -215,7 +221,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MILLISECONDS);
   };
 
-  const start = useCallback(async (project: string, produce: string[], origin: RunOrigin): Promise<RunOutcome> => {
+  const start = useCallback(async (project: string, produce: string[], origin: RunOrigin, isSuperseded?: () => boolean): Promise<RunOutcome> => {
     if (busy.current) {
       showNotice(project, origin, messages.runInProgress);
       return "not_started";
@@ -236,10 +242,10 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
       }
       const settingsFailure = refusedSettingsFailure(error);
       if (settingsFailure !== null) {
-        show({ serial, project, origin, runId: null, refusal: null,
+        show({ serial, project, origin, runId: null, refusal: null, isSuperseded,
                state: { ...initialRunState([]), final: "failed", failure: settingsFailure, endedAt: Date.now() } });
       } else {
-        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: refusalDetailOf(error) ?? String(error) });
+        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: refusalDetailOf(error) ?? String(error), isSuperseded });
       }
       return "not_started";
     }
@@ -249,7 +255,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
       return "up_to_date";
     }
     const runId = reply.run_id;
-    show({ serial, project, origin, runId, state: initialRunState(reply.stages), refusal: null });
+    show({ serial, project, origin, runId, state: initialRunState(reply.stages), refusal: null, isSuperseded });
     return new Promise<RunOutcome>((resolve) => {
       stopEvents.current = subscribeToRunEvents(runId, token, (event) => {
         const record = latestRecord.current!;

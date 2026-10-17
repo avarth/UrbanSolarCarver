@@ -27,3 +27,22 @@ test("a value submitted while idle runs at once, and a failed run does not stop 
   expect(calls).toEqual([1, 2]);
   expect(queue.busy()).toBe(false);
 });
+
+test("a run's value counts as left once a newer value is submitted; the last value's run is never superseded", async () => {
+  const runs: { value: number; isSuperseded: () => boolean }[] = [];
+  let finish!: () => void;
+  const queue = createThresholdUpdateQueue((value, isSuperseded) => {
+    runs.push({ value, isSuperseded });
+    return new Promise((resolve) => { finish = resolve; });
+  });
+  queue.submit(1);
+  expect(runs[0].isSuperseded()).toBe(false);
+  queue.submit(2); queue.submit(4);
+  expect(runs[0].isSuperseded()).toBe(true);
+  finish(); await flush();
+  expect(runs.map((run) => run.value)).toEqual([1, 4]);
+  expect(runs[0].isSuperseded()).toBe(true);
+  expect(runs[1].isSuperseded()).toBe(false);
+  finish(); await flush();
+  expect(runs[1].isSuperseded()).toBe(false);
+});

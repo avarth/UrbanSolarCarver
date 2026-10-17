@@ -150,10 +150,18 @@ export type SaveOutcome = "saved" | "refused" | "failed" | "overtaken" | "none";
 export interface ConfigSaver {
   /** Saves *values* once no other change has come for the delay. */
   schedule: (values: Record<string, unknown>) => void;
-  /** Sends the waiting save now; resolves with how the last save sent ended, once its reply is passed on ("none" when none was sent). */
+  /**
+   * Sends the waiting save now, or sends a failed save again; resolves with how the save of the latest change ended, once its
+   * reply is passed on ("none" when no save was sent). A save overtaken by a newer change resolves with that change's save.
+   */
   flush: () => Promise<SaveOutcome>;
   /** Drops the waiting save and any reply still to come. */
   cancel: () => void;
+}
+
+interface SaveRequest {
+  values: Record<string, unknown>;
+  change: number;
 }
 
 /**
@@ -164,20 +172,24 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
                                   delayMilliseconds = SAVE_DELAY_MILLISECONDS): ConfigSaver {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let latestChange = 0;
-  let waitingSave: { values: Record<string, unknown>; change: number } | null = null;
+  let waitingSave: SaveRequest | null = null;
+  // The latest change, when its save failed without field errors (a run the page does not know of, a file the service could not
+  // write): the next flush sends it again instead of answering with the old failure.
+  let failedSave: SaveRequest | null = null;
   let lastSave: Promise<SaveOutcome> = Promise.resolve("none");
-  const send = async (values: Record<string, unknown>, change: number): Promise<SaveOutcome> => {
+  const send = async (request: SaveRequest): Promise<SaveOutcome> => {
     try {
-      const reply = await save(values);
-      if (change !== latestChange) return "overtaken";
+      const reply = await save(request.values);
+      if (request.change !== latestChange) return "overtaken";
       dispatch({ type: "save_succeeded", reply });
       return "saved";
     } catch (error) {
-      if (change !== latestChange) return "overtaken";
+      if (request.change !== latestChange) return "overtaken";
       if (error instanceof ApiError && error.status === 422 && isConfigErrorReply(error.body)) {
         dispatch({ type: "save_rejected", reply: error.body });
         return "refused";
       }
+      failedSave = request;
       dispatch({ type: "save_failed", error });
       return "failed";
     }
@@ -185,21 +197,35 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
   const sendWaitingSave = () => {
     clearTimeout(timer);
     if (waitingSave !== null) {
-      lastSave = send(waitingSave.values, waitingSave.change);
+      lastSave = send(waitingSave);
       waitingSave = null;
     }
     return lastSave;
   };
+  const flush = async (): Promise<SaveOutcome> => {
+    if (waitingSave === null && failedSave !== null) waitingSave = failedSave;
+    failedSave = null;
+    let saveToWaitFor = sendWaitingSave();
+    for (;;) {
+      const outcome = await saveToWaitFor;
+      if (outcome !== "overtaken") return outcome;
+      const newerSave = sendWaitingSave();      // the change that overtook it, sent now if it still waits
+      if (newerSave === saveToWaitFor) return outcome;    // cancelled: no newer save to wait for
+      saveToWaitFor = newerSave;
+    }
+  };
   return {
     schedule: (values) => {
       clearTimeout(timer);
+      failedSave = null;
       waitingSave = { values, change: ++latestChange };
       timer = setTimeout(sendWaitingSave, delayMilliseconds);
     },
-    flush: sendWaitingSave,
+    flush,
     cancel: () => {
       clearTimeout(timer);
       waitingSave = null;
+      failedSave = null;
       latestChange++;
     },
   };
@@ -209,7 +235,7 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
  * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project
  * starts its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown.
  * *flushSave* sends a waiting change at once and resolves, with how the save ended, when its reply is in the form, for a run
- * that must use it. *changeAndSave* makes a change and saves it with the changes before it at once, without the delay (the
+ * that must use it (a save that failed is sent again). *changeAndSave* makes a change and saves it with the changes before it at once, without the delay (the
  * carving threshold, whose run follows its save).
  */
 export function useSettingsForm(token: string, project: string, start: FormStart) {

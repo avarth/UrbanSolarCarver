@@ -168,6 +168,9 @@
   background: var(--colour-panel);
 }
 
+.save-failure { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-unit); }
+.save-failure:not(:last-child) { margin-bottom: calc(var(--space-unit) * 3); }   /* above the open step's run button */
+
 .run-button-area .primary-button { width: 100%; }
 .run-button-reason { margin: var(--space-unit) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 

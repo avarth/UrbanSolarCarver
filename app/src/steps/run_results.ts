@@ -122,7 +122,8 @@ interface FollowedRun {
 /**
  * Fetches again what a run's stages wrote as each one is done, and at the run's end what its unfinished stages left (a
  * cancelled or failed stage removed its old results when it began); calls *onRunEnded* once per run. A run that had ended
- * before the project was opened is not followed again: the project opened with its results.
+ * before the project was opened is not followed again: the project opened with its results. Nothing is fetched for a run whose
+ * value the user has left (RunRecord.isSuperseded): its results would show that value until the next run's arrive.
  */
 export function useResultsFollowingRun(record: RunRecord | null, reload: (stages: readonly string[]) => void, onRunEnded: (record: RunRecord) => void): void {
   const followed = useRef<FollowedRun>({ serial: record?.serial ?? null, reloadedStages: new Set(), ended: record?.state.final != null });
@@ -135,7 +136,7 @@ export function useResultsFollowingRun(record: RunRecord | null, reload: (stages
     if (run.ended) return;
     const stagesToReload = (record.state.final === null ? doneStages : record.state.order).filter((stage) => !run.reloadedStages.has(stage));
     stagesToReload.forEach((stage) => run.reloadedStages.add(stage));
-    if (stagesToReload.length > 0) reload(stagesToReload);
+    if (stagesToReload.length > 0 && !(record.isSuperseded?.() ?? false)) reload(stagesToReload);
     if (record.state.final !== null) {
       run.ended = true;
       onRunEnded(record);

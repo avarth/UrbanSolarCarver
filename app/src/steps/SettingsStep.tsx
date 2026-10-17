@@ -2,7 +2,7 @@
 // message in place of the engine's, and messages that name no single setting. The step's Run analysis button sits pinned at the
 // bottom of the panel (RunAnalysisButton), disabled with the first reason that blocks the run, its run's progress under it.
 import { useId, type ReactNode } from "react";
-import type { HealthReply } from "../api_client/client";
+import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from "../api_client/client";
 import { messages } from "../messages";
 import type { FormState, SaveOutcome } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, settingsForStep, settingView } from "../settings_form/presentation";
@@ -45,15 +45,43 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
 }
 
 /**
- * Saves a change still waiting, then starts the run only when the settings it will read are the ones the form shows: not
- * after a refused or failed save, nor when a newer change overtook it (Run analysis is pressed again once that has landed).
- * Resolves with whether the run was started.
+ * Saves a change still waiting (or a change whose save failed, again), then starts the run only when the settings it will read
+ * are the ones the form shows: not after a refused or failed save, nor when the change was dropped. Resolves with whether the
+ * run was started.
  */
 export async function runAnalysisAfterSaving(flushSave: () => Promise<SaveOutcome>, startRun: () => void): Promise<boolean> {
   const outcome = await flushSave();
   if (outcome !== "saved" && outcome !== "none") return false;
   startRun();
   return true;
+}
+
+export interface SaveFailureText {
+  /** Why, as far as the page knows: a run it does not know of, or the service's words; null when it gave none. */
+  reason: string | null;
+  advice: string;
+}
+
+/**
+ * What the panel says about a save that failed without field errors (FormState.saveFailure); null without one, and for a
+ * stopped engine or a lost token, which the app's overlay reports.
+ */
+export function saveFailureTextOf(saveFailure: unknown): SaveFailureText | null {
+  if (saveFailure === null || serviceProblemOf(saveFailure) !== "other") return null;
+  // A run the page did not start: one from before a reload, or from another tab.
+  if (saveFailure instanceof ApiError && saveFailure.status === 409) return { reason: messages.runOfProjectElsewhere, advice: messages.saveAgainAfterThatRun };
+  return { reason: refusalDetailOf(saveFailure), advice: messages.saveAgainOrRun };
+}
+
+/** The failed save, pinned under the step list whichever step is open, with Save again. */
+export function SaveFailureNotice({ text, onSaveAgain }: { text: SaveFailureText; onSaveAgain: () => void }) {
+  return (
+    <div className="save-failure" role="alert">
+      <p className="setting-error"><WarningIcon /><span>{messages.settingsNotSaved}</span></p>
+      <p className="step-reason">{text.reason === null ? text.advice : `${text.reason} ${text.advice}`}</p>
+      <button type="button" className="secondary-button" onClick={onSaveAgain}>{messages.saveAgain}</button>
+    </div>
+  );
 }
 
 /** Field errors and step errors together: the count of the step's "settings to fix". */

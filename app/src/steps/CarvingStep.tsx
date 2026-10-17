@@ -74,6 +74,16 @@ export function thresholdControlValues(view: SettingView, shownNumber: number): 
   return view.name === "threshold" ? { threshold: { method: "cutoff", value: shownNumber } } : { [view.name]: fromDisplayValue(view.name, shownNumber) };
 }
 
+/**
+ * Why Carve amount is disabled: the carving rule chosen in the fold (Automatic split, Score cutoff) sets the cutoff without it.
+ * Null when the control is not Carve amount or the rule is Carve amount.
+ */
+export function carveAmountUnusedReason(form: FormState, view: SettingView): string | null {
+  if (view.name !== "carve_fraction") return null;
+  const method = (shownValue(form, "threshold") as ThresholdSpec | null)?.method ?? "carve_fraction";
+  return method === "carve_fraction" ? null : messages.carveAmountNotUsed(messages.carvingRuleChoices[method]);
+}
+
 /** A slider step a hundredth of the range or less, rounded down to a power of ten. */
 function sliderStep(highest: number): number {
   return highest > 0 ? 10 ** Math.floor(Math.log10(highest / SLIDER_STEPS)) : 1;
@@ -85,6 +95,8 @@ interface ThresholdControlProps {
   highestScore: number | null;
   autoUpdate: boolean;
   disabled: boolean;
+  /** The element that says why the control is disabled, when it is not a run (Carve amount under another carving rule). */
+  reasonId?: string;
   onChangeValue: (shownNumber: number) => void;
   onCommit: (shownNumber: number) => void;
 }
@@ -93,7 +105,7 @@ interface ThresholdControlProps {
  * The slider and number field of the threshold. With auto-update on, the number moved or typed is held here until the user lets
  * go of the slider or leaves the field, then handed on to run; it shows until the form holds it.
  */
-function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, onChangeValue, onCommit }: ThresholdControlProps) {
+function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reasonId, onChangeValue, onCommit }: ThresholdControlProps) {
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;
@@ -112,7 +124,7 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, onCh
     if (heldNumber === stored) setHeldNumber(null);
     else onCommit(heldNumber);
   };
-  const describedBy = error === undefined ? undefined : errorId;
+  const describedBy = [error === undefined ? null : errorId, reasonId ?? null].filter((id) => id !== null).join(" ") || undefined;
   return (
     <div className="setting-field threshold-control" data-setting={view.name}>
       <div className="setting-label-row">
@@ -214,6 +226,7 @@ export function CarvingStep(props: CarvingStepProps) {
   const { form, summary, scorePoints, analysisOutOfDate, autoUpdate, runBlocker } = props;
   const reasonId = useId();
   const updateReasonId = useId();
+  const carveAmountReasonId = useId();
   const settingChangedSinceCommit = useRef(false);
   const thresholdView = thresholdControlOf(form.mode);
   const isShadowTolerated = thresholdIsShadowToleratedIn(form.mode);
@@ -243,7 +256,9 @@ export function CarvingStep(props: CarvingStepProps) {
   const commitNumberOnLeave = (event: FocusEvent) => { if (isNumberField(event.target)) commitCarvingSetting(); };
   const commitNumberOnEnter = (event: KeyboardEvent) => { if (event.key === "Enter" && isNumberField(event.target)) commitCarvingSetting(); };
   const disabledReason = analysisOutOfDate ? null : (props.thresholdDisabledReason ?? props.settingsDisabledReason);
+  const carveAmountReason = thresholdView === null ? null : carveAmountUnusedReason(form, thresholdView);
   const updateBlocker = analysisOutOfDate ? null : runBlocker;
+  const contentClassName = props.carvingDimmed || analysisOutOfDate ? "carving-content carving-content-dimmed" : "carving-content";
   const comparedScores = scorePoints?.comparedScores ?? null;
   const kept = scorePoints?.kept ?? null;
   return (
@@ -259,11 +274,14 @@ export function CarvingStep(props: CarvingStepProps) {
         </div>
       )}
       {props.analysisFeedback}
-      <div className={props.carvingDimmed || analysisOutOfDate ? "carving-content carving-content-dimmed" : "carving-content"}>
-        {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
+      {/* The reasons, the Update carving button and the run's progress stay outside the dimmed parts, so their text keeps its contrast (UX 12). */}
+      {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
+      {carveAmountReason !== null && <p id={carveAmountReasonId} className="step-reason">{carveAmountReason}</p>}
+      <div className={contentClassName}>
         {thresholdView === null ? <p className="step-reason">{messages.angleRuleHasNoThreshold}</p> : (
           <ThresholdControl view={thresholdView} form={form} highestScore={scorePoints?.header.score_max ?? null} autoUpdate={autoUpdating}
-                            disabled={thresholdDisabled || analysisOutOfDate}
+                            disabled={thresholdDisabled || analysisOutOfDate || carveAmountReason !== null}
+                            reasonId={carveAmountReason !== null ? carveAmountReasonId : undefined}
                             onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(thresholdView, shownNumber))}
                             onCommit={props.onThresholdCommit} />
         )}
@@ -279,25 +297,27 @@ export function CarvingStep(props: CarvingStepProps) {
             {messages.updateWhenThresholdChanges}
           </label>
         )}
-        {!autoUpdating && (
-          <div className="update-carving">
-            <button type="button" className="secondary-button" disabled={runBlocker !== null || analysisOutOfDate}
-                    aria-describedby={updateBlocker !== null ? updateReasonId : undefined} onClick={props.onUpdateCarving}>
-              {messages.updateCarving}
-            </button>
-            {updateBlocker !== null && <p id={updateReasonId} className="run-button-reason">{updateBlocker}</p>}
-          </div>
-        )}
-        {props.carvingFeedback}
-        {thresholdView !== null && summary !== null && comparedScores !== null && kept !== null && (
-          <ScoreHistogram comparedScores={comparedScores} kept={kept} cutoff={summary.threshold_value} isShadowTolerated={isShadowTolerated}
-                          slopeLimitVoxelsRemoved={summary.slope_limit_extra_voxels_removed} />
-        )}
-        {summary !== null && (
+      </div>
+      {!autoUpdating && (
+        <div className="update-carving">
+          <button type="button" className="secondary-button" disabled={runBlocker !== null || analysisOutOfDate}
+                  aria-describedby={updateBlocker !== null ? updateReasonId : undefined} onClick={props.onUpdateCarving}>
+            {messages.updateCarving}
+          </button>
+          {updateBlocker !== null && <p id={updateReasonId} className="run-button-reason">{updateBlocker}</p>}
+        </div>
+      )}
+      {props.carvingFeedback}
+      {summary !== null && (
+        <div className={contentClassName}>
+          {thresholdView !== null && comparedScores !== null && kept !== null && (
+            <ScoreHistogram comparedScores={comparedScores} kept={kept} cutoff={summary.threshold_value} isShadowTolerated={isShadowTolerated}
+                            slopeLimitVoxelsRemoved={summary.slope_limit_extra_voxels_removed} />
+          )}
           <CarvingNumbers summary={summary} voxelSize={scorePoints?.header.voxel_size ?? null} isWeighted={props.isWeightedMode}
                           lastAnalysisSeconds={props.lastAnalysisSeconds} />
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

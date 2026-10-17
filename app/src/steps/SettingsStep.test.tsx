@@ -1,9 +1,11 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { ModeInfo } from "../api_client/client";
+import { ApiError, type ModeInfo } from "../api_client/client";
 import { formReducer, initialFormState, type FormState } from "../settings_form/form_state";
-import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { SaveOutcome } from "../settings_form/form_state";
-import { runAnalysisAfterSaving, runAnalysisBlocker, SettingsStep, settingsToFixCount, type RunAnalysisConditions } from "./SettingsStep";
+import {
+  runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, settingsToFixCount, type RunAnalysisConditions,
+} from "./SettingsStep";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -100,6 +102,25 @@ test("a project whose stored grid is over the budget opens with Voxel size to fi
   expect(runAnalysisBlocker(conditions({ form: opened }))).toBe("Fix the voxel size to run the analysis.");
   rendered = renderForTest(<SettingsStep form={opened} onChange={() => {}} disabledReason={null} />);
   expect(rendered.container.querySelector(".setting-error strong")!.textContent).toBe("Use 0.07\u00a0m or more.");
+});
+
+test("a save that failed without field errors is said in the panel with Save again; a stopped engine or lost token is left to the overlay", () => {
+  expect(saveFailureTextOf(null)).toBeNull();
+  expect(saveFailureTextOf(new TypeError("Failed to fetch"))).toBeNull();
+  expect(saveFailureTextOf(new ApiError(401, { detail: "The access token is missing or wrong." }))).toBeNull();
+  expect(saveFailureTextOf(new ApiError(409, { detail: "A run of project 'p' is active." })))
+    .toEqual({ reason: "A run of this project is in progress, perhaps in another tab.", advice: "Save again once it has ended." });
+  expect(saveFailureTextOf(new ApiError(500, "Internal Server Error")))
+    .toEqual({ reason: null, advice: "Save again, or start a run: it saves the settings first." });
+  expect(saveFailureTextOf(new ApiError(422, { detail: [{ loc: ["body", "values"], msg: "Field required" }] }))!.reason).toBeNull();
+
+  const onSaveAgain = vi.fn();
+  rendered = renderForTest(<SaveFailureNotice text={saveFailureTextOf(new ApiError(409, { detail: "x" }))!} onSaveAgain={onSaveAgain} />);
+  const notice = rendered.container.querySelector("[role=alert]")!;
+  expect(notice.textContent).toBe("The last change to the settings was not saved." +
+    "A run of this project is in progress, perhaps in another tab. Save again once it has ended.Save again");
+  click(notice.querySelector("button")!);
+  expect(onSaveAgain).toHaveBeenCalledOnce();
 });
 
 test("Run analysis starts the run only after the waiting change was saved, or when nothing waited", async () => {

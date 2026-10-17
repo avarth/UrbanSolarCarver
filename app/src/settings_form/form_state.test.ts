@@ -212,6 +212,48 @@ test("flushing tells a refused or failed save from a stored one, so a run never 
   expect(await saver.flush()).toBe("failed");
 });
 
+test("a save that failed without field errors is sent again by the next flush, so a run does not stop at the old failure", async () => {
+  const actions: FormAction[] = [];
+  const conflict = new ApiError(409, { detail: "A run of project 'p' is active." });
+  const reply: ConfigReply = { settings: { voxel_size: 2 }, grid_plan: null };
+  const save = vi.fn().mockRejectedValueOnce(conflict).mockRejectedValueOnce(conflict).mockResolvedValueOnce(reply);
+  const saver = createConfigSaver(save, (action) => actions.push(action));
+  saver.schedule({ voxel_size: 2 });
+  expect(await saver.flush()).toBe("failed");
+  expect(await saver.flush()).toBe("failed");                // sent again, and refused again
+  expect(await saver.flush()).toBe("saved");
+  expect(save.mock.calls).toEqual([[{ voxel_size: 2 }], [{ voxel_size: 2 }], [{ voxel_size: 2 }]]);
+  expect(actions.map((action) => action.type)).toEqual(["save_failed", "save_failed", "save_succeeded"]);
+  expect(await saver.flush()).toBe("saved");                 // stored: nothing is sent again
+  expect(save).toHaveBeenCalledTimes(3);
+});
+
+test("a flush whose save a newer change overtook resolves with the newer change's save, sent at once", async () => {
+  vi.useFakeTimers();
+  let answerFirstRequest: (reply: ConfigReply) => void = () => {};
+  const newerReply: ConfigReply = { settings: { voxel_size: 5 }, grid_plan: null };
+  const save = vi.fn()
+    .mockImplementationOnce(() => new Promise<ConfigReply>((resolve) => { answerFirstRequest = resolve; }))
+    .mockResolvedValueOnce(newerReply);
+  const actions: FormAction[] = [];
+  const saver = createConfigSaver(save, (action) => actions.push(action));
+  saver.schedule({ voxel_size: 4 });
+  const flushed = saver.flush();
+  saver.schedule({ voxel_size: 5 });                        // waits for its delay
+  answerFirstRequest({ settings: { voxel_size: 4 }, grid_plan: null });
+  expect(await flushed).toBe("saved");
+  expect(save.mock.calls).toEqual([[{ voxel_size: 4 }], [{ voxel_size: 5 }]]);
+  expect(actions).toEqual([{ type: "save_succeeded", reply: newerReply }]);
+  await vi.advanceTimersByTimeAsync(400);
+  expect(save).toHaveBeenCalledTimes(2);                     // the newer change's timer sends nothing more
+  save.mockResolvedValueOnce({ settings: { voxel_size: 6 }, grid_plan: null });
+  saver.schedule({ voxel_size: 6 });
+  const cancelled = saver.flush();
+  saver.cancel();
+  expect(await cancelled).toBe("overtaken");                 // cancelled on its way, with no newer save to wait for
+  expect(save).toHaveBeenCalledTimes(3);
+});
+
 function renderedForm(project: string, settings: Record<string, unknown>) {
   let latest: ReturnType<typeof useSettingsForm> | null = null;
   function FormProbe({ projectName, projectSettings }: { projectName: string; projectSettings: Record<string, unknown> }) {

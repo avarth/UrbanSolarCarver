@@ -54,3 +54,10 @@ test("stages are named in plain words", () => {
   expect(["preprocessing", "thresholding", "exporting", "massing"].map(stageDisplayName))
     .toEqual(["Sun analysis", "Carving", "Envelope mesh", "Building massing"]);
 });
+
+test("an issue raised before any stage began (stage null, as the service sends it) is kept with the run's warnings", () => {
+  let s = initialRunState(["preprocessing"]);
+  s = runReducer(s, { type: "issue", stage: null, code: "UNUSED_SETTING", message: "epw_path is not used by this mode" });
+  expect(s.issues).toEqual([{ stage: null, code: "UNUSED_SETTING", message: "epw_path is not used by this mode" }]);
+  expect(s.stages.preprocessing.state).toBe("running");
+});

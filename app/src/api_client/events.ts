@@ -2,7 +2,7 @@
 
 export type RunEvent =
   | { type: "stage_progress"; stage: string | null; done: number; total: number }
-  | { type: "issue"; stage: string; code: string; message: string }
+  | { type: "issue"; stage: string | null; code: string; message: string }     // null: raised before any stage began (the config loading)
   | { type: "run_finished"; stages: string[]; files: string[] }
   | { type: "run_cancelled" }
   | { type: "run_failed"; error_type: string; message: string; field_errors: { field: string | null; message: string }[] }

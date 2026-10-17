@@ -21,7 +21,9 @@ import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveIn
 import { ModeStep } from "./ModeStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import type { RunLoop } from "./run_state";
-import { RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SettingsStep, settingsToFixCount } from "./SettingsStep";
+import {
+  RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, settingsToFixCount,
+} from "./SettingsStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
   plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type AnalysisPeriod, type PipelineStage, type ProjectViewState,
@@ -312,6 +314,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     ...resultSteps.pinnedAction,
   };
   const openStepUsable = openStep !== null && stepNotUsableYet(openStep, viewState) === null;
+  const openStepAction = openStep !== null && openStepUsable ? (pinnedActions[openStep] ?? null) : null;
+  // A save that failed without field errors leaves the form showing values the service did not store: said whichever step is open.
+  const saveFailureText = saveFailureTextOf(form.saveFailure);
+  const saveFailureNotice = saveFailureText === null ? null : <SaveFailureNotice text={saveFailureText} onSaveAgain={() => void flushSave()} />;
 
   // The empty view's "Add files" leads to the Inputs step, where each role has its own box: the focus goes to the first one's button.
   useEffect(() => {
@@ -332,7 +338,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     <div className="workspace">
       <aside ref={panel} className="workspace-panel">
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}
-                       pinnedAction={openStep !== null && openStepUsable ? (pinnedActions[openStep] ?? null) : null} />
+                       pinnedAction={saveFailureNotice === null && openStepAction === null ? null : <>{saveFailureNotice}{openStepAction}</>} />
       </aside>
       <section className="workspace-view">
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaces} sunPath={sunPath}

@@ -61,11 +61,13 @@ function layerHasData(layer: LayerName, results: RunResults): boolean {
 
 /**
  * Whether a stage's layers are dimmed: while a run of the project brings the stage up to date, until the run has done it;
- * otherwise while its stage status is not current (UX 6.3).
+ * after a run of a value the user has since left, whose results were not fetched (the run that follows brings them); otherwise
+ * while its stage status is not current (UX 6.3).
  */
 export function isStageDimmed(stage: PipelineStage, record: RunRecord | null, stages: Record<PipelineStage, StageState>): boolean {
   const runUnderWay = record !== null && record.state.final === null && record.refusal === null;
   if (runUnderWay && record.state.order.includes(stage)) return record.state.stages[stage].state !== "done";
+  if (record !== null && record.state.order.includes(stage) && (record.isSuperseded?.() ?? false)) return true;
   return stages[stage] !== "current";
 }
 
@@ -131,7 +133,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
 
   useResultsFollowingRun(record, reloadResults, (endedRun) => {
     const { state } = endedRun;
-    context.refreshStageStatus(state.final === "finished" ? state.order : []);
+    const superseded = endedRun.isSuperseded?.() ?? false;     // its results were not fetched, so its stages are not shown as current
+    context.refreshStageStatus(state.final === "finished" && !superseded ? state.order : []);
     if (state.final === "finished" && state.order.includes("preprocessing") && state.endedAt !== null) {
       setLastAnalysisSeconds((state.endedAt - state.startedAt) / 1000);
     }
@@ -144,12 +147,13 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const startAfterSaving = (produce: string[], origin: RunOrigin) =>
     runAnalysisAfterSaving(flushSave, () => void runs.start(project, produce, origin));
 
-  // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value next.
-  const thresholdQueue = useMemo(() => createThresholdUpdateQueue(async (shownNumber) => {
+  // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value next. A run whose value
+  // the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the carving stays dimmed.
+  const thresholdQueue = useMemo(() => createThresholdUpdateQueue(async (shownNumber, isSuperseded) => {
     const view = thresholdControlOf(form.mode);
     if (view === null) return;
     const outcome = await changeAndSave(thresholdControlValues(view, shownNumber));
-    if (outcome === "saved" || outcome === "none") await runs.start(project, CARVING_STAGES, "carving_update");
+    if (outcome === "saved" || outcome === "none") await runs.start(project, CARVING_STAGES, "carving_update", isSuperseded);
   }), [form.mode]);
 
   const feedback = (origin: RunOrigin) => (

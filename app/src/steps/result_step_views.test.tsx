@@ -282,17 +282,38 @@ test("with auto-update off, carving settings only change the form", () => {
   expect(onCarvingSettingCommit).not.toHaveBeenCalled();
 });
 
-test("disabled carving controls say why: the run in progress over the controls, the run blocker under Update carving", () => {
-  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, thresholdDisabledReason: "A run is in progress",
+test("disabled carving controls say why, outside the dimmed carving: the run in progress over the controls, the run blocker under Update carving", () => {
+  // The carving is dimmed while its run is under way, which is when these reasons show: dimmed, their text would fall below AA (UX 12).
+  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, carvingDimmed: true, thresholdDisabledReason: "A run is in progress",
                                                            settingsDisabledReason: "A run is in progress", runBlocker: "A run is in progress" })} />);
-  expect([...rendered.container.querySelectorAll(".carving-content > .step-reason")].map((reason) => reason.textContent)).toEqual(["A run is in progress"]);
+  expect(rendered.container.querySelector(".carving-content-dimmed")).not.toBeNull();
+  expect([...rendered.container.querySelectorAll(".carving-step > .step-reason")].map((reason) => reason.textContent)).toEqual(["A run is in progress"]);
   const update = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Update carving")!;
   expect(update.hasAttribute("disabled")).toBe(true);
-  expect(document.getElementById(update.getAttribute("aria-describedby")!)!.textContent).toBe("A run is in progress");
+  const updateReason = document.getElementById(update.getAttribute("aria-describedby")!)!;
+  expect(updateReason.textContent).toBe("A run is in progress");
+  expect(updateReason.closest(".carving-content-dimmed")).toBeNull();
+  expect(rendered.container.querySelectorAll(".carving-content-dimmed .step-reason, .carving-content-dimmed .run-button-reason")).toHaveLength(0);
   rendered.unmount();
   rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, runBlocker: "Waiting for the GPU to be ready" })} />);
-  expect(rendered.container.querySelector(".carving-content > .step-reason")).toBeNull();
+  expect(rendered.container.querySelector(".carving-step > .step-reason")).toBeNull();
   expect(rendered.container.querySelector(".update-carving .run-button-reason")!.textContent).toBe("Waiting for the GPU to be ready");
+});
+
+test("Carve amount is disabled, saying why, when the carving rule is Automatic split or Score cutoff", () => {
+  for (const [threshold, ruleName] of [[{ method: "headtail" }, "Automatic split"], [{ method: "cutoff", value: 0.4 }, "Score cutoff"]] as const) {
+    rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("daylight", { threshold }), isWeightedMode: true, carvingDimmed: true })} />);
+    const carveAmount = rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
+    const slider = rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=range]")!;
+    expect(carveAmount.disabled && slider.disabled).toBe(true);
+    const reason = document.getElementById(slider.getAttribute("aria-describedby")!)!;
+    expect(reason.textContent).toBe(`Carve amount is not used with the carving rule ${ruleName}. Choose Carve amount under More carving settings to use it.`);
+    expect(reason.closest(".carving-content-dimmed")).toBeNull();
+    rendered.unmount();
+  }
+  rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("daylight"), isWeightedMode: true })} />);
+  expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.disabled).toBe(false);
+  expect(rendered.container.textContent).not.toContain("is not used with the carving rule");
 });
 
 test("Volume carved is 100 minus Volume kept as shown, so the two add up to 100", () => {
