@@ -2,7 +2,7 @@ import { act, useMemo, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo, RunSummary } from "../api_client/client";
 import { formReducer, initialFormState, type FormState } from "../settings_form/form_state";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { CarvingStep, readAutoUpdate, type CarvingStepProps } from "./CarvingStep";
 import { EnvelopeAndMassingStep, storeyRows, type PlatesFile } from "./EnvelopeAndMassingStep";
@@ -228,6 +228,51 @@ test("Envelope and massing: three tiles, the per-storey table with a total, grey
   expect(rendered.container.querySelector(".envelope-results-out-of-date")).not.toBeNull();
   expect(rendered.container.textContent).toContain("Out of date for the current carving");
   expect(rendered.container.textContent).toContain("Open the run report");
+});
+
+/** The elements that hold text of their own (HTML or SVG) inside *root*. */
+function textBearingElementsIn(root: Element): Element[] {
+  return [root, ...root.querySelectorAll("*")].filter((element) =>
+    [...element.childNodes].some((node) => node.nodeType === Node.TEXT_NODE && node.textContent!.trim() !== ""));
+}
+
+/** The opacities below 1 from *element* up to *root*: what fades the element's text. */
+function fadingOpacitiesOf(element: Element, root: Element): string[] {
+  const opacities: string[] = [];
+  for (let current: Element | null = element; current !== null; current = current === root ? null : current.parentElement) {
+    const opacity = getComputedStyle(current).opacity;
+    if (opacity !== "" && Number(opacity) < 1) opacities.push(`${current.tagName.toLowerCase()}.${current.getAttribute("class")}: ${opacity}`);
+  }
+  return opacities;
+}
+
+test("dimmed and greyed results keep their text at full opacity in the muted colour, and fade only the bars and swatches (UX 5.5, 5.6, 12)", () => {
+  const removeStyleSheet = addStyleSheetForTest("src/steps/steps.css");
+  try {
+    rendered = renderForTest(<CarvingStep {...carvingProps({ carvingDimmed: true })} />);
+    const carvingResults = rendered.container.querySelector(".carving-content-dimmed")!;
+    act(() => carvingResults.querySelector("svg")!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+    expect(carvingResults.querySelector(".score-histogram-readout")).not.toBeNull();
+    const carvingTexts = textBearingElementsIn(carvingResults);
+    expect(carvingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Scores of the voxels", "Volume kept", "61 %", "Kept", "1.5"]));
+    expect(carvingTexts.flatMap((element) => fadingOpacitiesOf(element, carvingResults))).toEqual([]);
+    expect(getComputedStyle(carvingResults).color).toBe("var(--colour-muted)");
+    expect(Number(getComputedStyle(carvingResults.querySelector(".histogram-bar")!).opacity)).toBeLessThan(1);
+    expect(Number(getComputedStyle(carvingResults.querySelector(".histogram-swatch")!).opacity)).toBeLessThan(1);
+    rendered.unmount();
+
+    const massing = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
+    rendered = renderForTest(<EnvelopeAndMassingStep form={formFor("time-based")} onChange={vi.fn()} disabledReason={null} massing={massing}
+                                                     platesFile={PLATES} outOfDate hasRunReport onOpenRunReport={vi.fn()} />);
+    const massingResults = rendered.container.querySelector(".envelope-results-out-of-date")!;
+    const massingTexts = textBearingElementsIn(massingResults);
+    expect(massingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Gross floor area", "Floor area per storey", "1, ground", "880"]));
+    expect(massingTexts.flatMap((element) => fadingOpacitiesOf(element, massingResults))).toEqual([]);
+    for (const greyed of massingResults.querySelectorAll(".number-tiles, .storey-table")) expect(getComputedStyle(greyed).color).toBe("var(--colour-muted)");
+    expect(Number(getComputedStyle(massingResults.querySelector(".storey-swatch")!).opacity)).toBeLessThan(1);
+  } finally {
+    removeStyleSheet();
+  }
 });
 
 test("the Export downloads in the format chosen, out-of-date files labelled", () => {

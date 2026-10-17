@@ -376,7 +376,13 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .envelope-step,
 .export-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
 
-.carving-content-dimmed { opacity: 0.55; }
+/* Dimmed results (UX 5.5, 6.3): the text turns muted, which keeps AA contrast on white and on chrome (UX 12); only the graphics
+   without text fade. Opacity on text would bring muted text to about 2.3:1. */
+.carving-content-dimmed { color: var(--colour-muted); }
+.carving-content-dimmed .histogram-bar,
+.carving-content-dimmed .histogram-swatch,
+.carving-content-dimmed .histogram-cutoff { opacity: 0.55; }
+.carving-content-dimmed .histogram-cutoff-label rect { fill: var(--colour-muted); }
 
 .carving-locked {
   display: flex;
@@ -482,8 +488,10 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 /* Envelope and massing (UX 5.6) -------------------------------------------------------------------------------------------- */
 
 .envelope-results { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+/* Greyed when out of date (UX 5.6), as the dimmed carving: muted text, faded swatches. */
 .envelope-results-out-of-date .number-tiles,
-.envelope-results-out-of-date .storey-table { opacity: 0.55; }
+.envelope-results-out-of-date .storey-table { color: var(--colour-muted); }
+.envelope-results-out-of-date .storey-swatch { opacity: 0.55; }
 .out-of-date-label { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); font-weight: 600; }
 
 .storey-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
