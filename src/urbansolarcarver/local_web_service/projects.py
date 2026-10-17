@@ -303,8 +303,8 @@ class ProjectStore:
     def add_input(self, name: str, role: str, file_name: str, data: bytes) -> InputFilesReply:
         """Store an uploaded file for a role and rebuild the joined file of a mesh role.
 
-        A mesh is checked with the engine's own loader before it is kept, so a file the
-        run would refuse is refused at upload. A file with the name of an earlier upload
+        A mesh is checked with the engine's own loader and a weather file is read as an EPW with Ladybug's reader
+        before it is kept, so a file the run would refuse is refused at upload. A file with the name of an earlier upload
         replaces it, also when the names differ only in letter case (one name, one file on Windows).
         Nothing on disk or in project.json changes unless the whole upload, joined file included, succeeds.
         """
@@ -317,7 +317,7 @@ class ProjectStore:
             if role == WEATHER_ROLE:
                 if extension != WEATHER_EXTENSION:
                     raise ProjectError(f"The weather file must be an {WEATHER_EXTENSION} file.", status_code=422)
-                self._write_bytes_atomically(project_folder / INPUTS_FOLDER / WEATHER_FILE_NAME, data)
+                self._store_weather_file(project_folder, clean_name, data)
                 project_json.input_files[role] = {WEATHER_FILE_NAME: 0}
             else:
                 if extension not in MESH_EXTENSIONS:
@@ -424,6 +424,30 @@ class ProjectStore:
         except BaseException:
             Path(temporary_path).unlink(missing_ok=True)
             raise
+
+    @staticmethod
+    def _store_weather_file(project_folder: Path, clean_name: str, data: bytes) -> None:
+        """Check an uploaded weather file by reading it as an EPW, then move it over the earlier one.
+
+        Ladybug's reader, which the engine uses for the same file, needs a LOCATION line, the eight header
+        lines and the hourly rows of a whole year. The earlier weather file stays when the new one is refused.
+        """
+        from ladybug.epw import EPW
+        inputs_folder = project_folder / INPUTS_FOLDER
+        descriptor, upload_name = tempfile.mkstemp(dir=inputs_folder, prefix="upload", suffix=WEATHER_EXTENSION)
+        upload_path = Path(upload_name)
+        try:
+            with os.fdopen(descriptor, "wb") as upload_file:
+                upload_file.write(data)
+            try:
+                EPW(str(upload_path)).dry_bulb_temperature      # the first hourly field loads, and so checks, the whole body
+            except Exception as error:      # the reader fails with AssertionError, IndexError or ValueError, by what is wrong
+                reason = "its LOCATION line, header lines or fields are missing" if isinstance(error, IndexError) else str(error)
+                raise ProjectError(f"'{clean_name}' cannot be read as an EPW weather file: {reason or type(error).__name__}",
+                                   status_code=422) from error
+            os.replace(upload_path, inputs_folder / WEATHER_FILE_NAME)
+        finally:
+            upload_path.unlink(missing_ok=True)
 
     def _add_mesh_file(self, project_folder: Path, project_json: ProjectJson, role: str, clean_name: str, data: bytes) -> None:
         """Check an uploaded mesh, build the joined file with it, then move both into place."""

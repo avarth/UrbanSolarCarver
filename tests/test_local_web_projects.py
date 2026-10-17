@@ -188,6 +188,42 @@ def test_weather_location_comes_from_the_epw_header(tmp_path):
     assert err.value.status_code == 422
 
 
+def _golden_epw_lines():
+    return GOLDEN_EPW.read_bytes().splitlines(keepends=True)
+
+
+@pytest.mark.parametrize("broken_name, broken_content", [
+    ("truncated", lambda lines: b"".join(lines[:100])),                  # the header and 92 hourly rows
+    ("without_header", lambda lines: b"".join(lines[8:])),               # hourly rows only
+    ("header_only", lambda lines: b"".join(lines[:8])),
+    ("not_a_weather_file", lambda lines: b"this is not weather data\n" * 20),
+    ("empty", lambda lines: b""),
+])
+def test_a_weather_file_that_cannot_be_read_as_an_epw_is_refused_and_the_earlier_one_is_kept(tmp_path, broken_name, broken_content):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    stored_weather = tmp_path / "p/inputs/weather.epw"
+    stored_bytes = stored_weather.read_bytes()
+    revision_before = store.read_project_json("p").inputs_revision
+    with pytest.raises(ProjectError) as err:
+        store.add_input("p", "weather", f"{broken_name}.epw", broken_content(_golden_epw_lines()))
+    assert err.value.status_code == 422
+    assert f"{broken_name}.epw" in str(err.value) and "upload" not in str(err.value)    # the person's file name, not a temporary one
+    assert stored_weather.read_bytes() == stored_bytes
+    assert store.read_project_json("p").inputs_revision == revision_before
+    assert store.weather_location("p") == "Denver Centennial Golden Nr, USA"
+    assert sorted(path.name for path in (tmp_path / "p/inputs").glob("*.*")) == ["weather.epw"]    # no temporary file is left
+
+
+def test_a_truncated_weather_file_as_the_first_upload_leaves_the_project_without_weather(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    with pytest.raises(ProjectError) as err:
+        store.add_input("p", "weather", "cut.epw", b"".join(_golden_epw_lines()[:100]))
+    assert err.value.status_code == 422 and "cut.epw" in str(err.value)
+    assert not (tmp_path / "p/inputs/weather.epw").exists()
+    assert store.read_project_json("p").input_files.get("weather", {}) == {}
+
+
 def test_names_differing_only_in_letter_case_are_one_file(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
     store.add_input("p", "max_volume", "A.ply", _box_bytes([0, 0, 5]))
