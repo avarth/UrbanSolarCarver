@@ -302,6 +302,37 @@ def test_an_opened_project_over_the_voxel_budget_still_gets_its_grid(client):
     assert grid_plan["voxel_size"] == 1.0 and grid_plan["total_voxels"] > grid_plan["budget_voxels"]
 
 
+@pytest.mark.parametrize("edit_config", [
+    lambda config: {**config, "voxel_size": -1},    # a setting the engine refuses
+    lambda config: None,                            # an empty file
+    lambda config: ["not", "a", "mapping"],
+])
+def test_a_project_whose_config_yaml_does_not_validate_still_opens(client_after_fake_run, projects_folder, edit_config):
+    client = client_after_fake_run
+    config_path = projects_folder / "p" / "config.yaml"
+    edited = edit_config(yaml.safe_load(config_path.read_text(encoding="utf-8")))
+    config_path.write_text("" if edited is None else yaml.safe_dump(edited), encoding="utf-8")
+    opened = client.get("/api/projects/p")
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["stage_status"]["stages"] == {stage: "out_of_date" for stage in PIPELINE_STAGES}
+    assert opened.json()["grid_plan"] is None
+    assert client.get("/api/projects/p/stage-status").json()["stages"] == {stage: "out_of_date" for stage in PIPELINE_STAGES}
+    refused_run = client.post("/api/projects/p/runs", json={"produce": ["thresholding"]})
+    assert refused_run.status_code == 422 and refused_run.json()["field_errors"]
+    saved = client.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 2.0}})
+    assert saved.status_code == 200 and client.get("/api/projects/p").json()["grid_plan"]["voxel_size"] == 2.0
+
+
+def test_a_project_file_that_is_not_utf8_hides_only_its_own_project(client, projects_folder):
+    for name in ("bad json", "bad config", "good"):
+        create_project(client, name)
+    (projects_folder / "bad json" / "project.json").write_bytes('{"name": "bad json", "created": "café"}'.encode("cp1252"))
+    (projects_folder / "bad config" / "config.yaml").write_bytes("# café, saved in a legacy code page\nmode: daylight\n".encode("cp1252"))
+    listed = client.get("/api/projects")
+    assert listed.status_code == 200 and [row["name"] for row in listed.json()] == ["good"]
+    assert client.get("/api/projects/bad json").status_code == 422
+
+
 def test_the_examples_are_listed_with_a_description(client):
     examples = client.get("/api/examples").json()
     assert [example["name"] for example in examples] == ["basic_perimeter_block", "new_building", "multiple_buildings"]

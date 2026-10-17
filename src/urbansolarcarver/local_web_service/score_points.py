@@ -14,8 +14,9 @@ thinned to a point budget, in the layout below (all numbers little-endian):
   ``has_compared_scores``.
 
 Header keys: ``origin``, ``shape``, ``voxel_size``, ``scores_kind``, ``weight_unit``,
-``score_min`` and ``score_max`` (of all occupied voxels, not only the points), ``occupied_count``,
-``point_count``, ``thinning_step``, ``has_mask``, ``has_compared_scores``.
+``score_min`` and ``score_max`` (of the finite scores of all occupied voxels, not only the points;
+null when there are none), ``occupied_count``, ``point_count``, ``thinning_step``, ``has_mask``,
+``has_compared_scores``.
 """
 from __future__ import annotations
 
@@ -77,6 +78,7 @@ def build_score_points(run_folder: Path, cap: int = SCORE_POINTS_CAP) -> bytes |
     point_indices = occupied_indices[::thinning_step]
     point_scores = all_scores[point_indices].astype("<f4")
     occupied_scores = all_scores[occupied_indices]
+    finite_occupied_scores = occupied_scores[np.isfinite(occupied_scores)]     # the engine warns about NaN scores, so they occur
 
     kept_mask, compared_scores = _thresholding_arrays(run_folder, preprocessing_manifest.run_id)
     header = {
@@ -85,15 +87,15 @@ def build_score_points(run_folder: Path, cap: int = SCORE_POINTS_CAP) -> bytes |
         "voxel_size": preprocessing_manifest.voxel_size,
         "scores_kind": preprocessing_manifest.scores_kind,
         "weight_unit": MODES[preprocessing_manifest.mode].weight_unit,
-        "score_min": float(occupied_scores.min()) if occupied_count else None,
-        "score_max": float(occupied_scores.max()) if occupied_count else None,
+        "score_min": float(finite_occupied_scores.min()) if len(finite_occupied_scores) else None,
+        "score_max": float(finite_occupied_scores.max()) if len(finite_occupied_scores) else None,
         "occupied_count": occupied_count,
         "point_count": len(point_indices),
         "thinning_step": thinning_step,
         "has_mask": kept_mask is not None,
         "has_compared_scores": compared_scores is not None,
     }
-    header_bytes = json.dumps(header).encode("utf-8")
+    header_bytes = json.dumps(header, allow_nan=False).encode("utf-8")    # JSON.parse refuses NaN and Infinity
     header_bytes += b" " * (-len(header_bytes) % HEADER_ALIGNMENT_BYTES)
 
     blob_parts = [struct.pack("<I", len(header_bytes)), header_bytes,

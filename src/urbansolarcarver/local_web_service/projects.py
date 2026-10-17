@@ -175,21 +175,28 @@ class ProjectStore:
 
     def summary(self, name: str) -> ProjectSummary:
         """The list row of one existing project."""
-        project_json = self.read_project_json(name)
-        project_folder = self.open(name)
-        return ProjectSummary(
-            name=project_json.name,
-            created=project_json.created,
-            modified=self._modified(project_folder),
-            mode=self._mode(project_folder),
-        )
+        with self.project_lock(name):   # config.yaml is read here too, and a save replaces it
+            project_json = self.read_project_json(name)
+            project_folder = self.open(name)
+            return ProjectSummary(
+                name=project_json.name,
+                created=project_json.created,
+                modified=self._modified(project_folder),
+                mode=self._mode(project_folder),
+            )
 
     def read_project_json(self, name: str) -> ProjectJson:
-        project_json_path = self.open(name) / PROJECT_JSON_FILE_NAME
-        try:
-            return ProjectJson.model_validate_json(project_json_path.read_text(encoding="utf-8"))
-        except (ValidationError, OSError) as error:
-            raise ProjectError(f"{PROJECT_JSON_FILE_NAME} of '{name}' cannot be read: {error}", status_code=422) from error
+        """project.json of a project, read under the project lock.
+
+        On Windows a file that is open cannot be replaced, so a read without the lock can make a concurrent
+        write_project_json fail with PermissionError (for example the record a finished run writes).
+        """
+        with self.project_lock(name):
+            project_json_path = self.open(name) / PROJECT_JSON_FILE_NAME
+            try:
+                return ProjectJson.model_validate_json(project_json_path.read_text(encoding="utf-8"))
+            except (ValidationError, OSError, UnicodeDecodeError) as error:
+                raise ProjectError(f"{PROJECT_JSON_FILE_NAME} of '{name}' cannot be read: {error}", status_code=422) from error
 
     def write_project_json(self, name: str, data: ProjectJson) -> None:
         """Write project.json through a temporary file in the same folder, so a reader never sees a partial file."""
@@ -226,14 +233,18 @@ class ProjectStore:
             return ConfigReply(settings=self._without_service_owned(stored_config), grid_plan=grid_plan)
 
     def read_stored_config(self, name: str) -> dict:
-        """The content of config.yaml as stored, service paths and device included."""
+        """The content of config.yaml as stored, service paths and device included.
+
+        An empty file, or one that holds no mapping, gives an empty dict: it sets no setting, so it fails
+        validation like any other config without a mode, and the Settings step can show that.
+        """
         with self.project_lock(name):
             config_path = self.open(name) / CONFIG_FILE_NAME
             try:
                 stored_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            except (yaml.YAMLError, OSError) as error:
+            except (yaml.YAMLError, OSError, UnicodeDecodeError) as error:
                 raise ProjectError(f"{CONFIG_FILE_NAME} of '{name}' cannot be read: {error}", status_code=422) from error
-            return stored_config
+            return stored_config if isinstance(stored_config, dict) else {}
 
     def read_settings(self, name: str) -> dict:
         """The stored settings of a project without the paths and device the service owns."""
@@ -255,11 +266,16 @@ class ProjectStore:
 
         Planned as a save plans it, without writing anything; a grid over the budget is returned as it is (a larger
         max volume uploaded after the settings were saved can give one), so the app can say so when the project opens.
+        None as well when the stored settings do not validate (a hand-edited config.yaml): the project still opens,
+        and the next save reports the field.
         """
         bounds = self.joined_bounds(name)
         if bounds is None:
             return None
-        config = self.load_project_config(name)
+        try:
+            config = self.load_project_config(name)
+        except ConfigError:
+            return None
         return self._grid_plan_reply(plan_voxel_grid(bounds, config.voxel_size, config.margin_frac))
 
     def _plan_and_check_grid(self, name: str, config: UserConfig) -> GridPlanReply | None:
@@ -360,11 +376,15 @@ class ProjectStore:
         return self._stored_file_path(self.open(name), role, file_name)
 
     def joined_bounds(self, name: str) -> list[list[float]] | None:
-        """[[xmin, ymin, zmin], [xmax, ymax, zmax]] of the joined max volume, None before any is uploaded."""
+        """[[xmin, ymin, zmin], [xmax, ymax, zmax]] of the joined max volume, None before any is uploaded.
+
+        Read with trimesh's own loader, which keeps the vertices load_mesh keeps: load_mesh then only reorders
+        faces (fix_normals), which takes about 80 times longer than the read and does not move the bounds.
+        """
         joined_path = self.open(name) / JOINED_FOLDER / "max_volume.ply"
         if not joined_path.is_file():
             return None
-        return load_mesh(str(joined_path)).bounds.tolist()
+        return trimesh.load(str(joined_path), force="mesh").bounds.tolist()
 
     def weather_location(self, name: str) -> str | None:
         """'<city>, <country>' from the LOCATION line of the weather file; None without a usable file."""
@@ -500,6 +520,6 @@ class ProjectStore:
             return ""
         try:
             config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-        except (yaml.YAMLError, OSError) as error:
+        except (yaml.YAMLError, OSError, UnicodeDecodeError) as error:
             raise ProjectError(f"{CONFIG_FILE_NAME} of '{project_folder.name}' cannot be read: {error}", status_code=422) from error
         return str(config.get("mode", "")) if isinstance(config, dict) else ""

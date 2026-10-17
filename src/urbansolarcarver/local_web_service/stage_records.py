@@ -42,17 +42,25 @@ def _read_manifest(run_folder: Path, stage: str) -> dict | None:
 
 
 def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
-    """The state of every pipeline stage of a project, in pipeline order."""
+    """The state of every pipeline stage of a project, in pipeline order.
+
+    When the stored settings do not validate (a hand-edited config.yaml, or an engine update that validates a
+    setting differently), no stage can be current, so every completed stage is out_of_date; the project still
+    opens and the next save or run reports the field.
+    """
     project_json = store.read_project_json(name)
     run_folder = store.open(name) / RUN_FOLDER
-    current_config = store.load_project_config(name)
+    try:
+        current_config = store.load_project_config(name)
+    except ConfigError:
+        current_config = None
     status: dict[str, StageState] = {}
     for stage in PIPELINE_STAGES:
         record = project_json.stage_records.get(stage)
         manifest = _read_manifest(run_folder, stage)
         if record is None or manifest is None:
             status[stage] = "missing"
-        elif record.inputs_revision != project_json.inputs_revision:
+        elif current_config is None or record.inputs_revision != project_json.inputs_revision:
             status[stage] = "out_of_date"
         elif _settings_changed(store, name, stage, record, current_config):
             status[stage] = "out_of_date"

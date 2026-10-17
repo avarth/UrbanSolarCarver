@@ -4,6 +4,7 @@ import struct
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from urbansolarcarver.local_web_service.score_points import build_score_points
 from urbansolarcarver.pydantic_schemas import PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
@@ -110,4 +111,23 @@ def test_a_grid_without_occupied_voxels_gives_no_points(tmp_path):
     np.save(run / "preprocessing" / "voxel_grid.npy", np.zeros((4, 3, 2), dtype=bool))
     header, indices, _, _, _ = decode(build_score_points(run))
     assert header["point_count"] == 0 and header["thinning_step"] == 1 and len(indices) == 0
+    assert header["score_min"] is None and header["score_max"] is None
+
+
+def test_nan_scores_leave_the_header_valid_json_with_the_finite_range(tmp_path):
+    run = write_fake_run(tmp_path, with_mask=False)
+    scores = np.load(run / "preprocessing" / "scores.npy")
+    scores.ravel()[[0, 5]] = (np.nan, np.inf)
+    np.save(run / "preprocessing" / "scores.npy", scores)
+    blob = build_score_points(run)
+    header_length = struct.unpack("<I", blob[:4])[0]
+    header_text = blob[4:4 + header_length].decode("utf-8")
+    header = json.loads(header_text, parse_constant=lambda constant: pytest.fail(f"{constant} in the header"))
+    assert (header["score_min"], header["score_max"]) == (1.0, 17.0)
+
+
+def test_scores_that_are_all_nan_give_no_range(tmp_path):
+    run = write_fake_run(tmp_path, with_mask=False)
+    np.save(run / "preprocessing" / "scores.npy", np.full((4, 3, 2), np.nan, dtype=np.float32))
+    header = decode(build_score_points(run))[0]
     assert header["score_min"] is None and header["score_max"] is None

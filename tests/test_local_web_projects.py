@@ -75,6 +75,18 @@ def test_write_project_json_replaces_the_file_and_leaves_no_temporary_file(tmp_p
     assert sorted(path.name for path in folder.iterdir() if path.is_file()) == ["config.yaml", "project.json"]
 
 
+def test_reading_project_json_waits_for_the_project_lock(tmp_path):
+    """On Windows a write cannot replace project.json while a reader has it open, so readers take the lock the writers hold."""
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    read_finished = threading.Event()
+    with store.project_lock("p"):
+        reader = threading.Thread(target=lambda: (store.read_project_json("p"), read_finished.set()))
+        reader.start()
+        assert not read_finished.wait(0.2)
+    reader.join(10)
+    assert read_finished.is_set()
+
+
 def _box_bytes(center, ext=".ply"):
     m = trimesh.creation.box(extents=[10, 10, 10]); m.apply_translation(center)
     exported = m.export(file_type=ext.lstrip("."))
@@ -349,6 +361,18 @@ def test_unknown_mode_at_create_leaves_no_project_folder(tmp_path):
     with pytest.raises(ConfigError):
         store.create("p", "no-such-mode")
     assert not (tmp_path / "p").exists()
+
+
+def test_joined_bounds_do_not_need_the_engine_loader(tmp_path, monkeypatch):
+    """The bounds are read without load_mesh's fix_normals, which takes most of its time and does not move a vertex."""
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    expected_bounds = projects.load_mesh(str(tmp_path / "p" / "inputs" / "joined" / "max_volume.ply")).bounds.tolist()
+
+    def refuse(path):
+        raise AssertionError("joined_bounds called load_mesh")
+    monkeypatch.setattr(projects, "load_mesh", refuse)
+    assert store.joined_bounds("p") == expected_bounds == [[-5.0, -5.0, 0.0], [5.0, 5.0, 10.0]]
 
 
 def test_grid_plan_and_budget_use_the_joined_max_volume(tmp_path):

@@ -75,7 +75,8 @@ Each project is a folder in the projects folder:
 ├── inputs/        The files you added (max_volume/, test_surfaces/, weather.epw)
 │                  and the joined meshes the engine reads (joined/)
 ├── config.yaml    The settings, a normal USC configuration file
-├── project.json   The project's record: its settings, input revision and one record per completed stage
+├── project.json   The project's record: the files you added with their triangle counts, the input revision
+│                  and one record per completed stage (with the settings that stage ran with)
 └── run/           The engine's output: preprocessing/, thresholding/, exporting/ and massing/
 ```
 
