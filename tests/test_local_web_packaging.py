@@ -124,3 +124,13 @@ def test_mode_lists_name_engine_modes():
         for key in ("modes", "essential", "label_for_modes", "unit_for_modes", "help_for_modes"):
             if isinstance(entry.get(key), (list, dict)):
                 assert set(entry[key]) <= set(MODES), (name, key)
+
+
+# ---- The Mode step: mode_tiles.json against the engine's modes (UX 5.3) ----
+
+MODE_TILES_PATH = APP_FOLDER / "src" / "steps" / "mode_tiles.json"
+
+
+def test_mode_tiles_name_every_engine_mode_once():
+    tiles = json.loads(MODE_TILES_PATH.read_text(encoding="utf-8"))
+    assert sorted(t["engine_name"] for t in tiles) == sorted(MODES)

@@ -17,14 +17,14 @@ interface SettingTooltipProps {
   extraLine?: string;
 }
 
-interface TooltipPlacement {
+export interface TooltipPlacement {
   top: number;
   left: number;
   arrowLeft: number;
 }
 
-/** Under the "i", centred on it, moved sideways as little as keeps it inside the window. */
-function placementUnder(infoButton: HTMLElement, tooltip: HTMLElement): TooltipPlacement {
+/** Under the anchor (an "i", a mode tile), centred on it, moved sideways as little as keeps it inside the window. */
+export function placementUnder(infoButton: HTMLElement, tooltip: HTMLElement): TooltipPlacement {
   const anchor = infoButton.getBoundingClientRect();
   const anchorCentre = anchor.left + anchor.width / 2;
   const widestLeft = window.innerWidth - tooltip.offsetWidth - WINDOW_MARGIN_PIXELS;
@@ -32,7 +32,13 @@ function placementUnder(infoButton: HTMLElement, tooltip: HTMLElement): TooltipP
   return { top: anchor.bottom + GAP_UNDER_INFO_BUTTON_PIXELS, left, arrowLeft: anchorCentre - left };
 }
 
-function MessageParts({ parts }: { parts: MessagePart[] }) {
+/** The style of a tooltip at *placement*; hidden until it is placed, so it never shows where it would first land. */
+export function placedTooltipStyle(placement: TooltipPlacement | null): CSSProperties {
+  return placement === null ? { visibility: "hidden" }
+    : { top: placement.top, left: placement.left, "--setting-tooltip-arrow-left": `${placement.arrowLeft}px` } as CSSProperties;
+}
+
+export function MessageParts({ parts }: { parts: MessagePart[] }) {
   return <>{parts.map((part, index) => (typeof part === "string" ? part : <code key={index}>{part.code}</code>))}</>;
 }
 
@@ -87,8 +93,7 @@ export function SettingTooltip({ settingLabel, help, configName, defaultText, ex
     setDismissed(pinnedByClick);
     setPinnedByClick(!pinnedByClick);
   };
-  const tooltipStyle = placement === null ? { visibility: "hidden" } as CSSProperties
-    : { top: placement.top, left: placement.left, "--setting-tooltip-arrow-left": `${placement.arrowLeft}px` } as CSSProperties;
+  const tooltipStyle = placedTooltipStyle(placement);
 
   return (
     <span ref={anchor} className="setting-info-anchor"

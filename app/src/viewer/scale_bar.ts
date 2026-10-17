@@ -1,5 +1,6 @@
 // The scale bar of UX 8.1: a round length that adjusts to the zoom so the bar stays 100 to 250 px long.
-import { formattedNumber, messages } from "../messages";
+import { messages } from "../messages";
+import { formattedNumber } from "../steps/format_numbers";
 
 const SHORTEST_BAR_PIXELS = 100;
 const ROUND_STEPS = [1, 2, 5];

@@ -9,6 +9,7 @@ export type ExampleInfo = Schemas["ExampleInfo"];
 export type ProjectSummary = Schemas["ProjectSummary"];
 export type ProjectDetail = Schemas["ProjectDetail"];
 export type InputFilesReply = Schemas["InputFilesReply"];
+export type InputFileInfo = Schemas["InputFileInfo"];
 export type ConfigReply = Schemas["ConfigReply"];
 export type ConfigErrorReply = Schemas["ConfigErrorReply"];
 export type GridPlanReply = Schemas["GridPlanReply"];
@@ -73,6 +74,20 @@ function projectPath(project: string): string {
   return `/api/projects/${encodeURIComponent(project)}`;
 }
 
+/** The service's own words for a refused request (its "detail", or the messages of its field errors); null for another failure. */
+export function refusalDetailOf(error: unknown): string | null {
+  if (!(error instanceof ApiError) || typeof error.body !== "object" || error.body === null) return null;
+  const body = error.body as { detail?: unknown; field_errors?: { message: string }[] };
+  if (typeof body.detail === "string") return body.detail;
+  if (Array.isArray(body.field_errors)) return body.field_errors.map((fieldError) => fieldError.message).join(" ");
+  return null;
+}
+
+/** The address of an uploaded input file. A request for it needs the token header like any other. */
+export function inputFileUrl(project: string, role: string, fileName: string): string {
+  return `${projectPath(project)}/inputs/${encodeURIComponent(role)}/${encodeURIComponent(fileName)}`;
+}
+
 /** The address of a result file of the project's last run. A request for it needs the token header like any other. */
 export function runFileUrl(project: string, path: string): string {
   return `${projectPath(project)}/run/files/${path.split("/").map(encodeURIComponent).join("/")}`;
@@ -129,7 +144,7 @@ export async function addInput(token: string, project: string, role: string, fil
 }
 
 export const removeInput = (token: string, project: string, role: string, fileName: string) =>
-  requestJson<InputFilesReply>(token, `${projectPath(project)}/inputs/${encodeURIComponent(role)}/${encodeURIComponent(fileName)}`, "DELETE");
+  requestJson<InputFilesReply>(token, inputFileUrl(project, role, fileName), "DELETE");
 
 export const putConfig = (token: string, project: string, values: Record<string, unknown>) =>
   requestJson<ConfigReply>(token, `${projectPath(project)}/config`, "PUT", { values });

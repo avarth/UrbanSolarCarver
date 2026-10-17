@@ -163,3 +163,29 @@
   font-size: var(--text-secondary);
   font-weight: 600;
 }
+
+/* The view and its centre message (the empty state of UX 11). */
+.viewer-pane { position: absolute; inset: 0; overflow: hidden; }
+.viewer-canvas { position: absolute; inset: 0; }
+
+.viewer-centre {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 320px;
+  text-align: center;
+  color: var(--colour-ink);
+}
+
+.viewer-centre[data-viewport-theme="dark"] { color: var(--colour-ink-on-dark); }
+
+.viewer-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewer-empty-state p { margin: 0; }
+.viewer-centre[data-viewport-theme="dark"] .link-button { color: var(--colour-test-surface-on-dark); }

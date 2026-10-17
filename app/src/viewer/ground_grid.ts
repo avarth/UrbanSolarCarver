@@ -1,7 +1,8 @@
 // The ground grid of UX 8.1 on z = 0 of the local origin: 10 m cells with stronger lines every 50 m and 100 m (1 m, 10 m and
 // 50 m for a model under 30 m), distance labels on the 100 m lines, reaching 1 km from the model centre and fading with distance.
 import * as THREE from "three";
-import { messages, formattedNumber } from "../messages";
+import { messages } from "../messages";
+import { formattedNumber } from "../steps/format_numbers";
 import { colourToken, type ViewportTheme } from "./colour_scales";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 

@@ -1,19 +1,7 @@
-// The interface texts of UX spec sections 5.1, 5.4 to 5.7, 6.1, 7, 8 and 11, in one place. A text that takes values is a function.
+// The interface texts of UX spec sections 4, 5, 6.1, 7, 8 and 11, in one place. A text that takes values is a function.
 // Texts that the engine writes (a file that cannot be read, why Warp cannot run, the message of a failed run) are shown as the
 // engine gives them and have no entry here.
-
-/** 690807104 as "690 807 104". */
-export function groupedDigits(count: number): string {
-  return String(count).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-}
-
-/** A measured value: whole from 100 up, up to two decimals from 1 up, up to three below, digits grouped ("1 250", "1.5", "0.012"). */
-export function formattedNumber(value: number): string {
-  const magnitude = Math.abs(value);
-  const rounded = Number(value.toFixed(magnitude >= 100 ? 0 : magnitude >= 1 ? 2 : 3));
-  const [whole, fraction] = String(Math.abs(rounded)).split(".");
-  return `${rounded < 0 ? "-" : ""}${groupedDigits(Number(whole))}${fraction === undefined ? "" : `.${fraction}`}`;
-}
+import { groupedDigits } from "./steps/format_numbers";
 
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -22,6 +10,12 @@ const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "Ju
 export function dayAndMonth(monthDay: string): string {
   const [month, day] = monthDay.split("-").map(Number);
   return `${day} ${MONTH_ABBREVIATIONS[month - 1]}`;
+}
+
+/** A moment in this computer's time zone as "17 Oct 2026, 09:05". */
+export function dateAndTime(moment: Date): string {
+  const twoDigits = (value: number) => String(value).padStart(2, "0");
+  return `${moment.getDate()} ${MONTH_ABBREVIATIONS[moment.getMonth()]} ${moment.getFullYear()}, ${twoDigits(moment.getHours())}:${twoDigits(moment.getMinutes())}`;
 }
 
 /** ["10", "12", "14"] as "10, 12 and 14". */
@@ -37,13 +31,81 @@ export function plainText(parts: MessagePart[]): string {
 }
 
 export const messages = {
-  // Start screen (5.1)
+  // Top bar and start screen (4, 5.1)
+  productName: "UrbanSolarCarver",
+  versionLine: (version: string) => `Version ${version}`,
+  projectsLink: "Projects",
   newProject: "New project",
   projectNameLabel: "Project name",
   projectNameHint: "Up to 64 letters, numbers, spaces, hyphens or underscores.",
   createProject: "Create project",
   openProject: "Open a project",
+  noProjectsYet: "No projects yet.",
   tryExample: "Try an example",
+
+  // The steps and their summary lines (4.1)
+  stepTitles: {
+    inputs: "Inputs",
+    mode: "Mode",
+    settings: "Settings",
+    carving: "Carving",
+    envelope_and_massing: "Envelope and massing",
+    export: "Export",
+  },
+  inputsSummary: (volumeCount: number, testSurfaceCount: number, hasWeatherFile: boolean) =>
+    `${volumeCount} ${volumeCount === 1 ? "volume" : "volumes"}, ${testSurfaceCount} ${testSurfaceCount === 1 ? "test surface" : "test surfaces"}` +
+    (hasWeatherFile === true ? ", weather" : ""),
+  maxVolumeMissing: "Maximum volume missing",
+  testSurfacesMissing: "Test surfaces missing",
+  maxVolumeAndTestSurfacesMissing: "Maximum volume and test surfaces missing",
+  periodSummary: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => {
+    const startDate = `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]}`, endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
+    return `${startDate === endDate ? startDate : `${startDate} to ${endDate}`}, ${startHour} to ${endHour} h`;
+  },
+  voxelsOfSize: (voxelSizeText: string) => `${voxelSizeText} voxels`,
+  settingsSummary: (periodText: string, voxelsText: string) => `${periodText}; ${voxelsText}`,
+  keptShare: (percentText: string) => `${percentText} kept`,
+  notRunYet: "Not run yet",
+  outOfDateSummary: "Out of date",
+  massingSummary: (floorAreaText: string, storeysText: string) => `${floorAreaText}, ${storeysText}`,
+  notBuiltYet: "Not built yet",
+  exportReady: "Ready",
+  buildEnvelopeFirst: "Build the envelope first",
+  carvingNeedsAnalysis: "Run the analysis in Settings to see the carving",
+  envelopeNeedsAnalysis: "Run the analysis in Settings before building the envelope and massing",
+  exportNeedsBuild: "Build the envelope and massing to export them",
+
+  // Inputs (5.2)
+  maxVolumeTitle: "Maximum volume",
+  testSurfacesTitle: "Test surfaces",
+  weatherFileTitle: "Weather file (optional)",
+  requiredInput: "Required",
+  weatherFileExtension: ".epw",
+  maxVolumeHint: "The largest building you would allow, as one or more closed meshes.",
+  testSurfacesHint: "The surfaces whose sun or sky the carving protects, such as neighbouring facades.",
+  weatherNeededFor: (modeNames: string) => `Needed for ${modeNames}.`,
+  orDropThemHere: "or drop them here",
+  replaceFile: "Replace",
+  removeFile: (fileName: string) => `Remove ${fileName}`,
+  triangleCount: (count: number) => `${groupedDigits(count)} ${count === 1 ? "triangle" : "triangles"}`,
+  fileProblem: (fileName: string, reason: string) => `${fileName}: ${reason}`,
+  inputsSizeTitle: "Size of all inputs together",
+  inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ} m`,
+
+  // Mode (5.3). The names, lines and tooltips of the six modes are in steps/mode_tiles.json.
+  modeGroupLabel: "Mode",
+  modeFillsStartingValues: "Choosing a mode fills its starting values in Settings.",
+  engineName: (engineName: string): MessagePart[] => ["Engine name: ", { code: String(engineName) }],
+  experimental: "Experimental",
+  aboutMode: (plainName: string) => `About ${plainName}`,
+
+  // Run buttons (5.4, 6.4)
+  runAnalysis: "Run analysis",
+  runInProgress: "A run is in progress",
+  addMaxVolumeToRun: "Add a maximum volume to run the analysis",
+  addTestSurfacesToRun: "Add test surfaces to run the analysis",
+  addMaxVolumeAndTestSurfacesToRun: "Add a maximum volume and test surfaces to run the analysis",
+  fixSettingsToRun: "Fix the settings above to run the analysis.",
 
   // Warm-up and device status (5.1, 6.1, 11)
   gpuPreparing: "Preparing the GPU",

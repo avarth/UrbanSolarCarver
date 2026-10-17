@@ -4,7 +4,7 @@
 import { useId, useState } from "react";
 import type { FormState } from "./form_state";
 import type { SettingGroupView } from "./presentation";
-import { fieldErrorOf, SettingField } from "./SettingField";
+import { fieldErrorOf, SettingField, type SettingFieldExtras } from "./SettingField";
 import "./settings_form.css";
 
 // Building massing's three essential heights and widths sit side by side (UX 5.6, screens).
@@ -15,9 +15,11 @@ interface SettingGroupProps {
   form: FormState;
   onChange: (values: Record<string, unknown>) => void;
   disabled?: boolean;
+  /** What the step adds under some of the group's fields, by setting name. */
+  fieldExtras?: Record<string, SettingFieldExtras>;
 }
 
-export function SettingGroup({ group, form, onChange, disabled = false }: SettingGroupProps) {
+export function SettingGroup({ group, form, onChange, disabled = false, fieldExtras = {} }: SettingGroupProps) {
   const [unfoldedByUser, setUnfoldedByUser] = useState(false);
   const foldId = useId();
   const foldHoldsAnError = group.folded.some((view) => fieldErrorOf(form, view) !== undefined);
@@ -29,7 +31,7 @@ export function SettingGroup({ group, form, onChange, disabled = false }: Settin
         <>
           <h3 className="setting-group-title">{group.title}</h3>
           <div className={essentialClass}>
-            {group.essential.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabled} />)}
+            {group.essential.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabled} extras={fieldExtras[view.name]} />)}
           </div>
         </>
       )}
@@ -40,7 +42,7 @@ export function SettingGroup({ group, form, onChange, disabled = false }: Settin
           </button>
           {unfolded && (
             <div id={foldId} className="setting-group-folded">
-              {group.folded.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabled} />)}
+              {group.folded.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabled} extras={fieldExtras[view.name]} />)}
             </div>
           )}
         </>

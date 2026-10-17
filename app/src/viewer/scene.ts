@@ -30,7 +30,7 @@ export interface LayerDescription {
 const CAMERA_MOVE_MILLISECONDS = 400;
 const DIMMED_OPACITY = 0.35;
 const DIMMED_DESATURATION = 1;
-const DEFAULT_SKY_DOME_OPACITY = 0.6;
+export const DEFAULT_SKY_DOME_OPACITY = 0.6;
 const FIELD_OF_VIEW_DEGREES = 35;
 const FRAME_MARGIN = 1.1;
 const TOP_VIEW_TILT_RADIANS = 1e-3;         // a hair off straight down, so "up" on the screen is defined and points north

@@ -16,11 +16,19 @@ import { ThresholdRule, type ThresholdSpec } from "./widgets/ThresholdRule";
 import { TiltedPlaneAngles } from "./widgets/TiltedPlaneAngles";
 import "./settings_form.css";
 
+/** What a step adds under one of its fields: a note while the field is valid (the grid under Voxel size), and the error
+ *  in the step's own words in place of the engine's message (the grid over the budget). */
+export interface SettingFieldExtras {
+  note?: ReactNode;
+  errorContent?: ReactNode;
+}
+
 export interface SettingFieldProps {
   view: SettingView;
   form: FormState;
   onChange: (values: Record<string, unknown>) => void;
   disabled?: boolean;
+  extras?: SettingFieldExtras;
 }
 
 // The words shown for the options of a choice the engine names in code.
@@ -68,7 +76,7 @@ export function defaultTextOf(view: SettingView, form: FormState, isShadowTolera
   return withUnit(typeof value === "number" && isDecimalSetting && Number.isInteger(value) ? value.toFixed(1) : String(value));
 }
 
-function WarningIcon() {
+export function WarningIcon() {
   return (
     <svg className="setting-error-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
       <path d="M8 1.5 15 14H1z" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
@@ -77,7 +85,7 @@ function WarningIcon() {
   );
 }
 
-export function SettingField({ view, form, onChange, disabled = false }: SettingFieldProps) {
+export function SettingField({ view, form, onChange, disabled = false, extras }: SettingFieldProps) {
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;
@@ -157,7 +165,8 @@ export function SettingField({ view, form, onChange, disabled = false }: Setting
                         extraLine={view.name === "voxel_size" && form.gridPlan ? messages.gridSize(form.gridPlan.resolution, form.gridPlan.total_voxels) : undefined} />
       </div>
       {controlElement}
-      {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon />{error}</p>}
+      {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{extras?.errorContent ?? error}</span></p>}
+      {error === undefined && extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
     </div>
   );
 }

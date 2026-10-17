@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { dayAndMonth, formattedNumber, listedWithAnd, messages, plainText } from "./messages";
+import { dayAndMonth, listedWithAnd, messages, plainText } from "./messages";
 
 test("interface messages follow the copy rules", () => {
   const text = JSON.stringify(Object.values(messages).map(m => typeof m === "function" ? (m as (...values: number[]) => unknown)(1, 2, 3, 4) : m));
@@ -18,7 +18,7 @@ test("the engine stopped and access lost messages show the command as code, with
 
 test("the grid over budget message groups digits and gives the voxel size to use", () => {
   expect(messages.gridOverBudget(884, 690807104, 500000000, 0.07)).toEqual({
-    description: "This grid would have 884 voxels per side, 690 807 104 in total. The analysis can handle up to 500 000 000.",
+    description: "This grid would have 884 voxels per side, 690 807 104 in total. The analysis can handle up to 500 000 000.",
     advice: "Use 0.07 m or more.",
   });
 });
@@ -35,8 +35,7 @@ test("the count of settings to fix agrees with the number", () => {
   expect(messages.settingsToFix(3)).toBe("3 settings to fix");
 });
 
-test("numbers, dates and lists for the 3D view", () => {
-  expect([1250.4, 1.5, 0.0123, 20, -100, 1000].map(formattedNumber)).toEqual(["1 250", "1.5", "0.012", "20", "-100", "1 000"]);
+test("dates and lists for the 3D view", () => {
   expect(dayAndMonth("12-21")).toBe("21 Dec");
   expect(listedWithAnd(["10", "12", "14"])).toBe("10, 12 and 14");
   expect(listedWithAnd(["21 Dec"])).toBe("21 Dec");
