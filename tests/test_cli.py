@@ -295,22 +295,43 @@ class TestUiCommand:
         monkeypatch.setattr(carver_cli, "_ui_static_folder", lambda: static_folder)
         return static_folder
 
-    def test_without_the_extra_names_the_install_command(self, monkeypatch):
-        import builtins
+    @pytest.fixture
+    def service_never_starts(self, monkeypatch):
+        """Fails the test if the command gets as far as starting the service."""
+        import uvicorn
+        monkeypatch.setattr(uvicorn, "run", lambda *args, **kwargs: pytest.fail("the service must not start"))
+        monkeypatch.setattr(uvicorn.Server, "run", lambda *args, **kwargs: pytest.fail("the service must not start"))
+
+    @staticmethod
+    def _without_module(monkeypatch, missing_module):
+        """Makes importlib.util.find_spec report one module as not installed."""
+        import importlib.util
+        real_find_spec = importlib.util.find_spec
+        monkeypatch.setattr(importlib.util, "find_spec",
+                            lambda name, *args, **kwargs: None if name == missing_module else real_find_spec(name, *args, **kwargs))
+
+    @pytest.mark.parametrize("missing_module", ["fastapi", "uvicorn", "multipart", "websockets"])
+    def test_without_the_extra_names_the_install_command(self, monkeypatch, built_front_end, service_never_starts, missing_module):
         import sys
-        real_import = builtins.__import__
-
-        def import_without_fastapi(name, *args, **kwargs):
-            if name.split(".")[0] == "fastapi":
-                raise ImportError("No module named 'fastapi'")
-            return real_import(name, *args, **kwargs)
-
-        monkeypatch.setattr(builtins, "__import__", import_without_fastapi)
+        self._without_module(monkeypatch, missing_module)
         result = _invoke(["ui", "--no-browser"])
         assert result.exit_code == 1
         assert "[ui]" in result.output
         assert "-m pip install" in result.output
         assert sys.executable in result.output
+        assert missing_module in result.output
+
+    def test_the_install_command_quotes_a_python_path_with_spaces(self, monkeypatch, built_front_end, service_never_starts):
+        monkeypatch.setattr("sys.executable", "C:\\Program Files\\Python 3\\python.exe")
+        self._without_module(monkeypatch, "websockets")
+        result = _invoke(["ui", "--no-browser"])
+        assert result.exit_code == 1
+        assert '"C:\\Program Files\\Python 3\\python.exe" -m pip install' in result.output
+
+    def test_the_install_command_leaves_a_python_path_without_spaces_bare(self, monkeypatch):
+        from urbansolarcarver import carver_cli
+        monkeypatch.setattr("sys.executable", "C:\\Python3\\python.exe")
+        assert carver_cli._ui_install_command().startswith("C:\\Python3\\python.exe -m pip install")
 
     def test_without_the_front_end_names_the_build_command(self, monkeypatch, tmp_path):
         from urbansolarcarver import carver_cli

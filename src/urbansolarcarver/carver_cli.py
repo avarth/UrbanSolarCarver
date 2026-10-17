@@ -30,6 +30,7 @@ RPC mechanism used by the Grasshopper plugin.
 """
 from __future__ import annotations
 
+import importlib.util
 import logging
 import os
 import platform
@@ -930,15 +931,19 @@ UI_DEFAULT_PORT = 8770
 UI_DEFAULT_PROJECTS_FOLDER = Path.home() / "UrbanSolarCarver" / "projects"
 UI_HOST = "127.0.0.1"          # the service is never reachable from another machine
 UI_LOGGERS_SHOWING_REQUEST_PATHS = ("uvicorn.error", "uvicorn.access")
+# The modules of the ui extra (fastapi, uvicorn, python-multipart, websockets): fastapi and uvicorn import without
+# the other two, which the service needs for file uploads and for the run events.
+UI_REQUIRED_MODULES = ("fastapi", "uvicorn", "multipart", "websockets")
 
 
 def _ui_install_command() -> str:
     """The pip command that adds the ui extra: from the repository folder when this package runs from
     a source checkout (an editable install), by package name otherwise."""
+    python_command = f'"{sys.executable}"' if " " in sys.executable else sys.executable
     repository_folder = Path(__file__).resolve().parents[2]
     if (repository_folder / "pyproject.toml").is_file():
-        return f'{sys.executable} -m pip install -e "{repository_folder}[ui]"'
-    return f'{sys.executable} -m pip install "urbansolarcarver[ui]"'
+        return f'{python_command} -m pip install -e "{repository_folder}[ui]"'
+    return f'{python_command} -m pip install "urbansolarcarver[ui]"'
 
 
 def _ui_static_folder() -> Path:
@@ -981,12 +986,11 @@ def ui(
         typer.secho(f"  Invalid device {device!r}: use 'auto', 'cpu', or 'cuda'", fg="red")
         raise typer.Exit(1)
 
-    try:
-        import fastapi  # noqa: F401  (checked here so the message names the extra instead of a module)
-        import uvicorn
-    except ImportError:
-        typer.secho("  The browser UI needs the ui extra: " + _ui_install_command(), fg="red")
+    missing_modules = [module for module in UI_REQUIRED_MODULES if importlib.util.find_spec(module) is None]
+    if missing_modules:     # checked up front, so a partial install gets the hint and not a traceback from the service
+        typer.secho(f"  The browser UI needs the ui extra (not found: {', '.join(missing_modules)}): " + _ui_install_command(), fg="red")
         raise typer.Exit(1)
+    import uvicorn
 
     static_folder = _ui_static_folder()
     if not (static_folder / "index.html").is_file():
