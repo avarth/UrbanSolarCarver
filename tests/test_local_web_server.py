@@ -323,6 +323,22 @@ def test_a_project_whose_config_yaml_does_not_validate_still_opens(client_after_
     assert saved.status_code == 200 and client.get("/api/projects/p").json()["grid_plan"]["voxel_size"] == 2.0
 
 
+def test_a_project_whose_config_yaml_has_a_yaml_syntax_error_opens_with_empty_settings(client_with_inputs, projects_folder):
+    client = client_with_inputs
+    assert read_events(client, start_run(client, produce=["thresholding"])["run_id"])[-1]["type"] == "run_finished"
+    (projects_folder / "p" / "config.yaml").write_text("mode: daylight\nvoxel_size: [1.0\n", encoding="utf-8")
+    assert [row["name"] for row in client.get("/api/projects").json()] == ["p"]
+    opened = client.get("/api/projects/p")
+    assert opened.status_code == 200, opened.text
+    assert opened.json()["settings"] == {} and opened.json()["grid_plan"] is None
+    assert opened.json()["stage_status"]["stages"] == {
+        "preprocessing": "out_of_date", "thresholding": "out_of_date", "exporting": "missing", "massing": "missing"}
+    saved = client.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 2.0}})
+    assert saved.status_code == 200, saved.text
+    repaired = client.get("/api/projects/p").json()
+    assert repaired["settings"]["mode"] == "daylight" and repaired["grid_plan"]["voxel_size"] == 2.0
+
+
 def test_a_project_file_that_is_not_utf8_hides_only_its_own_project(client, projects_folder):
     for name in ("bad json", "bad config", "good"):
         create_project(client, name)

@@ -160,6 +160,7 @@ class ProjectStore:
         A folder is skipped, not reported as an error, when it is not a project this service
         could have made: no project.json, a name the service would not accept, or a project.json
         or config.yaml that cannot be read. One bad folder must not hide the other projects.
+        A config.yaml with a YAML syntax error is read as holding no settings, so its project is listed without a mode.
         """
         if not self._projects_folder.is_dir():
             return []
@@ -233,18 +234,9 @@ class ProjectStore:
             return ConfigReply(settings=self._without_service_owned(stored_config), grid_plan=grid_plan)
 
     def read_stored_config(self, name: str) -> dict:
-        """The content of config.yaml as stored, service paths and device included.
-
-        An empty file, or one that holds no mapping, gives an empty dict: it sets no setting, so it fails
-        validation like any other config without a mode, and the Settings step can show that.
-        """
+        """The content of config.yaml as stored, service paths and device included (see _parse_config_file)."""
         with self.project_lock(name):
-            config_path = self.open(name) / CONFIG_FILE_NAME
-            try:
-                stored_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-            except (yaml.YAMLError, OSError, UnicodeDecodeError) as error:
-                raise ProjectError(f"{CONFIG_FILE_NAME} of '{name}' cannot be read: {error}", status_code=422) from error
-            return stored_config if isinstance(stored_config, dict) else {}
+            return self._parse_config_file(self.open(name) / CONFIG_FILE_NAME, name)
 
     def read_settings(self, name: str) -> dict:
         """The stored settings of a project without the paths and device the service owns."""
@@ -513,13 +505,27 @@ class ProjectStore:
         file_paths = [project_folder / PROJECT_JSON_FILE_NAME, project_folder / CONFIG_FILE_NAME]
         return _utc_iso(max(path.stat().st_mtime for path in file_paths if path.is_file()))
 
-    @staticmethod
-    def _mode(project_folder: Path) -> str:
+    @classmethod
+    def _mode(cls, project_folder: Path) -> str:
         config_path = project_folder / CONFIG_FILE_NAME
         if not config_path.is_file():
             return ""
+        return str(cls._parse_config_file(config_path, project_folder.name).get("mode", ""))
+
+    @staticmethod
+    def _parse_config_file(config_path: Path, name: str) -> dict:
+        """The settings a config.yaml holds as a dict; ProjectError(422) when the file cannot be read or is not UTF-8.
+
+        An empty file, one that holds no mapping, or one with a YAML syntax error (a hand edit) gives an empty
+        dict: it sets no setting, so it fails validation like any other config without a mode, the project
+        still opens with every completed stage out of date, and the next save replaces the file.
+        """
         try:
-            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-        except (yaml.YAMLError, OSError, UnicodeDecodeError) as error:
-            raise ProjectError(f"{CONFIG_FILE_NAME} of '{project_folder.name}' cannot be read: {error}", status_code=422) from error
-        return str(config.get("mode", "")) if isinstance(config, dict) else ""
+            config_text = config_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as error:
+            raise ProjectError(f"{CONFIG_FILE_NAME} of '{name}' cannot be read: {error}", status_code=422) from error
+        try:
+            stored_config = yaml.safe_load(config_text)
+        except yaml.YAMLError:
+            return {}
+        return stored_config if isinstance(stored_config, dict) else {}

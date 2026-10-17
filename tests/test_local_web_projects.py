@@ -61,8 +61,8 @@ def test_list_skips_folders_that_are_not_readable_projects_and_keeps_the_good_on
         (tmp_path / odd_name).mkdir()
         (tmp_path / odd_name / "project.json").write_text(store.read_project_json("good").model_dump_json(), encoding="utf-8")
     (tmp_path / "no project file").mkdir()
-    assert [p.name for p in store.list()] == ["good"]
-    assert store.list()[0].mode == "daylight"
+    # A YAML syntax error is a hand edit the next save repairs, so that project stays listed, without a mode.
+    assert [(p.name, p.mode) for p in store.list()] == [("broken config", ""), ("good", "daylight")]
 
 
 def test_write_project_json_replaces_the_file_and_leaves_no_temporary_file(tmp_path):
