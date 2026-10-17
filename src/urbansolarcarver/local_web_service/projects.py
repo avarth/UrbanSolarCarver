@@ -6,7 +6,6 @@ a validated name and checked to be a direct child of the projects folder.
 """
 from __future__ import annotations
 
-import contextlib
 import os
 import re
 import shutil
@@ -23,8 +22,8 @@ from ..errors import ConfigError, InputError
 from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_budget, plan_voxel_grid
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config_from_mode_starting_values, load_config
+from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from ..run_context import RunContext, run_context
 from .api_models import ConfigReply, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
 
 PROJECT_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
@@ -39,14 +38,15 @@ WEATHER_EXTENSION = ".epw"
 WEATHER_FILE_NAME = "weather.epw"
 INPUTS_FOLDER = "inputs"
 JOINED_FOLDER = "inputs/joined"
-# Settings the service decides, whatever the browser sends: file locations inside the project folder and the compute device.
-SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir", "device")
+# Settings the service decides, whatever the browser sends: every file location (the service takes no path from
+# the browser; simulated_weights_path is never set) and the compute device.
+SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir", "device", "simulated_weights_path")
 SERVICE_PATHS = {
     "max_volume_path": "inputs/joined/max_volume.ply",
     "test_surface_path": "inputs/joined/test_surfaces.ply",
     "epw_path": "inputs/weather.epw",
     "out_dir": "run",
-}   # relative to the project folder
+}   # relative to the project folder; epw_path only for modes that read a weather file
 UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
 FILE_NAME_SEPARATORS = re.compile(r"[\\/]")
 
@@ -92,17 +92,6 @@ def sanitize_file_name(name: str) -> str:
     if not clean_name or clean_name.startswith("."):
         raise ProjectError(f"'{name}' has no usable file name: use letters, digits, '-', '_' and '.'.", status_code=422)
     return clean_name
-
-
-@contextlib.contextmanager
-def _engine_issues_not_warned():
-    """Keep the engine's advisory notes about a config (such as settings the mode ignores) out of the warnings.
-
-    The settings form always holds every setting of the mode's family, so those notes would repeat at
-    every save and load. The engine collects them on the context instead, which is dropped here.
-    """
-    with run_context(RunContext()):
-        yield
 
 
 def _utc_iso(timestamp_seconds: float) -> str:
@@ -220,11 +209,13 @@ class ProjectStore:
         with self.project_lock(name):
             project_folder = self.open(name)
             browser_values = {key: value for key, value in values.items() if key not in SERVICE_OWNED_SETTINGS}
-            with _engine_issues_not_warned():
-                config = build_config_from_mode_starting_values(
-                    {**browser_values, **SERVICE_PATHS, "device": self._device}, base_folder=project_folder)
+            service_paths = self._service_paths_for_mode(values.get("mode"))
+            config = build_config_from_mode_starting_values(
+                {**browser_values, **service_paths, "device": self._device}, base_folder=project_folder)
             grid_plan = self._plan_and_check_grid(name, config)
-            stored_config = {**config.model_dump(mode="json"), **SERVICE_PATHS}
+            # Only the settings that were given: the engine warns when a config file sets a setting the mode does not
+            # use, and loading it back sets exactly the stored ones, so a full dump would warn at every load.
+            stored_config = {**config.model_dump(mode="json", exclude_unset=True), **service_paths}
             self._write_bytes_atomically(
                 project_folder / CONFIG_FILE_NAME, yaml.safe_dump(stored_config, sort_keys=False).encode("utf-8"))
             return ConfigReply(settings=self._without_service_owned(stored_config), grid_plan=grid_plan)
@@ -241,8 +232,7 @@ class ProjectStore:
 
     def load_project_config(self, name: str) -> UserConfig:
         """The stored config.yaml as the engine's validated config, with its paths resolved inside the project folder."""
-        with _engine_issues_not_warned():
-            return load_config(str(self.open(name) / CONFIG_FILE_NAME))
+        return load_config(str(self.open(name) / CONFIG_FILE_NAME))
 
     def _plan_and_check_grid(self, name: str, config: UserConfig) -> GridPlanReply | None:
         """The grid plan of the joined max volume, None before one exists; GridOverBudget when it is too large."""
@@ -256,6 +246,14 @@ class ProjectStore:
         except ConfigError as error:
             raise GridOverBudget(str(error), error.errors, plan_reply) from error
         return plan_reply
+
+    @staticmethod
+    def _service_paths_for_mode(mode) -> dict:
+        """SERVICE_PATHS, without the weather file for a mode that does not read one (the engine warns about an unused epw_path)."""
+        mode_settings = MODES.get(canonical_mode_name(mode))
+        if mode_settings is not None and not mode_settings.needs_epw:
+            return {key: path for key, path in SERVICE_PATHS.items() if key != "epw_path"}
+        return dict(SERVICE_PATHS)
 
     @staticmethod
     def _grid_plan_reply(plan: VoxelGridPlan) -> GridPlanReply:

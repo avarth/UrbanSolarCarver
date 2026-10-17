@@ -1,5 +1,6 @@
 """Project folders, names and project.json of the local web service."""
 import threading
+import warnings
 from pathlib import Path
 
 import pytest
@@ -298,10 +299,32 @@ def test_browser_paths_and_device_are_ignored(tmp_path):
 
 
 def test_config_yaml_holds_the_service_paths_relative_to_the_project_folder(tmp_path):
-    store = ProjectStore(tmp_path, device="cpu"); store.create("p", "daylight")
-    stored = yaml.safe_load((tmp_path / "p/config.yaml").read_text(encoding="utf-8"))
-    assert {key: stored[key] for key in projects.SERVICE_PATHS} == projects.SERVICE_PATHS
-    assert stored["device"] == "cpu"
+    store = ProjectStore(tmp_path, device="cpu")
+    store.create("sunny", "time-based"); store.create("bright", "daylight")
+    sunny = yaml.safe_load((tmp_path / "sunny/config.yaml").read_text(encoding="utf-8"))
+    assert {key: sunny[key] for key in projects.SERVICE_PATHS} == projects.SERVICE_PATHS
+    assert sunny["device"] == "cpu"
+    bright = yaml.safe_load((tmp_path / "bright/config.yaml").read_text(encoding="utf-8"))
+    assert {key: bright.get(key) for key in projects.SERVICE_PATHS} == {**projects.SERVICE_PATHS, "epw_path": None}
+
+
+def test_simulated_weights_path_from_the_browser_is_never_stored(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "benefit")
+    for path in ("C:/Windows/win.ini", "../other/x.json"):
+        reply = store.write_config_from_values("p", {"mode": "benefit", "simulated_weights_path": path})
+        assert "simulated_weights_path" not in reply.settings
+    assert yaml.safe_load((tmp_path / "p/config.yaml").read_text(encoding="utf-8")).get("simulated_weights_path") is None
+    assert store.load_project_config("p").simulated_weights_path is None
+
+
+@pytest.mark.parametrize("mode", ["daylight", "time-based"])
+def test_saving_and_loading_a_config_raises_no_warnings(tmp_path, mode):
+    store = ProjectStore(tmp_path)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        store.create("p", mode)
+        store.write_config_from_values("p", {"mode": mode, "voxel_size": 2.0})
+        store.load_project_config("p")
 
 
 def test_invalid_setting_raises_config_error_on_its_field(tmp_path):
