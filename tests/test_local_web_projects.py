@@ -24,6 +24,24 @@ def test_invalid_project_names_are_rejected_without_writing(tmp_path, bad):
     assert not any(p for p in tmp_path.rglob("*") if p.is_file())
 
 
+WINDOWS_DEVICE_NAMES = ["CON", "PRN", "AUX", "NUL", *(f"COM{digit}" for digit in range(1, 10)), *(f"LPT{digit}" for digit in range(1, 10))]
+
+
+@pytest.mark.parametrize("device_name", WINDOWS_DEVICE_NAMES)
+def test_windows_device_names_are_not_project_names_in_any_letter_case(tmp_path, device_name):
+    store = ProjectStore(tmp_path / "projects")
+    for bad in (device_name, device_name.lower(), device_name.capitalize(), f" {device_name} "):
+        with pytest.raises(ProjectError) as err:
+            store.create(bad, "time-based")
+        assert err.value.status_code == 422 and "device name" in str(err.value)
+    assert not any(p for p in tmp_path.rglob("*") if p.is_file())
+
+
+@pytest.mark.parametrize("fine", ["Console", "COM10", "COM0", "LPT", "nul 2", "my-con", "Aux_1"])
+def test_names_that_only_contain_a_device_name_are_project_names(tmp_path, fine):
+    assert projects.validate_project_name(fine) == fine
+
+
 def test_create_makes_the_folder_layout_and_project_json(tmp_path):
     store = ProjectStore(tmp_path)
     folder = store.create("Block 7", "time-based")
@@ -139,6 +157,28 @@ def test_file_names_without_a_usable_name_are_rejected(raw):
     with pytest.raises(ProjectError) as err:
         sanitize_file_name(raw)
     assert err.value.status_code == 422
+
+
+@pytest.mark.parametrize("raw", [f"{device_name}{extension}" for device_name in ("CON", "nul", "Com1", "LPT9", "aux")
+                                 for extension in ("", ".ply", ".tar.ply", ".")] + ["n u l.ply", "C:\\x\\prn.epw"])
+def test_file_names_that_are_windows_device_names_are_rejected(raw):
+    with pytest.raises(ProjectError) as err:
+        sanitize_file_name(raw)
+    assert err.value.status_code == 422 and "device name" in str(err.value)
+
+
+@pytest.mark.parametrize("fine", ["console.ply", "com10.ply", "my_nul.ply", "nul_1.obj", "a.nul.ply"])
+def test_file_names_that_only_contain_a_device_name_are_kept(fine):
+    assert sanitize_file_name(fine) == fine
+
+
+def test_an_upload_named_like_a_windows_device_is_refused_without_writing(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    for role, file_name in (("max_volume", "nul.ply"), ("weather", "CON.epw")):
+        with pytest.raises(ProjectError) as err:
+            store.add_input("p", role, file_name, b"x")
+        assert err.value.status_code == 422
+    assert store.read_project_json("p").input_files == {}
 
 
 def test_upload_and_removal_raise_the_inputs_revision(tmp_path):

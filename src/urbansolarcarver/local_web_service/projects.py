@@ -47,6 +47,8 @@ SERVICE_PATHS = {
     "epw_path": "inputs/weather.epw",
     "out_dir": "run",
 }   # relative to the project folder; epw_path only for modes that read a weather file
+# Windows reserves these names for devices: a file or folder named so, with or without an extension, cannot be made there.
+WINDOWS_DEVICE_NAME_PATTERN = re.compile(r"(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])", re.IGNORECASE)
 UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
 FILE_NAME_SEPARATORS = re.compile(r"[\\/]")
 
@@ -70,6 +72,13 @@ class ProjectError(Exception):
         self.status_code = status_code
 
 
+def _check_not_a_windows_device_name(name: str) -> None:
+    """Raise ProjectError(422) when the part of the name before its first '.' is a Windows device name (CON, NUL, COM1, ...)."""
+    if WINDOWS_DEVICE_NAME_PATTERN.fullmatch(name.split(".")[0]) is not None:
+        raise ProjectError(f"'{name}' is a Windows device name, which Windows does not allow for a file or folder: "
+                           "choose another name.", status_code=422)
+
+
 def validate_project_name(name: str) -> str:
     """Return the name without surrounding spaces, or raise ProjectError(422)."""
     stripped_name = name.strip(" ")
@@ -79,18 +88,21 @@ def validate_project_name(name: str) -> str:
             "'-' and '_', starting with a letter or digit.",
             status_code=422,
         )
+    _check_not_a_windows_device_name(stripped_name)
     return stripped_name
 
 
 def sanitize_file_name(name: str) -> str:
     """The last part of an uploaded file name with only letters, digits, '-', '_' and '.' kept.
 
-    Raises ProjectError(422) when nothing usable is left or the name would be hidden (starts with '.').
+    Raises ProjectError(422) when nothing usable is left, the name would be hidden (starts with '.') or it is a
+    Windows device name (CON, NUL, COM1, ...), also with an extension.
     """
     last_part = FILE_NAME_SEPARATORS.split(name)[-1]
     clean_name = UNWANTED_FILE_NAME_CHARACTERS.sub("", last_part)
     if not clean_name or clean_name.startswith("."):
         raise ProjectError(f"'{name}' has no usable file name: use letters, digits, '-', '_' and '.'.", status_code=422)
+    _check_not_a_windows_device_name(clean_name)
     return clean_name
 
 
