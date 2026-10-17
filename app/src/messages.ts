@@ -139,6 +139,9 @@ export const messages = {
   modelMoreThan10Km: "This model is more than 10\u00a0km across. Is it in meters?",
   modelLessThan1M: "This model is less than 1\u00a0m across. Is it in meters?",
 
+  // Units written after the numbers of the run steps (UX 5.5 to 5.7, 9)
+  units: { shadeHours: "m²·h", percent: "%", squareMetres: "m²", cubicMetres: "m³", seconds: "s" },
+
   // Runs and their progress (6.2 to 6.4, 11)
   runProgress: "Run progress",
   stageStates: { waiting: "waiting", running: "running", done: "done" },
@@ -149,6 +152,7 @@ export const messages = {
   errorType: (errorType: string) => `Error type: ${errorType}`,
   goToSetting: (settingLabel: string) => `Go to ${String(settingLabel).toLowerCase()}`,
   runConnectionLost: "The connection to the engine was lost during the run.",
+  runReportUnreadable: "The run report could not be read. Build the envelope and massing again to write it.",
   warningsTitle: "Warnings",
   warningCount: (count: number) => `${count} ${count === 1 ? "warning" : "warnings"}`,
   summaryWithWarnings: (summary: string, warningsText: string) => `${summary}, ${warningsText}`,

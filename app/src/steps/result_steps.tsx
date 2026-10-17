@@ -59,6 +59,27 @@ function layerHasData(layer: LayerName, results: RunResults): boolean {
   }
 }
 
+/**
+ * Whether a stage's layers are dimmed: while a run of the project brings the stage up to date, until the run has done it;
+ * otherwise while its stage status is not current (UX 6.3).
+ */
+export function isStageDimmed(stage: PipelineStage, record: RunRecord | null, stages: Record<PipelineStage, StageState>): boolean {
+  const runUnderWay = record !== null && record.state.final === null && record.refusal === null;
+  if (runUnderWay && record.state.order.includes(stage)) return record.state.stages[stage].state !== "done";
+  return stages[stage] !== "current";
+}
+
+export function dimmedLayersOf(record: RunRecord | null, stages: Record<PipelineStage, StageState>): LayerName[] {
+  return (Object.keys(LAYERS_OF_STAGE) as PipelineStage[]).filter((stage) => isStageDimmed(stage, record, stages)).flatMap((stage) => LAYERS_OF_STAGE[stage]);
+}
+
+/** The layers of a run that was cancelled or failed whose stage left no data: listed with the missing-result note (UX 8.2). */
+export function missingLayersOf(record: RunRecord | null, results: RunResults, isWeightedMode: boolean): LayerName[] {
+  if (record === null || (record.state.final !== "cancelled" && record.state.final !== "failed")) return [];
+  return record.state.order.flatMap((stage) => LAYERS_OF_STAGE[stage as PipelineStage] ?? [])
+    .filter((layer) => (layer !== "sky_dome" || isWeightedMode) && !layerHasData(layer, results));
+}
+
 export interface ResultStepsContext {
   token: string;
   project: string;
@@ -135,14 +156,6 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} />
   );
 
-  const isDimmedStage = (stage: PipelineStage) =>
-    running && record.state.order.includes(stage) ? record.state.stages[stage].state !== "done" : stages[stage] !== "current";
-  const dimmedLayers = (Object.keys(LAYERS_OF_STAGE) as PipelineStage[]).filter(isDimmedStage).flatMap((stage) => LAYERS_OF_STAGE[stage]);
-  const runStoppedEarly = record !== null && (record.state.final === "cancelled" || record.state.final === "failed");
-  const missingLayers = runStoppedEarly
-    ? record.state.order.flatMap((stage) => LAYERS_OF_STAGE[stage as PipelineStage] ?? [])
-      .filter((layer) => (layer !== "sky_dome" || context.isWeightedMode) && !layerHasData(layer, results))
-    : [];
 
   const analysisOutOfDate = stages.preprocessing !== "current";
   const carvingUpdateRunning = runs.activeRun?.project === project && runs.activeRun.origin === "carving_update";
@@ -175,15 +188,12 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const content = {
     carving: (
       <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={results.summary?.carving ?? null} scorePoints={results.scorePoints}
-                   analysisOutOfDate={analysisOutOfDate} carvingDimmed={isDimmedStage("thresholding")}
+                   analysisOutOfDate={analysisOutOfDate} carvingDimmed={isStageDimmed("thresholding", record, stages)}
                    autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
                    thresholdDisabledReason={otherRunActive ? messages.runInProgress : null} settingsDisabledReason={settingsDisabledReason}
                    runBlocker={runBlocker} onChange={changeSettings}
                    onThresholdCommit={(shownNumber) => thresholdQueue.submit(shownNumber)}
-                   onCarvingSettingCommit={(values) => {
-                     changeSettings(values);
-                     if (thresholdView !== null) thresholdQueue.submit(thresholdControlNumber(form, thresholdView));
-                   }}
+                   onCarvingSettingCommit={() => { if (thresholdView !== null) thresholdQueue.submit(thresholdControlNumber(form, thresholdView)); }}
                    onUpdateCarving={() => void startAfterSaving(CARVING_STAGES, "carving_update")}
                    onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")}
                    lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")}
@@ -210,8 +220,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     viewer: {
       results: { scorePoints: results.scorePoints, carving: results.summary?.carving ?? null, skyDome: results.skyDome, envelope: results.envelope,
                  massing: results.massing },
-      dimmedLayers,
-      missingLayers,
+      dimmedLayers: dimmedLayersOf(record, stages),
+      missingLayers: missingLayersOf(record, results, context.isWeightedMode),
       runProgress: running ? runProgressShare(record.state) : null,
       overlayContent: runReportOpen
         ? <RunReportPanel token={token} project={project} onClose={() => setRunReportOpen(false)} onServiceProblem={context.onServiceProblem} />

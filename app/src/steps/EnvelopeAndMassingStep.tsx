@@ -24,13 +24,21 @@ export interface PlatesFile {
 export interface StoreyRow {
   /** 0 for the ground storey, as the engine counts floors and names the parts of plates.obj. */
   floorIndex: number;
+  /** Heights in metres above the bottom of the lowest storey (storey 1, the ground storey, when it has plates). */
   bottom: number;
   top: number;
   area: number;
 }
 
-/** One row per storey that has plates, from the ground up. */
+/** One row per storey that has plates, from the ground up, its heights measured from the bottom of the lowest storey. */
 export function storeyRows(platesFile: PlatesFile): StoreyRow[] {
+  const rows = storeyRowsInModelHeights(platesFile);
+  const ground = rows.length > 0 ? rows[0].bottom : 0;
+  return rows.map((row) => ({ ...row, bottom: row.bottom - ground, top: row.top - ground }));
+}
+
+/** The storeys with the heights plates.json gives, in model coordinates. */
+function storeyRowsInModelHeights(platesFile: PlatesFile): StoreyRow[] {
   const rows = new Map<number, StoreyRow>();
   for (const plate of platesFile.plates) {
     const row = rows.get(plate.floor);
@@ -115,9 +123,9 @@ export function EnvelopeAndMassingStep({ form, onChange, disabledReason, massing
         <section className={outOfDate ? "envelope-results envelope-results-out-of-date" : "envelope-results"}>
           {outOfDate && <p className="out-of-date-label">{messages.outOfDateForCarving}</p>}
           <div className="number-tiles number-tiles-three">
-            <NumberTile label={messages.grossFloorArea} value={formatNumber(massing.total_floor_area_m2)} unit="m²" />
+            <NumberTile label={messages.grossFloorArea} value={formatNumber(massing.total_floor_area_m2)} unit={messages.units.squareMetres} />
             <NumberTile label={messages.storeys} value={formatNumber(massing.storeys_built)} />
-            <NumberTile label={messages.envelopeVolume} value={formatNumber(massing.envelope_volume_m3)} unit="m³" />
+            <NumberTile label={messages.envelopeVolume} value={formatNumber(massing.envelope_volume_m3)} unit={messages.units.cubicMetres} />
           </div>
           {platesFile !== null && platesFile.plates.length > 0 && <StoreyTable platesFile={platesFile} />}
         </section>

@@ -5,7 +5,7 @@
 import { useId, useMemo, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../messages";
 import { formattedNumber, groupedDigits } from "./format_numbers";
-import { histogramBins, logAxisDecades, stackedBarHeights, type HistogramBin, type HistogramScale } from "./score_histogram";
+import { histogramBins, logAxisDecades, logAxisHeight, stackedBarHeights, type HistogramBin, type HistogramScale } from "./score_histogram";
 import "./steps.css";
 
 const BIN_COUNT = 40;
@@ -42,7 +42,7 @@ function yTicks(scale: HistogramScale, axisTop: number): { count: number; height
   if (scale === "log") {
     return Array.from({ length: Math.floor(axisTop / DECADES_PER_LOG_TICK) + 1 }, (_, tick) => {
       const decade = tick * DECADES_PER_LOG_TICK;
-      return { count: 10 ** decade, height: (decade / axisTop) * PLOT_HEIGHT };
+      return { count: 10 ** decade, height: logAxisHeight(10 ** decade, axisTop, PLOT_HEIGHT) };
     });
   }
   return Array.from({ length: LINEAR_TICKS + 1 }, (_, tick) => ({ count: (axisTop * tick) / LINEAR_TICKS, height: (tick / LINEAR_TICKS) * PLOT_HEIGHT }));
@@ -53,7 +53,7 @@ export function ScoreHistogram({ comparedScores, kept, cutoff, isShadowTolerated
   const [activeBin, setActiveBin] = useState<number | null>(null);
   const titleId = useId();
   const bins = useMemo(() => histogramBins(comparedScores, kept, BIN_COUNT), [comparedScores, kept]);
-  const unit = isShadowTolerated ? "m²·h" : "";
+  const unit = isShadowTolerated ? messages.units.shadeHours : "";
   if (bins.length === 0) return null;
 
   const lowest = Math.min(bins[0].lower, cutoff), highest = Math.max(bins[bins.length - 1].upper, cutoff);

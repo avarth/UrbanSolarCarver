@@ -23,6 +23,7 @@ export type SkyDome = Schemas["SkyDome"];
 export const TOKEN_HEADER = "X-USC-Token";
 const TOKEN_QUERY_PARAMETER = "token";
 const STORED_TOKEN_KEY = "usc.token";
+const BLOB_ADDRESS_LIFETIME_MILLISECONDS = 10_000;
 
 /** A reply that is not 2xx. *body* is the parsed JSON of the reply (the service's error models), or its text when it is not JSON. */
 export class ApiError extends Error {
@@ -197,5 +198,6 @@ export async function downloadWithToken(token: string, address: string, fileName
   document.body.appendChild(link);
   link.click();
   link.remove();
-  setTimeout(() => URL.revokeObjectURL(blobAddress), 0);    // after the browser has taken the click
+  // Kept for a while after the click: a browser that starts the download later (Firefox) would lose a revoked address.
+  setTimeout(() => URL.revokeObjectURL(blobAddress), BLOB_ADDRESS_LIFETIME_MILLISECONDS);
 }

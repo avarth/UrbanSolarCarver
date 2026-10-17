@@ -1,8 +1,8 @@
 import { act, createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { ApiError } from "../api_client/client";
+import { ApiError, serviceProblemOf } from "../api_client/client";
 import { renderForTest } from "../viewer_overlays/render_for_test";
-import { UP_TO_DATE_NOTICE_MILLISECONDS, useRunLoop, type RunLoop, type RunOutcome } from "./run_state";
+import { NOTICE_MILLISECONDS, useRunLoop, type RunLoop, type RunOutcome } from "./run_state";
 
 class FakeWebSocket {
   static opened: FakeWebSocket[] = [];
@@ -53,13 +53,34 @@ test("a run is followed to its last event: the active run, then the record of ho
   unmount();
 });
 
-test("a start while a run is active starts nothing", async () => {
+test("a start while a run is active starts nothing and says A run is in progress at its button", async () => {
   vi.stubGlobal("fetch", replyWith({ status: "started", run_id: "r1", stages: ["thresholding"] }));
   const { loop, unmount } = renderedLoop();
   await act(async () => { void loop().start("p", ["thresholding"], "carving_update"); });
   let second: RunOutcome | null = null;
   await act(async () => { second = await loop().start("p", ["exporting"], "build"); });
   expect(second).toBe("not_started");
+  expect(loop().notice).toEqual({ project: "p", origin: "build", message: "A run is in progress" });
+  unmount();
+});
+
+test("a stage-status reply holds only when no run of its project started or ran since it was asked for", async () => {
+  vi.stubGlobal("fetch", replyWith({ status: "started", run_id: "r1", stages: ["thresholding"] }));
+  const { loop, unmount } = renderedLoop();
+  const askedBeforeTheRun = loop().replyStillHolds("p");
+  const askedForAnotherProject = loop().replyStillHolds("q");
+  expect(askedBeforeTheRun()).toBe(true);
+  let outcome: Promise<RunOutcome> | null = null;
+  await act(async () => { outcome = loop().start("p", ["thresholding"], "carving_update"); });
+  const askedDuringTheRun = loop().replyStillHolds("p");
+  expect(askedBeforeTheRun()).toBe(false);
+  expect(askedDuringTheRun()).toBe(false);
+  expect(askedForAnotherProject()).toBe(true);
+  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["thresholding"], files: [] });
+  await outcome;
+  expect(askedBeforeTheRun()).toBe(false);          // a run started after it was asked for
+  expect(askedDuringTheRun()).toBe(false);          // read while the run had removed its stage records
+  expect(loop().replyStillHolds("p")()).toBe(true);
   unmount();
 });
 
@@ -70,9 +91,9 @@ test("nothing to run shows Results are up to date at the button for three second
   let outcome: RunOutcome | null = null;
   await act(async () => { outcome = await loop().start("p", ["exporting", "massing"], "build"); });
   expect(outcome).toBe("up_to_date");
-  expect(loop().upToDate).toEqual({ project: "p", origin: "build" });
-  await act(() => vi.advanceTimersByTimeAsync(UP_TO_DATE_NOTICE_MILLISECONDS));
-  expect(loop().upToDate).toBeNull();
+  expect(loop().notice).toEqual({ project: "p", origin: "build", message: "Results are up to date" });
+  await act(() => vi.advanceTimersByTimeAsync(NOTICE_MILLISECONDS));
+  expect(loop().notice).toBeNull();
   unmount();
 });
 
@@ -97,7 +118,8 @@ test("a connection lost during a run is passed on as a stopped engine, or a lost
     act(() => FakeWebSocket.opened[0].onclose?.({ code, reason: "" }));
     expect(await outcome).toBe("connection_lost");
     const problem = onServiceProblem.mock.calls[0][0];
-    expect(problem instanceof ApiError && problem.status === 401).toBe(isAccessLost);
+    expect(serviceProblemOf(problem)).toBe(isAccessLost ? "access_lost" : "engine_stopped");
+    expect(problem instanceof ApiError).toBe(isAccessLost);
     unmount();
   }
 });

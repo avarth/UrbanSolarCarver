@@ -150,20 +150,14 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const sunPathSphere = useMemo(() => (joinedBounds === null ? null : hemisphere(localBounds(joinedBounds, localOrigin(joinedBounds)))), [joinedBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
-  // A run removes the records of its stages when it starts and writes them when it ends, so the stage status read during a run
-  // says "missing" for results still on screen: a reply that comes while a run of this project is active, or that was asked
-  // for before one started, is not used. The run's end asks again.
-  const runsStarted = useRef(0);
-  const runActiveNow = useRef(runActive);
-  if (runActive && !runActiveNow.current) runsStarted.current += 1;
-  runActiveNow.current = runActive;
-  // *completedStages*: the stages a run just completed are current at once, so their layers are not dimmed until the reply.
+  // A stage status read across a run of this project says "missing" for results still on screen: such a reply is not used
+  // (RunLoop.replyStillHolds), and the run's end asks again. *completedStages*: the stages a run just completed are current at
+  // once, so their layers are not dimmed until the reply.
   const refreshStageStatus = (completedStages: readonly string[] = []) => {
     if (completedStages.length > 0) setStages((current) => ({ ...current, ...Object.fromEntries(completedStages.map((stage) => [stage, "current"])) }));
-    const runsStartedBefore = runsStarted.current;
+    const replyStillHolds = runs.replyStillHolds(project.name);
     getStageStatus(token, project.name).then((reply) => {
-      if (runActiveNow.current || runsStarted.current !== runsStartedBefore) return;
-      setStages(reply.stages as Record<PipelineStage, StageState>);
+      if (replyStillHolds()) setStages(reply.stages as Record<PipelineStage, StageState>);
     }).catch(onServiceProblem);
   };
 

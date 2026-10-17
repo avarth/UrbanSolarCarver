@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { histogramBins, logAxisDecades, stackedBarHeights } from "./score_histogram";
+import { histogramBins, logAxisDecades, logAxisHeight, stackedBarHeights } from "./score_histogram";
 
 test("histogram bins split kept and carved and count every voxel", () => {
   const bins = histogramBins(Float32Array.from([0, 0, 1, 5, 9]), Uint8Array.from([1, 1, 1, 0, 0]), 3);
@@ -17,11 +17,19 @@ test("scores that are all the same fall in one bin", () => {
 });
 
 test("on the log scale the carved part sits on top of the kept part", () => {
-  const h = stackedBarHeights(100, 900, "log", 100, 4);       // log10(100) = 2, log10(1000) = 3, of 4 decades
-  expect(h.kept).toBeCloseTo(50);
-  expect(h.carved).toBeCloseTo(25);
-  expect(stackedBarHeights(0, 100, "log", 100, 4)).toEqual({ kept: 0, carved: 50 });
+  // The axis runs from 0.5 (log10 = -0.301) to 10 000 (4): 4.301 decades. Kept 100 reaches 2.301 of them, kept + carved 1000 one more.
+  const h = stackedBarHeights(100, 900, "log", 100, 4);
+  expect(h.kept).toBeCloseTo((2.30103 / 4.30103) * 100);
+  expect(h.carved).toBeCloseTo((1 / 4.30103) * 100);
   expect(stackedBarHeights(0, 0, "log", 100, 4)).toEqual({ kept: 0, carved: 0 });
+});
+
+test("one voxel has a height on the log axis, below the first tick at 1", () => {
+  const one = stackedBarHeights(1, 0, "log", 100, 4);
+  expect(one.kept).toBeGreaterThan(0);
+  expect(one.kept).toBeCloseTo(logAxisHeight(1, 4, 100));
+  expect(stackedBarHeights(0, 1, "log", 100, 4).carved).toBeCloseTo(one.kept);
+  expect(logAxisHeight(10_000, 4, 100)).toBeCloseTo(100);
 });
 
 test("on the linear scale each part is its count over the top of the axis", () => {

@@ -45,11 +45,22 @@ export function logAxisDecades(largestCount: number): number {
   return Math.max(2, decades + (decades % 2));
 }
 
-const logHeight = (count: number, decades: number, plotHeight: number) => (count >= 1 ? (Math.log10(count) / decades) * plotHeight : 0);
+// The log axis starts at half a voxel, below its first tick (1), so a bar or a kept part of one voxel still has a height.
+const LOG_AXIS_BOTTOM_COUNT = 0.5;
+
+/**
+ * The height of a count on the log axis, from its bottom (half a voxel) to 10 to the power *decades* at *plotHeight*; 0 for
+ * no voxels. The ticks (1, 100, 10 000) are placed with it too.
+ */
+export function logAxisHeight(count: number, decades: number, plotHeight: number): number {
+  if (count <= 0) return 0;
+  const bottom = Math.log10(LOG_AXIS_BOTTOM_COUNT);
+  return ((Math.log10(count) - bottom) / (decades - bottom)) * plotHeight;
+}
 
 /**
  * The heights of a bar's kept part and of its carved part stacked on top of it. On the log scale (*axisTop* in decades, the
- * axis starting at a count of 1) the kept part runs from the axis to log(kept) and the carved part from log(kept) to
+ * axis starting at half a voxel) the kept part runs from the axis to log(kept) and the carved part from log(kept) to
  * log(kept + carved); on the linear scale (*axisTop* the count at the top of the axis) each part is its share of *axisTop*.
  */
 export function stackedBarHeights(keptCount: number, carvedCount: number, scale: HistogramScale, plotHeight: number,
@@ -57,6 +68,6 @@ export function stackedBarHeights(keptCount: number, carvedCount: number, scale:
   if (scale === "linear") {
     return { kept: (keptCount / axisTop) * plotHeight, carved: (carvedCount / axisTop) * plotHeight };
   }
-  const kept = logHeight(keptCount, axisTop, plotHeight);
-  return { kept, carved: logHeight(keptCount + carvedCount, axisTop, plotHeight) - kept };
+  const kept = logAxisHeight(keptCount, axisTop, plotHeight);
+  return { kept, carved: logAxisHeight(keptCount + carvedCount, axisTop, plotHeight) - kept };
 }

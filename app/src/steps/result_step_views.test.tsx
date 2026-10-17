@@ -8,6 +8,7 @@ import { CarvingStep, readAutoUpdate, type CarvingStepProps } from "./CarvingSte
 import { EnvelopeAndMassingStep, storeyRows, type PlatesFile } from "./EnvelopeAndMassingStep";
 import { exportDownloads } from "./ExportStep";
 import { RunProgress } from "./RunProgress";
+import { RunReportPanel } from "./RunReportPanel";
 import { initialRunState, runReducer, type RunLoop, type RunRecord } from "./run_state";
 import { ScoreHistogram } from "./ScoreHistogram";
 
@@ -161,8 +162,10 @@ const PLATES: PlatesFile = {
   total_floor_area_m2: 880,
 };
 
-test("the storeys of plates.json, one row each from the ground up", () => {
+test("the storeys of plates.json, one row each from the ground up, heights from the bottom of storey 1", () => {
   expect(storeyRows(PLATES)).toEqual([{ floorIndex: 0, bottom: 0, top: 5, area: 500 }, { floorIndex: 1, bottom: 5, top: 8, area: 380 }]);
+  const belowZero = { ...PLATES, plates: PLATES.plates.map((plate) => ({ ...plate, z_bottom: plate.z_bottom - 0.5, z_top: plate.z_top - 0.5 })) };
+  expect(storeyRows(belowZero).map((row) => [row.bottom, row.top])).toEqual([[0, 5], [5, 8]]);
 });
 
 test("Envelope and massing: three tiles, the per-storey table with a total, greyed and labelled when out of date", () => {
@@ -194,8 +197,8 @@ test("the Export downloads in the format chosen, out-of-date files labelled", ()
   expect(downloads[3].address).toBe("/api/projects/my%20project/config.yaml");
 });
 
-function runs(record: RunRecord | null, upToDate: RunLoop["upToDate"] = null) {
-  return { current: record, upToDate, cancel: vi.fn() };
+function runs(record: RunRecord | null, notice: RunLoop["notice"] = null) {
+  return { current: record, notice, cancel: vi.fn() };
 }
 
 test("under the button that started it: the stages with their states, the batches, the elapsed time and Cancel", () => {
@@ -238,7 +241,72 @@ test("Cancelled, a stage chain error, the warnings of a run and Results are up t
                                         origin="build" mode="time-based" onGoToSetting={vi.fn()} />);
   expect(rendered.container.textContent).toBe("Results are out of date; run the analysis again");
   rendered.unmount();
-  rendered = renderForTest(<RunProgress runs={runs(null, { project: "p", origin: "build" })} project="p" origin="build" mode="time-based"
-                                        onGoToSetting={vi.fn()} />);
+  rendered = renderForTest(<RunProgress runs={runs(null, { project: "p", origin: "build", message: "Results are up to date" })} project="p"
+                                        origin="build" mode="time-based" onGoToSetting={vi.fn()} />);
   expect(rendered.container.textContent).toBe("Results are up to date");
+});
+
+function unfoldCarvingSettings(container: HTMLElement) {
+  click([...container.querySelectorAll("button")].find((button) => button.textContent === "More carving settings")!);
+}
+
+test("with auto-update on, a carving number field runs once the user leaves it, with the whole number; a switch runs at once", () => {
+  const onChange = vi.fn(), onCarvingSettingCommit = vi.fn();
+  rendered = renderForTest(<CarvingStep {...carvingProps({ onChange, onCarvingSettingCommit })} />);
+  unfoldCarvingSettings(rendered.container);
+  const field = rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above_min_consecutive"] input')!;
+  typeInto(field, "4");
+  typeInto(field, "45");
+  expect(onChange.mock.calls).toEqual([[{ carve_above_min_consecutive: 4 }], [{ carve_above_min_consecutive: 45 }]]);
+  expect(onCarvingSettingCommit).not.toHaveBeenCalled();
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledOnce();
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledOnce();            // nothing changed since: no second run
+  typeInto(field, "3");
+  act(() => field.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledTimes(2);
+  click(rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above"] input')!);
+  expect(onChange).toHaveBeenLastCalledWith({ carve_above: false });
+  expect(onCarvingSettingCommit).toHaveBeenCalledTimes(3);
+});
+
+test("with auto-update off, carving settings only change the form", () => {
+  const onChange = vi.fn(), onCarvingSettingCommit = vi.fn();
+  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, onChange, onCarvingSettingCommit })} />);
+  unfoldCarvingSettings(rendered.container);
+  const field = rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above_min_consecutive"] input')!;
+  typeInto(field, "2");
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(onChange).toHaveBeenCalledWith({ carve_above_min_consecutive: 2 });
+  expect(onCarvingSettingCommit).not.toHaveBeenCalled();
+});
+
+test("disabled carving controls say why: the run in progress over the controls, the run blocker under Update carving", () => {
+  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, thresholdDisabledReason: "A run is in progress",
+                                                           settingsDisabledReason: "A run is in progress", runBlocker: "A run is in progress" })} />);
+  expect([...rendered.container.querySelectorAll(".carving-content > .step-reason")].map((reason) => reason.textContent)).toEqual(["A run is in progress"]);
+  const update = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Update carving")!;
+  expect(update.hasAttribute("disabled")).toBe(true);
+  expect(document.getElementById(update.getAttribute("aria-describedby")!)!.textContent).toBe("A run is in progress");
+  rendered.unmount();
+  rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, runBlocker: "Waiting for the GPU to be ready" })} />);
+  expect(rendered.container.querySelector(".carving-content > .step-reason")).toBeNull();
+  expect(rendered.container.querySelector(".update-carving .run-button-reason")!.textContent).toBe("Waiting for the GPU to be ready");
+});
+
+test("Volume carved is 100 minus Volume kept as shown, so the two add up to 100", () => {
+  rendered = renderForTest(<CarvingStep {...carvingProps({ summary: { ...CARVING, retention_pct: 60.5 } })} />);
+  const tiles = [...rendered.container.querySelectorAll(".number-tile")].map((tile) => tile.textContent);
+  expect(tiles.slice(0, 2)).toEqual(["Volume kept61 %", "Volume carved39 %"]);
+});
+
+test("a run report that cannot be read says so instead of an empty panel", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ detail: "There is no result file" }), { status: 404 })));
+  rendered = renderForTest(<RunReportPanel token="t" project="p" onClose={vi.fn()} onServiceProblem={vi.fn()} />);
+  await act(async () => {});
+  expect(rendered.container.querySelector(".run-report-problem")!.textContent)
+    .toBe("The run report could not be read. Build the envelope and massing again to write it.");
+  expect(rendered.container.querySelector("pre")).toBeNull();
+  vi.unstubAllGlobals();
 });

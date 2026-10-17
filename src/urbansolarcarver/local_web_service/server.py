@@ -338,8 +338,11 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
 
     @router.get("/projects/{name}/config.yaml", response_class=FileResponse, responses={200: {"content": {"application/yaml": {}}}})
     def download_config(name: str) -> FileResponse:
-        """The project's config.yaml as stored, for the Export step's settings download."""
-        return FileResponse(store.open(name) / CONFIG_FILE_NAME, media_type="application/yaml", filename=CONFIG_FILE_NAME, headers=NO_CACHE)
+        """The project's config.yaml as stored, for the Export step's settings download; 404 when the project has none."""
+        config_path = store.open(name) / CONFIG_FILE_NAME
+        if not config_path.is_file():
+            raise ProjectError(f"Project '{name}' has no {CONFIG_FILE_NAME}.", status_code=404)
+        return FileResponse(config_path, media_type="application/yaml", filename=CONFIG_FILE_NAME, headers=NO_CACHE)
 
     @router.get("/projects/{name}/download", response_class=FileResponse, responses={200: {"content": {"application/zip": {}}}})
     def download_project(name: str) -> FileResponse:

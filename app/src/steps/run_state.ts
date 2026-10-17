@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, cancelRun, refusalDetailOf, serviceProblemOf, startRun } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
+import { messages } from "../messages";
 import type { PipelineStage } from "./step_summaries";
 
 export type StageRunState = "waiting" | "running" | "done";
@@ -141,14 +142,30 @@ export interface RunLoop {
   current: RunRecord | null;
   /** The project and button of the run starting or in progress (the engine runs one at a time); null when none is. */
   activeRun: { project: string; origin: RunOrigin } | null;
-  /** The button whose "Results are up to date" is showing, for three seconds after the service said so. */
-  upToDate: { project: string; origin: RunOrigin } | null;
+  /**
+   * A short message at a button, for three seconds: "Results are up to date" when the service had nothing to run, "A run is in
+   * progress" when the button was pressed while a run was starting or under way.
+   */
+  notice: RunNotice | null;
   /** Brings *produce* up to date; resolves at the run's last event. */
   start: (project: string, produce: string[], origin: RunOrigin) => Promise<RunOutcome>;
   cancel: () => void;
+  /**
+   * Made before a request about *project* (its stage status), it tells when the reply comes whether the reply still holds: not
+   * when it was asked for or answered while a run of the project was starting or under way, nor after one started since. A run
+   * removes the records of its stages when it starts and writes them when it ends, so a status read across a run says
+   * "missing" for results on screen.
+   */
+  replyStillHolds: (project: string) => () => boolean;
 }
 
-export const UP_TO_DATE_NOTICE_MILLISECONDS = 3000;
+export interface RunNotice {
+  project: string;
+  origin: RunOrigin;
+  message: string;
+}
+
+export const NOTICE_MILLISECONDS = 3000;
 const WEBSOCKET_CLOSE_UNAUTHORIZED = 4401;
 
 /** A refused start whose settings the service found invalid (ConfigError), as a failed run that names its fields. */
@@ -167,18 +184,20 @@ function problemOfLostConnection(code: number): unknown {
 export function useRunLoop(token: string, onServiceProblem: (error: unknown) => void): RunLoop {
   const [current, setCurrent] = useState<RunRecord | null>(null);
   const [activeRun, setActiveRun] = useState<RunLoop["activeRun"]>(null);
-  const [upToDate, setUpToDate] = useState<RunLoop["upToDate"]>(null);
+  const [notice, setNotice] = useState<RunNotice | null>(null);
   const latestRecord = useRef<RunRecord | null>(null);       // ahead of the render that shows it
   const busy = useRef(false);
+  const busyProject = useRef<string | null>(null);
   const runsAskedFor = useRef(0);
+  const runsAskedForByProject = useRef(new Map<string, number>());
   const stopEvents = useRef<(() => void) | null>(null);
-  const upToDateTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const reportProblem = useRef(onServiceProblem);
   reportProblem.current = onServiceProblem;
 
   useEffect(() => () => {
     stopEvents.current?.();
-    clearTimeout(upToDateTimer.current);
+    clearTimeout(noticeTimer.current);
   }, []);
 
   const show = (record: RunRecord) => {
@@ -187,14 +206,25 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
   };
   const release = () => {
     busy.current = false;
+    busyProject.current = null;
     setActiveRun(null);
+  };
+  const showNotice = (project: string, origin: RunOrigin, message: string) => {
+    clearTimeout(noticeTimer.current);
+    setNotice({ project, origin, message });
+    noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MILLISECONDS);
   };
 
   const start = useCallback(async (project: string, produce: string[], origin: RunOrigin): Promise<RunOutcome> => {
-    if (busy.current) return "not_started";
+    if (busy.current) {
+      showNotice(project, origin, messages.runInProgress);
+      return "not_started";
+    }
     busy.current = true;
+    busyProject.current = project;
     setActiveRun({ project, origin });
     const serial = ++runsAskedFor.current;
+    runsAskedForByProject.current.set(project, (runsAskedForByProject.current.get(project) ?? 0) + 1);
     let reply;
     try {
       reply = await startRun(token, project, produce);
@@ -215,9 +245,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     }
     if (reply.status === "up_to_date" || reply.run_id === null) {
       release();
-      clearTimeout(upToDateTimer.current);
-      setUpToDate({ project, origin });
-      upToDateTimer.current = setTimeout(() => setUpToDate(null), UP_TO_DATE_NOTICE_MILLISECONDS);
+      showNotice(project, origin, messages.resultsUpToDate);
       return "up_to_date";
     }
     const runId = reply.run_id;
@@ -244,5 +272,11 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     cancelRun(token, record.runId).catch((error) => { if (serviceProblemOf(error) !== "other") reportProblem.current(error); });
   }, [token]);
 
-  return { current, activeRun, upToDate, start, cancel };
+  const replyStillHolds = useCallback((project: string) => {
+    const runsBefore = runsAskedForByProject.current.get(project) ?? 0;
+    const askedDuringARun = busyProject.current === project;
+    return () => !askedDuringARun && busyProject.current !== project && (runsAskedForByProject.current.get(project) ?? 0) === runsBefore;
+  }, []);
+
+  return { current, activeRun, notice, start, cancel, replyStillHolds };
 }

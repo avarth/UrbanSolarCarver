@@ -493,11 +493,13 @@ def test_the_project_downloads_as_a_zip(client_after_fake_run):
     assert client_after_fake_run.get("/api/projects/missing/download").status_code == 404
 
 
-def test_the_settings_download_as_config_yaml(client_with_inputs):
+def test_the_settings_download_as_config_yaml(client_with_inputs, projects_folder):
     reply = client_with_inputs.get("/api/projects/p/config.yaml")
     assert reply.status_code == 200 and "config.yaml" in reply.headers["content-disposition"]
     assert yaml.safe_load(reply.text)["mode"] == "daylight"
     assert client_with_inputs.get("/api/projects/missing/config.yaml").status_code == 404
+    (projects_folder / "p" / "config.yaml").unlink()
+    assert client_with_inputs.get("/api/projects/p/config.yaml").status_code == 404
 
 
 # ---- Device warm-up ----

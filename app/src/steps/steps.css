@@ -519,6 +519,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 }
 
 .run-report-header h2 { margin: 0; font-size: var(--text-step-title); font-weight: 600; }
+.run-report-problem { padding: calc(var(--space-unit) * 3); font-size: var(--text-body); }
 
 .run-report-text {
   flex: 1;

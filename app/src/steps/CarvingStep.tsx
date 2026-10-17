@@ -1,9 +1,10 @@
 // The Carving step (UX 5.5, 11): the threshold control of the mode (Shadow tolerated in m²·h with its slider for Sun at set
 // hours, Carve amount in % for the weighted modes, the angle rule's message), the other carving settings folded under it, the
 // histogram, the numbers of the last carving, and the "Update when I change the threshold" switch, remembered per project.
-// With the switch on, letting go of the slider or leaving the number field reruns the carving; off, Update carving does.
+// With the switch on, letting go of the slider or leaving the number field reruns the carving, as does a change of another
+// carving setting (a switch or a choice at once, a number field when the user leaves it); off, Update carving does.
 // When the analysis is out of date the carving is shown dimmed, its controls disabled, with Run analysis in the step.
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import type { RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import { shownValue, type FormState } from "../settings_form/form_state";
@@ -160,15 +161,20 @@ interface CarvingNumbersProps {
 
 /** Volume kept, Volume carved, Kept volume, Obstruction removed (weighted modes) and the time of the last analysis, two per row. */
 export function CarvingNumbers({ summary, voxelSize, isWeighted, lastAnalysisSeconds }: CarvingNumbersProps) {
+  const { units } = messages;
+  // Carved is 100 minus the kept percentage as shown, so the two whole numbers always add up to 100.
+  const keptPercent = Math.round(summary.retention_pct);
   return (
     <div className="number-tiles number-tiles-two">
-      <NumberTile label={messages.volumeKept} value={formatNumber(summary.retention_pct)} unit="%" />
-      <NumberTile label={messages.volumeCarved} value={formatNumber(100 - summary.retention_pct)} unit="%" />
-      {voxelSize !== null && <NumberTile label={messages.keptVolume} value={formatNumber(summary.voxels_kept * voxelSize ** 3)} unit="m³" />}
+      <NumberTile label={messages.volumeKept} value={formatNumber(keptPercent)} unit={units.percent} />
+      <NumberTile label={messages.volumeCarved} value={formatNumber(100 - keptPercent)} unit={units.percent} />
+      {voxelSize !== null && <NumberTile label={messages.keptVolume} value={formatNumber(summary.voxels_kept * voxelSize ** 3)} unit={units.cubicMetres} />}
       {isWeighted && summary.obstruction_fraction_carved !== null && (
-        <NumberTile label={messages.obstructionRemoved} value={formatNumber(summary.obstruction_fraction_carved * 100)} unit="%" />
+        <NumberTile label={messages.obstructionRemoved} value={formatNumber(summary.obstruction_fraction_carved * 100)} unit={units.percent} />
       )}
-      {lastAnalysisSeconds !== null && <NumberTile label={messages.lastAnalysisTook} value={formatNumber(lastAnalysisSeconds, undefined, 1)} unit="s" />}
+      {lastAnalysisSeconds !== null && (
+        <NumberTile label={messages.lastAnalysisTook} value={formatNumber(lastAnalysisSeconds, undefined, 1)} unit={units.seconds} />
+      )}
     </div>
   );
 }
@@ -193,8 +199,8 @@ export interface CarvingStepProps {
   onChange: (values: Record<string, unknown>) => void;
   /** The threshold to apply and run, with auto-update on, as the control shows it (m²·h, or % for Carve amount). */
   onThresholdCommit: (shownNumber: number) => void;
-  /** A carving setting changed with auto-update on: the carving reruns with it. */
-  onCarvingSettingCommit: (values: Record<string, unknown>) => void;
+  /** A carving setting was changed with auto-update on and the user is done with it: the carving reruns with it. */
+  onCarvingSettingCommit: () => void;
   onUpdateCarving: () => void;
   onRunAnalysis: () => void;
   lastAnalysisSeconds: number | null;
@@ -207,6 +213,8 @@ export interface CarvingStepProps {
 export function CarvingStep(props: CarvingStepProps) {
   const { form, summary, scorePoints, analysisOutOfDate, autoUpdate, runBlocker } = props;
   const reasonId = useId();
+  const updateReasonId = useId();
+  const settingChangedSinceCommit = useRef(false);
   const thresholdView = thresholdControlOf(form.mode);
   const isShadowTolerated = thresholdIsShadowToleratedIn(form.mode);
   const groups = settingsForStep("carving", form.mode).map((group) => ({
@@ -216,7 +224,26 @@ export function CarvingStep(props: CarvingStepProps) {
   const settingsDisabled = analysisOutOfDate || props.settingsDisabledReason !== null;
   // The angle rule has no threshold, so nothing updates on its own there: Update carving runs it.
   const autoUpdating = autoUpdate && thresholdView !== null;
-  const changeCarvingSetting = (values: Record<string, unknown>) => (autoUpdating ? props.onCarvingSettingCommit(values) : props.onChange(values));
+  // Every change goes to the form at once; with auto-update on the run follows when the user is done with the field, so typing
+  // "45" saves and runs 45, not 4 (a run disables the settings and would take the focus away mid-number).
+  const changeCarvingSetting = (values: Record<string, unknown>) => {
+    props.onChange(values);
+    if (autoUpdating) settingChangedSinceCommit.current = true;
+  };
+  const commitCarvingSetting = () => {
+    if (!settingChangedSinceCommit.current) return;
+    settingChangedSinceCommit.current = false;
+    props.onCarvingSettingCommit();
+  };
+  const isNumberField = (target: EventTarget) => target instanceof HTMLInputElement && target.type === "number";
+  const commitChoice = (event: FormEvent) => {
+    const target = event.target;
+    if (target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio"))) commitCarvingSetting();
+  };
+  const commitNumberOnLeave = (event: FocusEvent) => { if (isNumberField(event.target)) commitCarvingSetting(); };
+  const commitNumberOnEnter = (event: KeyboardEvent) => { if (event.key === "Enter" && isNumberField(event.target)) commitCarvingSetting(); };
+  const disabledReason = analysisOutOfDate ? null : (props.thresholdDisabledReason ?? props.settingsDisabledReason);
+  const updateBlocker = analysisOutOfDate ? null : runBlocker;
   const comparedScores = scorePoints?.comparedScores ?? null;
   const kept = scorePoints?.kept ?? null;
   return (
@@ -233,15 +260,18 @@ export function CarvingStep(props: CarvingStepProps) {
       )}
       {props.analysisFeedback}
       <div className={props.carvingDimmed || analysisOutOfDate ? "carving-content carving-content-dimmed" : "carving-content"}>
+        {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
         {thresholdView === null ? <p className="step-reason">{messages.angleRuleHasNoThreshold}</p> : (
           <ThresholdControl view={thresholdView} form={form} highestScore={scorePoints?.header.score_max ?? null} autoUpdate={autoUpdating}
                             disabled={thresholdDisabled || analysisOutOfDate}
                             onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(thresholdView, shownNumber))}
                             onCommit={props.onThresholdCommit} />
         )}
-        {groups.map((group) => (
-          <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled} />
-        ))}
+        <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}>
+          {groups.map((group) => (
+            <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled} />
+          ))}
+        </div>
         {thresholdView !== null && (
           <label className="switch-row">
             <input type="checkbox" role="switch" className="setting-switch" checked={autoUpdate} disabled={analysisOutOfDate}
@@ -250,9 +280,13 @@ export function CarvingStep(props: CarvingStepProps) {
           </label>
         )}
         {!autoUpdating && (
-          <button type="button" className="secondary-button" disabled={runBlocker !== null || analysisOutOfDate} onClick={props.onUpdateCarving}>
-            {messages.updateCarving}
-          </button>
+          <div className="update-carving">
+            <button type="button" className="secondary-button" disabled={runBlocker !== null || analysisOutOfDate}
+                    aria-describedby={updateBlocker !== null ? updateReasonId : undefined} onClick={props.onUpdateCarving}>
+              {messages.updateCarving}
+            </button>
+            {updateBlocker !== null && <p id={updateReasonId} className="run-button-reason">{updateBlocker}</p>}
+          </div>
         )}
         {props.carvingFeedback}
         {thresholdView !== null && summary !== null && comparedScores !== null && kept !== null && (

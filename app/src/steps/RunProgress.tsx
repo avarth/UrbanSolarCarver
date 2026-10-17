@@ -1,7 +1,7 @@
 // What a run shows under the button that started it (UX 6.3, 11): while it runs, each stage in plain words with its state,
 // the batch count during the ray tracing, the elapsed time and Cancel; once it ended, how it ended (a failure with a Details
-// fold and a link to the setting it names, "Cancelled.") and the warnings it reported. "Results are up to date" shows for three
-// seconds when the service had nothing to run.
+// fold and a link to the setting it names, "Cancelled.") and the warnings it reported. A notice of the run loop shows for three
+// seconds: "Results are up to date" when the service had nothing to run, "A run is in progress" for a press during a run.
 import { useEffect, useState } from "react";
 import { messages } from "../messages";
 import { presentedSettingOf, settingView } from "../settings_form/presentation";
@@ -25,7 +25,7 @@ function useElapsedSeconds(state: RunState): number {
 
 /** "6.4 s". */
 export function secondsText(seconds: number): string {
-  return formatNumber(seconds, "s", 1);
+  return formatNumber(seconds, messages.units.seconds, 1);
 }
 
 function StageList({ state, onCancel }: { state: RunState; onCancel: () => void }) {
@@ -90,7 +90,7 @@ function RunEnded({ record, mode, onGoToSetting }: { record: RunRecord; mode: st
 }
 
 interface RunProgressProps {
-  runs: Pick<RunLoop, "current" | "upToDate" | "cancel">;
+  runs: Pick<RunLoop, "current" | "notice" | "cancel">;
   project: string;
   origin: RunOrigin;
   mode: string;
@@ -101,12 +101,12 @@ interface RunProgressProps {
 export function RunProgress({ runs, project, origin, mode, onGoToSetting }: RunProgressProps) {
   const record = runs.current;
   const isThisButton = record !== null && record.project === project && record.origin === origin;
-  const upToDate = runs.upToDate !== null && runs.upToDate.project === project && runs.upToDate.origin === origin;
-  if (!isThisButton && !upToDate) return null;
+  const notice = runs.notice !== null && runs.notice.project === project && runs.notice.origin === origin ? runs.notice.message : null;
+  if (!isThisButton && notice === null) return null;
   return (
     <div className="run-progress" role="status">
-      {upToDate && <p className="run-outcome">{messages.resultsUpToDate}</p>}
-      {isThisButton && !upToDate && (
+      {notice !== null && <p className="run-outcome">{notice}</p>}
+      {isThisButton && notice === null && (
         <>
           {record.state.final === null && record.refusal === null ? <StageList state={record.state} onCancel={runs.cancel} />
             : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} />}
