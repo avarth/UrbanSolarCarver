@@ -12,6 +12,7 @@ Usage
     python setup_env.py                   # auto-detect GPU, install everything
     python setup_env.py --cpu             # force CPU-only (no CUDA)
     python setup_env.py --dry-run         # show what would be installed
+    python setup_env.py --no-ui           # leave out the browser UI (the ui extra)
     python setup_env.py --venv-dir PATH   # put the virtual environment at PATH
 
 Requirements
@@ -28,7 +29,8 @@ What this script does
    and picks the one with the newest torch
 4. Upgrades pip and installs PyTorch from that index
 5. Installs UrbanSolarCarver in editable mode with its dependencies, including
-   warp-lang  (pip install -e .[dev])
+   warp-lang and the ui extra for  usc ui  (pip install -e .[dev,ui]; with
+   --no-ui: pip install -e .[dev])
 6. Verifies that torch, warp and urbansolarcarver import
 7. Precompiles the Warp kernels so the first run does not pay the compile time
 """
@@ -250,6 +252,10 @@ def main():
              f"on Windows a short per-user path is used automatically when the "
              f"repo path is too deep for the 260-char limit)"
     )
+    parser.add_argument(
+        "--no-ui", action="store_true",
+        help="Do not install the ui extra (the packages behind 'usc ui')"
+    )
     args = parser.parse_args()
 
     # ── 0. Check Python version ──
@@ -273,12 +279,13 @@ def main():
     log(f"Index URL: {index_url}")
 
     venv_dir = resolve_venv_dir(args.venv_dir)
+    install_target = ".[dev]" if args.no_ui else ".[dev,ui]"
 
     if args.dry_run:
         log("Dry run, would execute:", "info")
         print(f"  1. python -m venv {venv_dir}")
         print(f"  2. pip install torch --index-url {index_url}")
-        print(f"  3. pip install -e .[dev]")
+        print(f"  3. pip install -e {install_target}")
         return
 
     # ── 2. Create venv ──
@@ -304,7 +311,7 @@ def main():
 
     # ── 5. Install UrbanSolarCarver + all deps ──
     log("Installing UrbanSolarCarver and dependencies...")
-    run([str(vpy), "-m", "pip", "install", "-e", ".[dev]", "--quiet"])
+    run([str(vpy), "-m", "pip", "install", "-e", install_target, "--quiet"])
 
     # ── 6. Verify ──
     log("Verifying installation...")
@@ -366,6 +373,8 @@ def main():
     print(f"  Activate:  {venv_dir}\\Scripts\\activate" if platform.system() == "Windows"
           else f"  Activate:  source {venv_dir}/bin/activate")
     print(f"  CLI:       urbansolarcarver --help")
+    if not args.no_ui:
+        print(f"  Browser:   usc ui")
     print(f"  Jupyter:   {vpy} -m jupyter notebook")
     print()
 

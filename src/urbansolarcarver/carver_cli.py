@@ -30,8 +30,10 @@ RPC mechanism used by the Grasshopper plugin.
 """
 from __future__ import annotations
 
+import logging
 import os
 import platform
+import re
 import subprocess
 import sys
 import time
@@ -915,6 +917,104 @@ def schema(
     if mode:
         typer.echo(f"\n  Showing parameters for mode: {mode}")
     typer.echo(f"  {len(rows)} parameters\n")
+
+
+# ---------------------------------------------------------------------------
+# ui: the browser interface, served from this machine only
+#
+# The web service (FastAPI) and uvicorn belong to the optional ``ui`` extra, so
+# everything here imports them inside function bodies and every other command
+# keeps working without the extra.
+# ---------------------------------------------------------------------------
+UI_DEFAULT_PORT = 8770
+UI_DEFAULT_PROJECTS_FOLDER = Path.home() / "UrbanSolarCarver" / "projects"
+UI_HOST = "127.0.0.1"          # the service is never reachable from another machine
+UI_LOGGERS_SHOWING_REQUEST_PATHS = ("uvicorn.error", "uvicorn.access")
+
+
+def _ui_install_command() -> str:
+    """The pip command that adds the ui extra: from the repository folder when this package runs from
+    a source checkout (an editable install), by package name otherwise."""
+    repository_folder = Path(__file__).resolve().parents[2]
+    if (repository_folder / "pyproject.toml").is_file():
+        return f'{sys.executable} -m pip install -e "{repository_folder}[ui]"'
+    return f'{sys.executable} -m pip install "urbansolarcarver[ui]"'
+
+
+def _ui_static_folder() -> Path:
+    """The folder with the built front-end (``index.html`` and its assets)."""
+    from .local_web_service.server import DEFAULT_STATIC_FOLDER
+    return DEFAULT_STATIC_FOLDER
+
+
+class _TokenRedactingFilter(logging.Filter):
+    """Replaces the value of a ``token=`` query parameter in the arguments of a log record.
+
+    uvicorn logs the request path with its query string, and the launch URL's path and the WebSocket's
+    path carry the token. The token is printed once, in the launch URL, and nowhere else.
+    """
+    _token_value_pattern = re.compile(r'(?<=token=)[^&\s"]+')
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(
+                self._token_value_pattern.sub("...", argument) if isinstance(argument, str) else argument
+                for argument in record.args)
+        return True
+
+
+@app.command(help="Open the browser interface (needs the ui extra)")
+def ui(
+    port: int = Option(UI_DEFAULT_PORT, "--port", help="Port on 127.0.0.1"),
+    projects_folder: Path = Option(UI_DEFAULT_PROJECTS_FOLDER, "--projects-folder",
+                                   help="Folder that holds one subfolder per project"),
+    no_browser: bool = Option(False, "--no-browser", help="Print the address without opening the browser"),
+    device: str = Option("auto", "--device", "-d", help="Compute device: 'auto', 'cpu', or 'cuda'"),
+):
+    """Start the local web service and open the interface in the default browser.
+
+    The service listens on 127.0.0.1 only. Each launch creates a random token, which the browser receives
+    once in the address and sends with every request; the address is printed here as well. The compute
+    kernels are compiled in the background while the interface is used. Press Ctrl+C to stop.
+    """
+    if device not in ("auto", "cpu", "cuda"):
+        typer.secho(f"  Invalid device {device!r}: use 'auto', 'cpu', or 'cuda'", fg="red")
+        raise typer.Exit(1)
+
+    try:
+        import fastapi  # noqa: F401  (checked here so the message names the extra instead of a module)
+        import uvicorn
+    except ImportError:
+        typer.secho("  The browser UI needs the ui extra: " + _ui_install_command(), fg="red")
+        raise typer.Exit(1)
+
+    static_folder = _ui_static_folder()
+    if not (static_folder / "index.html").is_file():
+        typer.secho(f"  The front-end is not built: {static_folder / 'index.html'} is missing.", fg="red")
+        typer.secho("  Build it with: cd app && npm install && npm run build", fg="red")
+        raise typer.Exit(1)
+
+    import secrets
+    import webbrowser
+    from .local_web_service.gpu_warm_up import GpuWarmUp
+    from .local_web_service.server import create_app
+
+    projects_folder = projects_folder.expanduser().resolve()
+    projects_folder.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_hex(32)
+    warm_up = GpuWarmUp(device)
+    warm_up.start()
+    service = create_app(projects_folder, token, port, device=device, static_folder=static_folder, warm_up=warm_up)
+
+    launch_url = f"http://{UI_HOST}:{port}/?token={token}"
+    typer.echo(f"  Projects folder: {projects_folder}")
+    typer.echo(f"  Open this address in a browser on this machine: {launch_url}")
+    if not no_browser:
+        webbrowser.open(launch_url)
+
+    for logger_name in UI_LOGGERS_SHOWING_REQUEST_PATHS:
+        logging.getLogger(logger_name).addFilter(_TokenRedactingFilter())
+    uvicorn.run(service, host=UI_HOST, port=port)
 
 
 # ---------------------------------------------------------------------------

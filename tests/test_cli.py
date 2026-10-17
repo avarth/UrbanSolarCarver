@@ -272,3 +272,110 @@ def test_importing_the_cli_does_not_load_torch():
     code = ("import sys; import urbansolarcarver.carver_cli as c; "
             "sys.exit(1 if 'torch' in sys.modules else 0)")
     assert subprocess.run([sys.executable, "-c", code]).returncode == 0
+
+
+def test_importing_the_cli_does_not_load_the_web_service():
+    import subprocess
+    import sys
+    code = ("import sys; import urbansolarcarver.carver_cli as c; "
+            "sys.exit(1 if 'fastapi' in sys.modules else 0)")
+    assert subprocess.run([sys.executable, "-c", code]).returncode == 0
+
+
+class TestUiCommand:
+    """`usc ui` checks the install, then starts the local service on 127.0.0.1 with a fresh token."""
+
+    @pytest.fixture
+    def built_front_end(self, tmp_path, monkeypatch):
+        """A static folder with an index.html, standing in for the built front-end."""
+        from urbansolarcarver import carver_cli
+        static_folder = tmp_path / "ui_static"
+        static_folder.mkdir()
+        (static_folder / "index.html").write_text("<html></html>", encoding="utf-8")
+        monkeypatch.setattr(carver_cli, "_ui_static_folder", lambda: static_folder)
+        return static_folder
+
+    def test_without_the_extra_names_the_install_command(self, monkeypatch):
+        import builtins
+        import sys
+        real_import = builtins.__import__
+
+        def import_without_fastapi(name, *args, **kwargs):
+            if name.split(".")[0] == "fastapi":
+                raise ImportError("No module named 'fastapi'")
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", import_without_fastapi)
+        result = _invoke(["ui", "--no-browser"])
+        assert result.exit_code == 1
+        assert "[ui]" in result.output
+        assert "-m pip install" in result.output
+        assert sys.executable in result.output
+
+    def test_without_the_front_end_names_the_build_command(self, monkeypatch, tmp_path):
+        from urbansolarcarver import carver_cli
+        missing_folder = tmp_path / "no_front_end"
+        monkeypatch.setattr(carver_cli, "_ui_static_folder", lambda: missing_folder)
+        result = _invoke(["ui", "--no-browser", "--projects-folder", str(tmp_path / "projects")])
+        assert result.exit_code == 1
+        assert "npm run build" in result.output
+        assert "no_front_end" in result.output
+
+    def test_starts_uvicorn_on_localhost_with_a_token(self, monkeypatch, tmp_path, built_front_end):
+        import re
+        import uvicorn
+        import webbrowser
+        from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
+
+        calls = []
+        monkeypatch.setattr(GpuWarmUp, "start", lambda self: calls.append("warm_up_start"))
+        monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append(("uvicorn_run", kwargs)))
+        opened_urls = []
+        monkeypatch.setattr(webbrowser, "open", opened_urls.append)
+
+        projects_folder = tmp_path / "projects"
+        result = _invoke(["ui", "--projects-folder", str(projects_folder)])
+
+        assert result.exit_code == 0, result.output
+        assert calls[0] == "warm_up_start"
+        assert calls[1][0] == "uvicorn_run" and len(calls) == 2
+        assert calls[1][1]["host"] == "127.0.0.1"
+        assert calls[1][1]["port"] == 8770
+        assert len(opened_urls) == 1
+        assert re.fullmatch(r"http://127\.0\.0\.1:8770/\?token=[0-9a-f]{64}", opened_urls[0])
+        assert opened_urls[0] in result.output
+        assert projects_folder.is_dir()
+
+    def test_no_browser_prints_the_url_and_opens_nothing(self, monkeypatch, tmp_path, built_front_end):
+        import uvicorn
+        import webbrowser
+        from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
+
+        ports = []
+        monkeypatch.setattr(GpuWarmUp, "start", lambda self: None)
+        monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: ports.append(kwargs["port"]))
+        monkeypatch.setattr(webbrowser, "open", lambda url: pytest.fail("the browser must not open"))
+
+        result = _invoke(["ui", "--no-browser", "--port", "8123", "--projects-folder", str(tmp_path / "projects")])
+
+        assert result.exit_code == 0, result.output
+        assert ports == [8123]
+        assert "http://127.0.0.1:8123/?token=" in result.output
+
+    def test_an_unknown_device_is_refused(self, tmp_path, built_front_end):
+        result = _invoke(["ui", "--no-browser", "--device", "tpu", "--projects-folder", str(tmp_path / "projects")])
+        assert result.exit_code == 1
+        assert "tpu" in result.output
+
+    def test_the_token_is_kept_out_of_uvicorn_log_lines(self):
+        import logging
+        from urbansolarcarver.carver_cli import _TokenRedactingFilter
+
+        token = "ab" * 32
+        record = logging.LogRecord(
+            "uvicorn.error", logging.INFO, __file__, 0, '%s - "WebSocket %s" [accepted]',
+            ("127.0.0.1:50000", f"/api/v1/events?token={token}&x=1"), None)
+        assert _TokenRedactingFilter().filter(record) is True
+        assert token not in record.getMessage()
+        assert "token=" in record.getMessage() and "x=1" in record.getMessage()
+
