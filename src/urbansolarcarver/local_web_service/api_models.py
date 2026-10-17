@@ -144,9 +144,12 @@ class SunPath(BaseModel):
 
 class WarmUpState(BaseModel):
     """How far the background preparation of the compute device has come."""
-    state: Literal["not_started", "running", "ready", "cpu", "failed"]     # "cpu": no CUDA device, the CPU is used
+    state: Literal["not_started", "running", "ready", "cpu", "failed"]     # "cpu": the CPU is used
     device_name: str | None = None      # the CUDA device as torch names it; None until known and on the CPU
     problem: str | None = None          # why the preparation failed
+    # Whether torch sees a CUDA device. In state "cpu", False means there is none and True means the CPU was chosen
+    # at launch (``usc ui --device cpu``) on a machine that has one. True when "ready"; None until known and when "failed".
+    cuda_available: bool | None = None
 
 
 class HealthReply(BaseModel):

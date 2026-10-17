@@ -325,7 +325,7 @@ export interface paths {
         };
         /**
          * Download Config
-         * @description The project's config.yaml as stored, for the Export step's settings download.
+         * @description The project's config.yaml as stored, for the Export step's settings download; 404 when the project has none.
          */
         get: operations["download_config"];
         put?: never;
@@ -722,6 +722,8 @@ export interface components {
             device_name?: string | null;
             /** Problem */
             problem?: string | null;
+            /** Cuda Available */
+            cuda_available?: boolean | null;
         };
     };
     responses: never;

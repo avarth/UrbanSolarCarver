@@ -223,12 +223,14 @@ def test_a_real_server_gives_the_browser_the_refusal_codes(projects_folder):
 def test_health_reports_the_warm_up_state(projects_folder):
     client = build_client(projects_folder)[0]
     health = client.get("/api/health").json()
-    assert health == {"version": __version__, "warm_up": {"state": "not_started", "device_name": None, "problem": None}}
+    assert health == {"version": __version__,
+                      "warm_up": {"state": "not_started", "device_name": None, "problem": None, "cuda_available": None}}
     warm_up = GpuWarmUp("auto", warm_up_function=lambda device: "Test GPU")
     warm_up.start()
     client = build_client(projects_folder, warm_up=warm_up)[0]
     wait_for_warm_up(warm_up)
-    assert client.get("/api/health").json()["warm_up"] == {"state": "ready", "device_name": "Test GPU", "problem": None}
+    assert client.get("/api/health").json()["warm_up"] == {
+        "state": "ready", "device_name": "Test GPU", "problem": None, "cuda_available": True}
 
 
 def test_schema_and_modes(client):
@@ -572,11 +574,32 @@ def test_warm_up_reports_the_device_name_when_ready():
     assert (state.state, state.device_name, state.problem) == ("ready", "Test GPU for cuda", None)
 
 
-def test_warm_up_without_a_cuda_device_is_cpu():
-    warm_up = GpuWarmUp("auto", warm_up_function=lambda device: None)
+def test_warm_up_without_a_cuda_device_is_cpu_and_says_no_cuda_device_exists():
+    warm_up = GpuWarmUp("auto", warm_up_function=lambda device: None, cuda_available_function=lambda: False)
     warm_up.start()
     state = wait_for_warm_up(warm_up)
-    assert (state.state, state.device_name, state.problem) == ("cpu", None, None)
+    assert (state.state, state.device_name, state.problem, state.cuda_available) == ("cpu", None, None, False)
+
+
+def test_warm_up_on_the_cpu_chosen_at_launch_says_a_cuda_device_exists():
+    warm_up = GpuWarmUp("cpu", warm_up_function=lambda device: None, cuda_available_function=lambda: True)
+    warm_up.start()
+    state = wait_for_warm_up(warm_up)
+    assert (state.state, state.device_name, state.problem, state.cuda_available) == ("cpu", None, None, True)
+
+
+def test_the_two_cpu_cases_reach_the_app_apart_through_health(projects_folder):
+    replies = []
+    for cuda_available in (False, True):
+        warm_up = GpuWarmUp("cpu", warm_up_function=lambda device: None, cuda_available_function=lambda found=cuda_available: found)
+        warm_up.start()
+        wait_for_warm_up(warm_up)
+        client = build_client(projects_folder, warm_up=warm_up)[0]
+        replies.append(client.get("/api/health").json()["warm_up"])
+    assert replies == [
+        {"state": "cpu", "device_name": None, "problem": None, "cuda_available": False},
+        {"state": "cpu", "device_name": None, "problem": None, "cuda_available": True},
+    ]
 
 
 def test_warm_up_failure_keeps_the_message():
@@ -587,6 +610,7 @@ def test_warm_up_failure_keeps_the_message():
     warm_up.start()
     state = wait_for_warm_up(warm_up)
     assert state.state == "failed" and "setup_env.py" in state.problem and state.device_name is None
+    assert state.cuda_available is None
 
 
 def test_warm_up_runs_once_and_shows_running_meanwhile():
@@ -615,3 +639,4 @@ def test_default_warm_up_prepares_the_cpu_or_names_why_it_cannot():
     state = wait_for_warm_up(warm_up, deadline_seconds=120.0)
     assert state.state in ("cpu", "failed") and state.device_name is None
     assert (state.problem is None) == (state.state == "cpu")
+    assert (state.cuda_available is None) == (state.state == "failed")

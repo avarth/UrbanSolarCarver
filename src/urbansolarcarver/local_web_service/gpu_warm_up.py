@@ -18,6 +18,8 @@ _log = logging.getLogger(__name__)
 # Takes the device choice ("auto", "cpu", "cuda"); returns the name of the CUDA device it prepared,
 # or None when it prepared the CPU. Raises when the device cannot be prepared.
 WarmUpFunction = Callable[[str], str | None]
+# Tells whether torch sees a CUDA device, whatever device was chosen.
+CudaAvailableFunction = Callable[[], bool]
 
 
 def prepare_compute_device(device: str) -> str | None:
@@ -35,12 +37,21 @@ def prepare_compute_device(device: str) -> str | None:
     return torch.cuda.get_device_name(resolved_device) if resolved_device.type == "cuda" else None
 
 
+def cuda_is_available() -> bool:
+    """Whether torch sees a CUDA device, also when the CPU was chosen."""
+    import torch
+
+    return torch.cuda.is_available()
+
+
 class GpuWarmUp:
     """Runs the device preparation once on a daemon thread and reports its state."""
 
-    def __init__(self, device: str, warm_up_function: WarmUpFunction | None = None):
+    def __init__(self, device: str, warm_up_function: WarmUpFunction | None = None,
+                 cuda_available_function: CudaAvailableFunction | None = None):
         self._device = device
         self._warm_up_function = warm_up_function or prepare_compute_device
+        self._cuda_available_function = cuda_available_function or cuda_is_available
         self._state = WarmUpState(state="not_started")
         self._lock = threading.Lock()
 
@@ -59,7 +70,10 @@ class GpuWarmUp:
     def _run(self) -> None:
         try:
             device_name = self._warm_up_function(self._device)
-            finished = WarmUpState(state="cpu") if device_name is None else WarmUpState(state="ready", device_name=device_name)
+            if device_name is None:
+                finished = WarmUpState(state="cpu", cuda_available=self._cuda_available_function())
+            else:
+                finished = WarmUpState(state="ready", device_name=device_name, cuda_available=True)
         except Exception as error:      # whatever went wrong is shown to the person; runs are not blocked by it
             _log.warning("The compute device warm-up failed: %s", error)
             finished = WarmUpState(state="failed", problem=str(error))
