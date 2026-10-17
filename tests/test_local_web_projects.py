@@ -4,6 +4,9 @@ from pathlib import Path
 
 import pytest
 import trimesh
+import yaml
+
+from urbansolarcarver.errors import ConfigError
 
 from urbansolarcarver.local_web_service import projects
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore, sanitize_file_name
@@ -275,3 +278,54 @@ def test_joined_file_follows_sorted_file_names_whatever_the_upload_order(tmp_pat
     assert _block_centres_x(joined_path) == [100, 200]
     store.add_input("p", "test_surfaces", "a.ply", _box_bytes([0, 0, 5]))
     assert _block_centres_x(joined_path) == [0, 100, 200]
+
+
+def test_config_yaml_round_trips_through_load_config(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    reply = store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 2.0, "carve_fraction": 0.3})
+    loaded = store.load_project_config("p")
+    assert loaded.voxel_size == 2.0 and loaded.carve_fraction == 0.3
+    assert Path(loaded.max_volume_path) == (tmp_path / "p/inputs/joined/max_volume.ply").resolve()
+    assert "max_volume_path" not in reply.settings and reply.settings["mode"] == "daylight"
+    assert store.read_settings("p") == reply.settings
+
+
+def test_browser_paths_and_device_are_ignored(tmp_path):
+    store = ProjectStore(tmp_path, device="cpu"); store.create("p", "daylight")
+    store.write_config_from_values("p", {"mode": "daylight", "out_dir": "C:/elsewhere", "max_volume_path": "/etc/x", "device": "cuda"})
+    loaded = store.load_project_config("p")
+    assert Path(loaded.out_dir) == (tmp_path / "p/run").resolve() and loaded.device == "cpu"
+
+
+def test_config_yaml_holds_the_service_paths_relative_to_the_project_folder(tmp_path):
+    store = ProjectStore(tmp_path, device="cpu"); store.create("p", "daylight")
+    stored = yaml.safe_load((tmp_path / "p/config.yaml").read_text(encoding="utf-8"))
+    assert {key: stored[key] for key in projects.SERVICE_PATHS} == projects.SERVICE_PATHS
+    assert stored["device"] == "cpu"
+
+
+def test_invalid_setting_raises_config_error_on_its_field(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    with pytest.raises(ConfigError) as err:
+        store.write_config_from_values("p", {"mode": "daylight", "voxel_size": -1})
+    assert [e.field for e in err.value.errors] == ["voxel_size"]
+
+
+def test_unknown_mode_at_create_leaves_no_project_folder(tmp_path):
+    store = ProjectStore(tmp_path)
+    with pytest.raises(ConfigError):
+        store.create("p", "no-such-mode")
+    assert not (tmp_path / "p").exists()
+
+
+def test_grid_plan_and_budget_use_the_joined_max_volume(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    assert store.write_config_from_values("p", {"mode": "daylight"}).grid_plan is None
+    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    reply = store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 1.0})
+    assert reply.grid_plan.resolution == 11            # 10 m side + 1% margin each side, rounded up
+    with pytest.raises(ConfigError) as err:
+        store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 0.0125, "grid_step": 0.0125})
+    assert err.value.errors[0].field == "voxel_size"
+    assert err.value.grid_plan.total_voxels > err.value.grid_plan.budget_voxels == 500_000_000
+    assert store.load_project_config("p").voxel_size == 1.0   # the rejected value was not stored

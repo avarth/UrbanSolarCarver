@@ -6,8 +6,10 @@ a validated name and checked to be a direct child of the projects folder.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import re
+import shutil
 import tempfile
 import threading
 from datetime import datetime, timezone
@@ -17,9 +19,13 @@ import trimesh
 import yaml
 from pydantic import ValidationError
 
-from ..errors import InputError
+from ..errors import ConfigError, InputError
+from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_budget, plan_voxel_grid
 from ..io import load_mesh, save_mesh
-from .api_models import InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from ..load_config import build_config_from_mode_starting_values, load_config
+from ..pydantic_schemas import UserConfig
+from ..run_context import RunContext, run_context
+from .api_models import ConfigReply, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
 
 PROJECT_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
 PROJECT_JSON_FILE_NAME = "project.json"
@@ -33,8 +39,27 @@ WEATHER_EXTENSION = ".epw"
 WEATHER_FILE_NAME = "weather.epw"
 INPUTS_FOLDER = "inputs"
 JOINED_FOLDER = "inputs/joined"
+# Settings the service decides, whatever the browser sends: file locations inside the project folder and the compute device.
+SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir", "device")
+SERVICE_PATHS = {
+    "max_volume_path": "inputs/joined/max_volume.ply",
+    "test_surface_path": "inputs/joined/test_surfaces.ply",
+    "epw_path": "inputs/weather.epw",
+    "out_dir": "run",
+}   # relative to the project folder
 UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
 FILE_NAME_SEPARATORS = re.compile(r"[\\/]")
+
+
+class GridOverBudget(ConfigError):
+    """The voxel grid of the max volume and voxel size has more voxels than preprocessing can score.
+
+    ``grid_plan`` is the rejected plan, so the app can name the smallest voxel size that fits.
+    """
+
+    def __init__(self, message: str, errors, grid_plan: GridPlanReply):
+        super().__init__(message, errors)
+        self.grid_plan = grid_plan
 
 
 class ProjectError(Exception):
@@ -69,6 +94,17 @@ def sanitize_file_name(name: str) -> str:
     return clean_name
 
 
+@contextlib.contextmanager
+def _engine_issues_not_warned():
+    """Keep the engine's advisory notes about a config (such as settings the mode ignores) out of the warnings.
+
+    The settings form always holds every setting of the mode's family, so those notes would repeat at
+    every save and load. The engine collects them on the context instead, which is dropped here.
+    """
+    with run_context(RunContext()):
+        yield
+
+
 def _utc_iso(timestamp_seconds: float) -> str:
     return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(timespec="seconds")
 
@@ -76,8 +112,9 @@ def _utc_iso(timestamp_seconds: float) -> str:
 class ProjectStore:
     """The projects under one projects folder."""
 
-    def __init__(self, projects_folder: Path):
+    def __init__(self, projects_folder: Path, device: str = "auto"):
         self._projects_folder = Path(projects_folder)
+        self._device = device
         self._project_locks: dict[str, threading.RLock] = {}
         self._project_locks_guard = threading.Lock()
 
@@ -100,7 +137,10 @@ class ProjectStore:
         return project_folder
 
     def create(self, name: str, mode: str) -> Path:
-        """Make the project folder with its layout, project.json and a minimal config.yaml."""
+        """Make the project folder with its layout, project.json and the first config.yaml of the mode.
+
+        Raises ConfigError, and leaves no folder behind, when the mode is not one the engine knows.
+        """
         project_name = validate_project_name(name)
         project_folder = self._project_folder(project_name)
         try:
@@ -111,7 +151,11 @@ class ProjectStore:
             (project_folder / sub_folder).mkdir(parents=True)
         created = datetime.now(timezone.utc).isoformat(timespec="seconds")
         self.write_project_json(project_name, ProjectJson(name=project_name, created=created))
-        (project_folder / CONFIG_FILE_NAME).write_text(yaml.safe_dump({"mode": mode}), encoding="utf-8")
+        try:
+            self.write_config_from_values(project_name, {"mode": mode})
+        except BaseException:
+            shutil.rmtree(project_folder, ignore_errors=True)   # the folder was made by this call, so no earlier project is lost
+            raise
         return project_folder
 
     def open(self, name: str) -> Path:
@@ -164,6 +208,63 @@ class ProjectStore:
         except BaseException:
             Path(temporary_path).unlink(missing_ok=True)
             raise
+
+    def write_config_from_values(self, name: str, values: dict) -> ConfigReply:
+        """Validate settings from the browser on top of the starting values of their mode and store them as config.yaml.
+
+        The paths and the device are the service's: any the browser sends are dropped and the
+        project's own are put in. When the joined max volume exists, the voxel grid it and the
+        voxel size give is planned, and a grid over the engine's budget raises GridOverBudget.
+        Nothing is stored unless the settings are valid. ConfigError propagates.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            browser_values = {key: value for key, value in values.items() if key not in SERVICE_OWNED_SETTINGS}
+            with _engine_issues_not_warned():
+                config = build_config_from_mode_starting_values(
+                    {**browser_values, **SERVICE_PATHS, "device": self._device}, base_folder=project_folder)
+            grid_plan = self._plan_and_check_grid(name, config)
+            stored_config = {**config.model_dump(mode="json"), **SERVICE_PATHS}
+            self._write_bytes_atomically(
+                project_folder / CONFIG_FILE_NAME, yaml.safe_dump(stored_config, sort_keys=False).encode("utf-8"))
+            return ConfigReply(settings=self._without_service_owned(stored_config), grid_plan=grid_plan)
+
+    def read_settings(self, name: str) -> dict:
+        """The stored settings of a project without the paths and device the service owns."""
+        with self.project_lock(name):
+            config_path = self.open(name) / CONFIG_FILE_NAME
+            try:
+                stored_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+            except (yaml.YAMLError, OSError) as error:
+                raise ProjectError(f"{CONFIG_FILE_NAME} of '{name}' cannot be read: {error}", status_code=422) from error
+            return self._without_service_owned(stored_config)
+
+    def load_project_config(self, name: str) -> UserConfig:
+        """The stored config.yaml as the engine's validated config, with its paths resolved inside the project folder."""
+        with _engine_issues_not_warned():
+            return load_config(str(self.open(name) / CONFIG_FILE_NAME))
+
+    def _plan_and_check_grid(self, name: str, config: UserConfig) -> GridPlanReply | None:
+        """The grid plan of the joined max volume, None before one exists; GridOverBudget when it is too large."""
+        bounds = self.joined_bounds(name)
+        if bounds is None:
+            return None
+        plan = plan_voxel_grid(bounds, config.voxel_size, config.margin_frac)
+        plan_reply = self._grid_plan_reply(plan)
+        try:
+            check_voxel_grid_budget(plan)
+        except ConfigError as error:
+            raise GridOverBudget(str(error), error.errors, plan_reply) from error
+        return plan_reply
+
+    @staticmethod
+    def _grid_plan_reply(plan: VoxelGridPlan) -> GridPlanReply:
+        return GridPlanReply(resolution=plan.resolution, voxel_size=plan.voxel_size, total_voxels=plan.total_voxels,
+                             extent=plan.extent, budget_voxels=MAX_GRID_VOXELS)
+
+    @staticmethod
+    def _without_service_owned(stored_config: dict) -> dict:
+        return {key: value for key, value in stored_config.items() if key not in SERVICE_OWNED_SETTINGS}
 
     def add_input(self, name: str, role: str, file_name: str, data: bytes) -> InputFilesReply:
         """Store an uploaded file for a role and rebuild the joined file of a mesh role.

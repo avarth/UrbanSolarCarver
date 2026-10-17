@@ -44,3 +44,30 @@ class ProjectSummary(BaseModel):
     created: str                # ISO 8601, UTC
     modified: str               # ISO 8601, UTC: newest modification time of project.json and config.yaml
     mode: str
+
+
+class GridPlanReply(BaseModel):
+    """The voxel grid a max volume and a voxel size would give, and the engine's limit for it."""
+    resolution: int             # voxels per side
+    voxel_size: float           # meters
+    total_voxels: int
+    extent: float               # side of the grid in meters
+    budget_voxels: int          # the most voxels preprocessing can score
+
+
+class ConfigReply(BaseModel):
+    """The settings of a project after a save, without the paths and device the service owns."""
+    settings: dict
+    grid_plan: GridPlanReply | None     # None before a max volume is uploaded
+
+
+class FieldErrorReply(BaseModel):
+    """One invalid setting."""
+    field: str | None           # None for a check that involves several settings
+    message: str
+
+
+class ConfigErrorReply(BaseModel):
+    """The body of a rejected settings save."""
+    field_errors: list[FieldErrorReply]
+    grid_plan: GridPlanReply | None     # the rejected plan when the error is the voxel budget
