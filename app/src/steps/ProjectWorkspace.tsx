@@ -1,22 +1,21 @@
 // An open project (UX 4): the step accordion in the left panel and the 3D view beside it. It holds what the steps share: the
 // input files, the settings form (the Mode step and the Settings step both change it), the stage status the step summaries
-// read, and the input meshes and sun path the 3D view draws. The steps that start runs and show their results (Carving,
-// Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop.
+// read, and the input meshes (input_meshes.ts) and the sun path (sun_path_request.ts) the 3D view draws. The steps that
+// start runs and show their results (Carving, Envelope and massing, Export) are put together in result_steps.tsx from these
+// and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import * as THREE from "three";
-import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import {
-  addInput, ApiError, getStageStatus, getSunPath, inputFileUrl, refusalDetailOf, removeInput, serviceProblemOf,
-  type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail, type SunPath,
+  addInput, ApiError, getStageStatus, refusalDetailOf, removeInput, serviceProblemOf,
+  type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
-import { shownValue, useSettingsForm, type FormState } from "../settings_form/form_state";
+import { shownValue, useSettingsForm } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
-import { loadMesh } from "../viewer/loaders";
 import { localBounds, localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { hemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
+import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ModeStep } from "./ModeStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
@@ -26,11 +25,9 @@ import {
 } from "./SettingsStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
-  plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type AnalysisPeriod, type PipelineStage, type ProjectViewState,
-  type StageState, type StepName,
+  plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName,
 } from "./step_summaries";
-
-type MeshRole = Exclude<InputRole, "weather">;
+import { analysisPeriodOf, useSunPathOfStoredPeriod } from "./sun_path_request";
 
 const NO_SHIFT: Point3 = [0, 0, 0];
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "mode", "settings"];
@@ -43,7 +40,6 @@ const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   envelope_and_massing: ["envelope", "building_massing"],
   export: ["envelope", "building_massing"],
 };
-const MODE_WITH_SUN_PATH = "time-based";
 
 interface ProjectWorkspaceProps {
   token: string;
@@ -56,61 +52,6 @@ interface ProjectWorkspaceProps {
   /** A request failed: the app shows the engine-stopped or access-lost overlay when the failure is one of those. */
   onServiceProblem: (error: unknown) => void;
   onShowProjects: () => void;
-}
-
-function extensionOf(fileName: string): string {
-  return fileName.slice(fileName.lastIndexOf(".") + 1);
-}
-
-/** The meshes of several files as one geometry (triangle soup, positions only, as the view draws them). */
-function joinedGeometry(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  return mergeGeometries(parts.map((part) => (part.index ? part.toNonIndexed() : part))) ?? new THREE.BufferGeometry();
-}
-
-function boundsOf(geometries: (THREE.BufferGeometry | null)[]): Bounds3 | null {
-  const box = new THREE.Box3();
-  for (const geometry of geometries) {
-    if (!geometry) continue;
-    geometry.computeBoundingBox();
-    box.union(geometry.boundingBox!);
-  }
-  return box.isEmpty() ? null : [box.min.toArray(), box.max.toArray()];
-}
-
-/** The joined mesh of a role's files in local coordinates; reloaded when the files, their contents or the local origin change. */
-function useInputGeometry(token: string, project: string, role: MeshRole, files: InputFileInfo[], origin: Point3, revision: number,
-                          onLoaded: () => void, onServiceProblem: (error: unknown) => void): THREE.BufferGeometry | null {
-  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
-  const reloadKey = JSON.stringify([files.map((file) => file.name), origin, revision]);
-  useEffect(() => {
-    if (files.length === 0) {
-      setGeometry(null);
-      return;
-    }
-    let stale = false;
-    Promise.all(files.map((file) => loadMesh(inputFileUrl(project, role, file.name), token, extensionOf(file.name), origin)))
-      .then((parts) => {
-        if (stale) return;
-        setGeometry(joinedGeometry(parts));
-        onLoaded();
-      })
-      .catch((error) => {
-        // A refused request may be a lost token; a file the service accepted that the view cannot read stays undrawn.
-        if (!stale && error instanceof ApiError) onServiceProblem(error);
-      });
-    return () => {
-      stale = true;
-    };
-  }, [reloadKey]);
-  return geometry;
-}
-
-/** The analysis period the form holds, when the mode reads one and every part of it is set. */
-function analysisPeriodOf(form: FormState, modeReadsPeriod: boolean): AnalysisPeriod | null {
-  const values = ANALYSIS_PERIOD_FIELDS.map((name) => shownValue(form, name));
-  if (!modeReadsPeriod || !values.every((value) => typeof value === "number")) return null;
-  const [startMonth, startDay, startHour, endMonth, endDay, endHour] = values as number[];
-  return { startMonth, startDay, startHour, endMonth, endDay, endHour };
 }
 
 /** Why a request about the inputs failed, in words for the file box. */
@@ -134,7 +75,6 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
   const [openStep, setOpenStep] = useState<StepName | null>("inputs");
   const [viewStep, setViewStep] = useState<StepName>("inputs");     // the step whose layers the view shows: the last one opened
-  const [sunPath, setSunPath] = useState<SunPath | null>(null);
   const [framingRequest, setFramingRequest] = useState(0);
   const panel = useRef<HTMLElement>(null);
   const [addFilesRequest, setAddFilesRequest] = useState(0);
@@ -173,23 +113,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   }, [form.saveFailure]);
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
-  const sunPathKey = JSON.stringify([form.mode, ANALYSIS_PERIOD_FIELDS.map((name) => shownValue(form, name)), northDegrees, hasWeatherFile]);
-  const sunPathWanted = form.mode === MODE_WITH_SUN_PATH && hasWeatherFile && analysisPeriodOf(form, true) !== null;
-  const sunPathRequestKey = useRef<string | null>(null);      // the period last asked for; only its reply is kept
-  useEffect(() => {
-    if (!sunPathWanted) {
-      sunPathRequestKey.current = null;
-      setSunPath(null);
-      return;
-    }
-    // The service reads the stored settings: wait for the save, and keep the last path while the form holds a refused change.
-    if (form.pendingSave || settingsToFixCount(form) > 0 || sunPathRequestKey.current === sunPathKey) return;
-    const requestKey = sunPathKey;
-    sunPathRequestKey.current = requestKey;
-    getSunPath(token, project.name).then((reply) => { if (sunPathRequestKey.current === requestKey) setSunPath(reply); }).catch((error) => {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
-    });
-  }, [sunPathKey, sunPathWanted, form.pendingSave]);
+  const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, onServiceProblem });
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
 
