@@ -146,7 +146,7 @@ The settings the analysis reads (preprocessing settings), in folding groups, ess
 - **Detail**: Voxel size essential; folded: Sample spacing, Edge strip with less weight, Ray length, Grid margin.
 - **Computer** (folded): Rays per batch, Detailed statistics.
 
-Under Voxel size: the grid it gives ("92 × 64 × 41 = 241 000 voxels"), updated on each change from the `PUT config` reply. A grid over the budget shows the message of section 11 and disables Run analysis.
+Under Voxel size: the grid it gives (the grid is cubic: "62 voxels per side, 238 328 in total"), updated on each change from the `PUT config` reply. A grid over the budget shows the message of section 11 and disables Run analysis.
 
 The step ends with **Run analysis**, pinned to the bottom of the panel while this step is open. It runs preprocessing and thresholding. After a successful run the Carving step opens.
 

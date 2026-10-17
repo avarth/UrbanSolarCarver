@@ -3,7 +3,7 @@
 - Date: 2026-10-16
 - Implementation: not started (the UI work belongs to the main development session)
 - Engine baseline: `main` at `f2947fd` (stage contract restructure, request core, module split, one device rule, cached sky weights)
-- Status: reviewed and amended on 2026-10-16 (front-end delivery, several input files per role, changes during a run, score layer cap, packaged examples, missing results, tiers note); awaiting approval
+- Status: approved; amended on 2026-10-17 by the UX design spec `2026-10-17-local-web-ui-ux-design.md` (its section 14, approved by the user). Where this document and that section differ, that section applies; the places are marked "Amended 2026-10-17" below.
 
 ## 1. Goal and scope
 
@@ -62,6 +62,8 @@ The service holds no carving logic. It turns HTTP requests into engine calls, st
 
 ## 4. Engine changes before the service
 
+Amended 2026-10-17: one more engine change, approved by the user: thresholding saves `scores_compared_with_cutoff.npy` (UX spec section 14 item 10; plan Task 0).
+
 Done, and on `main` since `830a1f0`:
 
 - **`engine_requests`**: the request core every transport uses. `parse_engine_request` validates a message into a typed request (`RunRequest`, `StageRequest`, `RunPipelineRequest`, `SimulateWeightsRequest`, `PingRequest`); `config_for_engine_request` builds its config from a YAML path or from the mode's starting values plus overrides; `handle_engine_request(request, session, context=None)` runs it inside a given `RunContext` and returns a typed reply (`RunReply`, `StageReply`...); `error_reply_for(exc)` builds an `ErrorReply` with `error_type` and `config_errors`. The pickle daemon is now a transport over it. The local web service is a second transport: it calls `handle_engine_request` with its own `RunContext` (progress, issues, cancel) instead of reimplementing request handling.
@@ -80,6 +82,9 @@ Done, and on `main` since `830a1f0`:
 | `projects.py` | Project folder layout, uploads, joining several files per role, stored settings, input-change tracking |
 | `run_worker.py` | The worker thread, the run context, event forwarding, cancel |
 | `score_points.py` | Builds the score layer data from the preprocessing and thresholding outputs |
+| `run_summary.py` | Carving and massing numbers, sky dome data, sun positions (amended 2026-10-17) |
+| `stage_records.py` | Per-stage records, stage status and stage choice (amended 2026-10-17) |
+| `gpu_warm_up.py` | Background GPU warm-up started by `usc ui` (amended 2026-10-17) |
 | `api_models.py` | Pydantic request, reply and event models (the OpenAPI schema comes from these) |
 
 Command: `usc ui [--port PORT] [--projects-folder PATH] [--no-browser] [--device auto|cpu|cuda]`. It starts uvicorn on `127.0.0.1` and opens the browser at `http://127.0.0.1:PORT/?token=...` unless `--no-browser` is given. The default projects folder is `~/UrbanSolarCarver/projects`. If `ui_static/index.html` is missing (a damaged checkout), `usc ui` stops with a message that names the folder and the rebuild command (section 8). If the `ui` extra is not installed, it stops with the `pip install` command that adds it.
@@ -105,13 +110,14 @@ Optional extra `ui` in `pyproject.toml`: `fastapi`, `uvicorn`, `python-multipart
   inputs/joined/max_volume.ply      written by the service from the files above
   inputs/joined/test_surfaces.ply
   config.yaml                       the settings as the user set them, paths relative to the project
-  last_completed_run_config.yaml    the config of the last run that finished; absent otherwise
   run/                              the run folder: preprocessing/, thresholding/, exporting/, massing/, run_report.md
 ```
 
 **Joining several files.** After every upload or removal the service rebuilds the joined file of that role, the way the Grasshopper components join several objects: the maximum volume files are concatenated and identical vertices welded, so each closed body stays closed; the test surface files are concatenated without welding, because welding across neighbouring panels averages their normals and can flip panels. The config's `max_volume_path` and `test_surface_path` point to the joined files. File names are kept as uploaded after removing path parts and characters other than letters, digits, `-`, `_` and `.`; a name that already exists in the role is replaced.
 
 `config.yaml` holds the values as set (unresolved "None means auto" fields stay None), so it rebuilds to the same config. It loads with `usc run -c config.yaml --out run --produce exporting --produce massing`.
+
+Amended 2026-10-17: `project.json` holds `inputs_revision` (raised by every upload and removal), the triangle count of each input file, and one record per completed stage (the config it ran with, the inputs revision, its manifest's `run_id`). These replace `inputs_changed_since_last_run` and `last_completed_run_config.yaml`; see UX spec section 14 item 1 and plan Tasks 1, 2 and 5.
 
 There is one run folder per project, updated in place: `run_pipeline` writes `run/<stage>` and, with `start_from`, reads the earlier stages from the same folder. A user keeps a result by exporting it.
 
@@ -143,6 +149,8 @@ All paths are under `/api`. Replies are JSON unless noted.
 The grid plan in the `PUT config` reply comes from `grid_planning.plan_voxel_grid(bounds, voxel_size, margin_frac)` with the stored mesh bounds; `check_voxel_grid_budget` turns an oversized grid into a field error on `voxel_size`.
 
 ### 5.5 Run lifecycle
+
+Amended 2026-10-17: stage choice uses the per-stage records and `GET projects/{name}/stage-status` (`current`, `out_of_date`, `missing` per stage), so an analysis-only run (`produce: ["thresholding"]`) followed by a build (`["exporting", "massing"]`) runs the missing stages instead of replying "up to date". Before a run the records of the stages it will run are removed; on success they are written again. The steps below describe the original design; plan Task 5 holds the amended rule.
 
 When `POST runs` arrives:
 
@@ -191,6 +199,8 @@ Events, each a JSON object with a `type`:
 
 ### 5.7 Score layer data
 
+Amended 2026-10-17: after the kept/carved array, a fourth array holds the compared scores (`float32`, from `scores_compared_with_cutoff.npy`) when thresholding wrote them; the header says `has_compared_scores`. New routes beside it: `run/summary`, `run/sky-patches`, `sun-positions`, `stage-status`, `examples`; `GET health` reports the warm-up state (UX spec section 14, plan Tasks 4, 6, 7).
+
 `GET run/score-points` reads `run/preprocessing/manifest.json` and `run/thresholding/manifest.json` (paths in manifests are relative to the manifest's folder) and returns:
 
 - a JSON header: `origin` (world coordinates, as the manifest records), `shape`, `voxel_size`, `scores_kind`, `weight_unit`, score minimum and maximum, and the counts below;
@@ -201,6 +211,8 @@ The browser rebuilds positions from the index, origin and voxel size. Without a 
 **Cap.** At most 1,000,000 voxels are sent (about 9 MB); a city-scale grid can hold ten times more, which a browser draws slowly. Above the cap the service keeps every k-th occupied voxel in index order, with k the smallest whole number that brings the count under the cap, so the thinning is even across the grid. The header reports `thinning_step` (k, 1 when nothing was thinned) and the total count, and the view states "showing 1 of every k voxels".
 
 ## 6. Settings in the browser
+
+Amended 2026-10-17: the tier lists and form sections become `app/src/settings_form/setting_presentation.json` with labels, units, help, step and group placement and essential flags (UX spec section 7). The essential settings below keep their meaning; the screen parts of this section are replaced by the UX spec.
 
 - **Form source.** Field types, defaults, limits and descriptions come from `GET schema`. Mode choices, descriptions and starting values come from `GET modes`.
 - **Fields the JSON schema does not constrain** get explicit widgets in `app/settings_form/`: `mode` (select from `GET modes`), `final_mesh_format` (ply, obj, stl, glb), `sun_steps_per_hour` (the allowed timesteps), `tilted_plane_angle_deg` (one angle, or eight compass angles), and the analysis period (one date-and-hour range). `device`, `out_dir` and the input paths are not shown in the form: the service sets them.
@@ -220,6 +232,8 @@ The browser rebuilds positions from the index, origin and voxel size. Without a 
 - **A front-end test** checks that every setting name in the tier and section lists exists in `GET schema`, so a renamed setting fails a test instead of disappearing from the form.
 
 ## 7. Browser app flow
+
+Amended 2026-10-17: replaced by the UX design spec (`2026-10-17-local-web-ui-ux-design.md`): a start screen, then the steps Inputs, Mode, Settings, Carving, Envelope and massing, Export, with runs in two phases. The text below is kept for the record of the original design.
 
 One page: a left panel with the steps and their forms, and a 3D view on the right that is always visible.
 
