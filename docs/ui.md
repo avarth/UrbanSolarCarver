@@ -34,19 +34,19 @@ The start screen shows the version, the device (the GPU's name, or that the CPU 
 A project opens as a list of six steps on the left, with the 3D view on the right. Each step shows a one-line summary when it is closed.
 
 1. **Inputs.** Drop or choose the maximum volume (the largest building you would allow), the test surfaces (the surfaces whose sun or sky the carving protects) and, for the modes that need one, a weather file (`.epw`). Meshes may be PLY, OBJ, STL or GLB; several files for one role are joined into one. The step lists each file with its triangle count and the size of all inputs together, and warns when the model looks as if it is not in meters.
-2. **Mode.** Six tiles, each with a plain name. The engine name is shown on the tile for people who use the CLI.
+2. **Mode.** Six tiles, each with a plain name and a one-line description. The engine name, for people who use the CLI, is in the tile's tooltip.
 
-    | Tile | Engine name | Keeps |
+    | Tile | Engine name | What it does |
     |------|-------------|-------|
-    | Sun at set hours | `time-based` | Direct sun on the test surfaces during the hours you choose |
-    | Solar energy | `irradiance` | Sun and sky energy over the period |
-    | Solar heat when cold | `benefit` | Sun in the hours that need heating |
-    | Daylight | `daylight` | The view of an overcast sky |
+    | Sun at set hours | `time-based` | Keeps direct sun on the test surfaces during the hours you choose |
+    | Solar energy | `irradiance` | Keeps sun and sky energy over the period |
+    | Solar heat when cold | `benefit` | Keeps sun in the hours that need heating |
+    | Daylight | `daylight` | Keeps the view of an overcast sky |
     | Angle rule | `tilted_plane` | Removes everything above a plane at a fixed angle from each facade |
-    | Night cooling | `radiative_cooling` | A flat roof's view of the cold night sky (experimental) |
+    | Night cooling | `radiative_cooling` | Keeps a flat roof's view of the cold night sky (experimental) |
 
     Choosing a mode fills its starting values in Settings. [Carving Modes](modes.md) explains the methods.
-3. **Settings.** The analysis settings with plain labels, units and a help text for each: the analysis period, the mode's own settings and the detail (voxel size and sampling). The step shows the size of the voxel grid and refuses a grid larger than the analysis can handle, naming the smallest voxel size that fits. **Run analysis** is in this step.
+3. **Settings.** The analysis settings with plain labels, units and a help text for each: the analysis period, the mode's own settings, the detail (voxel size and sampling) and the computer group (rays per batch, detailed statistics). The step shows the size of the voxel grid and refuses a grid larger than the analysis can handle, naming the smallest voxel size that fits. **Run analysis** is in this step.
 4. **Carving.** How much to carve, with a histogram of the scores of the voxels (a log or linear scale), and the numbers of the last carving. Sun at set hours has a *Shadow tolerated* slider in m²·h; the weighted modes have a *Carve amount* slider in percent; the Angle rule has no threshold. The other carving settings (the carving rule, score smoothing, the cut above a carved voxel, the steepest step between columns) are folded under the slider.
 5. **Envelope and massing.** The envelope settings and the building massing settings (ground floor and upper floor heights, bay width, allowed overhang, whether floors rest on the floors below), then **Build envelope and massing**. The results are the gross floor area, the number of storeys, the envelope volume and a table with the bottom, top and floor area of each storey. A link opens the run report.
 6. **Export.** The mesh format of the carved envelope and the downloads: the carved envelope, the building massing (OBJ), the building massing data (JSON), the settings (`config.yaml`) and the whole project as a zip. A change of format rebuilds the envelope mesh only.
@@ -83,7 +83,7 @@ Each project is a folder in the projects folder:
 
 ## Security
 
-The service listens on `127.0.0.1` only and checks the `Host` header of every request, which stops a web page on another site from reaching it. Every request to the API needs the token of the launch, which only the printed and opened address carries. It takes no file path from the browser; it derives every folder from a validated project name.
+The service listens on `127.0.0.1` only and checks the `Host` header of every request, which stops a web page on another site from reaching it. Every request to the API needs the token of the launch, which only the printed and opened address carries, and the service takes no file path from the browser: it derives every folder from a validated project name.
 
 ## Without a CUDA-enabled GPU
 
