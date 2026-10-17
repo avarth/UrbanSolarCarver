@@ -10,14 +10,14 @@
 
 **Specs:**
 - Technical: `docs/superpowers/specs/2026-10-16-local-web-ui-design.md`, as amended on 2026-10-17 by the UX spec's section 14.
-- UX: `docs/superpowers/specs/2026-10-17-local-web-ui-ux-design.md` (approved 2026-10-17). It replaces the technical spec's section 7 and the screen parts of its section 6. Section numbers below prefixed "UX" refer to it.
+- UX: `docs/superpowers/specs/2026-10-17-local-web-ui-ux-design.md` (approved 2026-10-17, high-fidelity screens accepted the same day, UX 17). It replaces the technical spec's section 7 and the screen parts of its section 6. Section numbers below prefixed "UX" refer to it. The Claude Design canvas of UX 17 shows every front-end task's target screens; the UX spec stays the source of truth where they differ.
 
 ## Global Constraints
 
 - Binds to `127.0.0.1` only. Random token of 32 bytes (hex) per launch, sent as `X-USC-Token` header (WebSocket: `token` query parameter). Missing or wrong token: 401. `Host` must be `127.0.0.1:PORT` or `localhost:PORT`, otherwise 403. Static files are served without the token.
 - The service never takes a file path from the browser; files arrive by upload. The service sets `max_volume_path`, `test_surface_path`, `epw_path`, `out_dir` and `device` itself and ignores values the browser sends for them.
 - One run at a time per service process. While a project's run is active, uploads, removals and `PUT config` for that project reply 409.
-- Importing `urbansolarcarver.local_web_service` must not import torch; the warm-up thread started by `usc ui`, a run, or a sun-positions request does.
+- Importing `urbansolarcarver.local_web_service` must not import torch; the warm-up thread started by `usc ui`, a run, or a sun-path request does.
 - FastAPI, uvicorn and python-multipart live in the optional `ui` extra; `httpx` joins the `dev` extra.
 - The built front-end in `src/urbansolarcarver/ui_static/` is committed; `ui_static/build_info.json` holds the hash of the front-end sources.
 - Score layer: at most 1,000,000 voxels, evenly thinned above that.
@@ -46,7 +46,7 @@ Every other file under `src/urbansolarcarver/` is engine code. An implementer wh
 
 **Models.** Implementers of Tasks 0 to 8 and 14: Sonnet. One combined review per task (spec compliance and code quality): Opus. Tasks 9 to 13 (front-end): Opus.
 
-**Order.** Task 0 first, then Tasks 1 to 8, then 9 to 14. The UX spec is approved, so the front-end is no longer blocked. The Claude Design pass (UX 17) may run alongside Tasks 1 to 8; any value it changes goes into the UX spec first and reaches the code through `tokens.css` and `messages.ts`.
+**Order.** Task 0 first, then Tasks 1 to 8, then 9 to 14. The UX spec is approved, so the front-end is no longer blocked. The Claude Design pass (UX 17) is done and its changes are in the UX spec and in the tasks below; later value changes still go into the UX spec first and reach the code through `tokens.css` and `messages.ts`.
 
 ## Review Focus
 
@@ -68,7 +68,7 @@ src/urbansolarcarver/local_web_service/
   api_models.py        pydantic request, reply and event models
   projects.py          project folders, names, uploads, joining, project.json, config.yaml
   score_points.py      binary score layer data with the cap, raw and compared scores
-  run_summary.py       carving and massing numbers, sky dome data, sun positions
+  run_summary.py       carving and massing numbers, sky dome data, sun path
   stage_records.py     per-stage records, stage status, stage choice
   run_worker.py        RunWorker thread, run events, error mapping
   gpu_warm_up.py       background warm-up started by usc ui, its state for GET health
@@ -85,7 +85,7 @@ app/
   src/theme/           tokens.css, fonts/ (Atkinson Hyperlegible Next woff2 + OFL.txt)
   src/api_client/      client.ts, generated_types.ts, events.ts
   src/viewer/          scene.ts, local_origin.ts, loaders.ts, layers.ts, score_points_decoder.ts, size_check.ts,
-                       ground_grid.ts, compass.ts, scale_bar.ts, sky_dome.ts, sun_positions.ts, colour_scales.ts
+                       ground_grid.ts, compass.ts, scale_bar.ts, sky_dome.ts, sun_path.ts, colour_scales.ts
   src/settings_form/   setting_presentation.json, presentation.ts, SettingField.tsx, SettingGroup.tsx, SettingTooltip.tsx,
                        widgets/{AnalysisPeriod, TiltedPlaneAngles, SunStepsPerHour, MeshFormat, PercentSlider}.tsx
   src/steps/           StartScreen.tsx, StepAccordion.tsx, InputsStep.tsx, ModeStep.tsx, SettingsStep.tsx,
@@ -401,7 +401,7 @@ git commit -m "feat(ui): settings stored as config.yaml with service-owned paths
 
 ---
 
-### Task 4: Score layer data, run summary, sky dome and sun positions
+### Task 4: Score layer data, run summary, sky dome and sun path
 
 **Files:**
 - Create: `src/urbansolarcarver/local_web_service/score_points.py`, `src/urbansolarcarver/local_web_service/run_summary.py`
@@ -416,7 +416,8 @@ git commit -m "feat(ui): settings stored as config.yaml with service-owned paths
   - Header keys: `origin`, `shape`, `voxel_size`, `scores_kind`, `weight_unit`, `score_min`, `score_max`, `occupied_count`, `point_count`, `thinning_step`, `has_mask`, `has_compared_scores`.
   - `run_summary.build_run_summary(run_folder: Path) -> RunSummary`: `RunSummary.carving: CarvingSummary | None` (the eight diagnostic keys above, `obstruction_fraction_carved` None when absent) and `RunSummary.massing: MassingSummary | None` (`floor_area_m2_per_storey: list[float]`, `total_floor_area_m2: float`, `storeys_built: int`, `envelope_volume_m3: float`); each None when its stage output is missing. Models in `api_models.py`.
   - `run_summary.build_sky_dome(run_folder: Path) -> SkyDome | None`: `directions: list[list[float]]` (145), `solid_angles: list[float]`, `weights: list[float]`; None when `patch_weights.npy` is absent (time-based and tilted_plane). Torch is imported inside the function.
-  - `run_summary.sun_positions_for_config(config: UserConfig) -> list[list[float]]`: unit vectors from `get_sun_vectors(config.epw_path, sample_period(PreprocessingSettings.from_config(config), config.sun_steps_per_hour)[0], config.min_altitude, torch.device("cpu"), config.north_deg)`; an empty list when the mode is not time-based or the weather file or period is missing. Torch is imported inside the function.
+  - `run_summary.sun_marker_hours(start_hour: int, end_hour: int) -> list[int]`: `range(start_hour, end_hour + 1, step)` with `step = 3` when `end_hour - start_hour > 8`, else `2` (UX 8.2).
+  - `run_summary.sun_path_for_config(config: UserConfig) -> SunPath` (UX 8.2, UX 14 item 4): `SunPath.days: list[SunPathDay]`, one for the first and one for the last day of the stored period (one when they are the same day); `SunPathDay`: `date: str` (`"12-21"`, month and day), `day_path: list[list[float]]` (unit vectors from sunrise to sunset every 10 minutes, `get_sun_vectors(..., min_altitude=0, ...)`), `period_path: list[list[float]]` (from `start_hour` to `end_hour` every 5 minutes with the stored `min_altitude`), `markers: list[SunMarker]` (`hour: int`, `vector: list[float]`, one `get_sun_vectors` call per hour of `sun_marker_hours`, an hour whose sun is below `min_altitude` left out). Dates are Ladybug `DateTime(month, day, hour, minute)`; every call passes `torch.device("cpu")` and the stored `north_deg`. `days` is empty when the mode is not time-based or the weather file or period is missing. Torch is imported inside the function. Models in `api_models.py`.
   - Thinning: `thinning_step = max(1, ceil(occupied_count / cap))`; the kept voxels are the occupied flat indices in increasing order, sliced `[::thinning_step]`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -480,12 +481,21 @@ def test_sky_dome_has_145_patches_or_none(tmp_path):
     dome = build_sky_dome(_fake_run(tmp_path / "w", with_patch_weights=True))
     assert len(dome.directions) == len(dome.weights) == len(dome.solid_angles) == 145
 
-def test_sun_positions_need_time_based_mode_weather_and_period():
+def test_sun_marker_hours_every_two_hours_or_three_for_long_days():
+    assert sun_marker_hours(10, 14) == [10, 12, 14]
+    assert sun_marker_hours(8, 18) == [8, 11, 14, 17]
+
+def test_sun_path_needs_time_based_mode_weather_and_period():
     golden = UserConfig(..., mode="time-based", epw_path=GOLDEN_EPW, start_month=12, start_day=21, start_hour=10,
-                        end_month=12, end_day=21, end_hour=14, sun_steps_per_hour=1)
-    vectors = sun_positions_for_config(golden)
-    assert 4 <= len(vectors) <= 5 and all(v[2] > 0 for v in vectors)
-    assert sun_positions_for_config(golden.model_copy(update={"mode": "daylight"})) == []
+                        end_month=12, end_day=21, end_hour=14)
+    path = sun_path_for_config(golden)
+    assert len(path.days) == 1 and path.days[0].date == "12-21"
+    day = path.days[0]
+    assert [m.hour for m in day.markers] == [10, 12, 14] and all(m.vector[2] > 0 for m in day.markers)
+    assert len(day.day_path) > len(day.period_path) >= 48 and all(v[2] > 0 for v in day.day_path)
+    season = golden.model_copy(update={"start_month": 11, "start_day": 1, "end_month": 2, "end_day": 28})
+    assert [d.date for d in sun_path_for_config(season).days] == ["11-01", "02-28"]
+    assert sun_path_for_config(golden.model_copy(update={"mode": "daylight"})).days == []
 ```
 
 - [ ] **Step 2: Run them to verify they fail**
@@ -501,7 +511,7 @@ Expected: FAIL (`ImportError: build_score_points`, `build_run_summary`).
 
 ```bash
 git add src/urbansolarcarver/local_web_service tests/test_local_web_score_points.py tests/test_local_web_run_summary.py
-git commit -m "feat(ui): score layer with compared scores, run summary, sky dome and sun positions"
+git commit -m "feat(ui): score layer with compared scores, run summary, sky dome and sun path"
 ```
 
 ---
@@ -621,7 +631,7 @@ git commit -m "feat(ui): stage records with stage status, run worker with two-ph
   - `class GpuWarmUp` in `gpu_warm_up.py`: `__init__(self, device: str, warm_up_function=None)` (default: resolve the device, then `warmup_kernels` on it, imported lazily); `start()` runs it on a daemon thread; `state() -> WarmUpState` with `state: Literal["not_started", "running", "ready", "cpu", "failed"]` (`cpu` when no CUDA device is available), `device_name: str | None` (as `torch.cuda.get_device_name` reports it), `problem: str | None` (the `WarpBackendUnavailableError` or other message on failure). Runs never wait for it in the service; the browser keeps the run buttons disabled while it is `running` (UX 5.1).
   - `create_app(projects_folder: Path, token: str, port: int, device: str = "auto", static_folder: Path | None = None, worker: RunWorker | None = None, warm_up: GpuWarmUp | None = None) -> FastAPI` (without *warm_up*, a `GpuWarmUp` that is never started, state `not_started`).
   - `openapi_document() -> dict`: `create_app(Path("."), "x", 0).openapi()`, used by the front-end type generation (Task 9).
-  - Routes exactly as spec 5.4, with the input routes as amended (`POST`/`DELETE`/`GET` under `inputs/{role}`) and these replies: `GET health` `{version, warm_up: WarmUpState}`; `GET modes` list of `{name, description, needs_epw, needs_period, experimental, score_kind, weight_unit, starting_values}`; `GET projects/{name}` `{name, created, modified, settings, inputs: {role: [InputFileInfo]}, joined_bounds, weather_location, stage_status}`; `GET projects/{name}/stage-status` `StageStatusReply`; `GET projects/{name}/sun-positions` `{vectors: [[x, y, z]]}` from `sun_positions_for_config` on the stored config (empty list when not applicable); `GET projects/{name}/run/summary` `RunSummary`; `GET projects/{name}/run/sky-patches` `SkyDome` or 404; `PUT config` body `{"values": {...}}`, reply `ConfigReply` or 422 `ConfigErrorReply` (with `grid_plan` for `GridOverBudget`); `POST runs` body `{"produce": [...]}` (default `["exporting", "massing"]`) reply `StartRunReply`, 409 `{detail}`, 422 `{detail, missing_inputs}`; `GET run/score-points` `application/octet-stream` or 404; `GET run/files/{path}` (404 for paths outside `run/`); `GET download` zip of the project folder.
+  - Routes exactly as spec 5.4, with the input routes as amended (`POST`/`DELETE`/`GET` under `inputs/{role}`) and these replies: `GET health` `{version, warm_up: WarmUpState}`; `GET modes` list of `{name, description, needs_epw, needs_period, experimental, score_kind, weight_unit, starting_values}`; `GET projects/{name}` `{name, created, modified, settings, inputs: {role: [InputFileInfo]}, joined_bounds, weather_location, stage_status}`; `GET projects/{name}/stage-status` `StageStatusReply`; `GET projects/{name}/sun-path` `SunPath` from `sun_path_for_config` on the stored config (`days` empty when not applicable); `GET projects/{name}/run/summary` `RunSummary`; `GET projects/{name}/run/sky-patches` `SkyDome` or 404; `PUT config` body `{"values": {...}}`, reply `ConfigReply` or 422 `ConfigErrorReply` (with `grid_plan` for `GridOverBudget`); `POST runs` body `{"produce": [...]}` (default `["exporting", "massing"]`) reply `StartRunReply`, 409 `{detail}`, 422 `{detail, missing_inputs}`; `GET run/score-points` `application/octet-stream` or 404; `GET run/files/{path}` (404 for paths outside `run/`); `GET download` zip of the project folder.
   - `ProjectError`, `RunConflict`, `MissingInputs`, `ConfigError` map to their status codes in exception handlers; 409 for input and config changes while `worker.active_project() == name`.
   - Security middleware for every request: Host check (403), then for paths under `/api` the token check (401); the WebSocket `api/runs/{run_id}/events?token=...` checks both before accepting and closes with code 4401 or 4403. `hmac.compare_digest` for the token.
   - Static files from `static_folder` (default `ui_static/` next to the package) at `/`, without the token; `index.html` for `/`.
@@ -653,7 +663,7 @@ def test_missing_inputs_are_422_with_their_roles(client): ...
 def test_health_reports_the_warm_up_state(client): ...               # warm_up.state == "not_started"; with a GpuWarmUp whose fake function returns at once: "ready"
 def test_stage_status_summary_and_sky_dome_routes(client_after_fake_run): ...
     # stage-status has the four stages; run/summary -> 200 with "carving"; run/sky-patches -> 404 for tilted_plane
-def test_sun_positions_are_empty_without_weather(client): ...       # time-based project without weather -> {"vectors": []}
+def test_sun_path_is_empty_without_weather(client): ...             # time-based project without weather -> {"days": []}
 def test_grid_over_budget_reply_carries_the_plan(client_with_inputs): ...   # PUT voxel_size 0.0125 -> 422, grid_plan.budget_voxels == 500_000_000
 ```
 
@@ -774,10 +784,10 @@ git commit -m "feat(ui): usc ui command with GPU warm-up at launch; the installe
 **Interfaces:**
 - Produces:
   - npm scripts: `dev` (Vite, proxy `/api` with `ws: true` to `http://127.0.0.1:8770`), `api-types` (`python -c "import json; from urbansolarcarver.local_web_service.server import openapi_document; print(json.dumps(openapi_document()))" > openapi.json && openapi-typescript openapi.json -o src/api_client/generated_types.ts`), `build` (`vite build --outDir ../src/urbansolarcarver/ui_static --emptyOutDir && node scripts/write_build_info.mjs`), `test` (`vitest run`).
-  - `client.ts`: `readTokenFromLaunchUrl(): string` (reads `?token=`, then removes it from the address bar with `history.replaceState`), and one typed function per route, each sending `X-USC-Token`, named `getHealth`, `getModes`, `getSchema`, `getExamples`, `listProjects`, `createProject`, `getProject`, `createProjectFromExample`, `addInput`, `removeInput`, `putConfig`, `getStageStatus`, `getSunPositions`, `startRun`, `cancelRun`, `getRunSummary`, `getSkyPatches`, `getScorePoints`, plus `runFileUrl(project, path)` and `projectDownloadUrl(project)`; non-2xx replies throw `ApiError {status, body}`.
+  - `client.ts`: `readTokenFromLaunchUrl(): string` (reads `?token=`, then removes it from the address bar with `history.replaceState`), and one typed function per route, each sending `X-USC-Token`, named `getHealth`, `getModes`, `getSchema`, `getExamples`, `listProjects`, `createProject`, `getProject`, `createProjectFromExample`, `addInput`, `removeInput`, `putConfig`, `getStageStatus`, `getSunPath`, `startRun`, `cancelRun`, `getRunSummary`, `getSkyPatches`, `getScorePoints`, plus `runFileUrl(project, path)` and `projectDownloadUrl(project)`; non-2xx replies throw `ApiError {status, body}`.
   - `events.ts`: `subscribeToRunEvents(runId, token, onEvent): () => void` over `ws://<host>/api/runs/<id>/events?token=`.
-  - `tokens.css`: CSS custom properties on `:root` with the UX 10.1 values, named `--colour-chrome`, `--colour-panel`, `--colour-ink`, `--colour-muted`, `--colour-line`, `--colour-accent`, `--colour-accent-soft`, `--colour-sun`, `--colour-carved`, `--colour-ready`, `--colour-error`, `--colour-viewport-light`, `--colour-viewport-dark`, `--colour-grid-minor-light`, `--colour-grid-major-light`, `--colour-grid-minor-dark`, `--colour-grid-major-dark`; type `--text-body: 14px`, `--text-secondary: 12px`, `--text-step-title: 16px`, `--text-key-number: 20px`, `--line-height: 1.4`; `--space-unit: 4px`; `--radius-large: 6px`, `--radius-small: 4px`; a 2 px `--colour-accent` outline on `:focus-visible` (UX 12); the `@font-face` rules for the bundled font; `font-variant-numeric: tabular-nums` on `body` when the font has tabular figures (check with a quick render of "1111" against "8888"; if the widths differ, bundle IBM Plex Sans for numbers and say so in the commit message).
-  - `messages.ts`: `export const messages` with one entry per state of UX 11 and the device lines of UX 5.1 and 6.1, copied verbatim from the UX spec (functions where the text takes values, e.g. `gridOverBudget(voxelCount, budget, smallestVoxelSize)`).
+  - `tokens.css`: CSS custom properties on `:root` with the UX 10.1 values, named `--colour-chrome`, `--colour-panel`, `--colour-ink`, `--colour-muted`, `--colour-line`, `--colour-accent`, `--colour-accent-soft`, `--colour-sun`, `--colour-carved`, `--colour-ready`, `--colour-error`, `--colour-viewport-light`, `--colour-viewport-dark`, `--colour-grid-minor-light`, `--colour-grid-major-light`, `--colour-grid-minor-dark`, `--colour-grid-major-dark`, and the rows added with the screens (UX 17): `--colour-overlay-on-dark: #2b3a45`, `--colour-ink-on-dark: #e6ecee`, `--colour-muted-on-dark: #a9b6bc`, `--colour-line-on-dark: #3b4b56`, `--colour-test-surface-on-dark: #6fa0c4`, `--colour-axis-x: #b0603a`, `--colour-axis-y: #4f8a5b`, `--colour-axis-z: #3b6ea5`; type `--text-body: 14px`, `--text-secondary: 12px`, `--text-step-title: 16px`, `--text-key-number: 20px`, `--line-height: 1.4`; `--space-unit: 4px`; `--radius-large: 6px`, `--radius-small: 4px`; a 2 px `--colour-accent` outline on `:focus-visible` (UX 12); the `@font-face` rules for the bundled font; `font-variant-numeric: tabular-nums` on `body` when the font has tabular figures (check with a quick render of "1111" against "8888"; if the widths differ, bundle IBM Plex Sans for numbers and say so in the commit message).
+  - `messages.ts`: `export const messages` with one entry per state of UX 11 and the device lines of UX 5.1 and 6.1, copied verbatim from the UX spec (functions where the text takes values, e.g. `gridOverBudget(voxelsPerSide, totalVoxels, budgetVoxels, smallestVoxelSize)` giving "This grid would have 884 voxels per side, 690 807 104 in total. The analysis can handle up to 500 000 000." and "Use 0.07 m or more.", and `fixSettingToRun(label)` giving "Fix the voxel size to run the analysis."), plus the warm-up line of UX 5.1 ("You can open a project and add files now. The run buttons wait until the GPU is ready.").
   - Build hash (both sides identical): files = `app/package.json`, `app/package-lock.json` and every file under `app/src`, sorted by their path relative to `app/` written with `/`; for each, update SHA-256 with `relative_path + "\n"` then the file bytes with every `\r\n` replaced by `\n`; `build_info.json` = `{"app_source_sha256": "<hex>"}`.
 
 - [ ] **Step 1: Write the failing tests**
@@ -797,13 +807,15 @@ test("readTokenFromLaunchUrl takes the token and clears it from the address", ()
 test("tokens hold the UX spec colours", () => {
   const css = readFileSync("src/theme/tokens.css", "utf8");
   for (const [name, hex] of [["--colour-accent", "#2f5d7c"], ["--colour-sun", "#f2b632"], ["--colour-carved", "#c8553d"],
-                              ["--colour-viewport-light", "#e3e8e7"], ["--colour-viewport-dark", "#22303a"]])
+                              ["--colour-viewport-light", "#e3e8e7"], ["--colour-viewport-dark", "#22303a"],
+                              ["--colour-overlay-on-dark", "#2b3a45"], ["--colour-test-surface-on-dark", "#6fa0c4"]])
     expect(css).toMatch(new RegExp(`${name}:\\s*${hex}`, "i"));
 });
 test("interface messages follow the copy rules", () => {
-  const text = JSON.stringify(Object.values(messages).map(m => typeof m === "function" ? m(1, 2, 3) : m));
+  const text = JSON.stringify(Object.values(messages).map(m => typeof m === "function" ? m(1, 2, 3, 4) : m));
   expect(text).not.toMatch(/plates?\b|floor plate|\u2014|NVIDIA/i);
   expect(text).toContain("No CUDA-enabled GPU found. USC runs on the CPU, which is slower.");
+  expect(messages.fixSettingToRun("Voxel size")).toBe("Fix the voxel size to run the analysis.");
 });
 ```
 
@@ -825,11 +837,11 @@ git commit -m "feat(ui): front-end scaffold, typed API client, theme tokens and 
 ### Task 10: 3D viewer with scale, orientation and the mode layers
 
 **Files:**
-- Create: `app/src/viewer/scene.ts`, `local_origin.ts`, `loaders.ts`, `layers.ts`, `score_points_decoder.ts`, `size_check.ts`, `ground_grid.ts`, `compass.ts`, `scale_bar.ts`, `sky_dome.ts`, `sun_positions.ts`, `colour_scales.ts` and their `*.test.ts`; `app/src/viewer_overlays/Compass.tsx`, `AxisGizmo.tsx`, `ScaleBar.tsx`, `Legend.tsx`, `LayersMenu.tsx`, `ViewToolbar.tsx`
+- Create: `app/src/viewer/scene.ts`, `local_origin.ts`, `loaders.ts`, `layers.ts`, `score_points_decoder.ts`, `size_check.ts`, `ground_grid.ts`, `compass.ts`, `scale_bar.ts`, `sky_dome.ts`, `sun_path.ts`, `colour_scales.ts` and their `*.test.ts`; `app/src/viewer_overlays/Compass.tsx`, `AxisGizmo.tsx`, `ScaleBar.tsx`, `Legend.tsx`, `LayersMenu.tsx`, `ViewToolbar.tsx`
 - Test: Vitest
 
 **Interfaces:**
-- Consumes: Task 9 client (`getScorePoints`, `getSkyPatches`, `getSunPositions`, `runFileUrl`).
+- Consumes: Task 9 client (`getScorePoints`, `getSkyPatches`, `getSunPath`, `runFileUrl`).
 - Produces:
   - `localOrigin(bounds: [[number,number,number],[number,number,number]]): [number,number,number]` (the minimum corner) and `toLocal(point, origin)` in float64 before any `Float32Array` is filled.
   - `decodeScorePoints(buffer: ArrayBuffer): {header, indices: Uint32Array, scores: Float32Array, kept: Uint8Array | null, comparedScores: Float32Array | null}` (layout of Task 4) and `voxelCentres(header, indices, origin): Float32Array` (centre = header.origin + (ijk + 0.5) * voxel_size, minus the local origin).
@@ -839,10 +851,10 @@ git commit -m "feat(ui): front-end scaffold, typed API client, theme tokens and 
   - `northNeedleScreenAngle(cameraYawDegrees: number, northDegrees: number): number`: `northDegrees - cameraYawDegrees` normalised to [0, 360); camera yaw is the clockwise turn of the view about Z from the top view with +Y up the screen.
   - `hemisphere(maxVolumeBounds): {centre: [number,number,number], radius: number}`: centre at the footprint centre on the lowest z, radius 1.5 × the larger horizontal side (UX 8.2).
   - `cividis(t: number): string` (matplotlib's cividis, 0 → `#00224e`, 1 → `#fee838`), `sunRamp(t, viewportTheme): string` (viewport background to `--colour-sun`), `storeyColour(storeyIndex, storeyCount): string` (`#dfe6ea` to `#2f5d7c`).
-  - `class ViewerScene`: `constructor(container: HTMLElement)`, Z up, `setNorth(deg)`, `setLayer(name: LayerName, object: THREE.Object3D | null)`, `setLayerVisible(name, visible)`, `setLayerDimmed(name, dimmed)` (out of date: 35 % opacity, desaturated), `setSkyDomeOpacity(opacity: number)`, `setViewportTheme(theme: "light" | "dark")`, `frameAll()`, `viewTop()` (north up), `onCameraChange(listener: (camera: {yawDegrees: number, metresPerPixel: number}) => void)`, `describe(): string` (accessible name, UX 12). `LayerName = "max_volume" | "test_surfaces" | "kept_voxels" | "carved_voxels" | "sun_positions" | "sky_dome" | "envelope" | "building_massing"`. Orbit with the left button, pan with the right, zoom with the wheel; camera moves animate 400 ms, instant under `prefers-reduced-motion`.
-  - Drawing as UX 8.2: maximum volume light solid (ghost in later steps), test surfaces solid accent, kept voxels coloured by raw score with `cividis`, carved voxels in `--colour-carved` at 10 % opacity, sun positions as amber dots on the hemisphere, the 145 sky patches on the hemisphere coloured with `sunRamp`, envelope light solid, building massing coloured with `storeyColour`. Ground grid and north arrow on z = 0 of the local origin, fading with distance.
+  - `class ViewerScene`: `constructor(container: HTMLElement)`, Z up, `setNorth(deg)`, `setLayer(name: LayerName, object: THREE.Object3D | null)`, `setLayerVisible(name, visible)`, `setLayerDimmed(name, dimmed)` (out of date: 35 % opacity, desaturated), `setSkyDomeOpacity(opacity: number)`, `setViewportTheme(theme: "light" | "dark")`, `frameAll()`, `viewTop()` (north up), `onCameraChange(listener: (camera: {yawDegrees: number, metresPerPixel: number}) => void)`, `describe(): string` (accessible name, UX 12). `LayerName = "max_volume" | "test_surfaces" | "kept_voxels" | "carved_voxels" | "sun_path" | "sky_dome" | "envelope" | "building_massing"`. Orbit with the left button, pan with the right, zoom with the wheel; camera moves animate 400 ms, instant under `prefers-reduced-motion`.
+  - Drawing as UX 8.2: maximum volume light solid (ghost in later steps), test surfaces solid accent (`--colour-test-surface-on-dark` on the dark viewport), kept voxels coloured by raw score with `cividis` over 0 to the cutoff (`keptScoreRange(thresholdValue): [0, thresholdValue]`), carved voxels in `--colour-carved` at 10 % opacity plus the maximum volume's top edges and front vertical edges above the kept voxels at 60 %, the sun path from `getSunPath` (`sunPathObjects(sunPath, hemisphere)` in `sun_path.ts`: per day a dashed `--colour-sun` line for `day_path`, a solid 3 px line for `period_path`, a sun disc and an "<hour> h" label sprite per marker), the 145 sky patches on the hemisphere coloured with `sunRamp`, envelope light solid, or translucent white (about 30 %, `--colour-ink` edges at about 20 %) while the building massing layer is on, building massing coloured with `storeyColour`. Ground grid and north arrow on z = 0 of the local origin, fading with distance.
   - `loadMesh(url, token, extension): Promise<THREE.BufferGeometry>` with three.js `PLYLoader`, `OBJLoader`, `STLLoader`, `GLTFLoader`.
-  - Overlays (React, outside `viewer/`): compass top left (click: `viewTop()`), layers menu top right (only the layers that exist; the sky dome entry has the opacity slider; a missing layer shows the missing-result message), axis gizmo bottom left (lettered X, Y, Z), scale bar bottom centre ("0 to 20 m"), legend bottom right (colouring on screen and unit; "Showing 1 of every k voxels" when thinned), toolbar (frame all, top view, light or dark viewport, remembered in `localStorage` under `usc.viewportTheme`, light by default).
+  - Overlays (React, outside `viewer/`): compass top left (click: `viewTop()`), layers menu top right (only the layers that exist; the sky dome entry has the opacity slider; a missing layer shows the missing-result message), axis gizmo bottom left (lettered X, Y, Z in `--colour-axis-x/-y/-z`), scale bar bottom centre ("0 to 20 m"), legend bottom right (colouring on screen and unit; for kept voxels the 0-to-cutoff ramp with "Kept voxels. Carved voxels score above <cutoff>."; for the sun path "Sun path, 21 Dec; sun at 10, 12 and 14 h"; for the massing "Building massing, by storey" with a numbered swatch per storey; "Showing 1 of every k voxels" when thinned), toolbar at the top right left of the layers menu (three 40 px icon buttons: frame all, top view, light or dark viewport, with accessible names; remembered in `localStorage` under `usc.viewportTheme`, light by default). On the dark viewport every overlay uses the `*-on-dark` tokens (UX 8.1, 10.1).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -873,6 +885,13 @@ test("hemisphere is 1.5 times the larger horizontal side", () => {
   expect(hemisphere([[0, 0, 2], [40, 30, 35]])).toEqual({centre: [20, 15, 2], radius: 60});
 });
 test("cividis endpoints", () => { expect(cividis(0)).toBe("#00224e"); expect(cividis(1)).toBe("#fee838"); });
+test("kept voxels are coloured over 0 to the cutoff", () => { expect(keptScoreRange(1.5)).toEqual([0, 1.5]); });
+test("sun path objects: two lines per day and one sun per marker", () => {
+  const day = {date: "12-21", day_path: [[1, 0, 0.1], [0, -1, 0.4], [-1, 0, 0.1]], period_path: [[0.3, -1, 0.4], [-0.3, -1, 0.4]],
+               markers: [{hour: 10, vector: [0.3, -1, 0.4]}, {hour: 12, vector: [0, -1, 0.45]}]};
+  const objects = sunPathObjects({days: [day]}, {centre: [0, 0, 0], radius: 54});
+  expect(objects.lines).toHaveLength(2); expect(objects.markers.map(m => m.label)).toEqual(["10 h", "12 h"]);
+});
 ```
 
 - [ ] **Step 2: Run them to verify they fail.** Run: `cd app && npm test`. Expected: FAIL (modules missing).
@@ -885,7 +904,7 @@ test("cividis endpoints", () => { expect(cividis(0)).toBe("#00224e"); expect(civ
 
 ```bash
 git add app/src/viewer app/src/viewer_overlays
-git commit -m "feat(ui): three.js viewer with grid, compass, scale bar, mode layers and light or dark viewport"
+git commit -m "feat(ui): three.js viewer with grid, compass, scale bar, sun path, mode layers and light or dark viewport"
 ```
 
 ---
@@ -900,9 +919,9 @@ git commit -m "feat(ui): three.js viewer with grid, compass, scale bar, mode lay
 - Consumes: `GET schema`, `GET modes`, `PUT config` (Task 9 client).
 - Produces:
   - `setting_presentation.json`: `{"steps": {"settings": [group titles], "carving": [...], "envelope_and_massing": [...], "export": [...]}, "settings": {"<UserConfig field>": {"label", "unit", "help", "step", "group", "essential": "all" | [modes] | false, "modes": [modes] (absent = every mode), "display": "percent" (optional), "widget": (optional), "label_for_modes": {mode: label} (optional)}}}`. Content: the UX 7 table verbatim (labels, units, help, step, group, essential). Groups in order: settings `["When", "Mode specific", "Detail", "Computer"]`; carving `["How much to carve"]`; envelope_and_massing `["Envelope", "Building massing"]`; export `["Export"]`. The six period fields share `"widget": "analysis_period"` and the form draws one widget labelled by the `start_month` entry. `threshold` has `"widget": "threshold"` and `"label_for_modes": {"time-based": "Shadow tolerated"}` (label "Carving rule" otherwise); `carve_fraction` and `plate_tolerance` have `"display": "percent"`. `modes`: period fields `["time-based", "irradiance", "benefit"]`; `sun_steps_per_hour`, `min_altitude` `["time-based"]`; `balance_temperature`, `balance_offset`, `include_harm` `["benefit"]`; `tilted_plane_angle_deg` `["tilted_plane"]`; `dew_point_celsius`, `min_sky_elevation_deg`, `bliss_k` `["radiative_cooling"]`; `edge_taper`, `score_smoothing`, `carve_fraction` the four weighted modes; `threshold` every mode except `tilted_plane`.
-  - `settingsForStep(step: StepName, mode: string): SettingGroupView[]` (the six period fields appear as one `SettingView` named `start_month`) with `SettingGroupView = {title, essential: SettingView[], folded: SettingView[]}`; empty groups are left out.
+  - `settingsForStep(step: StepName, mode: string): SettingGroupView[]` (the six period fields appear as one `SettingView` named `start_month`) with `SettingGroupView = {title, essential: SettingView[], folded: SettingView[], foldLabel: string}`; empty groups are left out. `foldLabel` follows UX 5.4: "More sun settings" (When), "More mode settings" (Mode specific), "More detail settings" (Detail), "More carving settings", "More envelope settings", "More massing settings"; a group with no essential settings (Computer) is one fold titled with the group name. `SettingGroup` draws the title as a 12 px, 600, muted header and the fold as a link-styled button under the essential settings. Building massing's three essential fields sit side by side (UX 5.6).
   - `toDisplayValue(name, value)` and `fromDisplayValue(name, shown)` (percent: × 100 and ÷ 100).
-  - `SettingTooltip`: help text, then "Config name: `<name>`, default <value> <unit>", opening on hover, focus and click, closing with Escape; the voxel size tooltip adds the grid from the last `PUT config` reply ("62 voxels per side, 238 328 in total").
+  - `SettingTooltip`: help text, then "Config name: `<name>`, default <value> <unit>" in 12 px muted with the name in monospace, opening on hover, focus and click, closing with Escape, pointing at its "i" (whose background turns `--colour-accent-soft` while open, UX 7); the voxel size tooltip adds the grid from the last `PUT config` reply ("62 voxels per side, 238 328 in total").
   - `form_state.ts`: `formReducer` (values, field errors, grid plan, pending save); a mode choice fills `starting_values` from `GET modes` and keeps the shared settings the user set; every change sends `PUT config` debounced 400 ms; a 422 puts each field error under its field.
 
 - [ ] **Step 1: Write the failing tests**
@@ -938,6 +957,12 @@ test("essential settings of the Settings step per mode", () => {
   expect(names("benefit")).toContain("balance_temperature");
   expect(names("tilted_plane")).toEqual(["north_deg", "tilted_plane_angle_deg", "voxel_size"]);
 });
+test("time-based carving folds the cut-above and slope settings", () => {
+  const [group] = settingsForStep("carving", "time-based");
+  expect(group.essential.map(s => s.name)).toEqual(["threshold"]);
+  expect(group.folded.map(s => s.name)).toEqual(["carve_above", "carve_above_min_consecutive", "max_slope_deg"]);
+  expect(group.foldLabel).toBe("More carving settings");
+});
 test("percent settings convert both ways", () => {
   expect(toDisplayValue("carve_fraction", 0.3)).toBe(30); expect(fromDisplayValue("plate_tolerance", 20)).toBe(0.2);
 });
@@ -967,16 +992,16 @@ git commit -m "feat(ui): settings with plain labels, units and tooltips, placed 
 - Test: Vitest; `tests/test_local_web_packaging.py` (tile names against the engine)
 
 **Interfaces:**
-- Consumes: client (Task 9), `ViewerScene` and overlays (Task 10), `settingsForStep`, `SettingGroup`, `formReducer` (Task 11); `GET health`, `GET examples`, `GET projects/{name}/stage-status`, `GET projects/{name}/sun-positions` (Tasks 6 and 7).
+- Consumes: client (Task 9), `ViewerScene` and overlays (Task 10), `settingsForStep`, `SettingGroup`, `formReducer` (Task 11); `GET health`, `GET examples`, `GET projects/{name}/stage-status`, `GET projects/{name}/sun-path` (Tasks 6 and 7).
 - Produces:
-  - `App` layout (UX 4): top bar (product name, project name, "Projects" link, device status dot and text), left panel 340 px wide with its own scroll, the viewer filling the rest; minimum window 1280 × 720; below 1100 px wide the panel overlays the view.
-  - `StartScreen` (UX 5.1): version, device line from `GET health` polled every second while `warm_up == "running"`, New project (name field), Open a project (name and last modified), Try an example (title and one-line description from `GET examples`). Choosing one opens the accordion with Inputs open.
-  - `StepAccordion`: one step open at a time; each closed step shows `stepSummary(step, state)`; steps never lock; a step that cannot be used yet explains why when opened (UX 4.1).
+  - `App` layout (UX 4): top bar (product name, project name, "Projects" link, device status dot and text; on the start screen only the product name and the device status), left panel 340 px wide with its own scroll and the open step's run button pinned under the step list with its disabled reason, the viewer filling the rest; minimum window 1280 × 720; below 1100 px wide the panel overlays the view.
+  - `StartScreen` (UX 5.1): version, device card from `GET health` polled every second while `warm_up == "running"` (spinner, "Preparing the GPU" and the warm-up line of `messages`), three cards side by side: New project ("Project name" field with the hint "Up to 64 letters, numbers, spaces, hyphens or underscores.", **Create project** sends `createProject(name, "time-based")`), Open a project (name and last modified date and time, newest first), Try an example (title and one-line description from `GET examples`). Choosing one opens the accordion with Inputs open.
+  - `StepAccordion`: one step open at a time; each closed step shows `stepSummary(step, state)`; steps never lock; a step that cannot be used yet explains why when opened (UX 4.1). Each row starts with its state mark (tick on `--colour-ready`, "!" on `--colour-error` with the summary in `--colour-error` and 600, empty ring, accent ring on the open step); the "1 setting to fix" summary stays visible while the step is open.
   - `stepSummary(step: StepName, state: ProjectViewState): string`, giving exactly the UX 4.1 texts, e.g. `"1 volume, 2 test surfaces, weather"`, `"Test surfaces missing"`, `"21 Dec, 10 to 14 h; 1 m voxels"`, `"1 setting to fix"`, `"61 % kept"`, `"Not run yet"`, `"4 820 m², 7 storeys"`, `"Out of date"`, `"Not built yet"`, `"Ready"`, `"Build the envelope first"`.
   - `formatNumber(value: number, unit?: string, decimals = 0): string`: thousands separated by U+202F (narrow no-break space), unit after U+00A0; `formatPercent` rounds to whole numbers.
-  - `InputsStep` (UX 5.2): boxes Maximum volume, Test surfaces, Weather file (optional), each with "Add files" (picker and drag and drop) and the file list (name, triangle count, remove); the weather box shows the location and which modes need it; the joined size in metres and `sizeWarning`; meshes drawn on arrival and framed; add and remove disabled during a run with the reason.
-  - `mode_tiles.json`: the six tiles of UX 5.3 (`engine_name`, `plain_name`, `one_line`, `tooltip`, `needs`, `symbol`, `experimental`). `ModeStep`: a 3 × 2 radio group (arrow keys move, Space or Enter selects), tooltip on hover, focus and the tile's "i"; a weather drop zone under the tiles when the chosen mode needs one and none is uploaded.
-  - `SettingsStep` (UX 5.4): the groups from `settingsForStep("settings", mode)`, the grid line under Voxel size, the over-budget message from `messages.gridOverBudget` with `smallestVoxelSizeWithinBudget(voxelSize: number, totalVoxels: number, budgetVoxels: number): number` (in `grid_budget.ts`) = `voxelSize * cbrt(totalVoxels / budgetVoxels)` rounded up to 0.1 m, from the `grid_plan` and `budget_voxels` of the 422 reply (Task 3), and **Run analysis** pinned to the panel bottom (disabled with its reason while inputs, weather, a field or the warm-up block it). The sun positions layer is requested whenever the mode is time-based and the weather file and period are set, before any run. During a run of this project the fields are disabled with "A run is in progress" (the service replies 409 to `PUT config` then).
+  - `InputsStep` (UX 5.2): boxes Maximum volume, Test surfaces, Weather file (optional), each with "Add files" (picker and drag and drop) and the file list (name, triangle count, remove); the empty and filled box texts of UX 5.2 ("Required", the one-line hints, "or drop them here", **Replace** in a filled weather box, "Remove <file name>" as the remove button's name); the weather box shows the location and which modes need it; "Size of all inputs together" with the joined size in metres, and `sizeWarning`; meshes drawn on arrival and framed; add and remove disabled during a run with the reason.
+  - `mode_tiles.json`: the six tiles of UX 5.3 (`engine_name`, `plain_name`, `one_line`, `tooltip`, `needs` as the tooltip sentence, e.g. "Needs a weather file and an analysis period.", `symbol`, `experimental`). `ModeStep`: a 3 × 2 radio group (arrow keys move, Space or Enter selects), tile states of UX 5.3 (chosen: 2 px accent border on accent soft; hovered: muted border), tooltip on hover, focus and the tile's "i" (plain name, tooltip, needs, "Engine name: `<engine_name>`"), the line "Choosing a mode fills its starting values in Settings." under the tiles, and a weather drop zone under the tiles when the chosen mode needs one and none is uploaded.
+  - `SettingsStep` (UX 5.4): the groups from `settingsForStep("settings", mode)`, the grid line under Voxel size, the over-budget message from `messages.gridOverBudget` with `smallestVoxelSizeWithinBudget(voxelSize: number, totalVoxels: number, budgetVoxels: number): number` (in `grid_budget.ts`) = `voxelSize * cbrt(totalVoxels / budgetVoxels)` rounded up to 0.01 m below 1 m and to 0.1 m from 1 m up (UX 11), from the `grid_plan` and `budget_voxels` of the 422 reply (Task 3), with the field outline 2 px `--colour-error` and the message under it with a warning icon, and **Run analysis** pinned to the panel bottom (disabled with its reason while inputs, weather, a field or the warm-up block it; for a field, `messages.fixSettingToRun(label)`). The sun path layer (`getSunPath`) is requested whenever the mode is time-based and the weather file and period are set, before any run. During a run of this project the fields are disabled with "A run is in progress" (the service replies 409 to `PUT config` then).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -994,7 +1019,14 @@ test("closed steps summarise their state in the UX spec's words", () => {
   expect(stepSummary("envelope_and_massing", stateWith({stages: {massing: "out_of_date"}}))).toBe("Out of date");
 });
 test("numbers use narrow no-break spaces", () => { expect(formatNumber(31400, "m³")).toBe("31 400 m³"); });
-test("smallest voxel size that fits the budget", () => { expect(smallestVoxelSizeWithinBudget(1.0, 1_500_000_000, 500_000_000)).toBe(1.5); });
+test("smallest voxel size that fits the budget", () => {
+  expect(smallestVoxelSizeWithinBudget(1.0, 1_500_000_000, 500_000_000)).toBe(1.5);
+  expect(smallestVoxelSizeWithinBudget(0.06, 690_807_104, 500_000_000)).toBe(0.07);   // 0.0668, to 0.01 m below 1 m
+  expect(smallestVoxelSizeWithinBudget(1.0, 600_000_000, 500_000_000)).toBe(1.1);     // 1.0627, to 0.1 m from 1 m up
+});
+test("a new project's Mode summary names its starting mode", () => {
+  expect(stepSummary("mode", stateWith({mode: "time-based"}))).toBe("Sun at set hours");
+});
 ```
 
 - [ ] **Step 2: Run them to verify they fail.** Run: `cd app && npm test` and `.venv/Scripts/python -m pytest tests/test_local_web_packaging.py -q -p no:cacheprovider -k tiles`. Expected: FAIL.
@@ -1025,9 +1057,9 @@ git commit -m "feat(ui): start screen, step accordion, inputs, mode tiles and an
   - `runReducer(state, event)` in `run_state.ts`: per-stage `waiting | running | done`, `done/total` during ray tracing, issues, final `finished | failed | cancelled`, elapsed time; stage display names "Sun analysis", "Carving", "Envelope mesh", "Building massing".
   - `RunProgress`: the stage list with states, elapsed time, Cancel, under the button that started the run; every other run button disabled with "A run is in progress" (UX 6.4); the progress bar along the top of the viewer; "Results are up to date" for three seconds when `POST runs` replies so. Layers update stage by stage; until new data arrives the previous layer stays, dimmed.
   - `createThresholdUpdateQueue(applyAndRun: (value: number) => Promise<void>): {submit(value: number): void, busy(): boolean}`: at most one `applyAndRun` at a time; values submitted while one runs replace each other, and exactly one more call follows with the last value (Review Focus 5). `applyAndRun` = `PUT config` with the value, then `POST runs {"produce": ["thresholding"]}`, resolving at the run's final event.
-  - `histogramBins(compared: Float32Array, kept: Uint8Array, binCount: number): {lower, upper, keptCount, carvedCount}[]` over the occupied voxels sent; `ScoreHistogram`: split bars (kept `--colour-accent`, carved `--colour-carved`), cutoff line at the summary's `threshold_value` labelled with value and unit, log y axis by default with a linear switch, hover with range and both counts, axis title "Shadow tolerated at which a voxel is carved, m²·h" (time-based) or "Score compared with the cutoff (relative)" (weighted), and the slope-limit note "The slope limit removed N voxels below the cutoff." when `slope_limit_extra_voxels_removed > 0`. No histogram for `tilted_plane`.
-  - `CarvingStep` (UX 5.5): threshold control per mode (Shadow tolerated number and slider; Carve amount percent slider and number, with the folded thresholding settings; the angle rule's message), the histogram, the numbers (Volume kept, Volume carved, Kept volume, Obstruction removed for weighted modes, analysis time), the "Update when I change the threshold" switch (on by default, stored in `localStorage` under `usc.autoUpdate.<project>`; off shows **Update carving**), and **Build envelope and massing** pinned to the bottom. When `stage-status` reports preprocessing not `current`: the carving dimmed, the control and switch disabled, the UX 5.5 message, and a Run analysis button.
-  - `EnvelopeAndMassingStep` (UX 5.6): the envelope and building massing groups, **Build envelope and massing** (`produce: ["exporting", "massing"]`), results (Gross floor area, Storeys, Envelope volume, table per storey: number, bottom and top height, area), "Open run report" opening `RunReportPanel` over the viewer (the report as preformatted text in milestone 1), and the out-of-date state (results greyed with "Out of date for the current carving", layers dimmed) when exporting or massing is `out_of_date`.
+  - `histogramBins(compared: Float32Array, kept: Uint8Array, binCount: number): {lower, upper, keptCount, carvedCount}[]` over the occupied voxels sent; `stackedBarHeights(keptCount, carvedCount, scale: "log" | "linear", plotHeight, decades): {kept, carved}` (log: kept from the axis to log(kept), carved from log(kept) to log(kept + carved), UX 5.5); `ScoreHistogram`: titled "Scores of the voxels", split bars (kept `--colour-accent`, carved `--colour-carved`), cutoff as a dashed `--colour-ink` line at the summary's `threshold_value` with its value on an ink label, log y axis by default with a **Log** / **Linear** switch at the title's right, the "Kept" / "Carved" key under the chart, hover reading "0.9 to 1.2 m²·h" and "880 kept, 92 carved", axis title "Shadow tolerated at which a voxel is carved, m²·h" (time-based) or "Score compared with the cutoff (relative)" (weighted), and the slope-limit note "The slope limit removed N voxels below the cutoff." when `slope_limit_extra_voxels_removed > 0`. No histogram for `tilted_plane`.
+  - `CarvingStep` (UX 5.5): threshold control per mode (Shadow tolerated number and slider, the slider ends labelled "0" and "<maximum>, the highest score", with "More carving settings" folding the cut-above and slope settings; Carve amount percent slider and number, with the folded thresholding settings; the angle rule's message), the histogram, the numbers as tiles two per row (Volume kept, Volume carved, Kept volume, Obstruction removed for weighted modes, "Last analysis took"), the "Update when I change the threshold" switch (on by default, stored in `localStorage` under `usc.autoUpdate.<project>`; off shows **Update carving**), and **Build envelope and massing** pinned to the bottom. When `stage-status` reports preprocessing not `current`: the carving dimmed, the control and switch disabled, the UX 5.5 message, and a Run analysis button.
+  - `EnvelopeAndMassingStep` (UX 5.6): the envelope and building massing groups, **Build envelope and massing** (`produce: ["exporting", "massing"]`), results (Gross floor area, Storeys, Envelope volume as tiles in one row; the table captioned "Floor area per storey" with columns "Storey", "Bottom, m", "Top, m", "Area, m²", storeys numbered from 1 with the first row "1, ground", a swatch of `storeyColour` per row, heights to one decimal, a bold "Total" row), "Open the run report" opening `RunReportPanel` over the viewer (the report as preformatted text in milestone 1), and the out-of-date state (results greyed with "Out of date for the current carving", layers dimmed) when exporting or massing is `out_of_date`.
   - `ExportStep` (UX 5.7): links for the envelope mesh, "Building massing (OBJ)", "Building massing data (JSON)", `config.yaml`, the project zip; the mesh format choice (`produce: ["exporting"]` on change); out-of-date files labelled and still downloadable.
   - Every state of UX 11 shown with its `messages` entry; run failures with a "Details" fold and a link to the named field; the full overlay when the engine is not reachable (WebSocket or fetch failure).
 
@@ -1054,6 +1086,10 @@ test("histogram bins split kept and carved and count every voxel", () => {
   expect(bins.reduce((n, b) => n + b.keptCount + b.carvedCount, 0)).toBe(5);
   expect(bins[0]).toMatchObject({keptCount: 3, carvedCount: 0}); expect(bins[2]).toMatchObject({keptCount: 0, carvedCount: 1});
 });
+test("on the log scale the carved part sits on top of the kept part", () => {
+  const h = stackedBarHeights(100, 900, "log", 100, 4);       // log10(100) = 2, log10(1000) = 3, of 4 decades
+  expect(h.kept).toBeCloseTo(50); expect(h.carved).toBeCloseTo(25);
+});
 ```
 
 - [ ] **Step 2: Run them to verify they fail.** Run: `cd app && npm test`. Expected: FAIL.
@@ -1061,7 +1097,7 @@ test("histogram bins split kept and carved and count every voxel", () => {
 - [ ] **Step 3: Implement the steps, the histogram, the queue and the run progress**
 
 - [ ] **Step 4: Run the tests (PASS), rebuild (`npm run build`), and check the whole flow by hand** in the browser preview against `usc ui --no-browser`, noting and fixing anything that fails before the commit:
-  - the `basic_perimeter_block` example in time-based mode: Run analysis, then Carving opens with the voxels, the sun positions and the histogram with its cutoff line;
+  - the `basic_perimeter_block` example in time-based mode: Run analysis, then Carving opens with the voxels, the sun path with its hour suns and the histogram with its cutoff line, matching the screens of UX 17;
   - the threshold moved quickly several times with auto-update on (one queued run, last value shown), then with it off (Update carving);
   - a weighted mode: the sky dome with its opacity slider, the Carve amount control, the cutoff line;
   - Build envelope and massing after an analysis-only run (it runs, it is not "up to date"); then a threshold change: envelope and massing dimmed and "Out of date";

@@ -82,7 +82,7 @@ Done, and on `main` since `830a1f0`:
 | `projects.py` | Project folder layout, uploads, joining several files per role, stored settings, input-change tracking |
 | `run_worker.py` | The worker thread, the run context, event forwarding, cancel |
 | `score_points.py` | Builds the score layer data from the preprocessing and thresholding outputs |
-| `run_summary.py` | Carving and massing numbers, sky dome data, sun positions (amended 2026-10-17) |
+| `run_summary.py` | Carving and massing numbers, sky dome data, sun path (amended 2026-10-17) |
 | `stage_records.py` | Per-stage records, stage status and stage choice (amended 2026-10-17) |
 | `gpu_warm_up.py` | Background GPU warm-up started by `usc ui` (amended 2026-10-17) |
 | `api_models.py` | Pydantic request, reply and event models (the OpenAPI schema comes from these) |
@@ -199,7 +199,7 @@ Events, each a JSON object with a `type`:
 
 ### 5.7 Score layer data
 
-Amended 2026-10-17: after the kept/carved array, a fourth array holds the compared scores (`float32`, from `scores_compared_with_cutoff.npy`) when thresholding wrote them; the header says `has_compared_scores`. New routes beside it: `run/summary`, `run/sky-patches`, `sun-positions`, `stage-status`, `examples`; `GET health` reports the warm-up state (UX spec section 14, plan Tasks 4, 6, 7).
+Amended 2026-10-17: after the kept/carved array, a fourth array holds the compared scores (`float32`, from `scores_compared_with_cutoff.npy`) when thresholding wrote them; the header says `has_compared_scores`. New routes beside it: `run/summary`, `run/sky-patches`, `sun-path`, `stage-status`, `examples`; `GET health` reports the warm-up state (UX spec section 14, plan Tasks 4, 6, 7).
 
 `GET run/score-points` reads `run/preprocessing/manifest.json` and `run/thresholding/manifest.json` (paths in manifests are relative to the manifest's folder) and returns:
 
