@@ -161,8 +161,13 @@
 .step-reason { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 .step-error { margin-bottom: calc(var(--space-unit) * 3); }
 
+/* The open step's run button with its progress, failure details and warnings: at most half the panel, scrolling beyond that,
+   so a long list at 200 % zoom (UX 12) never pushes the step list out of the panel. */
 .step-pinned-action {
   flex: none;
+  box-sizing: border-box;     /* the half includes the padding and the border */
+  max-height: 50%;
+  overflow-y: auto;
   padding: calc(var(--space-unit) * 3);
   border-top: 1px solid var(--colour-line);
   background: var(--colour-panel);

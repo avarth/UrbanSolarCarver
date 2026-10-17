@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 
 let rendered: RenderedOverlay | null = null;
@@ -52,4 +52,18 @@ test("a step that cannot be used yet opens and says why", () => {
   expect(carving.textContent).toContain("Run the analysis in Settings to see the carving");
   expect(carving.textContent).not.toContain("carving content");
   expect(rendered.container.querySelector(".step-pinned-action")!.textContent).toBe("Run analysis");
+});
+
+test("the pinned action area takes at most half the panel and scrolls, so the step list keeps the other half (UX 12, 200 % zoom)", () => {
+  const removeStyleSheet = addStyleSheetForTest("src/steps/steps.css");
+  try {
+    rendered = renderForTest(<StepAccordion steps={STEPS} openStep="inputs" onOpenStep={() => {}} pinnedAction={<p>A long list of warnings</p>} />);
+    const pinned = getComputedStyle(rendered.container.querySelector(".step-pinned-action")!);
+    expect(pinned.maxHeight).toBe("50%");
+    expect(pinned.overflowY).toBe("auto");
+    const stepList = getComputedStyle(rendered.container.querySelector(".step-list")!);
+    expect(stepList.overflowY).toBe("auto");
+  } finally {
+    removeStyleSheet();
+  }
 });

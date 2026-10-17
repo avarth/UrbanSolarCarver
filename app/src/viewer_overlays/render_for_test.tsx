@@ -1,4 +1,5 @@
 // Rendering an overlay into the jsdom document for a test, with React's act so effects and updates have run.
+import { readFileSync } from "node:fs";
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
@@ -32,4 +33,15 @@ export function click(element: Element): void {
   act(() => {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true }));
   });
+}
+
+/**
+ * Adds a style sheet of the app (a path from app/, such as "src/steps/steps.css") to the jsdom document, so getComputedStyle
+ * reports what its rules declare (jsdom applies the cascade but resolves no var() and computes no layout); returns its removal.
+ */
+export function addStyleSheetForTest(path: string): () => void {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(path, "utf8");
+  document.head.appendChild(style);
+  return () => style.remove();
 }
