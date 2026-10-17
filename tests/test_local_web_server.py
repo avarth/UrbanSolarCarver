@@ -280,6 +280,27 @@ def test_project_inputs_config_run_and_files(client):
     assert start_run(client)["status"] == "up_to_date"
 
 
+def test_an_opened_project_carries_the_grid_of_its_stored_settings_without_changing_it(client, projects_folder):
+    assert create_project(client, "p", "daylight")["grid_plan"] is None          # no max volume yet
+    assert upload(client, "p", "max_volume", VOLUME).status_code == 200
+    saved = client.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 2.0}}).json()
+    config_path = projects_folder / "p" / "config.yaml"
+    config_before = config_path.read_bytes()
+    first, second = client.get("/api/projects/p").json(), client.get("/api/projects/p").json()
+    assert first["grid_plan"] == saved["grid_plan"]
+    assert second["modified"] == first["modified"] and config_path.read_bytes() == config_before
+
+
+def test_an_opened_project_over_the_voxel_budget_still_gets_its_grid(client):
+    create_project(client, "p", "daylight")
+    assert upload(client, "p", "max_volume", VOLUME).status_code == 200
+    assert client.put("/api/projects/p/config", json={"values": {"mode": "daylight", "voxel_size": 1.0}}).status_code == 200
+    larger_volume = ("volume.ply", box_bytes([0, 0, 5], extents=(10_000, 10_000, 10)))     # replaces the first upload
+    assert upload(client, "p", "max_volume", larger_volume).status_code == 200
+    grid_plan = client.get("/api/projects/p").json()["grid_plan"]
+    assert grid_plan["voxel_size"] == 1.0 and grid_plan["total_voxels"] > grid_plan["budget_voxels"]
+
+
 def test_the_examples_are_listed_with_a_description(client):
     examples = client.get("/api/examples").json()
     assert [example["name"] for example in examples] == ["basic_perimeter_block", "new_building", "multiple_buildings"]

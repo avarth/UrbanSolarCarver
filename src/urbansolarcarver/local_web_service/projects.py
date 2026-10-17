@@ -250,6 +250,18 @@ class ProjectStore:
         """The stored config.yaml as the engine's validated config, with its paths resolved inside the project folder."""
         return self.config_from_settings(name, self.read_stored_config(name))
 
+    def stored_grid_plan(self, name: str) -> GridPlanReply | None:
+        """The grid the stored settings and the joined max volume give, None before a max volume exists.
+
+        Planned as a save plans it, without writing anything; a grid over the budget is returned as it is (a larger
+        max volume uploaded after the settings were saved can give one), so the app can say so when the project opens.
+        """
+        bounds = self.joined_bounds(name)
+        if bounds is None:
+            return None
+        config = self.load_project_config(name)
+        return self._grid_plan_reply(plan_voxel_grid(bounds, config.voxel_size, config.margin_frac))
+
     def _plan_and_check_grid(self, name: str, config: UserConfig) -> GridPlanReply | None:
         """The grid plan of the joined max volume, None before one exists; GridOverBudget when it is too large."""
         bounds = self.joined_bounds(name)

@@ -26,9 +26,9 @@ test("the legend shows the kept voxel range, its note and the thinning", () => {
 
 test("the legend titles of the weighted modes and the building massing swatches", () => {
   expect(keptVoxelsLegendTitle("weighted_sum", "kWh/m²")).toBe("Obstruction score (relative)");
-  rendered = renderForTest(<Legend theme="dark" content={{ sunPath: "Sun path, 21 Dec; sun at 10, 12 and 14 h", buildingMassing: { storeyCount: 3 } }} />);
+  rendered = renderForTest(<Legend theme="dark" content={{ sunPath: "Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h", buildingMassing: { storeyCount: 3 } }} />);
   const text = rendered.container.textContent;
-  expect(text).toContain("Sun path, 21 Dec; sun at 10, 12 and 14 h");
+  expect(text).toContain("Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h");
   expect(text).toContain("Building massing, by storey");
   expect(Array.from(rendered.container.querySelectorAll(".viewer-storey-swatch")).map((swatch) => swatch.textContent)).toEqual(["1", "2", "3"]);
   expect(rendered.container.querySelector("[data-viewport-theme='dark']")).not.toBeNull();
@@ -36,7 +36,7 @@ test("the legend titles of the weighted modes and the building massing swatches"
 
 test("the scale bar reads 0 to its length", () => {
   rendered = renderForTest(<ScaleBar theme="light" metresPerPixel={0.13} />);
-  expect(rendered.container.textContent).toBe("0 to 20 m");
+  expect(rendered.container.textContent).toBe("0 to 20\u00a0m");
 });
 
 test("the compass shows the top view when clicked", () => {

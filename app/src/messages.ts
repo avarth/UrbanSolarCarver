@@ -1,6 +1,6 @@
 // The interface texts of UX spec sections 4, 5, 6.1, 7, 8 and 11, in one place. A text that takes values is a function.
 // Texts that the engine writes (a file that cannot be read, why Warp cannot run, the message of a failed run) are shown as the
-// engine gives them and have no entry here.
+// engine gives them and have no entry here. A unit follows its number after a no-break space (\u00a0), as in format_numbers.ts.
 import { groupedDigits } from "./steps/format_numbers";
 
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -60,7 +60,7 @@ export const messages = {
   maxVolumeAndTestSurfacesMissing: "Maximum volume and test surfaces missing",
   periodSummary: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => {
     const startDate = `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]}`, endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
-    return `${startDate === endDate ? startDate : `${startDate} to ${endDate}`}, ${startHour} to ${endHour} h`;
+    return `${startDate === endDate ? startDate : `${startDate} to ${endDate}`}, ${startHour} to ${endHour}\u00a0h`;
   },
   voxelsOfSize: (voxelSizeText: string) => `${voxelSizeText} voxels`,
   settingsSummary: (periodText: string, voxelsText: string) => `${periodText}; ${voxelsText}`,
@@ -79,6 +79,7 @@ export const messages = {
   maxVolumeTitle: "Maximum volume",
   testSurfacesTitle: "Test surfaces",
   weatherFileTitle: "Weather file (optional)",
+  weatherFileNeededTitle: "Weather file",
   requiredInput: "Required",
   weatherFileExtension: ".epw",
   maxVolumeHint: "The largest building you would allow, as one or more closed meshes.",
@@ -90,7 +91,7 @@ export const messages = {
   triangleCount: (count: number) => `${groupedDigits(count)} ${count === 1 ? "triangle" : "triangles"}`,
   fileProblem: (fileName: string, reason: string) => `${fileName}: ${reason}`,
   inputsSizeTitle: "Size of all inputs together",
-  inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ} m`,
+  inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ}\u00a0m`,
 
   // Mode (5.3). The names, lines and tooltips of the six modes are in steps/mode_tiles.json.
   modeGroupLabel: "Mode",
@@ -127,7 +128,7 @@ export const messages = {
   gridOverBudget: (voxelsPerSide: number, totalVoxels: number, budgetVoxels: number, smallestVoxelSize: number) => ({
     description: `This grid would have ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total. ` +
       `The analysis can handle up to ${groupedDigits(budgetVoxels)}.`,
-    advice: `Use ${smallestVoxelSize} m or more.`,   // shown in bold
+    advice: `Use ${smallestVoxelSize}\u00a0m or more.`,   // shown in bold
   }),
   details: "Details",
   resultsOutOfDate: "Results are out of date; run the analysis again",
@@ -135,8 +136,8 @@ export const messages = {
   engineStopped: ["The USC engine stopped. Start it again with ", { code: "usc ui" }, ", then reload this page."] as MessagePart[],
   accessLost: ["This page has lost its access to the engine. Open it again from the link that ", { code: "usc ui" }, " printed."] as MessagePart[],
   resultsUpToDate: "Results are up to date",
-  modelMoreThan10Km: "This model is more than 10 km across. Is it in meters?",
-  modelLessThan1M: "This model is less than 1 m across. Is it in meters?",
+  modelMoreThan10Km: "This model is more than 10\u00a0km across. Is it in meters?",
+  modelLessThan1M: "This model is less than 1\u00a0m across. Is it in meters?",
 
   // Settings form (5.4 to 5.7, 7). The labels, units and help texts of the settings are in settings_form/setting_presentation.json.
   moreSettingsOfGroup: {
@@ -164,7 +165,7 @@ export const messages = {
   },
   hourUnit: "h",
   periodText: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) =>
-    `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} ${startHour} h to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]} ${endHour} h`,
+    `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} ${startHour}\u00a0h to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]} ${endHour}\u00a0h`,
   oneAngle: "One angle",
   oneAnglePerDirection: "One per direction",
   compassDirections: ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
@@ -197,11 +198,11 @@ export const messages = {
   outOfDate: "out of date",
   viewEmpty: "3D view, empty.",
   viewShowing: (layerList: string) => `3D view showing: ${layerList}.`,
-  hourLabel: (hour: number) => `${hour} h`,
+  hourLabel: (hour: number) => `${hour}\u00a0h`,
   storeyLabel: (storeyNumber: number) => `Storey ${storeyNumber}`,
   northLetter: "N",
-  scaleBar: (length: string) => `0 to ${length} m`,
-  lengthInMetres: (length: string) => `${length} m`,
+  scaleBar: (length: string) => `0 to ${length}\u00a0m`,
+  lengthInMetres: (length: string) => `${length}\u00a0m`,
   compass: "Compass. Show the top view with north up",
   axisGizmo: "Axes: X, Y and Z",
   frameAll: "Frame all",
@@ -213,7 +214,7 @@ export const messages = {
   keptVoxelsScoreIn: (unit: string) => `Score, ${unit}`,
   keptVoxelsNote: (cutoff: string) => `Kept voxels. Carved voxels score above ${cutoff}.`,
   thinnedVoxels: (step: number) => `Showing 1 of every ${groupedDigits(step)} voxels`,
-  sunPathLegend: (days: string, hours: string) => `Sun path, ${days}; sun at ${hours} h`,
+  sunPathLegend: (days: string, hours: string) => `Sun path, ${days}; sun at ${hours}\u00a0h`,
   skyDomeLegend: (unit: string) => `Sky patch weight, ${unit}`,
   buildingMassingLegend: "Building massing, by storey",
   legend: "Legend",

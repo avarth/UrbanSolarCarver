@@ -211,6 +211,7 @@ class ProjectDetail(BaseModel):
     joined_bounds: list[list[float]] | None     # as in InputFilesReply
     weather_location: str | None
     stage_status: StageStatusReply
+    grid_plan: GridPlanReply | None             # of the stored settings, as a save would plan it; None without a max volume
 
 
 class CancelRunReply(BaseModel):

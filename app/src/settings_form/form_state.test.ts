@@ -1,6 +1,6 @@
 import { act, createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { ApiError, type ConfigReply, type ModeInfo } from "../api_client/client";
+import { ApiError, type ConfigErrorReply, type ConfigReply, type ModeInfo } from "../api_client/client";
 import { renderForTest } from "../viewer_overlays/render_for_test";
 import { createConfigSaver, defaultValue, formReducer, initialFormState, shownValue, useSettingsForm, valuesToSend, type FormAction } from "./form_state";
 
@@ -189,14 +189,27 @@ test("flushing the saver sends a waiting save at once and resolves once its repl
   const reply: ConfigReply = { settings: { voxel_size: 2 }, grid_plan: GRID_PLAN };
   const save = vi.fn().mockResolvedValue(reply);
   const saver = createConfigSaver(save, (action) => actions.push(action));
-  await saver.flush();                                       // nothing waiting: resolves without a request
+  expect(await saver.flush()).toBe("none");                 // nothing waiting: resolves without a request
   expect(save).not.toHaveBeenCalled();
   saver.schedule({ voxel_size: 2 });
-  await saver.flush();
+  expect(await saver.flush()).toBe("saved");
   expect(save).toHaveBeenCalledExactlyOnceWith({ voxel_size: 2 });
   expect(actions).toEqual([{ type: "save_succeeded", reply }]);
   await vi.advanceTimersByTimeAsync(400);
   expect(save).toHaveBeenCalledOnce();                       // the timer of the flushed save sends nothing more
+});
+
+test("flushing tells a refused or failed save from a stored one, so a run never starts on settings that were not saved", async () => {
+  const refusal: ConfigErrorReply = { field_errors: [{ field: "voxel_size", message: "too small" }], grid_plan: null };
+  const save = vi.fn()
+    .mockRejectedValueOnce(new ApiError(422, refusal))
+    .mockRejectedValueOnce(new ApiError(409, { detail: "A run of project 'p' is active." }));
+  const saver = createConfigSaver(save, () => {});
+  saver.schedule({ voxel_size: 0.001 });
+  expect(await saver.flush()).toBe("refused");
+  expect(await saver.flush()).toBe("refused");             // nothing new waiting: the last save's outcome
+  saver.schedule({ voxel_size: 2 });
+  expect(await saver.flush()).toBe("failed");
 });
 
 function renderedForm(project: string, settings: Record<string, unknown>) {

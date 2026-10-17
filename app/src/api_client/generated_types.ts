@@ -574,6 +574,7 @@ export interface components {
             /** Weather Location */
             weather_location: string | null;
             stage_status: components["schemas"]["StageStatusReply"];
+            grid_plan: components["schemas"]["GridPlanReply"] | null;
         };
         /**
          * ProjectSummary

@@ -4,6 +4,7 @@
 // and the schema defaults fill the rest, on the service as in the form.
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError, putConfig, type ConfigErrorReply, type ConfigReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
+import { gridIsOverBudget } from "../steps/grid_budget";
 import { presentedSettingOf, settingIsReadBy } from "./presentation";
 
 export const SAVE_DELAY_MILLISECONDS = 400;
@@ -72,7 +73,10 @@ export function initialFormState({ schema, modes, settings, gridPlan }: FormStar
   const startingValues = startingValuesByMode[mode] ?? {};
   const userValues = Object.fromEntries(Object.entries(settings).filter(([name, value]) =>
     name !== "mode" && !(name in startingValues && sameValue(value, startingValues[name]))));
-  return { mode, userValues, startingValuesByMode, schemaProperties, fieldErrors: {}, stepErrors: [], gridPlan,
+  // Stored settings whose grid is over the budget (a larger maximum volume came after them) open with Voxel size to fix, as a
+  // save of them would be refused; the message under the field is the step's own (SettingsStep), so the text here stays empty.
+  const fieldErrors: Record<string, string> = gridIsOverBudget(gridPlan) ? { voxel_size: "" } : {};
+  return { mode, userValues, startingValuesByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
            pendingSave: false, changeCount: 0, saveFailure: null };
 }
 
@@ -137,11 +141,17 @@ function isConfigErrorReply(body: unknown): body is ConfigErrorReply {
   return typeof body === "object" && body !== null && Array.isArray((body as ConfigErrorReply).field_errors);
 }
 
+/**
+ * How the last save sent ended: stored, refused with field errors (422), failed (a run in progress, the engine stopped),
+ * overtaken by a newer change while it was on its way, or no save was sent at all.
+ */
+export type SaveOutcome = "saved" | "refused" | "failed" | "overtaken" | "none";
+
 export interface ConfigSaver {
   /** Saves *values* once no other change has come for the delay. */
   schedule: (values: Record<string, unknown>) => void;
-  /** Sends the waiting save now; resolves once the last save sent has had its reply passed on (at once when none was sent). */
-  flush: () => Promise<void>;
+  /** Sends the waiting save now; resolves with how the last save sent ended, once its reply is passed on ("none" when none was sent). */
+  flush: () => Promise<SaveOutcome>;
   /** Drops the waiting save and any reply still to come. */
   cancel: () => void;
 }
@@ -155,15 +165,21 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
   let timer: ReturnType<typeof setTimeout> | undefined;
   let latestChange = 0;
   let waitingSave: { values: Record<string, unknown>; change: number } | null = null;
-  let lastSave: Promise<void> = Promise.resolve();
-  const send = async (values: Record<string, unknown>, change: number) => {
+  let lastSave: Promise<SaveOutcome> = Promise.resolve("none");
+  const send = async (values: Record<string, unknown>, change: number): Promise<SaveOutcome> => {
     try {
       const reply = await save(values);
-      if (change === latestChange) dispatch({ type: "save_succeeded", reply });
+      if (change !== latestChange) return "overtaken";
+      dispatch({ type: "save_succeeded", reply });
+      return "saved";
     } catch (error) {
-      if (change !== latestChange) return;
-      if (error instanceof ApiError && error.status === 422 && isConfigErrorReply(error.body)) dispatch({ type: "save_rejected", reply: error.body });
-      else dispatch({ type: "save_failed", error });
+      if (change !== latestChange) return "overtaken";
+      if (error instanceof ApiError && error.status === 422 && isConfigErrorReply(error.body)) {
+        dispatch({ type: "save_rejected", reply: error.body });
+        return "refused";
+      }
+      dispatch({ type: "save_failed", error });
+      return "failed";
     }
   };
   const sendWaitingSave = () => {
@@ -192,7 +208,8 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
 /**
  * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project
  * starts its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown.
- * *flushSave* sends a waiting change at once and resolves when its reply is in the form, for a run that must use it.
+ * *flushSave* sends a waiting change at once and resolves, with how the save ended, when its reply is in the form, for a run
+ * that must use it.
  */
 export function useSettingsForm(token: string, project: string, start: FormStart) {
   const [form, dispatch] = useReducer(formReducer, start, initialFormState);
@@ -225,6 +242,6 @@ export function useSettingsForm(token: string, project: string, start: FormStart
     if (form.changeCount > 0) saver.current?.schedule(valuesToSend(form));
   }, [form.changeCount]);
 
-  const flushSave = useCallback(() => saver.current?.flush() ?? Promise.resolve(), []);
+  const flushSave = useCallback((): Promise<SaveOutcome> => saver.current?.flush() ?? Promise.resolve("none"), []);
   return { form, dispatch, flushSave, pendingSave: form.pendingSave };
 }

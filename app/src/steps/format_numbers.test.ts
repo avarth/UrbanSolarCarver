@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import { formatNumber, formatPercent, formattedNumber, groupedDigits } from "./format_numbers";
 
-const THIN = " ";       // narrow no-break space, between groups of digits
-const NBSP = " ";       // no-break space, before the unit
+const THIN = "\u202f";       // narrow no-break space, between groups of digits
+const NBSP = "\u00a0";       // no-break space, before the unit
 
 test("numbers use narrow no-break spaces", () => {
   expect(formatNumber(31400, "m³")).toBe(`31${THIN}400${NBSP}m³`);

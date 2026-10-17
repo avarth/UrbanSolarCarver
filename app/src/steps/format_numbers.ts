@@ -1,8 +1,8 @@
 // Numbers in the interface (UX 9): digits grouped by a narrow no-break space ("31 400"), the unit after a no-break space
 // ("31 400 m³"), so neither a number nor its unit is split across lines; percentages whole in the panel.
 
-const DIGIT_GROUP_SEPARATOR = " ";     // narrow no-break space
-const UNIT_SEPARATOR = " ";            // no-break space
+const DIGIT_GROUP_SEPARATOR = "\u202f";     // narrow no-break space
+const UNIT_SEPARATOR = "\u00a0";            // no-break space
 
 /** The digits of a whole number in groups of three: 690807104 as "690 807 104". */
 export function groupedDigits(count: number): string {

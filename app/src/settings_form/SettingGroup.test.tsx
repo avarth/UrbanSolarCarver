@@ -88,9 +88,9 @@ test("the tooltip opens on hover, focus and click, closes with Escape, and gives
   act(() => { infoButton.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); });
   const tooltip = rendered.container.querySelector("[role='tooltip']")!;
   expect(tooltip.textContent).toContain("Edge of the cubes the volume is divided into.");
-  expect(tooltip.textContent).toContain("Config name: voxel_size, default 1.0 m");
+  expect(tooltip.textContent).toContain("Config name: voxel_size, default 1.0\u00a0m");
   expect(tooltip.querySelector("code")!.textContent).toBe("voxel_size");
-  expect(tooltip.textContent).toContain("62 voxels per side, 238 328 in total");
+  expect(tooltip.textContent).toContain("62 voxels per side, 238\u202f328 in total");
   expect(infoButton.getAttribute("aria-expanded")).toBe("true");
   pressEscape(infoButton);
   expect(rendered.container.querySelector("[role='tooltip']")).toBeNull();

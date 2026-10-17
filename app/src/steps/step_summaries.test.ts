@@ -1,8 +1,8 @@
 import { expect, test } from "vitest";
 import { stepMark, stepSummary, type PipelineStage, type ProjectViewState, type StageState } from "./step_summaries";
 
-const THIN = " ";
-const NBSP = " ";
+const THIN = "\u202f";
+const NBSP = "\u00a0";
 
 interface StateOverrides {
   maxVolume?: number;
@@ -55,9 +55,9 @@ test("the inputs summary counts files per role and names what is missing", () =>
 });
 
 test("the settings summary gives the period and the voxel size, or the count of settings to fix", () => {
-  expect(stepSummary("settings", stateWith({}))).toBe(`21 Dec, 10 to 14 h; 1${NBSP}m voxels`);
+  expect(stepSummary("settings", stateWith({}))).toBe(`21 Dec, 10 to 14\u00a0h; 1${NBSP}m voxels`);
   expect(stepSummary("settings", stateWith({ voxelSize: 0.5, analysisPeriod: { startMonth: 10, startDay: 15, startHour: 7, endMonth: 4, endDay: 15, endHour: 19 } })))
-    .toBe(`15 Oct to 15 Apr, 7 to 19 h; 0.5${NBSP}m voxels`);
+    .toBe(`15 Oct to 15 Apr, 7 to 19${NBSP}h; 0.5${NBSP}m voxels`);
   expect(stepSummary("settings", stateWith({ mode: "daylight", analysisPeriod: null, voxelSize: 2 }))).toBe(`2${NBSP}m voxels`);
   expect(stepSummary("settings", stateWith({ settingsToFix: 1 }))).toBe("1 setting to fix");
 });
@@ -66,6 +66,7 @@ test("the carving, envelope and export summaries follow the stage status", () =>
   expect(stepSummary("carving", stateWith({}))).toBe("Not run yet");
   expect(stepSummary("carving", stateWith({ keptPercent: 61.2, stages: { thresholding: "current" } }))).toBe(`61${NBSP}% kept`);
   expect(stepSummary("carving", stateWith({ keptPercent: 61.2, stages: { thresholding: "out_of_date" } }))).toBe("Out of date");
+  expect(stepSummary("carving", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("Out of date");     // no run summary read
   expect(stepSummary("envelope_and_massing", stateWith({}))).toBe("Not built yet");
   expect(stepSummary("envelope_and_massing", stateWith({ totalFloorArea: 4820, storeys: 7, stages: { exporting: "out_of_date", massing: "current" } }))).toBe("Out of date");
   expect(stepSummary("export", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("Ready");

@@ -4,7 +4,7 @@
 import { useId } from "react";
 import type { HealthReply } from "../api_client/client";
 import { messages } from "../messages";
-import type { FormState } from "../settings_form/form_state";
+import type { FormState, SaveOutcome } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, settingsForStep, settingView } from "../settings_form/presentation";
 import { WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
@@ -42,6 +42,18 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
   // A warm-up that failed blocks nothing: a run then reports the problem itself (the service's warm-up says the same).
   if (conditions.warmUpState === null || conditions.warmUpState === "not_started" || conditions.warmUpState === "running") return messages.runButtonWaitsForGpu;
   return null;
+}
+
+/**
+ * Saves a change still waiting, then starts the run only when the settings it will read are the ones the form shows: not
+ * after a refused or failed save, nor when a newer change overtook it (Run analysis is pressed again once that has landed).
+ * Resolves with whether the run was started.
+ */
+export async function runAnalysisAfterSaving(flushSave: () => Promise<SaveOutcome>, startRun: () => void): Promise<boolean> {
+  const outcome = await flushSave();
+  if (outcome !== "saved" && outcome !== "none") return false;
+  startRun();
+  return true;
 }
 
 /** Field errors and step errors together: the count of the step's "settings to fix". */

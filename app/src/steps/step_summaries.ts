@@ -73,8 +73,8 @@ function settingsSummary(state: ProjectViewState): string {
 
 function carvingSummary(state: ProjectViewState): string {
   const carving = state.stages.thresholding;
+  if (carving === "out_of_date") return messages.outOfDateSummary;     // with or without the summary of that carving
   if (carving === "missing" || state.keptPercent === null) return messages.notRunYet;
-  if (carving === "out_of_date") return messages.outOfDateSummary;
   return messages.keptShare(formatPercent(state.keptPercent));
 }
 

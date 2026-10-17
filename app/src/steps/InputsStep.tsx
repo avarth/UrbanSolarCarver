@@ -31,6 +31,8 @@ interface InputBoxProps {
   onRemoveFile: RemoveInputFile;
   /** Why files cannot be added or removed now (a run is in progress); null when they can. */
   disabledReason: string | null;
+  /** The weather box under the mode tiles, where the chosen mode needs the file: not titled optional there. */
+  weatherNeeded?: boolean;
 }
 
 const TITLES: Record<InputRole, string> = {
@@ -48,7 +50,7 @@ function RemoveIcon() {
 }
 
 /** One input box: dashed and with its hint while empty, solid with one row per file once it has files. */
-export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason }: InputBoxProps) {
+export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -100,7 +102,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
       <input ref={picker} type="file" hidden multiple={!isWeather} accept={isWeather ? WEATHER_FILE_TYPE : MESH_FILE_TYPES}
              onChange={(event) => { void add(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
       <div className="input-box-title-row">
-        <h3 id={titleId} className="input-box-title">{TITLES[role]}</h3>
+        <h3 id={titleId} className="input-box-title">{isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role]}</h3>
         {filled ? addButton : <span className="input-box-required">{isWeather ? messages.weatherFileExtension : messages.requiredInput}</span>}
       </div>
       {!filled && (

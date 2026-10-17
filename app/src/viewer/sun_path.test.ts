@@ -5,7 +5,7 @@ test("sun path objects: two lines per day and one sun per marker", () => {
   const day = {date: "12-21", day_path: [[1, 0, 0.1], [0, -1, 0.4], [-1, 0, 0.1]], period_path: [[0.3, -1, 0.4], [-0.3, -1, 0.4]],
                markers: [{hour: 10, vector: [0.3, -1, 0.4]}, {hour: 12, vector: [0, -1, 0.45]}]};
   const objects = sunPathObjects({days: [day]}, {centre: [0, 0, 0], radius: 54});
-  expect(objects.lines).toHaveLength(2); expect(objects.markers.map(m => m.label)).toEqual(["10 h", "12 h"]);
+  expect(objects.lines).toHaveLength(2); expect(objects.markers.map(m => m.label)).toEqual(["10\u00a0h", "12\u00a0h"]);
 });
 
 test("points lie on the hemisphere around its centre", () => {
@@ -31,6 +31,6 @@ test("a period over midnight is drawn as two runs, so its early and its evening 
 
 test("sun path legend names the days and the hours with a sun", () => {
   const day = (date: string) => ({date, day_path: [], period_path: [], markers: [10, 12, 14].map(hour => ({hour, vector: [0, 0, 1]}))});
-  expect(sunPathLegend({days: [day("12-21")]})).toBe("Sun path, 21 Dec; sun at 10, 12 and 14 h");
-  expect(sunPathLegend({days: [day("06-01"), day("08-31")]})).toBe("Sun path, 1 Jun and 31 Aug; sun at 10, 12 and 14 h");
+  expect(sunPathLegend({days: [day("12-21")]})).toBe("Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h");
+  expect(sunPathLegend({days: [day("06-01"), day("08-31")]})).toBe("Sun path, 1 Jun and 31 Aug; sun at 10, 12 and 14\u00a0h");
 });

@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { InputsStep, inputsSizeText, type AddInputFiles } from "./InputsStep";
+import { InputBox, InputsStep, inputsSizeText, type AddInputFiles } from "./InputsStep";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -50,12 +50,12 @@ test("filled boxes: a row per file with its triangle count or location, a named 
   expect(testSurfaces.classList.contains("input-box-filled")).toBe(true);
   expect(testSurfaces.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
   expect([...testSurfaces.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbor_roofs.ply", "neighbor_windows.ply"]);
-  expect(testSurfaces.querySelector(".input-file-detail")!.textContent).toBe("2 040 triangles");
+  expect(testSurfaces.querySelector(".input-file-detail")!.textContent).toBe("2\u202f040 triangles");
   expect(testSurfaces.querySelector('[aria-label="Remove neighbor_windows.ply"]')).not.toBeNull();
   const weather = boxTitled("Weather file (optional)");
   expect(weather.querySelector(".input-box-title-row button")!.textContent).toBe("Replace");
   expect(weather.querySelector(".input-file-detail")!.textContent).toBe("Golden, CO, USA");
-  expect(rendered.container.querySelector(".inputs-size")!.textContent).toBe("Size of all inputs together52 × 44 × 30 m");
+  expect(rendered.container.querySelector(".inputs-size")!.textContent).toBe("Size of all inputs together52 × 44 × 30\u00a0m");
 });
 
 test("files dropped on a box are added to its role, and a file that cannot be read is named in the box", async () => {
@@ -83,5 +83,11 @@ test("during a run adding and removing are disabled, with the reason", () => {
 });
 
 test("the size line rounds to whole metres from 10 m up", () => {
-  expect(inputsSizeText([[0, 0, 0], [1250.4, 8.25, 0.5]])).toBe("1 250 × 8.25 × 0.5 m");
+  expect(inputsSizeText([[0, 0, 0], [1250.4, 8.25, 0.5]])).toBe("1\u202f250 × 8.25 × 0.5\u00a0m");
+});
+
+test("the weather box where the chosen mode needs the file is not titled optional", () => {
+  rendered = renderForTest(<InputBox role="weather" files={[]} weatherLocation={null} weatherHint={WEATHER_HINT} onAddFiles={async () => []}
+                                     onRemoveFile={async () => null} disabledReason={null} weatherNeeded />);
+  expect(rendered.container.querySelector("h3")!.textContent).toBe("Weather file");
 });

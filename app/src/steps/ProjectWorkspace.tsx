@@ -18,7 +18,7 @@ import { hemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ModeStep } from "./ModeStep";
-import { RunAnalysisButton, runAnalysisBlocker, SettingsStep, settingsToFixCount } from "./SettingsStep";
+import { RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SettingsStep, settingsToFixCount } from "./SettingsStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
   plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type AnalysisPeriod, type PipelineStage, type ProjectViewState,
@@ -118,7 +118,7 @@ function inputProblemText(error: unknown, fileName: string): string {
 
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { token, project, modes, warmUpState, runActive, onServiceProblem } = props;
-  const formStart = useMemo(() => ({ schema: props.schema, modes, settings: project.settings, gridPlan: null }), []);
+  const formStart = useMemo(() => ({ schema: props.schema, modes, settings: project.settings, gridPlan: project.grid_plan }), []);
   const { form, dispatch, flushSave } = useSettingsForm(token, project.name, formStart);
   const [files, setFiles] = useState<Record<InputRole, InputFileInfo[]>>({
     max_volume: project.inputs.max_volume ?? [], test_surfaces: project.inputs.test_surfaces ?? [], weather: project.inputs.weather ?? [],
@@ -132,8 +132,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [viewStep, setViewStep] = useState<StepName>("inputs");     // the step whose layers the view shows: the last one opened
   const [sunPath, setSunPath] = useState<SunPath | null>(null);
   const [framingRequest, setFramingRequest] = useState(0);
-  const emptyStatePicker = useRef<HTMLInputElement>(null);
-  const [emptyStateProblems, setEmptyStateProblems] = useState<string[]>([]);
+  const panel = useRef<HTMLElement>(null);
+  const [addFilesRequest, setAddFilesRequest] = useState(0);
 
   const modeInfo = modes.find((candidate) => candidate.name === form.mode);
   const modeNeedsWeatherFile = modeInfo?.needs_epw ?? false;
@@ -248,7 +248,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const weatherHint = messages.weatherNeededFor(listedWithAnd(modes.filter((mode) => mode.needs_epw).map((mode) => plainModeName(mode.name))));
   const weatherBox = (
     <InputBox role="weather" files={files.weather} weatherLocation={weatherLocation} weatherHint={weatherHint} onAddFiles={addFiles}
-              onRemoveFile={removeFile} disabledReason={inputsDisabledReason} />
+              onRemoveFile={removeFile} disabledReason={inputsDisabledReason} weatherNeeded />
   );
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
@@ -277,34 +277,27 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     runActive, maxVolumeFiles: viewState.maxVolumeFiles, testSurfaceFiles: viewState.testSurfaceFiles, modeNeedsWeatherFile, hasWeatherFile,
     form, warmUpState,
   });
-  const runAnalysis = async () => {
-    await flushSave();      // the run reads the stored settings, so a change still waiting is saved first
-    props.onRunAnalysis();
-  };
 
+  // The empty view's "Add files" leads to the Inputs step, where each role has its own box: the focus goes to the first one's button.
+  useEffect(() => {
+    if (addFilesRequest > 0) panel.current?.querySelector<HTMLButtonElement>(".inputs-step .input-add")?.focus();
+  }, [addFilesRequest]);
   const hasNoMeshInputs = files.max_volume.length === 0 && files.test_surfaces.length === 0;
-  const addFromEmptyView = async (chosenFiles: File[]) => {
-    openTheStep("inputs");
-    setEmptyStateProblems(await addFiles("max_volume", chosenFiles));
-  };
   const emptyViewContent = hasNoMeshInputs && (
     <div className="viewer-empty-state">
       <p>{messages.noInputsYet}</p>
-      <input ref={emptyStatePicker} type="file" hidden multiple accept=".ply,.obj,.stl,.glb"
-             onChange={(event) => { void addFromEmptyView(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
-      <button type="button" className="primary-button" disabled={inputsDisabledReason !== null} onClick={() => emptyStatePicker.current?.click()}>
+      <button type="button" className="primary-button" onClick={() => { openTheStep("inputs"); setAddFilesRequest((count) => count + 1); }}>
         {messages.addFiles}
       </button>
       <button type="button" className="link-button" onClick={props.onShowProjects}>{messages.orTryAnExample}</button>
-      {emptyStateProblems.map((problem) => <p key={problem} className="setting-error">{problem}</p>)}
     </div>
   );
 
   return (
     <div className="workspace">
-      <aside className="workspace-panel">
+      <aside ref={panel} className="workspace-panel">
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}
-                       pinnedAction={openStep === "settings" ? <RunAnalysisButton blocker={runBlocker} onRunAnalysis={() => void runAnalysis()} /> : null} />
+                       pinnedAction={openStep === "settings" ? <RunAnalysisButton blocker={runBlocker} onRunAnalysis={() => void runAnalysisAfterSaving(flushSave, props.onRunAnalysis)} /> : null} />
       </aside>
       <section className="workspace-view">
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaces} sunPath={sunPath}

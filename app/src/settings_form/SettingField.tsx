@@ -2,6 +2,7 @@
 // and, after a rejected save, the message under it with a warning icon and the field outlined in the error colour.
 import { useId, type ReactNode } from "react";
 import { messages } from "../messages";
+import { withUnit } from "../steps/format_numbers";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
   ANALYSIS_PERIOD_FIELDS, fromDisplayValue, thresholdIsShadowToleratedIn, toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
@@ -59,21 +60,20 @@ function rangeOf(property: SchemaProperty | undefined): { minimum?: number; maxi
 /** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */
 export function defaultTextOf(view: SettingView, form: FormState, isShadowTolerated: boolean): string {
   const unit = unitOfValue(view);
-  const withUnit = (text: string) => (unit ? `${text} ${unit}` : text);
   if (view.widget === "analysis_period") {
     const period = ANALYSIS_PERIOD_FIELDS.map((name) => defaultValue(form, name));
     return period.every((value) => typeof value === "number") ? messages.periodText(...(period as [number, number, number, number, number, number]))
       : messages.automatic;
   }
   const value = toDisplayValue(view.name, defaultValue(form, view.name));
-  if (view.widget === "threshold" && value === null) return isShadowTolerated ? withUnit("0") : messages.carvingRuleChoices.carve_fraction;
+  if (view.widget === "threshold" && value === null) return isShadowTolerated ? withUnit("0", unit) : messages.carvingRuleChoices.carve_fraction;
   if (value === null) return messages.automatic;
   if (typeof value === "boolean") return value ? messages.switchedOn : messages.switchedOff;
   if (typeof value === "string") return CHOICE_NAMES[view.name]?.[value] ?? value;
-  if (Array.isArray(value)) return withUnit(value.join(", "));
+  if (Array.isArray(value)) return withUnit(value.join(", "), unit);
   // A decimal setting reads like the engine's own default (1.0, not 1); a whole-number one stays whole.
   const isDecimalSetting = typesOf(form.schemaProperties[view.name]).includes("number") && view.display !== "percent";
-  return withUnit(typeof value === "number" && isDecimalSetting && Number.isInteger(value) ? value.toFixed(1) : String(value));
+  return withUnit(typeof value === "number" && isDecimalSetting && Number.isInteger(value) ? value.toFixed(1) : String(value), unit);
 }
 
 export function WarningIcon() {

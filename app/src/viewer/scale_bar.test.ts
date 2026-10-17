@@ -16,7 +16,7 @@ test("the scale bar stays between 100 and 250 px at any zoom", () => {
 });
 
 test("the scale bar label reads 0 to the length", () => {
-  expect(scaleBarLabel(20)).toBe("0 to 20 m");
-  expect(scaleBarLabel(0.5)).toBe("0 to 0.5 m");
-  expect(scaleBarLabel(1000)).toBe("0 to 1 000 m");
+  expect(scaleBarLabel(20)).toBe("0 to 20\u00a0m");
+  expect(scaleBarLabel(0.5)).toBe("0 to 0.5\u00a0m");
+  expect(scaleBarLabel(1000)).toBe("0 to 1\u202f000\u00a0m");
 });

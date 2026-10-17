@@ -18,8 +18,8 @@ test("the engine stopped and access lost messages show the command as code, with
 
 test("the grid over budget message groups digits and gives the voxel size to use", () => {
   expect(messages.gridOverBudget(884, 690807104, 500000000, 0.07)).toEqual({
-    description: "This grid would have 884 voxels per side, 690 807 104 in total. The analysis can handle up to 500 000 000.",
-    advice: "Use 0.07 m or more.",
+    description: "This grid would have 884 voxels per side, 690\u202f807\u202f104 in total. The analysis can handle up to 500\u202f000\u202f000.",
+    advice: "Use 0.07\u00a0m or more.",
   });
 });
 
