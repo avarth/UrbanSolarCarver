@@ -1,0 +1,76 @@
+// The data colours of the 3D view (UX 10.1): cividis for scores, the sun ramp for sky patch weights, the storey ramp for the
+// building massing. The theme colours themselves live in theme/tokens.css and are read from there.
+
+export type ViewportTheme = "light" | "dark";
+
+// matplotlib's cividis colormap, its 256 entries (matplotlib 3.10, colormaps["cividis"]).
+const CIVIDIS_HEX = (
+  "00224e 00234f 002451 002553 002554 002656 002758 002859 00285b 00295d 002a5f 002a61 002b62 002c64 002c66 002d68 " +
+  "002e6a 002e6c 002f6d 00306f 003070 003170 003171 013271 053371 083370 0c3470 0f3570 123570 143670 163770 18376f " +
+  "1a386f 1c396f 1e3a6f 203a6f 213b6e 233c6e 243c6e 263d6e 273e6e 293f6e 2a3f6d 2b406d 2d416d 2e416d 2f426d 31436d " +
+  "32436d 33446d 34456c 35456c 36466c 38476c 39486c 3a486c 3b496c 3c4a6c 3d4a6c 3e4b6c 3f4c6c 404c6c 414d6c 424e6c " +
+  "434e6c 444f6c 45506c 46516c 47516c 48526c 49536c 4a536c 4b546c 4c556c 4d556c 4e566c 4f576c 50576c 51586d 52596d " +
+  "535a6d 545a6d 555b6d 555c6d 565c6d 575d6d 585e6d 595e6e 5a5f6e 5b606e 5c616e 5d616e 5e626e 5e636f 5f636f 60646f " +
+  "61656f 62656f 636670 646770 656870 656870 666970 676a71 686a71 696b71 6a6c71 6b6d72 6c6d72 6c6e72 6d6f72 6e6f73 " +
+  "6f7073 707173 717274 727274 727374 737475 747475 757575 767676 777776 777777 787877 797977 7a7a78 7b7a78 7c7b78 " +
+  "7d7c78 7e7c78 7e7d78 7f7e78 807f78 817f78 828079 838179 848279 858279 868379 878478 888578 898578 8a8678 8b8778 " +
+  "8c8878 8d8878 8e8978 8f8a78 908b78 918b78 928c78 928d78 938e78 948e77 958f77 969077 979177 989277 999277 9a9376 " +
+  "9b9476 9c9576 9d9576 9e9676 9f9775 a09875 a19975 a29975 a39a74 a49b74 a59c74 a69c74 a79d73 a89e73 a99f73 aaa073 " +
+  "aba072 aca172 ada272 aea371 afa471 b0a571 b1a570 b3a670 b4a76f b5a86f b6a96f b7a96e b8aa6e b9ab6d baac6d bbad6d " +
+  "bcae6c bdae6c beaf6b bfb06b c0b16a c1b26a c2b369 c3b369 c4b468 c5b568 c6b667 c7b767 c8b866 c9b965 cbb965 ccba64 " +
+  "cdbb63 cebc63 cfbd62 d0be62 d1bf61 d2c060 d3c05f d4c15f d5c25e d6c35d d7c45c d9c55c dac65b dbc75a dcc859 ddc858 " +
+  "dec958 dfca57 e0cb56 e1cc55 e2cd54 e4ce53 e5cf52 e6d051 e7d150 e8d24f e9d34e ead34c ebd44b edd54a eed649 efd748 " +
+  "f0d846 f1d945 f2da44 f3db42 f5dc41 f6dd3f f7de3e f8df3c f9e03a fbe138 fce236 fde334 fee434 fee535 fee636 fee838"
+).split(" ").map((hex) => `#${hex}`);
+
+const STOREY_RAMP_START = "#dfe6ea";      // UX 10.1: storeys run from this light grey to slate
+const STOREY_RAMP_END = "#2f5d7c";
+
+function clampedShare(t: number): number {
+  return Math.min(1, Math.max(0, Number.isFinite(t) ? t : 0));
+}
+
+/** matplotlib's cividis at t in [0, 1], looked up the way matplotlib does (256 bins). */
+export function cividis(t: number): string {
+  return CIVIDIS_HEX[Math.min(CIVIDIS_HEX.length - 1, Math.floor(clampedShare(t) * CIVIDIS_HEX.length))];
+}
+
+/** The score range the kept voxels are coloured over: 0 to the cutoff, the range of the kept voxels (UX 8.2). */
+export function keptScoreRange(thresholdValue: number): [number, number] {
+  return [0, thresholdValue];
+}
+
+/** The value of a --colour-* token of theme/tokens.css. */
+export function colourToken(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(`--colour-${name}`).trim();
+}
+
+export function viewportBackground(theme: ViewportTheme): string {
+  return colourToken(`viewport-${theme}`);
+}
+
+function rgbOf(hex: string): [number, number, number] {
+  const digits = hex.replace("#", "");
+  return [0, 2, 4].map((start) => parseInt(digits.slice(start, start + 2), 16)) as [number, number, number];
+}
+
+function hexOf(rgb: number[]): string {
+  return `#${rgb.map((channel) => Math.round(channel).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** The colour a share t of the way from one colour to another, mixed in sRGB. */
+function mixedColour(from: string, to: string, t: number): string {
+  const share = clampedShare(t);
+  const start = rgbOf(from), end = rgbOf(to);
+  return hexOf(start.map((channel, index) => channel + (end[index] - channel) * share));
+}
+
+/** The sky dome ramp: the viewport background at 0, the sun colour at 1. */
+export function sunRamp(t: number, viewportTheme: ViewportTheme): string {
+  return mixedColour(viewportBackground(viewportTheme), colourToken("sun"), t);
+}
+
+/** The colour of a storey (0 for the ground storey) of the building massing. */
+export function storeyColour(storeyIndex: number, storeyCount: number): string {
+  return mixedColour(STOREY_RAMP_START, STOREY_RAMP_END, storeyCount > 1 ? storeyIndex / (storeyCount - 1) : 0);
+}

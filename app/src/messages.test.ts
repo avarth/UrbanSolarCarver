@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { messages, plainText } from "./messages";
+import { dayAndMonth, formattedNumber, listedWithAnd, messages, plainText } from "./messages";
 
 test("interface messages follow the copy rules", () => {
   const text = JSON.stringify(Object.values(messages).map(m => typeof m === "function" ? (m as (...values: number[]) => unknown)(1, 2, 3, 4) : m));
@@ -33,4 +33,11 @@ test("the device lines of UX 5.1 and 6.1", () => {
 test("the count of settings to fix agrees with the number", () => {
   expect(messages.settingsToFix(1)).toBe("1 setting to fix");
   expect(messages.settingsToFix(3)).toBe("3 settings to fix");
+});
+
+test("numbers, dates and lists for the 3D view", () => {
+  expect([1250.4, 1.5, 0.0123, 20, -100, 1000].map(formattedNumber)).toEqual(["1 250", "1.5", "0.012", "20", "-100", "1 000"]);
+  expect(dayAndMonth("12-21")).toBe("21 Dec");
+  expect(listedWithAnd(["10", "12", "14"])).toBe("10, 12 and 14");
+  expect(listedWithAnd(["21 Dec"])).toBe("21 Dec");
 });

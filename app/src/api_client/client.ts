@@ -17,7 +17,7 @@ export type CancelRunReply = Schemas["CancelRunReply"];
 export type RunSummary = Schemas["RunSummary"];
 export type SkyDome = Schemas["SkyDome"];
 
-const TOKEN_HEADER = "X-USC-Token";
+export const TOKEN_HEADER = "X-USC-Token";
 const TOKEN_QUERY_PARAMETER = "token";
 const STORED_TOKEN_KEY = "usc.token";
 
