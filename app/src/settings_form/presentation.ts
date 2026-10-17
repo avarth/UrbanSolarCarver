@@ -87,9 +87,10 @@ export function unitOfValue(view: SettingView): string {
  * "tilted_plane_angle_deg.float"); null when the form shows no such setting ("mode").
  */
 export function presentedSettingOf(field: string): string | null {
-  if (field in SETTING_PRESENTATIONS) return field;
+  // Own keys only: "constructor" or "toString" are in every object through its prototype, and are no setting.
+  if (Object.hasOwn(SETTING_PRESENTATIONS, field)) return field;
   const settingName = field.split(".")[0];
-  return settingName in SETTING_PRESENTATIONS ? settingName : null;
+  return Object.hasOwn(SETTING_PRESENTATIONS, settingName) ? settingName : null;
 }
 
 /** The fold under a group's essential settings; a group without essential settings is one fold titled with the group name. */

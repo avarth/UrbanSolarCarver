@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { fromDisplayValue, settingIsReadBy, settingsForStep, toDisplayValue } from "./presentation";
+import { fromDisplayValue, presentedSettingOf, settingIsReadBy, settingsForStep, toDisplayValue } from "./presentation";
 
 const names = (views: { name: string }[]) => views.map((view) => view.name);
 
@@ -77,4 +77,12 @@ test("which modes read a setting", () => {
   expect(settingIsReadBy("start_day", "daylight")).toBe(false);
   expect(settingIsReadBy("carve_fraction", "time-based")).toBe(false);
   expect(settingIsReadBy("threshold", "tilted_plane")).toBe(false);
+});
+
+test("a field the engine names finds its setting by the name or the part before a dot, never by a name every object has", () => {
+  expect(presentedSettingOf("voxel_size")).toBe("voxel_size");
+  expect(presentedSettingOf("threshold.value")).toBe("threshold");
+  expect(presentedSettingOf("mode")).toBeNull();
+  expect(presentedSettingOf("constructor")).toBeNull();
+  expect(presentedSettingOf("toString.value")).toBeNull();
 });
