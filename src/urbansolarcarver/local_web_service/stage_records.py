@@ -12,6 +12,7 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
@@ -53,7 +54,7 @@ def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
             status[stage] = "missing"
         elif record.inputs_revision != project_json.inputs_revision:
             status[stage] = "out_of_date"
-        elif stage in stages_to_rerun(store.config_from_settings(name, record.config), current_config, [stage]):
+        elif _settings_changed(store, name, stage, record, current_config):
             status[stage] = "out_of_date"
         elif stage in UPSTREAM_STAGE and not _reads_current_upstream(
                 status[UPSTREAM_STAGE[stage]], project_json.stage_records.get(UPSTREAM_STAGE[stage]), manifest):
@@ -61,6 +62,15 @@ def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
         else:
             status[stage] = "current"
     return status
+
+
+def _settings_changed(store: ProjectStore, name: str, stage: str, record: StageRecord, current_config: UserConfig) -> bool:
+    """Whether the stage would run again with the current settings; a record that no longer builds a valid config counts as changed."""
+    try:
+        recorded_config = store.config_from_settings(name, record.config)
+    except ConfigError:     # e.g. an engine update since the run removed or newly validates a setting
+        return True
+    return stage in stages_to_rerun(recorded_config, current_config, [stage])
 
 
 def _reads_current_upstream(upstream_state: StageState, upstream_record: StageRecord | None, manifest: dict) -> bool:

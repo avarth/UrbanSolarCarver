@@ -6,6 +6,7 @@ for each stage it runs, as the real stages do.
 import json
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -67,26 +68,25 @@ class FakeEngine:
 
 
 class FakeSession:
-    released = 0
-
     def __init__(self, device="cpu"):
         self.device = device
 
     def release_memory(self):
-        FakeSession.released += 1
+        pass
 
 
 def make_worker(store, handle_request=None, device="cpu") -> RunWorker:
     return RunWorker(store, device, handle_request=handle_request or FakeEngine(), session_factory=FakeSession)
 
 
-def wait_until_finished(worker: RunWorker, run_id: str) -> list[dict]:
-    """All events of a run once it has finished."""
+def wait_until_finished(worker: RunWorker, run_id: str, deadline_seconds: float = 20.0) -> list[dict]:
+    """All events of a run once it has finished; fails the test when the run does not finish within the deadline."""
     state = worker.run_state(run_id)
+    deadline = time.monotonic() + deadline_seconds
     seen = 0
     while not state.finished:
-        seen += len(state.wait_for_events(seen, 10.0))
-        assert seen or state.finished, "the run produced no event within 10 seconds"
+        assert time.monotonic() < deadline, f"the run did not finish within {deadline_seconds} seconds"
+        seen += len(state.wait_for_events(seen, 0.2))
     return list(state.events)
 
 
@@ -215,6 +215,14 @@ def test_a_stage_without_its_manifest_is_missing_and_its_dependants_out_of_date(
     (store.open(name) / "run" / "thresholding" / "manifest.json").unlink()
     assert stage_status(store, name) == {
         "preprocessing": "current", "thresholding": "missing", "exporting": "out_of_date", "massing": "out_of_date"}
+
+
+def test_a_record_whose_settings_no_longer_build_a_config_is_out_of_date(built_project):
+    store, name, _worker = built_project
+    project_json = store.read_project_json(name)
+    project_json.stage_records["massing"].config["floor_height"] = -3.0     # a value the engine now refuses
+    store.write_project_json(name, project_json)
+    assert stage_status(store, name) == {**ALL_CURRENT, "massing": "out_of_date"}
 
 
 def test_a_stage_whose_manifest_is_not_json_is_missing(built_project):

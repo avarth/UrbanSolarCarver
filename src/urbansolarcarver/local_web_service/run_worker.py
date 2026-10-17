@@ -146,32 +146,55 @@ class RunWorker:
             return StartRunReply(status="started", run_id=state.run_id, stages=choice.stages)
 
     def _run(self, state: RunState, context: RunContext, produce_for_engine: list[str], settings: dict, inputs_revision: int) -> None:
-        """The thread body: run the engine, record the stages on success, and end the event log with one final event."""
+        """The thread body: run the engine, record the stages on success, and end the event log with one final event.
+
+        Whatever goes wrong while finishing, the worker is released and the readers get a final event: a run that
+        could not end would block every later start.
+        """
         issues_forwarder = _IssuesForwarder(state, context)
         context.on_progress = issues_forwarder.forward_progress
+        final_event = None
+        try:
+            final_event = self._final_event_of_run(state, context, produce_for_engine, settings, inputs_revision)
+            issues_forwarder.forward_new_issues()
+        except Exception as error:
+            _log.exception("Finishing a run of project '%s' failed", state.project)
+            if final_event is None:
+                final_event = _run_failed_event(type(error).__name__, str(error))
+        finally:
+            self._release_session_memory()
+            self._active = None     # before the final event: a reader that sees the run end can start the next one
+            state.finish(final_event or _run_failed_event("RunAborted", "The run stopped unexpectedly."))
+
+    def _final_event_of_run(self, state: RunState, context: RunContext, produce_for_engine: list[str],
+                            settings: dict, inputs_revision: int) -> dict:
+        """Run the engine and give the event that ends the run, whether it finished, was cancelled or failed."""
         try:
             self._call_engine(state, context, produce_for_engine)
             record_stages(self._store, state.project, state.stages, settings, inputs_revision)
-            final_event = {"type": "run_finished", "stages": state.stages,
-                           "files": _result_files(self._store.open(state.project) / RUN_FOLDER)}
+            return {"type": "run_finished", "stages": state.stages,
+                    "files": _result_files(self._store.open(state.project) / RUN_FOLDER)}
         except RunCancelled:
-            final_event = {"type": "run_cancelled"}
+            return {"type": "run_cancelled"}
         except StageChainError:
             _log.exception("A run of project '%s' found its earlier stages unusable", state.project)
             forget_stages(self._store, state.project, PIPELINE_STAGES)
-            final_event = _run_failed_event("StageChainError", STAGE_CHAIN_MESSAGE)
+            return _run_failed_event("StageChainError", STAGE_CHAIN_MESSAGE)
         except ConfigError as error:
-            final_event = _run_failed_event("ConfigError", str(error), [
+            return _run_failed_event("ConfigError", str(error), [
                 {"field": field_error.field, "message": field_error.message} for field_error in error.errors])
         except Exception as error:
             _log.exception("A run of project '%s' failed", state.project)
-            final_event = _run_failed_event(type(error).__name__, str(error))
-        finally:
-            if self._session is not None:
-                self._session.release_memory()
-        issues_forwarder.forward_new_issues()
-        self._active = None     # before the final event: a reader that sees the run end can start the next one
-        state.finish(final_event)
+            return _run_failed_event(type(error).__name__, str(error))
+
+    def _release_session_memory(self) -> None:
+        """Free unused compute memory; a failure (a CUDA fault, say) is logged and does not change how the run ended."""
+        if self._session is None:
+            return
+        try:
+            self._session.release_memory()
+        except Exception:
+            _log.exception("Releasing the compute memory after a run failed")
 
     def _call_engine(self, state: RunState, context: RunContext, produce_for_engine: list[str]) -> None:
         from ..engine_requests import RunRequest

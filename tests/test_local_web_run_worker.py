@@ -4,13 +4,15 @@ import threading
 import pytest
 
 from test_local_web_stage_records import (
-    ALL_CURRENT, ALL_MISSING, FakeEngine, FakeSession, change_settings, make_worker, project_with_inputs,
+    ALL_CURRENT, ALL_MISSING, FakeEngine, change_settings, make_worker, project_with_inputs,
     run_and_wait, wait_until_finished,
 )
 from urbansolarcarver.errors import ConfigError, ConfigFieldError, InputError, StageChainError
+from urbansolarcarver.local_web_service import run_worker as run_worker_module
 from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.run_worker import MissingInputs, RunConflict, RunWorker
 from urbansolarcarver.local_web_service.stage_records import choose_stages, stage_status
+from urbansolarcarver.stage_settings import PIPELINE_STAGES
 from urbansolarcarver.run_context import report_issue, run_context, stage_context
 
 
@@ -142,15 +144,28 @@ def test_a_finished_run_lists_the_result_files_that_exist(project_with_inputs):
         "exporting/export.ply", "massing/plates.json", "massing/plates.obj", "run_report.md"]}
 
 
+class CountingSession:
+    """A session that counts its releases; ``instances`` collects every one created."""
+
+    def __init__(self, instances):
+        self.released = 0
+        instances.append(self)
+
+    def release_memory(self):
+        self.released += 1
+
+
 def test_cancel_gives_run_cancelled_and_leaves_the_stages_missing(project_with_inputs):
     store, name = project_with_inputs
-    worker = make_worker(store, handle_request=WaitsForCancel())
+    released_sessions = []
+    worker = RunWorker(store, "cpu", handle_request=WaitsForCancel(),
+                       session_factory=lambda device: CountingSession(released_sessions))
     reply = start_blocked_run(worker, name, ["thresholding"])
     assert worker.cancel(reply.run_id)
     events = wait_until_finished(worker, reply.run_id)
     assert events[-1] == {"type": "run_cancelled"}
     assert stage_status(store, name) == ALL_MISSING
-    assert FakeSession.released > 0
+    assert released_sessions[0].released == 1
 
 
 def test_cancel_of_an_unknown_or_finished_run_is_false(project_with_inputs):
@@ -212,6 +227,46 @@ def test_failures_become_run_failed_events(project_with_inputs, error, error_typ
         assert stage_status(store, name)["thresholding"] == "missing" and stage_status(store, name)["preprocessing"] == "current"
     assert worker.active_project() is None
     next_run = worker.start(name, ["thresholding"])      # a failed run does not block the next one
+    assert next_run.status == "started"
+    wait_until_finished(worker, next_run.run_id)
+
+
+def test_a_failing_release_of_memory_does_not_block_the_worker(project_with_inputs):
+    store, name = project_with_inputs
+
+    class SessionThatFailsToRelease:
+        def release_memory(self):
+            raise RuntimeError("CUDA error")
+
+    worker = RunWorker(store, "cpu", handle_request=FakeEngine(), session_factory=lambda device: SessionThatFailsToRelease())
+    reply = run_and_wait(worker, name, ["thresholding"])
+    assert worker.run_state(reply.run_id).events[-1]["type"] == "run_finished"     # the run itself succeeded
+    assert worker.active_project() is None
+    assert run_and_wait(worker, name, ["exporting"]).status == "started"
+
+
+def test_a_failure_while_finishing_still_ends_the_run_and_frees_the_worker(project_with_inputs, monkeypatch):
+    store, name = project_with_inputs
+    run_and_wait(make_worker(store), name, ["thresholding"])
+    change_settings(store, name, carve_fraction=0.3)
+
+    def engine_with_broken_chain(request, session, context):
+        raise StageChainError("rerun preprocessing")
+
+    forget_all_stages = run_worker_module.forget_stages
+
+    def forget_stages_failing_for_the_whole_pipeline(store_, name_, stages):
+        if len(stages) == len(PIPELINE_STAGES):
+            raise OSError("disk error")
+        forget_all_stages(store_, name_, stages)
+
+    monkeypatch.setattr(run_worker_module, "forget_stages", forget_stages_failing_for_the_whole_pipeline)
+    worker = make_worker(store, handle_request=engine_with_broken_chain)
+    reply = run_and_wait(worker, name, ["thresholding"])
+    last_event = worker.run_state(reply.run_id).events[-1]
+    assert (last_event["type"], last_event["error_type"], last_event["message"]) == ("run_failed", "OSError", "disk error")
+    assert worker.active_project() is None
+    next_run = worker.start(name, ["thresholding"])
     assert next_run.status == "started"
     wait_until_finished(worker, next_run.run_id)
 
