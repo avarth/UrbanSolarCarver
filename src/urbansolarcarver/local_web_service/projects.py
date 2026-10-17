@@ -208,7 +208,7 @@ class ProjectStore:
             try:
                 if role != WEATHER_ROLE:
                     joined_temporary_path = self._write_joined_temporary_file(
-                        project_folder, role, self._load_stored_meshes(project_folder, role, remaining_names))
+                        project_folder, role, list(self._load_stored_meshes(project_folder, role, remaining_names).values()))
                 self._stored_file_path(project_folder, role, file_name).unlink(missing_ok=True)
                 if role != WEATHER_ROLE:
                     self._replace_joined_file(project_folder, role, joined_temporary_path)
@@ -305,7 +305,7 @@ class ProjectStore:
                 raise ProjectError(message.replace(repr(str(upload_path)), repr(clean_name)).replace(str(upload_path), clean_name),
                                    status_code=422) from error
             other_names = [recorded for recorded in recorded_names if recorded != stored_name]
-            meshes_by_name = dict(zip(other_names, self._load_stored_meshes(project_folder, role, other_names)))
+            meshes_by_name = self._load_stored_meshes(project_folder, role, other_names)
             meshes_by_name[stored_name] = uploaded_mesh
             joined_temporary_path = self._write_joined_temporary_file(
                 project_folder, role, [meshes_by_name[mesh_name] for mesh_name in sorted(meshes_by_name)])
@@ -318,12 +318,12 @@ class ProjectStore:
         recorded_names[stored_name] = len(uploaded_mesh.faces)
 
     @staticmethod
-    def _load_stored_meshes(project_folder: Path, role: str, file_names: list[str]) -> list[trimesh.Trimesh]:
-        """The meshes of recorded files in name order, or ProjectError when one cannot be read."""
-        meshes = []
+    def _load_stored_meshes(project_folder: Path, role: str, file_names: list[str]) -> dict[str, trimesh.Trimesh]:
+        """The meshes of recorded files by file name, in name order, or ProjectError when one cannot be read."""
+        meshes = {}
         for file_name in sorted(file_names):
             try:
-                meshes.append(load_mesh(str(project_folder / INPUTS_FOLDER / role / file_name)))
+                meshes[file_name] = load_mesh(str(project_folder / INPUTS_FOLDER / role / file_name))
             except InputError as error:
                 raise ProjectError(f"The {role} file '{file_name}' cannot be read, so the joined file was not rebuilt: {error}",
                                    status_code=422) from error

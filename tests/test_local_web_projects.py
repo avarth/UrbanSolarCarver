@@ -256,3 +256,22 @@ def test_uploads_from_two_threads_to_one_role_are_both_recorded(tmp_path):
     joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces.ply", force="mesh")
     assert len(joined.faces) == 24
     assert [path.name for path in (tmp_path / "p/inputs/joined").iterdir()] == ["test_surfaces.ply"]
+
+
+def _block_centres_x(joined_path):
+    joined = trimesh.load(joined_path, force="mesh")
+    centres = joined.triangles_center
+    return [round(float(centres[start:start + 12, 0].mean())) for start in range(0, len(centres), 12)]
+
+
+def test_joined_file_follows_sorted_file_names_whatever_the_upload_order(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    joined_path = tmp_path / "p/inputs/joined/test_surfaces.ply"
+    store.add_input("p", "test_surfaces", "b.ply", _box_bytes([100, 0, 5]))
+    store.add_input("p", "test_surfaces", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "test_surfaces", "c.ply", _box_bytes([200, 0, 5]))
+    assert _block_centres_x(joined_path) == [0, 100, 200]
+    store.remove_input("p", "test_surfaces", "a.ply")
+    assert _block_centres_x(joined_path) == [100, 200]
+    store.add_input("p", "test_surfaces", "a.ply", _box_bytes([0, 0, 5]))
+    assert _block_centres_x(joined_path) == [0, 100, 200]
