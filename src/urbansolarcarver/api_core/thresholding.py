@@ -25,7 +25,8 @@ from ._diagnostics import (
 
 # Everything thresholding writes into its folder, besides manifest.json.
 _THRESHOLDING_OUTPUTS = (
-    "mask.npy", "diagnostics/diagnostic.json", "diagnostics/threshold_histogram.png",
+    "mask.npy", "scores_compared_with_cutoff.npy",
+    "diagnostics/diagnostic.json", "diagnostics/threshold_histogram.png",
 )
 
 @dataclass(frozen=True)
@@ -215,9 +216,18 @@ def thresholding(
     -------------------
     ``mask.npy``
         3-D Boolean array (same shape as the voxel grid), True = keep.
+    ``scores_compared_with_cutoff.npy``
+        3-D float32 array (same shape as the voxel grid): the values the
+        cutoff is applied to before the slope limit.  With ``carve_above``
+        these are the cutoffs at which each voxel is removed
+        (:func:`~urbansolarcarver.column_postprocessing.carve_above_scores`);
+        otherwise the scores after score smoothing (the raw scores for the
+        violation-count modes).  A voxel is kept when it is occupied and its
+        value is at most the threshold.
     ``manifest.json``
         ``ThresholdingManifest`` recording a random ``run_id`` (new on every
-        run), the mask path, the path and ``run_id`` of the upstream
+        run), the mask path, the path of ``scores_compared_with_cutoff.npy``,
+        the path and ``run_id`` of the upstream
         preprocessing manifest (paths relative to the manifest's folder), and
         the resolved threshold strategy, score smoothing radius (m) and slope
         limit this run applied.  The
@@ -327,6 +337,14 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     thr_val = _resolve_threshold(
         occ_scores, spec, None if removal_scores is None else removal_scores[occ])
 
+    # The values the cutoff is applied to, for tools that show the cutoff
+    # against them (the UI histogram). Saved before the slope limit, which
+    # removes voxels without looking at scores.
+    compared_with_cutoff = (scores.reshape(grid_shape) if removal_scores is None
+                            else removal_scores).astype(np.float32, copy=False)
+    compared_with_cutoff_path = out_path / "scores_compared_with_cutoff.npy"
+    np.save(compared_with_cutoff_path, compared_with_cutoff, allow_pickle=False)
+
     # Threshold to mask. Empty cells are False: there is nothing to keep.
     mask = occ & (scores <= thr_val).reshape(grid_shape)
     if mask.sum() == occ.sum():
@@ -431,6 +449,7 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     commit_manifest(out_path, ThresholdingManifest(
         run_id=run_id,
         mask_path=stored_path(mask_path, out_path),
+        scores_compared_with_cutoff_path=stored_path(compared_with_cutoff_path, out_path),
         upstream_manifest=stored_path(pre_manifest_path, out_path),
         upstream_run_id=pre_manifest.run_id,
         resolved_threshold=spec,

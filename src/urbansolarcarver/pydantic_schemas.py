@@ -701,6 +701,9 @@ class ThresholdingManifest(BaseModel):
 
     run_id: str
     mask_path: str
+    # The values the cutoff is applied to (float32, the grid shape); None in
+    # manifests written before thresholding saved them.
+    scores_compared_with_cutoff_path: Optional[str] = None
     upstream_manifest: str
     upstream_run_id: str
     # The settings this run applied after resolving the config's "None =

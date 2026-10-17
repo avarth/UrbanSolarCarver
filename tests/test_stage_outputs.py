@@ -2,8 +2,10 @@
 its previous run before it starts, writes its manifest last, and the run
 report keeps the sections of every stage built on the same thresholding run."""
 import importlib
+import json
 import warnings
 
+import numpy as np
 import pytest
 
 from _stage_scene import daylight_cube_config
@@ -150,6 +152,36 @@ def test_thresholding_manifest_records_the_resolved_settings(tmp_path, threshold
     assert manifest.resolved_threshold.value == conf.carve_fraction
     assert manifest.score_smoothing_m == pytest.approx(1.1 * conf.voxel_size)
     assert manifest.max_slope_deg == 75.0
+
+
+def test_thresholding_saves_the_scores_it_compares_with_the_cutoff(tmp_path, thresholded_run):
+    from urbansolarcarver.pydantic_schemas import ThresholdingManifest
+    conf, thr = thresholded_run
+    folder = thr.out_dir
+    manifest = ThresholdingManifest.model_validate_json((folder / "manifest.json").read_text(encoding="utf-8"))
+    compared = np.load(folder / manifest.scores_compared_with_cutoff_path)
+    mask = np.load(folder / manifest.mask_path)
+    occupied = np.load(tmp_path / "run" / "preprocessing" / "voxel_grid.npy").astype(bool)
+    summary = json.loads((folder / "diagnostics" / "diagnostic.json").read_text(encoding="utf-8"))
+    kept_before_slope_limit = occupied & (compared <= summary["threshold_value"])
+    assert compared.dtype == np.float32 and compared.shape == mask.shape
+    assert not (mask & ~kept_before_slope_limit).any()
+    assert int(kept_before_slope_limit.sum()) - int(mask.sum()) == summary["slope_limit_extra_voxels_removed"]
+
+
+def test_without_carve_above_time_based_compares_the_raw_scores(tmp_path, example_epw_path):
+    from urbansolarcarver import preprocessing, thresholding
+    from urbansolarcarver.pydantic_schemas import ThresholdingManifest
+    conf = daylight_cube_config(
+        tmp_path, mode="time-based", threshold=0, carve_above=False, epw_path=str(example_epw_path),
+        start_month=12, start_day=21, start_hour=10, end_month=12, end_day=21, end_hour=14)
+    pre = _quietly(preprocessing, conf, tmp_path / "run" / "preprocessing")
+    thr = _quietly(thresholding, pre, conf, tmp_path / "run" / "thresholding")
+    manifest = ThresholdingManifest.model_validate_json(thr.manifest_path.read_text(encoding="utf-8"))
+    compared = np.load(thr.out_dir / manifest.scores_compared_with_cutoff_path)
+    raw_scores = np.load(pre.out_dir / "scores.npy").reshape(compared.shape)
+    occupied = np.load(pre.out_dir / "voxel_grid.npy").astype(bool)
+    assert np.array_equal(compared[occupied], raw_scores[occupied].astype(np.float32))
 
 
 def test_thresholding_result_carries_its_issues(tmp_path, thresholded_run):
