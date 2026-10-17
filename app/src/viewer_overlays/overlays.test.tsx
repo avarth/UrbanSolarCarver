@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterEach, expect, test, vi } from "vitest";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
@@ -77,4 +78,10 @@ test("the layers menu lists the layers that exist, with the missing-result note 
   expect(rendered.container.querySelector("input[type='range']")).not.toBeNull();
   click(rendered.container.querySelector("input[type='checkbox']")!);
   expect(onVisibleChange).toHaveBeenCalledWith("kept_voxels", false);
+});
+
+test("the overlay styles take every colour from the tokens and keep the toolbar focus outline visible", () => {
+  const overlaysCss = readFileSync("src/viewer_overlays/overlays.css", "utf8");
+  expect(overlaysCss).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i);
+  expect(overlaysCss).toMatch(/\.viewer-toolbar button {[^}]*outline-offset: -2px/);
 });

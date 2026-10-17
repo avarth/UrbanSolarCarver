@@ -18,7 +18,6 @@ interface LegendProps {
 }
 
 const RAMP_STOPS = 11;
-const WHITE = "#ffffff";
 
 /** The score unit of the kept voxels: "Shading caused, m²·h" for Sun at set hours, "Obstruction score (relative)" for weighted modes. */
 export function keptVoxelsLegendTitle(scoresKind: ScorePointsHeader["scores_kind"], weightUnit: string): string {
@@ -32,14 +31,14 @@ function relativeLuminance(hex: string): number {
   return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
 }
 
-/** Ink or white, whichever has the higher contrast on the background (WCAG 2.1 contrast ratio). */
+/** Ink or white (the panel colour), whichever has the higher contrast on the background (WCAG 2.1 contrast ratio). */
 function textColourOn(background: string): string {
   const contrast = (first: string, second: string) => {
     const [lighter, darker] = [relativeLuminance(first), relativeLuminance(second)].sort((a, b) => b - a);
     return (lighter + 0.05) / (darker + 0.05);
   };
-  const ink = colourToken("ink");
-  return contrast(background, WHITE) > contrast(background, ink) ? WHITE : ink;
+  const ink = colourToken("ink"), white = colourToken("panel");
+  return contrast(background, white) > contrast(background, ink) ? white : ink;
 }
 
 function rampGradient(colourAt: (t: number) => string): string {

@@ -166,8 +166,10 @@ export function buildingMassingLayer(geometry: THREE.BufferGeometry): THREE.Obje
   if (!geometry.groups.length) geometry.addGroup(0, Infinity, 0);
   const materials = Array.from({ length: storeyCount }, (_, storey) => solidMaterial(storeyColour(storey, storeyCount), 1));
   const body = new THREE.Mesh(geometry, materials);
+  const edges = edgeLines(geometry, colourToken("ink"), MASSING_EDGE_OPACITY);
   const massing = new THREE.Group();
-  massing.add(body, edgeLines(geometry, colourToken("ink"), MASSING_EDGE_OPACITY));
+  massing.add(body, edges);
+  massing.userData.applyTheme = (theme: ViewportTheme) => (edges.material as THREE.LineBasicMaterial).color.set(inkColour(theme));
   massing.userData.summary = messages.storeyCount(storeyCount);
   massing.userData.storeyCount = storeyCount;
   massing.userData.hoverLabel = (intersection: THREE.Intersection) =>
@@ -218,30 +220,89 @@ export function keptColumnTops(points: ScorePoints, origin: Point3): (x: number,
   };
 }
 
-/**
- * The parts of the maximum volume's edges (pairs of points) that lie above the kept voxels: vertical edges from the kept top up,
- * other edges when both their ends are above it. Drawn over the carved voxels, they show the volume that was carved away.
- */
-export function carvedOutlineSegments(edgeSegments: Float32Array, keptTopAt: (x: number, y: number) => number): Float32Array {
-  const outline: number[] = [];
-  for (let start = 0; start < edgeSegments.length; start += 6) {
-    const [ax, ay, az, bx, by, bz] = edgeSegments.subarray(start, start + 6);
-    if (Math.abs(ax - bx) < VERTICAL_TOLERANCE_METRES && Math.abs(ay - by) < VERTICAL_TOLERANCE_METRES) {
-      const low = Math.max(Math.min(az, bz), keptTopAt(ax, ay)), high = Math.max(az, bz);
-      if (high - low > VERTICAL_TOLERANCE_METRES) outline.push(ax, ay, low, ax, ay, high);
-    } else if (az >= keptTopAt(ax, ay) - VERTICAL_TOLERANCE_METRES && bz >= keptTopAt(bx, by) - VERTICAL_TOLERANCE_METRES) {
-      outline.push(ax, ay, az, bx, by, bz);
-    }
-  }
-  return Float32Array.from(outline);
+/** The maximum volume's feature edges, and the outward horizontal normal of each vertical one (0, 0 for the others). */
+export interface VolumeOutline {
+  segments: Float32Array;           // pairs of points
+  outwardNormals: Float32Array;     // nx, ny per segment
 }
 
-/** The feature edges of a mesh as pairs of points. */
-export function featureEdgeSegments(geometry: THREE.BufferGeometry): Float32Array {
+function isVertical(ax: number, ay: number, bx: number, by: number): boolean {
+  return Math.abs(ax - bx) < VERTICAL_TOLERANCE_METRES && Math.abs(ay - by) < VERTICAL_TOLERANCE_METRES;
+}
+
+function pointKey(point: THREE.Vector3): string {
+  return `${point.x.toFixed(4)},${point.y.toFixed(4)},${point.z.toFixed(4)}`;
+}
+
+function edgeKey(first: THREE.Vector3, second: THREE.Vector3): string {
+  const [a, b] = [pointKey(first), pointKey(second)].sort();
+  return `${a}|${b}`;
+}
+
+/** The feature edges of the maximum volume; a vertical edge's outward normal is the sum of the horizontal normals of the faces beside it. */
+export function volumeOutline(geometry: THREE.BufferGeometry): VolumeOutline {
+  const positions = geometry.getAttribute("position");
+  const index = geometry.index;
+  const cornerCount = index ? index.count : positions.count;
+  const horizontalNormals = new Map<string, [number, number]>();
+  const corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  const faceNormal = new THREE.Vector3();
+  for (let first = 0; first + 2 < cornerCount; first += 3) {
+    corners.forEach((corner, offset) => corner.fromBufferAttribute(positions, index ? index.getX(first + offset) : first + offset));
+    THREE.Triangle.getNormal(corners[0], corners[1], corners[2], faceNormal);
+    for (let side = 0; side < 3; side++) {
+      const [a, b] = [corners[side], corners[(side + 1) % 3]];
+      if (!isVertical(a.x, a.y, b.x, b.y)) continue;
+      const key = edgeKey(a, b);
+      const sum = horizontalNormals.get(key) ?? [0, 0];
+      horizontalNormals.set(key, [sum[0] + faceNormal.x, sum[1] + faceNormal.y]);
+    }
+  }
   const edges = new THREE.EdgesGeometry(geometry, FEATURE_EDGE_DEGREES);
   const segments = Float32Array.from(edges.getAttribute("position").array);
   edges.dispose();
-  return segments;
+  const outwardNormals = new Float32Array((segments.length / 6) * 2);
+  const [a, b] = [new THREE.Vector3(), new THREE.Vector3()];
+  for (let segment = 0; segment < segments.length / 6; segment++) {
+    a.fromArray(segments, segment * 6);
+    b.fromArray(segments, segment * 6 + 3);
+    if (!isVertical(a.x, a.y, b.x, b.y)) continue;
+    const [nx, ny] = horizontalNormals.get(edgeKey(a, b)) ?? [0, 0];
+    const length = Math.hypot(nx, ny) || 1;
+    outwardNormals.set([nx / length, ny / length], segment * 2);
+  }
+  return { segments, outwardNormals };
+}
+
+/**
+ * The parts of the maximum volume's edges drawn over the carved voxels (UX 8.2): its top edges, at its highest z, and the
+ * vertical edges that face the camera (outward normal toward it), from the kept top up. Bottom edges and the vertical edges at
+ * the back are left out: above the kept voxels nothing hides them.
+ */
+export function carvedOutlineSegments(outline: VolumeOutline, keptTopAt: (x: number, y: number) => number, cameraXY: [number, number]): Float32Array {
+  const { segments, outwardNormals } = outline;
+  let topZ = -Infinity;
+  for (let value = 2; value < segments.length; value += 3) topZ = Math.max(topZ, segments[value]);
+  const drawn: number[] = [];
+  for (let segment = 0; segment < segments.length / 6; segment++) {
+    const [ax, ay, az, bx, by, bz] = segments.subarray(segment * 6, segment * 6 + 6);
+    if (isVertical(ax, ay, bx, by)) {
+      const facesCamera = outwardNormals[segment * 2] * (cameraXY[0] - ax) + outwardNormals[segment * 2 + 1] * (cameraXY[1] - ay) > 0;
+      const low = Math.max(Math.min(az, bz), keptTopAt(ax, ay)), high = Math.max(az, bz);
+      if (facesCamera && high - low > VERTICAL_TOLERANCE_METRES) drawn.push(ax, ay, low, ax, ay, high);
+    } else if (Math.abs(az - topZ) < VERTICAL_TOLERANCE_METRES && Math.abs(bz - topZ) < VERTICAL_TOLERANCE_METRES) {
+      drawn.push(ax, ay, az, bx, by, bz);
+    }
+  }
+  return Float32Array.from(drawn);
+}
+
+/**
+ * The size a points material needs for a point to be as wide on screen as a voxel. With size attenuation three.js draws a point
+ * size * (view height / 2) / depth pixels wide, and a voxel spans voxelSize * view height / (2 * depth * tan(fov / 2)) pixels.
+ */
+export function pointSizeForVoxel(voxelSize: number, fieldOfViewDegrees: number): number {
+  return voxelSize / Math.tan((fieldOfViewDegrees * Math.PI) / 360);
 }
 
 function voxelObject(centres: Float32Array, voxelSize: number, colours: THREE.Color[] | null, colour: string, baseOpacity: number): THREE.Object3D {
@@ -252,7 +313,11 @@ function voxelObject(centres: Float32Array, voxelSize: number, colours: THREE.Co
     if (colours) geometry.setAttribute("color", new THREE.Float32BufferAttribute(colours.flatMap((each) => [each.r, each.g, each.b]), 3));
     const material = layerMaterial(new THREE.PointsMaterial({ size: voxelSize, sizeAttenuation: true, vertexColors: colours !== null, color: colours ? "#ffffff" : colour }), baseOpacity);
     material.depthWrite = baseOpacity >= 1;
-    return new THREE.Points(geometry, material);
+    const points = new THREE.Points(geometry, material);
+    points.onBeforeRender = (_renderer, _scene, camera) => {
+      if (camera instanceof THREE.PerspectiveCamera) material.size = pointSizeForVoxel(voxelSize, camera.fov);
+    };
+    return points;
   }
   const cubes = new THREE.InstancedMesh(new THREE.BoxGeometry(voxelSize, voxelSize, voxelSize), solidMaterial(colours ? "#ffffff" : colour, baseOpacity), count);
   const placement = new THREE.Matrix4();
@@ -288,16 +353,29 @@ export interface CarvedVoxelsDrawing {
   voxels: VoxelSet;
   voxelSize: number;
   voxelCount: number;
-  outlineSegments: Float32Array;      // carvedOutlineSegments of the maximum volume's edges
+  outline: VolumeOutline;             // volumeOutline of the maximum volume
+  keptTopAt: (x: number, y: number) => number;      // keptColumnTops of the score points
 }
 
-/** The carved voxels in the carved colour at 10 % opacity, with the maximum volume's edges above the kept voxels at 60 %. */
-export function carvedVoxelsLayer({ voxels, voxelSize, voxelCount, outlineSegments }: CarvedVoxelsDrawing): THREE.Object3D {
+/**
+ * The carved voxels in the carved colour at 10 % opacity, with the maximum volume's top edges and front vertical edges above the
+ * kept voxels at 60 %. Which vertical edges are in front depends on the camera: the scene calls userData.followCamera(position).
+ */
+export function carvedVoxelsLayer({ voxels, voxelSize, voxelCount, outline, keptTopAt }: CarvedVoxelsDrawing): THREE.Object3D {
   const carvedColour = colourToken("carved");
   const layer = new THREE.Group();
   if (voxels.scores.length) layer.add(voxelObject(voxels.centres, voxelSize, null, carvedColour, CARVED_VOXEL_OPACITY));
-  const outlineGeometry = new THREE.BufferGeometry();
-  outlineGeometry.setAttribute("position", new THREE.BufferAttribute(outlineSegments, 3));
+  // One buffer large enough for every edge; each camera move rewrites it with the edges to draw.
+  const outlinePositions = new THREE.BufferAttribute(new Float32Array(outline.segments.length), 3);
+  const outlineGeometry = new THREE.BufferGeometry().setAttribute("position", outlinePositions);
+  outlineGeometry.boundingSphere = new THREE.Box3().setFromArray(outline.segments).getBoundingSphere(new THREE.Sphere());
+  outlineGeometry.setDrawRange(0, 0);
+  layer.userData.followCamera = (cameraPosition: THREE.Vector3) => {
+    const drawn = carvedOutlineSegments(outline, keptTopAt, [cameraPosition.x, cameraPosition.y]);
+    (outlinePositions.array as Float32Array).set(drawn);
+    outlinePositions.needsUpdate = true;
+    outlineGeometry.setDrawRange(0, drawn.length / 3);
+  };
   const outlineMaterial = layerMaterial(new THREE.LineBasicMaterial({ color: carvedColour, depthWrite: false }), CARVED_OUTLINE_OPACITY);
   layer.add(new THREE.LineSegments(outlineGeometry, outlineMaterial));
   layer.userData.summary = messages.voxelCount(voxelCount);

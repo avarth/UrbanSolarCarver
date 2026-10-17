@@ -45,6 +45,10 @@
   --colour-grid-minor-dark: #2f3e48;
   --colour-grid-major-dark: #4b5d69;
 
+  /* The lights of the 3D view: white from the sky and the sun, grey from the ground */
+  --colour-light-sky: #ffffff;
+  --colour-light-ground: #8a9499;
+
   /* On the dark viewport */
   --colour-overlay-on-dark: #2b3a45;
   --colour-ink-on-dark: #e6ecee;

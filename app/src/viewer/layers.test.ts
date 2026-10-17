@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
-import { buildingMassingLayer, carvedOutlineSegments, keptColumnTops, splitScorePoints, storeyOfPart } from "./layers";
+import { buildingMassingLayer, carvedOutlineSegments, keptColumnTops, pointSizeForVoxel, splitScorePoints, storeyOfPart, volumeOutline } from "./layers";
 import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
@@ -35,15 +35,60 @@ test("the kept top of a column is the top face of its highest kept voxel, the gr
   expect(keptTopAt(1.9, 1.9)).toBe(0);
 });
 
-test("the carved outline keeps the maximum volume's edges above the kept voxels", () => {
-  const keptTopAt = (x: number) => (x < 5 ? 10 : 0);
-  const edges = Float32Array.from([
-    0, 0, 0, 0, 0, 30,          // vertical edge over kept voxels 10 m high: drawn from 10 m
-    8, 0, 0, 8, 0, 30,          // vertical edge where everything was carved: drawn whole
-    0, 0, 30, 8, 0, 30,         // top edge: drawn
-    0, 0, 0, 4, 0, 0,           // bottom edge under kept voxels: left out
-  ]);
-  expect(Array.from(carvedOutlineSegments(edges, keptTopAt))).toEqual([0, 0, 10, 0, 0, 30, 8, 0, 0, 8, 0, 30, 0, 0, 30, 8, 0, 30]);
+// A box 10 by 10 m and 20 m high on the ground: four vertical edges at its corners, four top and four bottom edges.
+function boxOutline() {
+  return volumeOutline(new THREE.BoxGeometry(10, 10, 20).translate(5, 5, 10));
+}
+
+function segmentsOf(values: Float32Array): number[][] {
+  return Array.from({ length: values.length / 6 }, (_, segment) => Array.from(values.subarray(segment * 6, segment * 6 + 6)));
+}
+
+test("the outline knows the outward horizontal normal of each vertical edge", () => {
+  const outline = boxOutline();
+  const verticals = segmentsOf(outline.segments).map((segment, index) => ({ segment, normal: Array.from(outline.outwardNormals.subarray(index * 2, index * 2 + 2)) }))
+    .filter(({ segment }) => segment[0] === segment[3] && segment[1] === segment[4]);
+  expect(verticals).toHaveLength(4);
+  const southWest = verticals.find(({ segment }) => segment[0] === 0 && segment[1] === 0)!;
+  expect(southWest.normal[0]).toBeCloseTo(-Math.SQRT1_2); expect(southWest.normal[1]).toBeCloseTo(-Math.SQRT1_2);
+});
+
+test("the carved outline keeps the top edges and the vertical edges facing the camera, from the kept top up", () => {
+  const keptTopAt = (x: number) => (x < 5 ? 8 : 0);
+  const drawn = segmentsOf(carvedOutlineSegments(boxOutline(), keptTopAt, [-50, 5]));      // camera to the west
+  const verticals = drawn.filter((segment) => segment[0] === segment[3] && segment[1] === segment[4]);
+  expect(verticals.map((segment) => [segment[0], segment[1], Math.min(segment[2], segment[5]), Math.max(segment[2], segment[5])]).sort())
+    .toEqual([[0, 0, 8, 20], [0, 10, 8, 20]]);         // the two west corners; the east ones are at the back
+  const others = drawn.filter((segment) => !(segment[0] === segment[3] && segment[1] === segment[4]));
+  expect(others).toHaveLength(4);
+  expect(others.every((segment) => segment[2] === 20 && segment[5] === 20)).toBe(true);
+});
+
+test("over a fully carved column the vertical edge is drawn from the ground and the bottom edges are not", () => {
+  const drawn = segmentsOf(carvedOutlineSegments(boxOutline(), () => 0, [-50, -50]));     // camera to the south-west
+  const verticals = drawn.filter((segment) => segment[0] === segment[3] && segment[1] === segment[4]);
+  expect(verticals).toHaveLength(1);
+  expect([Math.min(verticals[0][2], verticals[0][5]), Math.max(verticals[0][2], verticals[0][5])]).toEqual([0, 20]);
+  expect(drawn.some((segment) => segment[2] === 0 && segment[5] === 0)).toBe(false);
+});
+
+test("a voxel drawn as a point is as wide as the voxel on screen", () => {
+  const voxelSize = 2, fieldOfViewDegrees = 35, viewHeightPixels = 800, depth = 50;
+  const pointPixels = (pointSizeForVoxel(voxelSize, fieldOfViewDegrees) * viewHeightPixels / 2) / depth;       // three.js size attenuation
+  const voxelPixels = (voxelSize * viewHeightPixels) / (2 * depth * Math.tan((fieldOfViewDegrees * Math.PI) / 360));
+  expect(pointPixels).toBeCloseTo(voxelPixels);
+});
+
+test("the building massing edges follow the viewport theme", () => {
+  document.documentElement.style.setProperty("--colour-ink", "#1f2a30");
+  document.documentElement.style.setProperty("--colour-ink-on-dark", "#e6ecee");
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  geometry.userData.partNames = [];
+  const massing = buildingMassingLayer(geometry);
+  massing.userData.applyTheme("dark");
+  const edges = massing.children.find((child) => child instanceof THREE.LineSegments) as THREE.LineSegments;
+  expect(`#${(edges.material as THREE.LineBasicMaterial).color.getHexString()}`).toBe("#e6ecee");
+  document.documentElement.removeAttribute("style");
 });
 
 test("the storey of a building massing part comes from its name", () => {

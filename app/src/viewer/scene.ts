@@ -134,9 +134,9 @@ export class ViewerScene {
     this.controls.addEventListener("change", () => this.cameraChanged());
     this.controls.addEventListener("start", () => { this.cameraMove = null; });     // the user takes over from a camera move
 
-    const skyLight = new THREE.HemisphereLight("#ffffff", "#8a9499", 2.2);
+    const skyLight = new THREE.HemisphereLight(colourToken("light-sky"), colourToken("light-ground"), 2.2);
     skyLight.position.set(0, 0, 1);
-    const sunLight = new THREE.DirectionalLight("#ffffff", 1.6);
+    const sunLight = new THREE.DirectionalLight(colourToken("light-sky"), 1.6);
     sunLight.position.set(-0.45, -0.7, 1);
     this.scene.add(skyLight, sunLight);
 
@@ -173,6 +173,7 @@ export class ViewerScene {
     if (object) {
       object.name = name;
       object.userData.applyTheme?.(this.theme);
+      object.userData.followCamera?.(this.camera.position);
       this.scene.add(object);
     }
     this.refreshLayers();
@@ -372,6 +373,7 @@ export class ViewerScene {
     this.camera.near = Math.max(0.01, distance / 1000);
     this.camera.far = distance * 20 + 4000;         // the grid reaches 1 km past the model
     this.camera.updateProjectionMatrix();
+    for (const slot of this.slots.values()) slot.object?.userData.followCamera?.(this.camera.position);
     const state = this.cameraState();
     for (const listener of this.cameraListeners) listener(state);
     this.requestRender();
