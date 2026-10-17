@@ -18,9 +18,12 @@ from .score_points import read_stage_manifest, resolve_stored_path
 
 DIAGNOSTIC_PATH = Path("diagnostics") / "diagnostic.json"
 PLATES_FILE_NAME = "plates.json"
+HOURS_PER_DAY = 24
+MINUTES_PER_DAY = 24 * 60
+MINUTES_PER_YEAR = 365 * MINUTES_PER_DAY
 LONG_DAY_HOURS = 8              # a daily period longer than this gets a marker every 3 hours instead of 2
 DAY_PATH_STEP_MINUTES = 10
-PERIOD_PATH_STEP_MINUTES = 5
+STEPS_PER_HOUR_OF_PERIOD_PATH = 12      # one point every 5 minutes
 HORIZON_SEARCH_MINUTES = 5      # sunrise and sunset are rounded to a minute, which can leave the sun just below the horizon
 SUN_PATH_MODE = "time-based"
 
@@ -84,16 +87,22 @@ def build_sky_dome(run_folder: Path) -> SkyDome | None:
 
 
 def sun_marker_hours(start_hour: int, end_hour: int) -> list[int]:
-    """The whole hours that get a sun disc: every 2 hours, every 3 hours when the daily period is longer than 8 hours."""
-    step = 3 if end_hour - start_hour > LONG_DAY_HOURS else 2
-    return list(range(start_hour, end_hour + 1, step))
+    """The whole hours that get a sun disc: every 2 hours, every 3 hours when the daily period is longer than 8 hours.
+
+    A period whose end hour is before its start hour runs over midnight, as in the engine
+    (20 to 4 is 20, 22, 0, 2, 4).
+    """
+    hours_in_period = (end_hour - start_hour) % HOURS_PER_DAY
+    step = 3 if hours_in_period > LONG_DAY_HOURS else 2
+    return [(start_hour + hours_after_start) % HOURS_PER_DAY for hours_after_start in range(0, hours_in_period + 1, step)]
 
 
 def sun_path_for_config(config: UserConfig) -> SunPath:
     """The sun path of the first and the last day of the stored analysis period (one day when they are the same).
 
     Empty unless the mode is time-based and the weather file and the period are set. The vectors point
-    toward the sun in model coordinates (the stored ``north_deg`` applied).
+    toward the sun in model coordinates (the stored ``north_deg`` applied). The analysis hours drawn
+    are the engine's own: the times of its analysis period that fall on the day.
     """
     period = (config.start_month, config.start_day, config.start_hour, config.end_month, config.end_day, config.end_hour)
     if canonical_mode_name(config.mode) != SUN_PATH_MODE or None in period:
@@ -103,52 +112,74 @@ def sun_path_for_config(config: UserConfig) -> SunPath:
     first_day = (config.start_month, config.start_day)
     last_day = (config.end_month, config.end_day)
     days = [first_day] if first_day == last_day else [first_day, last_day]
-    return SunPath(days=[_sun_path_of_day(config, month, day) for month, day in days])
+    period_date_times = _analysis_period_date_times(config)
+    return SunPath(days=[_sun_path_of_day(config, month, day, period_date_times) for month, day in days])
 
 
-def _sun_path_of_day(config: UserConfig, month: int, day: int) -> SunPathDay:
-    day_path = _sun_vectors(config, _date_times(month, day, range(0, 24 * 60, DAY_PATH_STEP_MINUTES)), min_altitude=0.0)
-    sunrise_vector, sunset_vector = _vectors_at_sunrise_and_sunset(config, month, day)
-    if sunrise_vector is not None and sunset_vector is not None:
-        day_path = [_laid_on_horizon(sunrise_vector), *day_path, _laid_on_horizon(sunset_vector)]
+def _analysis_period_date_times(config: UserConfig) -> list:
+    """The times of the engine's analysis period every 5 minutes (it handles a period that runs over midnight)."""
+    from ..sun import sample_period
+    from ..stage_settings import PreprocessingSettings
+    date_times, _ = sample_period(PreprocessingSettings.from_config(config), STEPS_PER_HOUR_OF_PERIOD_PATH)
+    return date_times
 
-    period_minutes = range(config.start_hour * 60, config.end_hour * 60 + 1, PERIOD_PATH_STEP_MINUTES)
-    period_path = _sun_vectors(config, _date_times(month, day, period_minutes), min_altitude=config.min_altitude)
+
+def _sun_path_of_day(config: UserConfig, month: int, day: int, period_date_times: list) -> SunPathDay:
+    sunrise_and_sunset_minutes = _sunrise_and_sunset_minutes_of_year(config, month, day)
+    if sunrise_and_sunset_minutes is None:      # polar day or polar night: the calendar day, with no ends on the horizon
+        first_minute = _date_times(month, day, 0)[0].moy
+        day_path = _sun_vectors(config, _date_times_of_minutes(range(first_minute, first_minute + MINUTES_PER_DAY, DAY_PATH_STEP_MINUTES)),
+                                min_altitude=0.0)
+    else:
+        sunrise_minute, sunset_minute = sunrise_and_sunset_minutes
+        day_path = _sun_vectors(
+            config, _date_times_of_minutes(range(sunrise_minute, sunset_minute + 1, DAY_PATH_STEP_MINUTES)), min_altitude=0.0)
+        # Ladybug rounds sunrise and sunset to a minute, so the sun can be a hair below the horizon at that minute
+        # and get_sun_vectors drops it: the minutes after sunrise and before sunset are looked up too, and the
+        # nearest one above the horizon is taken.
+        after_sunrise = _sun_vectors(
+            config, _date_times_of_minutes(range(sunrise_minute, min(sunrise_minute + HORIZON_SEARCH_MINUTES, sunset_minute) + 1)),
+            min_altitude=0.0)
+        before_sunset = _sun_vectors(
+            config, _date_times_of_minutes(range(max(sunset_minute - HORIZON_SEARCH_MINUTES, sunrise_minute), sunset_minute + 1)),
+            min_altitude=0.0)
+        if after_sunrise and before_sunset:
+            day_path = [_laid_on_horizon(after_sunrise[0]), *day_path, _laid_on_horizon(before_sunset[-1])]
+
+    period_date_times_of_day = [date_time for date_time in period_date_times if (date_time.month, date_time.day) == (month, day)]
+    period_path = _sun_vectors(config, period_date_times_of_day, min_altitude=config.min_altitude)
     markers = []
     for hour in sun_marker_hours(config.start_hour, config.end_hour):
-        hour_vectors = _sun_vectors(config, _date_times(month, day, [hour * 60]), min_altitude=config.min_altitude)
+        hour_vectors = _sun_vectors(config, _date_times(month, day, hour * 60), min_altitude=config.min_altitude)
         if hour_vectors:
             markers.append(SunMarker(hour=hour, vector=hour_vectors[0]))
     return SunPathDay(date=f"{month:02d}-{day:02d}", day_path=day_path, period_path=period_path, markers=markers)
 
 
-def _vectors_at_sunrise_and_sunset(config: UserConfig, month: int, day: int) -> tuple[list[float] | None, list[float] | None]:
-    """The sun directions at Ladybug's sunrise and sunset of the day; None for both on a day the sun does not rise and set.
+def _sunrise_and_sunset_minutes_of_year(config: UserConfig, month: int, day: int) -> tuple[int, int] | None:
+    """Ladybug's sunrise and sunset of the day as minutes of the year; None on a day the sun does not rise and set.
 
-    Ladybug rounds the two times to a minute, so the sun can be a hair below the horizon at that minute
-    and ``get_sun_vectors`` drops it: the first minutes after sunrise and the last minutes before sunset
-    are looked up too, and the nearest one that is above the horizon is taken.
+    Sunset can fall after midnight, on the next calendar day, which the minute of the year keeps.
     """
     from ladybug.epw import EPW
     from ladybug.sunpath import Sunpath
     sunrise_and_sunset = Sunpath.from_location(EPW(config.epw_path).location).calculate_sunrise_sunset(month, day)
     sunrise, sunset = sunrise_and_sunset["sunrise"], sunrise_and_sunset["sunset"]
     if sunrise is None or sunset is None:
-        return None, None       # polar day or polar night
-    sunrise_minute = sunrise.hour * 60 + sunrise.minute
-    sunset_minute = sunset.hour * 60 + sunset.minute
-    after_sunrise = _sun_vectors(
-        config, _date_times(month, day, range(sunrise_minute, sunrise_minute + HORIZON_SEARCH_MINUTES + 1)), min_altitude=0.0)
-    before_sunset = _sun_vectors(
-        config, _date_times(month, day, range(sunset_minute - HORIZON_SEARCH_MINUTES, sunset_minute + 1)), min_altitude=0.0)
-    if not after_sunrise or not before_sunset:
-        return None, None
-    return after_sunrise[0], before_sunset[-1]
+        return None
+    return sunrise.moy, sunset.moy
 
 
-def _date_times(month: int, day: int, minutes_of_day):
+def _date_times(month: int, day: int, minute_of_day: int):
+    """A one-element list with the Ladybug DateTime at a minute of the day."""
     from ladybug.dt import DateTime
-    return [DateTime(month, day, minute_of_day // 60, minute_of_day % 60) for minute_of_day in minutes_of_day]
+    return [DateTime(month, day, minute_of_day // 60, minute_of_day % 60)]
+
+
+def _date_times_of_minutes(minutes_of_year):
+    """Ladybug DateTimes for minutes of the year, wrapping past the end of the year."""
+    from ladybug.dt import DateTime
+    return [DateTime.from_moy(minute % MINUTES_PER_YEAR) for minute in minutes_of_year]
 
 
 def _sun_vectors(config: UserConfig, date_times, min_altitude: float) -> list[list[float]]:
@@ -157,6 +188,8 @@ def _sun_vectors(config: UserConfig, date_times, min_altitude: float) -> list[li
     A time with the sun below it is an ordinary outcome here, so the engine's issue about an empty
     result is collected in a throwaway run context instead of being raised as a warning.
     """
+    if not date_times:
+        return []
     import torch
     from ..run_context import RunContext, run_context
     from ..sun import get_sun_vectors

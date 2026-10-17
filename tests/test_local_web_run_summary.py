@@ -1,5 +1,6 @@
 """Run summary, sky dome and sun path of the local web service."""
 import json
+import math
 import subprocess
 import sys
 import warnings
@@ -82,6 +83,12 @@ def test_sun_marker_hours_every_two_hours_or_three_for_long_days():
     assert sun_marker_hours(8, 18) == [8, 11, 14, 17]
 
 
+def test_sun_marker_hours_of_a_period_over_midnight_follow_the_hours_of_the_period():
+    assert sun_marker_hours(20, 4) == [20, 22, 0, 2, 4]         # 8 hours after the start: every 2 hours
+    assert sun_marker_hours(18, 4) == [18, 21, 0, 3]            # 10 hours: every 3 hours
+    assert sun_marker_hours(10, 10) == [10]
+
+
 def golden_config(**changes):
     values = {"mode": "time-based", "max_volume_path": "v.ply", "test_surface_path": "s.ply", "out_dir": "run",
               "epw_path": str(GOLDEN_EPW), "start_month": 12, "start_day": 21, "start_hour": 10,
@@ -143,3 +150,41 @@ def test_importing_the_service_modules_does_not_load_torch():
             "print('torch' in sys.modules)")
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert result.stdout.strip() == "False"
+
+
+@pytest.fixture
+def arctic_epw(tmp_path):
+    """The Golden weather file moved to 66 N, 25 E (time zone +2): on 18 June the sun sets just after midnight."""
+    lines = GOLDEN_EPW.read_text(encoding="utf-8", errors="replace").splitlines(keepends=True)
+    location_fields = lines[0].split(",")
+    location_fields[6:9] = ["66.0", "25.0", "2.0"]
+    lines[0] = ",".join(location_fields)
+    arctic_path = tmp_path / "arctic.epw"
+    arctic_path.write_text("".join(lines), encoding="utf-8")
+    return arctic_path
+
+
+def azimuth_degrees(vector):
+    return math.degrees(math.atan2(vector[0], vector[1]))      # clockwise from +y, which is north here
+
+
+def test_a_sunset_after_midnight_still_gives_a_path_from_sunrise_to_sunset(arctic_epw):
+    config = golden_config(epw_path=str(arctic_epw), start_month=6, start_day=18, end_month=6, end_day=18)
+    day = sun_path_for_config(config).days[0]
+    assert day.day_path[0][2] == day.day_path[-1][2] == 0.0 and all(v[2] > 0 for v in day.day_path[1:-1])
+    azimuths = [azimuth_degrees(vector) % 360 for vector in day.day_path]
+    steps = [(later - earlier) % 360 for earlier, later in zip(azimuths, azimuths[1:])]
+    assert all(0 <= step < 10 for step in steps)                               # always clockwise, never back to an earlier sun
+    assert sum(steps) < 360                                                      # the path is one turn at most, not a closed loop
+    assert azimuths[0] < 10 and azimuths[-1] > 350                             # starts and ends near north, having gone round by the south
+    assert [m.hour for m in day.markers] == [10, 12, 14]
+
+
+def test_analysis_hours_over_midnight_are_the_engines(arctic_epw):
+    config = golden_config(epw_path=str(arctic_epw), start_month=6, start_day=18, end_month=6, end_day=18,
+                           start_hour=20, end_hour=4, min_altitude=0.0)
+    day = sun_path_for_config(config).days[0]
+    assert [marker.hour for marker in day.markers] == [20, 22, 0, 2, 4]
+    assert len(day.period_path) > 48 and all(vector[2] > 0 for vector in day.period_path)
+    first_azimuth, last_azimuth = azimuth_degrees(day.period_path[0]), azimuth_degrees(day.period_path[-1])
+    assert abs(first_azimuth - last_azimuth) > 30       # the early morning hours come first, then the evening ones
