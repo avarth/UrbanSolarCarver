@@ -51,6 +51,7 @@ https://github.com/user-attachments/assets/7fb20820-bd24-4ccd-86f5-4f4f868b372a
 
 - **GPU-accelerated** ray tracing via NVIDIA Warp, with CPU fallback
 - **Simulated benefit weights**: a built-in ISO 13790 (5R1C) hourly building simulation derives when a marginal joule of solar gain is actually useful (thermal lag, mass state, gain saturation), independently implemented and validated against ETH's [RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator)
+- **Browser UI** (`usc ui`): a local app with a 3D view where you add the inputs, choose a mode, run the analysis, adjust how much to carve against a score histogram, build the envelope and building massing, and download the files; it runs on your computer and uses the same engine
 - **Grasshopper plugin** for Rhino 3D with 27 components and persistent GPU daemon
 - **3-stage pipeline** (preprocessing, thresholding, exporting), each re-runnable independently
 - **YAML configuration** with CLI overrides (`-o voxel_size=0.5 -o mode=irradiance`) and mode-specific templates
@@ -68,7 +69,7 @@ cd UrbanSolarCarver
 python setup_env.py
 ```
 
-Auto-detects your GPU and installs the correct PyTorch + CUDA wheels. Use `--cpu` for CPU-only mode.
+Auto-detects your GPU and installs the correct PyTorch + CUDA wheels. Use `--cpu` for CPU-only mode. The browser UI is installed with it; `--no-ui` leaves it out.
 
 ### Grasshopper (Rhino 3D)
 
@@ -79,6 +80,16 @@ Auto-detects your GPU and installs the correct PyTorch + CUDA wheels. Use `--cpu
 ![Grasshopper canvas](docs/assets/grasshopper_canvas_snapshot.png)
 
 ## Usage
+
+### Browser UI
+
+```console
+$ usc ui
+```
+
+Opens the interface in your browser, on this computer only. See [Browser UI](https://avarth.github.io/UrbanSolarCarver/ui/) for the steps, where projects are kept and how it behaves without a CUDA-enabled GPU.
+
+### Python and CLI
 
 ```python
 from urbansolarcarver import load_config, run_pipeline
