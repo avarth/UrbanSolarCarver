@@ -21,6 +21,7 @@ from urbansolarcarver.local_web_service.stage_records import (
     UPSTREAM_STAGE, choose_stages, forget_stages, missing_inputs, record_stages, stage_status,
 )
 
+GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 ALL_CURRENT = {stage: "current" for stage in PIPELINE_STAGES}
 ALL_MISSING = {stage: "missing" for stage in PIPELINE_STAGES}
 
@@ -272,7 +273,7 @@ def test_missing_inputs_names_the_weather_file_for_a_mode_that_reads_one(tmp_pat
     store = ProjectStore(tmp_path)
     store.create("p", "time-based")
     assert missing_inputs(store, "p", store.load_project_config("p")) == ["max_volume", "test_surfaces", "weather"]
-    store.add_input("p", "weather", "weather.epw", b"LOCATION,Golden,CO,USA,TMY3,724666,39.74,-105.18,-7.0,1829.0\n")
+    store.add_input("p", "weather", "weather.epw", GOLDEN_EPW.read_bytes())
     assert missing_inputs(store, "p", store.load_project_config("p")) == ["max_volume", "test_surfaces"]
 
 
