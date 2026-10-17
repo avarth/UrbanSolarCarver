@@ -161,22 +161,60 @@ def test_without_a_built_front_end_the_api_is_still_served(projects_folder, tmp_
     assert client.get("/api/health").status_code == 200
 
 
+def receive_close_code(client, url, **options):
+    """The close code the server answers a WebSocket connection with, when it sends no event first."""
+    with client.websocket_connect(url, **options) as websocket:
+        with pytest.raises(WebSocketDisconnect) as closed:
+            websocket.receive_json()
+    return closed.value.code
+
+
 def test_websocket_without_token_is_refused(client):
-    for query, host, expected_code in [("", f"127.0.0.1:{PORT}", WEBSOCKET_CLOSE_UNAUTHORIZED),
-                                       ("?token=wrong", f"127.0.0.1:{PORT}", WEBSOCKET_CLOSE_UNAUTHORIZED),
-                                       (f"?token={TOKEN}", "evil.example:8770", WEBSOCKET_CLOSE_FORBIDDEN)]:
-        with pytest.raises(WebSocketDisconnect) as refused:
-            with client.websocket_connect(events_url("anything", query), headers={"Host": host}):
-                pass
-        assert refused.value.code == expected_code
-    assert (WEBSOCKET_CLOSE_UNAUTHORIZED, WEBSOCKET_CLOSE_FORBIDDEN) == (4401, 4403)
+    assert receive_close_code(client, events_url("anything", "")) == WEBSOCKET_CLOSE_UNAUTHORIZED
+    assert receive_close_code(client, events_url("anything", "?token=wrong")) == WEBSOCKET_CLOSE_UNAUTHORIZED
+    assert receive_close_code(client, events_url("anything"), headers={"Host": "evil.example:8770"}) == WEBSOCKET_CLOSE_FORBIDDEN
+    assert (WEBSOCKET_CLOSE_UNAUTHORIZED, WEBSOCKET_CLOSE_FORBIDDEN, WEBSOCKET_CLOSE_UNKNOWN_RUN) == (4401, 4403, 4404)
 
 
 def test_websocket_of_an_unknown_run_is_closed(client):
-    with pytest.raises(WebSocketDisconnect) as refused:
-        with client.websocket_connect(events_url("unknown")):
-            pass
-    assert refused.value.code == WEBSOCKET_CLOSE_UNKNOWN_RUN
+    assert receive_close_code(client, events_url("unknown")) == WEBSOCKET_CLOSE_UNKNOWN_RUN
+
+
+@pytest.mark.slow
+def test_a_real_server_gives_the_browser_the_refusal_codes(projects_folder):
+    """Through uvicorn and a WebSocket client, as a browser connects: a close before the accept would arrive as code 1006."""
+    import socket
+    import uvicorn
+    from websockets.exceptions import ConnectionClosed
+    from websockets.sync.client import connect
+
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
+    app = create_app(projects_folder, TOKEN, port, worker=make_worker(ProjectStore(projects_folder)))
+    server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning"))
+    server_thread = threading.Thread(target=server.run, daemon=True)
+    server_thread.start()
+    try:
+        deadline = time.monotonic() + 20
+        while not server.started:
+            assert time.monotonic() < deadline and server_thread.is_alive(), "the server did not start"
+            time.sleep(0.02)
+
+        def close_code(query, host="127.0.0.1"):
+            # the socket goes to the server whatever the address in the URL, so the URL sets the Host header
+            with connect(f"ws://{host}:{port}/api/runs/anything/events{query}",
+                         sock=socket.create_connection(("127.0.0.1", port))) as websocket:
+                with pytest.raises(ConnectionClosed) as closed:
+                    websocket.recv(timeout=10)
+            return closed.value.rcvd.code
+
+        assert close_code("?token=wrong") == WEBSOCKET_CLOSE_UNAUTHORIZED
+        assert close_code(f"?token={TOKEN}", host="evil.example") == WEBSOCKET_CLOSE_FORBIDDEN
+        assert close_code(f"?token={TOKEN}") == WEBSOCKET_CLOSE_UNKNOWN_RUN
+    finally:
+        server.should_exit = True
+        server_thread.join(timeout=20)
 
 
 # ---- Basics ----
@@ -209,6 +247,7 @@ def test_the_openapi_document_describes_the_routes():
     assert {"WarmUpState", "StageStatusReply", "ConfigErrorReply", "ProjectDetail"} <= set(document["components"]["schemas"])
 
 
+@pytest.mark.slow
 def test_importing_the_service_does_not_load_torch():
     code = "import sys; import urbansolarcarver.local_web_service.server; print('torch' in sys.modules)"
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
@@ -457,6 +496,7 @@ def test_warm_up_runs_once_and_shows_running_meanwhile():
     assert calls == ["auto"]
 
 
+@pytest.mark.slow
 def test_default_warm_up_prepares_the_cpu_or_names_why_it_cannot():
     warm_up = GpuWarmUp("cpu")
     warm_up.start()

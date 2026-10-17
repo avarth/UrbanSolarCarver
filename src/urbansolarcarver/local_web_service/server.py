@@ -61,7 +61,8 @@ class SecurityMiddleware:
 
     The Host check stops a web page on another site from reaching the service through DNS rebinding; the
     token, which only the launch URL carries, stops other programs and pages from using the API.
-    A WebSocket is refused before it is accepted, with a close code the app can tell apart.
+    A WebSocket is refused after the checks and before any event is sent: it is accepted (which sends no data) and closed at once
+    with a code the app can tell apart, because a server answers a close before the accept with an HTTP 403 that a browser reports as 1006.
     The token travels in a header for HTTP and in the query string for a WebSocket (a browser cannot set a header there).
     """
 
@@ -96,7 +97,8 @@ class SecurityMiddleware:
     @staticmethod
     async def _refuse(scope: Scope, receive: Receive, send: Send, status_code: int, websocket_close_code: int, message: str) -> None:
         if scope["type"] == "websocket":
-            await receive()     # the connect message, which the protocol has the application read before it closes
+            await receive()     # the connect message, which the protocol has the application read before it answers
+            await send({"type": "websocket.accept"})
             await send({"type": "websocket.close", "code": websocket_close_code, "reason": message})
         else:
             await JSONResponse({"detail": message}, status_code=status_code)(scope, receive, send)
@@ -255,6 +257,7 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
         """Every event of the run from the first, then new ones as they come; closes after the run's last event."""
         run_state = worker.run_state(run_id)
         if run_state is None:
+            await websocket.accept()    # accepted, then closed: a close before the accept would reach the browser as 1006
             await websocket.close(code=WEBSOCKET_CLOSE_UNKNOWN_RUN)
             return
         await websocket.accept()
