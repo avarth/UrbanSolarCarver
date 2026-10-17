@@ -37,6 +37,7 @@ import platform
 import re
 import subprocess
 import sys
+import threading
 import time
 from multiprocessing import AuthenticationError
 from pathlib import Path
@@ -933,6 +934,7 @@ UI_HOST = "127.0.0.1"          # the service is never reachable from another mac
 UI_LOGGERS_SHOWING_REQUEST_PATHS = ("uvicorn.error", "uvicorn.access")
 # The modules of the ui extra (fastapi, uvicorn, python-multipart, websockets): fastapi and uvicorn import without
 # the other two, which the service needs for file uploads and for the run events.
+UI_LISTEN_POLL_SECONDS = 0.05  # how often the thread that opens the browser looks whether the server listens
 UI_REQUIRED_MODULES = ("fastapi", "uvicorn", "multipart", "websockets")
 
 
@@ -950,6 +952,19 @@ def _ui_static_folder() -> Path:
     """The folder with the built front-end (``index.html`` and its assets)."""
     from .local_web_service.server import DEFAULT_STATIC_FOLDER
     return DEFAULT_STATIC_FOLDER
+
+
+def _open_browser_when_listening(server, server_ended: threading.Event, launch_url: str) -> None:
+    """Open the launch URL once the uvicorn server listens; never when the server ended without listening.
+
+    The port can be held by another program, which would receive the token in the URL if the browser opened
+    before the server bound it.
+    """
+    import webbrowser
+    while not server.started and not server_ended.wait(UI_LISTEN_POLL_SECONDS):
+        pass
+    if server.started:
+        webbrowser.open(launch_url)
 
 
 class _TokenRedactingFilter(logging.Filter):
@@ -999,7 +1014,6 @@ def ui(
         raise typer.Exit(1)
 
     import secrets
-    import webbrowser
     from .local_web_service.gpu_warm_up import GpuWarmUp
     from .local_web_service.server import create_app
 
@@ -1013,12 +1027,31 @@ def ui(
     launch_url = f"http://{UI_HOST}:{port}/?token={token}"
     typer.echo(f"  Projects folder: {projects_folder}")
     typer.echo(f"  Open this address in a browser on this machine: {launch_url}")
-    if not no_browser:
-        webbrowser.open(launch_url)
 
     for logger_name in UI_LOGGERS_SHOWING_REQUEST_PATHS:
         logging.getLogger(logger_name).addFilter(_TokenRedactingFilter())
-    uvicorn.run(service, host=UI_HOST, port=port)
+    server = uvicorn.Server(uvicorn.Config(service, host=UI_HOST, port=port))
+    server_ended = threading.Event()
+    browser_thread = None
+    if not no_browser:
+        browser_thread = threading.Thread(
+            target=_open_browser_when_listening, args=(server, server_ended, launch_url), name="ui-open-browser", daemon=True)
+        browser_thread.start()
+    try:
+        server.run()
+    except KeyboardInterrupt:       # Ctrl+C stops the service, as uvicorn.run treats it
+        pass
+    except SystemExit:              # uvicorn exits this way when it cannot start, for example when the port is taken
+        if server.started:
+            raise
+    finally:
+        server_ended.set()
+        if browser_thread is not None:
+            browser_thread.join()
+    if not server.started:
+        typer.secho(f"  The service could not start on port {port} of {UI_HOST}: another program may be using it. "
+                    "Choose a free port with --port.", fg="red")
+        raise typer.Exit(1)
 
 
 # ---------------------------------------------------------------------------

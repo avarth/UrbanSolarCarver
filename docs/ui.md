@@ -8,7 +8,7 @@
 usc ui
 ```
 
-The command prints the address to open and opens it in your default browser. The address carries a token that is new on every launch, so keep using the page it opened (or the printed address) and not a bookmark from an earlier launch. Press Ctrl+C in the terminal to stop the service.
+The command prints the address to open and opens it in your default browser once the service is listening. When another program already uses the port, the command says so and stops without opening the browser; choose a free port with `--port`. The address carries a token that is new on every launch, so keep using the page it opened (or the printed address) and not a bookmark from an earlier launch. Press Ctrl+C in the terminal to stop the service.
 
 | Option | Default | Meaning |
 |--------|---------|---------|

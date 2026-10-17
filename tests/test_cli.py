@@ -342,46 +342,100 @@ class TestUiCommand:
         assert "npm run build" in result.output
         assert "no_front_end" in result.output
 
+    @staticmethod
+    def _server_that_starts_listening(monkeypatch, events):
+        """Replaces the uvicorn server run by one that records its address, then listens until the browser was asked to open."""
+        import time
+        import uvicorn
+
+        def run(server, sockets=None):
+            events.append(("server_run", server.config.host, server.config.port))
+            server.started = True
+            deadline = time.monotonic() + 10
+            while not any(event[0] == "browser_open" for event in events) and time.monotonic() < deadline:
+                time.sleep(0.01)
+
+        monkeypatch.setattr(uvicorn.Server, "run", run)
+
     def test_starts_uvicorn_on_localhost_with_a_token(self, monkeypatch, tmp_path, built_front_end):
         import re
-        import uvicorn
         import webbrowser
         from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
 
-        calls = []
-        monkeypatch.setattr(GpuWarmUp, "start", lambda self: calls.append("warm_up_start"))
-        monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: calls.append(("uvicorn_run", kwargs)))
-        opened_urls = []
-        monkeypatch.setattr(webbrowser, "open", opened_urls.append)
+        events = []
+        monkeypatch.setattr(GpuWarmUp, "start", lambda self: events.append("warm_up_start"))
+        self._server_that_starts_listening(monkeypatch, events)
+        monkeypatch.setattr(webbrowser, "open", lambda url: events.append(("browser_open", url)))
 
         projects_folder = tmp_path / "projects"
         result = _invoke(["ui", "--projects-folder", str(projects_folder)])
 
         assert result.exit_code == 0, result.output
-        assert calls[0] == "warm_up_start"
-        assert calls[1][0] == "uvicorn_run" and len(calls) == 2
-        assert calls[1][1]["host"] == "127.0.0.1"
-        assert calls[1][1]["port"] == 8770
-        assert len(opened_urls) == 1
-        assert re.fullmatch(r"http://127\.0\.0\.1:8770/\?token=[0-9a-f]{64}", opened_urls[0])
-        assert opened_urls[0] in result.output
+        assert events[:2] == ["warm_up_start", ("server_run", "127.0.0.1", 8770)] and len(events) == 3
+        opened_url = events[2][1]
+        assert re.fullmatch(r"http://127\.0\.0\.1:8770/\?token=[0-9a-f]{64}", opened_url)
+        assert opened_url in result.output
         assert projects_folder.is_dir()
 
-    def test_no_browser_prints_the_url_and_opens_nothing(self, monkeypatch, tmp_path, built_front_end):
+    def test_the_browser_opens_only_once_the_server_listens(self, monkeypatch, tmp_path, built_front_end):
+        import time
         import uvicorn
         import webbrowser
         from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
 
-        ports = []
+        opened_urls = []
+        urls_opened_before_listening = []
+
+        def run(server, sockets=None):
+            time.sleep(0.3)     # longer than the polling of the thread that waits to open the browser
+            urls_opened_before_listening.extend(opened_urls)
+            server.started = True
+            deadline = time.monotonic() + 10
+            while not opened_urls and time.monotonic() < deadline:
+                time.sleep(0.01)
+
         monkeypatch.setattr(GpuWarmUp, "start", lambda self: None)
-        monkeypatch.setattr(uvicorn, "run", lambda app, **kwargs: ports.append(kwargs["port"]))
+        monkeypatch.setattr(uvicorn.Server, "run", run)
+        monkeypatch.setattr(webbrowser, "open", opened_urls.append)
+
+        result = _invoke(["ui", "--projects-folder", str(tmp_path / "projects")])
+
+        assert result.exit_code == 0, result.output
+        assert urls_opened_before_listening == [] and len(opened_urls) == 1
+
+    def test_no_browser_prints_the_url_and_opens_nothing(self, monkeypatch, tmp_path, built_front_end):
+        import webbrowser
+        from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
+
+        events = []
+        monkeypatch.setattr(GpuWarmUp, "start", lambda self: None)
+        self._server_that_starts_listening(monkeypatch, events)
+        events.append(("browser_open", "not expected"))      # lets the fake server return at once
         monkeypatch.setattr(webbrowser, "open", lambda url: pytest.fail("the browser must not open"))
 
         result = _invoke(["ui", "--no-browser", "--port", "8123", "--projects-folder", str(tmp_path / "projects")])
 
         assert result.exit_code == 0, result.output
-        assert ports == [8123]
+        assert events[1] == ("server_run", "127.0.0.1", 8123)
         assert "http://127.0.0.1:8123/?token=" in result.output
+
+    def test_a_taken_port_is_named_and_the_browser_never_opens(self, monkeypatch, tmp_path, built_front_end):
+        import socket
+        import webbrowser
+        from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
+
+        monkeypatch.setattr(GpuWarmUp, "start", lambda self: None)
+        monkeypatch.setattr(webbrowser, "open", lambda url: pytest.fail("the browser must not open"))
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as other_program:
+            other_program.bind(("127.0.0.1", 0))
+            other_program.listen()
+            taken_port = other_program.getsockname()[1]
+
+            result = _invoke(["ui", "--port", str(taken_port), "--projects-folder", str(tmp_path / "projects")])
+
+        assert result.exit_code == 1, result.output
+        assert f"port {taken_port}" in result.output and "--port" in result.output
+        assert f"http://127.0.0.1:{taken_port}/?token=" in result.output      # the launch URL is still printed
 
     def test_an_unknown_device_is_refused(self, tmp_path, built_front_end):
         result = _invoke(["ui", "--no-browser", "--device", "tpu", "--projects-folder", str(tmp_path / "projects")])
