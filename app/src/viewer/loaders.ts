@@ -9,6 +9,7 @@ import { PLYLoader } from "three/examples/jsm/loaders/PLYLoader.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { ApiError, TOKEN_HEADER } from "../api_client/client";
+import { messages } from "../messages";
 import type { Point3 } from "./local_origin";
 
 export type MeshExtension = "ply" | "obj" | "stl" | "glb";
@@ -16,6 +17,17 @@ export type MeshExtension = "ply" | "obj" | "stl" | "glb";
 const NO_SHIFT: Point3 = [0, 0, 0];
 const BINARY_STL_HEADER_BYTES = 84;
 const BINARY_STL_TRIANGLE_BYTES = 50;
+
+/**
+ * The file was fetched, but the view cannot make a mesh of it: a type it does not draw, or content the three.js loaders cannot
+ * parse (a truncated ASCII PLY, say). The message is the reason, from messages.ts. A failed request rejects with its own error.
+ */
+export class MeshNotReadableError extends Error {
+  constructor(reason: string) {
+    super(reason);
+    this.name = "MeshNotReadableError";
+  }
+}
 
 async function fetchWithToken(url: string, token: string): Promise<ArrayBuffer> {
   const reply = await fetch(url, { headers: { [TOKEN_HEADER]: token } });
@@ -115,9 +127,22 @@ function isBinaryStl(buffer: ArrayBuffer): boolean {
   return BINARY_STL_HEADER_BYTES + triangleCount * BINARY_STL_TRIANGLE_BYTES === buffer.byteLength;
 }
 
-/** A mesh file of the service, fetched with the token, as one geometry in coordinates relative to *localOriginPoint*. */
+/**
+ * A mesh file of the service, fetched with the token, as one geometry in coordinates relative to *localOriginPoint*. A file the
+ * view cannot make a mesh of rejects with MeshNotReadableError.
+ */
 export async function loadMesh(url: string, token: string, extension: MeshExtension | string, localOriginPoint: Point3 = NO_SHIFT): Promise<THREE.BufferGeometry> {
   const buffer = await fetchWithToken(url, token);
+  try {
+    return await parsedMesh(buffer, extension, localOriginPoint);
+  } catch (error) {
+    if (error instanceof MeshNotReadableError) throw error;
+    // The loaders throw whatever their parsing meets (a TypeError on a missing line); for the view it means one thing
+    throw new MeshNotReadableError(messages.meshCannotBeDrawn);
+  }
+}
+
+async function parsedMesh(buffer: ArrayBuffer, extension: MeshExtension | string, localOriginPoint: Point3): Promise<THREE.BufferGeometry> {
   const text = () => new TextDecoder().decode(buffer);
   switch (extension.toLowerCase().replace(/^\./, "")) {
     case "obj":
@@ -141,6 +166,6 @@ export async function loadMesh(url: string, token: string, extension: MeshExtens
       return geometry;
     }
     default:
-      throw new Error(`Meshes of type '${extension}' cannot be shown.`);
+      throw new MeshNotReadableError(messages.meshTypeCannotBeShown(extension));
   }
 }

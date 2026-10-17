@@ -1,10 +1,13 @@
 // The input meshes the 3D view draws (UX 8.2): the files of the maximum volume and of the test surfaces, each role's files
 // joined into one geometry in local coordinates, fetched again when the files, their contents or the local origin change.
+// A file the service accepted (the engine reads it) that the view cannot parse is left out of the drawing and named in its
+// input box (UX 11); the role's other files are still drawn.
 import { useEffect, useState } from "react";
 import * as THREE from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
-import { ApiError, inputFileUrl, type InputFileInfo } from "../api_client/client";
-import { loadMesh } from "../viewer/loaders";
+import { inputFileUrl, type InputFileInfo } from "../api_client/client";
+import { messages } from "../messages";
+import { loadMesh, MeshNotReadableError } from "../viewer/loaders";
 import type { Bounds3, Point3 } from "../viewer/local_origin";
 import type { InputRole } from "./InputsStep";
 
@@ -30,30 +33,45 @@ export function boundsOf(geometries: (THREE.BufferGeometry | null)[]): Bounds3 |
   return box.isEmpty() ? null : [box.min.toArray(), box.max.toArray()];
 }
 
+export interface InputGeometry {
+  /** The files the view could read, joined; null while none is loaded. */
+  geometry: THREE.BufferGeometry | null;
+  /** One text per file the view cannot draw, naming the file, for its input box. */
+  drawingProblems: string[];
+}
+
+const NOTHING_LOADED: InputGeometry = { geometry: null, drawingProblems: [] };
+
 /** The joined mesh of a role's files in local coordinates; reloaded when the files, their contents or the local origin change. */
 export function useInputGeometry(token: string, project: string, role: MeshRole, files: InputFileInfo[], origin: Point3, revision: number,
-                                 onLoaded: () => void, onServiceProblem: (error: unknown) => void): THREE.BufferGeometry | null {
-  const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
+                                 onLoaded: () => void, onServiceProblem: (error: unknown) => void): InputGeometry {
+  const [loaded, setLoaded] = useState<InputGeometry>(NOTHING_LOADED);
   const reloadKey = JSON.stringify([files.map((file) => file.name), origin, revision]);
   useEffect(() => {
     if (files.length === 0) {
-      setGeometry(null);
+      setLoaded(NOTHING_LOADED);
       return;
     }
     let stale = false;
-    Promise.all(files.map((file) => loadMesh(inputFileUrl(project, role, file.name), token, extensionOf(file.name), origin)))
-      .then((parts) => {
+    Promise.allSettled(files.map((file) => loadMesh(inputFileUrl(project, role, file.name), token, extensionOf(file.name), origin)))
+      .then((outcomes) => {
         if (stale) return;
-        setGeometry(joinedGeometry(parts));
-        onLoaded();
-      })
-      .catch((error) => {
-        // A refused request may be a lost token; a file the service accepted that the view cannot read stays undrawn.
-        if (!stale && error instanceof ApiError) onServiceProblem(error);
+        const parts: THREE.BufferGeometry[] = [];
+        const drawingProblems: string[] = [];
+        let failedRequest: unknown = null;
+        outcomes.forEach((outcome, index) => {
+          if (outcome.status === "fulfilled") parts.push(outcome.value);
+          else if (outcome.reason instanceof MeshNotReadableError) drawingProblems.push(messages.fileProblem(files[index].name, outcome.reason.message));
+          else failedRequest ??= outcome.reason;
+        });
+        setLoaded({ geometry: parts.length > 0 ? joinedGeometry(parts) : null, drawingProblems });
+        if (parts.length > 0) onLoaded();
+        // A failed request may mean a lost token or a stopped engine: the app tells which, and leaves a refusal of another kind
+        if (failedRequest !== null) onServiceProblem(failedRequest);
       });
     return () => {
       stale = true;
     };
   }, [reloadKey]);
-  return geometry;
+  return loaded;
 }

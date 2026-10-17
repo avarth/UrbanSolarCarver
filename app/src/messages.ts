@@ -99,6 +99,9 @@ export const messages = {
   removeFile: (fileName: string) => `Remove ${fileName}`,
   triangleCount: (count: number) => `${groupedDigits(count)} ${count === 1 ? "triangle" : "triangles"}`,
   fileProblem: (fileName: string, reason: string) => `${fileName}: ${reason}`,
+  // A file the service accepted (the engine reads it) that the 3D view cannot draw, said in its box as fileProblem(name, reason)
+  meshCannotBeDrawn: "The 3D view cannot read this file, so it is not drawn. Runs still use it.",
+  meshTypeCannotBeShown: (extension: string) => `Meshes of type '${extension}' cannot be shown.`,
   inputsSizeTitle: "Size of all inputs together",
   inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ}\u00a0m`,
 

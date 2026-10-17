@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { loadMesh } from "./loaders";
+import { messages } from "../messages";
+import { loadMesh, MeshNotReadableError } from "./loaders";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -76,4 +77,20 @@ test("the parts of an OBJ stay apart as groups with their names", async () => {
   const geometry = await loadMesh("/plates.obj", "t", "obj");
   expect(geometry.groups).toHaveLength(2);
   expect(geometry.userData.partNames).toEqual(["floor_0_plate_0", "floor_1_plate_0"]);
+});
+
+test("a file the loaders cannot parse (a truncated ASCII PLY) rejects with MeshNotReadableError and the reason of messages.ts", async () => {
+  const twoVertexLinesMissing = ["ply", "format ascii 1.0", "element vertex 3", "property float x", "property float y", "property float z",
+                                 "element face 1", "property list uchar uint vertex_indices", "end_header", "0 0 0", ""].join("\n");
+  answerWith(twoVertexLinesMissing);
+  const loading = loadMesh("/broken.ply", "t", "ply", ORIGIN);
+  await expect(loading).rejects.toBeInstanceOf(MeshNotReadableError);
+  await expect(loading).rejects.toThrow(messages.meshCannotBeDrawn);
+});
+
+test("a mesh of a type the view does not draw rejects with the reason of messages.ts", async () => {
+  answerWith("not a mesh");
+  const loading = loadMesh("/m.3dm", "t", "3dm");
+  await expect(loading).rejects.toBeInstanceOf(MeshNotReadableError);
+  await expect(loading).rejects.toThrow(messages.meshTypeCannotBeShown("3dm"));
 });

@@ -85,9 +85,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const hasWeatherFile = files.weather.length > 0;
   const origin = joinedBounds === null ? NO_SHIFT : localOrigin(joinedBounds);
   const frameAllInputs = () => setFramingRequest((count) => count + 1);
-  const maxVolume = useInputGeometry(token, project.name, "max_volume", files.max_volume, origin, inputRevisions.max_volume, frameAllInputs, onServiceProblem);
-  const testSurfaces = useInputGeometry(token, project.name, "test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, frameAllInputs,
+  const maxVolumeMesh = useInputGeometry(token, project.name, "max_volume", files.max_volume, origin, inputRevisions.max_volume, frameAllInputs, onServiceProblem);
+  const testSurfacesMesh = useInputGeometry(token, project.name, "test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, frameAllInputs,
                                         onServiceProblem);
+  const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
   const inputsBounds = boundsOf([maxVolume, testSurfaces]);
   const sunPathSphere = useMemo(() => (joinedBounds === null ? null : hemisphere(localBounds(joinedBounds, localOrigin(joinedBounds)))), [joinedBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
@@ -206,7 +207,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
       <InputsStep files={files} weatherLocation={weatherLocation} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
-                  onRemoveFile={removeFile} disabledReason={inputsDisabledReason} />
+                  onRemoveFile={removeFile} disabledReason={inputsDisabledReason}
+                  drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, test_surfaces: testSurfacesMesh.drawingProblems }} />
     ),
     mode: (
       <ModeStep mode={form.mode} onChoose={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}

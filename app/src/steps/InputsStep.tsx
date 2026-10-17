@@ -33,6 +33,8 @@ interface InputBoxProps {
   disabledReason: string | null;
   /** The weather box under the mode tiles, where the chosen mode needs the file: not titled optional there. */
   weatherNeeded?: boolean;
+  /** The files of the box that the 3D view cannot draw, one text each naming the file. */
+  drawingProblems?: string[];
 }
 
 const TITLES: Record<InputRole, string> = {
@@ -50,7 +52,10 @@ function RemoveIcon() {
 }
 
 /** One input box: dashed and with its hint while empty, solid with one row per file once it has files. */
-export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false }: InputBoxProps) {
+const NO_PROBLEMS: string[] = [];
+
+export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
+                           drawingProblems = NO_PROBLEMS }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -128,7 +133,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
         </ul>
       )}
       {disabledReason !== null && <p className="input-box-reason">{disabledReason}</p>}
-      {problems.map((problem) => <p key={problem} className="input-box-problem"><WarningIcon />{problem}</p>)}
+      {[...problems, ...drawingProblems].map((problem) => <p key={problem} className="input-box-problem"><WarningIcon />{problem}</p>)}
     </section>
   );
 }
@@ -149,15 +154,17 @@ interface InputsStepProps {
   onAddFiles: AddInputFiles;
   onRemoveFile: RemoveInputFile;
   disabledReason: string | null;
+  /** Per mesh role, the files the 3D view cannot draw (one text each naming the file). */
+  drawingProblems?: Partial<Record<InputRole, string[]>>;
 }
 
-export function InputsStep({ files, weatherLocation, weatherHint, inputsBounds, onAddFiles, onRemoveFile, disabledReason }: InputsStepProps) {
+export function InputsStep({ files, weatherLocation, weatherHint, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {} }: InputsStepProps) {
   const warning = inputsBounds === null ? null : sizeWarning(inputsBounds);
   return (
     <div className="inputs-step">
       {INPUT_ROLES.map((role) => (
         <InputBox key={role} role={role} files={files[role]} weatherLocation={weatherLocation} weatherHint={weatherHint}
-                  onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} />
+                  onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]} />
       ))}
       {inputsBounds !== null && (
         <div className="inputs-size">

@@ -91,3 +91,14 @@ test("the weather box where the chosen mode needs the file is not titled optiona
                                      onRemoveFile={async () => null} disabledReason={null} weatherNeeded />);
   expect(rendered.container.querySelector("h3")!.textContent).toBe("Weather file");
 });
+
+test("a file the 3D view cannot draw is named in its box, next to the files, which stay", () => {
+  const problem = "neighbor_windows.ply: The 3D view cannot read this file, so it is not drawn. Runs still use it.";
+  rendered = renderForTest(
+    <InputsStep files={SOME_FILES} weatherLocation="Golden, CO, USA" weatherHint={WEATHER_HINT} inputsBounds={null} onAddFiles={async () => []}
+                onRemoveFile={async () => null} disabledReason={null} drawingProblems={{ max_volume: [], test_surfaces: [problem] }} />);
+  const testSurfaces = boxTitled("Test surfaces");
+  expect([...testSurfaces.querySelectorAll(".input-box-problem")].map((paragraph) => paragraph.textContent)).toEqual([problem]);
+  expect([...testSurfaces.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbor_roofs.ply", "neighbor_windows.ply"]);
+  expect(boxTitled("Maximum volume").querySelector(".input-box-problem")).toBeNull();
+});
