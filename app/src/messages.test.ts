@@ -1,11 +1,19 @@
 import { expect, test } from "vitest";
-import { messages } from "./messages";
+import { messages, plainText } from "./messages";
 
 test("interface messages follow the copy rules", () => {
   const text = JSON.stringify(Object.values(messages).map(m => typeof m === "function" ? (m as (...values: number[]) => unknown)(1, 2, 3, 4) : m));
   expect(text).not.toMatch(/plates?\b|floor plate|—|NVIDIA/i);
   expect(text).toContain("No CUDA-enabled GPU found. USC runs on the CPU, which is slower.");
   expect(messages.fixSettingToRun("Voxel size")).toBe("Fix the voxel size to run the analysis.");
+});
+
+test("the engine stopped and access lost messages show the command as code, without markdown backticks", () => {
+  for (const parts of [messages.engineStopped, messages.accessLost]) {
+    expect(plainText(parts)).not.toContain("`");
+    expect(parts).toContainEqual({ code: "usc ui" });
+  }
+  expect(plainText(messages.engineStopped)).toBe("The USC engine stopped. Start it again with usc ui, then reload this page.");
 });
 
 test("the grid over budget message groups digits and gives the voxel size to use", () => {

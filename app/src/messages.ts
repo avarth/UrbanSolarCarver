@@ -7,6 +7,13 @@ function groupedDigits(count: number): string {
   return String(count).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 }
 
+/** A text in which a command is shown as code. */
+export type MessagePart = string | { code: string };
+
+export function plainText(parts: MessagePart[]): string {
+  return parts.map((part) => (typeof part === "string" ? part : part.code)).join("");
+}
+
 export const messages = {
   // Start screen (5.1)
   newProject: "New project",
@@ -41,6 +48,7 @@ export const messages = {
   details: "Details",
   resultsOutOfDate: "Results are out of date; run the analysis again",
   runCancelled: "Cancelled.",
-  engineStopped: "The USC engine stopped. Start it again with `usc ui`, then reload this page.",
+  engineStopped: ["The USC engine stopped. Start it again with ", { code: "usc ui" }, ", then reload this page."] as MessagePart[],
+  accessLost: ["This page has lost its access to the engine. Open it again from the link that ", { code: "usc ui" }, " printed."] as MessagePart[],
   resultsUpToDate: "Results are up to date",
 };

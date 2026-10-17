@@ -19,6 +19,7 @@ export type SkyDome = Schemas["SkyDome"];
 
 const TOKEN_HEADER = "X-USC-Token";
 const TOKEN_QUERY_PARAMETER = "token";
+const STORED_TOKEN_KEY = "usc.token";
 
 /** A reply that is not 2xx. *body* is the parsed JSON of the reply (the service's error models), or its text when it is not JSON. */
 export class ApiError extends Error {
@@ -28,14 +29,42 @@ export class ApiError extends Error {
   }
 }
 
-/** The token the launch address carries, which is then removed from the address bar so it is not copied or bookmarked. */
+/**
+ * The token the launch address carries, which is then removed from the address bar so it is not copied or bookmarked.
+ * It is kept in this tab's session storage, so a reload (which has no token in the address) finds it again; without
+ * storage (blocked by the browser) a reload loses it. Without a token in the address, the kept one is returned.
+ */
 export function readTokenFromLaunchUrl(): string {
   const parameters = new URLSearchParams(window.location.search);
-  const token = parameters.get(TOKEN_QUERY_PARAMETER) ?? "";
+  const tokenInAddress = parameters.get(TOKEN_QUERY_PARAMETER);
+  const token = tokenInAddress ?? readStoredToken();
+  if (tokenInAddress !== null) storeToken(tokenInAddress);
   parameters.delete(TOKEN_QUERY_PARAMETER);
   const remainingQuery = parameters.toString();
   window.history.replaceState(null, "", window.location.pathname + (remainingQuery ? `?${remainingQuery}` : "") + window.location.hash);
   return token;
+}
+
+function readStoredToken(): string {
+  try {
+    return window.sessionStorage.getItem(STORED_TOKEN_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function storeToken(token: string): void {
+  try {
+    window.sessionStorage.setItem(STORED_TOKEN_KEY, token);
+  } catch {
+    // storage is blocked: the token then lives only in this page load
+  }
+}
+
+/** What a failed request says about the service: 401 means this page has no valid token; a request that never got a reply means the engine is not running. */
+export function serviceProblemOf(error: unknown): "access_lost" | "engine_stopped" | "other" {
+  if (error instanceof ApiError) return error.status === 401 ? "access_lost" : "other";
+  return "engine_stopped";
 }
 
 function projectPath(project: string): string {

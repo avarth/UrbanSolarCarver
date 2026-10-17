@@ -67,12 +67,13 @@ def test_no_packaged_example_file_is_ignored_by_git():
 
 
 def app_source_sha256(app_folder: Path) -> str:
-    """The hash that app/scripts/write_build_info.mjs records: package.json, package-lock.json and every file under src/.
+    """The hash that app/scripts/write_build_info.mjs records: package.json, package-lock.json, index.html, vite.config.ts,
+    tsconfig.json and every file under src/.
 
     Files are taken in the order of their paths relative to app/ (written with "/"); each adds its relative path,
     a newline, and its bytes with every CRLF turned into LF, so a Windows checkout gives the same hash as a Linux one.
     """
-    source_files = [app_folder / "package.json", app_folder / "package-lock.json",
+    source_files = [*(app_folder / name for name in ("package.json", "package-lock.json", "index.html", "vite.config.ts", "tsconfig.json")),
                     *(path for path in (app_folder / "src").rglob("*") if path.is_file())]
     relative_paths = sorted(path.relative_to(app_folder).as_posix() for path in source_files)
     digest = hashlib.sha256()

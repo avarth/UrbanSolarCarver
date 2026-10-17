@@ -1,9 +1,12 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
-  ApiError, addInput, getHealth, getScorePoints, projectDownloadUrl, putConfig, readTokenFromLaunchUrl, runFileUrl, startRun,
+  ApiError, addInput, getHealth, getScorePoints, projectDownloadUrl, putConfig, readTokenFromLaunchUrl, runFileUrl, serviceProblemOf, startRun,
 } from "./client";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  window.sessionStorage.clear();
+});
 
 function answerWith(body: BodyInit | null, status = 200) {
   const fetchStub = vi.fn(async (_address: string, _options?: RequestInit) => new Response(body, { status }));
@@ -21,7 +24,40 @@ test("readTokenFromLaunchUrl keeps the other parameters and gives an empty token
   window.history.replaceState(null, "", "/?token=abc&view=dark");
   readTokenFromLaunchUrl();
   expect(window.location.search).toBe("?view=dark");
+  window.sessionStorage.clear();
   expect(readTokenFromLaunchUrl()).toBe("");
+});
+
+test("the token survives a reload: it is kept for the tab and read back when the address has none", () => {
+  window.history.replaceState(null, "", "/?token=abc");
+  readTokenFromLaunchUrl();
+  window.history.replaceState(null, "", "/");
+  expect(readTokenFromLaunchUrl()).toBe("abc");
+});
+
+test("a token in the address replaces the one kept for the tab", () => {
+  window.history.replaceState(null, "", "/?token=old");
+  readTokenFromLaunchUrl();
+  window.history.replaceState(null, "", "/?token=new");
+  readTokenFromLaunchUrl();
+  window.history.replaceState(null, "", "/");
+  expect(readTokenFromLaunchUrl()).toBe("new");
+});
+
+test("the token is still read when session storage cannot be used", () => {
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+  window.history.replaceState(null, "", "/?token=abc");
+  expect(readTokenFromLaunchUrl()).toBe("abc");
+  window.history.replaceState(null, "", "/");
+  expect(readTokenFromLaunchUrl()).toBe("");
+  vi.restoreAllMocks();
+});
+
+test("a 401 means the page lost its access, a failed connection means the engine stopped", () => {
+  expect(serviceProblemOf(new ApiError(401, { detail: "The access token is missing or wrong." }))).toBe("access_lost");
+  expect(serviceProblemOf(new TypeError("Failed to fetch"))).toBe("engine_stopped");
+  expect(serviceProblemOf(new ApiError(500, "oops"))).toBe("other");
 });
 
 test("a request carries the token in X-USC-Token", async () => {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { getHealth, readTokenFromLaunchUrl, type HealthReply } from "./api_client/client";
-import { messages } from "./messages";
+import { getHealth, readTokenFromLaunchUrl, serviceProblemOf, type HealthReply } from "./api_client/client";
+import { messages, type MessagePart } from "./messages";
 
 const accessToken = readTokenFromLaunchUrl();
 const WARM_UP_POLL_MILLISECONDS = 1000;
@@ -18,9 +18,13 @@ function warmUpText(warmUp: HealthReply["warm_up"]): string {
   }
 }
 
+function MessageText({ parts }: { parts: MessagePart[] }) {
+  return <p>{parts.map((part, index) => (typeof part === "string" ? part : <code key={index}>{part.code}</code>))}</p>;
+}
+
 export function App() {
   const [health, setHealth] = useState<HealthReply | null>(null);
-  const [engineReachable, setEngineReachable] = useState(true);
+  const [problem, setProblem] = useState<"access_lost" | "engine_stopped" | null>(null);
 
   useEffect(() => {
     let timer: number | undefined;
@@ -31,8 +35,9 @@ export function App() {
         if (leftPage) return;
         setHealth(reply);
         if (reply.warm_up.state === "not_started" || reply.warm_up.state === "running") timer = window.setTimeout(askForHealth, WARM_UP_POLL_MILLISECONDS);
-      } catch {
-        setEngineReachable(false);
+      } catch (error) {
+        const kind = serviceProblemOf(error);
+        if (!leftPage && kind !== "other") setProblem(kind);
       }
     };
     askForHealth();
@@ -42,7 +47,8 @@ export function App() {
     };
   }, []);
 
-  if (!engineReachable) return <p>{messages.engineStopped}</p>;
+  if (problem === "access_lost") return <MessageText parts={messages.accessLost} />;
+  if (problem === "engine_stopped") return <MessageText parts={messages.engineStopped} />;
   return (
     <main>
       <h1>UrbanSolarCarver {health?.version}</h1>

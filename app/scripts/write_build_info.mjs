@@ -16,7 +16,7 @@ function relativePathsUnder(folder) {
 }
 
 function appSourceSha256() {
-  const relativePaths = ["package.json", "package-lock.json", ...relativePathsUnder("src")];
+  const relativePaths = ["package.json", "package-lock.json", "index.html", "vite.config.ts", "tsconfig.json", ...relativePathsUnder("src")];
   relativePaths.sort((first, second) => Buffer.compare(Buffer.from(first), Buffer.from(second)));
   const digest = createHash("sha256");
   for (const relativePath of relativePaths) {
