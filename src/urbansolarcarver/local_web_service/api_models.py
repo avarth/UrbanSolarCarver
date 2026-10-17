@@ -24,6 +24,20 @@ class ProjectJson(BaseModel):
     stage_records: dict[str, StageRecord] = Field(default_factory=dict)   # stage name -> record
 
 
+class InputFileInfo(BaseModel):
+    """One uploaded input file as listed in the file lists of the inputs screen."""
+    name: str
+    triangle_count: int         # 0 for the weather file
+
+
+class InputFilesReply(BaseModel):
+    """The files of one input role after an upload or a removal."""
+    role: str
+    files: list[InputFileInfo]  # sorted by name
+    joined_bounds: list[list[float]] | None   # [[xmin, ymin, zmin], [xmax, ymax, zmax]] of the joined max volume, whatever the role
+    weather_location: str | None              # "<city>, <country>" from the weather file, None without one
+
+
 class ProjectSummary(BaseModel):
     """One row of the start screen's project list."""
     name: str
