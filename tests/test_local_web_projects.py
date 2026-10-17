@@ -291,6 +291,16 @@ def test_config_yaml_round_trips_through_load_config(tmp_path):
     assert store.read_settings("p") == reply.settings
 
 
+def test_config_from_settings_builds_the_config_of_a_settings_dict(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    stored = store.read_stored_config("p")
+    config = store.config_from_settings("p", {**stored, "voxel_size": 2.0})
+    assert config.voxel_size == 2.0 and Path(config.out_dir) == (tmp_path / "p/run").resolve()
+    assert store.load_project_config("p") == store.config_from_settings("p", stored)
+    with pytest.raises(ConfigError):
+        store.config_from_settings("p", {**stored, "voxel_size": -1})
+
+
 def test_browser_paths_and_device_are_ignored(tmp_path):
     store = ProjectStore(tmp_path, device="cpu"); store.create("p", "daylight")
     store.write_config_from_values("p", {"mode": "daylight", "out_dir": "C:/elsewhere", "max_volume_path": "/etc/x", "device": "cuda"})

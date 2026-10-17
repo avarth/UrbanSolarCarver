@@ -5,6 +5,8 @@ with the browser app. This module holds no behaviour.
 """
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -22,6 +24,21 @@ class ProjectJson(BaseModel):
     inputs_revision: int = 1    # raised by every upload and removal of an input file
     input_files: dict[str, dict[str, int]] = Field(default_factory=dict)  # role -> file name -> triangle count
     stage_records: dict[str, StageRecord] = Field(default_factory=dict)   # stage name -> record
+
+
+StageState = Literal["current", "out_of_date", "missing"]
+
+
+class StageStatusReply(BaseModel):
+    """Whether each pipeline stage of a project has output that matches the settings and inputs now."""
+    stages: dict[str, StageState]   # stage name -> state, in pipeline order
+
+
+class StartRunReply(BaseModel):
+    """The answer to a request to run: a run started, or every stage asked for is already current."""
+    status: Literal["started", "up_to_date"]
+    run_id: str | None              # None when up to date
+    stages: list[str]               # the stages the run executes, in pipeline order; empty when up to date
 
 
 class InputFileInfo(BaseModel):

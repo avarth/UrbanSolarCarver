@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from ..errors import ConfigError, InputError
 from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_budget, plan_voxel_grid
 from ..io import load_mesh, save_mesh
-from ..load_config import build_config_from_mode_starting_values, load_config
+from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
 from .api_models import ConfigReply, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
@@ -220,19 +220,30 @@ class ProjectStore:
                 project_folder / CONFIG_FILE_NAME, yaml.safe_dump(stored_config, sort_keys=False).encode("utf-8"))
             return ConfigReply(settings=self._without_service_owned(stored_config), grid_plan=grid_plan)
 
-    def read_settings(self, name: str) -> dict:
-        """The stored settings of a project without the paths and device the service owns."""
+    def read_stored_config(self, name: str) -> dict:
+        """The content of config.yaml as stored, service paths and device included."""
         with self.project_lock(name):
             config_path = self.open(name) / CONFIG_FILE_NAME
             try:
                 stored_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
             except (yaml.YAMLError, OSError) as error:
                 raise ProjectError(f"{CONFIG_FILE_NAME} of '{name}' cannot be read: {error}", status_code=422) from error
-            return self._without_service_owned(stored_config)
+            return stored_config
+
+    def read_settings(self, name: str) -> dict:
+        """The stored settings of a project without the paths and device the service owns."""
+        return self._without_service_owned(self.read_stored_config(name))
+
+    def config_from_settings(self, name: str, settings: dict) -> UserConfig:
+        """The engine's validated config for a stored settings dict, with its paths resolved inside the project folder.
+
+        Raises ConfigError when the settings are not valid.
+        """
+        return build_config(settings, base_folder=self.open(name))
 
     def load_project_config(self, name: str) -> UserConfig:
         """The stored config.yaml as the engine's validated config, with its paths resolved inside the project folder."""
-        return load_config(str(self.open(name) / CONFIG_FILE_NAME))
+        return self.config_from_settings(name, self.read_stored_config(name))
 
     def _plan_and_check_grid(self, name: str, config: UserConfig) -> GridPlanReply | None:
         """The grid plan of the joined max volume, None before one exists; GridOverBudget when it is too large."""
