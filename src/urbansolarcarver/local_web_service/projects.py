@@ -6,7 +6,9 @@ a validated name and checked to be a direct child of the projects folder.
 """
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -82,20 +84,28 @@ class ProjectStore:
         return project_folder
 
     def list(self) -> list[ProjectSummary]:
-        """The projects sorted by name; a folder without project.json is not a project."""
+        """The projects sorted by name.
+
+        A folder is skipped, not reported as an error, when it is not a project this service
+        could have made: no project.json, a name the service would not accept, or a project.json
+        or config.yaml that cannot be read. One bad folder must not hide the other projects.
+        """
         if not self._projects_folder.is_dir():
             return []
         summaries = []
         for project_folder in sorted(self._projects_folder.iterdir(), key=lambda folder: folder.name):
             if not (project_folder / PROJECT_JSON_FILE_NAME).is_file():
                 continue
-            project_json = self.read_project_json(project_folder.name)
-            summaries.append(ProjectSummary(
-                name=project_json.name,
-                created=project_json.created,
-                modified=self._modified(project_folder),
-                mode=self._mode(project_folder),
-            ))
+            try:
+                project_json = self.read_project_json(project_folder.name)
+                summaries.append(ProjectSummary(
+                    name=project_json.name,
+                    created=project_json.created,
+                    modified=self._modified(project_folder),
+                    mode=self._mode(project_folder),
+                ))
+            except ProjectError:
+                continue
         return summaries
 
     def read_project_json(self, name: str) -> ProjectJson:
@@ -106,8 +116,16 @@ class ProjectStore:
             raise ProjectError(f"{PROJECT_JSON_FILE_NAME} of '{name}' cannot be read: {error}", status_code=422) from error
 
     def write_project_json(self, name: str, data: ProjectJson) -> None:
-        project_json_path = self._project_folder(name) / PROJECT_JSON_FILE_NAME
-        project_json_path.write_text(data.model_dump_json(indent=1), encoding="utf-8")
+        """Write project.json through a temporary file in the same folder, so a reader never sees a partial file."""
+        project_folder = self._project_folder(name)
+        descriptor, temporary_path = tempfile.mkstemp(dir=project_folder, prefix=PROJECT_JSON_FILE_NAME, suffix=".tmp")
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
+                temporary_file.write(data.model_dump_json(indent=1))
+            os.replace(temporary_path, project_folder / PROJECT_JSON_FILE_NAME)
+        except BaseException:
+            Path(temporary_path).unlink(missing_ok=True)
+            raise
 
     @staticmethod
     def _modified(project_folder: Path) -> str:
@@ -119,5 +137,8 @@ class ProjectStore:
         config_path = project_folder / CONFIG_FILE_NAME
         if not config_path.is_file():
             return ""
-        config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        try:
+            config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        except (yaml.YAMLError, OSError) as error:
+            raise ProjectError(f"{CONFIG_FILE_NAME} of '{project_folder.name}' cannot be read: {error}", status_code=422) from error
         return str(config.get("mode", "")) if isinstance(config, dict) else ""
