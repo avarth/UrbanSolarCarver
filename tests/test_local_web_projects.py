@@ -1,9 +1,11 @@
 """Project folders, names and project.json of the local web service."""
+import threading
 from pathlib import Path
 
 import pytest
 import trimesh
 
+from urbansolarcarver.local_web_service import projects
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore, sanitize_file_name
 
 GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
@@ -168,3 +170,89 @@ def test_weather_location_comes_from_the_epw_header(tmp_path):
     with pytest.raises(ProjectError) as err:
         store.add_input("p", "weather", "golden.txt", b"x")
     assert err.value.status_code == 422
+
+
+def test_names_differing_only_in_letter_case_are_one_file(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    store.add_input("p", "max_volume", "A.ply", _box_bytes([0, 0, 5]))
+    reply = store.add_input("p", "max_volume", "a.ply", _box_bytes([30, 0, 5]))
+    assert [f.name for f in reply.files] == ["A.ply"]
+    assert reply.joined_bounds == [[25.0, -5.0, 0.0], [35.0, 5.0, 10.0]]
+    joined = trimesh.load(tmp_path / "p/inputs/joined/max_volume.ply", force="mesh")
+    assert len(joined.faces) == 12 and joined.is_watertight
+    assert [path.name for path in (tmp_path / "p/inputs/max_volume").iterdir()] == ["A.ply"]
+    assert store.remove_input("p", "max_volume", "A.ply").files == []
+
+
+def _state_of(store, tmp_path):
+    return (
+        store.read_project_json("p").model_dump_json(),
+        {path.name: path.read_bytes() for path in (tmp_path / "p/inputs").rglob("*") if path.is_file()},
+    )
+
+
+def test_failed_join_after_an_upload_leaves_files_and_project_json_as_they_were(tmp_path, monkeypatch):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    before = _state_of(store, tmp_path)
+    def failing_save_mesh(mesh, path):
+        raise OSError("disk full")
+    monkeypatch.setattr(projects, "save_mesh", failing_save_mesh)
+    for file_name in ("b.ply", "a.ply"):    # a new file, then a replacement of an existing one
+        with pytest.raises(ProjectError) as err:
+            store.add_input("p", "max_volume", file_name, _box_bytes([30, 0, 5]))
+        assert err.value.status_code == 500 and "disk full" in str(err.value)
+        assert _state_of(store, tmp_path) == before
+
+
+def test_failed_join_after_a_removal_leaves_files_and_project_json_as_they_were(tmp_path, monkeypatch):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "b.ply", _box_bytes([30, 0, 5]))
+    before = _state_of(store, tmp_path)
+    monkeypatch.setattr(projects, "save_mesh", lambda mesh, path: (_ for _ in ()).throw(OSError("disk full")))
+    with pytest.raises(ProjectError):
+        store.remove_input("p", "max_volume", "a.ply")
+    assert _state_of(store, tmp_path) == before
+
+
+def test_a_recorded_file_missing_on_disk_is_a_project_error_and_can_still_be_removed(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    store.add_input("p", "max_volume", "a.ply", _box_bytes([0, 0, 5]))
+    store.add_input("p", "max_volume", "b.ply", _box_bytes([30, 0, 5]))
+    (tmp_path / "p/inputs/max_volume/a.ply").unlink()
+    with pytest.raises(ProjectError):
+        store.add_input("p", "max_volume", "c.ply", _box_bytes([60, 0, 5]))
+    reply = store.remove_input("p", "max_volume", "a.ply")
+    assert [f.name for f in reply.files] == ["b.ply"]
+
+
+def test_rejection_message_names_the_uploaded_file_not_the_temporary_one(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    with pytest.raises(ProjectError) as err:
+        store.add_input("p", "test_surfaces", "facade_b.obj", b"v 0 0 0\n")
+    assert "facade_b.obj" in str(err.value)
+    assert "upload" not in str(err.value) and str(tmp_path) not in str(err.value)
+
+
+def test_uploads_from_two_threads_to_one_role_are_both_recorded(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    barrier = threading.Barrier(2)
+    failures = []
+    def upload(file_name, center):
+        try:
+            barrier.wait()
+            store.add_input("p", "test_surfaces", file_name, _box_bytes(center))
+        except Exception as error:     # reported to the test thread below
+            failures.append(error)
+    threads = [threading.Thread(target=upload, args=(f"{letter}.ply", [index * 30, 0, 5])) for index, letter in enumerate("ab")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert failures == []
+    assert [f.name for f in store.input_files("p", "test_surfaces")] == ["a.ply", "b.ply"]
+    assert store.read_project_json("p").inputs_revision == 3
+    joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces.ply", force="mesh")
+    assert len(joined.faces) == 24
+    assert [path.name for path in (tmp_path / "p/inputs/joined").iterdir()] == ["test_surfaces.ply"]

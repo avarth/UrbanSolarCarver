@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -77,6 +78,19 @@ class ProjectStore:
 
     def __init__(self, projects_folder: Path):
         self._projects_folder = Path(projects_folder)
+        self._project_locks: dict[str, threading.RLock] = {}
+        self._project_locks_guard = threading.Lock()
+
+    def project_lock(self, name: str) -> threading.RLock:
+        """The lock that serializes changes to one project.
+
+        The HTTP layer runs requests in a thread pool, so two requests can change the same project
+        at once. Every read-modify-write of project.json (and the files it describes) holds this
+        lock; it is re-entrant, so a caller may hold it around several store calls.
+        """
+        lock_key = validate_project_name(name).lower()   # Windows folder names ignore letter case
+        with self._project_locks_guard:
+            return self._project_locks.setdefault(lock_key, threading.RLock())
 
     def _project_folder(self, name: str) -> Path:
         """The folder of a project with a valid name, guaranteed to lie directly in the projects folder."""
@@ -155,55 +169,56 @@ class ProjectStore:
         """Store an uploaded file for a role and rebuild the joined file of a mesh role.
 
         A mesh is checked with the engine's own loader before it is kept, so a file the
-        run would refuse is refused at upload. A file with the name of an earlier upload replaces it.
+        run would refuse is refused at upload. A file with the name of an earlier upload
+        replaces it, also when the names differ only in letter case (one name, one file on Windows).
+        Nothing on disk or in project.json changes unless the whole upload, joined file included, succeeds.
         """
         self._check_role(role)
         clean_name = sanitize_file_name(file_name)
         extension = Path(clean_name).suffix.lower()
-        project_json = self.read_project_json(name)
-        project_folder = self.open(name)
-        if role == WEATHER_ROLE:
-            if extension != WEATHER_EXTENSION:
-                raise ProjectError(f"The weather file must be an {WEATHER_EXTENSION} file.", status_code=422)
-            self._write_bytes_atomically(project_folder / INPUTS_FOLDER / WEATHER_FILE_NAME, data)
-            project_json.input_files[role] = {WEATHER_FILE_NAME: 0}
-        else:
-            if extension not in MESH_EXTENSIONS:
-                raise ProjectError(f"A mesh file must be one of {', '.join(MESH_EXTENSIONS)}.", status_code=422)
-            role_folder = project_folder / INPUTS_FOLDER / role
-            descriptor, temporary_name = tempfile.mkstemp(dir=role_folder, prefix="upload", suffix=extension)
-            temporary_path = Path(temporary_name)
-            try:
-                with os.fdopen(descriptor, "wb") as temporary_file:
-                    temporary_file.write(data)
-                try:
-                    triangle_count = len(load_mesh(str(temporary_path)).faces)
-                except InputError as error:
-                    raise ProjectError(str(error), status_code=422) from error
-                os.replace(temporary_path, role_folder / clean_name)
-            except BaseException:
-                temporary_path.unlink(missing_ok=True)
-                raise
-            project_json.input_files.setdefault(role, {})[clean_name] = triangle_count
-            self._rebuild_joined_file(project_folder, role, project_json)
-        project_json.inputs_revision += 1
-        self.write_project_json(name, project_json)
-        return self._reply(name, role, project_json)
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
+            project_folder = self.open(name)
+            if role == WEATHER_ROLE:
+                if extension != WEATHER_EXTENSION:
+                    raise ProjectError(f"The weather file must be an {WEATHER_EXTENSION} file.", status_code=422)
+                self._write_bytes_atomically(project_folder / INPUTS_FOLDER / WEATHER_FILE_NAME, data)
+                project_json.input_files[role] = {WEATHER_FILE_NAME: 0}
+            else:
+                if extension not in MESH_EXTENSIONS:
+                    raise ProjectError(f"A mesh file must be one of {', '.join(MESH_EXTENSIONS)}.", status_code=422)
+                self._add_mesh_file(project_folder, project_json, role, clean_name, data)
+            project_json.inputs_revision += 1
+            self.write_project_json(name, project_json)
+            return self._reply(name, role, project_json)
 
     def remove_input(self, name: str, role: str, file_name: str) -> InputFilesReply:
-        """Delete an uploaded file and rebuild the joined file of a mesh role; 404 when the file is not there."""
+        """Delete an uploaded file and rebuild the joined file of a mesh role; 404 when the file is not there.
+
+        Nothing is deleted unless the joined file of the remaining files could be built.
+        """
         self._check_role(role)
-        project_json = self.read_project_json(name)
-        project_folder = self.open(name)
-        if file_name not in project_json.input_files.get(role, {}):
-            raise ProjectError(f"There is no {role} file named '{file_name}'.", status_code=404)
-        del project_json.input_files[role][file_name]
-        self._stored_file_path(project_folder, role, file_name).unlink(missing_ok=True)
-        if role != WEATHER_ROLE:
-            self._rebuild_joined_file(project_folder, role, project_json)
-        project_json.inputs_revision += 1
-        self.write_project_json(name, project_json)
-        return self._reply(name, role, project_json)
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
+            project_folder = self.open(name)
+            if file_name not in project_json.input_files.get(role, {}):
+                raise ProjectError(f"There is no {role} file named '{file_name}'.", status_code=404)
+            remaining_names = [other for other in project_json.input_files[role] if other != file_name]
+            joined_temporary_path = None
+            try:
+                if role != WEATHER_ROLE:
+                    joined_temporary_path = self._write_joined_temporary_file(
+                        project_folder, role, self._load_stored_meshes(project_folder, role, remaining_names))
+                self._stored_file_path(project_folder, role, file_name).unlink(missing_ok=True)
+                if role != WEATHER_ROLE:
+                    self._replace_joined_file(project_folder, role, joined_temporary_path)
+            finally:
+                if joined_temporary_path is not None:
+                    joined_temporary_path.unlink(missing_ok=True)
+            del project_json.input_files[role][file_name]
+            project_json.inputs_revision += 1
+            self.write_project_json(name, project_json)
+            return self._reply(name, role, project_json)
 
     def input_files(self, name: str, role: str) -> list[InputFileInfo]:
         """The uploaded files of a role sorted by name, with their triangle counts."""
@@ -271,30 +286,80 @@ class ProjectStore:
             Path(temporary_path).unlink(missing_ok=True)
             raise
 
-    @staticmethod
-    def _rebuild_joined_file(project_folder: Path, role: str, project_json: ProjectJson) -> None:
-        """Join the uploaded meshes of a role as the Grasshopper components do (spec 5.3).
-
-        Max volume files are concatenated and their coincident vertices merged; test surface
-        files are only concatenated. The joined file is replaced atomically, or removed when
-        the role has no file left.
-        """
-        joined_path = project_folder / JOINED_FOLDER / f"{role}.ply"
-        file_names = sorted(project_json.input_files.get(role, {}))
-        if not file_names:
-            joined_path.unlink(missing_ok=True)
-            return
-        meshes = [load_mesh(str(project_folder / INPUTS_FOLDER / role / file_name)) for file_name in file_names]
-        joined_mesh = trimesh.util.concatenate(meshes)
-        if role == "max_volume":
-            joined_mesh.merge_vertices()
-        temporary_path = joined_path.with_name(f"{role}.tmp.ply")
+    def _add_mesh_file(self, project_folder: Path, project_json: ProjectJson, role: str, clean_name: str, data: bytes) -> None:
+        """Check an uploaded mesh, build the joined file with it, then move both into place."""
+        role_folder = project_folder / INPUTS_FOLDER / role
+        recorded_names = project_json.input_files.setdefault(role, {})
+        stored_name = next((recorded for recorded in recorded_names if recorded.lower() == clean_name.lower()), clean_name)
+        descriptor, upload_name = tempfile.mkstemp(dir=role_folder, prefix="upload", suffix=Path(clean_name).suffix.lower())
+        upload_path = Path(upload_name)
+        joined_temporary_path = None
         try:
+            with os.fdopen(descriptor, "wb") as upload_file:
+                upload_file.write(data)
+            try:
+                uploaded_mesh = load_mesh(str(upload_path))
+            except InputError as error:
+                # the engine message names the temporary file; the person knows the file by its own name
+                message = str(error).removeprefix("load_mesh: ")
+                raise ProjectError(message.replace(repr(str(upload_path)), repr(clean_name)).replace(str(upload_path), clean_name),
+                                   status_code=422) from error
+            other_names = [recorded for recorded in recorded_names if recorded != stored_name]
+            meshes_by_name = dict(zip(other_names, self._load_stored_meshes(project_folder, role, other_names)))
+            meshes_by_name[stored_name] = uploaded_mesh
+            joined_temporary_path = self._write_joined_temporary_file(
+                project_folder, role, [meshes_by_name[mesh_name] for mesh_name in sorted(meshes_by_name)])
+            os.replace(upload_path, role_folder / stored_name)
+            self._replace_joined_file(project_folder, role, joined_temporary_path)
+        finally:
+            upload_path.unlink(missing_ok=True)
+            if joined_temporary_path is not None:
+                joined_temporary_path.unlink(missing_ok=True)
+        recorded_names[stored_name] = len(uploaded_mesh.faces)
+
+    @staticmethod
+    def _load_stored_meshes(project_folder: Path, role: str, file_names: list[str]) -> list[trimesh.Trimesh]:
+        """The meshes of recorded files in name order, or ProjectError when one cannot be read."""
+        meshes = []
+        for file_name in sorted(file_names):
+            try:
+                meshes.append(load_mesh(str(project_folder / INPUTS_FOLDER / role / file_name)))
+            except InputError as error:
+                raise ProjectError(f"The {role} file '{file_name}' cannot be read, so the joined file was not rebuilt: {error}",
+                                   status_code=422) from error
+        return meshes
+
+    @staticmethod
+    def _write_joined_temporary_file(project_folder: Path, role: str, meshes: list[trimesh.Trimesh]) -> Path | None:
+        """Join the meshes of a role as the Grasshopper components do (spec 5.3) into a new temporary file.
+
+        Max volume meshes are concatenated and their coincident vertices merged; test surface
+        meshes are only concatenated. Returns None for no meshes (the joined file is then removed).
+        The temporary name is unique, so concurrent builds never share a file.
+        """
+        if not meshes:
+            return None
+        descriptor, temporary_name = tempfile.mkstemp(dir=project_folder / JOINED_FOLDER, prefix=f"{role}-", suffix=".tmp.ply")
+        os.close(descriptor)
+        temporary_path = Path(temporary_name)
+        try:
+            joined_mesh = trimesh.util.concatenate(meshes)
+            if role == "max_volume":
+                joined_mesh.merge_vertices()
             save_mesh(joined_mesh, str(temporary_path))
-            os.replace(temporary_path, joined_path)
-        except BaseException:
+        except Exception as error:
             temporary_path.unlink(missing_ok=True)
-            raise
+            raise ProjectError(f"The joined {role} file could not be built: {error}", status_code=500) from error
+        return temporary_path
+
+    @staticmethod
+    def _replace_joined_file(project_folder: Path, role: str, joined_temporary_path: Path | None) -> None:
+        """Move the new joined file into place, or remove the joined file when the role has no mesh left."""
+        joined_path = project_folder / JOINED_FOLDER / f"{role}.ply"
+        if joined_temporary_path is None:
+            joined_path.unlink(missing_ok=True)
+        else:
+            os.replace(joined_temporary_path, joined_path)
 
     @staticmethod
     def _modified(project_folder: Path) -> str:
