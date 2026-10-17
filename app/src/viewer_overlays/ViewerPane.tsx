@@ -2,6 +2,7 @@
 // Each step shows its own layers by default (UX 8.2); the layers menu turns them on and off until another step opens.
 // The maximum volume is a light solid in Inputs, Mode and Settings and a ghost, off by default, in the later steps. Result
 // layers that are out of date, or being replaced by a run, are dimmed (UX 6.3); a thin bar along the top shows a run's progress.
+// Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
 import type { RunSummary, SkyDome, SunPath } from "../api_client/client";
@@ -79,6 +80,7 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
                              missingLayers = NO_LAYERS, runProgress = null, overlayContent }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
+  const [sceneUnavailable, setSceneUnavailable] = useState(false);
   const [camera, setCamera] = useState<CameraState>(NO_CAMERA);
   const [theme, setTheme] = useState<ViewportTheme>(rememberedViewportTheme);
   const [visibleByChoice, setVisibleByChoice] = useState<Partial<Record<LayerName, boolean>>>({});
@@ -88,7 +90,14 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   const originKey = localOrigin.join(",");
 
   useEffect(() => {
-    const viewer = new ViewerScene(container.current!);
+    let viewer: ViewerScene;
+    try {
+      viewer = new ViewerScene(container.current!);
+    } catch {
+      // three.js throws when the browser gives it no WebGL context; nothing of the scene was added to the page by then
+      setSceneUnavailable(true);
+      return;
+    }
     const stopListening = viewer.onCameraChange(setCamera);
     setScene(viewer);
     return () => {
@@ -173,15 +182,25 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
   };
   const progressPercent = runProgress === null ? 0 : Math.round(runProgress * 100);
+  const progressBar = runProgress !== null && (
+    <div className="viewer-run-progress" role="progressbar" aria-label={messages.runProgress} aria-valuemin={0} aria-valuemax={100}
+         aria-valuenow={progressPercent}>
+      <div className="viewer-run-progress-bar" style={{ width: `${progressPercent}%` }} />
+    </div>
+  );
+  if (sceneUnavailable) {
+    return (
+      <div className="viewer-pane viewer-pane-unavailable">
+        {progressBar}
+        <p className="viewer-unavailable" role="status">{messages.viewerNeedsWebGl}</p>
+        {overlayContent}
+      </div>
+    );
+  }
   return (
     <div className="viewer-pane">
       <div ref={container} className="viewer-canvas" />
-      {runProgress !== null && (
-        <div className="viewer-run-progress" role="progressbar" aria-label={messages.runProgress} aria-valuemin={0} aria-valuemax={100}
-             aria-valuenow={progressPercent}>
-          <div className="viewer-run-progress-bar" style={{ width: `${progressPercent}%` }} />
-        </div>
-      )}
+      {progressBar}
       <Compass yawDegrees={camera.yawDegrees} northDegrees={northDegrees} theme={theme} onViewTop={() => scene?.viewTop()} />
       <ViewToolbar theme={theme} onFrameAll={() => scene?.frameAll()} onTopView={() => scene?.viewTop()} onThemeChange={setTheme} />
       {entries.length > 0 && (

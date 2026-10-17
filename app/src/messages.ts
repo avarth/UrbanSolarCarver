@@ -262,6 +262,8 @@ export const messages = {
     building_massing: "Building massing",
   },
   noResultForStage: "No result for this stage: the last run stopped before it",
+  viewerNeedsWebGl: "The 3D view cannot start because this browser cannot use WebGL here, as over a remote desktop or when the " +
+    "graphics card is blocked. The steps on the left still work. To see the 3D view, open this page in another browser or at the computer itself.",
   layers: "Layers",
   skyDomeTransparency: "Transparency",
   voxelCount: (count: number) => `${groupedDigits(count)} voxels`,

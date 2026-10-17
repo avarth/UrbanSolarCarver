@@ -168,6 +168,10 @@
 .viewer-pane { position: absolute; inset: 0; overflow: hidden; }
 .viewer-canvas { position: absolute; inset: 0; }
 
+/* Without WebGL: the message in the middle of the view, on the page background. */
+.viewer-pane-unavailable { display: grid; place-items: center; padding: 16px; background: var(--colour-chrome); }
+.viewer-unavailable { max-width: 420px; margin: 0; color: var(--colour-ink); text-align: center; }
+
 .viewer-centre {
   position: absolute;
   top: 50%;

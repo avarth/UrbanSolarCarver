@@ -1,10 +1,12 @@
 import { readFileSync } from "node:fs";
 import { afterEach, expect, test, vi } from "vitest";
+import { messages } from "../messages";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu } from "./LayersMenu";
 import { Legend, keptVoxelsLegendTitle } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
+import { ViewerPane, type ViewerPaneProps } from "./ViewerPane";
 import { ViewToolbar, rememberedViewportTheme } from "./ViewToolbar";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
 
@@ -84,4 +86,20 @@ test("the overlay styles take every colour from the tokens and keep the toolbar 
   const overlaysCss = readFileSync("src/viewer_overlays/overlays.css", "utf8");
   expect(overlaysCss).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i);
   expect(overlaysCss).toMatch(/\.viewer-toolbar button {[^}]*outline-offset: -2px/);
+});
+
+const EMPTY_VIEW: ViewerPaneProps = {
+  maxVolume: null, testSurfaces: null, sunPath: null, hemisphere: null, maxVolumeAppearance: "solid", shownByDefault: [], northDegrees: 0,
+  framingRequest: 0, centreContent: null,
+};
+
+test("without WebGL (jsdom has none, like a remote desktop) the view says so, and the run progress and the run report still show", () => {
+  rendered = renderForTest(<ViewerPane {...EMPTY_VIEW} runProgress={0.5} overlayContent={<div className="run-report-panel">Run report</div>} />);
+  const unavailable = rendered.container.querySelector(".viewer-unavailable")!;
+  expect(unavailable.textContent).toBe(messages.viewerNeedsWebGl);
+  expect(unavailable.getAttribute("role")).toBe("status");
+  expect(rendered.container.querySelector("canvas")).toBeNull();
+  expect(rendered.container.querySelector("[role='progressbar']")!.getAttribute("aria-valuenow")).toBe("50");
+  expect(rendered.container.querySelector(".run-report-panel")!.textContent).toBe("Run report");
+  expect(rendered.container.querySelector(".viewer-toolbar")).toBeNull();      // no controls for a view that is not there
 });
