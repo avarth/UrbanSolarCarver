@@ -1,6 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import * as THREE from "three";
+import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { initialFormState, type SaveOutcome } from "../settings_form/form_state";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
@@ -100,19 +101,6 @@ test("a run that had ended before the project opened is not followed again; the 
 });
 
 // ---- Review Focus 5: threshold moves during a carving run, through the queue, the run loop and the results ----
-
-class FakeWebSocket {
-  static opened: FakeWebSocket[] = [];
-  onmessage: ((message: { data: string }) => void) | null = null;
-  onclose: ((event: { code: number; reason: string }) => void) | null = null;
-  constructor(readonly address: string) {
-    FakeWebSocket.opened.push(this);
-  }
-  close() {}
-  send(event: object) {
-    act(() => this.onmessage?.({ data: JSON.stringify(event) }));
-  }
-}
 
 const settle = () => act(async () => {
   for (let tick = 0; tick < 5; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
