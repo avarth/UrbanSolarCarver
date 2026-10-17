@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "api-types": "python -c \"import json; from urbansolarcarver.local_web_service.server import openapi_document; print(json.dumps(openapi_document()))\" > openapi.json && openapi-typescript openapi.json -o src/api_client/generated_types.ts",
-    "build": "vite build --outDir ../src/urbansolarcarver/ui_static --emptyOutDir && node scripts/write_build_info.mjs",
+    "typecheck": "tsc --noEmit -p .",
+    "build": "npm run typecheck && vite build --outDir ../src/urbansolarcarver/ui_static --emptyOutDir && node scripts/write_build_info.mjs",
     "test": "vitest run"
   },
   "dependencies": {
