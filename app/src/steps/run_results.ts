@@ -53,8 +53,8 @@ interface RunResultsSource {
   onServiceProblem: (error: unknown) => void;
 }
 
-/** The results, and the function that fetches again what the given stages write. */
-export function useRunResults({ token, project, origin, meshFormat, stagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => void] {
+/** The results, and the function that fetches again what the given stages write; its promise resolves once every fetch has ended. */
+export function useRunResults({ token, project, origin, meshFormat, stagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
   const source = useRef({ token, origin, meshFormat, onServiceProblem });
@@ -78,21 +78,22 @@ export function useRunResults({ token, project, origin, meshFormat, stagesWithRe
     }
   };
 
-  const fetchResults = useCallback((names: readonly ResultName[]) => {
-    for (const name of names) {
+  const fetchResults = useCallback((names: readonly ResultName[]): Promise<void> => {
+    const fetches = names.map((name) => {
       const request = (latestRequest.current[name] ?? 0) + 1;
       latestRequest.current[name] = request;
       const keep = (value: RunResults[ResultName]) => {
         if (latestRequest.current[name] === request) setResults((current) => ({ ...current, [name]: value }));
       };
-      fetchResult(name).then(keep).catch((error) => {
+      return fetchResult(name).then(keep).catch((error) => {
         keep(null);
         // A result the stage has not written is a 404 and stays null. Any other failure that is not a refusal may be a lost
         // engine: the app asks GET health before it says so, so a mesh the view cannot read only costs that check.
         const isMissingResult = error instanceof ApiError && error.status === NOT_FOUND;
         if (!isMissingResult && serviceProblemOf(error) !== "other") source.current.onServiceProblem(error);
       });
-    }
+    });
+    return Promise.all(fetches).then(() => undefined);     // each fetch handles its own failure, so none rejects
   }, [project]);
 
   const reload = useCallback((stages: readonly string[]) => fetchResults(resultsOfStages(stages)), [fetchResults]);

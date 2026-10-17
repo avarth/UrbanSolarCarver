@@ -114,9 +114,11 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   const errorId = `${inputId}-error`;
   const stored = thresholdControlNumber(form, view);
   const [heldNumber, setHeldNumber] = useState<number | null>(null);
-  const lastNumberHandedOn = useRef<number | null>(null);
+  // The number last handed on to run, or the stored number once the form holds a number, however it got there.
+  const lastNumberHandedOn = useRef(stored);
   useEffect(() => {
     if (heldNumber === stored) setHeldNumber(null);
+    lastNumberHandedOn.current = stored;
   }, [stored]);
   const error = fieldErrorOf(form, view);
   const isShadowTolerated = view.name === "threshold";
@@ -125,7 +127,7 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   const change = (value: number) => (autoUpdate ? setHeldNumber(value) : onChangeValue(value));
   const commit = () => {
     if (heldNumber === null) return;
-    const earlierNumberOnItsWay = lastNumberHandedOn.current !== null && lastNumberHandedOn.current !== stored;
+    const earlierNumberOnItsWay = lastNumberHandedOn.current !== stored;
     if (heldNumber !== stored || earlierNumberOnItsWay) {
       lastNumberHandedOn.current = heldNumber;
       onCommit(heldNumber);

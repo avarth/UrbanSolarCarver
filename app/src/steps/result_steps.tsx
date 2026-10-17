@@ -61,18 +61,23 @@ function layerHasData(layer: LayerName, results: RunResults): boolean {
 
 /**
  * Whether a stage's layers are dimmed: while a run of the project brings the stage up to date, until the run has done it;
- * after a run of a value the user has since left, whose results were not fetched (the run that follows brings them); otherwise
- * while its stage status is not current (UX 6.3).
+ * after a run of a value the user has since left, whose results were not fetched (the run that follows brings them); while
+ * the stage's results are fetched again (*stagesBeingFetched*), since what is on screen may be older; otherwise while its stage
+ * status is not current (UX 6.3).
  */
-export function isStageDimmed(stage: PipelineStage, record: RunRecord | null, stages: Record<PipelineStage, StageState>): boolean {
+export function isStageDimmed(stage: PipelineStage, record: RunRecord | null, stages: Record<PipelineStage, StageState>,
+                              stagesBeingFetched: readonly PipelineStage[] = []): boolean {
+  if (stagesBeingFetched.includes(stage)) return true;
   const runUnderWay = record !== null && record.state.final === null && record.refusal === null;
   if (runUnderWay && record.state.order.includes(stage)) return record.state.stages[stage].state !== "done";
   if (record !== null && record.state.order.includes(stage) && (record.isSuperseded?.() ?? false)) return true;
   return stages[stage] !== "current";
 }
 
-export function dimmedLayersOf(record: RunRecord | null, stages: Record<PipelineStage, StageState>): LayerName[] {
-  return (Object.keys(LAYERS_OF_STAGE) as PipelineStage[]).filter((stage) => isStageDimmed(stage, record, stages)).flatMap((stage) => LAYERS_OF_STAGE[stage]);
+export function dimmedLayersOf(record: RunRecord | null, stages: Record<PipelineStage, StageState>,
+                               stagesBeingFetched: readonly PipelineStage[] = []): LayerName[] {
+  return (Object.keys(LAYERS_OF_STAGE) as PipelineStage[]).filter((stage) => isStageDimmed(stage, record, stages, stagesBeingFetched))
+    .flatMap((stage) => LAYERS_OF_STAGE[stage]);
 }
 
 /** The layers of a run that was cancelled or failed whose stage left no data: listed with the missing-result note (UX 8.2). */
@@ -128,6 +133,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const [lastAnalysisSeconds, setLastAnalysisSeconds] = useState<number | null>(null);
   const [runReportOpen, setRunReportOpen] = useState(false);
   const [downloadProblem, setDownloadProblem] = useState<string | null>(null);
+  const [carvingFetchesUnderWay, setCarvingFetchesUnderWay] = useState(0);
   const record: RunRecord | null = runs.current?.project === project ? runs.current : null;
   const running = record !== null && record.state.final === null && record.refusal === null;
 
@@ -149,15 +155,19 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
 
   // When the last threshold value ended without a run (its save was not stored, its run did not start, or the service had nothing
   // to run), the run before it is no longer superseded, but its results were not fetched: the carving the service holds is
-  // fetched and the stage status asked again, so the panel neither stays dimmed nor shows the carving from before that run.
+  // fetched and the stage status asked again. The carving stays dimmed until those fetches have ended, so the carving from
+  // before that run is never shown as current.
   const showCarvingTheServiceHolds = useRef(() => {});
   showCarvingTheServiceHolds.current = () => {
-    reloadResults(CARVING_STAGES);
+    setCarvingFetchesUnderWay((count) => count + 1);
+    void reloadResults(CARVING_STAGES).then(() => setCarvingFetchesUnderWay((count) => count - 1));
     context.refreshStageStatus();
   };
+  const stagesBeingFetched: PipelineStage[] = carvingFetchesUnderWay > 0 ? ["thresholding"] : [];
 
   // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value next. A run whose value
-  // the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the carving stays dimmed.
+  // the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the carving stays dimmed
+  // until the next value's run, or, when none follows, until the results the service holds have been fetched.
   const thresholdQueue = useMemo(() => createThresholdUpdateQueue(async (shownNumber, isSuperseded) => {
     const view = thresholdControlOf(form.mode);
     if (view === null) return false;
@@ -203,7 +213,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const content = {
     carving: (
       <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={results.summary?.carving ?? null} scorePoints={results.scorePoints}
-                   analysisOutOfDate={analysisOutOfDate} carvingDimmed={isStageDimmed("thresholding", record, stages)}
+                   analysisOutOfDate={analysisOutOfDate} carvingDimmed={isStageDimmed("thresholding", record, stages, stagesBeingFetched)}
                    autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
                    thresholdDisabledReason={otherRunActive ? messages.runInProgress : null} settingsDisabledReason={settingsDisabledReason}
                    runBlocker={runBlocker} onChange={changeSettings}
@@ -235,7 +245,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     viewer: {
       results: { scorePoints: results.scorePoints, carving: results.summary?.carving ?? null, skyDome: results.skyDome, envelope: results.envelope,
                  massing: results.massing },
-      dimmedLayers: dimmedLayersOf(record, stages),
+      dimmedLayers: dimmedLayersOf(record, stages, stagesBeingFetched),
       missingLayers: missingLayersOf(record, results, context.isWeightedMode),
       runProgress: running ? runProgressShare(record.state) : null,
       overlayContent: runReportOpen

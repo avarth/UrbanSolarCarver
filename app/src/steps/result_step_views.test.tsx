@@ -134,6 +134,23 @@ test("a threshold typed back to the stored value while another value waits behin
   expect(field().value).toBe("1");
 });
 
+test("leaving the threshold field at the stored number submits nothing after the form got that number another way", () => {
+  const onThresholdCommit = vi.fn();
+  rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit })} />);
+  const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
+  const typeAndLeave = (text: string) => {
+    typeInto(field(), text);
+    act(() => field().dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  };
+  typeAndLeave("2");
+  expect(onThresholdCommit.mock.calls).toEqual([[2]]);
+  // The form now holds 3, set without this control's run (an edit with auto-update off, another carving setting's run).
+  rendered.rerender(<CarvingStep {...carvingProps({ onThresholdCommit, form: formFor("time-based", { threshold: { method: "cutoff", value: 3 } }) })} />);
+  typeAndLeave("3");
+  expect(onThresholdCommit.mock.calls).toEqual([[2]]);
+  expect(field().value).toBe("3");
+});
+
 test("a weighted mode shows Carve amount in % and Obstruction removed; the angle rule says it has no threshold and no histogram", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("daylight"), isWeightedMode: true })} />);
   expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Carve amount");

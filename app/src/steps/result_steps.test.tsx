@@ -248,3 +248,58 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
   expect(refreshStageStatus).toHaveBeenCalledTimes(3);    // at A's end, after the failed save, after "up to date"
   expect(refreshStageStatus).toHaveBeenLastCalledWith();
 });
+
+const CARVING_SUMMARY = {
+  threshold_value: 1.5, voxels_occupied: 1000, voxels_kept: 610, voxels_removed: 390, retention_pct: 61, obstruction_fraction_carved: null,
+  carve_above_extra_voxels_removed: 0, slope_limit_extra_voxels_removed: 0,
+};
+
+test("after a follow-up with nothing to run, the carving stays dimmed until the results the service holds have arrived", async () => {
+  FakeWebSocket.opened = [];
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const startReplies = [STARTED("r1"), { status: "up_to_date", run_id: null, stages: [] }];
+  let resultsHeld: Promise<void> | null = null;
+  let releaseResults: () => void = () => {};
+  vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
+    if ((init?.method ?? "GET") === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(startReplies.shift()));
+    if (address.endsWith("/run/summary") || address.endsWith("/run/score-points")) await resultsHeld;
+    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: CARVING_SUMMARY, massing: null }));
+    return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
+  }));
+  const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
+  const form = initialFormState({ schema: { properties: { mode: { default: "time-based" }, threshold: { default: null } } }, modes: [],
+                                  settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
+  let latest: ResultSteps | null = null;
+  function Workspace() {
+    const runs = useRunLoop("token", vi.fn());
+    latest = useResultSteps({
+      token: "token", project: "p", form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
+      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
+      openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+    });
+    return <>{latest.content.carving}</>;
+  }
+  rendered = renderForTest(<Workspace />);
+  await settle();
+  const field = () => rendered!.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
+  const carvingDimmed = () => latest!.viewer.dimmedLayers!.includes("kept_voxels");
+  const carvingStepDimmed = () => rendered!.container.querySelector(".carving-content-dimmed") !== null;
+  expect(carvingStepDimmed()).toBe(false);               // the carving numbers of the last run are shown
+
+  resultsHeld = new Promise((resolve) => { releaseResults = resolve; });
+  typeAndLeave(field(), "1");
+  await settle();
+  typeAndLeave(field(), "2");
+  typeAndLeave(field(), "1");                             // back to 1: waits behind run A, for 1
+  FakeWebSocket.opened[0].send({ type: "stage_progress", stage: "thresholding", done: 0, total: 1 });
+  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["thresholding"], files: [] });
+  await settle();
+  // The service had nothing to run for 1, and A's results are on their way: what is on screen is still from before A.
+  expect(rendered.container.textContent).toContain("Results are up to date");
+  expect(carvingDimmed()).toBe(true);
+  expect(carvingStepDimmed()).toBe(true);
+  releaseResults();
+  await settle();
+  expect(carvingDimmed()).toBe(false);
+  expect(carvingStepDimmed()).toBe(false);
+});
