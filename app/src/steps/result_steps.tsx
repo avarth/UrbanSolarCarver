@@ -4,7 +4,7 @@
 // run that stopped before their stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results
 // are fetched here and again as each stage of a run is done.
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { downloadWithToken, refusalDetailOf, serviceProblemOf } from "../api_client/client";
+import { downloadWithToken, failureTextOf, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
 import { analysisDiffersFromStored, shownValue, type FormState, type FormAction, type SaveOutcome } from "../settings_form/form_state";
 import type { Point3 } from "../viewer/local_origin";
@@ -258,7 +258,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     setDownloadProblem(null);
     downloadWithToken(token, file.address, file.fileName).catch((error) => {
       if (serviceProblemOf(error) !== "other") context.onServiceProblem(error);
-      else setDownloadProblem(refusalDetailOf(error) ?? String(error));
+      else setDownloadProblem(failureTextOf(error));
     });
   };
   // A format change rebuilds the envelope, which reads the carving: while Carving is locked the format is stored and the envelope
@@ -304,8 +304,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     ),
   };
 
-  // The 3D view follows the step: an envelope written by a run that then failed is not drawn, as its stage is not recorded.
-  const viewerResults: RunResults = { ...results, envelope: envelopeBuilt ? results.envelope : null };
+  // The 3D view follows the step: a part written by a run that then failed is not drawn, as its stage is not recorded.
+  const viewerResults: RunResults = { ...results, envelope: envelopeBuilt ? results.envelope : null, massing: massingBuilt ? results.massing : null };
   const warningsOfStep: Partial<Record<StepName, number>> = {};
   if (record !== null && record.state.final !== null && record.state.issues.length > 0) warningsOfStep[STEP_OF_ORIGIN[record.origin]] = record.state.issues.length;
 

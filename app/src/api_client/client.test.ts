@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
-  ApiError, addInput, chooseProjectsFolder, deleteProject, getHealth, getProjectsFolder, getScorePoints, openProjectFolder, projectDownloadUrl, putConfig,
+  ApiError, addInput, chooseProjectsFolder, deleteProject, failureTextOf, getHealth, getProjectsFolder, getScorePoints, openProjectFolder, projectDownloadUrl, putConfig,
   readTokenFromLaunchUrl, renameProject, resetProjectToExample, runFileUrl, serviceProblemOf, startRun,
 } from "./client";
 
@@ -109,6 +109,13 @@ test("an error reply that is not JSON keeps its text as the body", async () => {
   answerWith("Bad gateway", 502);
   const error = await getHealth("secret").catch((caught) => caught);
   expect(error.body).toBe("Bad gateway");
+});
+
+test("a failed request in words: the service's reason, a sentence with the status when it gave none, or that it did not reach the engine", () => {
+  expect(failureTextOf(new ApiError(409, { detail: "A run of this project is in progress." }))).toBe("A run of this project is in progress.");
+  expect(failureTextOf(new ApiError(422, { field_errors: [{ field: "voxel_size", message: "too small" }] }))).toBe("too small");
+  expect(failureTextOf(new ApiError(502, "Bad gateway"))).toBe("The USC engine refused the request and gave no reason (status 502). Try again.");
+  expect(failureTextOf(new TypeError("Failed to fetch"))).toBe("The request did not reach the USC engine. Check that it is still running, then try again.");
 });
 
 test("score points arrive as bytes", async () => {

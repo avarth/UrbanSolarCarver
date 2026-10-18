@@ -70,6 +70,8 @@ class FakeService {
   everythingUpToDate = false;
   /** The field errors a save of these values is refused with (422), or null when it is stored. */
   configErrorsOf: (values: Record<string, unknown>) => { field: string | null; message: string }[] | null = () => null;
+  /** The massing's plates.obj is on disk (a run wrote it), whether or not its stage is recorded. */
+  massingOnDisk = false;
   /** The contents of input files by path (for example "/inputs/test_surfaces/surfaces.obj"); one triangle for any other. */
   inputFileContents: Record<string, string> = {};
 
@@ -102,6 +104,7 @@ class FakeService {
     if (path === "/run/summary") return json(this.summary);
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
     if (path === "/run/files/exporting/export.obj" && this.summary.envelope?.mesh_file === "export.obj") return new Response(TRIANGLE_OBJ);
+    if (path === "/run/files/massing/plates.obj" && this.massingOnDisk) return new Response(TRIANGLE_OBJ);
     return json({ detail: "Not found" }, 404);
   };
 
@@ -537,4 +540,20 @@ test("a workspace made again for a renamed project opens with the steps it had o
   expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(false);        // the view shows the carving's layers, not the inputs' ones
   openStep("Export");
   expect(stepsReported).toHaveBeenLastCalledWith({ open: "export", view: "export" });
+});
+
+test("the 3D view draws no building massing while its stage is not recorded: a run that wrote it and then failed", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(project(CARVED));
+  openStep("Envelope and massing");
+  await act(async () => buttonIn(buildPart("Building massing"), "Build massing").click());
+  await settle();
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "massing", done: 0, total: 1 });
+  await settle();
+  service.massingOnDisk = true;         // written, not recorded
+  run.send({ type: "run_failed", error_type: "RuntimeError", message: "massing failed", field_errors: [] });
+  await settle();
+  expect(service.requests).toContain("GET /run/files/massing/plates.obj");
+  expect(FakeViewerScene.latest!.layersWithObjects()).not.toContain("building_massing");
 });

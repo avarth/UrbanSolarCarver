@@ -106,6 +106,9 @@ test("a start refused for invalid settings is a failed run naming its fields; an
   vi.stubGlobal("fetch", replyWith({ detail: "A run of project 'q' is active." }, 409));
   await act(async () => { await loop().start("p", ["thresholding"], "settings_run_analysis"); });
   expect(loop().current!.refusal).toBe("A run of project 'q' is active.");
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("Internal Server Error", { status: 500 })));
+  await act(async () => { await loop().start("p", ["thresholding"], "settings_run_analysis"); });
+  expect(loop().current!.refusal).toBe("The USC engine refused the request and gave no reason (status 500). Try again.");
   unmount();
 });
 

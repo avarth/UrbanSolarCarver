@@ -1,5 +1,6 @@
 // Typed access to the local service: one function per route, each sending the launch token in X-USC-Token.
 // The shapes come from generated_types.ts (npm run api-types), which is made from the service's own OpenAPI document.
+import { messages } from "../messages";
 import type { components } from "./generated_types";
 
 type Schemas = components["schemas"];
@@ -84,6 +85,16 @@ export function refusalDetailOf(error: unknown): string | null {
   if (typeof body.detail === "string") return body.detail;
   if (Array.isArray(body.field_errors)) return body.field_errors.map((fieldError) => fieldError.message).join(" ");
   return null;
+}
+
+/**
+ * A failed request in words, the same wherever it is shown: the service's reason; a sentence with the status when the service
+ * gave none (a 500 without a body the service wrote); or that the request did not reach the engine.
+ */
+export function failureTextOf(error: unknown): string {
+  const reason = refusalDetailOf(error);
+  if (reason !== null) return reason;
+  return error instanceof ApiError ? messages.requestRefusedWithoutReason(error.status) : messages.requestDidNotReachEngine;
 }
 
 /** The address of an uploaded input file. A request for it needs the token header like any other. */

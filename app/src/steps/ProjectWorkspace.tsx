@@ -5,7 +5,7 @@
 // and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  addInput, ApiError, getStageStatus, refusalDetailOf, removeInput, serviceProblemOf,
+  addInput, ApiError, failureTextOf, getStageStatus, removeInput, serviceProblemOf,
   type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
@@ -77,7 +77,7 @@ export interface OpenProjectSettingsSaver {
 /** Why a request about the inputs failed, in words for the file box. */
 function inputProblemText(error: unknown, fileName: string): string {
   if (error instanceof ApiError && error.status === 409) return messages.runInProgress;
-  const detail = refusalDetailOf(error) ?? String(error);
+  const detail = failureTextOf(error);
   return detail.includes(fileName) ? detail : messages.fileProblem(fileName, detail);
 }
 

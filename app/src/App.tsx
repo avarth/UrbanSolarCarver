@@ -7,8 +7,8 @@
 // reset opens it afresh.
 import { useEffect, useRef, useState } from "react";
 import {
-  ApiError, chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, getExamples, getHealth, getModes, getProject, getProjectsFolder,
-  getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, refusalDetailOf, renameProject, resetProjectToExample, serviceProblemOf,
+  chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, failureTextOf, getExamples, getHealth, getModes, getProject, getProjectsFolder,
+  getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, renameProject, resetProjectToExample, serviceProblemOf,
   type ExampleInfo, type HealthReply, type ModeInfo, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
 import { messages, type MessagePart } from "./messages";
@@ -172,6 +172,12 @@ export function App() {
     if (openProject === null) void readProjectsFolder();
   }, [openProject === null, runs.activeRun === null]);
 
+  /** A failed request in words (failureTextOf), once the app has looked at it for a lost token or a stopped engine. */
+  const failureText = (error: unknown): string => {
+    handleServiceProblem(error);
+    return failureTextOf(error);
+  };
+
   /** Opens the project the request gives; resolves with the reason it failed, or null. */
   const openFrom = async (request: Promise<ProjectDetail>): Promise<string | null> => {
     try {
@@ -180,17 +186,8 @@ export function App() {
       setFocusStartScreenHeading(false);
       return null;
     } catch (error) {
-      handleServiceProblem(error);
-      return refusalDetailOf(error);
+      return failureText(error);
     }
-  };
-
-  /** A failed request in words: the service's reason, that it gave none (with the status), or that it did not reach the engine. */
-  const failureText = (error: unknown): string => {
-    handleServiceProblem(error);
-    const reason = refusalDetailOf(error);
-    if (reason !== null) return reason;
-    return error instanceof ApiError ? messages.requestRefusedWithoutReason(error.status) : messages.requestDidNotReachEngine;
   };
 
   /** Resolves with the service's reason when the request fails, or null once it and *then* are done. */

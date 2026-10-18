@@ -6,7 +6,7 @@
 // useRunLoop runs one pipeline at a time, as the engine does: it starts a run, follows its events and keeps the last run's
 // state, for any project, so a run goes on being followed while another project is open.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, cancelRun, refusalDetailOf, serviceProblemOf, startRun } from "../api_client/client";
+import { ApiError, cancelRun, failureTextOf, serviceProblemOf, startRun } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
 import { messages } from "../messages";
 import type { PipelineStage } from "./step_summaries";
@@ -254,7 +254,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
         show({ serial, project, origin, runId: null, refusal: null, isSuperseded,
                state: { ...initialRunState([]), final: "failed", failure: settingsFailure, endedAt: Date.now() } });
       } else {
-        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: refusalDetailOf(error) ?? String(error), isSuperseded });
+        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: failureTextOf(error), isSuperseded });
       }
       return "not_started";
     }
