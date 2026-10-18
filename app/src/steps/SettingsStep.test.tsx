@@ -4,7 +4,8 @@ import { formReducer, initialFormState, type FormState } from "../settings_form/
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { SaveOutcome } from "../settings_form/form_state";
 import {
-  runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, settingsToFixCount, type RunAnalysisConditions,
+  runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, SettingsToFix, settingsToFixByStep, settingsToFixCount,
+  type RunAnalysisConditions,
 } from "./SettingsStep";
 
 let rendered: RenderedOverlay | null = null;
@@ -149,4 +150,24 @@ test("an error of the whole config outlines the settings it names, opens their f
   rendered.rerender(<SettingsStep form={refusedVoxelSize} onChange={() => {}} disabledReason={null} />);
   expect(fieldOf("Voxel size").querySelector(".setting-note")!.textContent)
     .toBe("Grid at the saved voxel size of 1 m: 62 voxels per side, 238 328 in total");
+});
+
+test("the settings to fix are counted by the step whose field holds them; messages for no field count in Settings", () => {
+  const state = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" },
+                          { field: "start_day", message: "a" }, { field: "end_day", message: "b" },
+                          { field: "min_plate_dimension", message: "Input should be greater than 0" },
+                          { field: null, message: "Value error, the settings do not fit together" }]);
+  expect(settingsToFixByStep(state)).toEqual({ settings: 2, carving: 1, envelope_and_massing: 1 });
+  expect(settingsToFixCount(state)).toBe(4);
+});
+
+test("a step that cannot be used yet still shows its settings to fix, so they can be fixed", () => {
+  const state = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
+  const onChange = vi.fn();
+  rendered = renderForTest(<SettingsToFix step="carving" form={state} onChange={onChange} disabledReason={null} />);
+  const field = rendered.container.querySelector<HTMLElement>('[data-setting="max_slope_deg"]')!;
+  expect(field.querySelector(".setting-error")!.textContent).toBe("Input should be greater than 0");
+  expect(rendered.container.querySelectorAll(".setting-field")).toHaveLength(1);
+  rendered.rerender(<SettingsToFix step="envelope_and_massing" form={state} onChange={onChange} disabledReason={null} />);
+  expect(rendered.container.querySelector(".setting-field")).toBeNull();
 });

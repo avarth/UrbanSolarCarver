@@ -45,8 +45,8 @@ export interface ProjectViewState {
   /** The period the analysis reads; null for a mode that reads none, or while a part of it is unset. */
   analysisPeriod: AnalysisPeriod | null;
   voxelSize: number;
-  /** Settings whose last save was refused, field errors and step errors together. */
-  settingsToFix: number;
+  /** Settings whose last save was refused, by the step that shows them (messages that name no setting count in Settings). */
+  settingsToFix: Partial<Record<StepName, number>>;
   stages: Record<PipelineStage, StageState>;
   /** From the run summary of the last carving; null before one. */
   keptPercent: number | null;
@@ -62,8 +62,10 @@ function inputsSummary(state: ProjectViewState): string {
   return messages.inputsSummary(state.maxVolumeFiles, state.testSurfaceFiles, state.hasWeatherFile);
 }
 
+const settingsToFixIn = (step: StepName, state: ProjectViewState) => state.settingsToFix[step] ?? 0;
+
 function settingsSummary(state: ProjectViewState): string {
-  if (state.settingsToFix > 0) return messages.settingsToFix(state.settingsToFix);
+  if (settingsToFixIn("settings", state) > 0) return messages.settingsToFix(settingsToFixIn("settings", state));
   const voxels = messages.voxelsOfSize(withUnit(formattedNumber(state.voxelSize), "m"));
   const period = state.analysisPeriod;
   if (period === null) return voxels;
@@ -89,6 +91,7 @@ function envelopeAndMassingSummary(state: ProjectViewState): string {
 
 /** The summary of a step's row: "1 volume, 2 test surfaces, weather", "Sun at set hours", "21 Dec, 10 to 14 h; 1 m voxels" ... */
 export function stepSummary(step: StepName, state: ProjectViewState): string {
+  if (step !== "settings" && settingsToFixIn(step, state) > 0) return messages.settingsToFix(settingsToFixIn(step, state));
   switch (step) {
     case "inputs":
       return inputsSummary(state);
@@ -108,13 +111,13 @@ export function stepSummary(step: StepName, state: ProjectViewState): string {
 /** A tick when the step is done, "!" when it has a setting to fix, an empty ring otherwise. */
 export function stepMark(step: StepName, state: ProjectViewState): StepMark {
   const { preprocessing, thresholding, exporting, massing } = state.stages;
+  if (settingsToFixIn(step, state) > 0) return "error";
   switch (step) {
     case "inputs":
       return state.maxVolumeFiles > 0 && state.testSurfaceFiles > 0 ? "done" : "none";
     case "mode":
       return "done";      // a project always has a mode, a new one Sun at set hours
     case "settings":
-      if (state.settingsToFix > 0) return "error";
       return preprocessing === "current" ? "done" : "none";
     case "carving":
       return thresholding === "current" ? "done" : "none";

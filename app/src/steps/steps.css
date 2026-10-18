@@ -160,6 +160,8 @@
 .step-not-usable { margin: 0; color: var(--colour-muted); }
 .step-reason { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 .step-error { margin-bottom: calc(var(--space-unit) * 3); }
+/* The fields with an error of a step that cannot be used yet, under the reason. */
+.settings-to-fix { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); margin-top: calc(var(--space-unit) * 3); }
 
 /* The open step's run button with its progress, failure details and warnings: at most half the panel, scrolling beyond that,
    so a long list at 200 % zoom (UX 12) never pushes the step list out of the panel. */

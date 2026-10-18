@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { stepMark, stepSummary, type PipelineStage, type ProjectViewState, type StageState } from "./step_summaries";
+import { stepMark, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName } from "./step_summaries";
 
 const THIN = "\u202f";
 const NBSP = "\u00a0";
@@ -11,7 +11,7 @@ interface StateOverrides {
   mode?: string;
   analysisPeriod?: ProjectViewState["analysisPeriod"];
   voxelSize?: number;
-  settingsToFix?: number;
+  settingsToFix?: Partial<Record<StepName, number>>;
   keptPercent?: number;
   totalFloorArea?: number;
   storeys?: number;
@@ -28,7 +28,7 @@ function stateWith(overrides: StateOverrides): ProjectViewState {
     mode: overrides.mode ?? "time-based",
     analysisPeriod: overrides.analysisPeriod === undefined ? DECEMBER_21_10_TO_14 : overrides.analysisPeriod,
     voxelSize: overrides.voxelSize ?? 1,
-    settingsToFix: overrides.settingsToFix ?? 0,
+    settingsToFix: overrides.settingsToFix ?? {},
     keptPercent: overrides.keptPercent ?? null,
     totalFloorArea: overrides.totalFloorArea ?? null,
     storeys: overrides.storeys ?? null,
@@ -59,7 +59,7 @@ test("the settings summary gives the period and the voxel size, or the count of 
   expect(stepSummary("settings", stateWith({ voxelSize: 0.5, analysisPeriod: { startMonth: 10, startDay: 15, startHour: 7, endMonth: 4, endDay: 15, endHour: 19 } })))
     .toBe(`15 Oct to 15 Apr, 7 to 19${NBSP}h; 0.5${NBSP}m voxels`);
   expect(stepSummary("settings", stateWith({ mode: "daylight", analysisPeriod: null, voxelSize: 2 }))).toBe(`2${NBSP}m voxels`);
-  expect(stepSummary("settings", stateWith({ settingsToFix: 1 }))).toBe("1 setting to fix");
+  expect(stepSummary("settings", stateWith({ settingsToFix: { settings: 1 } }))).toBe("1 setting to fix");
 });
 
 test("the carving, envelope and export summaries follow the stage status", () => {
@@ -78,7 +78,20 @@ test("each step's mark: done, a setting to fix, or nothing yet", () => {
   expect(stepMark("inputs", stateWith({ testSurfaces: 0 }))).toBe("none");
   expect(stepMark("mode", stateWith({}))).toBe("done");
   expect(stepMark("settings", stateWith({ stages: { preprocessing: "current" } }))).toBe("done");
-  expect(stepMark("settings", stateWith({ settingsToFix: 2, stages: { preprocessing: "current" } }))).toBe("error");
+  expect(stepMark("settings", stateWith({ settingsToFix: { settings: 2 }, stages: { preprocessing: "current" } }))).toBe("error");
   expect(stepMark("carving", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("none");
   expect(stepMark("envelope_and_massing", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("done");
+});
+
+test("a setting to fix is counted and marked on the step that holds it", () => {
+  const state = stateWith({ settingsToFix: { carving: 1, envelope_and_massing: 2 },
+                            stages: { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" } });
+  expect(stepSummary("carving", state)).toBe("1 setting to fix");
+  expect(stepMark("carving", state)).toBe("error");
+  expect(stepSummary("envelope_and_massing", state)).toBe("2 settings to fix");
+  expect(stepMark("envelope_and_massing", state)).toBe("error");
+  expect(stepSummary("settings", state)).toBe("21 Dec, 10 to 14 h; 1 m voxels");
+  expect(stepMark("settings", state)).toBe("done");
+  expect(stepMark("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("error");
+  expect(stepSummary("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("1 setting to fix");
 });

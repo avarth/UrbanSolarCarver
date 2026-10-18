@@ -21,7 +21,7 @@ import { ModeStep } from "./ModeStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import type { RunLoop } from "./run_state";
 import {
-  RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, settingsToFixCount,
+  RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, SettingsToFix, settingsToFixByStep,
 } from "./SettingsStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
@@ -192,7 +192,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     mode: form.mode,
     analysisPeriod: analysisPeriodOf(form, modeInfo?.needs_period ?? false),
     voxelSize: Number(shownValue(form, "voxel_size")),
-    settingsToFix: settingsToFixCount(form),
+    settingsToFix: settingsToFixByStep(form),
     stages,
     keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
     totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
@@ -229,7 +229,15 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     mark: stepMark(name, viewState),
     notUsableYet: stepNotUsableYet(name, viewState),
     content: stepContent[name],
-    feedbackWhenNotUsable: resultSteps.feedbackWhenNotUsable[name],
+    // A step that cannot be used yet shows the fields it holds with an error, so a setting to fix is never out of reach.
+    feedbackWhenNotUsable: (
+      <>
+        {resultSteps.feedbackWhenNotUsable[name]}
+        {name !== "inputs" && name !== "mode" && (
+          <SettingsToFix step={name} form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason} />
+        )}
+      </>
+    ),
   }));
 
   const runAnalysis = () => void runAnalysisAfterSaving(flushSave, () => {

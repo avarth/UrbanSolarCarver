@@ -5,8 +5,8 @@ import { useId, type ReactNode } from "react";
 import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from "../api_client/client";
 import { messages } from "../messages";
 import type { FormState, SaveOutcome } from "../settings_form/form_state";
-import { ANALYSIS_PERIOD_FIELDS, settingsForStep, settingView } from "../settings_form/presentation";
-import { gridLineOf, WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
+import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS, settingsForStep, settingView, type StepName as FormStepName } from "../settings_form/presentation";
+import { fieldErrorOf, gridLineOf, SettingField, WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
 import "./steps.css";
@@ -84,9 +84,42 @@ export function SaveFailureNotice({ text, onSaveAgain }: { text: SaveFailureText
   );
 }
 
-/** Field errors and step errors together: the count of the step's "settings to fix". */
+/**
+ * The settings to fix of each step (UX 4.1, 11): the fields with an error, counted in the step that draws them (the six period
+ * settings are one field), and the messages that name no field, counted in Settings, where they are shown.
+ */
+export function settingsToFixByStep(form: Pick<FormState, "fieldErrors" | "stepErrors">): Partial<Record<FormStepName, number>> {
+  const fields = new Set(Object.keys(form.fieldErrors).map((name) =>
+    ((ANALYSIS_PERIOD_FIELDS as readonly string[]).includes(name) ? ANALYSIS_PERIOD_FIELDS[0] : name)));
+  const counts: Partial<Record<FormStepName, number>> = {};
+  const count = (step: FormStepName, added: number) => { counts[step] = (counts[step] ?? 0) + added; };
+  for (const name of fields) count(SETTING_PRESENTATIONS[name]?.step ?? "settings", 1);
+  if (form.stepErrors.length > 0) count("settings", form.stepErrors.length);
+  return counts;
+}
+
+/** All the settings to fix, in every step. */
 export function settingsToFixCount(form: Pick<FormState, "fieldErrors" | "stepErrors">): number {
-  return Object.keys(form.fieldErrors).length + form.stepErrors.length;
+  return Object.values(settingsToFixByStep(form)).reduce((total, count) => total + count, 0);
+}
+
+interface SettingsToFixProps {
+  step: FormStepName;
+  form: FormState;
+  onChange: (values: Record<string, unknown>) => void;
+  disabledReason: string | null;
+}
+
+/** The fields of *step* that hold an error, for a step that cannot be used yet: its own content is not shown, these are. */
+export function SettingsToFix({ step, form, onChange, disabledReason }: SettingsToFixProps) {
+  const views = settingsForStep(step, form.mode).flatMap((group) => [...group.essential, ...group.folded])
+    .filter((view) => fieldErrorOf(form, view) !== undefined);
+  if (views.length === 0) return null;
+  return (
+    <div className="settings-to-fix">
+      {views.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledReason !== null} />)}
+    </div>
+  );
 }
 
 /**
