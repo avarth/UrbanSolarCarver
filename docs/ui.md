@@ -97,9 +97,12 @@ The interface is a React and three.js application whose source is in `app/`. The
 ```bash
 cd app
 npm install
-npm run build      # writes src/urbansolarcarver/ui_static/ and build_info.json
+npm run typecheck  # tsc --noEmit: the type check alone
+npm run build      # runs the type check first, then writes src/urbansolarcarver/ui_static/ and build_info.json
 npm test           # the front-end tests
 ```
+
+A type error stops `npm run build` before anything is written.
 
 Commit the rebuilt `ui_static/` with the source change: a test compares the hash in `build_info.json` with the sources and fails when they differ.
 
