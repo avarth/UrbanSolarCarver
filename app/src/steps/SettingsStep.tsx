@@ -6,7 +6,7 @@ import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from ".
 import { messages } from "../messages";
 import type { FormState, SaveOutcome } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, settingsForStep, settingView } from "../settings_form/presentation";
-import { WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
+import { gridLineOf, WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
 import "./steps.css";
@@ -89,11 +89,14 @@ export function settingsToFixCount(form: Pick<FormState, "fieldErrors" | "stepEr
   return Object.keys(form.fieldErrors).length + form.stepErrors.length;
 }
 
-/** The grid line under Voxel size, or the over-budget message in its place. */
+/**
+ * The grid line under Voxel size, or the over-budget message in its place. A refused save keeps the last grid planned, so the
+ * line stays under an error too; while the voxel size shown is not the one planned (its save was refused), it says so.
+ */
 function voxelSizeExtras(form: FormState): SettingFieldExtras {
   const plan = form.gridPlan;
   if (plan === null) return {};
-  if (!gridIsOverBudget(plan)) return { note: messages.gridSize(plan.resolution, plan.total_voxels) };
+  if (!gridIsOverBudget(plan)) return { note: gridLineOf(form)! };
   const text = messages.gridOverBudget(plan.resolution, plan.total_voxels, plan.budget_voxels,
     smallestVoxelSizeWithinBudget(plan.voxel_size, plan.total_voxels, plan.budget_voxels));
   return { errorContent: <>{text.description} <strong>{text.advice}</strong></> };

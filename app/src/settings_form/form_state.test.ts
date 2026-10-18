@@ -83,7 +83,7 @@ test("each change marks the form as waiting for a save, and a save reply brings 
   expect(state.gridPlan).toEqual(GRID_PLAN);
 });
 
-test("a 422 puts each field error under its field and a cross-field error on the step", () => {
+test("a 422 puts each field error under its field, and an error of the whole config under the settings it names", () => {
   let state = storedProjectState({ mode: "daylight" });
   state = formReducer(state, { type: "values_changed", values: { voxel_size: 0.001 } });
   state = formReducer(state, {
@@ -91,8 +91,9 @@ test("a 422 puts each field error under its field and a cross-field error on the
     reply: { field_errors: [{ field: "voxel_size", message: "Input should be greater than or equal to 0.01" },
                             { field: null, message: "grid_step must not exceed voxel_size" }], grid_plan: null },
   });
-  expect(state.fieldErrors).toEqual({ voxel_size: "Input should be greater than or equal to 0.01" });
-  expect(state.stepErrors).toEqual(["grid_step must not exceed voxel_size"]);
+  expect(state.fieldErrors).toEqual({ voxel_size: "Input should be greater than or equal to 0.01 Sample spacing on test surfaces must not exceed voxel size",
+                                      grid_step: "Sample spacing on test surfaces must not exceed voxel size" });
+  expect(state.stepErrors).toEqual([]);
   expect(state.pendingSave).toBe(false);
   state = formReducer(state, { type: "save_succeeded", reply: { settings: {}, grid_plan: null } });
   expect(state.fieldErrors).toEqual({});
@@ -179,7 +180,7 @@ test("an error the engine names after a dot goes under its setting, and one of a
                             { field: "tilted_plane_angle_deg.float", message: "Input should be a valid number" },
                             { field: "mode", message: "mode must be one of the six modes" }], grid_plan: null },
   });
-  expect(state.fieldErrors).toEqual({ threshold: "cutoff threshold must be >= 0", tilted_plane_angle_deg: "Input should be a valid number" });
+  expect(state.fieldErrors).toEqual({ threshold: "Cutoff threshold must be >= 0", tilted_plane_angle_deg: "Input should be a valid number" });
   expect(state.stepErrors).toEqual(["mode: mode must be one of the six modes"]);
 });
 
@@ -325,4 +326,41 @@ test("changeAndSave sets values and saves them at once with the changes before t
   expect(fetchMock).toHaveBeenCalledTimes(2);                // a later change is saved after the delay as before
   form.unmount();
   vi.unstubAllGlobals();
+});
+
+const reject = (state: ReturnType<typeof storedProjectState>, fieldErrors: { field: string | null; message: string }[]) =>
+  formReducer(state, { type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: null } });
+
+test("an error of the whole config is put, in the interface's words, under each setting it names; the last grid plan stays", () => {
+  let state = storedProjectState({ mode: "time-based" });
+  state = formReducer(state, { type: "save_succeeded", reply: { settings: { mode: "time-based" }, grid_plan: GRID_PLAN } });
+  state = formReducer(state, { type: "values_changed", values: { voxel_size: 0.5 } });
+  state = reject(state, [{ field: null,
+    message: "Value error, grid_step (1 m) must be ≤ voxel_size (0.5 m). Increase voxel_size or decrease grid_step." }]);
+  const sampling = "Sample spacing on test surfaces (1 m) must not be larger than the voxel size (0.5 m). " +
+    "Use a larger voxel size or a smaller sample spacing on test surfaces.";
+  expect(state.fieldErrors).toEqual({ grid_step: sampling, voxel_size: sampling });
+  expect(state.stepErrors).toEqual([]);
+  expect(state.gridPlan).toEqual(GRID_PLAN);
+
+  state = reject(state, [{ field: null, message: "Value error, start_day=31 is invalid for month 2 (max 28 days)" }]);
+  expect(state.fieldErrors).toEqual({ start_day: "February has 28 days, so the start day cannot be 31." });
+  state = reject(state, [{ field: null, message: "Value error, end_day=30 is invalid for month 2 (max 28 days)" }]);
+  expect(state.fieldErrors).toEqual({ end_day: "February has 28 days, so the end day cannot be 30." });
+  state = reject(state, [{ field: null, message: "Value error, mode 'time-based' requires analysis period fields: start_day, end_day" }]);
+  expect(state.fieldErrors).toEqual({ start_month: "Sun at set hours needs the whole analysis period: every day, month and hour." });
+  state = reject(state, [{ field: null, message: "Value error, mode 'time-based' requires epw_path" }]);
+  expect(state.fieldErrors).toEqual({});
+  expect(state.stepErrors).toEqual(["Add a weather file to run this mode"]);
+});
+
+test("any other engine message loses the 'Value error' prefix and has the labels in place of the config names", () => {
+  let state = storedProjectState({ mode: "tilted_plane" });
+  state = reject(state, [{ field: null, message: "Value error, tilted_plane_angle_deg must have length 8 [N, NE, E, SE, S, SW, W, NW]" }]);
+  expect(state.fieldErrors).toEqual({ tilted_plane_angle_deg: "Plane angle must have length 8 [N, NE, E, SE, S, SW, W, NW]" });
+  state = reject(state, [{ field: "north_deg", message: "Value error, north_deg is out of range" }]);
+  expect(state.fieldErrors).toEqual({ north_deg: "North direction is out of range" });
+  state = reject(state, [{ field: null, message: "Value error, something the form cannot place" }]);
+  expect(state.stepErrors).toEqual(["Something the form cannot place"]);
+  expect(state.fieldErrors).toEqual({});
 });

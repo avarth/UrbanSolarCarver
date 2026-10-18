@@ -5,7 +5,8 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError, putConfig, type ConfigErrorReply, type ConfigReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "../steps/grid_budget";
-import { presentedSettingOf, settingIsReadBy } from "./presentation";
+import { shownConfigErrorOf } from "./engine_errors";
+import { settingIsReadBy } from "./presentation";
 
 export const SAVE_DELAY_MILLISECONDS = 400;
 
@@ -37,7 +38,7 @@ export interface FormState {
   schemaProperties: Record<string, SchemaProperty>;
   /** The messages of the last rejected save, by setting name. */
   fieldErrors: Record<string, string>;
-  /** Messages of the last rejected save that name no single setting (grid_step above voxel_size), shown for the step. */
+  /** Messages of the last rejected save that name no setting the form shows (a missing weather file), shown for the step. */
   stepErrors: string[];
   gridPlan: GridPlanReply | null;
   /** A change has not been saved yet. */
@@ -111,13 +112,17 @@ export function formReducer(state: FormState, action: FormAction): FormState {
       const fieldErrors: Record<string, string> = {};
       const stepErrors: string[] = [];
       for (const { field, message } of action.reply.field_errors) {
-        // The engine names a part of a setting after a dot ("threshold.value"); the error goes under the setting the form shows.
-        // An error of a setting the form does not show ("mode") is shown for the step, with the engine's name for it.
-        const shownSetting = field === null ? null : presentedSettingOf(field);
-        if (shownSetting === null) stepErrors.push(field === null ? message : `${field}: ${message}`);
-        else fieldErrors[shownSetting] = shownSetting in fieldErrors ? `${fieldErrors[shownSetting]} ${message}` : message;
+        // Under each setting the error names, in the interface's words (engine_errors.ts); one naming none is the step's.
+        const shown = shownConfigErrorOf(field, message, state.mode);
+        if (shown.settings.length === 0 && !stepErrors.includes(shown.message)) stepErrors.push(shown.message);
+        for (const setting of shown.settings) {
+          fieldErrors[setting] = setting in fieldErrors ? `${fieldErrors[setting]} ${shown.message}` : shown.message;
+        }
       }
-      return { ...state, fieldErrors, stepErrors, gridPlan: action.reply.grid_plan, pendingSave: false, saveFailure: null };
+      // A refusal plans no grid unless the grid is what it refuses (over the budget): the last grid planned stays, so the grid
+      // line under Voxel size is not lost to an error elsewhere.
+      const gridPlan = action.reply.grid_plan ?? (gridIsOverBudget(state.gridPlan) ? null : state.gridPlan);
+      return { ...state, fieldErrors, stepErrors, gridPlan, pendingSave: false, saveFailure: null };
     }
     case "save_failed":
       return { ...state, pendingSave: false, saveFailure: action.error };

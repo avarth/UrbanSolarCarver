@@ -59,7 +59,9 @@ test("Run analysis says what blocks it, in order: a run, the inputs, the weather
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET) })))
     .toBe("Fix the voxel size to run the analysis.");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "end_day", message: "no such day" }]) }))).toBe("Fix the analysis period to run the analysis.");
-  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "grid_step must be <= voxel_size" }]) })))
+  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, grid_step must be <= voxel_size" }]) })))
+    .toBe("Fix the sample spacing on test surfaces to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, the settings do not fit together" }]) })))
     .toBe("Fix the settings above to run the analysis.");
   expect(runAnalysisBlocker(conditions({ warmUpState: "running" }))).toBe("Waiting for the GPU to be ready");
   expect(runAnalysisBlocker(conditions({ warmUpState: null }))).toBe("Waiting for the GPU to be ready");
@@ -87,9 +89,9 @@ test("a grid over the budget: the voxel count, the budget and the size to use, i
 });
 
 test("a message that names no setting is shown for the step; during a run the fields are disabled with the reason", () => {
-  rendered = renderForTest(<SettingsStep form={rejected([{ field: null, message: "grid_step must be <= voxel_size" }])} onChange={() => {}}
+  rendered = renderForTest(<SettingsStep form={rejected([{ field: null, message: "Value error, the settings do not fit together" }])} onChange={() => {}}
                                          disabledReason="A run is in progress" />);
-  expect(rendered.container.querySelector(".step-error")!.textContent).toBe("grid_step must be <= voxel_size");
+  expect(rendered.container.querySelector(".step-error")!.textContent).toBe("The settings do not fit together");
   expect(rendered.container.textContent).toContain("A run is in progress");
   const fields = [...rendered.container.querySelectorAll<HTMLInputElement>("input")];
   expect(fields.length).toBeGreaterThan(0);
@@ -129,4 +131,22 @@ test("Run analysis starts the run only after the waiting change was saved, or wh
     expect(await runAnalysisAfterSaving(async () => outcome, startRun)).toBe(starts);
     expect(startRun).toHaveBeenCalledTimes(starts ? 1 : 0);
   }
+});
+
+test("an error of the whole config outlines the settings it names, opens their fold, and leaves the grid line under Voxel size", () => {
+  const fieldOf = (label: string) => [...rendered!.container.querySelectorAll(".setting-field")].find((field) => field.textContent!.startsWith(label))!;
+  const crossFieldError = { field: null, message: "Value error, grid_step (1 m) must be ≤ voxel_size (1 m). Increase voxel_size or decrease grid_step." };
+  // A refusal of the stored voxel size (another setting changed): the grid line is the one of that voxel size.
+  rendered = renderForTest(<SettingsStep form={rejected([crossFieldError])} onChange={() => {}} disabledReason={null} />);
+  expect(rendered.container.querySelector(".step-error")).toBeNull();
+  expect(fieldOf("Voxel size").querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+  expect(fieldOf("Voxel size").querySelector(".setting-error")!.textContent).toContain("must not be larger than the voxel size");
+  expect(fieldOf("Voxel size").querySelector(".setting-note")!.textContent).toBe("62 voxels per side, 238 328 in total");
+  expect(fieldOf("Sample spacing on test surfaces").querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+  // A refused voxel size: the line says it is the grid of the voxel size last saved.
+  const refusedVoxelSize = formReducer(formReducer(form(), { type: "values_changed", values: { voxel_size: 0.5 } }),
+    { type: "save_rejected", reply: { field_errors: [crossFieldError], grid_plan: null } });
+  rendered.rerender(<SettingsStep form={refusedVoxelSize} onChange={() => {}} disabledReason={null} />);
+  expect(fieldOf("Voxel size").querySelector(".setting-note")!.textContent)
+    .toBe("Grid at the saved voxel size of 1 m: 62 voxels per side, 238 328 in total");
 });

@@ -2,7 +2,7 @@
 // and, after a rejected save, the message under it with a warning icon and the field outlined in the error colour.
 import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
-import { withUnit } from "../steps/format_numbers";
+import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { plainModeName } from "../steps/step_summaries";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
@@ -18,7 +18,7 @@ import { ThresholdRule, type ThresholdSpec } from "./widgets/ThresholdRule";
 import { TiltedPlaneAngles } from "./widgets/TiltedPlaneAngles";
 import "./settings_form.css";
 
-/** What a step adds under one of its fields: a note while the field is valid (the grid under Voxel size), and the error
+/** What a step adds under one of its fields: a note, under its error too (the grid under Voxel size), and the error
  *  in the step's own words in place of the engine's message (the grid over the budget). */
 export interface SettingFieldExtras {
   note?: ReactNode;
@@ -57,6 +57,17 @@ function typesOf(property: SchemaProperty | undefined): (string | undefined)[] {
 export function rangeOf(property: SchemaProperty | undefined): NumberRange {
   const bounded = property?.anyOf?.find((member) => member.type === "number" || member.type === "integer") ?? property;
   return { minimum: bounded?.minimum, maximum: bounded?.maximum, exclusiveMinimum: bounded?.exclusiveMinimum, exclusiveMaximum: bounded?.exclusiveMaximum };
+}
+
+/**
+ * The grid line of Voxel size (under the field and in its tooltip): the grid last planned. A refused save plans none, so while
+ * the voxel size shown is not the one planned the line says it is the grid of the saved one. Null without a plan.
+ */
+export function gridLineOf(form: FormState): string | null {
+  const plan = form.gridPlan;
+  if (plan === null) return null;
+  if (shownValue(form, "voxel_size") === plan.voxel_size) return messages.gridSize(plan.resolution, plan.total_voxels);
+  return messages.gridSizeAtSavedVoxelSize(withUnit(formattedNumber(plan.voxel_size), "m"), plan.resolution, plan.total_voxels);
 }
 
 // The engine's automatic slope limit (resolve_max_slope_deg): 75° in the weighted modes, off in the others.
@@ -181,12 +192,11 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
           : <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>}
         <SettingTooltip settingLabel={view.label} help={view.help} defaultText={defaultTextOf(view, form, isShadowTolerated)}
                         configName={view.widget === "analysis_period" ? messages.analysisPeriodConfigNames : view.name}
-                        extraLine={view.name === "voxel_size" && form.gridPlan ? messages.gridSize(form.gridPlan.resolution, form.gridPlan.total_voxels)
-                          : (emptyMeaningOf(view, form) ?? undefined)} />
+                        extraLine={(view.name === "voxel_size" ? gridLineOf(form) : emptyMeaningOf(view, form)) ?? undefined} />
       </div>
       {controlElement}
       {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{refusedInput ?? extras?.errorContent ?? error}</span></p>}
-      {error === undefined && extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
+      {extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
     </div>
   );
 }

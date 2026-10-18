@@ -237,6 +237,17 @@ export const messages = {
     ["Config name: ", { code: String(configName) }, `, default ${defaultText}`],
   analysisPeriodConfigNames: "start_month ... end_hour",
   gridSize: (voxelsPerSide: number, totalVoxels: number) => `${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
+  // The grid line while the voxel size shown was refused: the grid is the one of the voxel size last saved.
+  gridSizeAtSavedVoxelSize: (voxelSizeText: string, voxelsPerSide: number, totalVoxels: number) =>
+    `Grid at the saved voxel size of ${voxelSizeText}: ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
+  // Errors of the whole config, said under the settings they name (UX 11); the engine's own words are for the YAML.
+  samplingAboveVoxelSize: (samplingLabel: string, samplingText: string, voxelSizeLabel: string, voxelSizeText: string) =>
+    `${samplingLabel} (${samplingText}) must not be larger than the ${String(voxelSizeLabel).toLowerCase()} (${voxelSizeText}). ` +
+    `Use a larger ${String(voxelSizeLabel).toLowerCase()} or a smaller ${String(samplingLabel).toLowerCase()}.`,
+  dayNotInMonth: (dayName: string, day: number, monthName: string, daysInMonth: number) =>
+    `${monthName} has ${daysInMonth} days, so the ${String(dayName).toLowerCase()} cannot be ${day}.`,
+  periodIncomplete: (modeName: string) => `${modeName} needs the whole analysis period: every day, month and hour.`,
+  settingProblem: (settingLabel: string, message: string) => `${settingLabel}: ${message}`,
   automatic: "automatic",
   // What an empty setting does in the open mode, in its tooltip (UX 7): the engine's automatic value there.
   emptyMeansInMode: (valueText: string, modeName: string) => `Left empty, it is ${valueText} in ${modeName}.`,
