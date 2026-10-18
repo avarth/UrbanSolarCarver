@@ -43,6 +43,8 @@ Out of scope here: simulated benefit weights (milestone 2, **user**), detecting 
 
 Every numeric setting with a valid range is entered with a slider and a number field next to it; the number field accepts any value the engine accepts, the slider covers the range people normally use **(user)**. The slider range of each setting is listed in `setting_presentation.json` next to its label; where the engine gives no upper limit, the list gives a practical one (for example voxel size 0.1 to 5 m) and the number field still accepts more **(proposed)**. Settings that are counts or switches keep their current controls.
 
+A field with a slider takes a full row of its group, so the building massing fields of UX 5.6 are no longer three side by side: at three across, each slider was about 86 px wide and could not be dragged to a value **(proposed**, found in the final review on 2026-10-18**)**.
+
 ### 4.2 Balance temperature
 
 One slider from 10 to 30 °C with two handles **(user)**: the right handle is the balance temperature, the left handle is the balance temperature minus the dead band. The band between them is labelled "Dead band", and both values show as numbers that can be typed **(proposed)**. Moving the right handle moves the band with it.
