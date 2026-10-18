@@ -182,7 +182,7 @@ test("an error the engine names after a dot goes under its setting, and one of a
   });
   // The plane angle has no field in Sun at set hours: its error is said for the step, with its name.
   expect(state.fieldErrors).toEqual({ threshold: "Cutoff threshold must be >= 0" });
-  expect(state.stepErrors).toEqual(["Plane angle: Input should be a valid number", "mode: mode must be one of the six modes"]);
+  expect(state.stepErrors).toEqual(["Plane angle: Input should be a valid number", "Mode: mode must be one of the six modes"]);
 });
 
 test("flushing the saver sends a waiting save at once and resolves once its reply is passed on", async () => {

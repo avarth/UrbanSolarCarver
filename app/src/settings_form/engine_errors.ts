@@ -78,12 +78,15 @@ export function shownConfigErrorOf(field: string | null, message: string, mode: 
   // The engine names a part of a setting after a dot ("threshold.value"); the error goes under the setting the form shows.
   const setting = presentedSettingOf(field);
   if (field === "epw_path") return { settings: [], message: messages.weatherFileNeeded };
-  // A setting the form does not show at all ("mode") keeps the engine's name for it.
-  if (setting === null) return { settings: [], message: `${field}: ${inInterfaceWords(message, mode, false)}` };
+  // A setting the form has no field for: the mode by the name of its step, any other by the engine's name for it.
+  if (setting === null) {
+    return { settings: [], message: messages.settingProblem(field === "mode" ? messages.stepTitles.mode : field, inInterfaceWords(message, mode, false)) };
+  }
   return { settings: [setting], message: inInterfaceWords(message, mode) };
 }
 
-/** An error on a setting the mode does not show, said for the step with the setting's name. */
+/** An error on a setting the mode does not show, said for the step with the setting's name (once, when it already names it). */
 export function errorOfHiddenSetting(setting: string, message: string, mode: string): string {
-  return messages.settingProblem(shownNameOf(setting, mode), message);
+  const name = shownNameOf(setting, mode);
+  return message.toLowerCase().startsWith(name.toLowerCase()) ? message : messages.settingProblem(name, message);
 }

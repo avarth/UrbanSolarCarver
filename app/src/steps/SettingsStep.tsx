@@ -37,7 +37,12 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
   if (!hasTestSurfaces) return messages.addTestSurfacesToRun;
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) return messages.weatherFileNeeded;
   const firstFieldWithError = Object.keys(form.fieldErrors)[0];
-  if (firstFieldWithError !== undefined) return messages.fixSettingToRun(shownLabelOf(firstFieldWithError, form.mode));
+  if (firstFieldWithError !== undefined) {
+    // A setting of a later step is named with its step, so the user knows where to find it.
+    const step = SETTING_PRESENTATIONS[firstFieldWithError]?.step ?? "settings";
+    const label = shownLabelOf(firstFieldWithError, form.mode);
+    return step === "settings" ? messages.fixSettingToRun(label) : messages.fixSettingInStepToRun(label, messages.stepTitles[step]);
+  }
   if (form.stepErrors.length > 0) return messages.fixSettingsToRun;
   // A warm-up that failed blocks nothing: a run then reports the problem itself (the service's warm-up says the same).
   if (conditions.warmUpState === null || conditions.warmUpState === "not_started" || conditions.warmUpState === "running") return messages.runButtonWaitsForGpu;

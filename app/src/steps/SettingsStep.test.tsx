@@ -171,3 +171,8 @@ test("a step that cannot be used yet still shows its settings to fix, so they ca
   rendered.rerender(<SettingsToFix step="envelope_and_massing" form={state} onChange={onChange} disabledReason={null} />);
   expect(rendered.container.querySelector(".setting-field")).toBeNull();
 });
+
+test("a setting to fix in another step is named with that step under the run button", () => {
+  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]) })))
+    .toBe("Fix the steepest step between columns in Carving to run the analysis.");
+});

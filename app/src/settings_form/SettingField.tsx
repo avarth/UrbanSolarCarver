@@ -70,17 +70,20 @@ export function gridLineOf(form: FormState): string | null {
   return messages.gridSizeAtSavedVoxelSize(withUnit(formattedNumber(plan.voxel_size), "m"), plan.resolution, plan.total_voxels);
 }
 
-// The engine's automatic slope limit (resolve_max_slope_deg): 75° in the weighted modes, off in the others.
-const AUTOMATIC_SLOPE_LIMIT_DEGREES = 75;
+// The engine's automatic slope limit of the weighted modes, as the description of max_slope_deg in GET schema states it
+// (resolve_max_slope_deg; SettingGroup.test.ts checks the two agree).
+const AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION = /None \(default\): (\d+(?:\.\d+)?) for the weighted modes/;
 
 /**
  * What an empty setting does in the form's mode, for a setting whose empty value the engine fills by mode, or null. The slope
- * limit is the one: 75° in the weighted modes, off in Sun at set hours and the angle rule. (Score smoothing says it in its help.)
+ * limit is the one: the engine's number in the weighted modes, off in Sun at set hours and the angle rule (score smoothing says
+ * it in its help). Null in a weighted mode when the schema does not give the number.
  */
-export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" | "scoreKindByMode">): string | null {
+export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" | "scoreKindByMode" | "schemaProperties">): string | null {
   if (view.name !== "max_slope_deg") return null;
-  const valueText = form.scoreKindByMode[form.mode] === "weighted_sum" ? withUnit(String(AUTOMATIC_SLOPE_LIMIT_DEGREES), unitOfValue(view)) : messages.switchedOff;
-  return messages.emptyMeansInMode(valueText, plainModeName(form.mode));
+  if (form.scoreKindByMode[form.mode] !== "weighted_sum") return messages.emptyMeansInMode(messages.switchedOff, plainModeName(form.mode));
+  const degrees = AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION.exec(form.schemaProperties.max_slope_deg?.description ?? "")?.[1];
+  return degrees === undefined ? null : messages.emptyMeansInMode(withUnit(formattedNumber(Number(degrees)), unitOfValue(view)), plainModeName(form.mode));
 }
 
 /** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */

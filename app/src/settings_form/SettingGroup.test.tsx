@@ -17,7 +17,10 @@ const SCHEMA = {
     threshold: { anyOf: [{ $ref: "#/$defs/ThresholdSpec" }, { type: "null" }], default: null },
     carve_above: { default: true, type: "boolean" },
     carve_above_min_consecutive: { default: 1, type: "integer" },
-    max_slope_deg: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
+    // The engine's description says the automatic slope limit of the weighted modes (pydantic_schemas.py).
+    max_slope_deg: { anyOf: [{ type: "number" }, { type: "null" }], default: null,
+                     description: "It only ever removes voxels. None (default): 60 for the weighted modes (irradiance, benefit, daylight, " +
+                       "radiative_cooling), off for time-based and tilted_plane. 90: off." },
     score_smoothing: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
     ray_batch_size: { default: 0, type: "integer" },
     diagnostics: { default: false, type: "boolean" },
@@ -314,7 +317,7 @@ test("a setting whose empty value is automatic shows 'automatic' in the empty fi
     click(rendered.container.querySelector("button.setting-info")!);
     return rendered.container.querySelector("[role='tooltip']")!.textContent;
   };
-  expect(tooltipOf("daylight")).toContain("Left empty, it is 75 ° in Daylight.");
+  expect(tooltipOf("daylight")).toContain("Left empty, it is 60 ° in Daylight.");
   expect(tooltipOf("time-based")).toContain("Left empty, it is off in Sun at set hours.");
   expect(tooltipOf("tilted_plane")).toContain("Left empty, it is off in Angle rule.");
   // A setting with a value of its own shows no placeholder.
@@ -377,4 +380,10 @@ test("each input of the analysis period keeps its own refusal: a valid hour does
   expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 31.");
   typeKeys(startDay, "3");
   expect(rendered.container.querySelector(".setting-error")).toBeNull();
+});
+
+test("the automatic slope limit is the engine's: its description and resolve_max_slope_deg say the same number", () => {
+  const schemas = readFileSync("../src/urbansolarcarver/pydantic_schemas.py", "utf8");
+  const described = /None \(default\): (\d+) for the weighted modes/.exec(schemas)![1];
+  expect(schemas).toContain(`return ${described}.0 if MODES[mode].score_kind == "weighted_sum" else None`);
 });

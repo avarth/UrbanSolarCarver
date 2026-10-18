@@ -141,6 +141,7 @@ export const messages = {
   orTryAnExample: "or try an example",
   weatherFileNeeded: "Add a weather file to run this mode",
   fixSettingToRun: (settingLabel: string) => `Fix the ${String(settingLabel).toLowerCase()} to run the analysis.`,
+  fixSettingInStepToRun: (settingLabel: string, stepTitle: string) => `Fix the ${String(settingLabel).toLowerCase()} in ${stepTitle} to run the analysis.`,
   settingsToFix: (count: number) => `${count} ${count === 1 ? "setting" : "settings"} to fix`,
   gridOverBudget: (voxelsPerSide: number, totalVoxels: number, budgetVoxels: number, smallestVoxelSize: number) => ({
     description: `This grid would have ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total. ` +
