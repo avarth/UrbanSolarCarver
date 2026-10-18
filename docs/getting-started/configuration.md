@@ -117,9 +117,9 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `carve_above_min_consecutive` | 1 | Min consecutive carved voxels to trigger carve_above (2-3 avoid column removal from stray single voxels; shorter runs stay carved) |
 | `ground_floor_height` | 5.0 | Massing: height of the ground floor (m). See [Floor-plate massing](../massing.md) |
 | `floor_height` | 3.0 | Massing: height of every floor above the ground floor (m) |
-| `min_plate_dimension` | 3.0 | Massing: bay width and minimum floor-plate width (m) |
-| `plate_tolerance` | 0.2 | Massing: largest share of a bay's volume on a floor outside the carved envelope; plates never leave the maximum volume |
-| `plate_stacking` | supported | Massing: `supported` builds a bay only where it is built on the floor below; `free` decides each floor on its own |
+| `min_plate_dimension` | 3.0 | Massing: side of the square module and minimum floor-plate width (m) |
+| `plate_tolerance` | 0.2 | Massing: largest share of a module's volume on a floor outside the carved envelope; plates never leave the maximum volume |
+| `plate_stacking` | supported | Massing: `supported` builds a module only where it is built on the floor below; `free` decides each floor on its own |
 | `max_slope_deg` | 75 (weighted modes), off otherwise | Steepest rise (degrees) allowed between neighbouring columns after carve_above; taller columns are cut into ramps, which removes cliffs and spires. `90` = off. The extra score it removes is reported, not counted in `carve_fraction` |
 | `apply_smoothing` | false | SDF smoothing + marching cubes instead of cubic mesh |
 | `min_voxels` | 300 | Remove connected voxel clusters smaller than this |

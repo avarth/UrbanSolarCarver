@@ -93,8 +93,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
   behind it in the same bay was carved lower (in the Perimeter block example
   the north and south wings stopped at 14 m; the floor area goes from 53 634 to
   65 446 m²). A module at the back of a row shallower than one module joins the
-  one in front of it. `plates.json` keeps the key `bays` for the number of
-  modules of a plate.
+  one in front of it. A plate can now be as shallow as one module behind any
+  facade, and such a strip is kept at any angle of the footprint to the voxel
+  grid. `plates.json` keeps the key `bays` for the number of modules of a
+  plate.
 
 ### Added (cold period)
 

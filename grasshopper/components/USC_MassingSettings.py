@@ -10,13 +10,14 @@ ground_floor_height : float, optional
 floor_height : float, optional
     Height of every floor above the ground floor in metres. Default: 3.
 min_plate_dimension : float, optional
-    Bay width and minimum floor-plate width in metres. Default: 3.
+    Side of the square module and minimum floor-plate width in metres.
+    Default: 3.
 plate_tolerance : float, optional
-    Largest share (0-1) of a bay's volume on a floor that may lie outside
+    Largest share (0-1) of a module's volume on a floor that may lie outside
     the carved envelope. Plates never leave the maximum volume.
     Default: 0.2.
 supported : bool, optional
-    True: a bay is built only where it is built on the floor below.
+    True: a module is built only where it is built on the floor below.
     False: each floor is decided on its own. Default: True.
 
 Outputs
@@ -29,15 +30,15 @@ overrides : str
 try:
     ghenv.Component.Name = "USC Massing Settings"
     ghenv.Component.NickName = "USC_MassSet"
-    ghenv.Component.Description = "Floor heights, bay width, tolerance and stacking for USC_Massing. Connect to USC_Massing's 'massing_overrides' input."
+    ghenv.Component.Description = "Floor heights, module size, tolerance and stacking for USC_Massing. Connect to USC_Massing's 'massing_overrides' input."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
         ("ground_floor_height", "Height of the ground floor in metres. Default: 5."),
         ("floor_height", "Height of every floor above the ground floor in metres. Default: 3."),
-        ("min_plate_dimension", "Bay width and minimum floor-plate width in metres. Bays are cut perpendicular to the facades at this spacing. Default: 3."),
-        ("plate_tolerance", "Largest share (0-1) of a bay's volume on a floor that may lie outside the carved envelope. Plates never leave the maximum volume. Default: 0.2."),
-        ("supported", "True: a bay is built only where it is built on the floor below. False: each floor is decided on its own. Default: True."),
+        ("min_plate_dimension", "Side of the square module and minimum floor-plate width in metres. Each face of the footprint is cut into square modules of this side, along its facade and in depth behind it. Default: 3."),
+        ("plate_tolerance", "Largest share (0-1) of a module's volume on a floor that may lie outside the carved envelope. Plates never leave the maximum volume. Default: 0.2."),
+        ("supported", "True: a module is built only where it is built on the floor below. False: each floor is decided on its own. Default: True."),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d

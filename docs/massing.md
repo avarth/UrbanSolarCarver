@@ -33,12 +33,15 @@ simulation input (one closed prism per floor and plate).
    shallower than `min_plate_dimension` joins the one in front of it. Each
    module is built on its own, so a wing keeps its floors whatever the
    envelope does behind it in the same face, for example a courtyard of a
-   perimeter block carved lower.
+   perimeter block carved lower. Behind any facade a plate can therefore be
+   as shallow as one module, `min_plate_dimension`.
 4. **Floors.** For each floor (ground floor `ground_floor_height`, then
    `floor_height`), a module is built when it stays inside the maximum volume over
    the floor's full height, at most `plate_tolerance` of its volume lies outside
    the carved envelope, and (with `plate_stacking: supported`) it is built on
-   the floor below. Parts narrower than `min_plate_dimension` are dropped.
+   the floor below. Parts narrower than `min_plate_dimension` are dropped
+   (the test is the same at any angle of the footprint to the voxel grid), so
+   a strip one module deep, `min_plate_dimension`, is kept.
    The ground floor starts at the maximum volume's lowest point, and the top
    floor ends at or below its highest point; preprocessing records both in
    its manifest. The voxel grid is not aligned with these points, so the

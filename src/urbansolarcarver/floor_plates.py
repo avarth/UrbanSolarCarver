@@ -1,10 +1,10 @@
 """Floor-plate massing: stacked floor plates that follow the footprint.
 
 The carved envelope is turned into floors (a ground floor, then floors of
-equal height).  Each floor plate is made of *bays*: slices of the footprint
-that belong to one facade and are cut perpendicular to it.  A bay is built on
-a floor when its full floor height fits the envelope within a tolerance and
-stays inside the maximum volume.  See docs/massing.md.
+equal height).  Each floor plate is made of *bays*: square modules of the
+footprint that belong to one facade, cut along it and in depth behind it.  A
+module is built on a floor when its full floor height fits the envelope
+within a tolerance and stays inside the maximum volume.  See docs/massing.md.
 
 All geometry is in a local frame: world xy minus the voxel grid's origin, so
 voxel column (i, j) covers [i*vs, (i+1)*vs] x [j*vs, (j+1)*vs].  The stage

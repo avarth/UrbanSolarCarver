@@ -90,7 +90,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 - **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.
 - **USC_Export**: runs exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
 - **USC_Massing**: stage 4, builds floor plates from the carving mask (inputs `config`, `thr_result`, `massing_overrides`, `run`; outputs closed Breps, floor areas per floor and in total, and the `plates.json` path). See [Floor-plate massing](massing.md).
-- **USC_MassingSettings**: floor heights, bay width, tolerance and stacking for USC_Massing. Connect its output to USC_Massing's `massing_overrides` input so changes re-run only massing.
+- **USC_MassingSettings**: floor heights, module size, tolerance and stacking for USC_Massing. Connect its output to USC_Massing's `massing_overrides` input so changes re-run only massing.
 
 The stage components send the daemon's `run` command, each producing its own stage, and read the stage folders from the reply. A stage reads the output of the stage before it from `<out_dir>/<stage>` of its Config, so Preprocess and the stages after it need the same Config `out_dir`; the `pre_result` and `thr_result` inputs order the solve and still have to be connected. Conditions the engine reports (a setting the mode ignores, nothing carved, a footprint that could not be read, ...) appear as warnings on the component, one per issue, as `<stage>: <message>`. Re-running preprocessing makes the stages after it refuse their old output until they run again (the error names the stage to re-run).
 
