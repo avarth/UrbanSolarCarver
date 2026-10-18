@@ -55,3 +55,56 @@ def test_no_driver_or_forced_cpu_gets_cpu_wheels(driver, force_cpu):
 
 def test_pip_version_text_with_a_local_label_is_read():
     assert setup_env._version_tuple("2.14.1+cu126") == (2, 14, 1)
+
+
+# The browser app launcher that setup_env.py writes after installing.
+
+def test_the_windows_launcher_starts_the_browser_app_with_the_installed_python(tmp_path):
+    repository = tmp_path / "my projects" / "urbanSolarCarver"
+    repository.mkdir(parents=True)
+    python = tmp_path / "venvs" / "usc venv" / "Scripts" / "python.exe"
+    launcher = setup_env.write_browser_app_launcher(repository, python, system="Windows")
+    assert launcher == repository / "Start UrbanSolarCarver.cmd"
+    text = launcher.read_bytes().decode("utf-8")
+    assert "\r\n" in text and "\n" not in text.replace("\r\n", "")
+    assert f'set "USC_PYTHON={python}"' in text
+    assert f'set "PYTHONPATH={repository / "src"}"' in text
+    assert '"%USC_PYTHON%" -m urbansolarcarver.carver_cli ui %*' in text
+    assert 'if exist "%USC_PYTHON%" goto start' in text   # a moved or deleted venv is explained, not a cryptic error
+    assert "pause" in text                                # the window stays open to show why it stopped
+    assert " (" not in text.split(":start")[0].replace('"', "")  # no if (...) block a ")" in a path could end
+
+
+def test_the_windows_launcher_runs_from_a_path_with_parentheses(tmp_path):
+    if setup_env.platform.system() != "Windows":
+        pytest.skip("runs cmd.exe")
+    import subprocess
+    repository = tmp_path / "Program Files (x86)" / "urbanSolarCarver"
+    repository.mkdir(parents=True)
+    launcher = setup_env.write_browser_app_launcher(repository, repository / "missing (venv)" / "python.exe")
+    result = subprocess.run(["cmd", "/c", str(launcher)], input="\n", capture_output=True, text=True, timeout=30)
+    assert result.returncode == 1
+    assert "was not found" in result.stdout and "missing (venv)" in result.stdout
+
+
+def test_the_macos_and_linux_launcher_starts_the_browser_app_with_the_installed_python(tmp_path):
+    repository = tmp_path / "my projects" / "urbanSolarCarver"
+    repository.mkdir(parents=True)
+    python = tmp_path / "usc venv" / "bin" / "python"
+    launcher = setup_env.write_browser_app_launcher(repository, python, system="Darwin")
+    assert launcher == repository / "Start UrbanSolarCarver.command"
+    text = launcher.read_bytes().decode("utf-8")
+    assert text.startswith("#!/bin/sh\n") and "\r" not in text
+    assert f"usc_python='{python}'" in text
+    assert f"PYTHONPATH='{repository / 'src'}'" in text
+    assert 'exec "$usc_python" -m urbansolarcarver.carver_cli ui "$@"' in text
+    if setup_env.platform.system() != "Windows":
+        assert launcher.stat().st_mode & 0o111   # double-clickable on macOS, runnable on Linux
+
+
+def test_writing_the_launcher_again_replaces_the_old_one(tmp_path):
+    first = setup_env.write_browser_app_launcher(tmp_path, tmp_path / "old" / "python.exe", system="Windows")
+    second = setup_env.write_browser_app_launcher(tmp_path, tmp_path / "new" / "python.exe", system="Windows")
+    assert first == second
+    text = second.read_text(encoding="utf-8")
+    assert "new" in text and str(tmp_path / "old") not in text

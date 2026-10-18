@@ -83,11 +83,13 @@ Auto-detects your GPU and installs the correct PyTorch + CUDA wheels. Use `--cpu
 
 ### Browser UI
 
+Double-click `Start UrbanSolarCarver.cmd` (Windows) or `Start UrbanSolarCarver.command` (macOS, Linux) in the repository folder; `setup_env.py` writes it after installing. From a terminal:
+
 ```console
 $ usc ui
 ```
 
-Opens the interface in your browser, on this computer only. See [Browser UI](https://avarth.github.io/UrbanSolarCarver/ui/) for the steps, where projects are kept and how it behaves without a CUDA-enabled GPU.
+Either way the interface opens in your browser, on this computer only. See [Browser UI](https://avarth.github.io/UrbanSolarCarver/ui/) for the steps, where projects are kept and how it behaves without a CUDA-enabled GPU.
 
 ### Python and CLI
 
