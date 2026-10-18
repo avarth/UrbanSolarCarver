@@ -5,7 +5,7 @@
 // A start after the end is drawn wrapped: dates across the new year, hours across midnight. Every change goes through
 // withOvernightHoursOnOneDateAsOneNight (analysis_period.ts), so hours across midnight on one date are one night. A period stored
 // as one date with hours across midnight (a hand-edited config, an older save) is shown as the engine runs it: the whole year on the
-// year strip, "Every night, 22 to 2 h" in words; it is not changed until the next change in the control.
+// year strip, "Every day, 22 to 2 h" in words; it is not changed until the next change in the control.
 //
 // How changes are sent: a key or a preset is one change; a drag is held here and sent once, on release; the typed fields are sent
 // when one is left or Enter is pressed, or when the fields close (and a month when it is chosen). So a value on the way (end hour "1" on the way to "18", a

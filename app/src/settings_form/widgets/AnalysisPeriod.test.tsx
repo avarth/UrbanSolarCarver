@@ -295,7 +295,7 @@ test("a period not set yet says so; a first change sends all six settings", () =
 
 test("a period stored as one date with hours across midnight is shown as the engine runs it, every night, and not written until changed", () => {
   renderPeriod(form({ start_month: 12, start_day: 21, start_hour: 22, end_month: 12, end_day: 21, end_hour: 2 }));
-  expect(words().textContent).toBe(`Every night, 22 to 2${NBSP}h`);
+  expect(words().textContent).toBe(`Every day, 22 to 2${NBSP}h`);
   const yearRange = strips()[0].querySelector<HTMLElement>(".period-range")!;
   expect(rangePiecesIn(strips()[0])).toBe(1);
   expect([yearRange.style.getPropertyValue("--range-start"), yearRange.style.getPropertyValue("--range-end")]).toEqual(["0", "1"]);

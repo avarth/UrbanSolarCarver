@@ -33,7 +33,7 @@ test("the period in words: one date, a range, across the new year, across midnig
 test("one date with hours across midnight, stored so: the engine runs every night of the year, and the words and the year strip say so", () => {
   const storedOvernight = period(12, 21, 22, 12, 21, 2);
   expect(runsEveryNightOfTheYear(storedOvernight)).toBe(true);
-  expect(periodInWords(storedOvernight)).toBe("Every night, 22 to 2\u00a0h");
+  expect(periodInWords(storedOvernight)).toBe("Every day, 22 to 2\u00a0h");
   expect(dateRangeSegments(storedOvernight)).toEqual([{ start: 0, end: 1 }]);
   for (const otherPeriod of [period(12, 21, 22, 12, 22, 2), period(12, 21, 10, 12, 21, 10), period(12, 21, 10, 12, 21, 14)]) {
     expect(runsEveryNightOfTheYear(otherPeriod)).toBe(false);

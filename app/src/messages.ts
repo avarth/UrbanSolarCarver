@@ -109,7 +109,7 @@ export const messages = {
   periodSummary: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => {
     const hours = `${startHour} to ${endHour}\u00a0h`;
     const oneDate = startMonth === endMonth && startDay === endDay;
-    if (oneDate && startHour > endHour) return `Every night, ${hours}`;
+    if (oneDate && startHour > endHour) return `Every day, ${hours}`;
     const endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
     const dates = oneDate ? endDate : startMonth === endMonth && startDay < endDay ? `${startDay} to ${endDate}`
       : `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDate}`;
