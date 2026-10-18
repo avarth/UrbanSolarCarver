@@ -5,8 +5,8 @@
 import * as THREE from "three";
 import { messages } from "../messages";
 import { colourToken, type ViewportTheme } from "./colour_scales";
-import type { Bounds3, Point3 } from "./local_origin";
-import { pointOnHemisphere, sceneHemisphere, type Hemisphere } from "./sky_dome";
+import type { Point3 } from "./local_origin";
+import { pointOnHemisphere, type Hemisphere } from "./sky_dome";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
 const TICK_STEP_DEGREES = 10;
@@ -54,9 +54,19 @@ export function compassRingMarks(sphere: Hemisphere, northDegrees: number): Comp
   return { ticks, letters };
 }
 
-/** The ring around the scene of *sceneBounds* (maximum volume and test surfaces together), with an applyTheme(theme) in its userData. */
-export function compassRing(sceneBounds: Bounds3, northDegrees: number): THREE.Group {
-  const sphere = sceneHemisphere(sceneBounds);
+function lineColour(theme: ViewportTheme): string {
+  return colourToken(theme === "dark" ? "muted-on-dark" : "muted");
+}
+
+function letterColour(theme: ViewportTheme): string {
+  return colourToken(theme === "dark" ? "ink-on-dark" : "ink");
+}
+
+/**
+ * The ring on the rim of *sphere* (the scene hemisphere, or a stand-in for an empty scene), drawn for the viewport *theme*, with
+ * an applyTheme(theme) in its userData for a later change of theme.
+ */
+export function compassRing(sphere: Hemisphere, northDegrees: number, theme: ViewportTheme): THREE.Group {
   const { ticks, letters } = compassRingMarks(sphere, northDegrees);
   const positions: number[] = [];
   for (let segment = 0; segment < CIRCLE_SEGMENTS; segment++) {
@@ -65,10 +75,10 @@ export function compassRing(sceneBounds: Bounds3, northDegrees: number): THREE.G
   for (const tick of ticks) positions.push(...tick.inner, ...tick.outer);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
-  const lineMaterial = new THREE.LineBasicMaterial({ transparent: true, depthWrite: false });
+  const lineMaterial = new THREE.LineBasicMaterial({ color: lineColour(theme), transparent: true, depthWrite: false });
   const lines = new THREE.LineSegments(geometry, lineMaterial);
   const labels: TextSprite[] = letters.map(({ letter, position }) => {
-    const label = textSprite(letter, "#000000", { pixels: LETTER_PIXELS });
+    const label = textSprite(letter, letterColour(theme), { pixels: LETTER_PIXELS });
     label.position.set(...position);
     return label;
   });
@@ -76,10 +86,9 @@ export function compassRing(sceneBounds: Bounds3, northDegrees: number): THREE.G
   ring.name = "compass_ring";
   ring.renderOrder = -1;
   ring.add(lines, ...labels);
-  ring.userData.applyTheme = (theme: ViewportTheme) => {
-    const dark = theme === "dark";
-    lineMaterial.color.set(colourToken(dark ? "muted-on-dark" : "muted"));
-    for (const label of labels) recolourTextSprite(label, colourToken(dark ? "ink-on-dark" : "ink"));
+  ring.userData.applyTheme = (newTheme: ViewportTheme) => {
+    lineMaterial.color.set(lineColour(newTheme));
+    for (const label of labels) recolourTextSprite(label, letterColour(newTheme));
   };
   return ring;
 }

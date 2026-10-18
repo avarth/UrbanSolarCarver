@@ -80,7 +80,7 @@ test("the axis gizmo letters its axes in the ink of the overlay, not in the axis
   for (const letter of letters) expect(letter.getAttribute("fill")).toBe("currentColor");
 });
 
-test("the axis gizmo is drawn straight on the viewport, without a background, a border or a shadow, on both viewports", () => {
+test("the axis gizmo is drawn straight on the viewport, without a background, a border or a shadow, its letters outlined in the viewport colour", () => {
   const removeStyles = addStyleSheetForTest("src/viewer_overlays/overlays.css");
   try {
     for (const theme of ["light", "dark"] as const) {
@@ -90,6 +90,11 @@ test("the axis gizmo is drawn straight on the viewport, without a background, a 
       expect(style.backgroundImage).toMatch(/^(none|)$/);
       expect(style.borderTopStyle).toMatch(/^(none|)$/);
       expect(style.boxShadow).toBe("none");
+      for (const letter of rendered.container.querySelectorAll("text")) {
+        const letterStyle = getComputedStyle(letter);
+        expect(letterStyle.getPropertyValue("stroke")).toBe(`var(--colour-viewport-${theme})`);
+        expect(letterStyle.getPropertyValue("paint-order")).toBe("stroke");
+      }
       rendered.unmount();
       rendered = null;
     }

@@ -68,6 +68,8 @@ class FakeService {
   everythingUpToDate = false;
   /** The field errors a save of these values is refused with (422), or null when it is stored. */
   configErrorsOf: (values: Record<string, unknown>) => { field: string | null; message: string }[] | null = () => null;
+  /** The contents of input files by path (for example "/inputs/test_surfaces/surfaces.obj"); one triangle for any other. */
+  inputFileContents: Record<string, string> = {};
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -96,7 +98,7 @@ class FakeService {
       return json({ status: "started", run_id: `r${this.runsStarted.length}`, stages });
     }
     if (path === "/run/summary") return json(this.summary);
-    if (path.startsWith("/inputs/")) return new Response(TRIANGLE_OBJ);
+    if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
     return json({ detail: "Not found" }, 404);
   };
 
@@ -328,4 +330,13 @@ test("a refused mode change locks Carving: the old mode's carving is not shown a
   expect(service.count("POST /runs")).toBe(0);
   expect(FakeWebSocket.opened).toHaveLength(0);
   expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+});
+
+test("the sun path, the sky dome and the compass ring are sized to the maximum volume and the test surfaces together", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  // The maximum volume is the triangle from 0 to 1 m; the test surface lies apart from it, from 9 to 10 m along x
+  service.inputFileContents["/inputs/test_surfaces/surfaces.obj"] = "v 9 0 0\nv 10 0 0\nv 9 1 0\nf 1 2 3\n";
+  await openWorkspace(project(NOTHING_RUN));
+  // The scene runs from 0 to 10 m along x and 0 to 1 m along y: centred at (5, 0.5) on the ground, 1.5 x 10 m wide
+  expect(FakeViewerScene.latest!.sceneHemisphere).toEqual({ centre: [5, 0.5, 0], radius: 15 });
 });

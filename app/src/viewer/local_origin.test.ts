@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { localBounds, localOrigin, toLocal } from "./local_origin";
+import { localOrigin, toLocal } from "./local_origin";
 
 test("georeferenced coordinates keep millimetre precision after the shift", () => {
   const origin = localOrigin([[500000.25, 4200000.5, 10], [500100.25, 4200050.5, 40]]);
@@ -9,9 +9,4 @@ test("georeferenced coordinates keep millimetre precision after the shift", () =
 
 test("the local origin is the minimum corner", () => {
   expect(localOrigin([[1, 2, 3], [4, 5, 6]])).toEqual([1, 2, 3]);
-});
-
-test("bounds in local coordinates start at zero", () => {
-  const bounds: [[number, number, number], [number, number, number]] = [[100, 200, 5], [140, 230, 40]];
-  expect(localBounds(bounds, localOrigin(bounds))).toEqual([[0, 0, 0], [40, 30, 35]]);
 });

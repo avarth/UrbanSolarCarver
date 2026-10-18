@@ -40,7 +40,7 @@ export interface ViewerPaneProps {
   maxVolume: THREE.BufferGeometry | null;
   testSurfaces: THREE.BufferGeometry | null;
   sunPath: SunPath | null;
-  /** Where the sun path and the sky dome are drawn: around the maximum volume and the test surfaces together (R2 2). */
+  /** Where the sun path and the sky dome are drawn, and the compass ring lies: around the maximum volume and the test surfaces together (R2 2). */
   hemisphere: Hemisphere | null;
   maxVolumeAppearance: MaxVolumeAppearance;
   /** The layers the open step shows; a change of step brings these back. */
@@ -144,6 +144,7 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   useEffect(() => scene?.setViewportTheme(theme), [scene, theme]);
   useEffect(() => scene?.setGroundAid(groundAid), [scene, groundAid]);
   useEffect(() => scene?.setNorth(northDegrees), [scene, northDegrees]);
+  useEffect(() => scene?.setSceneHemisphere(hemisphere), [scene, hemisphere]);
   useEffect(() => scene?.setSkyDomeOpacity(skyDomeOpacity), [scene, skyDomeOpacity]);
   useEffect(() => setVisibleByChoice({}), [defaultsKey]);
 

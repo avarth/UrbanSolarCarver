@@ -4,7 +4,8 @@
 import * as THREE from "three";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { addStyleSheetForTest } from "../viewer_overlays/render_for_test";
-import { maxVolumeLayer, testSurfacesLayer } from "./layers";
+import { compassRing } from "./compass_ring";
+import { disposeLayer, maxVolumeLayer } from "./layers";
 import { ViewerScene } from "./scene";
 
 const drawn = vi.hoisted(() => ({ scene: null as THREE.Scene | null }));
@@ -21,7 +22,12 @@ vi.mock("three", async (importOriginal) => {
   return { ...three, WebGLRenderer: RendererKeepingTheScene };
 });
 
-const TEXT_CONTEXT = { font: "", fillStyle: "", textBaseline: "", measureText: () => ({ width: 40 }), fillText: () => {} };
+/** The colours text was drawn in, in order. */
+const textColours: string[] = [];
+const TEXT_CONTEXT = {
+  font: "", fillStyle: "", textBaseline: "", measureText: () => ({ width: 40 }),
+  fillText(this: { fillStyle: string }) { textColours.push(this.fillStyle); },
+};
 
 let removeTokens: () => void = () => {};
 let viewer: ViewerScene | null = null;
@@ -36,6 +42,7 @@ afterEach(() => {
   viewer?.dispose();
   viewer = null;
   drawn.scene = null;
+  textColours.length = 0;
   removeTokens();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -46,11 +53,18 @@ async function drawnScene(): Promise<THREE.Scene> {
   return drawn.scene!;
 }
 
+// The hemisphere of a scene running from 0 to 50 m along x and 0 to 10 m along y (ProjectWorkspace gives it, see sky_dome.test.ts)
+const SCENE_HEMISPHERE = { centre: [25, 5, 0] as [number, number, number], radius: 75 };
+
 function viewerWithInputs(): ViewerScene {
   const scene = new ViewerScene(document.createElement("div"));
   scene.setLayer("max_volume", maxVolumeLayer(new THREE.BoxGeometry(20, 10, 30).translate(10, 5, 15), "solid"));
-  scene.setLayer("test_surfaces", testSurfacesLayer(new THREE.PlaneGeometry(10, 10).translate(45, 5, 0)));      // outside the max volume
+  scene.setSceneHemisphere(SCENE_HEMISPHERE);
   return scene;
+}
+
+function letterOfRing(scene: THREE.Scene, letter: string): THREE.Object3D {
+  return scene.getObjectByName("compass_ring")!.children.find((child) => child.userData.text === letter)!;
 }
 
 test("the scene has no north arrow on the ground, and shows the ground grid until another ground aid is chosen", async () => {
@@ -77,18 +91,34 @@ test("the ground aid shows the compass ring, or neither the ring nor the grid", 
   expect(scene.getObjectByName("ground_grid")!.visible).toBe(false);
 });
 
-test("the compass ring is placed around the maximum volume and the test surfaces together, and turns with north", async () => {
+test("the compass ring lies on the rim of the scene hemisphere it is given, and turns with north", async () => {
   viewer = viewerWithInputs();
+  let north = letterOfRing(await drawnScene(), "N");
+  expect(north.position.x).toBeCloseTo(25);
+  expect(north.position.y).toBeGreaterThan(5 + 75);                 // north at 0 degrees is +Y, just outside the 75 m rim
+  expect(north.position.y).toBeLessThan(5 + 1.1 * 75);
   viewer.setNorth(90);
-  const ring = (await drawnScene()).getObjectByName("compass_ring")!;
-  const north = ring.children.find((child) => child.userData.text === "N")!;
-  // The scene runs from 0 to 50 m along x and 0 to 10 m along y: centre (25, 5), radius 75 m; north at 90 degrees is +X
-  expect(north.position.x).toBeGreaterThan(25 + 75);
+  north = letterOfRing(await drawnScene(), "N");
+  expect(north.position.x).toBeGreaterThan(25 + 75);                // north at 90 degrees is +X
   expect(north.position.y).toBeCloseTo(5);
+  viewer.setSceneHemisphere({ centre: [0, 0, 0], radius: 10 });     // the inputs changed
+  north = letterOfRing(await drawnScene(), "N");
+  expect(north.position.x).toBeGreaterThan(10);
+  expect(north.position.x).toBeLessThan(11);
 });
 
-test("an empty scene has no compass ring to size", async () => {
+test("an empty scene with the compass ring chosen draws it around the local origin, 60 m wide, as the grid is drawn", async () => {
   viewer = new ViewerScene(document.createElement("div"));
   viewer.setGroundAid("compass_ring");
-  expect((await drawnScene()).getObjectByName("compass_ring")).toBeUndefined();
+  const scene = await drawnScene();
+  expect(scene.getObjectByName("compass_ring")!.visible).toBe(true);
+  const north = letterOfRing(scene, "N");
+  expect(north.position.x).toBeCloseTo(0);
+  expect(north.position.y).toBeGreaterThan(60);
+  expect(north.position.y).toBeLessThan(66);
+});
+
+test("the ring's letters are drawn once, in the ink of the viewport theme they are built for", () => {
+  disposeLayer(compassRing({ centre: [0, 0, 0], radius: 10 }, 0, "dark"));
+  expect(textColours).toEqual(Array(4).fill("#e6ecee"));          // ink-on-dark, for N, E, S and W
 });

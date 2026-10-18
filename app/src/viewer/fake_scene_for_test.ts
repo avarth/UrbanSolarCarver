@@ -5,6 +5,7 @@
 import type * as THREE from "three";
 import { vi } from "vitest";
 import type { CameraState, GroundAid, LayerName, ViewportTheme } from "./scene";
+import type { Hemisphere } from "./sky_dome";
 
 /** Makes the canvas give a WebGL context, as a browser with WebGL does (jsdom gives none); vi.restoreAllMocks undoes it. */
 export function pretendTheBrowserHasWebGl(): void {
@@ -21,6 +22,8 @@ export class FakeViewerScene {
   readonly dimmed = new Set<LayerName>();
   /** The ground aid the pane chose last; undefined until it chooses one. */
   groundAid: GroundAid | undefined = undefined;
+  /** The scene hemisphere the pane gave last; undefined until it gives one. */
+  sceneHemisphere: Hemisphere | null | undefined = undefined;
   disposed = false;
 
   constructor(_container: HTMLElement) {
@@ -50,6 +53,10 @@ export class FakeViewerScene {
   }
 
   setNorth(_northDegrees: number): void {}
+  setSceneHemisphere(hemisphere: Hemisphere | null): void {
+    this.sceneHemisphere = hemisphere;
+  }
+
   setGroundAid(aid: GroundAid): void {
     this.groundAid = aid;
   }

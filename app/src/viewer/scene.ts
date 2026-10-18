@@ -12,6 +12,7 @@ import { northDirection } from "./compass";
 import { compassRing } from "./compass_ring";
 import { groundGrid, groundGridSpacing } from "./ground_grid";
 import { LAYER_NAMES, applyLayerAppearance, disposeLayer, type LayerName } from "./layers";
+import type { Hemisphere } from "./sky_dome";
 import { fitTextSpritesToView } from "./text_sprite";
 
 export type { LayerName } from "./layers";
@@ -49,7 +50,7 @@ const FRAME_MARGIN = 1.1;
 const TOP_VIEW_TILT_RADIANS = 1e-3;         // a hair off straight down, so "up" on the screen is defined and points north
 const FIRST_VIEW_DIRECTION = new THREE.Vector3(-0.5, -0.9, 0.75).normalize();     // from the south-south-west, above
 const EMPTY_SCENE_RADIUS_METRES = 60;
-const SCENE_BOUNDS_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces"];     // what the compass ring is sized to (R2 2)
+const EMPTY_SCENE_HEMISPHERE: Hemisphere = { centre: [0, 0, 0], radius: EMPTY_SCENE_RADIUS_METRES };
 
 const toDegrees = (radians: number) => (radians / Math.PI) * 180;
 const normalisedDegrees = (angle: number) => ((angle % 360) + 360) % 360;
@@ -123,6 +124,7 @@ export class ViewerScene {
   private northDegrees = 0;
   private skyDomeOpacity = DEFAULT_SKY_DOME_OPACITY;
   private groundAid: GroundAid = "grid";
+  private sceneHemisphere: Hemisphere | null = null;
   private grid: THREE.Group | null = null;
   private ring: THREE.Group | null = null;
   private hasFramedContent = false;
@@ -190,7 +192,7 @@ export class ViewerScene {
       this.scene.add(object);
     }
     this.refreshLayers();
-    if (SCENE_BOUNDS_LAYERS.includes(name) || !this.slots.get("max_volume")!.object) this.rebuildGroundAids();
+    if (name === "max_volume" || !this.slots.get("max_volume")!.object) this.rebuildGroundAids();
     if (object && !this.hasFramedContent) {
       this.hasFramedContent = true;
       this.frameAll(true);
@@ -206,6 +208,12 @@ export class ViewerScene {
   setLayerDimmed(name: LayerName, dimmed: boolean): void {
     this.slots.get(name)!.dimmed = dimmed;
     this.refreshLayers();
+  }
+
+  /** The hemisphere around the whole scene (R2 2), the one the sun path and the sky dome are drawn on: the compass ring lies on its rim. */
+  setSceneHemisphere(hemisphere: Hemisphere | null): void {
+    this.sceneHemisphere = hemisphere;
+    this.rebuildGroundAids();
   }
 
   setGroundAid(aid: GroundAid): void {
@@ -293,8 +301,8 @@ export class ViewerScene {
 
   /**
    * The ground aids, both built and only the chosen one shown. The grid is sized and placed for the maximum volume (or whatever
-   * is in the view without one); the compass ring for the maximum volume and the test surfaces together, and only once one of
-   * them is there (R2 2).
+   * is in the view without one); the compass ring lies on the rim of the scene hemisphere (R2 2). Without a scene hemisphere
+   * (nothing loaded yet) the ring is drawn around the local origin, EMPTY_SCENE_RADIUS_METRES wide, as the grid is.
    */
   private rebuildGroundAids(): void {
     const modelLayers = this.slots.get("max_volume")!.object ? ["max_volume" as const] : LAYER_NAMES.filter((name) => name !== "sky_dome" && name !== "sun_path");
@@ -308,13 +316,9 @@ export class ViewerScene {
       disposeLayer(aid);
     }
     this.grid = groundGrid(groundGridSpacing(longestSide || EMPTY_SCENE_RADIUS_METRES), [centre.x, centre.y]);
-    const sceneBox = this.boxOf(SCENE_BOUNDS_LAYERS, false);
-    this.ring = sceneBox.isEmpty() ? null : compassRing([sceneBox.min.toArray(), sceneBox.max.toArray()], this.northDegrees);
-    for (const aid of [this.grid, this.ring]) {
-      if (!aid) continue;
-      aid.userData.applyTheme(this.theme);
-      this.scene.add(aid);
-    }
+    this.grid.userData.applyTheme(this.theme);
+    this.ring = compassRing(this.sceneHemisphere ?? EMPTY_SCENE_HEMISPHERE, this.northDegrees, this.theme);
+    this.scene.add(this.grid, this.ring);
     this.showChosenGroundAid();
     this.fitPixelSizedObjects();
     this.requestRender();
