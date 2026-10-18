@@ -218,6 +218,17 @@
 .balance-handle:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--colour-accent), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent); }
 .balance-handle:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 1px var(--colour-accent), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent); }
 
+/* The track is the two handles' one, so a refused setting marks its own handle: a 2 px ring in the error colour, inside the focus
+   ring when the handle has the focus. */
+.balance-handle[aria-invalid="true"]::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--colour-error); }
+.balance-handle[aria-invalid="true"]::-moz-range-thumb { box-shadow: 0 0 0 2px var(--colour-error); }
+.balance-handle[aria-invalid="true"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--colour-error), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent);
+}
+.balance-handle[aria-invalid="true"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px var(--colour-error), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent);
+}
+
 .balance-numbers { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2) calc(var(--space-unit) * 6); }
 .balance-numbers .setting-control { flex-wrap: nowrap; }
 

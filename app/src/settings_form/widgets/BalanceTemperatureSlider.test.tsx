@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../../api_client/client";
@@ -189,4 +190,13 @@ test("an error of one of the two marks only its own handle and number field", ()
   renderBalance(refused);
   expect([lowerEndHandle(), deadBandNumber()].map((input) => input.getAttribute("aria-invalid"))).toEqual(["true", "true"]);
   expect([balanceHandle(), balanceNumber()].map((input) => input.getAttribute("aria-invalid"))).toEqual(["false", "false"]);
+});
+
+test("an invalid balance handle is marked on its own handle, not on the track the two share, and keeps its focus ring", () => {
+  const formCss = readFileSync("src/settings_form/settings_form.css", "utf8");
+  expect(formCss).toMatch(/\.balance-handle\[aria-invalid="true"\]::-webkit-slider-thumb\s*{[^}]*box-shadow: 0 0 0 2px var\(--colour-error\)/);
+  expect(formCss).toMatch(/\.balance-handle\[aria-invalid="true"\]::-moz-range-thumb\s*{[^}]*box-shadow: 0 0 0 2px var\(--colour-error\)/);
+  expect(formCss).toMatch(/\.balance-handle\[aria-invalid="true"\]:focus-visible::-webkit-slider-thumb\s*{[^}]*var\(--colour-error\)[^}]*0 0 0 5px var\(--colour-accent\)/);
+  expect(formCss).toMatch(/\.balance-handle\[aria-invalid="true"\]:focus-visible::-moz-range-thumb\s*{[^}]*var\(--colour-error\)[^}]*0 0 0 5px var\(--colour-accent\)/);
+  expect(formCss).not.toMatch(/\.balance-handle\[aria-invalid="true"\][^{]*track/);
 });
