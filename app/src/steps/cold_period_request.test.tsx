@@ -20,8 +20,8 @@ let requests: string[] = [];
 const FOUND = { status: "found", period: { start_month: 9, start_day: 30, end_month: 5, end_day: 15 } };
 let reply: unknown = FOUND;
 
-function ColdPeriodOf({ form, hasWeatherFile = true }: { form: FormState; hasWeatherFile?: boolean }) {
-  state = useColdPeriod({ token: "t", project: "p", form, hasWeatherFile, weatherFileKey: "Golden, CO, USA", onServiceProblem: () => {} });
+function ColdPeriodOf({ form, hasWeatherFile = true, weatherFileRevision = 0 }: { form: FormState; hasWeatherFile?: boolean; weatherFileRevision?: number }) {
+  state = useColdPeriod({ token: "t", project: "p", form, hasWeatherFile, weatherFileRevision, onServiceProblem: () => {} });
   return null;
 }
 
@@ -72,6 +72,41 @@ test("no weather file asks nothing and says it is needed; no cold day says so wi
   rendered.rerender(<ColdPeriodOf form={formOf({})} />);
   await waitForTheRequest();
   expect(state).toEqual({ kind: "none", baseTemperature: 13 });
+});
+
+test("a base that comes back to one already answered shows that answer at once and asks nothing", async () => {
+  rendered = renderForTest(<ColdPeriodOf form={formOf({})} />);
+  await waitForTheRequest();
+  rendered.rerender(<ColdPeriodOf form={formOf({ balance_temperature: 18 })} />);
+  await act(async () => { await vi.advanceTimersByTimeAsync(100); });
+  rendered.rerender(<ColdPeriodOf form={formOf({})} />);
+  expect(state?.kind).toBe("found");
+  await waitForTheRequest();
+  expect(requests).toEqual(["/api/projects/p/cold-period?base_temperature=13"]);
+});
+
+test("a reply for a base the form no longer shows is not shown", async () => {
+  let answerFirst: () => void = () => {};
+  vi.stubGlobal("fetch", vi.fn(async (address: string) => {
+    requests.push(address);
+    if (requests.length === 1) await new Promise<void>((resolve) => { answerFirst = resolve; });
+    const period = requests.length === 1 ? FOUND.period : { start_month: 10, start_day: 1, end_month: 4, end_day: 30 };
+    return new Response(JSON.stringify({ status: "found", period }), { status: 200, headers: { "content-type": "application/json" } });
+  }));
+  rendered = renderForTest(<ColdPeriodOf form={formOf({})} />);
+  await waitForTheRequest();                                     // asked for 13 °C; its reply waits
+  rendered.rerender(<ColdPeriodOf form={formOf({ balance_temperature: 12 })} />);
+  await waitForTheRequest();                                     // asked for 10 °C, answered
+  await act(async () => { answerFirst(); await vi.advanceTimersByTimeAsync(0); });
+  expect(state).toEqual({ kind: "found", dates: { startMonth: 10, startDay: 1, endMonth: 4, endDay: 30 }, baseTemperature: 10 });
+});
+
+test("a replaced weather file is asked about again at the same base", async () => {
+  rendered = renderForTest(<ColdPeriodOf form={formOf({})} />);
+  await waitForTheRequest();
+  rendered.rerender(<ColdPeriodOf form={formOf({})} weatherFileRevision={1} />);
+  await waitForTheRequest();
+  expect(requests).toHaveLength(2);
 });
 
 test("a mode without a balance temperature has no cold period", async () => {

@@ -112,6 +112,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [joinedBounds, setJoinedBounds] = useState<Bounds3 | null>(project.joined_bounds as Bounds3 | null);
   const [weatherLocation, setWeatherLocation] = useState(project.weather_location);
   const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0 });
+  // Goes up whenever the weather file is added, replaced or removed: the service keeps one name for it, so its file list may not change.
+  const [weatherFileRevision, setWeatherFileRevision] = useState(0);
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
   // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
   const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
@@ -173,7 +175,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
   const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, onServiceProblem });
-  const coldPeriod = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileKey: weatherLocation, onServiceProblem });
+  const coldPeriod = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision, onServiceProblem });
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
 
@@ -181,7 +183,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     setFiles((current) => ({ ...current, [reply.role]: reply.files }));
     setJoinedBounds(reply.joined_bounds as Bounds3 | null);
     setWeatherLocation(reply.weather_location);
-    if (reply.role !== "weather") setInputRevisions((current) => ({ ...current, [reply.role]: current[reply.role as MeshRole] + 1 }));
+    if (reply.role === "weather") setWeatherFileRevision((revision) => revision + 1);
+    else setInputRevisions((current) => ({ ...current, [reply.role]: current[reply.role as MeshRole] + 1 }));
   };
   const afterInputsChanged = (role: InputRole) => {
     refreshStageStatus();

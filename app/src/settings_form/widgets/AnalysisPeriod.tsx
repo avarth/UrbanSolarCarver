@@ -115,7 +115,9 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
           </button>
         ))}
         {coldPeriod !== null && (
-          <button type="button" className="period-preset" disabled={disabled || coldPeriod.kind !== "found"} aria-describedby={coldPeriodLineId}
+          // Not ready yet: aria-disabled, not disabled, so the button stays in the tab order and its line is read with it.
+          <button type="button" className="period-preset" disabled={disabled} aria-disabled={coldPeriod.kind !== "found" || undefined}
+                  aria-describedby={coldPeriodLineId}
                   aria-pressed={stored !== null && coldPeriod.kind === "found" && datesMatch(current, coldPeriod.dates)}
                   onClick={() => { if (coldPeriod.kind === "found") send(periodWithDates(current, coldPeriod.dates)); }}>
             {messages.coldPeriodPreset}

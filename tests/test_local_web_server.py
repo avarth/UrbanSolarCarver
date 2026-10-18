@@ -582,11 +582,17 @@ def test_the_cold_period_comes_from_the_uploaded_weather_file_and_the_base_tempe
     assert client.get("/api/projects/p/cold-period", params={"base_temperature": -40}).json() == {"status": "none", "period": None}
 
 
+@pytest.mark.parametrize("base_temperature", ["nan", "inf", "100"])
+def test_a_base_temperature_that_is_not_a_plausible_number_is_refused(client, base_temperature):
+    create_project(client, "p", "benefit")
+    assert client.get("/api/projects/p/cold-period", params={"base_temperature": base_temperature}).status_code == 422
+
+
 def test_the_cold_period_of_an_unreadable_weather_file_is_refused_with_a_reason(client, projects_folder):
     create_project(client, "p", "benefit")
     (projects_folder / "p" / "inputs" / "weather.epw").write_text("not a weather file", encoding="utf-8")
     reply = client.get("/api/projects/p/cold-period", params={"base_temperature": 13})
-    assert reply.status_code == 422 and "weather file" in reply.json()["detail"]
+    assert reply.status_code == 422 and reply.json()["detail"].startswith("The weather file cannot be read: ")
 
 
 def test_the_project_downloads_as_a_zip(client_after_fake_run):

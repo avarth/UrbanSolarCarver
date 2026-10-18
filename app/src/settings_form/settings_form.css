@@ -317,7 +317,7 @@
 }
 
 .period-preset[aria-pressed="true"] { border-color: var(--colour-accent); background: var(--colour-accent-soft); color: var(--colour-accent); font-weight: 600; }
-.period-preset:disabled { color: var(--colour-muted); cursor: default; }
+.period-preset:disabled, .period-preset[aria-disabled="true"] { color: var(--colour-muted); cursor: default; }
 
 /* The period in words reads as a link: it opens the typed fields. */
 .period-words {

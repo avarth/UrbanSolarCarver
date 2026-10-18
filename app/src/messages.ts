@@ -356,9 +356,10 @@ export const messages = {
   coldPeriodNeedsWeatherFile: "Add a weather file to find its cold period.",
   coldPeriodFinding: "Finding the cold period of the weather file.",
   coldPeriodFound: (startDay: number, startMonth: number, endDay: number, endMonth: number, baseText: string) =>
-    `Cold period of the weather file, days below ${baseText}: ${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}.`,
-  coldPeriodNone: (baseText: string) => `No part of the year in the weather file is below ${baseText} (balance temperature minus dead band).`,
-  coldPeriodFailed: (reason: string) => `The cold period cannot be found: ${reason}`,
+    `Cold period of the weather file, where the mean of the month around each day is below ${baseText}: ` +
+    `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}.`,
+  coldPeriodNone: (baseText: string) => `No month-long stretch of the weather file has a mean below ${baseText} (balance temperature minus dead band).`,
+  coldPeriodFailed: (reason: string) => `The cold period cannot be found. ${reason}`,
   temperatureText: (degrees: number) => `${Number(degrees.toFixed(1))} °C`,
   periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
   periodWordsButton: (periodWords: string) => `${periodWords}: type exact dates and hours`,

@@ -586,7 +586,7 @@ class ProjectStore:
         try:
             period = cold_period_from_weather_file(str(weather_path), base_temperature)
         except Exception as error:      # Ladybug's reader fails with AssertionError, IndexError or ValueError, by what is wrong
-            raise ProjectError(f"The weather file cannot be read for the cold period: {error}", status_code=422) from error
+            raise ProjectError(f"The weather file cannot be read: {error}", status_code=422) from error
         if period is None:
             return ColdPeriodReply(status="none")
         return ColdPeriodReply(status="found", period=ColdPeriodDates(**asdict(period)))

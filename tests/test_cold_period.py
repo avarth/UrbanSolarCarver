@@ -59,6 +59,26 @@ def test_daily_means_of_a_leap_year_leave_out_29_february():
     assert 100.0 not in daily and daily[58] == 1.0 and daily[59] == 3.0
 
 
+def test_hours_marked_missing_are_left_out_and_a_day_without_any_takes_its_neighbours():
+    hourly = np.full(8760, 10.0)
+    hourly[5] = 99.9                         # one missing hour on 1 January
+    hourly[24 * 100:24 * 101] = 99.9         # a whole day missing, between days of 10 and 20 °C
+    hourly[24 * 101:] = 20.0
+    daily = daily_mean_temperatures(hourly)
+    assert daily[0] == 10.0 and daily[100] == pytest.approx(15.0) and daily.max() == 20.0
+
+
+def test_a_one_day_window_reads_the_daily_means_themselves():
+    daily = np.full(DAYS_IN_YEAR, 20.0)
+    daily[[10, 11, 12]] = 0.0                # three cold days, with no smoothing
+    assert cold_day_span(daily, base_temperature=5.0, smoothing_days=1) == (10, 12)
+
+
+def test_the_cold_run_needs_one_value_for_each_day_of_a_non_leap_year():
+    with pytest.raises(ValueError, match="365"):
+        cold_day_span(np.zeros(366), base_temperature=5.0)
+
+
 def test_daily_means_refuse_a_series_that_is_not_one_year_of_hours():
     with pytest.raises(ValueError, match="8760"):
         daily_mean_temperatures(np.zeros(100))

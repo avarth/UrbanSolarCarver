@@ -74,7 +74,7 @@ Similar to irradiance, but weights hours by a heating-benefit criterion. Two wei
 
 **Key parameters**: `balance_temperature` (free-running balance point; default 15 °C, typically about 12 °C for commercial to 18 °C for residential buildings), `balance_offset` (dead-band width, default 2 °C).
 
-**Cold period**: `urbansolarcarver.cold_period.cold_period_from_weather_file(epw_path, base_temperature)` gives the start and end dates of the site's cold period for an analysis period: the longest run of days whose 31-day running mean dry-bulb temperature (wrapping across the new year) is below the base, for benefit mode `balance_temperature - balance_offset`. It may wrap across the new year. The browser UI offers it as a preset of the analysis period.
+**Cold period**: `urbansolarcarver.cold_period.cold_period_from_weather_file(epw_path, base_temperature)` gives the start and end dates of the site's cold period, to use as the analysis period: the longest run of days whose 31-day running mean dry-bulb temperature (wrapping across the new year) is below the base, for benefit mode `balance_temperature - balance_offset`. It may wrap across the new year. Hours the EPW marks missing (99.9) are left out. The browser UI offers it as a preset of the analysis period. With `simulated_weights_path` set, the balance values are unused by the mode, so the cold period found from them describes the simple rule, not the simulated building. In climates whose temperature stays near the base all year, the longest run can be short and its dates arbitrary.
 
 ### Simulated weights
 

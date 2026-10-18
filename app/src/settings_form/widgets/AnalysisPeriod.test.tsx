@@ -339,7 +339,7 @@ const coldLine = () => document.getElementById(presetButton(COLD_PERIOD).getAttr
 
 test("the cold period preset sets the dates the weather file gives, keeps the hours and shows as chosen", () => {
   renderPeriod(form(), false, { kind: "found", dates: { startMonth: 9, startDay: 30, endMonth: 5, endDay: 15 }, baseTemperature: 13 });
-  expect(coldLine()).toBe(`Cold period of the weather file, days below 13${NBSP}°C: 30 Sep to 15 May.`);
+  expect(coldLine()).toBe(`Cold period of the weather file, where the mean of the month around each day is below 13${NBSP}°C: 30 Sep to 15 May.`);
   expect(presetButton(COLD_PERIOD).getAttribute("aria-pressed")).toBe("false");
   click(presetButton(COLD_PERIOD));
   expect(periodValues()).toEqual({ start_month: 9, start_day: 30, start_hour: 10, end_month: 5, end_day: 15, end_hour: 14 });
@@ -349,12 +349,14 @@ test("the cold period preset sets the dates the weather file gives, keeps the ho
 
 test("the cold period preset waits for the weather file, or says no day is cold enough, and sets nothing", () => {
   renderPeriod(form(), false, { kind: "needs_weather_file" });
-  expect(presetButton(COLD_PERIOD).disabled).toBe(true);
+  expect(presetButton(COLD_PERIOD).getAttribute("aria-disabled")).toBe("true");      // still in the tab order, with its line
   expect(coldLine()).toBe("Add a weather file to find its cold period.");
+  click(presetButton(COLD_PERIOD));
   rendered!.unmount();
   renderPeriod(form(), false, { kind: "none", baseTemperature: 9.5 });
-  expect(presetButton(COLD_PERIOD).disabled).toBe(true);
-  expect(coldLine()).toBe(`No part of the year in the weather file is below 9.5${NBSP}°C (balance temperature minus dead band).`);
+  expect(presetButton(COLD_PERIOD).getAttribute("aria-disabled")).toBe("true");
+  expect(coldLine()).toBe(`No month-long stretch of the weather file has a mean below 9.5${NBSP}°C (balance temperature minus dead band).`);
+  click(presetButton(COLD_PERIOD));
   expect(changes).toEqual([]);
 });
 

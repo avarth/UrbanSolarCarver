@@ -28,6 +28,7 @@ DAYS_IN_YEAR = 365
 HOURS_IN_DAY = 24
 SMOOTHING_WINDOW_DAYS = 31              # a month, centred on the day
 LEAP_DAY_INDEX = 59                     # 29 February, counted from 1 January = 0
+MISSING_DRY_BULB = 99.9                 # the EPW format's mark for a missing dry-bulb temperature
 DAYS_IN_MONTH = (31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31)
 
 
@@ -41,19 +42,32 @@ class ColdPeriod:
 
 
 def daily_mean_temperatures(hourly_dry_bulb: Sequence[float]) -> np.ndarray:
-    """The 365 daily means of one year of hourly temperatures (8760 values, or 8784 with 29 February left out)."""
+    """The 365 daily means of one year of hourly temperatures (8760 values, or 8784 with 29 February left out).
+
+    Hours marked missing (99.9) are left out of their day's mean; a day with no hour given takes the mean of the days around it.
+    """
     hourly = np.asarray(hourly_dry_bulb, dtype=float)
     if hourly.shape not in ((DAYS_IN_YEAR * HOURS_IN_DAY,), ((DAYS_IN_YEAR + 1) * HOURS_IN_DAY,)):
         raise ValueError(f"Expected one year of hourly values (8760, or 8784 in a leap year), got {hourly.size}.")
-    daily = hourly.reshape(-1, HOURS_IN_DAY).mean(axis=1)
+    by_day = np.where(hourly >= MISSING_DRY_BULB, np.nan, hourly).reshape(-1, HOURS_IN_DAY)
+    given_hours = np.sum(~np.isnan(by_day), axis=1)
+    daily = np.full(by_day.shape[0], np.nan)
+    daily[given_hours > 0] = np.nanmean(by_day[given_hours > 0], axis=1)
     if daily.size == DAYS_IN_YEAR + 1:
         daily = np.delete(daily, LEAP_DAY_INDEX)
+    if np.isnan(daily).all():
+        raise ValueError("The weather file gives no dry-bulb temperature.")
+    missing_days = np.isnan(daily)
+    if missing_days.any():
+        days = np.arange(DAYS_IN_YEAR)
+        daily[missing_days] = np.interp(days[missing_days], days[~missing_days], daily[~missing_days], period=DAYS_IN_YEAR)
     return daily
 
 
 def _running_mean_around_the_year(daily: np.ndarray, window_days: int) -> np.ndarray:
+    """The mean of the *window_days* days centred on each day (an even window takes one day more), wrapping across the new year."""
     half = window_days // 2
-    wrapped = np.concatenate([daily[-half:], daily, daily[:half]])
+    wrapped = np.take(daily, np.arange(-half, daily.size + half), mode="wrap")
     return np.convolve(wrapped, np.full(2 * half + 1, 1.0 / (2 * half + 1)), mode="valid")
 
 
@@ -65,7 +79,10 @@ def cold_day_span(daily_mean: Sequence[float], base_temperature: float,
     cold gives (0, 364). Of two runs of equal length, the one with more degree
     days below the base is taken.
     """
-    smoothed = _running_mean_around_the_year(np.asarray(daily_mean, dtype=float), smoothing_days)
+    daily = np.asarray(daily_mean, dtype=float)
+    if daily.shape != (DAYS_IN_YEAR,):
+        raise ValueError(f"Expected one value for each of the {DAYS_IN_YEAR} days of a non-leap year, got {daily.size}.")
+    smoothed = _running_mean_around_the_year(daily, smoothing_days)
     cold = smoothed < base_temperature
     if not cold.any():
         return None

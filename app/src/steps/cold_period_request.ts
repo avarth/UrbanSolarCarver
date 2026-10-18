@@ -1,6 +1,9 @@
 // The cold period of the weather file (round 2, section 8), the preset "Cold period from the weather file" of Solar usefulness. It
 // is asked for as soon as the weather file is there, for the balance temperature minus the dead band the form shows (a change is
 // asked for once the values stop changing), so the preset is ready, and shows as chosen, before it is pressed.
+//
+// Answers are kept by what they were asked for (project, weather file revision, base), so a base that comes back to one already
+// answered shows that answer at once, and a reply for a base the form no longer shows is kept but not shown.
 import { useEffect, useRef, useState } from "react";
 import { getColdPeriod, serviceProblemOf, failureTextOf } from "../api_client/client";
 import { shownValue, type FormState } from "../settings_form/form_state";
@@ -22,47 +25,54 @@ interface ColdPeriodSource {
   project: string;
   form: FormState;
   hasWeatherFile: boolean;
-  /** Changes when another weather file replaces the project's one (its location), so the cold period is asked for again. */
-  weatherFileKey: string | null;
+  /** Goes up whenever a weather file is added or replaced (the service keeps one name for it), so the cold period is asked for again. */
+  weatherFileRevision: number;
   onServiceProblem: (error: unknown) => void;
 }
 
 /** The cold period for the preset; null when the form's mode has none (only Solar usefulness has a balance temperature). */
-export function useColdPeriod({ token, project, form, hasWeatherFile, weatherFileKey, onServiceProblem }: ColdPeriodSource): ColdPeriodState | null {
+export function useColdPeriod({ token, project, form, hasWeatherFile, weatherFileRevision, onServiceProblem }: ColdPeriodSource): ColdPeriodState | null {
   const wanted = form.mode === MODE_WITH_COLD_PERIOD;
   const baseTemperature = coldPeriodBaseOf(form);
-  const [state, setState] = useState<ColdPeriodState>({ kind: "finding" });
-  const requestKey = useRef<string | null>(null);       // the base and weather file last asked for; only its reply is kept
+  const [state, setState] = useState<ColdPeriodState>(hasWeatherFile ? { kind: "finding" } : { kind: "needs_weather_file" });
+  const answers = useRef(new Map<string, ColdPeriodState>());       // by request key
+  const shownKey = useRef<string | null>(null);                      // the request key of what the form shows now
   useEffect(() => {
     if (!wanted) return;
     if (!hasWeatherFile) {
-      requestKey.current = null;
+      shownKey.current = null;
       setState({ kind: "needs_weather_file" });
       return;
     }
     if (baseTemperature === null) return;           // an empty balance field: keep the last answer until it is filled
-    const key = JSON.stringify([project, weatherFileKey, baseTemperature]);
-    if (requestKey.current === key) return;
+    const key = JSON.stringify([project, weatherFileRevision, baseTemperature]);
+    shownKey.current = key;
+    const known = answers.current.get(key);
+    if (known !== undefined) {
+      setState(known);
+      return;
+    }
     setState({ kind: "finding" });
+    const answer = (reached: ColdPeriodState) => {
+      answers.current.set(key, reached);
+      if (shownKey.current === key) setState(reached);
+    };
     const timer = window.setTimeout(() => {
-      requestKey.current = key;
       getColdPeriod(token, project, baseTemperature).then((reply) => {
-        if (requestKey.current !== key) return;
         if (reply.status === "found" && reply.period) {
           const { start_month, start_day, end_month, end_day } = reply.period;
-          setState({ kind: "found", dates: { startMonth: start_month, startDay: start_day, endMonth: end_month, endDay: end_day }, baseTemperature });
+          answer({ kind: "found", dates: { startMonth: start_month, startDay: start_day, endMonth: end_month, endDay: end_day }, baseTemperature });
         } else if (reply.status === "no_weather_file") {
-          setState({ kind: "needs_weather_file" });
+          answer({ kind: "needs_weather_file" });
         } else {
-          setState({ kind: "none", baseTemperature });
+          answer({ kind: "none", baseTemperature });
         }
       }).catch((error) => {
-        if (requestKey.current !== key) return;
         if (serviceProblemOf(error) !== "other") onServiceProblem(error);
-        setState({ kind: "failed", reason: failureTextOf(error) });
+        if (shownKey.current === key) setState({ kind: "failed", reason: failureTextOf(error) });     // not kept: asked again next time
       });
     }, ASK_AFTER_MILLISECONDS);
     return () => window.clearTimeout(timer);
-  }, [wanted, hasWeatherFile, weatherFileKey, baseTemperature, project]);
+  }, [wanted, hasWeatherFile, weatherFileRevision, baseTemperature, project]);
   return wanted ? state : null;
 }
