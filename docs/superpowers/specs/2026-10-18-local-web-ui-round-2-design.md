@@ -128,6 +128,8 @@ The folder then goes to the recycle bin (Windows) or trash (macOS, Linux), not a
 
 Detecting the cold period automatically for Solar usefulness, from the weather file with Ladybug's tools, would add a preset "Cold period from the weather file" to the analysis period. It needs engine work and comes back to the user as its own proposal **(user** asked; deferred **proposed)**.
 
+Decided and built on 2026-10-18 after round 2 **(user)**: two sources are foreseen, the weather file now and the 5R1C simulation later, with simulated weights in milestone 2. The weather-file source takes the daily mean dry-bulb of the EPW, a 31-day running mean wrapping across the new year, and the base temperature balance_temperature - balance_offset (the threshold Solar usefulness applies to each hour); the cold period is the longest run of days below it, possibly across the new year. The preset sets the dates and keeps the hours; it is a one-time choice, so a later change of the balance temperature does not move the dates set **(proposed**, shown to the user before building**)**.
+
 ## 9. Bugs fixed in the same round (for the record)
 
 - Test surfaces lost their panel boundaries when the service joined the uploaded files (normals dropped), so the perimeter block's courtyard was never protected and the district example failed. Fixed in the service.

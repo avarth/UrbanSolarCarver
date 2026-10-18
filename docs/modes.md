@@ -74,6 +74,8 @@ Similar to irradiance, but weights hours by a heating-benefit criterion. Two wei
 
 **Key parameters**: `balance_temperature` (free-running balance point; default 15 °C, typically about 12 °C for commercial to 18 °C for residential buildings), `balance_offset` (dead-band width, default 2 °C).
 
+**Cold period**: `urbansolarcarver.cold_period.cold_period_from_weather_file(epw_path, base_temperature)` gives the start and end dates of the site's cold period for an analysis period: the longest run of days whose 31-day running mean dry-bulb temperature (wrapping across the new year) is below the base, for benefit mode `balance_temperature - balance_offset`. It may wrap across the new year. The browser UI offers it as a preset of the analysis period.
+
 ### Simulated weights
 
 Instead of the binary cold-hour rule, benefit mode can consume hourly weights derived from a thermal simulation of a typical building (the compact 5R1C hourly model from ISO 13790). For every hour of the year the simulation answers: *if one extra watt of sun arrived in this hour, how much less heating, and how much more cooling, would the building need over the whole year?* This captures thermal lag (a noon gain stored in the mass and released into the cold evening still earns credit), diurnal mass state, and gain saturation, none of which the binary rule can express. The simple rule is the special case where the weights are 0 or 1.

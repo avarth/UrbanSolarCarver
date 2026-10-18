@@ -83,6 +83,17 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ring. The compass ring, the sun path and the sky dome are sized to
   everything loaded, not to the maximum volume alone.
 
+### Added (cold period)
+
+- **Cold period from the weather file:** `urbansolarcarver.cold_period`
+  finds the longest run of days whose 31-day running mean dry-bulb
+  temperature is below a base temperature (for benefit mode
+  `balance_temperature - balance_offset`), wrapping across the new year. The
+  service answers it at `GET /api/projects/{name}/cold-period`, and in Solar
+  usefulness the analysis period has a preset "Cold period from the weather
+  file" that sets those dates and keeps the hours. A source from the 5R1C
+  simulation is planned with simulated weights in the interface.
+
 ### Changed (browser UI, round 2)
 
 - **Names in the interface.** The modes read Angle rule, Solar time-based
