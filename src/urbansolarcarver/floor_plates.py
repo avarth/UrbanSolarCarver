@@ -440,11 +440,30 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
     A bay whose rectangle holds column centres of another bay (a slanted
     end where a corner is not square) and a bay on a curved facade get
     None; ``plate_polygons`` draws those from their columns.
+
+    *xy* are voxel column centres, one per grid square.  Every test looks at
+    columns within two modules of the bay, so each bay reads only the columns
+    of a window of the grid around it.
     """
     xy = np.asarray(xy, dtype=np.float64)
     vs, w = float(voxel_size), float(bay_width)
     part = part_of_points(shapely.points(xy), polygons)
     shapes = [None] * len(bay_face)
+    columns_of_bay = np.split(np.argsort(bay, kind="stable"),
+                              np.cumsum(np.bincount(bay, minlength=len(bay_face)))[:-1])
+    grid_cell = np.rint(xy / vs - 0.5).astype(np.int64)
+    first_cell = grid_cell.min(axis=0)
+    grid_cell -= first_cell
+    column_at_cell = np.full(grid_cell.max(axis=0) + 1, -1, dtype=np.int64)
+    column_at_cell[grid_cell[:, 0], grid_cell[:, 1]] = np.arange(len(xy))
+
+    def columns_near(corners_xy):
+        """Columns whose centre lies within a voxel of the bounding box of *corners_xy*."""
+        lo = np.maximum(np.floor(corners_xy.min(axis=0) / vs).astype(np.int64) - first_cell - 1, 0)
+        hi = np.floor(corners_xy.max(axis=0) / vs).astype(np.int64) - first_cell + 2
+        window = column_at_cell[lo[0]:max(hi[0], 0), lo[1]:max(hi[1], 0)].ravel()
+        return window[window >= 0]
+
     for f_index in np.unique(bay_face):
         facade = facades[f_index]
         if not facade.straight:
@@ -453,45 +472,51 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
         along = facade.direction
         inward = np.array([-along[1], along[0]])             # solid on the left
         reach = 0.5 * vs * (abs(along[0]) + abs(along[1]))  # half a column square along u and d
-        same_part = part == facade.part
+        gap = 2.0 * reach + 1e-9                              # a neighbouring column is this close
         on_facade = origin + ((facade.start - origin) @ inward) * inward   # u = 0, d = 0
         u_all = (xy - on_facade) @ along
         d_all = (xy - on_facade) @ inward
-        on_face = faces.face == f_index
-        k_face = np.floor(u_all[on_face] / w + 1e-9)
-        d_face = d_all[on_face]
         u_start, u_end = (facade.start - on_facade) @ along, (facade.end - on_facade) @ along
+
+        def side(edge, outward, beyond):
+            """Edge of the columns' squares, or one voxel further when nothing lies beyond."""
+            return edge + outward * (reach if beyond.any() else reach + vs)
+
         for b in np.flatnonzero(bay_face == f_index):
-            mine = bay == b
-            others = same_part & ~mine
+            mine = columns_of_bay[b]
             u, d = u_all[mine], d_all[mine]
             u_lo, u_hi, d_lo, d_hi = u.min(), u.max(), d.min(), d.max()
-            if (others & (u_all > u_lo + 1e-9) & (u_all < u_hi - 1e-9)
-                    & (d_all > d_lo + 1e-9) & (d_all < d_hi - 1e-9)).any():
-                continue
-            in_u = others & (u_all >= u_lo - 1e-9) & (u_all <= u_hi + 1e-9)
-            in_d = others & (d_all >= d_lo - 1e-9) & (d_all <= d_hi + 1e-9)
-            gap = 2.0 * reach + 1e-9                          # a neighbouring column is this close
-
-            def side(edge, outward, beyond):
-                """Edge of the columns' squares, or one voxel further when nothing lies beyond."""
-                return edge + outward * (reach if beyond.any() else reach + vs)
-
             k_lo, k_hi = np.floor(u_lo / w + 1e-9), np.floor(u_hi / w + 1e-9)
+            # Every column the tests below look at lies in this rectangle of the facade's frame.
+            u_min, u_max = min((k_lo - 1) * w, u_lo - gap) - vs, max((k_hi + 2) * w, u_hi + gap) + vs
+            d_min, d_max = d_lo - gap - vs, d_hi + gap + vs
+            near = columns_near(np.array([on_facade + uu * along + dd * inward
+                                          for uu in (u_min, u_max) for dd in (d_min, d_max)]))
+            near = near[bay[near] != b]
+            others = near[part[near] == facade.part]
+            u_o, d_o = u_all[others], d_all[others]
+            if ((u_o > u_lo + 1e-9) & (u_o < u_hi - 1e-9) & (d_o > d_lo + 1e-9) & (d_o < d_hi - 1e-9)).any():
+                continue
+            in_u = (u_o >= u_lo - 1e-9) & (u_o <= u_hi + 1e-9)
+            in_d = (d_o >= d_lo - 1e-9) & (d_o <= d_hi + 1e-9)
+            others_on_face = faces.face[others] == f_index
+            face_near = near[faces.face[near] == f_index]
+            k_face, d_face = np.floor(u_all[face_near] / w + 1e-9), d_all[face_near]
             at_depth = (d_face >= d_lo - 1e-9) & (d_face <= d_hi + 1e-9)    # the face's columns beside this module
             u0 = (k_lo * w if ((k_face == k_lo - 1) & at_depth).any()
-                  else side(u_lo, -1.0, in_d & (u_all < u_lo) & (u_all >= u_lo - gap)))
+                  else side(u_lo, -1.0, in_d & (u_o < u_lo) & (u_o >= u_lo - gap)))
             u1 = ((k_hi + 1) * w if ((k_face == k_hi + 1) & at_depth).any()
-                  else side(u_hi, 1.0, in_d & (u_all > u_hi) & (u_all <= u_hi + gap)))
-            in_front = in_u & (d_all < d_lo) & (d_all >= d_lo - gap)
-            behind = in_u & (d_all > d_hi) & (d_all <= d_hi + gap)
-            module_in_front = (in_front & on_face).any()                # cut in depth: modules of the same row
-            module_behind = (behind & on_face).any()
+                  else side(u_hi, 1.0, in_d & (u_o > u_hi) & (u_o <= u_hi + gap)))
+            in_front = in_u & (d_o < d_lo) & (d_o >= d_lo - gap)
+            behind = in_u & (d_o > d_hi) & (d_o <= d_hi + gap)
+            module_in_front = (in_front & others_on_face).any()        # cut in depth: modules of the same row
+            module_behind = (behind & others_on_face).any()
             m_lo = np.floor(max(d_lo, 0.0) / w + 1e-9)
             d0 = m_lo * w if module_in_front else side(d_lo, -1.0, in_front)
             d1 = (m_lo + 1) * w if module_behind else side(d_hi, 1.0, behind)
-            across = np.unique(faces.face[behind])
-            if not module_behind and len(across) == 1 and facades[across[0]].straight                     and facades[across[0]].direction @ along < -1.0 + 1e-9:   # parallel, opposite
+            across = np.unique(faces.face[others[behind]])
+            if (not module_behind and len(across) == 1 and facades[across[0]].straight
+                    and facades[across[0]].direction @ along < -1.0 + 1e-9):   # parallel, opposite
                 d1 = 0.5 * ((facades[across[0]].start - on_facade) @ inward)
             pieces = [_rectangle(on_facade, along, inward, u0, u1, d0, d1)]
             a, z = max(u0, u_start), min(u1, u_end)
