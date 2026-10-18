@@ -180,8 +180,9 @@ test("an error the engine names after a dot goes under its setting, and one of a
                             { field: "tilted_plane_angle_deg.float", message: "Input should be a valid number" },
                             { field: "mode", message: "mode must be one of the six modes" }], grid_plan: null },
   });
-  expect(state.fieldErrors).toEqual({ threshold: "Cutoff threshold must be >= 0", tilted_plane_angle_deg: "Input should be a valid number" });
-  expect(state.stepErrors).toEqual(["mode: mode must be one of the six modes"]);
+  // The plane angle has no field in Sun at set hours: its error is said for the step, with its name.
+  expect(state.fieldErrors).toEqual({ threshold: "Cutoff threshold must be >= 0" });
+  expect(state.stepErrors).toEqual(["Plane angle: Input should be a valid number", "mode: mode must be one of the six modes"]);
 });
 
 test("flushing the saver sends a waiting save at once and resolves once its reply is passed on", async () => {
@@ -363,4 +364,51 @@ test("any other engine message loses the 'Value error' prefix and has the labels
   state = reject(state, [{ field: null, message: "Value error, something the form cannot place" }]);
   expect(state.stepErrors).toEqual(["Something the form cannot place"]);
   expect(state.fieldErrors).toEqual({});
+});
+
+test("choosing a mode leaves no error of the mode before: its save brings the new mode's own", () => {
+  let state = storedProjectState({ mode: "daylight" });
+  state = reject(state, [{ field: "edge_taper", message: "Input should be greater than or equal to 0" },
+                         { field: null, message: "Value error, the settings do not fit together" }]);
+  state = formReducer(state, { type: "mode_chosen", mode: "time-based" });
+  expect(state.fieldErrors).toEqual({});
+  expect(state.stepErrors).toEqual([]);
+});
+
+test("a value the user set that was refused is not carried to the new mode: it goes back to the default, and the form says so", () => {
+  let state = storedProjectState({ mode: "daylight" });
+  state = formReducer(state, { type: "values_changed", values: { max_slope_deg: 0, voxel_size: 2 } });
+  state = reject(state, [{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
+  state = formReducer(state, { type: "mode_chosen", mode: "time-based" });
+  expect(valuesToSend(state)).toEqual({ mode: "time-based", voxel_size: 2 });
+  expect(state.valuesResetByModeChange).toEqual({ settings: ["max_slope_deg"], mode: "time-based" });
+});
+
+test("a value carried to the new mode that its save refuses goes back to the default, and the form saves again", () => {
+  let state = storedProjectState({ mode: "daylight" });
+  state = formReducer(state, { type: "values_changed", values: { voxel_size: 0.5, north_deg: 20 } });
+  state = formReducer(state, { type: "save_succeeded", reply: { settings: { mode: "daylight", voxel_size: 0.5, north_deg: 20 }, grid_plan: null } });
+  state = formReducer(state, { type: "mode_chosen", mode: "time-based" });
+  const changeCount = state.changeCount;
+  state = reject(state, [{ field: null, message: "Value error, grid_step (1 m) must be ≤ voxel_size (0.5 m). Increase voxel_size or decrease grid_step." }]);
+  expect(valuesToSend(state)).toEqual({ mode: "time-based", north_deg: 20 });
+  expect(state.fieldErrors).toEqual({});
+  expect(state.valuesResetByModeChange).toEqual({ settings: ["voxel_size"], mode: "time-based" });
+  expect(state.pendingSave).toBe(true);
+  expect(state.changeCount).toBe(changeCount + 1);
+  // The next refusal is the new mode's own: nothing more is dropped.
+  state = reject(state, [{ field: "north_deg", message: "Input should be less than 360" }]);
+  expect(valuesToSend(state)).toEqual({ mode: "time-based", north_deg: 20 });
+  expect(state.fieldErrors).toEqual({ north_deg: "Input should be less than 360" });
+  // A change of the user ends the note.
+  state = formReducer(state, { type: "values_changed", values: { north_deg: 10 } });
+  expect(state.valuesResetByModeChange).toBeNull();
+});
+
+test("an error on a setting the mode does not show is said for the step with the setting's name; a stored one is not sent", () => {
+  let state = storedProjectState({ mode: "time-based", edge_taper: -1, voxel_size: 2 });
+  expect(valuesToSend(state)).toEqual({ mode: "time-based", voxel_size: 2 });
+  state = reject(state, [{ field: "edge_taper", message: "Input should be greater than or equal to 0" }]);
+  expect(state.fieldErrors).toEqual({});
+  expect(state.stepErrors).toEqual(["Edge strip with less weight: Input should be greater than or equal to 0"]);
 });

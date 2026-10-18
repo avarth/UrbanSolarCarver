@@ -5,10 +5,11 @@
 // mode is chosen. The tooltip lets the pointer through, so it never takes a click meant for the tile under it.
 // A mode that needs a weather file the project lacks gets the weather drop zone under the tiles.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { messages } from "../messages";
+import { listedWithAnd, messages } from "../messages";
+import { settingView } from "../settings_form/presentation";
 import { MessageParts, placedTooltipStyle, placementUnder, type TooltipPlacement } from "../settings_form/SettingTooltip";
 import { ModeTileSymbol } from "./ModeTileSymbols";
-import { MODE_TILES } from "./step_summaries";
+import { MODE_TILES, plainModeName } from "./step_summaries";
 import "./steps.css";
 
 const TILES_PER_ROW = 3;
@@ -20,6 +21,14 @@ interface ModeStepProps {
   disabledReason: string | null;
   /** The weather box, given when the chosen mode needs a weather file that is not there. */
   weatherDropZone: ReactNode;
+  /** The settings the last mode change set back to their defaults, as the new mode refused the user's values; null when none. */
+  valuesReset?: { settings: string[]; mode: string } | null;
+}
+
+/** "Steepest step between columns and voxel size are back to their defaults: ..." */
+function valuesResetText({ settings, mode }: { settings: string[]; mode: string }): string {
+  const labels = settings.map((name, index) => (index === 0 ? settingView(name, mode).label : settingView(name, mode).label.toLowerCase()));
+  return messages.valuesResetForMode(listedWithAnd(labels), labels.length, plainModeName(mode));
 }
 
 /** The tile the focus moves to from *index* for an arrow key; null for another key or a move off the grid. */
@@ -31,7 +40,7 @@ export function tileAfterArrowKey(index: number, key: string, tileCount: number)
   return next >= 0 && next < tileCount ? next : null;                                          // stay in the column
 }
 
-export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone }: ModeStepProps) {
+export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valuesReset = null }: ModeStepProps) {
   const chosenIndex = Math.max(0, MODE_TILES.findIndex((tile) => tile.engine_name === mode));
   const [focusIndex, setFocusIndex] = useState(chosenIndex);    // the tile in the tab order
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -164,6 +173,7 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone }: Mo
         </div>
       )}
       <p className="mode-step-note">{messages.modeFillsStartingValues}</p>
+      {valuesReset !== null && valuesReset.settings.length > 0 && <p className="step-reason mode-values-reset" role="status">{valuesResetText(valuesReset)}</p>}
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
       {weatherDropZone}
     </div>

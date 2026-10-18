@@ -212,6 +212,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     ),
     mode: (
       <ModeStep mode={form.mode} onChoose={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
+                valuesReset={form.valuesResetByModeChange}
                 weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} />
     ),
     settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason} />,

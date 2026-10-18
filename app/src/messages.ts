@@ -108,6 +108,10 @@ export const messages = {
   // Mode (5.3). The names, lines and tooltips of the six modes are in steps/mode_tiles.json.
   modeGroupLabel: "Mode",
   modeFillsStartingValues: "Choosing a mode fills its starting values in Settings.",
+  // After a mode change that set values the user had set back to the new mode's own (the new mode refuses them).
+  valuesResetForMode: (listedLabels: string, count: number, modeName: string) => (count === 1
+    ? `${listedLabels} is back to its default: ${modeName} cannot use the value you had set.`
+    : `${listedLabels} are back to their defaults: ${modeName} cannot use the values you had set.`),
   engineName: (engineName: string): MessagePart[] => ["Engine name: ", { code: String(engineName) }],
   experimental: "Experimental",
   aboutMode: (plainName: string) => `About ${plainName}`,

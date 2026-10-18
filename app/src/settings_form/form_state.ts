@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError, putConfig, type ConfigErrorReply, type ConfigReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "../steps/grid_budget";
-import { shownConfigErrorOf } from "./engine_errors";
+import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
 import { settingIsReadBy } from "./presentation";
 
 export const SAVE_DELAY_MILLISECONDS = 400;
@@ -47,6 +47,13 @@ export interface FormState {
   changeCount: number;
   /** Why the last save failed when the service did not answer with field errors (a run in progress, the engine stopped). */
   saveFailure: unknown;
+  /**
+   * The values the user set that the last mode change carried over, until the new mode's first save answers: a value it
+   * refuses goes back to the new mode's own (UX 5.3, choosing a mode fills its starting values).
+   */
+  carriedValues: Record<string, unknown>;
+  /** The settings the last mode change set back to the new mode's own value, as the new mode refused the user's; null when none. */
+  valuesResetByModeChange: { settings: string[]; mode: string } | null;
 }
 
 export interface FormStart {
@@ -77,13 +84,15 @@ export function initialFormState({ schema, modes, settings, gridPlan }: FormStar
   const scoreKindByMode = Object.fromEntries(modes.map((mode) => [mode.name, mode.score_kind]));
   const mode = typeof settings.mode === "string" ? settings.mode : String(schemaProperties.mode?.default);
   const startingValues = startingValuesByMode[mode] ?? {};
+  // A stored setting the mode does not read (left from another mode, or written by hand) is not sent again: the engine would
+  // ignore it, but still refuse it when invalid, with no field in this mode to fix it in.
   const userValues = Object.fromEntries(Object.entries(settings).filter(([name, value]) =>
-    name !== "mode" && !(name in startingValues && sameValue(value, startingValues[name]))));
+    name !== "mode" && settingIsReadBy(name, mode) && !(name in startingValues && sameValue(value, startingValues[name]))));
   // Stored settings whose grid is over the budget (a larger maximum volume came after them) open with Voxel size to fix, as a
   // save of them would be refused; the message under the field is the step's own (SettingsStep), so the text here stays empty.
   const fieldErrors: Record<string, string> = gridIsOverBudget(gridPlan) ? { voxel_size: "" } : {};
   return { mode, userValues, startingValuesByMode, scoreKindByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
-           pendingSave: false, changeCount: 0, saveFailure: null };
+           pendingSave: false, changeCount: 0, saveFailure: null, carriedValues: {}, valuesResetByModeChange: null };
 }
 
 /**
@@ -98,31 +107,52 @@ export function formReducer(state: FormState, action: FormAction): FormState {
         if (value === null || value === undefined) delete userValues[name];
         else userValues[name] = value;
       }
-      return { ...state, userValues, pendingSave: true, changeCount: state.changeCount + 1, saveFailure: null };
+      const carriedValues = Object.fromEntries(Object.entries(state.carriedValues).filter(([name]) => !(name in action.values)));
+      return { ...state, userValues, pendingSave: true, changeCount: state.changeCount + 1, saveFailure: null, carriedValues,
+               valuesResetByModeChange: null };
     }
     case "mode_chosen": {
       const startingValues = state.startingValuesByMode[action.mode] ?? {};
-      const userValues = Object.fromEntries(Object.entries(state.userValues).filter(([name]) =>
-        settingIsReadBy(name, action.mode) && !(name in startingValues) && !SETTINGS_OF_ONE_MODE_ONLY.has(name)));
-      return { ...state, mode: action.mode, userValues, pendingSave: true, changeCount: state.changeCount + 1, saveFailure: null };
+      const kept = Object.entries(state.userValues).filter(([name]) =>
+        settingIsReadBy(name, action.mode) && !(name in startingValues) && !SETTINGS_OF_ONE_MODE_ONLY.has(name));
+      // A value the last save refused is not carried over: the new mode would refuse it too.
+      const refused = kept.filter(([name]) => name in state.fieldErrors).map(([name]) => name);
+      const carried = kept.filter(([name]) => !refused.includes(name));
+      // The errors were the old mode's; the save of the new one brings its own, so none is left on a field this mode hides.
+      return { ...state, mode: action.mode, userValues: Object.fromEntries(carried), pendingSave: true, changeCount: state.changeCount + 1,
+               saveFailure: null, fieldErrors: {}, stepErrors: [], carriedValues: Object.fromEntries(carried),
+               valuesResetByModeChange: refused.length > 0 ? { settings: refused, mode: action.mode } : null };
     }
     case "save_succeeded":
-      return { ...state, gridPlan: action.reply.grid_plan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null };
+      return { ...state, gridPlan: action.reply.grid_plan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null, carriedValues: {} };
     case "save_rejected": {
+      const shownErrors = action.reply.field_errors.map(({ field, message }) => shownConfigErrorOf(field, message, state.mode));
+      // The first save after a mode change: a value it carried over that the new mode refuses goes back to the mode's own,
+      // and the form saves again without it.
+      const carriedAndRefused = [...new Set(shownErrors.flatMap((shown) => shown.settings))].filter((name) =>
+        name in state.carriedValues && name in state.userValues && sameValue(state.userValues[name], state.carriedValues[name]));
       const fieldErrors: Record<string, string> = {};
       const stepErrors: string[] = [];
-      for (const { field, message } of action.reply.field_errors) {
-        // Under each setting the error names, in the interface's words (engine_errors.ts); one naming none is the step's.
-        const shown = shownConfigErrorOf(field, message, state.mode);
-        if (shown.settings.length === 0 && !stepErrors.includes(shown.message)) stepErrors.push(shown.message);
+      for (const shown of shownErrors) {
+        if (shown.settings.some((name) => carriedAndRefused.includes(name))) continue;      // its value is gone
+        // Under each setting the error names, in the interface's words (engine_errors.ts); one naming none is the step's,
+        // as is one on a setting this mode does not show, with the setting's name.
+        if (shown.settings.length === 0) stepErrors.push(shown.message);
         for (const setting of shown.settings) {
-          fieldErrors[setting] = setting in fieldErrors ? `${fieldErrors[setting]} ${shown.message}` : shown.message;
+          if (!settingIsReadBy(setting, state.mode)) stepErrors.push(errorOfHiddenSetting(setting, shown.message, state.mode));
+          else fieldErrors[setting] = setting in fieldErrors ? `${fieldErrors[setting]} ${shown.message}` : shown.message;
         }
+      }
+      if (carriedAndRefused.length > 0) {
+        const userValues = Object.fromEntries(Object.entries(state.userValues).filter(([name]) => !carriedAndRefused.includes(name)));
+        const resetSettings = [...(state.valuesResetByModeChange?.settings ?? []), ...carriedAndRefused];
+        return { ...state, userValues, fieldErrors, stepErrors: [...new Set(stepErrors)], pendingSave: true, changeCount: state.changeCount + 1,
+                 saveFailure: null, carriedValues: {}, valuesResetByModeChange: { settings: resetSettings, mode: state.mode } };
       }
       // A refusal plans no grid unless the grid is what it refuses (over the budget): the last grid planned stays, so the grid
       // line under Voxel size is not lost to an error elsewhere.
       const gridPlan = action.reply.grid_plan ?? (gridIsOverBudget(state.gridPlan) ? null : state.gridPlan);
-      return { ...state, fieldErrors, stepErrors, gridPlan, pendingSave: false, saveFailure: null };
+      return { ...state, fieldErrors, stepErrors: [...new Set(stepErrors)], gridPlan, pendingSave: false, saveFailure: null, carriedValues: {} };
     }
     case "save_failed":
       return { ...state, pendingSave: false, saveFailure: action.error };

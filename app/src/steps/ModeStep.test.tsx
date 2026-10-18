@@ -162,3 +162,14 @@ test("the tooltip lets the pointer through, so a click on the tile under it reac
   expect(getComputedStyle(tooltip).pointerEvents).toBe("none");
   removeStyles.forEach((remove) => remove());
 });
+
+test("the settings a mode change set back to their defaults are named under the tiles", () => {
+  rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null}
+                                     valuesReset={{ settings: ["max_slope_deg", "voxel_size"], mode: "time-based" }} />);
+  expect(rendered.container.querySelector(".mode-values-reset")!.textContent)
+    .toBe("Steepest step between columns and voxel size are back to their defaults: Sun at set hours cannot use the values you had set.");
+  rendered.rerender(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null}
+                              valuesReset={{ settings: ["max_slope_deg"], mode: "time-based" }} />);
+  expect(rendered.container.querySelector(".mode-values-reset")!.textContent)
+    .toBe("Steepest step between columns is back to its default: Sun at set hours cannot use the value you had set.");
+});
