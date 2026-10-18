@@ -103,9 +103,13 @@ export const messages = {
   maxVolumeMissing: "Maximum volume missing",
   testSurfacesMissing: "Test surfaces missing",
   maxVolumeAndTestSurfacesMissing: "Maximum volume and test surfaces missing",
+  // The analysis period in words (R2 4.3), in the step summary and under the period's strips: "21 Dec, 10 to 14 h",
+  // "21 to 22 Dec, 22 to 2 h" (one month written once), "1 Oct to 30 Apr, 0 to 23 h".
   periodSummary: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => {
-    const startDate = `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]}`, endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
-    return `${startDate === endDate ? startDate : `${startDate} to ${endDate}`}, ${startHour} to ${endHour}\u00a0h`;
+    const endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
+    const dates = startMonth !== endMonth ? `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDate}`
+      : startDay === endDay ? endDate : `${startDay} to ${endDate}`;
+    return `${dates}, ${startHour} to ${endHour}\u00a0h`;
   },
   voxelsOfSize: (voxelSizeText: string) => `${voxelSizeText} voxels`,
   settingsSummary: (periodText: string, voxelsText: string) => `${periodText}; ${voxelsText}`,
@@ -320,6 +324,16 @@ export const messages = {
     end_day: "End day", end_month: "End month", end_hour: "End hour",
   },
   hourUnit: "h",
+  // The analysis period control (R2 4.3): the month marks of the year strip, its four handles and what they say to a screen
+  // reader, the presets, and the words under the strips, which open the typed fields.
+  monthInitials: MONTH_ABBREVIATIONS.map((abbreviation) => abbreviation[0]),
+  periodHandleNames: { start_date: "Start date", end_date: "End date", start_hour: "Start hour", end_hour: "End hour" },
+  periodDateSpoken: (month: number, day: number) => `${day} ${MONTH_NAMES[month - 1]}`,
+  periodHourSpoken: (hour: number) => `${hour}\u00a0h`,
+  periodPresets: "Presets",
+  periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
+  periodWordsButton: (periodWords: string) => `${periodWords}: type exact dates and hours`,
+  periodNotSet: "Not set yet",
   periodText: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) =>
     `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} ${startHour}\u00a0h to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]} ${endHour}\u00a0h`,
   oneAngle: "One angle",

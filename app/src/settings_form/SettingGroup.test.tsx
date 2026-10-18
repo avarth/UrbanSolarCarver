@@ -125,9 +125,12 @@ test("the analysis period is one widget that changes the six period settings", (
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "start_month")} form={formFor("time-based")} onChange={onChange} />);
   expect(rendered.container.textContent).toContain("Analysis period");
+  // The period in words opens the exact fields (R2 4.3); a typed day is sent when its field is left.
+  click(rendered.container.querySelector(".period-words")!);
   const startDay = rendered.container.querySelector<HTMLInputElement>("input[aria-label='Start day']")!;
   expect(startDay.value).toBe("21");
   typeInto(startDay, "5");
+  act(() => startDay.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(onChange).toHaveBeenLastCalledWith({ start_day: 5 });
   const endMonth = rendered.container.querySelector<HTMLSelectElement>("select[aria-label='End month']")!;
   expect(endMonth.value).toBe("12");
@@ -380,6 +383,7 @@ test("the message of a refused number goes when the value changes from elsewhere
 test("each input of the analysis period keeps its own refusal: a valid hour does not hide a refused day", () => {
   const form = formFor("time-based");
   rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "start_month")} form={form} onChange={() => {}} />);
+  click(rendered.container.querySelector(".period-words")!);
   const [startDay, startHour] = [...rendered.container.querySelectorAll<HTMLInputElement>("input[type='number']")];
   typeKeys(startDay, "32");
   expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 31.");
