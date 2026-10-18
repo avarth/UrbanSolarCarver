@@ -103,13 +103,17 @@ export const messages = {
   maxVolumeMissing: "Maximum volume missing",
   testSurfacesMissing: "Test surfaces missing",
   maxVolumeAndTestSurfacesMissing: "Maximum volume and test surfaces missing",
-  // The analysis period in words (R2 4.3), in the step summary and under the period's strips: "21 Dec, 10 to 14 h",
-  // "21 to 22 Dec, 22 to 2 h" (one month written once), "1 Oct to 30 Apr, 0 to 23 h".
+  // The analysis period in words (R2 4.3), in the step summary, under the period's strips and in its tooltip: "21 Dec, 10 to
+  // 14 h", "21 to 22 Dec, 22 to 2 h" (one month written once), "1 Oct to 30 Apr, 0 to 23 h", "22 Dec to 21 Dec, 10 to 14 h"
+  // (across the new year within one month). One date with hours across midnight is what the engine runs: every night of the year.
   periodSummary: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => {
+    const hours = `${startHour} to ${endHour}\u00a0h`;
+    const oneDate = startMonth === endMonth && startDay === endDay;
+    if (oneDate && startHour > endHour) return `Every night, ${hours}`;
     const endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
-    const dates = startMonth !== endMonth ? `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDate}`
-      : startDay === endDay ? endDate : `${startDay} to ${endDate}`;
-    return `${dates}, ${startHour} to ${endHour}\u00a0h`;
+    const dates = oneDate ? endDate : startMonth === endMonth && startDay < endDay ? `${startDay} to ${endDate}`
+      : `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDate}`;
+    return `${dates}, ${hours}`;
   },
   voxelsOfSize: (voxelSizeText: string) => `${voxelSizeText} voxels`,
   settingsSummary: (periodText: string, voxelsText: string) => `${periodText}; ${voxelsText}`,
@@ -343,8 +347,8 @@ export const messages = {
   periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
   periodWordsButton: (periodWords: string) => `${periodWords}: type exact dates and hours`,
   periodNotSet: "Not set yet",
-  periodText: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) =>
-    `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} ${startHour}\u00a0h to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]} ${endHour}\u00a0h`,
+  // The typed hour fields, named apart from the hour handles of the strip.
+  periodTypedHourNames: { start_hour: "Start hour, typed", end_hour: "End hour, typed" },
   oneAngle: "One angle",
   oneAnglePerDirection: "One per direction",
   compassDirections: ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],

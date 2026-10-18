@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import {
   changedPeriodSettings, dateHandleValueAfterKey, dayOfYear, dayOfYearAt, daysInMonth, hourAt, hourHandleValueAfterKey, monthDayOf,
   periodFromSettings, periodInWords, periodWithDayTyped, periodWithHandleAt, periodWithMonthChosen, presetPeriod, presetMatches,
-  withOvernightHoursOnOneDateAsOneNight, dateRangeSegments, hourRangeSegments, type Period,
+  runsEveryNightOfTheYear, withOvernightHoursOnOneDateAsOneNight, dateRangeSegments, hourRangeSegments, type Period,
 } from "./analysis_period";
 
 const period = (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number): Period =>
@@ -26,6 +26,18 @@ test("the period in words: one date, a range, across the new year, across midnig
   expect(periodInWords(period(10, 1, 0, 4, 30, 23))).toBe("1 Oct to 30 Apr, 0 to 23\u00a0h");
   expect(periodInWords(period(12, 21, 22, 12, 22, 2))).toBe("21 to 22 Dec, 22 to 2\u00a0h");
   expect(periodInWords(period(12, 31, 22, 1, 1, 2))).toBe("31 Dec to 1 Jan, 22 to 2\u00a0h");
+  // Across the new year within one month: both months written, never "22 to 21 Dec".
+  expect(periodInWords(period(12, 22, 10, 12, 21, 14))).toBe("22 Dec to 21 Dec, 10 to 14\u00a0h");
+});
+
+test("one date with hours across midnight, stored so: the engine runs every night of the year, and the words and the year strip say so", () => {
+  const storedOvernight = period(12, 21, 22, 12, 21, 2);
+  expect(runsEveryNightOfTheYear(storedOvernight)).toBe(true);
+  expect(periodInWords(storedOvernight)).toBe("Every night, 22 to 2\u00a0h");
+  expect(dateRangeSegments(storedOvernight)).toEqual([{ start: 0, end: 1 }]);
+  for (const otherPeriod of [period(12, 21, 22, 12, 22, 2), period(12, 21, 10, 12, 21, 10), period(12, 21, 10, 12, 21, 14)]) {
+    expect(runsEveryNightOfTheYear(otherPeriod)).toBe(false);
+  }
 });
 
 test("hours across midnight on one date: the end date becomes the next day, 31 December gives 1 January", () => {

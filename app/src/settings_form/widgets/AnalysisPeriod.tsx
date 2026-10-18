@@ -3,12 +3,14 @@
 // and the period in words, which opens fields to type the exact day, month and hour of each end.
 //
 // A start after the end is drawn wrapped: dates across the new year, hours across midnight. Every change goes through
-// withOvernightHoursOnOneDateAsOneNight (analysis_period.ts), so hours across midnight on one date are one night.
+// withOvernightHoursOnOneDateAsOneNight (analysis_period.ts), so hours across midnight on one date are one night. A period stored
+// as one date with hours across midnight (a hand-edited config, an older save) is shown as the engine runs it: the whole year on the
+// year strip, "Every night, 22 to 2 h" in words; it is not changed until the next change in the control.
 //
 // How changes are sent: a key or a preset is one change; a drag is held here and sent once, on release; the typed fields are sent
-// when one is left or Enter is pressed (and a month when it is chosen). So a value on the way (end hour "1" on the way to "18", a
+// when one is left or Enter is pressed, or when the fields close (and a month when it is chosen). So a value on the way (end hour "1" on the way to "18", a
 // drag that crosses the end hour and comes back) never moves the end date. The form saves once the changes stop.
-import { useId, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../../messages";
 import {
   changedPeriodSettings, dateHandleValueAfterKey, dateRangeSegments, dayOfYearAt, daysInMonth, DAYS_IN_YEAR, handlePositionOf, handleValueOf,
@@ -216,17 +218,32 @@ const TYPED_ENDS = [
 
 /**
  * The exact values of the period: for each end, the day (held to the month's length), the month and the hour. A typed number is
- * held here and sent when its field is left or Enter is pressed; a month is sent when it is chosen, its day held to its length.
+ * held here and sent when its field is left, Enter is pressed or the fields close without either (the words clicked, the step
+ * closed); a month is sent when it is chosen, its day held to its length.
  * Each number field keeps its own refusal; the field shows the first one standing, so a valid hour never hides a refused day.
  */
 function TypedPeriod({ id, period, onPeriod, invalid, describedBy, disabled, onRefusedInput }: TypedPeriodProps) {
   const [typedPeriod, setTypedPeriod] = useState<Period | null>(null);
-  const shown = typedPeriod ?? period;
-  const sendTyped = () => {
-    if (typedPeriod === null) return;
-    setTypedPeriod(null);
-    onPeriod(typedPeriod);
+  // The typed period and the latest way to send it, for the fields closing: their unmount sends what is typed and not yet sent.
+  const typedPeriodNow = useRef<Period | null>(null);
+  const sendPeriod = useRef(onPeriod);
+  sendPeriod.current = onPeriod;
+  const holdTyped = (typed: Period | null) => {
+    typedPeriodNow.current = typed;
+    setTypedPeriod(typed);
   };
+  const sendTyped = () => {
+    const typed = typedPeriodNow.current;
+    if (typed === null) return;
+    holdTyped(null);
+    sendPeriod.current(typed);
+  };
+  useEffect(() => () => {
+    const typed = typedPeriodNow.current;
+    typedPeriodNow.current = null;
+    if (typed !== null) sendPeriod.current(typed);
+  }, []);
+  const shown = typedPeriod ?? period;
   const refusals = useRef<Partial<Record<AnalysisPeriodField, string | null>>>({});
   const refusedIn = (field: AnalysisPeriodField) => (refusal: string | null) => {
     refusals.current = { ...refusals.current, [field]: refusal };
@@ -241,18 +258,18 @@ function TypedPeriod({ id, period, onPeriod, invalid, describedBy, disabled, onR
           <NumberInput className="setting-number setting-number-short" ariaLabel={messages.periodFieldNames[typedEnd.day]}
                        value={typedEnd.end === "start" ? shown.startDay : shown.endDay} mayBeEmpty={false} minimum={1} maximum={daysInMonth(month(typedEnd.end))}
                        wholeNumbers invalid={invalid} describedBy={describedBy} disabled={disabled}
-                       onValue={(day) => setTypedPeriod(periodWithDayTyped(shown, typedEnd.end, day!))} onRefused={refusedIn(typedEnd.day)} />
+                       onValue={(day) => holdTyped(periodWithDayTyped(shown, typedEnd.end, day!))} onRefused={refusedIn(typedEnd.day)} />
           <select className="setting-select" aria-label={messages.periodFieldNames[typedEnd.month]} value={month(typedEnd.end)} aria-invalid={invalid}
                   aria-describedby={describedBy} disabled={disabled}
                   onChange={(event) => {
-                    setTypedPeriod(null);
+                    holdTyped(null);
                     onPeriod(periodWithMonthChosen(shown, typedEnd.end, Number(event.target.value)));
                   }}>
             {messages.monthNames.map((monthName, index) => <option key={monthName} value={index + 1}>{monthName}</option>)}
           </select>
-          <NumberInput className="setting-number setting-number-short" ariaLabel={messages.periodFieldNames[typedEnd.hour]} value={shown[typedEnd.periodHour]}
+          <NumberInput className="setting-number setting-number-short" ariaLabel={messages.periodTypedHourNames[typedEnd.hour]} value={shown[typedEnd.periodHour]}
                        mayBeEmpty={false} minimum={0} maximum={HOURS_IN_DAY - 1} wholeNumbers invalid={invalid} describedBy={describedBy} disabled={disabled}
-                       onValue={(hour) => setTypedPeriod({ ...shown, [typedEnd.periodHour]: hour! })} onRefused={refusedIn(typedEnd.hour)} />
+                       onValue={(hour) => holdTyped({ ...shown, [typedEnd.periodHour]: hour! })} onRefused={refusedIn(typedEnd.hour)} />
           <span className="setting-unit">{messages.hourUnit}</span>
         </div>
       ))}

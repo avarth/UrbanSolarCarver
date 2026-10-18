@@ -61,13 +61,22 @@ export function periodInWords(period: Period): string {
 }
 
 /**
+ * Whether the period is one date with hours across midnight (21 Dec, 22 to 2 h): the engine runs it as every night of the year,
+ * the start (21 Dec 22:00) being after the end (21 Dec 02:00). A period stored so (a hand-edited config, an older save) is shown
+ * as that; the control itself never sends one.
+ */
+export function runsEveryNightOfTheYear(period: Period): boolean {
+  const oneDate = period.startMonth === period.endMonth && period.startDay === period.endDay;
+  return oneDate && period.startHour > period.endHour;
+}
+
+/**
  * Hours across midnight on one date become one night: the end date is the day after the start date (31 December gives 1 January),
  * so the engine samples that night and not every night of the year. Anything else is left as it is: one hour on one date
  * (10 to 10 h), and dates that already differ, also once the hours stop crossing midnight.
  */
 export function withOvernightHoursOnOneDateAsOneNight(period: Period): Period {
-  const oneDate = period.startMonth === period.endMonth && period.startDay === period.endDay;
-  if (!oneDate || period.startHour <= period.endHour) return period;
+  if (!runsEveryNightOfTheYear(period)) return period;
   const nextDay = monthDayOf(dayOfYear(period.startMonth, period.startDay) % DAYS_IN_YEAR + 1);
   return { ...period, endMonth: nextDay.month, endDay: nextDay.day };
 }
@@ -197,8 +206,9 @@ function segments(start: number, end: number): RangeSegment[] {
   return start < end ? [{ start, end }] : [{ start, end: 1 }, { start: 0, end }];
 }
 
-/** The year strip's range: from the start of the start day to the end of the end day. */
+/** The year strip's range: from the start of the start day to the end of the end day; the whole year where the engine runs every night of it. */
 export function dateRangeSegments(period: Period): RangeSegment[] {
+  if (runsEveryNightOfTheYear(period)) return [{ start: 0, end: 1 }];
   const startDay = dayOfYear(period.startMonth, period.startDay), endDay = dayOfYear(period.endMonth, period.endDay);
   if (startDay <= endDay) return [{ start: (startDay - 1) / DAYS_IN_YEAR, end: endDay / DAYS_IN_YEAR }];
   return segments((startDay - 1) / DAYS_IN_YEAR, endDay / DAYS_IN_YEAR);

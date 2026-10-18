@@ -115,12 +115,12 @@ export function automaticValueOf(view: SettingView, form: FormState): AutomaticV
   return null;
 }
 
-/** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */
+/** The default as the tooltip writes it ("1.0 m", "on", "21 Dec, 10 to 14 h", "automatic"). */
 export function defaultTextOf(view: SettingView, form: FormState, isShadowTolerated: boolean): string {
   const unit = unitOfValue(view);
   if (view.widget === "analysis_period") {
     const period = ANALYSIS_PERIOD_FIELDS.map((name) => defaultValue(form, name));
-    return period.every((value) => typeof value === "number") ? messages.periodText(...(period as [number, number, number, number, number, number]))
+    return period.every((value) => typeof value === "number") ? messages.periodSummary(...(period as [number, number, number, number, number, number]))
       : messages.automatic;
   }
   const value = toDisplayValue(view.name, defaultValue(form, view.name));

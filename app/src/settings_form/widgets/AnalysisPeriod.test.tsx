@@ -162,6 +162,7 @@ test("a date handle moved past the other by key gives a period across the new ye
   keyDown(handle("Start date"), "ArrowRight");
   expect(periodValues()).toMatchObject({ start_month: 12, start_day: 22, end_month: 12, end_day: 21 });
   expect(rangePiecesIn(strips()[0])).toBe(2);
+  expect(words().textContent).toBe(`22 Dec to 21 Dec, 10 to 14${NBSP}h`);
 });
 
 test("arrows move an hour handle an hour, Page Up and Page Down six hours; past the end hour on one date the end date moves to the next day", () => {
@@ -223,11 +224,11 @@ test("typed across the new year and across midnight: the words open the exact fi
   typeInto(typedField("End day"), "30");
   leave(typedField("End day"));
   // The end hour on its way to 2 passes nothing on until the field is left.
-  typeInto(typedField("Start hour"), "2");
-  typeInto(typedField("Start hour"), "22");
-  leave(typedField("Start hour"));
-  typeInto(typedField("End hour"), "2");
-  leave(typedField("End hour"));
+  typeInto(typedField("Start hour, typed"), "2");
+  typeInto(typedField("Start hour, typed"), "22");
+  leave(typedField("Start hour, typed"));
+  typeInto(typedField("End hour, typed"), "2");
+  leave(typedField("End hour, typed"));
   expect(periodValues()).toEqual({ start_month: 10, start_day: 1, start_hour: 22, end_month: 4, end_day: 30, end_hour: 2 });
   expect(words().textContent).toBe(`1 Oct to 30 Apr, 22 to 2${NBSP}h`);
 });
@@ -236,12 +237,12 @@ test("typed hours across midnight on one date: the end date moves to the next da
   renderPeriod();
   click(words());
   // On the way from 14 to 18, the end hour reads 1 (before 10): nothing is sent until the field is left.
-  typeInto(typedField("End hour"), "1");
-  typeInto(typedField("End hour"), "18");
-  leave(typedField("End hour"));
+  typeInto(typedField("End hour, typed"), "1");
+  typeInto(typedField("End hour, typed"), "18");
+  leave(typedField("End hour, typed"));
   expect(changes).toEqual([{ end_hour: 18 }]);
-  typeInto(typedField("Start hour"), "22");
-  act(() => { typedField("Start hour").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
+  typeInto(typedField("Start hour, typed"), "22");
+  act(() => { typedField("Start hour, typed").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
   expect(periodValues()).toEqual({ ...WINTER_DAY, start_hour: 22, end_day: 22, end_hour: 18 });
   expect(typedField("End day").value).toBe("22");
 });
@@ -290,4 +291,43 @@ test("a period not set yet says so; a first change sends all six settings", () =
   expect([...rendered.container.querySelectorAll(".period-preset")].map((button) => button.getAttribute("aria-pressed"))).toEqual(["false", "false", "false", "false"]);
   click(presetButton("21 December"));
   expect(onChange).toHaveBeenLastCalledWith({ start_month: 12, start_day: 21, start_hour: 0, end_month: 12, end_day: 21, end_hour: 23 });
+});
+
+test("a period stored as one date with hours across midnight is shown as the engine runs it, every night, and not written until changed", () => {
+  renderPeriod(form({ start_month: 12, start_day: 21, start_hour: 22, end_month: 12, end_day: 21, end_hour: 2 }));
+  expect(words().textContent).toBe(`Every night, 22 to 2${NBSP}h`);
+  const yearRange = strips()[0].querySelector<HTMLElement>(".period-range")!;
+  expect(rangePiecesIn(strips()[0])).toBe(1);
+  expect([yearRange.style.getPropertyValue("--range-start"), yearRange.style.getPropertyValue("--range-end")]).toEqual(["0", "1"]);
+  expect([...rendered!.container.querySelectorAll(".period-preset")].map((button) => button.getAttribute("aria-pressed"))).toEqual(["false", "false", "false", "false"]);
+  expect(changes).toEqual([]);
+  // The next change applies the rule: one night.
+  keyDown(handle("End hour"), "ArrowRight");
+  expect(changes).toEqual([{ end_day: 22, end_hour: 3 }]);
+  expect(words().textContent).toBe(`21 to 22 Dec, 22 to 3${NBSP}h`);
+});
+
+test("the typed hour fields are named apart from the hour handles", () => {
+  renderPeriod();
+  click(words());
+  const names = [...rendered!.container.querySelectorAll("[aria-label]")].map((element) => element.getAttribute("aria-label"));
+  expect(names.filter((name) => name!.startsWith("Start hour"))).toEqual(["Start hour", "Start hour, typed"]);
+  expect(names.filter((name) => name!.startsWith("End hour"))).toEqual(["End hour", "End hour, typed"]);
+});
+
+test("a typed value is sent when the typed fields close without the field being left", () => {
+  renderPeriod();
+  click(words());
+  typeInto(typedField("End hour, typed"), "18");
+  expect(changes).toEqual([]);
+  click(words());
+  expect(rendered!.container.querySelector(".setting-period")).toBeNull();
+  expect(changes).toEqual([{ end_hour: 18 }]);
+  expect(words().textContent).toBe(`21 Dec, 10 to 18${NBSP}h`);
+});
+
+test("the tooltip writes the default period in the same words as the control", () => {
+  renderPeriod();
+  click(rendered!.container.querySelector<HTMLButtonElement>("button.setting-info")!);
+  expect(rendered!.container.querySelector("[role='tooltip']")!.textContent).toContain(`default 21 Dec, 10 to 14${NBSP}h`);
 });
