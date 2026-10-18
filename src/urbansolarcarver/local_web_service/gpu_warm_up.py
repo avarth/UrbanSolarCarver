@@ -63,6 +63,14 @@ class GpuWarmUp:
             self._state = WarmUpState(state="running")
         threading.Thread(target=self._run, name="gpu-warm-up", daemon=True).start()
 
+    def _cuda_available_after_cpu_warm_up(self) -> bool | None:
+        """Whether a CUDA device exists, for a CPU that is prepared; None when torch cannot tell (the CPU still runs)."""
+        try:
+            return self._cuda_available_function()
+        except Exception as error:
+            _log.warning("Could not tell whether a CUDA device exists: %s", error)
+            return None
+
     def state(self) -> WarmUpState:
         with self._lock:
             return self._state
@@ -70,12 +78,13 @@ class GpuWarmUp:
     def _run(self) -> None:
         try:
             device_name = self._warm_up_function(self._device)
-            if device_name is None:
-                finished = WarmUpState(state="cpu", cuda_available=self._cuda_available_function())
-            else:
-                finished = WarmUpState(state="ready", device_name=device_name, cuda_available=True)
         except Exception as error:      # whatever went wrong is shown to the person; runs are not blocked by it
             _log.warning("The compute device warm-up failed: %s", error)
             finished = WarmUpState(state="failed", problem=str(error))
+        else:
+            if device_name is None:
+                finished = WarmUpState(state="cpu", cuda_available=self._cuda_available_after_cpu_warm_up())
+            else:
+                finished = WarmUpState(state="ready", device_name=device_name, cuda_available=True)
         with self._lock:
             self._state = finished

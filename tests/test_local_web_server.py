@@ -585,6 +585,16 @@ def test_warm_up_on_the_cpu_chosen_at_launch_says_a_cuda_device_exists():
     assert (state.state, state.device_name, state.problem, state.cuda_available) == ("cpu", None, None, True)
 
 
+def test_a_prepared_cpu_stays_cpu_when_asking_torch_for_a_cuda_device_fails():
+    def cuda_check_that_fails():
+        raise RuntimeError("CUDA driver initialization failed")
+
+    warm_up = GpuWarmUp("cpu", warm_up_function=lambda device: None, cuda_available_function=cuda_check_that_fails)
+    warm_up.start()
+    state = wait_for_warm_up(warm_up)
+    assert (state.state, state.device_name, state.problem, state.cuda_available) == ("cpu", None, None, None)
+
+
 def test_the_two_cpu_cases_reach_the_app_apart_through_health(projects_folder):
     replies = []
     for cuda_available in (False, True):
