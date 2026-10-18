@@ -350,6 +350,16 @@ export const messages = {
   periodDateSpoken: (month: number, day: number) => `${day} ${MONTH_NAMES[month - 1]}`,
   periodHourSpoken: (hour: number) => `${hour}\u00a0h`,
   periodPresets: "Presets",
+  // The cold period of the weather file (round 2, section 8), a preset of Solar usefulness: the longest run of days whose
+  // month-around mean temperature is below the balance temperature minus the dead band.
+  coldPeriodPreset: "Cold period from the weather file",
+  coldPeriodNeedsWeatherFile: "Add a weather file to find its cold period.",
+  coldPeriodFinding: "Finding the cold period of the weather file.",
+  coldPeriodFound: (startDay: number, startMonth: number, endDay: number, endMonth: number, baseText: string) =>
+    `Cold period of the weather file, days below ${baseText}: ${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}.`,
+  coldPeriodNone: (baseText: string) => `No part of the year in the weather file is below ${baseText} (balance temperature minus dead band).`,
+  coldPeriodFailed: (reason: string) => `The cold period cannot be found: ${reason}`,
+  temperatureText: (degrees: number) => `${Number(degrees.toFixed(1))} °C`,
   periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
   periodWordsButton: (periodWords: string) => `${periodWords}: type exact dates and hours`,
   periodNotSet: "Not set yet",

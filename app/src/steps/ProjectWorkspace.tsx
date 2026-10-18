@@ -15,6 +15,7 @@ import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
+import { useColdPeriod } from "./cold_period_request";
 import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ModeStep } from "./ModeStep";
@@ -172,6 +173,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
   const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, onServiceProblem });
+  const coldPeriod = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileKey: weatherLocation, onServiceProblem });
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
 
@@ -278,7 +280,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                 valuesReset={form.valuesResetByModeChange}
                 weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} />
     ),
-    settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason} />,
+    settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason}
+                            coldPeriod={coldPeriod} />,
     ...resultSteps.content,
   };
   const summaryOf = (name: StepName) => {

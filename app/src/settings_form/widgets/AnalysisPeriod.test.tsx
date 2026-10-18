@@ -2,6 +2,7 @@ import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
+import type { ColdPeriodState } from "../analysis_period";
 import { formReducer, initialFormState, shownValue, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
 import { SettingField } from "../SettingField";
@@ -37,16 +38,16 @@ const periodView = () => settingsForStep("settings", "time-based").flatMap((grou
 // saver sends to the engine (shownValue: the starting values of the mode, with the changes made).
 let latest: FormState | null = null;
 let changes: Record<string, unknown>[] = [];
-function Period({ start, disabled = false }: { start: FormState; disabled?: boolean }) {
+function Period({ start, disabled = false, coldPeriod = null }: { start: FormState; disabled?: boolean; coldPeriod?: ColdPeriodState | null }) {
   const [state, dispatch] = useReducer(formReducer, start);
   latest = state;
-  return <SettingField view={periodView()} form={state} disabled={disabled}
+  return <SettingField view={periodView()} form={state} disabled={disabled} extras={{ coldPeriod }}
                        onChange={(values) => { changes.push(values); dispatch({ type: "values_changed", values }); }} />;
 }
 
-function renderPeriod(start: FormState = form(), disabled = false) {
+function renderPeriod(start: FormState = form(), disabled = false, coldPeriod: ColdPeriodState | null = null) {
   changes = [];
-  rendered = renderForTest(<Period start={start} disabled={disabled} />);
+  rendered = renderForTest(<Period start={start} disabled={disabled} coldPeriod={coldPeriod} />);
   // jsdom lays nothing out: the year strip is 365 px wide (1 px a day), the hour strip 240 px (10 px an hour).
   const [yearStrip, hourStrip] = strips();
   for (const [strip, width] of [[yearStrip, 365], [hourStrip, 240]] as const) {
@@ -330,4 +331,34 @@ test("the tooltip writes the default period in the same words as the control", (
   renderPeriod();
   click(rendered!.container.querySelector<HTMLButtonElement>("button.setting-info")!);
   expect(rendered!.container.querySelector("[role='tooltip']")!.textContent).toContain(`default 21 Dec, 10 to 14${NBSP}h`);
+});
+
+
+const COLD_PERIOD = "Cold period from the weather file";
+const coldLine = () => document.getElementById(presetButton(COLD_PERIOD).getAttribute("aria-describedby")!)!.textContent;
+
+test("the cold period preset sets the dates the weather file gives, keeps the hours and shows as chosen", () => {
+  renderPeriod(form(), false, { kind: "found", dates: { startMonth: 9, startDay: 30, endMonth: 5, endDay: 15 }, baseTemperature: 13 });
+  expect(coldLine()).toBe(`Cold period of the weather file, days below 13${NBSP}°C: 30 Sep to 15 May.`);
+  expect(presetButton(COLD_PERIOD).getAttribute("aria-pressed")).toBe("false");
+  click(presetButton(COLD_PERIOD));
+  expect(periodValues()).toEqual({ start_month: 9, start_day: 30, start_hour: 10, end_month: 5, end_day: 15, end_hour: 14 });
+  expect(presetButton(COLD_PERIOD).getAttribute("aria-pressed")).toBe("true");
+  expect(words().textContent).toBe(`30 Sep to 15 May, 10 to 14${NBSP}h`);
+});
+
+test("the cold period preset waits for the weather file, or says no day is cold enough, and sets nothing", () => {
+  renderPeriod(form(), false, { kind: "needs_weather_file" });
+  expect(presetButton(COLD_PERIOD).disabled).toBe(true);
+  expect(coldLine()).toBe("Add a weather file to find its cold period.");
+  rendered!.unmount();
+  renderPeriod(form(), false, { kind: "none", baseTemperature: 9.5 });
+  expect(presetButton(COLD_PERIOD).disabled).toBe(true);
+  expect(coldLine()).toBe(`No part of the year in the weather file is below 9.5${NBSP}°C (balance temperature minus dead band).`);
+  expect(changes).toEqual([]);
+});
+
+test("a mode without a cold period has no such preset", () => {
+  renderPeriod();
+  expect(presetButton(COLD_PERIOD)).toBeUndefined();
 });
