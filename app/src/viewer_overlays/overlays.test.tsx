@@ -102,4 +102,12 @@ test("without WebGL (jsdom has none, like a remote desktop) the view says so, an
   expect(rendered.container.querySelector("[role='progressbar']")!.getAttribute("aria-valuenow")).toBe("50");
   expect(rendered.container.querySelector(".run-report-panel")!.textContent).toBe("Run report");
   expect(rendered.container.querySelector(".viewer-toolbar")).toBeNull();      // no controls for a view that is not there
+  expect(unavailable.textContent).toContain("for example over a remote desktop, or when the graphics card is blocked");
+});
+
+test("without WebGL the empty project's way to start (the hint, Add files, the examples) stays under the message", () => {
+  const emptyState = <div className="viewer-empty-state"><p>{messages.noInputsYet}</p><button type="button">{messages.addFiles}</button></div>;
+  rendered = renderForTest(<ViewerPane {...EMPTY_VIEW} centreContent={emptyState} />);
+  const texts = [...rendered.container.querySelectorAll(".viewer-pane p, .viewer-pane button")].map((element) => element.textContent);
+  expect(texts).toEqual([messages.viewerNeedsWebGl, messages.noInputsYet, messages.addFiles]);
 });

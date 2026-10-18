@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ModeInfo, ProjectDetail } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
-import { FakeViewerScene } from "../viewer/fake_scene_for_test";
+import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ProjectWorkspace } from "./ProjectWorkspace";
 import { useRunLoop } from "./run_state";
@@ -114,12 +114,14 @@ let service: FakeService;
 beforeEach(() => {
   FakeWebSocket.opened = [];
   vi.stubGlobal("WebSocket", FakeWebSocket);
+  pretendTheBrowserHasWebGl();
 });
 
 afterEach(() => {
   rendered?.unmount();
   rendered = null;
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   window.localStorage.clear();
 });
 

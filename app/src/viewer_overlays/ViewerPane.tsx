@@ -5,7 +5,7 @@
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
-import type { RunSummary, SkyDome, SunPath } from "../api_client/client";
+import type { ModeInfo, RunSummary, SkyDome, SunPath } from "../api_client/client";
 import { messages } from "../messages";
 import { keptScoreRange } from "../viewer/colour_scales";
 import {
@@ -61,8 +61,12 @@ export interface ViewerPaneProps {
   runProgress?: number | null;
   /** Shown over the view (the run report). */
   overlayContent?: ReactNode;
-  /** The project's mode: the sky dome legend says what its weights measure. */
+  /** The mode the form shows. */
   mode?: string | null;
+  /** The modes of the engine, for the mode an analysis on screen was made in. */
+  modes?: readonly ModeInfo[];
+  /** The analysis (preprocessing) is current: it was made in the mode the form shows. */
+  analysisCurrent?: boolean;
 }
 
 const NO_CAMERA: CameraState = { yawDegrees: 0, elevationDegrees: 90, metresPerPixel: 0 };
@@ -70,6 +74,28 @@ const NO_SHIFT: Point3 = [0, 0, 0];
 const NO_LAYERS: readonly LayerName[] = [];
 const EMPTY_OUTLINE: VolumeOutline = { segments: new Float32Array(0), outwardNormals: new Float32Array(0) };
 const RESULT_LAYERS: readonly LayerName[] = ["kept_voxels", "carved_voxels", "sky_dome", "envelope", "building_massing"];
+const NO_MODES: readonly ModeInfo[] = [];
+const WEBGL_CONTEXT = "webgl2";     // what three.js's WebGLRenderer asks the canvas for
+
+/**
+ * The mode the sky dome on screen was analysed in, for its legend: the weighted mode whose weight unit the score points of
+ * that analysis name (each weighted mode has its own); without them, the form's mode while the analysis is current; else
+ * null (no mode named), since the form's mode may not be the one the dome on screen was made in.
+ */
+export function analysedSkyDomeMode(modes: readonly ModeInfo[], scorePointsWeightUnit: string | null, formMode: string | null,
+                                    analysisCurrent: boolean): string | null {
+  const analysed = scorePointsWeightUnit === null ? []
+    : modes.filter((mode) => mode.score_kind === "weighted_sum" && mode.weight_unit === scorePointsWeightUnit);
+  if (analysed.length === 1) return analysed[0].name;
+  return analysisCurrent ? formMode : null;
+}
+
+/** Whether the browser gives a canvas a WebGL context; the test context is freed again at once. */
+function browserHasWebGl(): boolean {
+  const context = document.createElement("canvas").getContext(WEBGL_CONTEXT) as WebGL2RenderingContext | null;
+  context?.getExtension?.("WEBGL_lose_context")?.loseContext();
+  return context !== null;
+}
 
 /** The number of storeys of a building massing mesh: the highest storey of its parts, plus one. */
 function storeyCountOf(massing: THREE.BufferGeometry): number {
@@ -79,7 +105,8 @@ function storeyCountOf(massing: THREE.BufferGeometry): number {
 
 export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVolumeAppearance, shownByDefault, northDegrees, framingRequest,
                              centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
-                             missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null }: ViewerPaneProps) {
+                             missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null, modes = NO_MODES,
+                             analysisCurrent = false }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
@@ -92,12 +119,16 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   const originKey = localOrigin.join(",");
 
   useEffect(() => {
+    if (!browserHasWebGl()) {
+      setSceneUnavailable(true);
+      return;
+    }
     let viewer: ViewerScene;
     try {
       viewer = new ViewerScene(container.current!);
-    } catch {
-      // three.js throws when the browser gives it no WebGL context; nothing of the scene was added to the page by then
-      setSceneUnavailable(true);
+    } catch (error) {
+      // A fault of the scene, not a missing WebGL: said in the console; the view stays empty and the steps go on working
+      console.error(error);
       return;
     }
     const stopListening = viewer.onCameraChange(setCamera);
@@ -178,7 +209,8 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
           thinningStep: scorePoints.header.thinning_step }
       : undefined,
     skyDome: shown("sky_dome") && skyDome
-      ? { title: messages.skyDomeLegend(mode), lowestWeight: Math.min(...skyDome.weights),
+      ? { title: messages.skyDomeLegend(analysedSkyDomeMode(modes, scorePoints?.header.weight_unit ?? null, mode, analysisCurrent)),
+          lowestWeight: Math.min(...skyDome.weights),
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
@@ -194,7 +226,10 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
     return (
       <div className="viewer-pane viewer-pane-unavailable">
         {progressBar}
-        <p className="viewer-unavailable" role="status">{messages.viewerNeedsWebGl}</p>
+        <div className="viewer-unavailable-content">
+          <p className="viewer-unavailable" role="status">{messages.viewerNeedsWebGl}</p>
+          {centreContent}
+        </div>
         {overlayContent}
       </div>
     );
