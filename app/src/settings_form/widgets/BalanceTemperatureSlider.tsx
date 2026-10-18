@@ -3,7 +3,8 @@
 // Moving the right handle moves the band with it (the dead band stays); moving the left one changes only the dead band, and it
 // cannot pass the right one (the engine needs a dead band of 0 or more). Where the two handles lie on one spot (a dead band of 0,
 // or both pinned at an end of the track), the left one is on top and the direction of the move picks the handle: to the right it
-// moves the balance temperature with the band, to the left it opens the band; a drag keeps the handle its first move picked.
+// moves the balance temperature with the band, to the left it opens the band; a drag, or a run of keys until the handle loses the
+// focus, keeps the handle its first move picked.
 // Both values are number fields too, which take any value the engine accepts: a temperature off the track pins its handle at the
 // track's end, and the handle says the value itself. A setting with an error marks only its own handle and number field.
 import { useRef, type CSSProperties, type ReactNode } from "react";
@@ -48,7 +49,8 @@ export function BalanceTemperatureSlider({ balanceTemperature, deadBand, track, 
   const bandStyle = { "--dead-band-start": fractionOf(lowerEndOnTrack), "--dead-band-end": fractionOf(balanceOnTrack) } as CSSProperties;
   const onOneSpot = lowerEndOnTrack >= balanceOnTrack;
   const lowerEndClass = onOneSpot ? "balance-handle balance-handle-on-top" : "balance-handle";
-  // The handle a drag of the left handle moves, from the press to the release; null while no drag is under way (keys).
+  // The handle the left handle moves for a drag, from the press to the release, and for a run of keys, from the first key until the
+  // handle loses the focus: the first move picks it, so a run that began as a balance move stays one. Null between them.
   const dragOfLeftHandle = useRef<HandleMoved | null>(null);
   const moveLeftHandle = (text: string) => {
     let handle = dragOfLeftHandle.current;
@@ -83,6 +85,7 @@ export function BalanceTemperatureSlider({ balanceTemperature, deadBand, track, 
                aria-label={messages.deadBandLowerEndHandle} aria-valuetext={spokenValue(lowerEnd, unit)}
                onPointerDown={() => { dragOfLeftHandle.current = onOneSpot ? "undecided" : "lower_end"; }}
                onPointerUp={() => { dragOfLeftHandle.current = null; }} onBlur={() => { dragOfLeftHandle.current = null; }}
+               onKeyDown={() => { if (dragOfLeftHandle.current === null) dragOfLeftHandle.current = onOneSpot ? "undecided" : "lower_end"; }}
                onChange={(event) => moveLeftHandle(event.target.value)} />
         <input type="range" className="balance-handle" {...handleProps} aria-invalid={balanceInvalid} step={track.step} value={balanceOnTrack}
                aria-label={messages.balanceTemperatureHandle} aria-valuetext={spokenValue(balance, unit)}

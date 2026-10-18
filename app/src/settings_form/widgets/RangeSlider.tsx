@@ -8,6 +8,12 @@ import { formattedNumber, withUnit } from "../../steps/format_numbers";
 import type { SliderRange } from "../presentation";
 import { NumberInput, type ControlProps, type NumberRange } from "./NumberInput";
 
+/** The number the engine uses for an empty setting, and how it is said ("75 °", "off"). */
+export interface AutomaticValue {
+  value: number;
+  text: string;
+}
+
 interface RangeSliderProps extends ControlProps {
   value: number | null;
   /** The slider, in the units shown. */
@@ -18,8 +24,8 @@ interface RangeSliderProps extends ControlProps {
   unit: string;
   /** What the empty number field shows ("automatic"); also what the slider says while the value is empty. */
   placeholder?: string;
-  /** While the value is empty: the number the engine uses for it, where known (the handle starts there), else null. */
-  automaticValue?: number | null;
+  /** While the value is empty: what the engine uses for it, where known (the handle starts at its number), else null. */
+  automatic?: AutomaticValue | null;
   onValue: (value: number | null) => void;
 }
 
@@ -43,11 +49,11 @@ export function spokenValue(value: number, unit: string): string {
   return withUnit(formattedNumber(value), unit);
 }
 
-export function RangeSlider({ value, slider, engineRange, mayBeEmpty, unit, placeholder, automaticValue = null, onValue, inputId, labelId, invalid,
+export function RangeSlider({ value, slider, engineRange, mayBeEmpty, unit, placeholder, automatic = null, onValue, inputId, labelId, invalid,
                               describedBy, disabled, onRefusedInput }: RangeSliderProps) {
   const isEmpty = value === null;
-  const emptyPosition = automaticValue === null ? (slider.low + slider.high) / 2 : positionOnTrack(automaticValue, slider);
-  const emptyText = automaticValue === null ? placeholder : messages.automaticValue(spokenValue(automaticValue, unit));
+  const emptyPosition = automatic === null ? (slider.low + slider.high) / 2 : positionOnTrack(automatic.value, slider);
+  const emptyText = automatic === null ? placeholder : messages.automaticValue(automatic.text);
   return (
     <div className="setting-control setting-slider-control">
       <input type="range" className="setting-range" min={slider.low} max={slider.high} step={slider.step}

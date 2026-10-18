@@ -14,7 +14,7 @@ import { AnalysisPeriod, type AnalysisPeriodField } from "./widgets/AnalysisPeri
 import { BalanceTemperatureSlider } from "./widgets/BalanceTemperatureSlider";
 import { MeshFormat } from "./widgets/MeshFormat";
 import { NumberInput, type ControlProps, type NumberRange } from "./widgets/NumberInput";
-import { RangeSlider } from "./widgets/RangeSlider";
+import { RangeSlider, spokenValue, type AutomaticValue } from "./widgets/RangeSlider";
 import { SunStepsPerHour } from "./widgets/SunStepsPerHour";
 import { ThresholdRule, type ThresholdSpec } from "./widgets/ThresholdRule";
 import { TiltedPlaneAngles } from "./widgets/TiltedPlaneAngles";
@@ -87,27 +87,30 @@ export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" |
 }
 
 // The value that switches the slope limit off, and the engine's automatic score smoothing as a multiple of the voxel size, as the
-// descriptions of max_slope_deg and score_smoothing in GET schema state them.
-const SLOPE_LIMIT_OFF_IN_DESCRIPTION = /(\d+(?:\.\d+)?): off/;
+// descriptions of max_slope_deg and score_smoothing in GET schema state them (test_local_web_packaging.py checks they still do).
+const SLOPE_LIMIT_OFF_IN_DESCRIPTION = /(\d+(?:\.\d+)?): off\b/;
 const AUTOMATIC_SMOOTHING_IN_DESCRIPTION = /auto: (\d+(?:\.\d+)?) × voxel_size/;
 
 /**
- * The number the engine uses for an empty setting in the form's mode, where the schema says it, else null: the slope limit of the
- * weighted modes, or the value that is off in the others; the score smoothing, a multiple of the voxel size. An empty slider
- * starts its handle there, so a first key step moves from the value in use.
+ * What the engine does with an empty setting in the form's mode, where the schema says it, else null: the number (where an empty
+ * slider starts its handle, so a first key step moves from the value in use) and how it is said ("75 °", or "off" for the slope
+ * limit of Solar time-based and the angle rule, which 90 switches off, as the tooltip says). The slope limit of the weighted modes;
+ * the score smoothing, a multiple of the voxel size.
  */
-export function automaticValueOf(view: SettingView, form: FormState): number | null {
+export function automaticValueOf(view: SettingView, form: FormState): AutomaticValue | null {
   const description = form.schemaProperties[view.name]?.description ?? "";
   const numberIn = (pattern: RegExp) => {
     const found = pattern.exec(description)?.[1];
     return found === undefined ? null : Number(found);
   };
+  const said = (value: number | null, text?: string) => (value === null ? null : { value, text: text ?? spokenValue(value, unitOfValue(view)) });
   if (view.name === "max_slope_deg") {
-    return numberIn(form.scoreKindByMode[form.mode] === "weighted_sum" ? AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION : SLOPE_LIMIT_OFF_IN_DESCRIPTION);
+    return form.scoreKindByMode[form.mode] === "weighted_sum" ? said(numberIn(AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION))
+      : said(numberIn(SLOPE_LIMIT_OFF_IN_DESCRIPTION), messages.switchedOff);
   }
   if (view.name === "score_smoothing") {
     const factor = numberIn(AUTOMATIC_SMOOTHING_IN_DESCRIPTION), voxelSize = shownValue(form, "voxel_size");
-    return factor === null || typeof voxelSize !== "number" ? null : Number((factor * voxelSize).toPrecision(12));
+    return said(factor === null || typeof voxelSize !== "number" ? null : Number((factor * voxelSize).toPrecision(12)));
   }
   return null;
 }
@@ -221,7 +224,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
         const slider = shownSliderOf(view);
         controlElement = slider !== undefined ? (
           <RangeSlider {...control} value={value} slider={slider} engineRange={engineRange} mayBeEmpty={mayBeEmpty} unit={unit} placeholder={placeholder}
-                       automaticValue={value === null ? automaticValueOf(view, form) : null} onValue={changeTo} />
+                       automatic={value === null ? automaticValueOf(view, form) : null} onValue={changeTo} />
         ) : (
           <div className="setting-control">
             <NumberInput id={inputId} value={value} mayBeEmpty={mayBeEmpty} wholeNumbers={types.includes("integer")} invalid={control.invalid}

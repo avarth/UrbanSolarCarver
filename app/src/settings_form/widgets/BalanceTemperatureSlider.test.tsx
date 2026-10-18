@@ -157,10 +157,31 @@ test("both pinned at the low end (5 °C typed, dead band 2): a drag to the right
   expect(lowerEndHandle().value).toBe("10.5");
 });
 
+const keyDown = (handle: HTMLInputElement, key: string) => act(() => { handle.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })); });
+
 test("on one spot, a key to the right on the left handle moves the balance temperature, not the dead band", () => {
   rendered = renderForTest(<Balance start={form({ balance_offset: 0 })} />);
+  keyDown(lowerEndHandle(), "ArrowRight");
   setValue(lowerEndHandle(), "15.5");
   expect(latest!.userValues).toEqual({ balance_temperature: 15.5, balance_offset: 0 });
+});
+
+test("pinned at the low end (5 °C typed, dead band 2), a run of Right keys stays a balance move until the handle loses the focus", () => {
+  rendered = renderForTest(<Balance start={form({ balance_temperature: 5 })} />);
+  // The browser steps the handle from where it is drawn: 10, then 10.5 once the band shows from 8.5 (pinned at 10).
+  keyDown(lowerEndHandle(), "ArrowRight");
+  setValue(lowerEndHandle(), "10.5");
+  expect(latest!.userValues).toEqual({ balance_temperature: 10.5 });
+  keyDown(lowerEndHandle(), "ArrowRight");
+  setValue(lowerEndHandle(), "10.5");      // the lower end, 8.5, is still drawn at 10: one step right is 10.5
+  keyDown(lowerEndHandle(), "ArrowRight");
+  setValue(lowerEndHandle(), "11");
+  expect(latest!.userValues).toEqual({ balance_temperature: 11 });          // the band is never closed on the way
+  // After the focus leaves, the left handle is the lower end again: Right narrows the band.
+  act(() => { lowerEndHandle().dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
+  keyDown(lowerEndHandle(), "ArrowRight");
+  setValue(lowerEndHandle(), "10.5");
+  expect(latest!.userValues).toEqual({ balance_temperature: 11, balance_offset: 0.5 });
 });
 
 test("an error of one of the two marks only its own handle and number field", () => {

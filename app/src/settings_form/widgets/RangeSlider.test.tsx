@@ -104,6 +104,12 @@ test("an empty automatic setting starts its hollow handle at the value the engin
   expect(onChange).toHaveBeenLastCalledWith({ score_smoothing: 2.3 });
   rendered.rerender(<SettingField view={viewOf("carving", "max_slope_deg")} form={described} onChange={onChange} />);
   expect(slider().value).toBe("75");
+  expect(slider().getAttribute("aria-valuetext")).toBe("automatic, 75 °");
+  // In a mode where an empty slope limit is off, the handle sits at 90, the value that is off, and says so.
+  const timeBased = { ...described, scoreKindByMode: { daylight: "violation_count" } };
+  rendered.rerender(<SettingField view={viewOf("carving", "max_slope_deg")} form={timeBased} onChange={onChange} />);
+  expect(slider().value).toBe("90");
+  expect(slider().getAttribute("aria-valuetext")).toBe("automatic, off");
   // Without the engine's number the handle waits in the middle, and the value stays empty.
   rendered.rerender(<SettingField view={viewOf("carving", "score_smoothing")} form={form()} onChange={onChange} />);
   expect(slider().value).toBe("2.5");
