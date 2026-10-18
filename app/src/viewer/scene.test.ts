@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { cameraOrientation, describeView, metresPerPixelAt } from "./scene";
+import { cameraOrientation, describeView, metresPerPixelAt, nextGroundAid } from "./scene";
 
 test("camera yaw is the clockwise turn from the top view with +Y up the screen", () => {
   expect(cameraOrientation([0, 0, -1], [0, 1, 0])).toEqual({ yawDegrees: 0, elevationDegrees: 90 });
@@ -20,4 +20,10 @@ test("the accessible name lists the layers on screen with their counts and state
     { label: "Maximum volume", detail: null, dimmed: false },
     { label: "Kept voxels, coloured by score", detail: "16 126 voxels", dimmed: true },
   ])).toBe("3D view showing: Maximum volume; Kept voxels, coloured by score, 16 126 voxels, out of date.");
+});
+
+test("the ground aid button cycles off, ground grid, compass ring, and back to off", () => {
+  expect(nextGroundAid("off")).toBe("grid");
+  expect(nextGroundAid("grid")).toBe("compass_ring");
+  expect(nextGroundAid("compass_ring")).toBe("off");
 });

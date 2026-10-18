@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ModeInfo, SkyDome } from "../api_client/client";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
-import { renderForTest, type RenderedOverlay } from "./render_for_test";
+import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
 import { NO_VIEWER_RESULTS, ViewerPane, type ViewerPaneProps } from "./ViewerPane";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -17,6 +17,7 @@ afterEach(() => {
   rendered?.unmount();
   rendered = null;
   vi.restoreAllMocks();
+  window.localStorage.clear();
 });
 
 const SKY_DOME: SkyDome = { directions: [[0, 0, 1], [0, 1, 0.2]], solid_angles: [0.1, 0.1], weights: [0.2, 1.4] };
@@ -78,4 +79,13 @@ test("an error of the scene that is not a missing WebGL is logged, and the view 
   rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);
   expect(consoleError).toHaveBeenCalledWith(fault);
   expect(rendered.container.querySelector(".viewer-unavailable")).toBeNull();
+});
+
+test("the view starts with the ground aid chosen last on this computer, and the toolbar button moves the scene to the next one", () => {
+  window.localStorage.setItem("usc.groundAid", "compass_ring");
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);
+  expect(FakeViewerScene.latest!.groundAid).toBe("compass_ring");
+  click(rendered.container.querySelector(".viewer-ground-aid-button")!);
+  expect(FakeViewerScene.latest!.groundAid).toBe("off");
+  expect(window.localStorage.getItem("usc.groundAid")).toBe("off");
 });

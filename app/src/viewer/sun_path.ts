@@ -1,5 +1,5 @@
 // The sun path layer's content (UX 8.2): for each day of GET sun-path, the whole day's path (drawn dashed), the analysis hours on
-// it (drawn solid, 3 px) and a sun with an "<hour> h" label at each marker, all placed on the hemisphere around the model.
+// it (drawn solid, 3 px) and a sun with an "<hour> h" label at each marker, all placed on the hemisphere around the scene.
 import type { SunPath } from "../api_client/client";
 import { dayAndMonth, listedWithAnd, messages } from "../messages";
 import type { Point3 } from "./local_origin";

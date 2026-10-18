@@ -1,4 +1,5 @@
-// The 3D view (UX 8): a three.js scene with Z up in local coordinates, the ground grid and north arrow, and one slot per layer.
+// The 3D view (UX 8): a three.js scene with Z up in local coordinates, one ground aid (the ground grid, the compass ring or
+// neither, R2 2), and one slot per layer.
 // Orbit with the left mouse button, pan with the right, zoom with the wheel. Camera moves of frameAll and viewTop take 400 ms,
 // and are instant under prefers-reduced-motion. No React here: the overlays (viewer_overlays/) read the camera through
 // onCameraChange and call the methods below.
@@ -7,13 +8,25 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { messages } from "../messages";
 import { colourToken, viewportBackground, type ViewportTheme } from "./colour_scales";
-import { northArrow, northDirection } from "./compass";
+import { northDirection } from "./compass";
+import { compassRing } from "./compass_ring";
 import { groundGrid, groundGridSpacing } from "./ground_grid";
 import { LAYER_NAMES, applyLayerAppearance, disposeLayer, type LayerName } from "./layers";
 import { fitTextSpritesToView } from "./text_sprite";
 
 export type { LayerName } from "./layers";
 export type { ViewportTheme } from "./colour_scales";
+
+/** What lies on the ground (R2 2): nothing, the ground grid of UX 8.1, or the compass ring around the scene. */
+export type GroundAid = "off" | "grid" | "compass_ring";
+
+/** The ground aids in the order the toolbar button goes through them. */
+export const GROUND_AIDS: readonly GroundAid[] = ["off", "grid", "compass_ring"];
+
+/** The ground aid the toolbar button switches to from *current*: off, ground grid, compass ring, and off again. */
+export function nextGroundAid(current: GroundAid): GroundAid {
+  return GROUND_AIDS[(GROUND_AIDS.indexOf(current) + 1) % GROUND_AIDS.length];
+}
 
 export interface CameraState {
   yawDegrees: number;          // clockwise turn of the view about Z from the top view with +Y up the screen
@@ -36,8 +49,7 @@ const FRAME_MARGIN = 1.1;
 const TOP_VIEW_TILT_RADIANS = 1e-3;         // a hair off straight down, so "up" on the screen is defined and points north
 const FIRST_VIEW_DIRECTION = new THREE.Vector3(-0.5, -0.9, 0.75).normalize();     // from the south-south-west, above
 const EMPTY_SCENE_RADIUS_METRES = 60;
-const NORTH_ARROW_SHARE = 0.12;             // of the model's longest side
-const NORTH_ARROW_SMALLEST_METRES = 2;
+const SCENE_BOUNDS_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces"];     // what the compass ring is sized to (R2 2)
 
 const toDegrees = (radians: number) => (radians / Math.PI) * 180;
 const normalisedDegrees = (angle: number) => ((angle % 360) + 360) % 360;
@@ -110,8 +122,9 @@ export class ViewerScene {
   private theme: ViewportTheme = "light";
   private northDegrees = 0;
   private skyDomeOpacity = DEFAULT_SKY_DOME_OPACITY;
+  private groundAid: GroundAid = "grid";
   private grid: THREE.Group | null = null;
-  private arrow: THREE.Group | null = null;
+  private ring: THREE.Group | null = null;
   private hasFramedContent = false;
   private cameraMove: CameraMove | null = null;
   private frameRequest: number | null = null;
@@ -177,7 +190,7 @@ export class ViewerScene {
       this.scene.add(object);
     }
     this.refreshLayers();
-    if (name === "max_volume" || !this.slots.get("max_volume")!.object) this.rebuildGroundAids();
+    if (SCENE_BOUNDS_LAYERS.includes(name) || !this.slots.get("max_volume")!.object) this.rebuildGroundAids();
     if (object && !this.hasFramedContent) {
       this.hasFramedContent = true;
       this.frameAll(true);
@@ -195,6 +208,12 @@ export class ViewerScene {
     this.refreshLayers();
   }
 
+  setGroundAid(aid: GroundAid): void {
+    this.groundAid = aid;
+    this.showChosenGroundAid();
+    this.requestRender();
+  }
+
   setSkyDomeOpacity(opacity: number): void {
     this.skyDomeOpacity = Math.min(1, Math.max(0, opacity));
     this.refreshLayers();
@@ -204,7 +223,7 @@ export class ViewerScene {
     this.theme = theme;
     this.scene.background = new THREE.Color(viewportBackground(theme));
     this.grid?.userData.applyTheme(theme);
-    this.arrow?.userData.applyTheme(theme);
+    this.ring?.userData.applyTheme(theme);
     for (const slot of this.slots.values()) slot.object?.userData.applyTheme?.(theme);
     const dark = theme === "dark";
     this.hoverLabel.style.background = colourToken(dark ? "overlay-on-dark" : "panel");
@@ -250,7 +269,7 @@ export class ViewerScene {
     this.controls.dispose();
     for (const slot of this.slots.values()) if (slot.object) disposeLayer(slot.object);
     if (this.grid) disposeLayer(this.grid);
-    if (this.arrow) disposeLayer(this.arrow);
+    if (this.ring) disposeLayer(this.ring);
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.hoverLabel.remove();
@@ -272,29 +291,38 @@ export class ViewerScene {
     this.requestRender();
   }
 
-  /** The ground grid and the north arrow, sized and placed for the maximum volume (or whatever is in the view without one). */
+  /**
+   * The ground aids, both built and only the chosen one shown. The grid is sized and placed for the maximum volume (or whatever
+   * is in the view without one); the compass ring for the maximum volume and the test surfaces together, and only once one of
+   * them is there (R2 2).
+   */
   private rebuildGroundAids(): void {
     const modelLayers = this.slots.get("max_volume")!.object ? ["max_volume" as const] : LAYER_NAMES.filter((name) => name !== "sky_dome" && name !== "sun_path");
     const modelBox = this.boxOf(modelLayers, false);     // a hidden maximum volume still sets the grid
     const size = modelBox.isEmpty() ? new THREE.Vector3() : modelBox.getSize(new THREE.Vector3());
     const centre = modelBox.isEmpty() ? new THREE.Vector3() : modelBox.getCenter(new THREE.Vector3());
     const longestSide = Math.max(size.x, size.y, size.z);
-    for (const aid of [this.grid, this.arrow]) {
+    for (const aid of [this.grid, this.ring]) {
       if (!aid) continue;
       this.scene.remove(aid);
       disposeLayer(aid);
     }
-    const spacing = groundGridSpacing(longestSide || EMPTY_SCENE_RADIUS_METRES);
-    this.grid = groundGrid(spacing, [centre.x, centre.y]);
-    const arrowLength = Math.max(NORTH_ARROW_SMALLEST_METRES, NORTH_ARROW_SHARE * (longestSide || EMPTY_SCENE_RADIUS_METRES));
-    this.arrow = northArrow(this.northDegrees, arrowLength);
-    const corner = modelBox.isEmpty() ? new THREE.Vector3() : modelBox.min;
-    this.arrow.position.set(corner.x - 1.5 * arrowLength, corner.y - 1.5 * arrowLength, 0);
-    this.grid.userData.applyTheme(this.theme);
-    this.arrow.userData.applyTheme(this.theme);
-    this.scene.add(this.grid, this.arrow);
+    this.grid = groundGrid(groundGridSpacing(longestSide || EMPTY_SCENE_RADIUS_METRES), [centre.x, centre.y]);
+    const sceneBox = this.boxOf(SCENE_BOUNDS_LAYERS, false);
+    this.ring = sceneBox.isEmpty() ? null : compassRing([sceneBox.min.toArray(), sceneBox.max.toArray()], this.northDegrees);
+    for (const aid of [this.grid, this.ring]) {
+      if (!aid) continue;
+      aid.userData.applyTheme(this.theme);
+      this.scene.add(aid);
+    }
+    this.showChosenGroundAid();
     this.fitPixelSizedObjects();
     this.requestRender();
+  }
+
+  private showChosenGroundAid(): void {
+    if (this.grid) this.grid.visible = this.groundAid === "grid";
+    if (this.ring) this.ring.visible = this.groundAid === "compass_ring";
   }
 
   private boxOf(names: readonly LayerName[], visibleOnly = true): THREE.Box3 {

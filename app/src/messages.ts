@@ -353,6 +353,7 @@ export const messages = {
   hourLabel: (hour: number) => `${hour}\u00a0h`,
   storeyLabel: (storeyNumber: number) => `Storey ${storeyNumber}`,
   northLetter: "N",
+  compassRingLetters: ["N", "E", "S", "W"],       // clockwise from north, every 90 degrees on the compass ring
   scaleBar: (length: string) => `0 to ${length}\u00a0m`,
   lengthInMetres: (length: string) => `${length}\u00a0m`,
   compass: "Compass. Show the top view with north up",
@@ -361,6 +362,8 @@ export const messages = {
   topView: "Top view with north up",
   darkViewport: "Dark viewport",
   lightViewport: "Light viewport",
+  // The ground aid button names the aid it switches to: off, ground grid and compass ring follow each other in a cycle
+  groundAidSwitchTo: { grid: "Show the ground grid", compass_ring: "Show the compass ring", off: "Hide the compass ring" },
   keptVoxelsShadingCaused: "Shading caused, m²·h",
   keptVoxelsObstructionScore: "Obstruction score (relative)",
   keptVoxelsScoreIn: (unit: string) => `Score, ${unit}`,

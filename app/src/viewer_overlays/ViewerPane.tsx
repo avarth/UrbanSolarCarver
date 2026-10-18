@@ -13,7 +13,7 @@ import {
   storeyOfPart, sunPathLayer, testSurfacesLayer, volumeOutline, type MaxVolumeAppearance, type VolumeOutline,
 } from "../viewer/layers";
 import type { Point3 } from "../viewer/local_origin";
-import { DEFAULT_SKY_DOME_OPACITY, ViewerScene, type CameraState, type LayerName, type ViewportTheme } from "../viewer/scene";
+import { DEFAULT_SKY_DOME_OPACITY, ViewerScene, type CameraState, type GroundAid, type LayerName, type ViewportTheme } from "../viewer/scene";
 import { voxelCentres, type ScorePoints } from "../viewer/score_points_decoder";
 import type { Hemisphere } from "../viewer/sky_dome";
 import { sunPathLegend, sunPathObjects } from "../viewer/sun_path";
@@ -22,7 +22,7 @@ import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
 import { keptVoxelsLegendTitle, keptVoxelsLegendUnit, Legend, type LegendContent } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
-import { rememberedViewportTheme, ViewToolbar } from "./ViewToolbar";
+import { rememberedGroundAid, rememberedViewportTheme, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
 
 /** What the runs have produced for the view; each is null until its stage has written it. */
@@ -40,7 +40,7 @@ export interface ViewerPaneProps {
   maxVolume: THREE.BufferGeometry | null;
   testSurfaces: THREE.BufferGeometry | null;
   sunPath: SunPath | null;
-  /** Where the sun path and the sky dome are drawn: around the maximum volume. */
+  /** Where the sun path and the sky dome are drawn: around the maximum volume and the test surfaces together (R2 2). */
   hemisphere: Hemisphere | null;
   maxVolumeAppearance: MaxVolumeAppearance;
   /** The layers the open step shows; a change of step brings these back. */
@@ -112,6 +112,7 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
   const [camera, setCamera] = useState<CameraState>(NO_CAMERA);
   const [theme, setTheme] = useState<ViewportTheme>(rememberedViewportTheme);
+  const [groundAid, setGroundAid] = useState<GroundAid>(rememberedGroundAid);
   const [visibleByChoice, setVisibleByChoice] = useState<Partial<Record<LayerName, boolean>>>({});
   const [skyDomeOpacity, setSkyDomeOpacity] = useState(DEFAULT_SKY_DOME_OPACITY);
   const defaultsKey = shownByDefault.join(",");
@@ -141,6 +142,7 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   }, []);
 
   useEffect(() => scene?.setViewportTheme(theme), [scene, theme]);
+  useEffect(() => scene?.setGroundAid(groundAid), [scene, groundAid]);
   useEffect(() => scene?.setNorth(northDegrees), [scene, northDegrees]);
   useEffect(() => scene?.setSkyDomeOpacity(skyDomeOpacity), [scene, skyDomeOpacity]);
   useEffect(() => setVisibleByChoice({}), [defaultsKey]);
@@ -240,7 +242,8 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
       <div ref={container} className="viewer-canvas" />
       {progressBar}
       <Compass yawDegrees={camera.yawDegrees} northDegrees={northDegrees} theme={theme} onViewTop={() => scene?.viewTop()} />
-      <ViewToolbar theme={theme} onFrameAll={() => scene?.frameAll()} onTopView={() => scene?.viewTop()} onThemeChange={setTheme} />
+      <ViewToolbar theme={theme} groundAid={groundAid} onFrameAll={() => scene?.frameAll()} onTopView={() => scene?.viewTop()} onThemeChange={setTheme}
+                   onGroundAidChange={setGroundAid} />
       {entries.length > 0 && (
         <LayersMenu entries={entries} skyDomeOpacity={skyDomeOpacity} theme={theme} onSkyDomeOpacityChange={setSkyDomeOpacity}
                     onVisibleChange={(name, visible) => setVisibleByChoice((choices) => ({ ...choices, [name]: visible }))} />

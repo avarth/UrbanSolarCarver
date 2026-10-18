@@ -11,9 +11,9 @@ import {
 import { listedWithAnd, messages } from "../messages";
 import { analysisDiffersFromStored, shownValue, useSettingsForm, type SaveOutcome } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
-import { localBounds, localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
+import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
-import { hemisphere } from "../viewer/sky_dome";
+import { sceneHemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
@@ -107,8 +107,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const testSurfacesMesh = useInputGeometry(token, project.name, "test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, frameAllInputs,
                                         onServiceProblem);
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
-  const inputsBounds = boundsOf([maxVolume, testSurfaces]);
-  const sunPathSphere = useMemo(() => (joinedBounds === null ? null : hemisphere(localBounds(joinedBounds, localOrigin(joinedBounds)))), [joinedBounds]);
+  // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
+  const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
+  const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
   // A stage status read across a run of this project says "missing" for results still on screen: such a reply is not used
@@ -307,7 +308,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       </aside>
       <section className="workspace-view">
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaces} sunPath={sunPath}
-                    hemisphere={sunPathSphere}
+                    hemisphere={sceneSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={emptyViewContent} localOrigin={origin} mode={form.mode} modes={modes}

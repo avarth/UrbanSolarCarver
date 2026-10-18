@@ -98,11 +98,16 @@
 .viewer-layers-panel .viewer-sky-dome-slider { display: flex; gap: 8px; align-items: center; margin: 4px 0 0 24px; font-size: var(--text-secondary); }
 .viewer-layers-panel input[type="range"] { flex: 1; accent-color: var(--colour-accent); }
 
-.viewer-axis-gizmo {
+/* Drawn straight on the viewport (R2 2): no background, border or shadow on either viewport; the letters take the overlay's
+   ink, var(--colour-ink) or var(--colour-ink-on-dark). */
+.viewer-overlay.viewer-axis-gizmo {
   bottom: var(--overlay-gap);
   left: var(--overlay-gap);
   width: 72px;
   height: 72px;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
 }
 
 .viewer-axis-gizmo svg { display: block; }
