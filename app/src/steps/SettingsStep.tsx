@@ -4,8 +4,8 @@
 import { useId, type ReactNode } from "react";
 import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from "../api_client/client";
 import { messages } from "../messages";
-import type { FormState, SaveOutcome } from "../settings_form/form_state";
-import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS, settingsForStep, settingView, type StepName as FormStepName } from "../settings_form/presentation";
+import { shownValue, type FormState, type SaveOutcome } from "../settings_form/form_state";
+import { fieldSettingOf, SETTING_PRESENTATIONS, settingsForStep, settingView, type StepName as FormStepName } from "../settings_form/presentation";
 import { fieldErrorOf, gridLineOf, SettingField, WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
@@ -21,10 +21,9 @@ export interface RunAnalysisConditions {
   warmUpState: HealthReply["warm_up"]["state"] | null;
 }
 
-/** The label of a setting as the form shows it; the six period settings are one field, "Analysis period". */
+/** The label of a setting as the form shows it; settings drawn as one field have its label (the six period settings, "Analysis period"). */
 function shownLabelOf(settingName: string, mode: string): string {
-  const shownName = (ANALYSIS_PERIOD_FIELDS as readonly string[]).includes(settingName) ? ANALYSIS_PERIOD_FIELDS[0] : settingName;
-  return settingView(shownName, mode).label;
+  return settingView(fieldSettingOf(settingName), mode).label;
 }
 
 /** Why Run analysis cannot start, the first of: a run, the inputs, the weather file, a setting, the warm-up; null when it can. */
@@ -91,11 +90,11 @@ export function SaveFailureNotice({ text, onSaveAgain }: { text: SaveFailureText
 
 /**
  * The settings to fix of each step (UX 4.1, 11): the fields with an error, counted in the step that draws them (the six period
- * settings are one field), and the messages that name no field, counted in Settings, where they are shown.
+ * settings are one field, as are the balance temperature and its dead band), and the messages that name no field, counted in
+ * Settings, where they are shown.
  */
 export function settingsToFixByStep(form: Pick<FormState, "fieldErrors" | "stepErrors">): Partial<Record<FormStepName, number>> {
-  const fields = new Set(Object.keys(form.fieldErrors).map((name) =>
-    ((ANALYSIS_PERIOD_FIELDS as readonly string[]).includes(name) ? ANALYSIS_PERIOD_FIELDS[0] : name)));
+  const fields = new Set(Object.keys(form.fieldErrors).map(fieldSettingOf));
   const counts: Partial<Record<FormStepName, number>> = {};
   const count = (step: FormStepName, added: number) => { counts[step] = (counts[step] ?? 0) + added; };
   for (const name of fields) count(SETTING_PRESENTATIONS[name]?.step ?? "settings", 1);
@@ -129,15 +128,18 @@ export function SettingsToFix({ step, form, onChange, disabledReason }: Settings
 
 /**
  * The grid line under Voxel size, or the over-budget message in its place. A refused save keeps the last grid planned, so the
- * line stays under an error too; while the voxel size shown is not the one planned (its save was refused), it says so.
+ * line stays under an error too; while the voxel size shown is not the one planned (its save was refused), it says so. Above
+ * the grid line: the sample spacing the form lowered to the voxel size, while it is still the spacing shown (R2 4.4).
  */
 function voxelSizeExtras(form: FormState): SettingFieldExtras {
+  const lowered = form.sampleSpacingLoweredTo;
+  const changeNote = lowered !== null && shownValue(form, "grid_step") === lowered ? messages.sampleSpacingLoweredToVoxelSize(lowered) : undefined;
   const plan = form.gridPlan;
-  if (plan === null) return {};
-  if (!gridIsOverBudget(plan)) return { note: gridLineOf(form)! };
+  if (plan === null) return { changeNote };
+  if (!gridIsOverBudget(plan)) return { changeNote, note: gridLineOf(form)! };
   const text = messages.gridOverBudget(plan.resolution, plan.total_voxels, plan.budget_voxels,
     smallestVoxelSizeWithinBudget(plan.voxel_size, plan.total_voxels, plan.budget_voxels));
-  return { errorContent: <>{text.description} <strong>{text.advice}</strong></> };
+  return { changeNote, errorContent: <>{text.description} <strong>{text.advice}</strong></> };
 }
 
 interface SettingsStepProps {

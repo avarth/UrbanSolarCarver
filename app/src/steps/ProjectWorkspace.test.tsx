@@ -180,7 +180,7 @@ async function pressRunAnalysis() {
   await settle();
 }
 
-const voxelSizeField = () => container().querySelector<HTMLInputElement>('[data-setting="voxel_size"] input')!;
+const voxelSizeField = () => container().querySelector<HTMLInputElement>('[data-setting="voxel_size"] input[type="number"]')!;
 const thresholdField = () => container().querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
 const thresholdOf = (values: Record<string, unknown>) => (values.threshold as { value: number }).value;
 
@@ -319,7 +319,7 @@ test("a refused mode change locks Carving: the old mode's carving is not shown a
 
   // The setting with the error stays editable in the locked step; fixing it stores Daylight, and must not start a carving run,
   // which would run the whole analysis.
-  const slope = container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input')!;
+  const slope = container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!;
   expect(slope.disabled).toBe(false);
   // Once Daylight is stored, the service finds the analysis out of date.
   service.stages = { ...CARVED, preprocessing: "out_of_date", thresholding: "out_of_date" };

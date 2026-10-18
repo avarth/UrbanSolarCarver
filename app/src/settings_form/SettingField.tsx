@@ -6,22 +6,26 @@ import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { plainModeName } from "../steps/step_summaries";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
-  ANALYSIS_PERIOD_FIELDS, fromDisplayValue, thresholdIsShadowToleratedIn, toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
+  ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, fromDisplayValue, settingsOfField, settingView, shownSliderOf, thresholdIsShadowToleratedIn,
+  toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
 } from "./presentation";
 import { SettingTooltip } from "./SettingTooltip";
 import { AnalysisPeriod, type AnalysisPeriodField } from "./widgets/AnalysisPeriod";
+import { BalanceTemperatureSlider } from "./widgets/BalanceTemperatureSlider";
 import { MeshFormat } from "./widgets/MeshFormat";
 import { NumberInput, type ControlProps, type NumberRange } from "./widgets/NumberInput";
-import { PercentSlider } from "./widgets/PercentSlider";
+import { RangeSlider } from "./widgets/RangeSlider";
 import { SunStepsPerHour } from "./widgets/SunStepsPerHour";
 import { ThresholdRule, type ThresholdSpec } from "./widgets/ThresholdRule";
 import { TiltedPlaneAngles } from "./widgets/TiltedPlaneAngles";
 import "./settings_form.css";
 
-/** What a step adds under one of its fields: a note, under its error too (the grid under Voxel size), and the error
- *  in the step's own words in place of the engine's message (the grid over the budget). */
+/** What a step adds under one of its fields: a note, under its error too (the grid under Voxel size), a change the form made
+ *  for the user, said above the note (the sample spacing lowered to the voxel size, R2 4.4), and the error in the step's own
+ *  words in place of the engine's message (the grid over the budget). */
 export interface SettingFieldExtras {
   note?: ReactNode;
+  changeNote?: ReactNode;
   errorContent?: ReactNode;
 }
 
@@ -36,14 +40,9 @@ export interface SettingFieldProps {
 // The words shown for the options of a choice the engine names in code.
 const CHOICE_NAMES: Record<string, Record<string, string>> = { plate_stacking: messages.floorStackingChoices };
 
-/** The settings a view stands for: the six period settings for the analysis period, else its own. */
-function settingNamesOf(view: SettingView): readonly string[] {
-  return view.widget === "analysis_period" ? ANALYSIS_PERIOD_FIELDS : [view.name];
-}
-
-/** The messages of the last rejected save for the settings of *view*, or undefined. */
+/** The messages of the last rejected save for the settings *view* draws (the six of the analysis period), or undefined. */
 export function fieldErrorOf(form: FormState, view: SettingView): string | undefined {
-  const errors = settingNamesOf(view).map((name) => form.fieldErrors[name]).filter((error) => error !== undefined);
+  const errors = settingsOfField(view.name).map((name) => form.fieldErrors[name]).filter((error) => error !== undefined);
   return errors.length === 0 ? undefined : errors.join(" ");
 }
 
@@ -130,7 +129,8 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   const shown = toDisplayValue(view.name, shownValue(form, view.name));
   const changeTo = (value: unknown) => onChange({ [view.name]: fromDisplayValue(view.name, value) });
   // Controls made of several inputs are labelled as a group; the others are the target of their label.
-  const isGroupOfInputs = view.widget === "analysis_period" || view.widget === "tilted_plane_angles" || view.widget === "mesh_format";
+  const isGroupOfInputs = view.widget === "analysis_period" || view.widget === "tilted_plane_angles" || view.widget === "mesh_format"
+    || view.widget === "balance_temperature";
 
   let controlElement: ReactNode;
   switch (view.widget) {
@@ -155,9 +155,20 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
     case "mesh_format":
       controlElement = <MeshFormat {...control} value={shown as string | null} onFormat={changeTo} />;
       break;
-    case "percent_slider":
-      controlElement = <PercentSlider {...control} percent={shown as number | null} unit={unit} onPercent={changeTo} />;
+    case "balance_temperature": {
+      const [, deadBandName] = BALANCE_TEMPERATURE_FIELDS;
+      const deadBandView = settingView(deadBandName, form.mode);
+      const deadBand = shownValue(form, deadBandName);
+      controlElement = (
+        <BalanceTemperatureSlider {...control} balanceTemperature={typeof shown === "number" ? shown : null}
+                                  deadBand={typeof deadBand === "number" ? deadBand : null} track={view.slider!} deadBandStep={deadBandView.slider!.step}
+                                  balanceTemperatureRange={rangeOf(property)} deadBandRange={rangeOf(form.schemaProperties[deadBandName])} unit={unit}
+                                  deadBandLabel={deadBandView.label} onChange={onChange}
+                                  deadBandInfo={<SettingTooltip settingLabel={deadBandView.label} help={deadBandView.help} configName={deadBandName}
+                                                                defaultText={defaultTextOf(deadBandView, form, isShadowTolerated)} />} />
+      );
       break;
+    }
     default:
       if (types.includes("boolean")) {
         controlElement = (
@@ -174,14 +185,20 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
           </select>
         );
       } else {
-        const range = rangeOf(property);
-        const isPercent = view.display === "percent";
-        controlElement = (
+        // The engine's bounds, from GET schema; a share shown in percent is held to 0 to 100.
+        const engineRange = view.display === "percent" ? { minimum: 0, maximum: 100 } : rangeOf(property);
+        const value = typeof shown === "number" ? shown : null;
+        const mayBeEmpty = types.includes("null");
+        const placeholder = mayBeEmpty && defaultValue(form, view.name) === null ? messages.automatic : undefined;
+        const slider = shownSliderOf(view);
+        controlElement = slider !== undefined ? (
+          <RangeSlider {...control} value={value} slider={slider} engineRange={engineRange} mayBeEmpty={mayBeEmpty} unit={unit} placeholder={placeholder}
+                       onValue={changeTo} />
+        ) : (
           <div className="setting-control">
-            <NumberInput id={inputId} value={typeof shown === "number" ? shown : null} mayBeEmpty={types.includes("null")}
-                         wholeNumbers={types.includes("integer")} invalid={control.invalid} describedBy={control.describedBy} disabled={disabled}
-                         {...(isPercent ? { minimum: 0, maximum: 100 } : range)} onValue={changeTo} onRefused={setRefusedInput}
-                         placeholder={types.includes("null") && defaultValue(form, view.name) === null ? messages.automatic : undefined} />
+            <NumberInput id={inputId} value={value} mayBeEmpty={mayBeEmpty} wholeNumbers={types.includes("integer")} invalid={control.invalid}
+                         describedBy={control.describedBy} disabled={disabled} {...engineRange} onValue={changeTo} onRefused={setRefusedInput}
+                         placeholder={placeholder} />
             {unit && <span className="setting-unit">{unit}</span>}
           </div>
         );
@@ -199,6 +216,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       </div>
       {controlElement}
       {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{refusedInput ?? extras?.errorContent ?? error}</span></p>}
+      {extras?.changeNote !== undefined && <p className="setting-note" role="status">{extras.changeNote}</p>}
       {extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
     </div>
   );

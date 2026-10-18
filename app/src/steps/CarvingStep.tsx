@@ -2,10 +2,11 @@
 // time-based, Carve amount in % for the weighted modes, the angle rule's message), the other carving settings folded under it,
 // the histogram, the numbers of the last carving, and the "Update when I change the threshold" switch, remembered per project.
 // With the switch on, letting go of the slider or leaving the number field reruns the carving, as does a change of another
-// carving setting (a switch or a choice at once, a number field when the user leaves it); off, Update carving does.
+// carving setting (a switch or a choice at once, a number field when the user leaves it, a slider when it is let go); off, Update
+// carving does.
 // When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with Run
 // analysis in the step.
-import { useEffect, useId, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import type { RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import { shownValue, type FormState } from "../settings_form/form_state";
@@ -287,8 +288,13 @@ export function CarvingStep(props: CarvingStepProps) {
     const target = event.target;
     if (target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio"))) commitCarvingSetting();
   };
-  const commitNumberOnLeave = (event: FocusEvent) => { if (isNumberField(event.target)) commitCarvingSetting(); };
+  // A slider runs once the user lets it go, or after a key moved it, as the threshold slider does: not on every step of a drag.
+  // Leaving it runs a move not run yet (a drag let go outside the window).
+  const isSlider = (target: EventTarget) => target instanceof HTMLInputElement && target.type === "range";
+  const commitNumberOnLeave = (event: FocusEvent) => { if (isNumberField(event.target) || isSlider(event.target)) commitCarvingSetting(); };
   const commitNumberOnEnter = (event: KeyboardEvent) => { if (event.key === "Enter" && isNumberField(event.target)) commitCarvingSetting(); };
+  const commitSliderOnRelease = (event: PointerEvent) => { if (isSlider(event.target)) commitCarvingSetting(); };
+  const commitSliderAfterKey = (event: KeyboardEvent) => { if (SLIDER_KEYS.has(event.key) && isSlider(event.target)) commitCarvingSetting(); };
   const disabledReason = analysisOutOfDate ? null : (props.thresholdDisabledReason ?? props.settingsDisabledReason);
   const carveAmountReason = thresholdView === null ? null : carveAmountUnusedReason(form, thresholdView);
   const updateBlocker = analysisOutOfDate ? null : runBlocker;
@@ -320,7 +326,8 @@ export function CarvingStep(props: CarvingStepProps) {
                             onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(thresholdView, shownNumber))}
                             onCommit={props.onThresholdCommit} />
         )}
-        <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}>
+        <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}
+             onPointerUp={commitSliderOnRelease} onKeyUp={commitSliderAfterKey}>
           {groups.map((group) => (
             <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled}
                           fieldsWithErrorEditable={fieldsWithErrorEditable} />

@@ -362,6 +362,24 @@ test("with auto-update on, a carving number field runs once the user leaves it, 
   expect(onCarvingSettingCommit).toHaveBeenCalledTimes(3);
 });
 
+test("with auto-update on, a carving slider changes the form while dragged and runs once it is let go, or after a key moved it", () => {
+  const onChange = vi.fn(), onCarvingSettingCommit = vi.fn();
+  rendered = renderForTest(<CarvingStep {...carvingProps({ onChange, onCarvingSettingCommit })} />);
+  unfoldCarvingSettings(rendered.container);
+  const slider = rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="range"]')!;
+  typeInto(slider, "60");
+  typeInto(slider, "55");
+  expect(onChange.mock.calls).toEqual([[{ max_slope_deg: 60 }], [{ max_slope_deg: 55 }]]);
+  expect(onCarvingSettingCommit).not.toHaveBeenCalled();
+  act(() => slider.dispatchEvent(new Event("pointerup", { bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledOnce();
+  typeInto(slider, "56");
+  act(() => slider.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowRight", bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledTimes(2);
+  act(() => slider.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledTimes(2);       // no slider key, nothing moved
+});
+
 test("with auto-update off, carving settings only change the form", () => {
   const onChange = vi.fn(), onCarvingSettingCommit = vi.fn();
   rendered = renderForTest(<CarvingStep {...carvingProps({ autoUpdate: false, onChange, onCarvingSettingCommit })} />);
@@ -465,10 +483,13 @@ test("while the analysis is out of date, only a carving setting with an error st
   let form = formFor("daylight");
   form = formReducer(form, { type: "save_rejected", reply: { field_errors: [{ field: "max_slope_deg", message: "Input should be greater than 0" }], grid_plan: null } });
   rendered = renderForTest(<CarvingStep {...carvingProps({ form, isWeightedMode: true, analysisOutOfDate: true, onCarvingSettingCommit, onChange })} />);
-  const slope = rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input')!;
+  const slope = rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!;
   expect(slope.disabled).toBe(false);
   expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above"] input')!.disabled).toBe(true);
   expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.disabled).toBe(true);
+  // A slider is locked with its number field, and stays editable with it when it holds the error.
+  expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="score_smoothing"] input[type="range"]')!.disabled).toBe(true);
+  expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="range"]')!.disabled).toBe(false);
   typeKeys(slope, "45");
   act(() => slope.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(onChange).toHaveBeenLastCalledWith({ max_slope_deg: 45 });

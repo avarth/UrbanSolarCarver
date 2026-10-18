@@ -174,10 +174,10 @@ test("a group folds its other settings under a link-styled button named after th
 });
 
 test("a group without essential settings is one fold titled with the group name", () => {
-  const computer = settingsForStep("settings", "daylight").find((group) => group.title === "Computer")!;
-  rendered = renderForTest(<SettingGroup group={computer} form={formFor("daylight")} onChange={() => {}} />);
+  const [carving] = settingsForStep("carving", "tilted_plane");      // the angle rule has no threshold
+  rendered = renderForTest(<SettingGroup group={carving} form={formFor("tilted_plane")} onChange={() => {}} />);
   expect(rendered.container.querySelector(".setting-group-title")).toBeNull();
-  expect(rendered.container.querySelector("button.setting-fold")!.textContent).toBe("Computer");
+  expect(rendered.container.querySelector("button.setting-fold")!.textContent).toBe("How much to carve");
 });
 
 test("the building massing essentials sit side by side", () => {
@@ -193,9 +193,11 @@ test("a field error is shown under its field, and opens the fold that holds it",
   rendered = renderForTest(<SettingGroup group={group} form={form} onChange={() => {}} />);
   const error = rendered.container.querySelector(".setting-error")!;
   expect(error.textContent).toContain("Input should be less than or equal to 90");
-  const invalidFields = rendered.container.querySelectorAll<HTMLInputElement>("input[aria-invalid='true']");
-  expect(invalidFields).toHaveLength(1);
-  expect(invalidFields[0].getAttribute("aria-describedby")).toContain(error.id);
+  // The slider and the number field of that setting, and nothing else.
+  const invalidFields = [...rendered.container.querySelectorAll<HTMLInputElement>("input[aria-invalid='true']")];
+  expect(invalidFields.map((field) => field.type)).toEqual(["range", "number"]);
+  expect(invalidFields.every((field) => field.closest("[data-setting='max_slope_deg']") !== null)).toBe(true);
+  expect(invalidFields.every((field) => field.getAttribute("aria-describedby")!.includes(error.id))).toBe(true);
   expect(rendered.container.querySelector("button.setting-fold")!.getAttribute("aria-expanded")).toBe("true");
 });
 

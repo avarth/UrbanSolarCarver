@@ -1,3 +1,4 @@
+import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, type ModeInfo } from "../api_client/client";
 import { formReducer, initialFormState, type FormState } from "../settings_form/form_state";
@@ -175,4 +176,51 @@ test("a step that cannot be used yet still shows its settings to fix, so they ca
 test("a setting to fix in another step is named with that step under the run button", () => {
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]) })))
     .toBe("Fix the steepest step between columns in Carving to run the analysis.");
+});
+
+// The engine's sample spacing: 1 m by default, never automatic (R2 4.4).
+function formWithSampleSpacing(): FormState {
+  return initialFormState({ schema: { properties: { ...SCHEMA.properties, grid_step: { default: 1.0, type: "number", exclusiveMinimum: 0 } } },
+                            modes: MODES, settings: { mode: "time-based" }, gridPlan: PLAN_WITHIN_BUDGET });
+}
+
+/** The Settings step over the form the app holds, every change going to it as the app's onChange does. */
+function SettingsStepWithItsForm({ start }: { start: FormState }) {
+  const [state, dispatch] = useReducer(formReducer, start);
+  latestForm = state;
+  return <SettingsStep form={state} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={null} />;
+}
+let latestForm: FormState | null = null;
+
+function typeInto(field: HTMLInputElement, text: string): void {
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, text);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+const fieldNamed = (setting: string) => rendered!.container.querySelector<HTMLElement>(`[data-setting="${setting}"]`)!;
+
+test("a voxel size below the sample spacing lowers it to the voxel size, said under Voxel size above the grid line", () => {
+  rendered = renderForTest(<SettingsStepWithItsForm start={formWithSampleSpacing()} />);
+  typeInto(fieldNamed("voxel_size").querySelector<HTMLInputElement>("input[type='range']")!, "0.5");
+  expect(latestForm!.userValues).toEqual({ voxel_size: 0.5, grid_step: 0.5 });
+  const notes = [...fieldNamed("voxel_size").querySelectorAll(".setting-note")].map((note) => note.textContent);
+  expect(notes[0]).toBe("Sample spacing lowered to 0.5\u00a0m to match the voxel size.");
+  expect(fieldNamed("voxel_size").querySelector("[role='status']")!.textContent).toBe(notes[0]);
+  expect(notes).toHaveLength(2);                // the grid line stays under it
+});
+
+test("a sample spacing typed above the voxel size is not changed: the engine's error shows on it and opens its fold", () => {
+  rendered = renderForTest(<SettingsStepWithItsForm start={formWithSampleSpacing()} />);
+  const foldButton = [...rendered.container.querySelectorAll<HTMLButtonElement>("button.setting-fold")].find((button) => button.textContent === "More detail settings")!;
+  click(foldButton);
+  typeInto(fieldNamed("grid_step").querySelector<HTMLInputElement>("input[type='number']")!, "2");
+  expect(latestForm!.userValues).toEqual({ grid_step: 2 });
+  const refused = formReducer(latestForm!, { type: "save_rejected", reply: { field_errors: [{ field: null,
+    message: "Value error, grid_step (2 m) must be ≤ voxel_size (1 m). Increase voxel_size or decrease grid_step." }], grid_plan: null } });
+  rendered.rerender(<SettingsStep form={refused} onChange={() => {}} disabledReason={null} />);
+  expect(fieldNamed("grid_step").querySelector(".setting-error")!.textContent).toContain("must not be larger than the voxel size");
+  expect(fieldNamed("grid_step").querySelector<HTMLInputElement>("input[type='number']")!.value).toBe("2");
+  expect(refused.userValues.grid_step).toBe(2);
 });

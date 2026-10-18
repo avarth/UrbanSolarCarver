@@ -127,6 +127,38 @@ def test_mode_lists_name_engine_modes():
                 assert set(entry[key]) <= set(MODES), (name, key)
 
 
+def decimal_bounds_of(name: str) -> dict | None:
+    """The engine's bounds of a decimal setting (the number member of an optional one), or None for any other setting: a count
+    (integer), a switch, a choice, a list."""
+    schema = UserConfig.model_json_schema()["properties"][name]
+    members = schema.get("anyOf", [schema])
+    decimal = next((member for member in members if member.get("type") == "number"), None)
+    if decimal is None or any(member.get("type") in ("integer", "array") for member in members):
+        return None
+    return {key: decimal[key] for key in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum") if key in decimal}
+
+
+def test_every_decimal_setting_with_an_engine_range_has_a_slider():
+    """R2 4.1: every decimal setting the engine bounds is entered with a slider; counts and switches keep their controls."""
+    settings = presented_settings()
+    ranged = [name for name in settings if decimal_bounds_of(name)]
+    assert ranged and [name for name in ranged if "slider" not in settings[name]] == []
+    assert [name for name in settings if "slider" in settings[name] and decimal_bounds_of(name) is None] == []
+
+
+def test_each_slider_lies_within_the_engine_limits():
+    """The slider is the range people normally use: inside what the engine accepts, low below high, a step that fits in it."""
+    for name, entry in presented_settings().items():
+        if "slider" not in entry:
+            continue
+        slider, bounds = entry["slider"], decimal_bounds_of(name)
+        assert set(slider) == {"low", "high", "step"}, name
+        assert slider["low"] < slider["high"] and 0 < slider["step"] <= slider["high"] - slider["low"], name
+        for end in (slider["low"], slider["high"]):
+            assert end >= bounds.get("minimum", end) and end <= bounds.get("maximum", end), name
+            assert end > bounds.get("exclusiveMinimum", end - 1) and end < bounds.get("exclusiveMaximum", end + 1), name
+
+
 # ---- The Mode step: mode_tiles.json against the engine's modes (UX 5.3) ----
 
 MODE_TILES_PATH = APP_FOLDER / "src" / "steps" / "mode_tiles.json"

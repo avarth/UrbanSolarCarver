@@ -2,7 +2,10 @@ import { act, createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, type ConfigErrorReply, type ConfigReply, type ModeInfo } from "../api_client/client";
 import { renderForTest } from "../viewer_overlays/render_for_test";
-import { analysisDiffersFromStored, createConfigSaver, defaultValue, formReducer, initialFormState, shownValue, useSettingsForm, valuesToSend, type FormAction } from "./form_state";
+import {
+  analysisDiffersFromStored, createConfigSaver, defaultValue, formReducer, initialFormState, shownValue, useSettingsForm, valuesToSend, type FormAction,
+  type FormState,
+} from "./form_state";
 
 const SCHEMA = {
   properties: {
@@ -256,10 +259,10 @@ test("a flush whose save a newer change overtook resolves with the newer change'
   expect(save).toHaveBeenCalledTimes(3);
 });
 
-function renderedForm(project: string, settings: Record<string, unknown>) {
+function renderedForm(project: string, settings: Record<string, unknown>, schema: Record<string, unknown> = SCHEMA) {
   let latest: ReturnType<typeof useSettingsForm> | null = null;
   function FormProbe({ projectName, projectSettings }: { projectName: string; projectSettings: Record<string, unknown> }) {
-    latest = useSettingsForm("launch token", projectName, { schema: SCHEMA, modes: MODES, settings: projectSettings, gridPlan: null });
+    latest = useSettingsForm("launch token", projectName, { schema, modes: MODES, settings: projectSettings, gridPlan: null });
     return null;
   }
   const rendered = renderForTest(createElement(FormProbe, { projectName: project, projectSettings: settings }));
@@ -443,4 +446,62 @@ test("a stored setting the engine ignores in the mode is not sent again; one the
   const state = storedProjectState({ mode: "time-based", edge_taper: 0.3 });
   expect(valuesToSend(state)).toEqual({ mode: "time-based", edge_taper: 0.3 });
   expect(analysisDiffersFromStored(state)).toBe(false);
+});
+
+// The engine's sample spacing: 1 m by default, never automatic (R2 4.4).
+const SCHEMA_WITH_SAMPLE_SPACING = { properties: { ...SCHEMA.properties, grid_step: { default: 1.0 } } };
+
+function formWithSampleSpacing(settings: Record<string, unknown>): FormState {
+  return initialFormState({ schema: SCHEMA_WITH_SAMPLE_SPACING, modes: MODES, settings, gridPlan: null });
+}
+
+const changed = (state: FormState, values: Record<string, unknown>) => formReducer(state, { type: "values_changed", values });
+const saved = (state: FormState) => formReducer(state, { type: "save_succeeded", reply: { settings: { ...state.userValues, mode: state.mode }, grid_plan: null } });
+
+test("a voxel size below the sample spacing lowers the sample spacing to it, in the same save, and the form says so", async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ settings: {}, grid_plan: GRID_PLAN })));
+  vi.stubGlobal("fetch", fetchMock);
+  const form = renderedForm("first", { mode: "daylight" }, SCHEMA_WITH_SAMPLE_SPACING);
+  act(() => form.current().dispatch({ type: "values_changed", values: { voxel_size: 0.5 } }));
+  expect(form.current().form.sampleSpacingLoweredTo).toBe(0.5);
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(fetchMock).toHaveBeenCalledOnce();
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ values: { voxel_size: 0.5, grid_step: 0.5, mode: "daylight" } });
+  form.unmount();
+  vi.unstubAllGlobals();
+});
+
+test("the sample spacing follows the voxel size the save sends, not a value passed on the way; once saved, a larger voxel size leaves it", () => {
+  let state = formWithSampleSpacing({ mode: "daylight" });
+  // Typing 0.25 passes 0.2 on the way: the sample spacing ends at 0.25, as if 0.2 had never been typed.
+  state = changed(state, { voxel_size: 0.2 });
+  expect(state.userValues).toEqual({ voxel_size: 0.2, grid_step: 0.2 });
+  state = changed(state, { voxel_size: 0.25 });
+  expect(state.userValues).toEqual({ voxel_size: 0.25, grid_step: 0.25 });
+  expect(state.sampleSpacingLoweredTo).toBe(0.25);
+  // Dragged back above the spacing the user had before the save: that spacing is back, unset as it was, and the note goes.
+  state = changed(state, { voxel_size: 1.5 });
+  expect(state.userValues).toEqual({ voxel_size: 1.5 });
+  expect(state.sampleSpacingLoweredTo).toBeNull();
+  // Saved, the lowered spacing is the user's: raising the voxel size later does not raise it back.
+  state = saved(changed(state, { voxel_size: 0.5 }));
+  state = changed(state, { voxel_size: 2 });
+  expect(state.userValues).toEqual({ voxel_size: 2, grid_step: 0.5 });
+  expect(state.sampleSpacingLoweredTo).toBeNull();
+  // A voxel size at or above the sample spacing leaves it.
+  state = changed(state, { voxel_size: 0.5 });
+  expect(state.userValues).toEqual({ voxel_size: 0.5, grid_step: 0.5 });
+  expect(state.sampleSpacingLoweredTo).toBeNull();
+});
+
+test("a sample spacing the user types is theirs: above the voxel size it is not changed, and the note goes", () => {
+  let state = changed(formWithSampleSpacing({ mode: "daylight" }), { voxel_size: 0.5 });
+  expect(state.sampleSpacingLoweredTo).toBe(0.5);
+  state = changed(state, { grid_step: 2 });
+  expect(state.userValues).toEqual({ voxel_size: 0.5, grid_step: 2 });
+  expect(state.sampleSpacingLoweredTo).toBeNull();
+  // Not lowered by the next voxel size either while the user's own value waits to be saved: only a voxel size below it does.
+  state = changed(state, { voxel_size: 3 });
+  expect(state.userValues).toEqual({ voxel_size: 3, grid_step: 2 });
 });

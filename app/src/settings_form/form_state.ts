@@ -63,6 +63,13 @@ export interface FormState {
   stored: { mode: string; values: Record<string, unknown> };
   /** Counts the stored saves that changed what the analysis reads (the mode, a setting of the Settings step). */
   storedAnalysisRevision: number;
+  /** The sample spacing the form lowered to a smaller voxel size (R2 4.4), said under Voxel size; null when it lowered none. */
+  sampleSpacingLoweredTo: number | null;
+  /**
+   * While the change that lowered the sample spacing is not saved yet: the sample spacing the user had set before it (undefined:
+   * none). A voxel size changed again before the save is compared with that spacing, not with the lowered one.
+   */
+  sampleSpacingBeforeUnsavedLowering: { userValue: unknown } | null;
 }
 
 export interface FormStart {
@@ -103,7 +110,38 @@ export function initialFormState({ schema, modes, settings, gridPlan }: FormStar
   const fieldErrors: Record<string, string> = gridIsOverBudget(gridPlan) ? { voxel_size: "" } : {};
   return { mode, userValues, startingValuesByMode, scoreKindByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
            pendingSave: false, changeCount: 0, saveFailure: null, carriedValues: {}, valuesResetByModeChange: null,
-           stored: { mode, values: userValues }, storedAnalysisRevision: 0 };
+           stored: { mode, values: userValues }, storedAnalysisRevision: 0, sampleSpacingLoweredTo: null, sampleSpacingBeforeUnsavedLowering: null };
+}
+
+type SampleSpacingFollowing = Pick<FormState, "userValues" | "sampleSpacingLoweredTo" | "sampleSpacingBeforeUnsavedLowering">;
+
+/**
+ * The sample spacing after *changed* values (R2 4.4). The engine needs it no larger than the voxel size, so a voxel size below it
+ * lowers it to the voxel size, in the same change, and the form says so. The spacing compared is the one from before a lowering
+ * not saved yet: a voxel size typed as "0.25" passes 0.2 on the way, and a slider passes many values while dragged, but only the
+ * value the save sends counts, so the spacing ends at 0.25, and goes back to the user's own when the voxel size goes back above
+ * it. Once saved, a larger voxel size leaves the lowered spacing. A sample spacing the user sets is never changed here; one
+ * above the voxel size is refused by the engine, under Sample spacing.
+ */
+function followVoxelSize(state: FormState, changed: Record<string, unknown>, userValues: Record<string, unknown>): SampleSpacingFollowing {
+  if ("grid_step" in changed) return { userValues, sampleSpacingLoweredTo: null, sampleSpacingBeforeUnsavedLowering: null };
+  if (!("voxel_size" in changed)) {
+    return { userValues, sampleSpacingLoweredTo: state.sampleSpacingLoweredTo, sampleSpacingBeforeUnsavedLowering: state.sampleSpacingBeforeUnsavedLowering };
+  }
+  const before = state.sampleSpacingBeforeUnsavedLowering ?? { userValue: state.userValues.grid_step };
+  const spacingBefore = before.userValue ?? defaultValue(state, "grid_step");
+  const voxelSize = shownValue({ ...state, userValues }, "voxel_size");
+  const withSpacing = (userValue: unknown) => {
+    const values = { ...userValues };
+    if (userValue === undefined) delete values.grid_step;
+    else values.grid_step = userValue;
+    return values;
+  };
+  if (typeof voxelSize === "number" && typeof spacingBefore === "number" && voxelSize < spacingBefore) {
+    return { userValues: withSpacing(voxelSize), sampleSpacingLoweredTo: voxelSize, sampleSpacingBeforeUnsavedLowering: before };
+  }
+  const restored = state.sampleSpacingBeforeUnsavedLowering === null ? userValues : withSpacing(before.userValue);
+  return { userValues: restored, sampleSpacingLoweredTo: null, sampleSpacingBeforeUnsavedLowering: null };
 }
 
 /**
@@ -119,8 +157,8 @@ export function formReducer(state: FormState, action: FormAction): FormState {
         else userValues[name] = value;
       }
       const carriedValues = Object.fromEntries(Object.entries(state.carriedValues).filter(([name]) => !(name in action.values)));
-      return { ...state, userValues, pendingSave: true, changeCount: state.changeCount + 1, saveFailure: null, carriedValues,
-               valuesResetByModeChange: null };
+      return { ...state, ...followVoxelSize(state, action.values, userValues), pendingSave: true, changeCount: state.changeCount + 1,
+               saveFailure: null, carriedValues, valuesResetByModeChange: null };
     }
     case "mode_chosen": {
       const startingValues = state.startingValuesByMode[action.mode] ?? {};
@@ -130,9 +168,10 @@ export function formReducer(state: FormState, action: FormAction): FormState {
       const refused = kept.filter(([name]) => name in state.fieldErrors).map(([name]) => name);
       const carried = kept.filter(([name]) => !refused.includes(name));
       // The errors were the old mode's; the save of the new one brings its own, so none is left on a field this mode hides.
+      // A lowered sample spacing is the user's from here: the new mode's change is another one.
       return { ...state, mode: action.mode, userValues: Object.fromEntries(carried), pendingSave: true, changeCount: state.changeCount + 1,
                saveFailure: null, fieldErrors: {}, stepErrors: [], carriedValues: Object.fromEntries(carried),
-               valuesResetByModeChange: refused.length > 0 ? { settings: refused, mode: action.mode } : null };
+               valuesResetByModeChange: refused.length > 0 ? { settings: refused, mode: action.mode } : null, sampleSpacingBeforeUnsavedLowering: null };
     }
     case "save_succeeded": {
       // The reply gives the settings stored; without a mode in it (an older service), the form's are the ones sent.
@@ -140,7 +179,7 @@ export function formReducer(state: FormState, action: FormAction): FormState {
       const stored = typeof storedMode === "string" ? { mode: storedMode, values: storedValues } : { mode: state.mode, values: state.userValues };
       const analysisChanged = !sameAnalysisSettings(state, state.stored, stored);
       return { ...state, gridPlan: action.reply.grid_plan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null, carriedValues: {},
-               stored, storedAnalysisRevision: state.storedAnalysisRevision + (analysisChanged ? 1 : 0) };
+               stored, storedAnalysisRevision: state.storedAnalysisRevision + (analysisChanged ? 1 : 0), sampleSpacingBeforeUnsavedLowering: null };
     }
     case "save_rejected": {
       const shownErrors = action.reply.field_errors.map(({ field, message }) => shownConfigErrorOf(field, message, state.mode));
@@ -178,9 +217,13 @@ export function formReducer(state: FormState, action: FormAction): FormState {
   }
 }
 
-// The settings preprocessing reads: those of the Settings step but the computer's (how rays are batched, the statistics).
+// The settings of the Settings step that change how the computer runs the analysis (how rays are batched) or what its report
+// holds (the statistics), not its results (R2 4.5).
+const SETTINGS_OF_THE_COMPUTER = new Set(["ray_batch_size", "diagnostics"]);
+
+// The settings preprocessing reads: those of the Settings step but the computer's.
 const ANALYSIS_SETTINGS = Object.keys(SETTING_PRESENTATIONS).filter((name) =>
-  SETTING_PRESENTATIONS[name].step === "settings" && SETTING_PRESENTATIONS[name].group !== "Computer");
+  SETTING_PRESENTATIONS[name].step === "settings" && !SETTINGS_OF_THE_COMPUTER.has(name));
 
 type SettingsOfMode = FormState["stored"];
 

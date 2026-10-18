@@ -10,7 +10,7 @@ import {
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
 import { analysisDiffersFromStored, shownValue, useSettingsForm, type SaveOutcome } from "../settings_form/form_state";
-import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
+import { fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
@@ -196,7 +196,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // A failed run's link to the setting it names: the step that holds the setting opens and the focus goes to its field.
   const goToSetting = (settingName: string) => {
-    const shownName = (ANALYSIS_PERIOD_FIELDS as readonly string[]).includes(settingName) ? ANALYSIS_PERIOD_FIELDS[0] : settingName;
+    const shownName = fieldSettingOf(settingName);
     const step = SETTING_PRESENTATIONS[shownName]?.step;
     if (step === undefined) return;
     openTheStep(step);

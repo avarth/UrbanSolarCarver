@@ -1,6 +1,6 @@
 {
   "steps": {
-    "settings": ["When", "Mode specific", "Detail", "Computer"],
+    "settings": ["When", "Mode specific", "Detail"],
     "carving": ["How much to carve"],
     "envelope_and_massing": ["Envelope", "Building massing"],
     "export": ["Export"]
@@ -39,7 +39,7 @@
     "north_deg": {
       "label": "North direction", "unit": "°",
       "help": "Angle of north, clockwise from the model's +Y axis. 0 means +Y points north.",
-      "step": "settings", "group": "When", "essential": "all"
+      "step": "settings", "group": "When", "essential": "all", "slider": { "low": 0, "high": 359, "step": 1 }
     },
     "sun_steps_per_hour": {
       "label": "Sun positions per hour", "unit": "per hour",
@@ -49,17 +49,17 @@
     "min_altitude": {
       "label": "Lowest sun protected", "unit": "°",
       "help": "Sun positions lower than this above the horizon are not protected.",
-      "step": "settings", "group": "When", "essential": false, "modes": ["time-based"]
+      "step": "settings", "group": "When", "essential": false, "modes": ["time-based"], "slider": { "low": 0, "high": 90, "step": 1 }
     },
     "balance_temperature": {
       "label": "Balance temperature", "unit": "°C",
       "help": "Sun counts only in hours colder than this, minus the dead band. About 12 °C for offices, 18 °C for homes.",
-      "step": "settings", "group": "Mode specific", "essential": ["benefit"], "modes": ["benefit"]
+      "step": "settings", "group": "Mode specific", "essential": ["benefit"], "modes": ["benefit"], "widget": "balance_temperature", "slider": { "low": 10, "high": 30, "step": 0.5 }
     },
     "balance_offset": {
       "label": "Dead band", "unit": "°C",
       "help": "Hours within this many degrees below the balance temperature do not count either.",
-      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["benefit"]
+      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["benefit"], "slider": { "low": 0, "high": 20, "step": 0.5 }
     },
     "include_harm": {
       "label": "Subtract summer overheating (experimental)", "unit": "on/off",
@@ -80,48 +80,48 @@
     "min_sky_elevation_deg": {
       "label": "Protect sky above", "unit": "°",
       "help": "Sky lower than this angle is not protected. 0 protects the whole sky.",
-      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["radiative_cooling"]
+      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["radiative_cooling"], "slider": { "low": 0, "high": 85, "step": 1 }
     },
     "bliss_k": {
       "label": "Bliss constant", "unit": "",
       "help": "A physical constant of the sky model. Leave at 1.8 unless you know why.",
-      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["radiative_cooling"]
+      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["radiative_cooling"], "slider": { "low": 1, "high": 3, "step": 0.1 }
     },
     "voxel_size": {
       "label": "Voxel size", "unit": "m",
       "help": "Edge of the cubes the volume is divided into. Smaller is finer and slower: halving it makes 8 times as many voxels.",
-      "step": "settings", "group": "Detail", "essential": "all"
+      "step": "settings", "group": "Detail", "essential": "all", "slider": { "low": 0.1, "high": 5, "step": 0.1 }
     },
     "grid_step": {
       "label": "Sample spacing on test surfaces", "unit": "m",
       "help": "Distance between the points on the test surfaces that rays start from.",
-      "step": "settings", "group": "Detail", "essential": false
+      "step": "settings", "group": "Detail", "essential": false, "slider": { "low": 0.1, "high": 5, "step": 0.1 }
     },
     "edge_taper": {
       "label": "Edge strip with less weight", "unit": "m",
       "help": "Points this close to a test surface's edge count less, so corners do not force extra carving. Weighted modes only.",
       "step": "settings", "group": "Detail", "essential": false,
-      "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"]
+      "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"], "slider": { "low": 0, "high": 5, "step": 0.1 }
     },
     "ray_length": {
       "label": "Ray length", "unit": "m",
       "help": "How far from the test surfaces obstruction is checked.",
-      "step": "settings", "group": "Detail", "essential": false
+      "step": "settings", "group": "Detail", "essential": false, "slider": { "low": 10, "high": 1000, "step": 10 }
     },
     "margin_frac": {
       "label": "Grid margin", "unit": "fraction",
       "help": "Empty space added around the maximum volume.",
-      "step": "settings", "group": "Detail", "essential": false
+      "step": "settings", "group": "Detail", "essential": false, "slider": { "low": 0, "high": 0.2, "step": 0.01 }
     },
     "ray_batch_size": {
       "label": "Rays per batch", "unit": "",
       "help": "0 sizes batches from free GPU memory. Lower it if the computer runs out of memory.",
-      "step": "settings", "group": "Computer", "essential": false
+      "step": "settings", "group": "Detail", "essential": false
     },
     "diagnostics": {
       "label": "Detailed statistics", "unit": "on/off",
-      "help": "Adds median, spread and percentiles to the run report.",
-      "step": "settings", "group": "Computer", "essential": false
+      "help": "Adds median, spread and percentiles to the run report. They change only the run report, not the carving.",
+      "step": "settings", "group": "Detail", "essential": false
     },
     "threshold": {
       "label": "Carving rule", "unit": "choice",
@@ -138,13 +138,13 @@
       "label": "Carve amount", "unit": "%",
       "help": "Share of the total obstruction to remove, not of the volume. Higher gives a slimmer, lower building.",
       "step": "carving", "group": "How much to carve", "essential": ["irradiance", "benefit", "daylight", "radiative_cooling"],
-      "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"], "display": "percent", "widget": "percent_slider"
+      "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"], "display": "percent", "slider": { "low": 0, "high": 1, "step": 0.01 }
     },
     "score_smoothing": {
       "label": "Score smoothing", "unit": "m",
       "help": "Blurs the scores before cutting so the surface is cleaner. Empty means automatic (1.1 × voxel size).",
       "step": "carving", "group": "How much to carve", "essential": false,
-      "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"]
+      "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"], "slider": { "low": 0, "high": 5, "step": 0.1 }
     },
     "carve_above": {
       "label": "Remove everything above a cut", "unit": "on/off",
@@ -159,7 +159,7 @@
     "max_slope_deg": {
       "label": "Steepest step between columns", "unit": "°",
       "help": "Limits how steeply heights may jump between neighbours, turning spikes into ramps. 90 turns it off.",
-      "step": "carving", "group": "How much to carve", "essential": false
+      "step": "carving", "group": "How much to carve", "essential": false, "slider": { "low": 5, "high": 90, "step": 1 }
     },
     "apply_smoothing": {
       "label": "Smooth the envelope surface", "unit": "on/off",
@@ -184,22 +184,22 @@
     "ground_floor_height": {
       "label": "Ground floor height", "unit": "m",
       "help": "Height of the ground floor.",
-      "step": "envelope_and_massing", "group": "Building massing", "essential": "all"
+      "step": "envelope_and_massing", "group": "Building massing", "essential": "all", "slider": { "low": 2, "high": 10, "step": 0.1 }
     },
     "floor_height": {
       "label": "Upper floor height", "unit": "m",
       "help": "Height of every floor above the ground floor.",
-      "step": "envelope_and_massing", "group": "Building massing", "essential": "all"
+      "step": "envelope_and_massing", "group": "Building massing", "essential": "all", "slider": { "low": 2, "high": 6, "step": 0.1 }
     },
     "min_plate_dimension": {
       "label": "Bay width", "unit": "m",
       "help": "The grid the storeys are built from, and the narrowest piece of floor allowed.",
-      "step": "envelope_and_massing", "group": "Building massing", "essential": "all"
+      "step": "envelope_and_massing", "group": "Building massing", "essential": "all", "slider": { "low": 1, "high": 15, "step": 0.5 }
     },
     "plate_tolerance": {
       "label": "Allowed overhang", "unit": "%",
       "help": "Share of a bay on a storey that may lie outside the carved envelope. The massing never leaves the maximum volume.",
-      "step": "envelope_and_massing", "group": "Building massing", "essential": false, "display": "percent"
+      "step": "envelope_and_massing", "group": "Building massing", "essential": false, "display": "percent", "slider": { "low": 0, "high": 1, "step": 0.01 }
     },
     "plate_stacking": {
       "label": "Floors rest on floors below", "unit": "choice",

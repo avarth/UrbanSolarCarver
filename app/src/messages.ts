@@ -1,7 +1,7 @@
 // The interface texts of UX spec sections 4, 5, 6.1, 7, 8 and 11, in one place. A text that takes values is a function.
 // Texts that the engine writes (a file that cannot be read, why Warp cannot run, the message of a failed run) are shown as the
 // engine gives them and have no entry here. A unit follows its number after a no-break space (\u00a0), as in format_numbers.ts.
-import { groupedDigits } from "./steps/format_numbers";
+import { formattedNumber, groupedDigits, withUnit } from "./steps/format_numbers";
 
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -284,6 +284,9 @@ export const messages = {
   // The grid line while the voxel size shown was refused: the grid is the one of the voxel size last saved.
   gridSizeAtSavedVoxelSize: (voxelSizeText: string, voxelsPerSide: number, totalVoxels: number) =>
     `Grid at the saved voxel size of ${voxelSizeText}: ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
+  // Under Voxel size when a voxel size below the sample spacing lowered it (R2 4.4).
+  sampleSpacingLoweredToVoxelSize: (sampleSpacing: number) =>
+    `Sample spacing lowered to ${withUnit(formattedNumber(sampleSpacing), "m")} to match the voxel size.`,
   // Errors of the whole config, said under the settings they name (UX 11); the engine's own words are for the YAML.
   samplingAboveVoxelSize: (samplingLabel: string, samplingText: string, voxelSizeLabel: string, voxelSizeText: string) =>
     `${samplingLabel} (${samplingText}) must not be larger than the ${String(voxelSizeLabel).toLowerCase()} (${voxelSizeText}). ` +
@@ -329,6 +332,10 @@ export const messages = {
   carveAmountNotUsed: (ruleName: string) =>
     `Carve amount is not used with the carving rule ${ruleName}. Choose Carve amount under More carving settings to use it.`,
   scoreCutoffValue: "Score cutoff value",
+  // The balance temperature slider (R2 4.2): its two handles, and the band between them.
+  balanceTemperatureHandle: "Balance temperature",
+  deadBandLowerEndHandle: "Lower end of the dead band",
+  deadBandOnTrack: "Dead band",
 
   // The 3D view (8)
   layerNames: {

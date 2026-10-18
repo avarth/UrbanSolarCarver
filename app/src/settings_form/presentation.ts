@@ -1,10 +1,21 @@
 // Where each setting appears and how it reads (UX 5.4 to 5.7 and 7), from setting_presentation.json: the steps and their
-// groups, the essential settings shown at once and the ones folded under "More <group> settings", and the percent display.
+// groups, the essential settings shown at once and the ones folded under "More <group> settings", the percent display, and the
+// slider of each ranged setting (R2 4.1).
 import { messages } from "../messages";
 import presentationFile from "./setting_presentation.json";
 
 export type StepName = "settings" | "carving" | "envelope_and_massing" | "export";
-export type WidgetName = "analysis_period" | "threshold" | "tilted_plane_angles" | "sun_steps_per_hour" | "mesh_format" | "percent_slider";
+export type WidgetName = "analysis_period" | "threshold" | "tilted_plane_angles" | "sun_steps_per_hour" | "mesh_format" | "balance_temperature";
+
+/**
+ * The slider of a ranged setting (R2 4.1), in the engine's units: the range people normally use, inside the engine's limits
+ * (the packaging test checks it against the schema). The number field beside it takes any value the engine accepts.
+ */
+export interface SliderRange {
+  low: number;
+  high: number;
+  step: number;
+}
 
 /** One entry of setting_presentation.json. *modes* absent: every mode reads the setting. */
 export interface SettingPresentation {
@@ -17,6 +28,7 @@ export interface SettingPresentation {
   modes?: string[];
   display?: "percent";
   widget?: WidgetName;
+  slider?: SliderRange;
   label_for_modes?: Record<string, string>;
   unit_for_modes?: Record<string, string>;
   help_for_modes?: Record<string, string>;
@@ -30,6 +42,7 @@ export interface SettingView {
   help: string;
   widget?: WidgetName;
   display?: "percent";
+  slider?: SliderRange;
 }
 
 export interface SettingGroupView {
@@ -45,6 +58,21 @@ export const SETTING_PRESENTATIONS: Readonly<Record<string, SettingPresentation>
 
 /** The six period settings, drawn as one widget under the name of the first. */
 export const ANALYSIS_PERIOD_FIELDS = ["start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour"] as const;
+
+/** The balance temperature and its dead band, drawn as one slider with two handles under the name of the first (R2 4.2). */
+export const BALANCE_TEMPERATURE_FIELDS = ["balance_temperature", "balance_offset"] as const;
+
+const SETTINGS_DRAWN_AS_ONE_FIELD: readonly (readonly string[])[] = [ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS];
+
+/** The setting whose field draws *name*: the first of the settings drawn as one field ("end_hour" is in "start_month"), else *name*. */
+export function fieldSettingOf(name: string): string {
+  return SETTINGS_DRAWN_AS_ONE_FIELD.find((names) => names.includes(name))?.[0] ?? name;
+}
+
+/** The settings the field of *name* draws: every one of the settings drawn as one field, else *name* alone. */
+export function settingsOfField(name: string): readonly string[] {
+  return SETTINGS_DRAWN_AS_ONE_FIELD.find((names) => names[0] === name) ?? [name];
+}
 
 // Units that name the kind of control rather than a unit of the value; the control itself shows them.
 const UNITS_NAMING_THE_CONTROL = new Set(["on/off", "choice", "dates, hours"]);
@@ -69,6 +97,7 @@ export function settingView(name: string, mode: string): SettingView {
     help: presentation.help_for_modes?.[mode] ?? presentation.help,
     widget: presentation.widget,
     display: presentation.display,
+    slider: presentation.slider,
   };
 }
 
@@ -102,8 +131,7 @@ function foldLabelOf(title: string, essential: SettingView[]): string {
 /** The groups of *step* in *mode*, in the file's order, each with its essential and folded settings; empty groups are left out. */
 export function settingsForStep(step: StepName, mode: string): SettingGroupView[] {
   const shownNames = Object.keys(SETTING_PRESENTATIONS).filter((name) =>
-    SETTING_PRESENTATIONS[name].step === step && settingIsReadBy(name, mode)
-    && !(ANALYSIS_PERIOD_FIELDS as readonly string[]).slice(1).includes(name));
+    SETTING_PRESENTATIONS[name].step === step && settingIsReadBy(name, mode) && fieldSettingOf(name) === name);
   return PRESENTATION.steps[step].flatMap((title) => {
     const names = shownNames.filter((name) => SETTING_PRESENTATIONS[name].group === title);
     const essential = names.filter((name) => isEssentialIn(SETTING_PRESENTATIONS[name], mode)).map((name) => settingView(name, mode));
@@ -128,6 +156,13 @@ export function toDisplayValue(name: string, value: unknown): unknown {
 /** The value as the engine stores it, from the one the form shows. */
 export function fromDisplayValue(name: string, shown: unknown): unknown {
   return isShownAsPercent(name) && typeof shown === "number" ? withoutFloatingPointNoise(shown / 100) : shown;
+}
+
+/** The slider of *view* in the units the form shows (0 to 100 for a share stored as 0 to 1); undefined for a setting without one. */
+export function shownSliderOf(view: SettingView): SliderRange | undefined {
+  if (view.slider === undefined) return undefined;
+  const shown = (value: number) => toDisplayValue(view.name, value) as number;
+  return { low: shown(view.slider.low), high: shown(view.slider.high), step: shown(view.slider.step) };
 }
 
 /** The modes that label the threshold "Shadow tolerated" (time-based): there it is a cutoff in m²·h, asked for as a number. */

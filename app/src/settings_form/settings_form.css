@@ -104,7 +104,132 @@
 .setting-number:disabled,
 .setting-select:disabled { color: var(--colour-muted); background: var(--colour-chrome); }
 
-.setting-range { flex: 1 1 120px; accent-color: var(--colour-accent); }
+/* A slider (R2 4.1): a thin track in the line colour and a round handle in the accent colour. Drawn by the stylesheet, not the
+   browser, so it reads the same in every browser and an empty (automatic) value can show no handle. */
+.setting-range {
+  --slider-handle: 16px;
+  --slider-track: 4px;
+  flex: 1 1 120px;
+  min-width: 96px;
+  height: var(--slider-handle);
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.setting-range::-webkit-slider-runnable-track { height: var(--slider-track); border-radius: 2px; background: var(--colour-line); }
+.setting-range::-moz-range-track { height: var(--slider-track); border-radius: 2px; background: var(--colour-line); }
+
+.setting-range::-webkit-slider-thumb,
+.balance-handle::-webkit-slider-thumb {
+  width: var(--slider-handle);
+  height: var(--slider-handle);
+  margin-top: calc((var(--slider-track) - var(--slider-handle)) / 2);
+  border: 2px solid var(--colour-panel);
+  border-radius: 50%;
+  background: var(--colour-accent);
+  box-shadow: 0 0 0 1px var(--colour-accent);
+  appearance: none;
+}
+
+.setting-range::-moz-range-thumb,
+.balance-handle::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--slider-handle);
+  height: var(--slider-handle);
+  border: 2px solid var(--colour-panel);
+  border-radius: 50%;
+  background: var(--colour-accent);
+  box-shadow: 0 0 0 1px var(--colour-accent);
+}
+
+/* Empty (automatic): no handle until the slider is moved; a press on the track sets a value there. */
+.setting-range[data-empty="true"]::-webkit-slider-thumb { opacity: 0; }
+.setting-range[data-empty="true"]::-moz-range-thumb { opacity: 0; }
+
+.setting-range[aria-invalid="true"]::-webkit-slider-runnable-track { box-shadow: 0 0 0 1px var(--colour-error); }
+.setting-range[aria-invalid="true"]::-moz-range-track { box-shadow: 0 0 0 1px var(--colour-error); }
+
+.setting-range:disabled,
+.balance-handle:disabled { cursor: default; }
+.setting-range:disabled::-webkit-slider-thumb,
+.balance-handle:disabled::-webkit-slider-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+.setting-range:disabled::-moz-range-thumb,
+.balance-handle:disabled::-moz-range-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+
+.setting-slider-control { align-self: stretch; flex-wrap: nowrap; }
+
+/* In the three massing columns the slider takes its own row above the number field. */
+.setting-group-side-by-side .setting-slider-control { flex-wrap: wrap; }
+.setting-group-side-by-side .setting-slider-control .setting-range { flex-basis: 100%; min-width: 0; }
+.setting-group-side-by-side .setting-slider-control .setting-number { flex: 1 1 0; }
+
+/* The balance temperature (R2 4.2): two handles on one track, the dead band between them in the accent colour and named above
+   it. The two sliders lie over each other; only their handles take the pointer, so each handle can be dragged where it is. */
+.balance-slider { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); align-self: stretch; }
+
+.balance-track {
+  --slider-handle: 16px;
+  --slider-track: 4px;
+  position: relative;
+  height: calc(var(--slider-handle) + 20px);
+}
+
+.balance-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc((var(--slider-handle) - var(--slider-track)) / 2);
+  height: var(--slider-track);
+  border-radius: 2px;
+  background: var(--colour-line);
+}
+
+/* From the centre of the left handle to the centre of the right one: a handle's centre runs from half a handle in from the
+   left end to half a handle in from the right one. */
+.balance-dead-band {
+  position: absolute;
+  bottom: calc((var(--slider-handle) - var(--slider-track)) / 2);
+  left: calc(var(--slider-handle) / 2 + (100% - var(--slider-handle)) * var(--dead-band-start));
+  width: calc((100% - var(--slider-handle)) * (var(--dead-band-end) - var(--dead-band-start)));
+  height: var(--slider-track);
+  background: var(--colour-accent);
+}
+
+/* Over the middle of the band, kept on the track: at its left end the label starts there, at its right end it ends there. */
+.balance-dead-band-label {
+  --dead-band-middle: calc((var(--dead-band-start) + var(--dead-band-end)) / 2);
+  position: absolute;
+  bottom: var(--slider-handle);
+  left: calc(var(--slider-handle) / 2 + (100% - var(--slider-handle)) * var(--dead-band-middle));
+  transform: translateX(calc(var(--dead-band-middle) * -100%));
+  font-size: var(--text-secondary);
+  color: var(--colour-muted);
+  white-space: nowrap;
+}
+
+.balance-handle {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: var(--slider-handle);
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  pointer-events: none;
+}
+
+.balance-handle::-webkit-slider-runnable-track { height: var(--slider-handle); background: transparent; }
+.balance-handle::-moz-range-track { background: transparent; }
+.balance-handle::-webkit-slider-thumb { margin-top: 0; pointer-events: auto; cursor: pointer; }
+.balance-handle::-moz-range-thumb { pointer-events: auto; cursor: pointer; }
+.balance-handle-on-top { z-index: 1; }
+
+.balance-numbers { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2) calc(var(--space-unit) * 6); }
+.balance-numbers .setting-control { flex-wrap: nowrap; }
 
 .setting-period { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
 .setting-period-end { width: 36px; color: var(--colour-muted); }

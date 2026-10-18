@@ -1,6 +1,7 @@
 // One group of settings in a step (UX 5.4 to 5.6): a small header, the essential settings, and the others folded under a
-// link-styled button ("More carving settings"). A group without essential settings (Computer) is one fold titled with the
-// group name. A fold holding a setting with an error stays open, so the message is never hidden.
+// link-styled button ("More carving settings"). A group without essential settings (the carving of the angle rule, which has no
+// threshold) is one fold titled with the group name. A fold holding a setting with an error stays open, so the message is never
+// hidden.
 import { useId, useState } from "react";
 import type { FormState } from "./form_state";
 import type { SettingGroupView } from "./presentation";
