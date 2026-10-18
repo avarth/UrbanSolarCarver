@@ -163,6 +163,11 @@ export interface RunLoop {
    * "missing" for results on screen.
    */
   replyStillHolds: (project: string) => () => boolean;
+  /**
+   * Drops the last run's record when it is of *project* (names ignore letter case) and no run is starting or under way: a project
+   * renamed, reset or deleted does not show the failure, cancel or warnings of a run of its old content.
+   */
+  forget: (project: string) => void;
 }
 
 export interface RunNotice {
@@ -284,5 +289,12 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     return () => !askedDuringARun && busyProject.current !== project && (runsAskedForByProject.current.get(project) ?? 0) === runsBefore;
   }, []);
 
-  return { current, activeRun, notice, start, cancel, replyStillHolds };
+  const forget = useCallback((project: string) => {
+    const record = latestRecord.current;
+    if (record === null || record.project.toLowerCase() !== project.toLowerCase() || busyProject.current !== null) return;
+    latestRecord.current = null;
+    setCurrent(null);
+  }, []);
+
+  return { current, activeRun, notice, start, cancel, replyStillHolds, forget };
 }

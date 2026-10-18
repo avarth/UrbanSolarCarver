@@ -14,7 +14,8 @@ import { messages, type MessagePart } from "./messages";
 import { MessageParts } from "./settings_form/SettingTooltip";
 import { projectFolderPath, sameProjectName } from "./steps/ProjectDialogs";
 import { ProjectMenu, type ProjectActions } from "./steps/ProjectMenu";
-import { ProjectWorkspace } from "./steps/ProjectWorkspace";
+import { moveAutoUpdateChoice } from "./steps/CarvingStep";
+import { ProjectWorkspace, type OpenProjectSettingsSaver } from "./steps/ProjectWorkspace";
 import { useRunLoop } from "./steps/run_state";
 import { cpuChosenAtLaunch, exampleTitleOf, isWarmingUp, Spinner, StartScreen, type ProjectsFolderChange } from "./steps/StartScreen";
 import "./App.css";
@@ -107,10 +108,16 @@ export function App() {
   const [setup, setSetup] = useState<{ schema: Record<string, unknown>; modes: ModeInfo[] } | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [examples, setExamples] = useState<ExampleInfo[] | null>(null);
+  // Whether the examples were read since the start screen last showed: the project made from each changes while a project is
+  // open (made, renamed or deleted), so the start screen lists them only once read again. Their titles stay valid for the top bar.
+  const [examplesCurrent, setExamplesCurrent] = useState(false);
   const [openProject, setOpenProject] = useState<ProjectDetail | null>(null);
   const [projectsFolder, setProjectsFolder] = useState<ProjectsFolderReply | null>(null);
   // Counts the resets of the open project: the workspace is made again for the fresh copy, which keeps the project's name.
   const [openProjectResets, setOpenProjectResets] = useState(0);
+  // The open project was deleted from the top bar: the start screen then takes the focus on its heading.
+  const [focusStartScreenHeading, setFocusStartScreenHeading] = useState(false);
+  const openProjectSettings = useRef<OpenProjectSettingsSaver | null>(null);
   const engineCheck = useRef<(() => void) | null>(null);
   const runs = useRunLoop(accessToken, (error) => handleServiceProblem(error));
 
@@ -144,12 +151,16 @@ export function App() {
   /** The projects and the examples, whose project (the one made from each) changes with every project made, renamed or deleted. */
   const readStartScreenLists = () => {
     listProjects(accessToken).then(setProjects).catch(handleServiceProblem);
-    getExamples(accessToken).then(setExamples).catch(handleServiceProblem);
+    getExamples(accessToken).then((read) => {
+      setExamples(read);
+      setExamplesCurrent(true);
+    }).catch(handleServiceProblem);
   };
   const readProjectsFolder = () => getProjectsFolder(accessToken).then(setProjectsFolder).catch(handleServiceProblem);
 
   useEffect(() => {
     if (openProject === null) readStartScreenLists();
+    else setExamplesCurrent(false);
   }, [openProject === null]);
 
   // Whether the folder may change depends on a run being active, so it is asked again when a run starts or ends.
@@ -161,6 +172,7 @@ export function App() {
   const openFrom = async (request: Promise<ProjectDetail>): Promise<string | null> => {
     try {
       setOpenProject(await request);
+      setFocusStartScreenHeading(false);
       return null;
     } catch (error) {
       handleServiceProblem(error);
@@ -168,43 +180,76 @@ export function App() {
     }
   };
 
+  /** A failed request in words: the service's reason, or that it did not reach the engine. */
+  const failureText = (error: unknown): string => {
+    handleServiceProblem(error);
+    return refusalDetailOf(error) ?? (serviceProblemOf(error) === "engine_stopped" ? messages.requestDidNotReachEngine : String(error));
+  };
+
   /** Resolves with the service's reason when the request fails, or null once it and *then* are done. */
-  const reasonIfRefused = async <Reply,>(request: Promise<Reply>, then: (reply: Reply) => void): Promise<string | null> => {
+  const reasonIfRefused = async <Reply,>(request: () => Promise<Reply>, then: (reply: Reply) => void): Promise<string | null> => {
     try {
-      then(await request);
+      then(await request());
       return null;
     } catch (error) {
-      handleServiceProblem(error);
-      return refusalDetailOf(error) ?? String(error);
+      return failureText(error);
     }
   };
   const isOpenProject = (name: string) => openProject !== null && sameProjectName(openProject.name, name);
 
+  /**
+   * After a rename, reset or delete: the open project's settings saver sends nothing more when its workspace closes (a save
+   * to the old name, or of the old values over the fresh copy), and the run record and the auto-update choice follow the change.
+   */
+  const afterProjectChange = (name: string, newName: string | null, keepsAutoUpdate: boolean) => {
+    if (isOpenProject(name)) openProjectSettings.current?.cancel();
+    runs.forget(name);
+    moveAutoUpdateChoice(name, keepsAutoUpdate ? newName : null);
+  };
+
   const projectActions: ProjectActions = {
-    openFolder: (name) => reasonIfRefused(openProjectFolder(accessToken, name), () => {}),
-    rename: (name, newName) => reasonIfRefused(renameProject(accessToken, name, newName), (renamed) => {
-      if (isOpenProject(name)) setOpenProject(renamed);
-      else readStartScreenLists();
-    }),
-    delete: (name, confirmName) => reasonIfRefused(deleteProject(accessToken, name, confirmName), () => {
-      if (isOpenProject(name)) setOpenProject(null);     // the start screen then reads its lists
-      else readStartScreenLists();
-    }),
-    resetToExample: (name) => reasonIfRefused(resetProjectToExample(accessToken, name), (reset) => {
-      if (!isOpenProject(name)) return readStartScreenLists();
-      setOpenProject(reset);
-      setOpenProjectResets((resets) => resets + 1);
-    }),
+    openFolder: (name) => reasonIfRefused(() => openProjectFolder(accessToken, name), () => {}),
+    rename: async (name, newName) => {
+      // The settings are saved under the old name first; a save that fails keeps the project as it is.
+      if (isOpenProject(name) && (await openProjectSettings.current?.flush()) === "failed") return messages.settingsNotSavedSoNotRenamed;
+      return reasonIfRefused(() => renameProject(accessToken, name, newName), (renamed) => {
+        afterProjectChange(name, renamed.name, true);
+        if (isOpenProject(name)) setOpenProject(renamed);
+        else readStartScreenLists();
+      });
+    },
+    delete: async (name, confirmName) => {
+      if (isOpenProject(name)) await openProjectSettings.current?.flush();     // discarded with the project, failed or not
+      return reasonIfRefused(() => deleteProject(accessToken, name, confirmName), () => {
+        afterProjectChange(name, null, false);
+        if (!isOpenProject(name)) return readStartScreenLists();
+        setFocusStartScreenHeading(true);
+        setOpenProject(null);     // the start screen then reads its lists
+      });
+    },
+    resetToExample: async (name) => {
+      if (isOpenProject(name)) await openProjectSettings.current?.flush();     // replaced by the example's, failed or not
+      return reasonIfRefused(() => resetProjectToExample(accessToken, name), (reset) => {
+        afterProjectChange(name, null, false);
+        if (!isOpenProject(name)) return readStartScreenLists();
+        setOpenProject(reset);
+        setOpenProjectResets((resets) => resets + 1);
+      });
+    },
   };
 
   const changeProjectsFolder = async (): Promise<ProjectsFolderChange> => {
     try {
       const choice = await chooseProjectsFolder(accessToken);
-      if (choice.status === "changed") readStartScreenLists();
+      if (choice.status === "changed") {
+        // The start screen waits while the picker is open; should a project be open all the same, it belongs to the old folder.
+        openProjectSettings.current?.cancel();
+        setOpenProject(null);
+        readStartScreenLists();
+      }
       return choice.status === "unavailable" ? { status: "unavailable", problem: choice.problem ?? "" } : { status: choice.status };
     } catch (error) {
-      handleServiceProblem(error);
-      return { status: "refused", reason: refusalDetailOf(error) ?? String(error) };
+      return { status: "refused", reason: failureText(error) };
     } finally {
       void readProjectsFolder();      // the folder in use, and whether it may change (a run elsewhere may have started)
     }
@@ -230,8 +275,8 @@ export function App() {
         <span className="top-bar-device">{health && <DeviceStatus warmUp={health.warm_up} />}</span>
       </header>
       {openProject === null && (
-        <StartScreen health={health} projects={projects} examples={examples} projectsFolder={projectsFolder}
-                     activeRunProject={runs.activeRun?.project ?? null} projectActions={projectActions}
+        <StartScreen health={health} projects={projects} examples={examplesCurrent ? examples : null} projectsFolder={projectsFolder}
+                     activeRunProject={runs.activeRun?.project ?? null} projectActions={projectActions} headingTakesFocus={focusStartScreenHeading}
                      onCreateProject={(name) => openFrom(createProject(accessToken, name, NEW_PROJECT_MODE))}
                      onOpenProject={(name) => openFrom(getProject(accessToken, name))}
                      onTryExample={(example) => openFrom(example.project
@@ -242,7 +287,7 @@ export function App() {
       {openProject !== null && setup !== null && (
         <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes}
                           warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
-                          onShowProjects={() => setOpenProject(null)} />
+                          onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }} />
       )}
     </div>
   );

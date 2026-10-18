@@ -41,9 +41,11 @@ interface ProjectMenuProps {
   actions: ProjectActions;
   /** "top_bar": the button is the project name, the menu opens under its left edge; "project_row": a small button, the menu ends at its right edge. */
   placement: "top_bar" | "project_row";
+  /** The id of the line that says why the whole menu waits (the folder picker is open); the button is then disabled. */
+  waitReasonId?: string | null;
 }
 
-export function ProjectMenu({ projectName, exampleTitle, projectFolderPath, runActive, actions, placement }: ProjectMenuProps) {
+export function ProjectMenu({ projectName, exampleTitle, projectFolderPath, runActive, actions, placement, waitReasonId = null }: ProjectMenuProps) {
   const [menuPlace, setMenuPlace] = useState<CSSProperties | null>(null);     // null while the menu is closed
   const [dialog, setDialog] = useState<OpenDialog | null>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -130,6 +132,7 @@ export function ProjectMenu({ projectName, exampleTitle, projectFolderPath, runA
     <div className="project-menu">
       <button ref={button} type="button" className={`project-menu-button project-menu-button-${placement === "top_bar" ? "top-bar" : "row"}`}
               aria-label={messages.projectMenuOf(projectName)} aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
+              disabled={waitReasonId !== null} aria-describedby={waitReasonId ?? undefined}
               onClick={() => (open ? closeMenu(false) : openMenu())} onKeyDown={openOnArrowDown}>
         {placement === "top_bar"
           ? <>{projectName}<span className="project-menu-caret" aria-hidden="true">{messages.projectMenuCaret}</span></>

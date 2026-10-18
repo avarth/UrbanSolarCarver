@@ -49,11 +49,13 @@ interface DialogFrameProps {
   /** While the dialog's request is out, Escape does not close it. */
   busy: boolean;
   onClose: () => void;
+  /** The ids of the text that explains the dialog, read out with its title. */
+  describedBy?: string;
   children: ReactNode;
 }
 
 /** A modal dialog: the element marked data-autofocus (else the first control) takes the focus, which Tab keeps inside. */
-function DialogFrame({ title, busy, onClose, children }: DialogFrameProps) {
+function DialogFrame({ title, busy, onClose, describedBy, children }: DialogFrameProps) {
   const dialog = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -84,7 +86,8 @@ function DialogFrame({ title, busy, onClose, children }: DialogFrameProps) {
 
   return (
     <div className="project-dialog-backdrop">
-      <div ref={dialog} className="project-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId} onKeyDown={keepFocusInside}>
+      <div ref={dialog} className="project-dialog" role="dialog" aria-modal="true" aria-labelledby={titleId}
+           aria-describedby={describedBy} onKeyDown={keepFocusInside}>
         <h2 id={titleId}>{title}</h2>
         {children}
       </div>
@@ -174,6 +177,8 @@ export function DeleteProjectDialog({ projectName, projectFolderPath, onDelete, 
   const [typedName, setTypedName] = useState("");
   const { problem, setProblem, busy, send } = useDialogRequest(onClose);
   const fieldId = useId();
+  const explanationId = useId();
+  const folderId = useId();
   const nameMatches = typedName === projectName;      // as the service checks it: the name exactly as it is written
   const remove = (event: FormEvent) => {
     event.preventDefault();
@@ -181,10 +186,11 @@ export function DeleteProjectDialog({ projectName, projectFolderPath, onDelete, 
     void send(() => onDelete(typedName));
   };
   return (
-    <DialogFrame title={messages.deleteProjectTitle(projectName)} busy={busy} onClose={onClose}>
+    <DialogFrame title={messages.deleteProjectTitle(projectName)} busy={busy} onClose={onClose}
+                 describedBy={projectFolderPath !== null ? `${explanationId} ${folderId}` : explanationId}>
       <form className="project-dialog-form" onSubmit={remove}>
-        <p>{messages.deleteProjectExplanation(projectName)}</p>
-        {projectFolderPath !== null && <p>{messages.projectFolderIs}<span className="project-dialog-path">{projectFolderPath}</span></p>}
+        <p id={explanationId}>{messages.deleteProjectExplanation(projectName)}</p>
+        {projectFolderPath !== null && <p id={folderId}>{messages.projectFolderIs}<span className="project-dialog-path">{projectFolderPath}</span></p>}
         <label htmlFor={fieldId}>{messages.typeProjectNameToConfirm(projectName)}</label>
         <input id={fieldId} className="setting-number project-dialog-field" value={typedName} autoComplete="off" spellCheck={false}
                aria-invalid={problem !== null || undefined} onChange={(event) => { setTypedName(event.target.value); setProblem(null); }} />
@@ -204,14 +210,15 @@ interface ResetProjectDialogProps {
 
 export function ResetProjectDialog({ projectName, exampleTitle, onReset, onClose }: ResetProjectDialogProps) {
   const { problem, busy, send } = useDialogRequest(onClose);
+  const explanationId = useId();
   const reset = (event: FormEvent) => {
     event.preventDefault();
     if (!busy) void send(onReset);
   };
   return (
-    <DialogFrame title={messages.resetProjectTitle(projectName)} busy={busy} onClose={onClose}>
+    <DialogFrame title={messages.resetProjectTitle(projectName)} busy={busy} onClose={onClose} describedBy={explanationId}>
       <form className="project-dialog-form" onSubmit={reset}>
-        <p>{messages.resetProjectExplanation(projectName, exampleTitle)}</p>
+        <p id={explanationId}>{messages.resetProjectExplanation(projectName, exampleTitle)}</p>
         <ProblemLine problem={problem} />
         <DialogButtons confirmLabel={messages.resetProjectButton} confirmDisabled={false} busy={busy} onCancel={onClose} cancelHasFocus />
       </form>
@@ -220,9 +227,10 @@ export function ResetProjectDialog({ projectName, exampleTitle, onReset, onClose
 }
 
 export function ProjectProblemDialog({ title, problem, onClose }: { title: string; problem: string; onClose: () => void }) {
+  const problemId = useId();
   return (
-    <DialogFrame title={title} busy={false} onClose={onClose}>
-      <p className="setting-error">{problem}</p>
+    <DialogFrame title={title} busy={false} onClose={onClose} describedBy={problemId}>
+      <p id={problemId} className="setting-error">{problem}</p>
       <div className="project-dialog-buttons">
         <button type="button" className="secondary-button" onClick={onClose}>{messages.closePanel}</button>
       </div>

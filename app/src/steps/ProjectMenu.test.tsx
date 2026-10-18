@@ -131,6 +131,9 @@ test("the delete dialog names the project and its folder, and deletes only once 
   click(menuItem("Delete"));
   expect(dialog()!.textContent).toContain("Plot 7");
   expect(dialog()!.textContent).toContain("D:\\USC projects\\Plot 7");
+  const description = dialog()!.getAttribute("aria-describedby")!.split(" ").map((id) => document.getElementById(id)!.textContent).join(" ");
+  expect(description).toBe("The project Plot 7 and everything in its folder go to the recycle bin or trash, where you can restore them. " +
+                           "Folder: D:\\USC projects\\Plot 7");
   const field = dialog()!.querySelector<HTMLInputElement>("input")!;
   expect(dialogButton("Delete project").disabled).toBe(true);
   type(field, "plot 7");
@@ -158,6 +161,7 @@ test("Reset to the example asks first, names the example, and resets on the conf
   click(menuButton());
   click(menuItem("Reset to the example"));
   expect(dialog()!.textContent).toContain("Perimeter block");
+  expect(document.getElementById(dialog()!.getAttribute("aria-describedby")!)!.textContent).toContain("a fresh copy of the example Perimeter block");
   expect(document.activeElement).toBe(dialogButton("Cancel"));
   await act(async () => click(dialogButton("Reset project")));
   expect(actions.resetToExample).toHaveBeenCalledExactlyOnceWith("Plot 7");

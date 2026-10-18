@@ -6,13 +6,29 @@ import {
 import { App, DeviceStatus, freeProjectName, pollHealth } from "./App";
 import { click, renderForTest, type RenderedOverlay } from "./viewer_overlays/render_for_test";
 
-// The open project stands in for the workspace here: the page's own part is which project it opens, and when it opens it afresh.
+// The open project stands in for the workspace here: the page's own part is which project it opens, when it opens it afresh,
+// and what its settings saver sends around a rename, reset or delete. The stand-in saves as the settings form does: with the
+// config saver of the project, flushed when the workspace closes, and handed to the page.
 const workspaceMounts = vi.hoisted(() => [] as string[]);
+const workspaceSettings = vi.hoisted(() => ({ saver: null as { schedule: (values: Record<string, unknown>) => void } | null, delay: 0 }));
 vi.mock("./steps/ProjectWorkspace", async () => {
   const { useEffect } = await import("react");
+  const { createConfigSaver } = await import("./settings_form/form_state");
+  const { putConfig } = await import("./api_client/client");
   return {
-    ProjectWorkspace: ({ project }: { project: ProjectDetail }) => {
-      useEffect(() => { workspaceMounts.push(project.name); }, []);
+    ProjectWorkspace: ({ token, project, onSettingsSaverReady }: {
+      token: string; project: ProjectDetail; onSettingsSaverReady?: (saver: { flush: () => Promise<string>; cancel: () => void } | null) => void;
+    }) => {
+      useEffect(() => {
+        workspaceMounts.push(project.name);
+        const saver = createConfigSaver((values) => putConfig(token, project.name, values), () => {}, workspaceSettings.delay);
+        workspaceSettings.saver = saver;
+        onSettingsSaverReady?.({ flush: saver.flush, cancel: saver.cancel });
+        return () => {
+          onSettingsSaverReady?.(null);
+          void saver.flush();
+        };
+      }, []);
       return <div className="fake-workspace">{project.modified}</div>;
     },
   };
@@ -26,6 +42,9 @@ afterEach(() => {
   rendered?.unmount();
   rendered = null;
   workspaceMounts.length = 0;
+  workspaceSettings.saver = null;
+  workspaceSettings.delay = 0;
+  window.localStorage.clear();
 });
 
 const RUNNING: HealthReply = { version: "1", warm_up: { state: "running" } };
@@ -121,6 +140,12 @@ class FakeService {
   ];
   examples: ExampleInfo[] = [{ name: "perimeter_block", title: "Perimeter block", description: "A closed block.", project: null }];
   folder: ProjectsFolderReply = { path: "D:\\USC projects", source: "default", can_change: true };
+  /** Settings saves are refused with 409 (a run the page does not know of); false: they are stored. */
+  refuseConfigSaves = false;
+  /** While set, the folder picker stays open until this promise resolves. */
+  pickerClosesWhen: Promise<void> | null = null;
+  /** While set, the examples are answered only once this promise resolves. */
+  examplesAnswerWhen: Promise<void> | null = null;
 
   answer = async (address: string, init?: RequestInit): Promise<Response> => {
     const method = init?.method ?? "GET";
@@ -129,10 +154,15 @@ class FakeService {
     if (path === "/api/health") return json({ version: "1.4.0", warm_up: { state: "ready", device_name: "GPU" } });
     if (path === "/api/schema") return json({ properties: {} });
     if (path === "/api/modes") return json([]);
-    if (path === "/api/examples") return json(this.examples);
-    if (path === "/api/projects") return json(this.projects);
+    if (path === "/api/examples") {
+      await this.examplesAnswerWhen;
+      return json(this.examples);
+    }
+    if (method === "GET" && path === "/api/projects") return json(this.projects);
+    if (method === "POST" && path === "/api/projects") return json(projectDetail(JSON.parse(String(init!.body)).name));
     if (path === "/api/projects-folder") return json(this.folder);
     if (method === "POST" && path === "/api/projects-folder/choose") {
+      await this.pickerClosesWhen;
       this.folder = { ...this.folder, path: "E:\\Other projects", source: "preference" };
       this.projects = [{ name: "Elsewhere", created: "2026-10-18T09:00:00", modified: "2026-10-18T09:00:00", mode: "daylight" }];
       return json({ status: "changed", path: this.folder.path, problem: null });
@@ -142,6 +172,11 @@ class FakeService {
     const name = decodeURIComponent(projectRoute[1]);
     const rest = projectRoute[2] ?? "";
     if (method === "GET" && rest === "") return json(projectDetail(name, "2026-10-17T09:00:00", "perimeter_block"));
+    if (method === "PUT" && rest === "/config") {
+      if (this.refuseConfigSaves) return json({ detail: "A run of this project is in progress." }, 409);
+      return json({ settings: JSON.parse(String(init!.body)).values, grid_plan: null });
+    }
+    if (method === "POST" && rest === "/open-folder") throw new TypeError("Failed to fetch");      // the engine is not reached
     if (method === "POST" && rest === "/rename") return json(projectDetail(JSON.parse(String(init!.body)).new_name));
     if (method === "POST" && rest === "/reset-to-example") return json(projectDetail(name, "2026-10-18T10:30:00", "perimeter_block"));
     if (method === "POST" && rest.startsWith("/examples/")) return json(projectDetail(name, "2026-10-18T10:30:00", "perimeter_block"));
@@ -243,6 +278,138 @@ test("deleting the open project from the top bar returns to the start screen, wh
   expect(service.requests).toContain("DELETE /api/projects/Plot%207?confirm_name=Plot%207");
   expect(topBarMenuButton()).toBeNull();
   expect(page().querySelector(".start-screen")!.textContent).toContain("No projects yet.");
+  expect(document.activeElement).toBe(page().querySelector(".start-heading h1"));
+});
+
+function savedChanges(service: FakeService) {
+  return service.requests.filter((request) => request.startsWith("PUT"));
+}
+
+test("a rename of the open project sends its waiting settings first, under the old name, and nothing after", async () => {
+  const service = new FakeService();
+  workspaceSettings.delay = 60_000;       // the change waits for the rename's flush
+  await renderApp(service);
+  await openPlot7();
+  workspaceSettings.saver!.schedule({ voxel_size: 2 });
+  await chooseFromTopBarMenu("Rename");
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await settle();
+  const putAt = service.requests.indexOf("PUT /api/projects/Plot%207/config");
+  expect(putAt).toBeGreaterThan(-1);
+  expect(putAt).toBeLessThan(service.requests.indexOf("POST /api/projects/Plot%207/rename"));
+  expect(savedChanges(service)).toEqual(["PUT /api/projects/Plot%207/config"]);
+  expect(topBarMenuButton()!.textContent).toContain("Plot 8");
+});
+
+test("a rename whose settings cannot be saved first is not sent, and the dialog says why", async () => {
+  const service = new FakeService();
+  service.refuseConfigSaves = true;
+  await renderApp(service);
+  await openPlot7();
+  workspaceSettings.saver!.schedule({ voxel_size: 2 });
+  await settle();                          // the save fails: a run the page does not know of
+  await chooseFromTopBarMenu("Rename");
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await settle();
+  expect(service.requests.some((request) => request.includes("/rename"))).toBe(false);
+  expect(dialog().querySelector('[role="alert"]')!.textContent)
+    .toBe("The last change to the settings was not saved, so the project was not renamed. Save the settings again, then rename it.");
+});
+
+test("with a failed save outstanding, a reset of the open project sends no settings after the reset", async () => {
+  const service = new FakeService();
+  service.refuseConfigSaves = true;
+  await renderApp(service);
+  await openPlot7();
+  workspaceSettings.saver!.schedule({ voxel_size: 2 });
+  await settle();
+  await chooseFromTopBarMenu("Reset to the example");
+  await act(async () => click(buttonNamed("Reset project", dialog())));
+  await settle();
+  const resetAt = service.requests.indexOf("POST /api/projects/Plot%207/reset-to-example");
+  expect(resetAt).toBeGreaterThan(-1);
+  expect(service.requests.slice(resetAt).filter((request) => request.startsWith("PUT"))).toEqual([]);
+  expect(workspaceMounts).toEqual(["Plot 7", "Plot 7"]);
+});
+
+test("with a failed save outstanding, a delete of the open project sends no settings after the delete", async () => {
+  const service = new FakeService();
+  service.refuseConfigSaves = true;
+  await renderApp(service);
+  await openPlot7();
+  workspaceSettings.saver!.schedule({ voxel_size: 2 });
+  await settle();
+  await chooseFromTopBarMenu("Delete");
+  type(dialog().querySelector("input")!, "Plot 7");
+  await act(async () => click(buttonNamed("Delete project", dialog())));
+  await settle();
+  const deleteAt = service.requests.indexOf("DELETE /api/projects/Plot%207?confirm_name=Plot%207");
+  expect(deleteAt).toBeGreaterThan(-1);
+  expect(service.requests.slice(deleteAt).filter((request) => request.startsWith("PUT"))).toEqual([]);
+});
+
+test("the carving's auto-update choice follows a rename and goes with a delete", async () => {
+  const service = new FakeService();
+  window.localStorage.setItem("usc.autoUpdate.Plot 7", "off");
+  await renderApp(service);
+  await openPlot7();
+  await chooseFromTopBarMenu("Rename");
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await settle();
+  expect(window.localStorage.getItem("usc.autoUpdate.Plot 7")).toBeNull();
+  expect(window.localStorage.getItem("usc.autoUpdate.Plot 8")).toBe("off");
+  await chooseFromTopBarMenu("Delete");
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => click(buttonNamed("Delete project", dialog())));
+  await settle();
+  expect(window.localStorage.getItem("usc.autoUpdate.Plot 8")).toBeNull();
+});
+
+test("a request that does not reach the engine is said in words, not as the browser's error", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await openPlot7();
+  await chooseFromTopBarMenu("Open folder");
+  expect(dialog().textContent).toContain("The request did not reach the USC engine. Check that it is still running, then try again.");
+  expect(dialog().textContent).not.toContain("TypeError");
+});
+
+test("on the way back to the start screen, the examples wait to be read again before they can be chosen", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await openPlot7();
+  let answerExamples: () => void = () => {};
+  service.examplesAnswerWhen = new Promise((resolve) => { answerExamples = resolve; });
+  service.examples = [{ ...service.examples[0], project: "Plot 7" }];
+  click(buttonNamed("Projects"));
+  await settle();
+  expect(startChoice("Perimeter block")).toBeUndefined();
+  await act(async () => answerExamples());
+  await settle();
+  await act(async () => click(startChoice("Perimeter block")!));
+  await settle();
+  expect(service.requests.filter((request) => request.includes("/examples/"))).toEqual([]);     // opened, not made again
+});
+
+test("a project opened while the folder picker is open is closed when the folder changes", async () => {
+  const service = new FakeService();
+  let closePicker: () => void = () => {};
+  service.pickerClosesWhen = new Promise((resolve) => { closePicker = resolve; });
+  await renderApp(service);
+  click(buttonNamed("Change folder"));
+  await settle();
+  // The start screen waits while the picker is open; a project is opened past it here, as nothing in the page can.
+  type(page().querySelector<HTMLInputElement>(".start-name-field")!, "Plot 9");
+  await act(async () => page().querySelector(".start-new-project")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await settle();
+  expect(topBarMenuButton()!.textContent).toContain("Plot 9");
+  await act(async () => closePicker());
+  await settle();
+  expect(topBarMenuButton()).toBeNull();
+  expect(startChoice("Elsewhere")).toBeDefined();
 });
 
 test("resetting the open project to its example opens it afresh", async () => {

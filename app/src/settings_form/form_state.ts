@@ -367,5 +367,7 @@ export function useSettingsForm(token: string, project: string, start: FormStart
     saver.current.schedule(valuesToSend(latestForm.current));
     return saver.current.flush();
   }, []);
-  return { form, dispatch, flushSave, changeAndSave, currentForm, pendingSave: form.pendingSave };
+  // Drops a waiting or failed save, so the flush when the project closes sends nothing: for a project renamed, reset or deleted.
+  const cancelSave = useCallback(() => saver.current?.cancel(), []);
+  return { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm, pendingSave: form.pendingSave };
 }

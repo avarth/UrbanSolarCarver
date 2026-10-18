@@ -85,6 +85,8 @@ export const messages = {
     `The inputs, settings and results of ${projectName} are replaced with a fresh copy of the example ${exampleTitle}. ` +
     "The current ones go to the recycle bin or trash. The project keeps its name.",
   resetProjectButton: "Reset project",
+  settingsNotSavedSoNotRenamed: "The last change to the settings was not saved, so the project was not renamed. Save the settings again, then rename it.",
+  requestDidNotReachEngine: "The request did not reach the USC engine. Check that it is still running, then try again.",
 
   // The steps and their summary lines (4.1)
   stepTitles: {

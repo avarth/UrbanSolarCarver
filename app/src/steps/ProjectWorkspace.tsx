@@ -9,7 +9,7 @@ import {
   type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
-import { analysisDiffersFromStored, shownValue, useSettingsForm } from "../settings_form/form_state";
+import { analysisDiffersFromStored, shownValue, useSettingsForm, type SaveOutcome } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { localBounds, localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
@@ -52,6 +52,16 @@ interface ProjectWorkspaceProps {
   /** A request failed: the app shows the engine-stopped or access-lost overlay when the failure is one of those. */
   onServiceProblem: (error: unknown) => void;
   onShowProjects: () => void;
+  /** Given the saver of the settings once the workspace is open, and null when it closes: the app saves or drops before a rename, reset or delete. */
+  onSettingsSaverReady?: (saver: OpenProjectSettingsSaver | null) => void;
+}
+
+/** The settings saver of the open project, as the app uses it around a rename, reset or delete of that project. */
+export interface OpenProjectSettingsSaver {
+  /** Sends a waiting or failed save now; resolves with how it ended. */
+  flush: () => Promise<SaveOutcome>;
+  /** Drops a waiting or failed save, so closing the project sends nothing. */
+  cancel: () => void;
 }
 
 /** Why a request about the inputs failed, in words for the file box. */
@@ -64,8 +74,12 @@ function inputProblemText(error: unknown, fileName: string): string {
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { token, project, modes, warmUpState, runs, onServiceProblem } = props;
   const formStart = useMemo(() => ({ schema: props.schema, modes, settings: project.settings, gridPlan: project.grid_plan }), []);
-  const { form, dispatch, flushSave, changeAndSave, currentForm } = useSettingsForm(token, project.name, formStart);
+  const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useSettingsForm(token, project.name, formStart);
   const runActive = runs.activeRun?.project === project.name;
+  useEffect(() => {
+    props.onSettingsSaverReady?.({ flush: flushSave, cancel: cancelSave });
+    return () => props.onSettingsSaverReady?.(null);
+  }, []);
   const [files, setFiles] = useState<Record<InputRole, InputFileInfo[]>>({
     max_volume: project.inputs.max_volume ?? [], test_surfaces: project.inputs.test_surfaces ?? [], weather: project.inputs.weather ?? [],
   });

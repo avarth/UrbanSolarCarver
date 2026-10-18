@@ -41,6 +41,20 @@ export function readAutoUpdate(project: string): boolean {
   }
 }
 
+/**
+ * Carries the auto-update choice of a project to its new name (*to*), or drops it (*to* null) for a project deleted or reset
+ * to its example. Without storage there is nothing to carry.
+ */
+export function moveAutoUpdateChoice(from: string, to: string | null): void {
+  try {
+    const choice = window.localStorage.getItem(autoUpdateStorageKey(from));
+    window.localStorage.removeItem(autoUpdateStorageKey(from));
+    if (to !== null && choice !== null) window.localStorage.setItem(autoUpdateStorageKey(to), choice);
+  } catch {
+    // storage is blocked: no choice was kept
+  }
+}
+
 export function useAutoUpdate(project: string): [boolean, (on: boolean) => void] {
   const [autoUpdate, setAutoUpdate] = useState(() => readAutoUpdate(project));
   const remember = (on: boolean) => {

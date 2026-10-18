@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { HealthReply, ProjectsFolderReply } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ProjectActions } from "./ProjectMenu";
-import { newestFirst, StartScreen, type ProjectsFolderChange } from "./StartScreen";
+import { exampleTitleOf, newestFirst, StartScreen, type ProjectsFolderChange } from "./StartScreen";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -153,4 +153,78 @@ test("each project has its menu; the run of a project makes its own menu wait, n
   click(menuButtons[1]);
   click(menuButtons[0]);
   expect(card.querySelector('[role="menuitem"][aria-disabled="true"]')).toBeNull();
+});
+
+test("while the folder picker is open, every choice of the start screen waits, described by the line about the picker", async () => {
+  let answer: (outcome: ProjectsFolderChange) => void = () => {};
+  rendered = renderForTest(startScreen(WARMING_UP, { onChangeProjectsFolder: () => new Promise((resolve) => { answer = resolve; }) }));
+  const field = rendered.container.querySelector<HTMLInputElement>(".start-name-field")!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(field, "Plot 9");
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  click(changeFolderButton()!);
+  const pickerLineId = folderLine().querySelector('[role="status"]')!.id;
+  const waiting = [
+    ...rendered.container.querySelectorAll<HTMLButtonElement>(".start-choice"),
+    ...rendered.container.querySelectorAll<HTMLButtonElement>(".project-menu-button"),
+    rendered.container.querySelector<HTMLButtonElement>(".start-new-project button[type=submit]")!,
+  ];
+  expect(waiting).toHaveLength(2 + 1 + 2 + 1);       // two projects, one example, two menus, Create project
+  for (const button of waiting) {
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute("aria-describedby")).toBe(pickerLineId);
+  }
+  await act(async () => answer({ status: "cancelled" }));
+  expect(waiting.every((button) => !button.disabled)).toBe(true);
+});
+
+test("after a rename the focus goes to the renamed project's menu once the list shows it", async () => {
+  const projectActions: ProjectActions = { ...NO_ACTIONS, rename: vi.fn(async () => null) };
+  rendered = renderForTest(startScreen(WARMING_UP, { projectActions }));
+  const menuOf = (name: string) => rendered!.container.querySelector<HTMLButtonElement>(`[aria-label="Actions for ${name}"]`);
+  click(menuOf("Older")!);
+  click([...rendered.container.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === "Rename")!);
+  const dialogField = rendered.container.querySelector<HTMLInputElement>('[role="dialog"] input')!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(dialogField, "Oldest");
+    dialogField.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    rendered!.container.querySelector('[role="dialog"] form')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  rendered.rerender(startScreen(WARMING_UP, { projectActions, projects: [PROJECTS[1], { ...PROJECTS[0], name: "Oldest" }] }));
+  expect(document.activeElement).toBe(menuOf("Oldest"));
+});
+
+test("after a delete the focus goes to the projects heading once the project is gone from the list", async () => {
+  const projectActions: ProjectActions = { ...NO_ACTIONS, delete: vi.fn(async () => null) };
+  rendered = renderForTest(startScreen(WARMING_UP, { projectActions }));
+  click(rendered.container.querySelector('[aria-label="Actions for Older"]')!);
+  click([...rendered.container.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === "Delete")!);
+  const dialogField = rendered.container.querySelector<HTMLInputElement>('[role="dialog"] input')!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(dialogField, "Older");
+    dialogField.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    rendered!.container.querySelector('[role="dialog"] form')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  rendered.rerender(startScreen(WARMING_UP, { projectActions, projects: [PROJECTS[1]] }));
+  expect(document.activeElement).toBe(rendered.container.querySelectorAll(".start-card h2")[1]);
+});
+
+test("Reset to the example is offered only once the examples are read, and names the example by its title", () => {
+  const fromExample = [{ ...PROJECTS[1], example: "new_building" }];
+  rendered = renderForTest(startScreen(WARMING_UP, { projects: fromExample, examples: null }));
+  const menuItems = () => [...rendered!.container.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent);
+  click(rendered.container.querySelector(".project-menu-button")!);
+  expect(menuItems()).not.toContain("Reset to the example");
+  click(rendered.container.querySelector(".project-menu-button")!);
+  expect(exampleTitleOf("new_building", null)).toBeNull();
+  expect(exampleTitleOf("unknown_example", EXAMPLES)).toBeNull();
+  expect(exampleTitleOf("new_building", EXAMPLES)).toBe("New building among neighbors");
+  rendered.rerender(startScreen(WARMING_UP, { projects: fromExample }));
+  click(rendered.container.querySelector(".project-menu-button")!);
+  expect(menuItems()).toContain("Reset to the example");
 });
