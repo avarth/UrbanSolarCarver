@@ -32,6 +32,8 @@ export interface FormState {
   /** The settings the user set, which are what a save sends besides the mode. */
   userValues: Record<string, unknown>;
   startingValuesByMode: Record<string, Record<string, unknown>>;
+  /** How each mode scores ("weighted_sum", "violation_count"): some automatic values depend on it (the slope limit). */
+  scoreKindByMode: Record<string, string>;
   schemaProperties: Record<string, SchemaProperty>;
   /** The messages of the last rejected save, by setting name. */
   fieldErrors: Record<string, string>;
@@ -71,6 +73,7 @@ function startingValuesOf(state: Pick<FormState, "startingValuesByMode" | "mode"
 export function initialFormState({ schema, modes, settings, gridPlan }: FormStart): FormState {
   const schemaProperties = (schema.properties ?? {}) as Record<string, SchemaProperty>;
   const startingValuesByMode = Object.fromEntries(modes.map((mode) => [mode.name, mode.starting_values]));
+  const scoreKindByMode = Object.fromEntries(modes.map((mode) => [mode.name, mode.score_kind]));
   const mode = typeof settings.mode === "string" ? settings.mode : String(schemaProperties.mode?.default);
   const startingValues = startingValuesByMode[mode] ?? {};
   const userValues = Object.fromEntries(Object.entries(settings).filter(([name, value]) =>
@@ -78,7 +81,7 @@ export function initialFormState({ schema, modes, settings, gridPlan }: FormStar
   // Stored settings whose grid is over the budget (a larger maximum volume came after them) open with Voxel size to fix, as a
   // save of them would be refused; the message under the field is the step's own (SettingsStep), so the text here stays empty.
   const fieldErrors: Record<string, string> = gridIsOverBudget(gridPlan) ? { voxel_size: "" } : {};
-  return { mode, userValues, startingValuesByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
+  return { mode, userValues, startingValuesByMode, scoreKindByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
            pendingSave: false, changeCount: 0, saveFailure: null };
 }
 

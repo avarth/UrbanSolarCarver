@@ -305,3 +305,20 @@ test("a number outside the engine's range is refused in the field, with a messag
   expect(message()).toBe("Use 1 or more.");
   expect(onChange).toHaveBeenCalledTimes(2);
 });
+
+test("a setting whose empty value is automatic shows 'automatic' in the empty field and says in its tooltip what empty does in the mode", () => {
+  const tooltipOf = (mode: string) => {
+    rendered?.unmount();
+    rendered = renderForTest(<SettingField view={viewOf("carving", mode, "max_slope_deg")} form={formFor(mode)} onChange={() => {}} />);
+    expect(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!.placeholder).toBe("automatic");
+    click(rendered.container.querySelector("button.setting-info")!);
+    return rendered.container.querySelector("[role='tooltip']")!.textContent;
+  };
+  expect(tooltipOf("daylight")).toContain("Left empty, it is 75 ° in Daylight.");
+  expect(tooltipOf("time-based")).toContain("Left empty, it is off in Sun at set hours.");
+  expect(tooltipOf("tilted_plane")).toContain("Left empty, it is off in Angle rule.");
+  // A setting with a value of its own shows no placeholder.
+  rendered?.unmount();
+  rendered = renderForTest(<SettingField view={viewOf("settings", "daylight", "voxel_size")} form={formFor("daylight")} onChange={() => {}} />);
+  expect(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!.placeholder).toBe("");
+});

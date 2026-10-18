@@ -3,6 +3,7 @@
 import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
 import { withUnit } from "../steps/format_numbers";
+import { plainModeName } from "../steps/step_summaries";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
   ANALYSIS_PERIOD_FIELDS, fromDisplayValue, thresholdIsShadowToleratedIn, toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
@@ -56,6 +57,19 @@ function typesOf(property: SchemaProperty | undefined): (string | undefined)[] {
 export function rangeOf(property: SchemaProperty | undefined): NumberRange {
   const bounded = property?.anyOf?.find((member) => member.type === "number" || member.type === "integer") ?? property;
   return { minimum: bounded?.minimum, maximum: bounded?.maximum, exclusiveMinimum: bounded?.exclusiveMinimum, exclusiveMaximum: bounded?.exclusiveMaximum };
+}
+
+// The engine's automatic slope limit (resolve_max_slope_deg): 75° in the weighted modes, off in the others.
+const AUTOMATIC_SLOPE_LIMIT_DEGREES = 75;
+
+/**
+ * What an empty setting does in the form's mode, for a setting whose empty value the engine fills by mode, or null. The slope
+ * limit is the one: 75° in the weighted modes, off in Sun at set hours and the angle rule. (Score smoothing says it in its help.)
+ */
+export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" | "scoreKindByMode">): string | null {
+  if (view.name !== "max_slope_deg") return null;
+  const valueText = form.scoreKindByMode[form.mode] === "weighted_sum" ? withUnit(String(AUTOMATIC_SLOPE_LIMIT_DEGREES), unitOfValue(view)) : messages.switchedOff;
+  return messages.emptyMeansInMode(valueText, plainModeName(form.mode));
 }
 
 /** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */
@@ -152,7 +166,8 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
           <div className="setting-control">
             <NumberInput id={inputId} value={typeof shown === "number" ? shown : null} mayBeEmpty={types.includes("null")}
                          wholeNumbers={types.includes("integer")} invalid={control.invalid} describedBy={control.describedBy} disabled={disabled}
-                         {...(isPercent ? { minimum: 0, maximum: 100 } : range)} onValue={changeTo} onRefused={setRefusedInput} />
+                         {...(isPercent ? { minimum: 0, maximum: 100 } : range)} onValue={changeTo} onRefused={setRefusedInput}
+                         placeholder={types.includes("null") && defaultValue(form, view.name) === null ? messages.automatic : undefined} />
             {unit && <span className="setting-unit">{unit}</span>}
           </div>
         );
@@ -166,7 +181,8 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
           : <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>}
         <SettingTooltip settingLabel={view.label} help={view.help} defaultText={defaultTextOf(view, form, isShadowTolerated)}
                         configName={view.widget === "analysis_period" ? messages.analysisPeriodConfigNames : view.name}
-                        extraLine={view.name === "voxel_size" && form.gridPlan ? messages.gridSize(form.gridPlan.resolution, form.gridPlan.total_voxels) : undefined} />
+                        extraLine={view.name === "voxel_size" && form.gridPlan ? messages.gridSize(form.gridPlan.resolution, form.gridPlan.total_voxels)
+                          : (emptyMeaningOf(view, form) ?? undefined)} />
       </div>
       {controlElement}
       {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{refusedInput ?? extras?.errorContent ?? error}</span></p>}
