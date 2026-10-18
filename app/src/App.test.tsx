@@ -506,3 +506,24 @@ test("renaming the open project keeps the open step; opening a project and reset
   expect(workspaceSteps.startedWith).toHaveLength(4);
   expect(workspaceSteps.startedWith.at(-1)).toBeUndefined();
 });
+
+test("after a rename on the start screen, the examples wait to be read again: their project may be the old name", async () => {
+  const service = new FakeService();
+  service.examples = [{ ...service.examples[0], project: "Plot 7" }];
+  await renderApp(service);
+  let answerExamples: () => void = () => {};
+  service.examplesAnswerWhen = new Promise((resolve) => { answerExamples = resolve; });
+  service.examples = [{ ...service.examples[0], project: "Plot 8" }];
+  click(page().querySelector<HTMLButtonElement>(".start-screen .project-menu-button")!);
+  click(buttonNamed("Rename", page().querySelector('[role="menu"]')!));
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await settle();
+  expect(service.requests).toContain("POST /api/projects/Plot%207/rename");
+  expect(startChoice("Perimeter block")).toBeUndefined();
+  await act(async () => answerExamples());
+  await settle();
+  await act(async () => click(startChoice("Perimeter block")!));
+  await settle();
+  expect(service.requests).toContain("GET /api/projects/Plot%208");
+});

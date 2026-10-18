@@ -152,8 +152,12 @@ export function App() {
     };
   }, []);
 
-  /** The projects and the examples, whose project (the one made from each) changes with every project made, renamed or deleted. */
+  /**
+   * The projects and the examples, whose project (the one made from each) changes with every project made, renamed or deleted:
+   * the examples the start screen shows wait for their answer.
+   */
   const readStartScreenLists = () => {
+    setExamplesCurrent(false);
     listProjects(accessToken).then(setProjects).catch(handleServiceProblem);
     getExamples(accessToken).then((read) => {
       setExamples(read);
