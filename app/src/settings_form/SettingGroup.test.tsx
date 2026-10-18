@@ -183,10 +183,13 @@ test("a group without essential settings is one fold titled with the group name"
   expect(rendered.container.querySelector("button.setting-fold")!.textContent).toBe("How much to carve");
 });
 
-test("the building massing essentials sit side by side", () => {
+test("the building massing sliders each take a row of their own, as in every other group", () => {
   const [, massing] = settingsForStep("envelope_and_massing", "daylight");
   rendered = renderForTest(<SettingGroup group={massing} form={formFor("daylight")} onChange={() => {}} />);
-  expect(rendered.container.querySelector(".setting-group-essential")!.classList).toContain("setting-group-side-by-side");
+  const essentials = rendered.container.querySelector(".setting-group-essential")!;
+  expect([...essentials.classList]).toEqual(["setting-group-essential"]);
+  expect(essentials.querySelectorAll(":scope > .setting-field input[type='range']")).toHaveLength(3);
+  expect(readFileSync("src/settings_form/settings_form.css", "utf8")).not.toMatch(/side-by-side/);
 });
 
 test("a field error is shown under its field, and opens the fold that holds it", () => {

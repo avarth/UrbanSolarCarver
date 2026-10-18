@@ -93,9 +93,14 @@ function envelopeAndMassingSummary(state: ProjectViewState): string {
   return messages.envelopeAndMassingParts(messages.envelopePartStates[exporting], messages.massingPartStates[massing]);
 }
 
-/** "Ready" once both parts are built, or the part that is (Export offers each file once its stage exists). */
+/**
+ * "Ready" once both parts are built, or the part that is (Export offers each file once its stage exists); "Out of date" while a
+ * part that is built is out of date, as its files are then marked.
+ */
 function exportSummary(state: ProjectViewState): string {
-  const hasEnvelope = state.stages.exporting !== "missing", hasMassing = state.stages.massing !== "missing";
+  const { exporting, massing } = state.stages;
+  if (exporting === "out_of_date" || massing === "out_of_date") return messages.outOfDateSummary;
+  const hasEnvelope = exporting !== "missing", hasMassing = massing !== "missing";
   if (hasEnvelope && hasMassing) return messages.exportReady;
   if (hasEnvelope) return messages.envelopeReady;
   return hasMassing ? messages.massingReady : messages.notBuiltYet;

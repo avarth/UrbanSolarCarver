@@ -304,6 +304,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     ),
   };
 
+  // The 3D view follows the step: an envelope written by a run that then failed is not drawn, as its stage is not recorded.
+  const viewerResults: RunResults = { ...results, envelope: envelopeBuilt ? results.envelope : null };
   const warningsOfStep: Partial<Record<StepName, number>> = {};
   if (record !== null && record.state.final !== null && record.state.issues.length > 0) warningsOfStep[STEP_OF_ORIGIN[record.origin]] = record.state.issues.length;
 
@@ -311,10 +313,10 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     content,
     pinnedAction: { carving: buildFromCarvingButton },
     viewer: {
-      results: { scorePoints: results.scorePoints, carving: results.summary?.carving ?? null, skyDome: results.skyDome, envelope: results.envelope,
-                 massing: results.massing },
+      results: { scorePoints: viewerResults.scorePoints, carving: viewerResults.summary?.carving ?? null, skyDome: viewerResults.skyDome,
+                 envelope: viewerResults.envelope, massing: viewerResults.massing },
       dimmedLayers: dimmedLayersOf(record, stages, stagesBeingFetched),
-      missingLayers: missingLayersOf(record, results, context.isWeightedMode),
+      missingLayers: missingLayersOf(record, viewerResults, context.isWeightedMode),
       runProgress: running ? runProgressShare(record.state) : null,
       overlayContent: runReportOpen
         ? <RunReportPanel token={token} project={project} onClose={() => setRunReportOpen(false)} onServiceProblem={context.onServiceProblem} />

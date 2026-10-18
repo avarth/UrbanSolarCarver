@@ -87,6 +87,7 @@ export const messages = {
   resetProjectButton: "Reset project",
   settingsNotSavedSoNotRenamed: "The last change to the settings was not saved, so the project was not renamed. Save the settings again, then rename it.",
   requestDidNotReachEngine: "The request did not reach the USC engine. Check that it is still running, then try again.",
+  requestRefusedWithoutReason: (status: number) => `The USC engine refused the request and gave no reason (status ${status}). Try again.`,
 
   // The steps and their summary lines (4.1)
   stepTitles: {

@@ -70,8 +70,16 @@ test("the carving, envelope and export summaries follow the stage status", () =>
   expect(stepSummary("carving", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("Out of date");     // no run summary read
   expect(stepSummary("envelope_and_massing", stateWith({}))).toBe("Not built yet");
   expect(stepSummary("export", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("Ready");
-  expect(stepSummary("export", stateWith({ stages: { exporting: "out_of_date", massing: "current" } }))).toBe("Ready");
   expect(stepSummary("export", stateWith({}))).toBe("Not built yet");
+});
+
+test("the export summary says out of date, not ready, while a built part is out of date", () => {
+  const summaryOf = (exporting: StageState, massing: StageState) => stepSummary("export", stateWith({ stages: { exporting, massing } }));
+  expect(summaryOf("out_of_date", "out_of_date")).toBe("Out of date");
+  expect(summaryOf("out_of_date", "current")).toBe("Out of date");
+  expect(summaryOf("current", "out_of_date")).toBe("Out of date");
+  expect(summaryOf("out_of_date", "missing")).toBe("Out of date");
+  expect(summaryOf("missing", "out_of_date")).toBe("Out of date");
 });
 
 test("the envelope and massing summary names what exists of the two parts (R2 5)", () => {

@@ -3,10 +3,11 @@
 // times before the page says the engine stopped, so one lost request does not end the session. The runs are followed here, one
 // at a time as the engine runs them, so a run goes on being followed while the start screen or another project is open. The
 // projects folder and the project menus (on the start screen and on the project name in the top bar) send their requests here:
-// a rename keeps the open project open under its new name, a delete of it returns to the start screen, a reset opens it afresh.
+// a rename keeps the open project open under its new name and on its open step, a delete of it returns to the start screen, a
+// reset opens it afresh.
 import { useEffect, useRef, useState } from "react";
 import {
-  chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, getExamples, getHealth, getModes, getProject, getProjectsFolder,
+  ApiError, chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, getExamples, getHealth, getModes, getProject, getProjectsFolder,
   getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, refusalDetailOf, renameProject, resetProjectToExample, serviceProblemOf,
   type ExampleInfo, type HealthReply, type ModeInfo, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
@@ -15,7 +16,7 @@ import { MessageParts } from "./settings_form/SettingTooltip";
 import { projectFolderPath, sameProjectName } from "./steps/ProjectDialogs";
 import { ProjectMenu, type ProjectActions } from "./steps/ProjectMenu";
 import { moveAutoUpdateChoice } from "./steps/CarvingStep";
-import { ProjectWorkspace, type OpenProjectSettingsSaver } from "./steps/ProjectWorkspace";
+import { ProjectWorkspace, type OpenProjectSettingsSaver, type WorkspaceSteps } from "./steps/ProjectWorkspace";
 import { useRunLoop } from "./steps/run_state";
 import { cpuChosenAtLaunch, exampleTitleOf, isWarmingUp, Spinner, StartScreen, type ProjectsFolderChange } from "./steps/StartScreen";
 import "./App.css";
@@ -115,6 +116,9 @@ export function App() {
   const [projectsFolder, setProjectsFolder] = useState<ProjectsFolderReply | null>(null);
   // Counts the resets of the open project: the workspace is made again for the fresh copy, which keeps the project's name.
   const [openProjectResets, setOpenProjectResets] = useState(0);
+  // The workspace is made again for a renamed project too, and then opens with the steps it had open; otherwise with Inputs.
+  const openWorkspaceSteps = useRef<WorkspaceSteps | undefined>(undefined);
+  const [workspaceStartSteps, setWorkspaceStartSteps] = useState<WorkspaceSteps | undefined>(undefined);
   // The open project was deleted from the top bar: the start screen then takes the focus on its heading.
   const [focusStartScreenHeading, setFocusStartScreenHeading] = useState(false);
   const openProjectSettings = useRef<OpenProjectSettingsSaver | null>(null);
@@ -172,6 +176,7 @@ export function App() {
   const openFrom = async (request: Promise<ProjectDetail>): Promise<string | null> => {
     try {
       setOpenProject(await request);
+      setWorkspaceStartSteps(undefined);
       setFocusStartScreenHeading(false);
       return null;
     } catch (error) {
@@ -180,10 +185,12 @@ export function App() {
     }
   };
 
-  /** A failed request in words: the service's reason, or that it did not reach the engine. */
+  /** A failed request in words: the service's reason, that it gave none (with the status), or that it did not reach the engine. */
   const failureText = (error: unknown): string => {
     handleServiceProblem(error);
-    return refusalDetailOf(error) ?? (serviceProblemOf(error) === "engine_stopped" ? messages.requestDidNotReachEngine : String(error));
+    const reason = refusalDetailOf(error);
+    if (reason !== null) return reason;
+    return error instanceof ApiError ? messages.requestRefusedWithoutReason(error.status) : messages.requestDidNotReachEngine;
   };
 
   /** Resolves with the service's reason when the request fails, or null once it and *then* are done. */
@@ -214,8 +221,9 @@ export function App() {
       if (isOpenProject(name) && (await openProjectSettings.current?.flush()) === "failed") return messages.settingsNotSavedSoNotRenamed;
       return reasonIfRefused(() => renameProject(accessToken, name, newName), (renamed) => {
         afterProjectChange(name, renamed.name, true);
-        if (isOpenProject(name)) setOpenProject(renamed);
-        else readStartScreenLists();
+        if (!isOpenProject(name)) return readStartScreenLists();
+        setOpenProject(renamed);
+        setWorkspaceStartSteps(openWorkspaceSteps.current);
       });
     },
     delete: async (name, confirmName) => {
@@ -233,6 +241,7 @@ export function App() {
         afterProjectChange(name, null, false);
         if (!isOpenProject(name)) return readStartScreenLists();
         setOpenProject(reset);
+        setWorkspaceStartSteps(undefined);
         setOpenProjectResets((resets) => resets + 1);
       });
     },
@@ -242,8 +251,10 @@ export function App() {
     try {
       const choice = await chooseProjectsFolder(accessToken);
       if (choice.status === "changed") {
-        // The start screen waits while the picker is open; should a project be open all the same, it belongs to the old folder.
+        // The start screen waits while the picker is open; should a project be open all the same, it belongs to the old folder,
+        // as does the last run: a project of the same name in the new folder does not show that run's failure or warnings.
         openProjectSettings.current?.cancel();
+        if (runs.current !== null) runs.forget(runs.current.project);
         setOpenProject(null);
         readStartScreenLists();
       }
@@ -287,7 +298,8 @@ export function App() {
       {openProject !== null && setup !== null && (
         <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes}
                           warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
-                          onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }} />
+                          onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
+                          startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }} />
       )}
     </div>
   );

@@ -53,12 +53,15 @@ interface DownloadListState {
  * the file that was built, under its own format: a format chosen since without a build has no file yet.
  */
 export function exportDownloads({ project, meshFormat, envelopeFile, envelope, massing }: DownloadListState): ExportDownload[] {
-  const builtFormat = envelopeFile === null ? null : meshFormatOf(envelopeFile);
-  const envelopeFiles: ExportDownload[] = envelope === "missing" || envelopeFile === null || builtFormat === null ? [] : [
-    { label: messages.envelopeMeshDownload(meshFormatName(builtFormat)), address: runFileUrl(project, exportedMeshPath(envelopeFile)),
+  const envelopeFiles: ExportDownload[] = [];
+  if (envelope !== "missing" && envelopeFile !== null) {
+    const builtFormat = meshFormatOf(envelopeFile);
+    envelopeFiles.push({
+      label: messages.envelopeMeshDownload(meshFormatName(builtFormat)), address: runFileUrl(project, exportedMeshPath(envelopeFile)),
       fileName: `${project} envelope.${builtFormat}`, outOfDate: envelope === "out_of_date",
-      note: builtFormat === meshFormat ? undefined : messages.envelopeBuiltInOtherFormat(meshFormatName(builtFormat), meshFormatName(meshFormat)) },
-  ];
+      note: builtFormat === meshFormat ? undefined : messages.envelopeBuiltInOtherFormat(meshFormatName(builtFormat), meshFormatName(meshFormat)),
+    });
+  }
   const massingOutOfDate = massing === "out_of_date";
   const massingFiles: ExportDownload[] = massing === "missing" ? [] : [
     { label: messages.massingObjDownload, address: runFileUrl(project, MASSING_OBJ_PATH), fileName: `${project} massing.obj`, outOfDate: massingOutOfDate },

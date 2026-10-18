@@ -54,6 +54,16 @@ interface ProjectWorkspaceProps {
   onShowProjects: () => void;
   /** Given the saver of the settings once the workspace is open, and null when it closes: the app saves or drops before a rename, reset or delete. */
   onSettingsSaverReady?: (saver: OpenProjectSettingsSaver | null) => void;
+  /** The steps to open with (the workspace made again for a renamed project); absent: Inputs. */
+  startSteps?: WorkspaceSteps;
+  /** Told the open step and the step the view shows whenever either changes. */
+  onStepsChange?: (steps: WorkspaceSteps) => void;
+}
+
+/** The step open in the panel (null when all are closed) and the step whose layers the 3D view shows: the last one opened. */
+export interface WorkspaceSteps {
+  open: StepName | null;
+  view: StepName;
 }
 
 /** The settings saver of the open project, as the app uses it around a rename, reset or delete of that project. */
@@ -91,8 +101,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
   const storedAnalysisRevision = useRef(form.storedAnalysisRevision);
   storedAnalysisRevision.current = form.storedAnalysisRevision;
-  const [openStep, setOpenStep] = useState<StepName | null>("inputs");
-  const [viewStep, setViewStep] = useState<StepName>("inputs");     // the step whose layers the view shows: the last one opened
+  const [openStep, setOpenStep] = useState<StepName | null>(props.startSteps?.open ?? "inputs");
+  const [viewStep, setViewStep] = useState<StepName>(props.startSteps?.view ?? "inputs");
+  useEffect(() => props.onStepsChange?.({ open: openStep, view: viewStep }), [openStep, viewStep]);
   const [framingRequest, setFramingRequest] = useState(0);
   const panel = useRef<HTMLElement>(null);
   const [addFilesRequest, setAddFilesRequest] = useState(0);

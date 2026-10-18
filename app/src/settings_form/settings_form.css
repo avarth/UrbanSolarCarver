@@ -24,17 +24,6 @@
   align-self: stretch;
 }
 
-/* The fields sit on their bottom edge, so the inputs line up when a label takes two lines. */
-.setting-group-side-by-side {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: end;
-  gap: calc(var(--space-unit) * 2);
-}
-
-.setting-group-side-by-side .setting-control { flex-wrap: nowrap; gap: var(--space-unit); }
-.setting-group-side-by-side .setting-number { flex: 1 1 auto; width: auto; min-width: 0; }
-
 /* The fold reads as a link: accent text, no box. */
 .setting-fold {
   padding: 0;
@@ -159,11 +148,6 @@
 .balance-handle:disabled::-moz-range-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
 
 .setting-slider-control { align-self: stretch; flex-wrap: nowrap; }
-
-/* In the three massing columns the slider takes its own row above the number field. */
-.setting-group-side-by-side .setting-slider-control { flex-wrap: wrap; }
-.setting-group-side-by-side .setting-slider-control .setting-range { flex-basis: 100%; min-width: 0; }
-.setting-group-side-by-side .setting-slider-control .setting-number { flex: 1 1 0; }
 
 /* The balance temperature (R2 4.2): two handles on one track, the dead band between them in the accent colour and named above
    it. The two sliders lie over each other; only their handles take the pointer, so each handle can be dragged where it is. */

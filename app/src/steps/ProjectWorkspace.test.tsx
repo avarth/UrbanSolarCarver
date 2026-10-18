@@ -1,6 +1,6 @@
 // The open project as a whole, against a fake service: the settings form, the run loop, the stage status, the results and the
 // layers of the 3D view together, as the unit tests of each cannot show them.
-import { act } from "react";
+import { act, type ComponentProps } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { ModeInfo, ProjectDetail } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
@@ -61,7 +61,7 @@ class FakeService {
   readonly savedValues: Record<string, unknown>[] = [];
   readonly runsStarted: string[][] = [];
   stages: Record<PipelineStage, StageState>;
-  summary: { carving: typeof CARVING | null; envelope: typeof ENVELOPE | null; massing: typeof MASSING | null };
+  summary: { carving: typeof CARVING | null; envelope: { mesh_file: string; envelope_volume_m3: number } | null; massing: typeof MASSING | null };
   /** The status every save is refused with (409: a run of the project the page does not know of); null: saves are stored. */
   refuseSavesWith: number | null = null;
   /** While set, a request to start a run gets its reply only once this promise resolves. */
@@ -101,6 +101,7 @@ class FakeService {
     }
     if (path === "/run/summary") return json(this.summary);
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
+    if (path === "/run/files/exporting/export.obj" && this.summary.envelope?.mesh_file === "export.obj") return new Response(TRIANGLE_OBJ);
     return json({ detail: "Not found" }, 404);
   };
 
@@ -140,12 +141,12 @@ const settle = () => act(async () => {
 });
 const waitForTheSave = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, SAVE_DELAY_MILLISECONDS + 50)); });
 
-async function openWorkspace(opened: ProjectDetail) {
+async function openWorkspace(opened: ProjectDetail, steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange"> = {}) {
   vi.stubGlobal("fetch", vi.fn(service.answer));
   function Page() {
     const runs = useRunLoop("token", () => {});
     return <ProjectWorkspace token="token" project={opened} schema={SCHEMA} modes={MODES} warmUpState="ready" runs={runs}
-                             onServiceProblem={() => {}} onShowProjects={() => {}} />;
+                             onServiceProblem={() => {}} onShowProjects={() => {}} {...steps} />;
   }
   rendered = renderForTest(<Page />);
   await settle();
@@ -508,4 +509,32 @@ test("the 3D view and Export use the envelope file that was built, not a format 
   openStep("Export");
   const envelopeDownload = container().querySelector(".download-list li")!;
   expect(envelopeDownload.textContent).toBe("Carved envelope (PLY)Out of dateBuilt as PLY; the next envelope build writes OBJ.");
+});
+
+test("the 3D view draws no envelope while its stage is not recorded: a run that wrote it and then failed", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(project(CARVED));
+  openStep("Envelope and massing");
+  await act(async () => buttonIn(buildPart("Envelope"), "Build envelope").click());
+  await settle();
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
+  await settle();
+  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };      // written, not recorded
+  run.send({ type: "run_failed", error_type: "RuntimeError", message: "exporting failed", field_errors: [] });
+  await settle();
+  expect(service.requests).toContain("GET /run/files/exporting/export.obj");
+  expect(FakeViewerScene.latest!.layersWithObjects()).not.toContain("envelope");
+});
+
+test("a workspace made again for a renamed project opens with the steps it had open, and says when they change", async () => {
+  service = new FakeService(CARVED, CARVING);
+  const stepsReported = vi.fn();
+  await openWorkspace(project(CARVED), { startSteps: { open: "carving", view: "carving" }, onStepsChange: stepsReported });
+  expect(stepRow("Carving").classList.contains("step-open")).toBe(true);
+  expect(stepRow("Inputs").classList.contains("step-open")).toBe(false);
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(false);        // the view shows the carving's layers, not the inputs' ones
+  openStep("Export");
+  expect(stepsReported).toHaveBeenLastCalledWith({ open: "export", view: "export" });
 });

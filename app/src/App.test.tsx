@@ -4,6 +4,8 @@ import {
   ApiError, type ExampleInfo, type HealthReply, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
 import { App, DeviceStatus, freeProjectName, pollHealth } from "./App";
+import type { WorkspaceSteps } from "./steps/ProjectWorkspace";
+import type { RunLoop } from "./steps/run_state";
 import { click, renderForTest, type RenderedOverlay } from "./viewer_overlays/render_for_test";
 
 // The open project stands in for the workspace here: the page's own part is which project it opens, when it opens it afresh,
@@ -11,15 +13,23 @@ import { click, renderForTest, type RenderedOverlay } from "./viewer_overlays/re
 // config saver of the project, flushed when the workspace closes, and handed to the page.
 const workspaceMounts = vi.hoisted(() => [] as string[]);
 const workspaceSettings = vi.hoisted(() => ({ saver: null as { schedule: (values: Record<string, unknown>) => void } | null, delay: 0 }));
+// The steps each mount of the workspace started with, and the latest workspace's way to say which step is open and its run loop.
+const workspaceSteps = vi.hoisted(() => ({
+  startedWith: [] as (WorkspaceSteps | undefined)[], report: null as ((steps: WorkspaceSteps) => void) | null, runs: null as RunLoop | null,
+}));
 vi.mock("./steps/ProjectWorkspace", async () => {
   const { useEffect } = await import("react");
   const { createConfigSaver } = await import("./settings_form/form_state");
   const { putConfig } = await import("./api_client/client");
   return {
-    ProjectWorkspace: ({ token, project, onSettingsSaverReady }: {
-      token: string; project: ProjectDetail; onSettingsSaverReady?: (saver: { flush: () => Promise<string>; cancel: () => void } | null) => void;
+    ProjectWorkspace: ({ token, project, runs, startSteps, onStepsChange, onSettingsSaverReady }: {
+      token: string; project: ProjectDetail; runs: RunLoop; startSteps?: WorkspaceSteps; onStepsChange?: (steps: WorkspaceSteps) => void;
+      onSettingsSaverReady?: (saver: { flush: () => Promise<string>; cancel: () => void } | null) => void;
     }) => {
+      workspaceSteps.runs = runs;
+      workspaceSteps.report = onStepsChange ?? null;
       useEffect(() => {
+        workspaceSteps.startedWith.push(startSteps);
         workspaceMounts.push(project.name);
         const saver = createConfigSaver((values) => putConfig(token, project.name, values), () => {}, workspaceSettings.delay);
         workspaceSettings.saver = saver;
@@ -29,7 +39,7 @@ vi.mock("./steps/ProjectWorkspace", async () => {
           void saver.flush();
         };
       }, []);
-      return <div className="fake-workspace">{project.modified}</div>;
+      return <div className="fake-workspace" data-run-refusal={runs.current?.refusal ?? ""}>{project.modified}</div>;
     },
   };
 });
@@ -42,6 +52,9 @@ afterEach(() => {
   rendered?.unmount();
   rendered = null;
   workspaceMounts.length = 0;
+  workspaceSteps.startedWith.length = 0;
+  workspaceSteps.report = null;
+  workspaceSteps.runs = null;
   workspaceSettings.saver = null;
   workspaceSettings.delay = 0;
   window.localStorage.clear();
@@ -146,6 +159,12 @@ class FakeService {
   pickerClosesWhen: Promise<void> | null = null;
   /** While set, the examples are answered only once this promise resolves. */
   examplesAnswerWhen: Promise<void> | null = null;
+  /** The projects of the folder the picker changes to. */
+  projectsOfOtherFolder: ProjectSummary[] = [
+    { name: "Elsewhere", created: "2026-10-18T09:00:00", modified: "2026-10-18T09:00:00", mode: "daylight" },
+  ];
+  /** The reply to Open folder; null: the request does not reach the engine. */
+  openFolderReply: (() => Response) | null = null;
 
   answer = async (address: string, init?: RequestInit): Promise<Response> => {
     const method = init?.method ?? "GET";
@@ -164,7 +183,7 @@ class FakeService {
     if (method === "POST" && path === "/api/projects-folder/choose") {
       await this.pickerClosesWhen;
       this.folder = { ...this.folder, path: "E:\\Other projects", source: "preference" };
-      this.projects = [{ name: "Elsewhere", created: "2026-10-18T09:00:00", modified: "2026-10-18T09:00:00", mode: "daylight" }];
+      this.projects = this.projectsOfOtherFolder;
       return json({ status: "changed", path: this.folder.path, problem: null });
     }
     const projectRoute = /^\/api\/projects\/([^/]+)(\/.*)?$/.exec(path);
@@ -176,7 +195,11 @@ class FakeService {
       if (this.refuseConfigSaves) return json({ detail: "A run of this project is in progress." }, 409);
       return json({ settings: JSON.parse(String(init!.body)).values, grid_plan: null });
     }
-    if (method === "POST" && rest === "/open-folder") throw new TypeError("Failed to fetch");      // the engine is not reached
+    if (method === "POST" && rest === "/open-folder") {
+      if (this.openFolderReply !== null) return this.openFolderReply();
+      throw new TypeError("Failed to fetch");      // the engine is not reached
+    }
+    if (method === "POST" && rest === "/runs") return json({ detail: "The maximum volume is missing." }, 422);
     if (method === "POST" && rest === "/rename") return json(projectDetail(JSON.parse(String(init!.body)).new_name));
     if (method === "POST" && rest === "/reset-to-example") return json(projectDetail(name, "2026-10-18T10:30:00", "perimeter_block"));
     if (method === "POST" && rest.startsWith("/examples/")) return json(projectDetail(name, "2026-10-18T10:30:00", "perimeter_block"));
@@ -434,4 +457,52 @@ test("a changed projects folder shows its path and reads the project list again"
   expect(page().querySelector(".start-projects-folder")!.textContent).toContain("E:\\Other projects");
   expect(startChoice("Elsewhere")).toBeDefined();
   expect(startChoice("Plot 7")).toBeUndefined();
+});
+
+test("a refusal without a reason is said in a sentence with its status, not as the error's name", async () => {
+  const service = new FakeService();
+  service.openFolderReply = () => new Response("Internal Server Error", { status: 500 });
+  await renderApp(service);
+  await openPlot7();
+  await chooseFromTopBarMenu("Open folder");
+  expect(dialog().textContent).toContain("The USC engine refused the request and gave no reason (status 500). Try again.");
+  expect(dialog().textContent).not.toContain("ApiError");
+});
+
+test("a changed projects folder forgets the last run's record: a project of the same name there shows no run of the old one", async () => {
+  const service = new FakeService();
+  service.projectsOfOtherFolder = [{ name: "Plot 7", created: "2026-10-18T09:00:00", modified: "2026-10-18T09:00:00", mode: "time-based" }];
+  await renderApp(service);
+  await openPlot7();
+  await act(async () => { await workspaceSteps.runs!.start("Plot 7", ["thresholding"], "settings_run_analysis"); });
+  await settle();
+  expect(page().querySelector(".fake-workspace")!.getAttribute("data-run-refusal")).toBe("The maximum volume is missing.");
+  click(buttonNamed("Projects"));
+  await settle();
+  await act(async () => click(buttonNamed("Change folder")));
+  await settle();
+  await openPlot7();
+  expect(page().querySelector(".fake-workspace")!.getAttribute("data-run-refusal")).toBe("");
+});
+
+test("renaming the open project keeps the open step; opening a project and resetting it start at Inputs", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await openPlot7();
+  act(() => workspaceSteps.report!({ open: "export", view: "export" }));
+  await chooseFromTopBarMenu("Reset to the example");
+  await act(async () => click(buttonNamed("Reset project", dialog())));
+  await settle();
+  act(() => workspaceSteps.report!({ open: "carving", view: "carving" }));
+  await chooseFromTopBarMenu("Rename");
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await settle();
+  expect(workspaceMounts).toEqual(["Plot 7", "Plot 7", "Plot 8"]);
+  expect(workspaceSteps.startedWith).toEqual([undefined, undefined, { open: "carving", view: "carving" }]);
+  click(buttonNamed("Projects"));
+  await settle();
+  await openPlot7();
+  expect(workspaceSteps.startedWith).toHaveLength(4);
+  expect(workspaceSteps.startedWith.at(-1)).toBeUndefined();
 });
