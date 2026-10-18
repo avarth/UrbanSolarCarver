@@ -98,6 +98,8 @@ interface ThresholdControlProps {
   disabled: boolean;
   /** The element that says why the control is disabled, when it is not a run (Carve amount under another carving rule). */
   reasonId?: string;
+  /** The analysis is out of date: the control is disabled unless it holds an error, which stays open to be fixed. */
+  lockedUnlessError?: boolean;
   onChangeValue: (shownNumber: number) => void;
   onCommit: (shownNumber: number) => void;
 }
@@ -108,7 +110,8 @@ interface ThresholdControlProps {
  * form only when its run is next (it may wait behind a run in progress), so going back to the stored number is handed on too
  * while an earlier one is still on its way: it replaces the waiting one, and the run uses the number the user is at.
  */
-function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reasonId, onChangeValue, onCommit }: ThresholdControlProps) {
+function ThresholdControl({ view, form, highestScore, autoUpdate, disabled: disabledOtherwise, reasonId, lockedUnlessError = false, onChangeValue,
+                            onCommit }: ThresholdControlProps) {
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;
@@ -123,6 +126,7 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   // A number refused in the field (above 100 % for Carve amount, below 0) is said under it and never handed on.
   const [refusedInput, setRefusedInput] = useState<string | null>(null);
   const error = refusedInput ?? fieldErrorOf(form, view);
+  const disabled = disabledOtherwise || (lockedUnlessError && fieldErrorOf(form, view) === undefined);
   const isShadowTolerated = view.name === "threshold";
   const shownNumber = heldNumber ?? stored;
   const highest = isShadowTolerated ? Math.max(highestScore ?? 0, stored) : 100;
@@ -130,7 +134,8 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   const commit = () => {
     if (heldNumber === null) return;
     const earlierNumberOnItsWay = lastNumberHandedOn.current !== stored;
-    if (heldNumber !== stored || earlierNumberOnItsWay) {
+    // A number refused in the field is not run; the field already went back to the number before it.
+    if (refusedInput === null && (heldNumber !== stored || earlierNumberOnItsWay)) {
       lastNumberHandedOn.current = heldNumber;
       onCommit(heldNumber);
     }
@@ -247,9 +252,9 @@ export function CarvingStep(props: CarvingStepProps) {
   }));
   const thresholdDisabled = props.thresholdDisabledReason !== null;
   // While the analysis is out of date the carving settings wait for Run analysis, except one with an error, which stays open to
-  // be fixed; a change there is saved but runs nothing.
-  const carvingHoldsAnError = groups.some((group) => group.folded.some((view) => fieldErrorOf(form, view) !== undefined));
-  const settingsDisabled = (analysisOutOfDate && !carvingHoldsAnError) || props.settingsDisabledReason !== null;
+  // be fixed (SettingGroup fieldsWithErrorEditable); a change there is saved but runs nothing.
+  const settingsDisabled = analysisOutOfDate || props.settingsDisabledReason !== null;
+  const fieldsWithErrorEditable = analysisOutOfDate && props.settingsDisabledReason === null;
   // The angle rule has no threshold, so nothing updates on its own there: Update carving runs it.
   const autoUpdating = autoUpdate && thresholdView !== null;
   // Every change goes to the form at once; with auto-update on the run follows when the user is done with the field, so typing
@@ -296,14 +301,15 @@ export function CarvingStep(props: CarvingStepProps) {
       <div className="carving-content">
         {thresholdView === null ? <p className="step-reason">{messages.angleRuleHasNoThreshold}</p> : (
           <ThresholdControl view={thresholdView} form={form} highestScore={scorePoints?.header.score_max ?? null} autoUpdate={autoUpdating}
-                            disabled={thresholdDisabled || analysisOutOfDate || carveAmountReason !== null}
+                            disabled={thresholdDisabled || carveAmountReason !== null} lockedUnlessError={analysisOutOfDate}
                             reasonId={carveAmountReason !== null ? carveAmountReasonId : undefined}
                             onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(thresholdView, shownNumber))}
                             onCommit={props.onThresholdCommit} />
         )}
         <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}>
           {groups.map((group) => (
-            <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled} />
+            <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled}
+                          fieldsWithErrorEditable={fieldsWithErrorEditable} />
           ))}
         </div>
         {thresholdView !== null && (

@@ -17,9 +17,12 @@ interface SettingGroupProps {
   disabled?: boolean;
   /** What the step adds under some of the group's fields, by setting name. */
   fieldExtras?: Record<string, SettingFieldExtras>;
+  /** While *disabled*, a field holding an error stays editable, so it can be fixed (Carving while the analysis is out of date). */
+  fieldsWithErrorEditable?: boolean;
 }
 
-export function SettingGroup({ group, form, onChange, disabled = false, fieldExtras = {} }: SettingGroupProps) {
+export function SettingGroup({ group, form, onChange, disabled = false, fieldExtras = {}, fieldsWithErrorEditable = false }: SettingGroupProps) {
+  const disabledField = (view: SettingGroupView["essential"][number]) => disabled && !(fieldsWithErrorEditable && fieldErrorOf(form, view) !== undefined);
   const [unfoldedByUser, setUnfoldedByUser] = useState(false);
   const foldId = useId();
   const foldHoldsAnError = group.folded.some((view) => fieldErrorOf(form, view) !== undefined);
@@ -31,7 +34,7 @@ export function SettingGroup({ group, form, onChange, disabled = false, fieldExt
         <>
           <h3 className="setting-group-title">{group.title}</h3>
           <div className={essentialClass}>
-            {group.essential.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabled} extras={fieldExtras[view.name]} />)}
+            {group.essential.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledField(view)} extras={fieldExtras[view.name]} />)}
           </div>
         </>
       )}
@@ -42,7 +45,7 @@ export function SettingGroup({ group, form, onChange, disabled = false, fieldExt
           </button>
           {unfolded && (
             <div id={foldId} className="setting-group-folded">
-              {group.folded.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabled} extras={fieldExtras[view.name]} />)}
+              {group.folded.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledField(view)} extras={fieldExtras[view.name]} />)}
             </div>
           )}
         </>

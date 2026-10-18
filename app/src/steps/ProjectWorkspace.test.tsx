@@ -295,9 +295,11 @@ test("threshold values given during a carving run: one more run follows with the
   expect(service.runsStarted).toHaveLength(2);
 });
 
-test("a refused mode change locks Carving: the old mode's carving is not shown as current, and no carving setting starts the analysis", async () => {
+test("a refused mode change locks Carving: the old mode's carving is not shown as current, and fixing the setting starts no analysis", async () => {
   service = new FakeService(CARVED, CARVING);
-  service.configErrorsOf = (values) => (values.mode === "daylight" ? [{ field: null, message: "Value error, the settings do not fit together" }] : null);
+  // Daylight is refused for a carving setting until the user sets it, as a stored config.yaml or a run could leave it.
+  service.configErrorsOf = (values) => (values.mode === "daylight" && values.max_slope_deg === undefined
+    ? [{ field: "max_slope_deg", message: "Input should be greater than 0" }] : null);
   await openWorkspace(project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Mode");
   act(() => [...container().querySelectorAll<HTMLElement>('[role="radio"]')][3].click());      // Daylight
@@ -311,14 +313,19 @@ test("a refused mode change locks Carving: the old mode's carving is not shown a
   expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   expect(thresholdField().disabled).toBe(true);
   expect(dimmedCarvingLayers()).toEqual(["carved_voxels", "kept_voxels", "sky_dome"]);
+  expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
 
-  // The refusal is fixed; a carving setting changed now must not start a run, which would run the whole analysis.
-  service.configErrorsOf = () => null;
-  act(() => container().querySelector<HTMLButtonElement>(".carving-settings button.setting-fold")!.click());
-  const carveAbove = container().querySelector<HTMLInputElement>('[data-setting="carve_above"] input')!;
-  act(() => carveAbove.click());
+  // The setting with the error stays editable in the locked step; fixing it stores Daylight, and must not start a carving run,
+  // which would run the whole analysis.
+  const slope = container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input')!;
+  expect(slope.disabled).toBe(false);
+  // Once Daylight is stored, the service finds the analysis out of date.
+  service.stages = { ...CARVED, preprocessing: "out_of_date", thresholding: "out_of_date" };
+  typeAndLeave(slope, "45");
   await waitForTheSave();
   await settle();
-  expect(service.runsStarted).toEqual([]);
+  expect(service.savedValues).toEqual([{ mode: "daylight", max_slope_deg: 45 }]);
+  expect(service.count("POST /runs")).toBe(0);
   expect(FakeWebSocket.opened).toHaveLength(0);
+  expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
 });

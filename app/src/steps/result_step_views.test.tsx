@@ -441,3 +441,36 @@ test("a run report that cannot be read says so instead of an empty panel", async
   expect(rendered.container.querySelector("pre")).toBeNull();
   vi.unstubAllGlobals();
 });
+
+/** Types *text* one character at a time, as a keyboard does: each keystroke is an input event with the text so far. */
+function typeKeys(input: HTMLInputElement, text: string) {
+  typeInto(input, "");
+  for (let length = 1; length <= text.length; length++) typeInto(input, text.slice(0, length));
+}
+
+test("Carve amount typed past 100 keystroke by keystroke keeps the stored amount and runs nothing on leave", () => {
+  const onThresholdCommit = vi.fn(), onChange = vi.fn();
+  rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("daylight"), isWeightedMode: true, onThresholdCommit, onChange })} />);
+  const field = rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
+  typeKeys(field, "150");
+  expect(rendered.container.querySelector(".threshold-control .setting-error")!.textContent).toBe("Use 0 to 100.");
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(onThresholdCommit).not.toHaveBeenCalled();
+  expect(field.value).toBe("70");
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+test("while the analysis is out of date, only a carving setting with an error stays editable, and its change runs nothing", () => {
+  const onCarvingSettingCommit = vi.fn(), onChange = vi.fn();
+  let form = formFor("daylight");
+  form = formReducer(form, { type: "save_rejected", reply: { field_errors: [{ field: "max_slope_deg", message: "Input should be greater than 0" }], grid_plan: null } });
+  rendered = renderForTest(<CarvingStep {...carvingProps({ form, isWeightedMode: true, analysisOutOfDate: true, onCarvingSettingCommit, onChange })} />);
+  const slope = rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input')!;
+  expect(slope.disabled).toBe(false);
+  expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above"] input')!.disabled).toBe(true);
+  expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.disabled).toBe(true);
+  typeKeys(slope, "45");
+  act(() => slope.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(onChange).toHaveBeenLastCalledWith({ max_slope_deg: 45 });
+  expect(onCarvingSettingCommit).not.toHaveBeenCalled();
+});
