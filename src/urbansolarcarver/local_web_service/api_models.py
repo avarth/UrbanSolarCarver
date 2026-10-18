@@ -72,10 +72,13 @@ class GridPlanReply(BaseModel):
     budget_voxels: int          # the most voxels preprocessing can score
 
 
+ProjectsFolderSource = Literal["command_line", "preference", "default"]
+
+
 class ProjectsFolderReply(BaseModel):
     """The folder the projects live in, where that choice came from, and whether the browser may change it now."""
     path: str
-    source: Literal["command_line", "preference", "default"]
+    source: ProjectsFolderSource
     can_change: bool            # false when the folder came from the command line, or while a run is active
 
 

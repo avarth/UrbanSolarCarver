@@ -28,7 +28,7 @@ from local_web_test_support import (
 )
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
-from urbansolarcarver.local_web_service import folder_picker, user_preferences
+from urbansolarcarver.local_web_service import folder_picker, folder_picker_child, user_preferences
 from urbansolarcarver.local_web_service.folder_picker import FolderPickerUnavailable
 from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
 from urbansolarcarver.local_web_service.projects import ProjectStore
@@ -751,6 +751,36 @@ def test_a_run_that_starts_while_the_picker_is_open_blocks_the_change(projects_f
         worker.run_state(holder["run_id"]).wait_for_events(10 ** 9, 10)
 
 
+def test_a_second_choose_while_the_picker_is_open_is_409_and_the_first_still_completes(projects_folder, tmp_path, home_folder):
+    picker_open = threading.Event()
+    release_picker = threading.Event()
+    new_folder = tmp_path / "new"
+
+    def blocking_picker(initial_folder):
+        picker_open.set()
+        assert release_picker.wait(10)
+        return new_folder
+
+    client, _ = build_client(projects_folder, choose_folder_function=blocking_picker)
+    first_reply = {}
+    first_request = threading.Thread(target=lambda: first_reply.update(response=client.post("/api/projects-folder/choose")))
+    first_request.start()
+    try:
+        assert picker_open.wait(10)
+        second = client.post("/api/projects-folder/choose")
+        assert second.status_code == 409
+        assert "already open" in second.json()["detail"]
+    finally:
+        release_picker.set()
+        first_request.join(10)
+    assert first_reply["response"].json() == {"status": "changed", "path": str(new_folder), "problem": None}
+
+
+def test_an_unknown_projects_folder_source_fails_at_startup(projects_folder):
+    with pytest.raises(ValueError, match="projects_folder_source"):
+        create_app(projects_folder, TOKEN, PORT, projects_folder_source="comand_line")
+
+
 def test_a_folder_given_on_the_command_line_cannot_be_changed(projects_folder, tmp_path, home_folder):
     picker = FakeFolderPicker(tmp_path / "new")
     client, _ = build_client(projects_folder, projects_folder_source="command_line", choose_folder_function=picker)
@@ -823,31 +853,95 @@ class FakeTkinter:
         monkeypatch.setitem(sys.modules, "tkinter", self)
 
 
-def test_the_folder_picker_is_a_hidden_topmost_dialog_that_is_destroyed_afterwards(monkeypatch, tmp_path):
+def test_the_dialog_program_shows_a_hidden_topmost_dialog_and_destroys_it_afterwards(monkeypatch, tmp_path):
     fake = FakeTkinter(str(tmp_path / "chosen"))
     fake.install(monkeypatch)
-    assert folder_picker.choose_folder(tmp_path) == tmp_path / "chosen"
+    assert folder_picker_child.choose_folder_in_this_process(str(tmp_path)) == str(tmp_path / "chosen")
     assert fake.log == ["root", "withdraw", ("-topmost", True), ("ask", str(tmp_path)), "destroy"]
 
 
 @pytest.mark.parametrize("cancelled_answer", ["", ()])
-def test_a_cancelled_folder_picker_gives_none(monkeypatch, tmp_path, cancelled_answer):
+def test_a_cancelled_dialog_gives_none(monkeypatch, tmp_path, cancelled_answer):
     fake = FakeTkinter(cancelled_answer)
     fake.install(monkeypatch)
-    assert folder_picker.choose_folder(tmp_path) is None
+    assert folder_picker_child.choose_folder_in_this_process(str(tmp_path)) is None
     assert fake.log[-1] == "destroy"
 
 
-def test_a_computer_without_a_display_makes_the_folder_picker_unavailable(monkeypatch, tmp_path):
+def test_a_computer_without_a_display_makes_the_dialog_program_unavailable(monkeypatch, tmp_path):
     FakeTkinter("", no_display=True).install(monkeypatch)
-    with pytest.raises(FolderPickerUnavailable, match="display"):
-        folder_picker.choose_folder(tmp_path)
+    with pytest.raises(folder_picker_child.PickerUnavailable, match="display"):
+        folder_picker_child.choose_folder_in_this_process(str(tmp_path))
 
 
-def test_a_python_without_tkinter_makes_the_folder_picker_unavailable(monkeypatch, tmp_path):
+def test_a_python_without_tkinter_makes_the_dialog_program_unavailable(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "tkinter", None)       # an import of a module set to None raises ImportError
-    with pytest.raises(FolderPickerUnavailable, match="tkinter"):
+    with pytest.raises(folder_picker_child.PickerUnavailable, match="tkinter"):
+        folder_picker_child.choose_folder_in_this_process(str(tmp_path))
+
+
+def test_the_dialog_program_answers_with_exit_codes_and_json(monkeypatch, tmp_path, capsys):
+    greek_folder = tmp_path / "Έργα"
+    FakeTkinter(str(greek_folder)).install(monkeypatch)
+    assert folder_picker_child.main([str(tmp_path)]) == folder_picker_child.EXIT_CHOSEN
+    assert json.loads(capsys.readouterr().out) == {"folder": str(greek_folder)}
+    FakeTkinter("").install(monkeypatch)
+    assert folder_picker_child.main([str(tmp_path)]) == folder_picker_child.EXIT_CANCELLED
+    FakeTkinter("", no_display=True).install(monkeypatch)
+    assert folder_picker_child.main([str(tmp_path)]) == folder_picker_child.EXIT_UNAVAILABLE
+    assert "display" in capsys.readouterr().err
+
+
+def test_the_dialog_program_ships_with_the_package():
+    assert folder_picker.CHILD_SCRIPT.is_file() and folder_picker.CHILD_SCRIPT.parent == Path(folder_picker.__file__).parent
+
+
+def use_fake_dialog_program(monkeypatch, tmp_path, source):
+    """Replaces the dialog program by a script written for the test; choose_folder still starts it as a separate process."""
+    script = tmp_path / "fake_dialog_program.py"
+    script.write_text(source, encoding="utf-8")
+    monkeypatch.setattr(folder_picker, "CHILD_SCRIPT", script)
+
+
+def test_choose_folder_gives_the_folder_the_dialog_program_prints_even_with_greek_letters(monkeypatch, tmp_path):
+    use_fake_dialog_program(monkeypatch, tmp_path, "import json, sys\nsys.stdout.write(json.dumps({'folder': sys.argv[1] + '/Έργα'}))\n")
+    assert folder_picker.choose_folder(tmp_path / "αρχή") == Path(str(tmp_path / "αρχή") + "/Έργα")
+
+
+def test_choose_folder_gives_none_when_the_dialog_program_reports_a_cancel(monkeypatch, tmp_path):
+    use_fake_dialog_program(monkeypatch, tmp_path, f"import sys\nsys.exit({folder_picker_child.EXIT_CANCELLED})\n")
+    assert folder_picker.choose_folder(tmp_path) is None
+
+
+def test_choose_folder_is_unavailable_with_the_reason_the_dialog_program_gives(monkeypatch, tmp_path):
+    use_fake_dialog_program(monkeypatch, tmp_path, f"import sys\nsys.stderr.write('There is no display.')\nsys.exit({folder_picker_child.EXIT_UNAVAILABLE})\n")
+    with pytest.raises(FolderPickerUnavailable, match="There is no display."):
         folder_picker.choose_folder(tmp_path)
+
+
+def test_choose_folder_is_unavailable_when_the_dialog_program_crashes(monkeypatch, tmp_path):
+    use_fake_dialog_program(monkeypatch, tmp_path, "raise RuntimeError('the dialog broke')\n")
+    with pytest.raises(FolderPickerUnavailable, match="the dialog broke"):
+        folder_picker.choose_folder(tmp_path)
+
+
+def test_choose_folder_is_unavailable_when_the_dialog_program_stops_without_a_message(monkeypatch, tmp_path):
+    use_fake_dialog_program(monkeypatch, tmp_path, "import os\nos._exit(3)\n")
+    with pytest.raises(FolderPickerUnavailable, match="exit code 3"):
+        folder_picker.choose_folder(tmp_path)
+
+
+def test_choose_folder_is_unavailable_when_the_answer_cannot_be_read(monkeypatch, tmp_path):
+    use_fake_dialog_program(monkeypatch, tmp_path, "print('not json')\n")
+    with pytest.raises(FolderPickerUnavailable, match="cannot be read"):
+        folder_picker.choose_folder(tmp_path)
+
+
+def test_the_service_process_never_loads_tkinter_to_choose_a_folder(monkeypatch, tmp_path):
+    monkeypatch.delitem(sys.modules, "tkinter", raising=False)
+    use_fake_dialog_program(monkeypatch, tmp_path, "import json, sys\nsys.stdout.write(json.dumps({'folder': 'x'}))\n")
+    folder_picker.choose_folder(tmp_path)
+    assert "tkinter" not in sys.modules
 
 
 @pytest.mark.parametrize("platform, expected_command", [("darwin", ["open"]), ("linux", ["xdg-open"])])
