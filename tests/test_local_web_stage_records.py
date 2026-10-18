@@ -14,7 +14,9 @@ from local_web_test_support import (
 )
 from urbansolarcarver.stage_settings import PIPELINE_STAGES
 from urbansolarcarver.local_web_service.projects import ProjectStore
-from urbansolarcarver.local_web_service.stage_records import choose_stages, forget_stages, missing_inputs, record_stages, stage_status
+from urbansolarcarver.local_web_service.stage_records import (
+    choose_stages, envelope_voxel_size, forget_stages, missing_inputs, record_stages, stage_status,
+)
 
 @pytest.fixture
 def built_project(project_with_inputs):
@@ -58,6 +60,28 @@ def test_floor_height_change_reruns_massing_only(built_project):
     assert stage_status(store, name)["massing"] == "out_of_date"
     assert run_and_wait(worker, name, ["exporting", "massing"]).stages == ["massing"]
     assert stage_status(store, name) == ALL_CURRENT
+
+
+def test_massing_alone_runs_while_the_envelope_is_out_of_date_and_the_envelope_keeps_its_mark(built_project):
+    """Review Focus 5 (R2 5): Build massing and Build envelope each run their own stage; the other part keeps its out-of-date mark."""
+    store, name, worker = built_project
+    change_settings(store, name, carve_fraction=0.3)
+    assert run_and_wait(worker, name, ["thresholding"]).stages == ["thresholding"]
+    assert run_and_wait(worker, name, ["massing"]).stages == ["massing"]
+    assert stage_status(store, name) == {**ALL_CURRENT, "exporting": "out_of_date"}
+    change_settings(store, name, floor_height=4.0)
+    assert run_and_wait(worker, name, ["exporting"]).stages == ["exporting"]
+    assert stage_status(store, name) == {**ALL_CURRENT, "massing": "out_of_date"}
+
+
+def test_the_envelope_voxel_size_is_the_one_exporting_last_completed_with(built_project):
+    store, name, _worker = built_project
+    built_voxel_size = store.load_project_config(name).voxel_size
+    change_settings(store, name, voxel_size=built_voxel_size * 2)      # not built yet: the envelope on disk has the old voxels
+    assert envelope_voxel_size(store, name) == built_voxel_size
+    # A run removes the record of a stage it redoes; it runs with the stored settings, which cannot change during it.
+    forget_stages(store, name, ["exporting"])
+    assert envelope_voxel_size(store, name) == built_voxel_size * 2
 
 
 def test_mesh_format_change_reruns_exporting_only(built_project):

@@ -199,9 +199,10 @@ def test_mode_tiles_have_the_names_and_order_of_round_2():
     ]
 
 
-@pytest.mark.parametrize("retired_name", ["Sun at set hours", "Solar heat when cold"])
-def test_retired_mode_names_are_gone_from_the_app_sources(retired_name):
-    """R2 3, 6: "Solar time-based" and "Solar usefulness" replace the names of milestone 1 everywhere in the interface."""
+@pytest.mark.parametrize("retired_name", ["Sun at set hours", "Solar heat when cold", "Bay width", "Allowed overhang"])
+def test_retired_names_are_gone_from_the_app_sources(retired_name):
+    """R2 3, 6: "Solar time-based", "Solar usefulness", "Grid module" and "Permitted volume exceedance" replace the names of
+    milestone 1 everywhere in the interface."""
     sources = [path for path in (APP_FOLDER / "src").rglob("*") if path.is_file() and path.suffix in {".ts", ".tsx", ".json", ".css"}]
     assert APP_FOLDER / "src" / "messages.ts" in sources and MODE_TILES_PATH in sources
     assert [path.name for path in sources if retired_name in text_with_line_breaks_collapsed(path)] == []

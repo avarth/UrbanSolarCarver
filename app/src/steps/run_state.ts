@@ -121,8 +121,12 @@ export function runProgressShare(state: RunState): number {
 
 // The loop of runs -------------------------------------------------------------------------------------------------------
 
-/** The button that started a run: its progress and outcome are shown under it (UX 6.3). */
-export type RunOrigin = "settings_run_analysis" | "carving_run_analysis" | "carving_update" | "build" | "export_format";
+/**
+ * The button that started a run: its progress and outcome are shown under it (UX 6.3). "build" is Carving's Build envelope and
+ * massing, which opens the Envelope and massing step and shows its run there; "build_envelope" and "build_massing" are the
+ * buttons of that step's two parts (R2 5).
+ */
+export type RunOrigin = "settings_run_analysis" | "carving_run_analysis" | "carving_update" | "build" | "build_envelope" | "build_massing" | "export_format";
 
 export interface RunRecord {
   /** Counts the runs asked for in this page, so each one is followed once. */

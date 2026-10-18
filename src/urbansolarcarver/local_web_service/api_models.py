@@ -121,6 +121,11 @@ class CarvingSummary(BaseModel):
     slope_limit_extra_voxels_removed: int
 
 
+class EnvelopeSummary(BaseModel):
+    """The numbers exporting reports for the envelope part of the envelope and massing screen."""
+    envelope_volume_m3: float       # the voxels the envelope mesh was built from, after its cleanup
+
+
 class MassingSummary(BaseModel):
     """The numbers massing reports for the run summary of the envelope and massing screen."""
     floor_area_m2_per_storey: list[float]
@@ -132,6 +137,7 @@ class MassingSummary(BaseModel):
 class RunSummary(BaseModel):
     """What the finished stages of a run report; a part is None when its stage has no output."""
     carving: CarvingSummary | None
+    envelope: EnvelopeSummary | None
     massing: MassingSummary | None
 
 

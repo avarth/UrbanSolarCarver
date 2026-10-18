@@ -55,6 +55,7 @@ test("a run that stopped early lists the layers its stages left without data; a 
 test("each stage names the results it writes; the score points follow the carving, not the analysis", () => {
   expect(resultsOfStages(["preprocessing"])).toEqual(["skyDome"]);
   expect(resultsOfStages(["thresholding", "exporting", "massing"])).toEqual(["summary", "scorePoints", "envelope", "massing", "platesFile"]);
+  expect(resultsOfStages(["exporting"])).toEqual(["summary", "envelope"]);       // the envelope volume is in the run summary (R2 5)
 });
 
 function followedRun(initial: RunRecord | null) {

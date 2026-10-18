@@ -5,7 +5,7 @@ import { formReducer, initialFormState, type FormState } from "../settings_form/
 import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { CarvingStep, readAutoUpdate, type CarvingStepProps } from "./CarvingStep";
-import { EnvelopeAndMassingStep, storeyRows, type PlatesFile } from "./EnvelopeAndMassingStep";
+import { EnvelopeAndMassingStep, storeyRows, type EnvelopeAndMassingStepProps, type PlatesFile } from "./EnvelopeAndMassingStep";
 import { exportDownloads } from "./ExportStep";
 import { RunProgress } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
@@ -214,20 +214,52 @@ test("the storeys of plates.json, one row each from the ground up, heights from 
   expect(storeyRows(belowZero).map((row) => [row.bottom, row.top])).toEqual([[0, 5], [5, 8]]);
 });
 
-test("Envelope and massing: three tiles, the per-storey table with a total, greyed and labelled when out of date", () => {
-  const massing = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
-  rendered = renderForTest(<EnvelopeAndMassingStep form={formFor("time-based")} onChange={vi.fn()} disabledReason={null} massing={massing}
-                                                   platesFile={PLATES} outOfDate hasRunReport onOpenRunReport={vi.fn()} />);
-  expect([...rendered.container.querySelectorAll(".number-tile")].map((tile) => tile.textContent))
-    .toEqual(["Gross floor area880 m²", "Storeys2", "Envelope volume4 200 m³"]);
-  const table = rendered.container.querySelector("table")!;
+const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
+const ENVELOPE = { envelope_volume_m3: 4150 };
+
+function envelopeAndMassingProps(overrides: Partial<EnvelopeAndMassingStepProps> = {}): EnvelopeAndMassingStepProps {
+  return {
+    form: formFor("time-based"), onChange: vi.fn(), disabledReason: null, envelope: ENVELOPE, envelopeOutOfDate: false,
+    envelopeButton: <button type="button">Build envelope</button>, massing: MASSING, platesFile: PLATES, massingOutOfDate: false,
+    massingButton: <button type="button">Build massing</button>, buildFeedback: null, hasRunReport: true, onOpenRunReport: vi.fn(), ...overrides,
+  };
+}
+
+/** The part of the step whose heading is *title*: its settings, its button and its results. */
+function partOf(container: Element, title: string): Element {
+  return [...container.querySelectorAll(".build-part")].find((part) => part.querySelector(".setting-group-title")!.textContent === title)!;
+}
+
+test("Envelope and massing: two parts, each with its settings, its button and its results; the run report link at the bottom (R2 5)", () => {
+  rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps()} />);
+  const envelope = partOf(rendered.container, "Envelope"), massing = partOf(rendered.container, "Building massing");
+  expect(envelope.querySelector('[data-setting="apply_smoothing"]')).not.toBeNull();
+  expect(envelope.querySelector('[data-setting="ground_floor_height"]')).toBeNull();
+  expect(massing.querySelector('[data-setting="min_plate_dimension"]')).not.toBeNull();
+  expect([...rendered.container.querySelectorAll('[data-setting="min_plate_dimension"] label')].map((label) => label.textContent)).toEqual(["Grid module"]);
+  expect([...envelope.querySelectorAll("button")].map((button) => button.textContent)).toContain("Build envelope");
+  expect([...massing.querySelectorAll("button")].map((button) => button.textContent)).toContain("Build massing");
+  expect([...envelope.querySelectorAll(".number-tile")].map((tile) => tile.textContent)).toEqual(["Envelope volume4 150 m³"]);
+  expect([...massing.querySelectorAll(".number-tile")].map((tile) => tile.textContent)).toEqual(["Gross floor area880 m²", "Storeys2"]);
+  const table = massing.querySelector("table")!;
   expect(table.querySelector("caption")!.textContent).toBe("Floor area per storey");
   expect([...table.querySelectorAll("tr")].map((row) => [...row.children].map((cell) => cell.textContent))).toEqual([
     ["Storey", "Bottom, m", "Top, m", "Area, m²"], ["1, ground", "0.0", "5.0", "500"], ["2", "5.0", "8.0", "380"], ["Total", "", "", "880"],
   ]);
-  expect(rendered.container.querySelector(".envelope-results-out-of-date")).not.toBeNull();
-  expect(rendered.container.textContent).toContain("Out of date for the current carving");
-  expect(rendered.container.textContent).toContain("Open the run report");
+  expect(rendered.container.querySelector(".envelope-results-out-of-date")).toBeNull();
+  const lastChild = rendered.container.querySelector(".envelope-step")!.lastElementChild!;
+  expect(lastChild.textContent).toBe("Open the run report");
+});
+
+test("each part is greyed and labelled out of date on its own; a part not built shows no results", () => {
+  rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ massingOutOfDate: true })} />);
+  expect(partOf(rendered.container, "Envelope").querySelector(".envelope-results-out-of-date")).toBeNull();
+  expect(partOf(rendered.container, "Building massing").querySelector(".envelope-results-out-of-date")!.textContent).toContain("Out of date for the current carving");
+  rendered.unmount();
+  rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ envelopeOutOfDate: true, massing: null, platesFile: null })} />);
+  expect(partOf(rendered.container, "Envelope").querySelector(".envelope-results-out-of-date")).not.toBeNull();
+  expect(partOf(rendered.container, "Building massing").querySelector(".envelope-results")).toBeNull();
+  expect(partOf(rendered.container, "Building massing").textContent).toContain("Build massing");
 });
 
 /** The elements that hold text of their own (HTML or SVG) inside *root*. */
@@ -261,9 +293,7 @@ test("dimmed and greyed results keep their text at full opacity in the muted col
     expect(Number(getComputedStyle(carvingResults.querySelector(".histogram-swatch")!).opacity)).toBeLessThan(1);
     rendered.unmount();
 
-    const massing = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
-    rendered = renderForTest(<EnvelopeAndMassingStep form={formFor("time-based")} onChange={vi.fn()} disabledReason={null} massing={massing}
-                                                     platesFile={PLATES} outOfDate hasRunReport onOpenRunReport={vi.fn()} />);
+    rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ massingOutOfDate: true })} />);
     const massingResults = rendered.container.querySelector(".envelope-results-out-of-date")!;
     const massingTexts = textBearingElementsIn(massingResults);
     expect(massingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Gross floor area", "Floor area per storey", "1, ground", "880"]));
@@ -276,7 +306,7 @@ test("dimmed and greyed results keep their text at full opacity in the muted col
 });
 
 test("the Export downloads in the format chosen, out-of-date files labelled", () => {
-  const downloads = exportDownloads({ project: "my project", meshFormat: "glb", envelopeOutOfDate: true, massingOutOfDate: false });
+  const downloads = exportDownloads({ project: "my project", meshFormat: "glb", envelope: "out_of_date", massing: "current" });
   expect(downloads.map((download) => [download.label, download.fileName, download.outOfDate])).toEqual([
     ["Carved envelope (GLB)", "my project envelope.glb", true],
     ["Building massing (OBJ)", "my project massing.obj", false],
@@ -286,6 +316,13 @@ test("the Export downloads in the format chosen, out-of-date files labelled", ()
   ]);
   expect(downloads[0].address).toBe("/api/projects/my%20project/run/files/exporting/export.glb");
   expect(downloads[3].address).toBe("/api/projects/my%20project/config.yaml");
+});
+
+test("Export offers each file once its stage exists: the envelope without the massing, the massing without the envelope (R2 5)", () => {
+  const labelsWith = (envelope: "current" | "missing", massing: "current" | "missing") =>
+    exportDownloads({ project: "p", meshFormat: "ply", envelope, massing }).map((download) => download.label);
+  expect(labelsWith("current", "missing")).toEqual(["Carved envelope (PLY)", "Settings (config.yaml)", "Whole project (zip)"]);
+  expect(labelsWith("missing", "current")).toEqual(["Building massing (OBJ)", "Building massing data (JSON)", "Settings (config.yaml)", "Whole project (zip)"]);
 });
 
 function runs(record: RunRecord | null, notice: RunLoop["notice"] = null) {

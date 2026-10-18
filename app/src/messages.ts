@@ -118,11 +118,16 @@ export const messages = {
   outOfDateSummary: "Out of date",
   massingSummary: (floorAreaText: string, storeysText: string) => `${floorAreaText}, ${storeysText}`,
   notBuiltYet: "Not built yet",
+  // What exists of the two parts of Envelope and massing (R2 5): "Envelope built, massing not built".
+  envelopePartStates: { current: "Envelope built", out_of_date: "Envelope out of date", missing: "Envelope not built" },
+  massingPartStates: { current: "massing built", out_of_date: "massing out of date", missing: "massing not built" },
+  envelopeAndMassingParts: (envelopeText: string, massingText: string) => `${envelopeText}, ${massingText}`,
   exportReady: "Ready",
-  buildEnvelopeFirst: "Build the envelope first",
+  envelopeReady: "Envelope ready",
+  massingReady: "Massing ready",
   carvingNeedsAnalysis: "Run the analysis in Settings to see the carving",
   envelopeNeedsAnalysis: "Run the analysis in Settings before building the envelope and massing",
-  exportNeedsBuild: "Build the envelope and massing to export them",
+  exportNeedsBuild: "Build the envelope or the massing to export them",
 
   // Inputs (5.2)
   maxVolumeTitle: "Maximum volume",
@@ -231,6 +236,8 @@ export const messages = {
   updateWhenThresholdChanges: "Update when I change the threshold",
   updateCarving: "Update carving",
   buildEnvelopeAndMassing: "Build envelope and massing",
+  // Why the build buttons wait while Carving is locked: a build would run the analysis first (M10).
+  buildWaitsForAnalysis: "Settings changed since the analysis. Run the analysis again before building.",
   histogramTitle: "Scores of the voxels",
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",
@@ -250,7 +257,9 @@ export const messages = {
   obstructionRemoved: "Obstruction removed",
   lastAnalysisTook: "Last analysis took",
 
-  // Envelope and massing (5.6)
+  // Envelope and massing (5.6; R2 5: two parts, each built on its own)
+  buildEnvelope: "Build envelope",
+  buildMassing: "Build massing",
   grossFloorArea: "Gross floor area",
   storeys: "Storeys",
   envelopeVolume: "Envelope volume",

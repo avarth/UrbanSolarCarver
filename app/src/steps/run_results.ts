@@ -27,11 +27,14 @@ type ResultName = keyof RunResults;
 
 const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null };
 
-/** What each stage writes. The score points need the carving's mask, so they follow thresholding, not the analysis. */
+/**
+ * What each stage writes. The score points need the carving's mask, so they follow thresholding, not the analysis; the run
+ * summary holds the numbers of the carving, the envelope and the massing.
+ */
 const RESULTS_OF_STAGE: Record<PipelineStage, ResultName[]> = {
   preprocessing: ["skyDome"],
   thresholding: ["summary", "scorePoints"],
-  exporting: ["envelope"],
+  exporting: ["summary", "envelope"],
   massing: ["summary", "massing", "platesFile"],
 };
 const MESH_RESULTS: ResultName[] = ["envelope", "massing"];

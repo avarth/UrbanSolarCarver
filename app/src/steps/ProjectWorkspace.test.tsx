@@ -43,6 +43,8 @@ const CARVING = {
   threshold_value: 1.5, voxels_occupied: 1000, voxels_kept: 610, voxels_removed: 390, retention_pct: 61, obstruction_fraction_carved: null,
   carve_above_extra_voxels_removed: 0, slope_limit_extra_voxels_removed: 0,
 };
+const ENVELOPE = { envelope_volume_m3: 4150 };
+const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
 const NOTHING_RUN: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" };
 const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, preprocessing: "current", thresholding: "current" };
 
@@ -59,7 +61,7 @@ class FakeService {
   readonly savedValues: Record<string, unknown>[] = [];
   readonly runsStarted: string[][] = [];
   stages: Record<PipelineStage, StageState>;
-  summary: { carving: typeof CARVING | null; massing: null };
+  summary: { carving: typeof CARVING | null; envelope: typeof ENVELOPE | null; massing: typeof MASSING | null };
   /** The status every save is refused with (409: a run of the project the page does not know of); null: saves are stored. */
   refuseSavesWith: number | null = null;
   /** While set, a request to start a run gets its reply only once this promise resolves. */
@@ -73,7 +75,7 @@ class FakeService {
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
-    this.summary = { carving, massing: null };
+    this.summary = { carving, envelope: null, massing: null };
   }
 
   answer = async (address: string, init?: RequestInit): Promise<Response> => {
@@ -180,6 +182,18 @@ async function pressRunAnalysis() {
   await settle();
 }
 
+/** The part of the Envelope and massing step whose heading is *title*. */
+function buildPart(title: string): HTMLElement {
+  return [...container().querySelectorAll<HTMLElement>(".build-part")].find((part) => part.querySelector(".setting-group-title")!.textContent === title)!;
+}
+
+function buttonIn(root: Element, text: string): HTMLButtonElement {
+  return [...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === text)!;
+}
+
+/** Why a disabled button is disabled: the text its aria-describedby names. */
+const reasonOf = (button: HTMLButtonElement) => document.getElementById(button.getAttribute("aria-describedby")!)!.textContent;
+
 const voxelSizeField = () => container().querySelector<HTMLInputElement>('[data-setting="voxel_size"] input[type="number"]')!;
 const thresholdField = () => container().querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
 const thresholdOf = (values: Record<string, unknown>) => (values.threshold as { value: number }).value;
@@ -206,7 +220,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   run.send({ type: "stage_progress", stage: "thresholding", done: 0, total: 1 });
   await settle();
   service.stages = CARVED;
-  service.summary = { carving: CARVING, massing: null };
+  service.summary = { carving: CARVING, envelope: null, massing: null };
   run.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
   await settle();
 
@@ -351,4 +365,81 @@ test("a failed run's link to a setting opens its step and focuses the input its 
   const link = [...container().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Go to voxel size")!;
   act(() => link.click());
   expect(document.activeElement).toBe(voxelSizeField());
+});
+
+test("Build massing sends only massing and Build envelope only exporting; each leaves the other part's out-of-date mark (Review Focus 5)", async () => {
+  // A threshold change and Run analysis since the last build: the envelope and the massing are both out of date.
+  const stagesAfterAnalysis: Record<PipelineStage, StageState> = { ...CARVED, exporting: "out_of_date", massing: "out_of_date" };
+  service = new FakeService(stagesAfterAnalysis, CARVING);
+  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: MASSING };
+  await openWorkspace(project(stagesAfterAnalysis));
+  openStep("Envelope and massing");
+  const envelopeOutOfDate = () => buildPart("Envelope").querySelector(".envelope-results-out-of-date") !== null;
+  const massingOutOfDate = () => buildPart("Building massing").querySelector(".envelope-results-out-of-date") !== null;
+  expect([envelopeOutOfDate(), massingOutOfDate()]).toEqual([true, true]);
+  expect(container().querySelector(".step-pinned-action")).toBeNull();          // each part has its own button
+
+  await act(async () => buttonIn(buildPart("Building massing"), "Build massing").click());
+  await settle();
+  expect(service.runsStarted).toEqual([["massing"]]);
+  // One run at a time: the envelope's button waits, saying why; the progress is under the button that started the run.
+  expect(buttonIn(buildPart("Envelope"), "Build envelope").disabled).toBe(true);
+  expect(reasonOf(buttonIn(buildPart("Envelope"), "Build envelope"))).toBe("A run is in progress");
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "massing", done: 0, total: 1 });
+  await settle();
+  expect(buildPart("Building massing").querySelector(".run-progress-stages")!.textContent).toContain("Building massing");
+  expect(buildPart("Envelope").querySelector(".run-progress")).toBeNull();
+
+  service.stages = { ...stagesAfterAnalysis, massing: "current" };
+  run.send({ type: "run_finished", stages: ["massing"], files: [] });
+  await settle();
+  expect([envelopeOutOfDate(), massingOutOfDate()]).toEqual([true, false]);
+  openStep("Carving");
+  expect(stepRow("Envelope and massing").querySelector(".step-summary")!.textContent).toBe("Envelope out of date, massing built");
+
+  openStep("Envelope and massing");
+  await act(async () => buttonIn(buildPart("Envelope"), "Build envelope").click());
+  await settle();
+  expect(service.runsStarted).toEqual([["massing"], ["exporting"]]);
+  expect(FakeWebSocket.opened).toHaveLength(2);
+  // Its volume arrives with the run summary once the envelope mesh is done.
+  service.stages = { ...service.stages, exporting: "current" };
+  service.summary = { ...service.summary, envelope: { envelope_volume_m3: 3900 } };
+  FakeWebSocket.opened[1].send({ type: "run_finished", stages: ["exporting"], files: [] });
+  await settle();
+  expect(buildPart("Envelope").querySelector(".number-tile")!.textContent).toBe("Envelope volume3 900 m³");
+  expect([envelopeOutOfDate(), massingOutOfDate()]).toEqual([false, false]);
+});
+
+test("while Carving is locked, Build envelope, Build massing and Carving's Build envelope and massing are disabled and say why (M10)", async () => {
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
+  service = new FakeService(built, CARVING);
+  await openWorkspace(project(built));
+  openStep("Envelope and massing");
+  expect(buttonIn(buildPart("Envelope"), "Build envelope").disabled).toBe(false);
+
+  // A voxel size typed and not saved yet: the analysis is out of date for the settings shown, and a build would run it.
+  openStep("Settings");
+  type(voxelSizeField(), "2");
+  const lockReason = "Settings changed since the analysis. Run the analysis again before building.";
+  openStep("Envelope and massing");
+  for (const [part, label] of [["Envelope", "Build envelope"], ["Building massing", "Build massing"]]) {
+    const button = buttonIn(buildPart(part), label);
+    expect(button.disabled).toBe(true);
+    expect(reasonOf(button)).toBe(lockReason);
+  }
+  openStep("Carving");
+  const carvingBuild = buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing");
+  expect(carvingBuild.disabled).toBe(true);
+  expect(reasonOf(carvingBuild)).toBe(lockReason);
+
+  // Stored, the service finds the analysis out of date: the lock holds until Run analysis.
+  service.stages = { preprocessing: "out_of_date", thresholding: "out_of_date", exporting: "out_of_date", massing: "out_of_date" };
+  await waitForTheSave();
+  await settle();
+  expect(service.savedValues).toEqual([{ mode: "time-based", voxel_size: 2 }]);
+  openStep("Envelope and massing");
+  expect(buttonIn(buildPart("Building massing"), "Build massing").disabled).toBe(true);
+  expect(service.count("POST /runs")).toBe(0);
 });

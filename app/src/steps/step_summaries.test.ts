@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { stepMark, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName } from "./step_summaries";
+import { stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName } from "./step_summaries";
 
 const THIN = "\u202f";
 const NBSP = "\u00a0";
@@ -39,8 +39,9 @@ function stateWith(overrides: StateOverrides): ProjectViewState {
 test("closed steps summarise their state in the UX spec's words", () => {
   expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 2, weather: true }))).toBe("1 volume, 2 test surfaces, weather");
   expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 0 }))).toBe("Test surfaces missing");
-  expect(stepSummary("envelope_and_massing", stateWith({ totalFloorArea: 4820, storeys: 7, stages: { massing: "current" } }))).toBe(`4${THIN}820${NBSP}m², 7 storeys`);
-  expect(stepSummary("envelope_and_massing", stateWith({ stages: { massing: "out_of_date" } }))).toBe("Out of date");
+  expect(stepSummary("envelope_and_massing", stateWith({ totalFloorArea: 4820, storeys: 7, stages: { exporting: "current", massing: "current" } })))
+    .toBe(`4${THIN}820${NBSP}m², 7 storeys`);
+  expect(stepSummary("envelope_and_massing", stateWith({ stages: { exporting: "out_of_date", massing: "out_of_date" } }))).toBe("Out of date");
 });
 
 test("a new project's Mode summary names its starting mode", () => {
@@ -68,9 +69,31 @@ test("the carving, envelope and export summaries follow the stage status", () =>
   expect(stepSummary("carving", stateWith({ keptPercent: 61.2, stages: { thresholding: "out_of_date" } }))).toBe("Out of date");
   expect(stepSummary("carving", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("Out of date");     // no run summary read
   expect(stepSummary("envelope_and_massing", stateWith({}))).toBe("Not built yet");
-  expect(stepSummary("envelope_and_massing", stateWith({ totalFloorArea: 4820, storeys: 7, stages: { exporting: "out_of_date", massing: "current" } }))).toBe("Out of date");
   expect(stepSummary("export", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("Ready");
-  expect(stepSummary("export", stateWith({ stages: { exporting: "current" } }))).toBe("Build the envelope first");
+  expect(stepSummary("export", stateWith({ stages: { exporting: "out_of_date", massing: "current" } }))).toBe("Ready");
+  expect(stepSummary("export", stateWith({}))).toBe("Not built yet");
+});
+
+test("the envelope and massing summary names what exists of the two parts (R2 5)", () => {
+  const summaryOf = (exporting: StageState, massing: StageState) =>
+    stepSummary("envelope_and_massing", stateWith({ totalFloorArea: 4820, storeys: 7, stages: { exporting, massing } }));
+  expect(summaryOf("current", "missing")).toBe("Envelope built, massing not built");
+  expect(summaryOf("missing", "current")).toBe("Envelope not built, massing built");
+  expect(summaryOf("out_of_date", "current")).toBe("Envelope out of date, massing built");
+  expect(summaryOf("current", "out_of_date")).toBe("Envelope built, massing out of date");
+  expect(summaryOf("out_of_date", "missing")).toBe("Envelope out of date, massing not built");
+  expect(summaryOf("missing", "out_of_date")).toBe("Envelope not built, massing out of date");
+  // Both built and current: the numbers of the massing; without them (no run summary read) the words.
+  expect(summaryOf("current", "current")).toBe(`4${THIN}820${NBSP}m², 7 storeys`);
+  expect(stepSummary("envelope_and_massing", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("Envelope built, massing built");
+});
+
+test("Export can be used once either part is built, and says which is ready", () => {
+  expect(stepNotUsableYet("export", stateWith({}))).toBe("Build the envelope or the massing to export them");
+  expect(stepNotUsableYet("export", stateWith({ stages: { exporting: "current" } }))).toBeNull();
+  expect(stepNotUsableYet("export", stateWith({ stages: { massing: "out_of_date" } }))).toBeNull();
+  expect(stepSummary("export", stateWith({ stages: { exporting: "current" } }))).toBe("Envelope ready");
+  expect(stepSummary("export", stateWith({ stages: { massing: "current" } }))).toBe("Massing ready");
 });
 
 test("each step's mark: done, a setting to fix, or nothing yet", () => {

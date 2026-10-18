@@ -241,3 +241,10 @@ def write_fake_finished_run(tmp_path, obstruction_fraction_carved=None):
         json.dumps({"plates": [], "floor_area_m2_per_floor": [120.0, 80.0], "total_floor_area_m2": 200.0}), encoding="utf-8")
     write_diagnostic(run / "massing", {"floors": 3, "floors_built": 2, "envelope_volume_m3": 4321.5})
     return run
+
+
+def write_fake_finished_run_with_envelope(tmp_path, obstruction_fraction_carved=None):
+    """A finished run whose exporting left 50 voxels after its cleanup."""
+    run = write_fake_finished_run(tmp_path, obstruction_fraction_carved)
+    write_diagnostic(run / "exporting", {"voxels_original": 100, "voxels_retained": 50})
+    return run

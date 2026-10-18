@@ -13,7 +13,7 @@ import numpy as np
 from ..mode_registry import canonical_mode_name
 from ..pydantic_schemas import PreprocessingManifest, UserConfig
 from ..stage_settings import stage_folder
-from .api_models import CarvingSummary, MassingSummary, RunSummary, SkyDome, SunMarker, SunPath, SunPathDay
+from .api_models import CarvingSummary, EnvelopeSummary, MassingSummary, RunSummary, SkyDome, SunMarker, SunPath, SunPathDay
 from .score_points import read_stage_manifest, resolve_stored_path
 
 DIAGNOSTIC_PATH = Path("diagnostics") / "diagnostic.json"
@@ -28,9 +28,15 @@ HORIZON_SEARCH_MINUTES = 5      # sunrise and sunset are rounded to a minute, wh
 SUN_PATH_MODE = "time-based"
 
 
-def build_run_summary(run_folder: Path) -> RunSummary:
-    """The numbers of the thresholding and massing stages; each part is None when its stage has no output."""
-    return RunSummary(carving=_carving_summary(Path(run_folder)), massing=_massing_summary(Path(run_folder)))
+def build_run_summary(run_folder: Path, envelope_voxel_size: float | None = None) -> RunSummary:
+    """The numbers of the thresholding, exporting and massing stages; each part is None when its stage has no output.
+
+    *envelope_voxel_size* is the voxel size of the grid exporting meshed (stage_records.envelope_voxel_size); without it the
+    envelope part is None, since the exporting diagnostic counts voxels only.
+    """
+    run_folder = Path(run_folder)
+    return RunSummary(carving=_carving_summary(run_folder), envelope=_envelope_summary(run_folder, envelope_voxel_size),
+                      massing=_massing_summary(run_folder))
 
 
 def _read_json(path: Path) -> dict | None:
@@ -54,6 +60,13 @@ def _carving_summary(run_folder: Path) -> CarvingSummary | None:
         carve_above_extra_voxels_removed=diagnostic["carve_above_extra_voxels_removed"],
         slope_limit_extra_voxels_removed=diagnostic["slope_limit_extra_voxels_removed"],
     )
+
+
+def _envelope_summary(run_folder: Path, voxel_size: float | None) -> EnvelopeSummary | None:
+    diagnostic = _read_json(stage_folder(run_folder, "exporting") / DIAGNOSTIC_PATH)
+    if diagnostic is None or voxel_size is None:
+        return None
+    return EnvelopeSummary(envelope_volume_m3=diagnostic["voxels_retained"] * voxel_size ** 3)
 
 
 def _massing_summary(run_folder: Path) -> MassingSummary | None:

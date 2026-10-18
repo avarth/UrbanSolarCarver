@@ -1,7 +1,8 @@
-// The steps that show and start runs (UX 5.5 to 5.7, 6): Carving, Envelope and massing and Export, their pinned buttons, the
-// progress under the button that started a run, and what the 3D view draws of the results (dimmed while out of date or
-// replaced, listed as missing after a run that stopped before their stage). ProjectWorkspace gives them the project's form,
-// stage status and run loop; the results are fetched here and again as each stage of a run is done.
+// The steps that show and start runs (UX 5.5 to 5.7, 6): Carving, Envelope and massing and Export, their buttons (Carving's
+// pinned under the steps, Build envelope and Build massing in the two parts of their step, R2 5), the progress under the button
+// that started a run, and what the 3D view draws of the results (dimmed while out of date or replaced, listed as missing after a
+// run that stopped before their stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results
+// are fetched here and again as each stage of a run is done.
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { downloadWithToken, refusalDetailOf, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
@@ -22,8 +23,11 @@ import { createThresholdUpdateQueue } from "./threshold_queue";
 
 export const ANALYSIS_STAGES: PipelineStage[] = ["thresholding"];     // Run analysis: preprocessing is added when it is out of date
 export const CARVING_STAGES: PipelineStage[] = ["thresholding"];
-export const BUILD_STAGES: PipelineStage[] = ["exporting", "massing"];
-export const ENVELOPE_MESH_STAGES: PipelineStage[] = ["exporting"];
+export const BUILD_STAGES: PipelineStage[] = ["exporting", "massing"];     // Carving's Build envelope and massing
+// Build envelope and Build massing (R2 5): the massing reads the carving, not the envelope, so each runs its own stage. A mesh
+// format change runs the envelope's.
+export const ENVELOPE_STAGES: PipelineStage[] = ["exporting"];
+export const MASSING_STAGES: PipelineStage[] = ["massing"];
 const PIPELINE_STAGES: readonly PipelineStage[] = ["preprocessing", "thresholding", "exporting", "massing"];
 
 /** The step whose summary counts the warnings of a run started by each button. */
@@ -32,6 +36,8 @@ const STEP_OF_ORIGIN: Record<RunOrigin, StepName> = {
   carving_run_analysis: "carving",
   carving_update: "carving",
   build: "envelope_and_massing",
+  build_envelope: "envelope_and_massing",
+  build_massing: "envelope_and_massing",
   export_format: "export",
 };
 
@@ -233,11 +239,17 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const thresholdView = thresholdControlOf(form.mode);
   const changeSettings = (values: Record<string, unknown>) => dispatch({ type: "values_changed", values });
 
-  const buildButton = (opensEnvelopeStep: boolean) => (
-    <RunAnalysisButton blocker={runBlocker} label={messages.buildEnvelopeAndMassing}
-                       feedback={opensEnvelopeStep ? null : feedback("build")}
+  // A build reads the carving, so it waits while Carving is locked: it would run the analysis first, which only Run analysis
+  // starts (M10). The first reason that blocks a run comes first, as for Run analysis.
+  const buildBlocker = runBlocker ?? (analysisOutOfDate ? messages.buildWaitsForAnalysis : null);
+  const buildButton = (label: string, produce: PipelineStage[], origin: RunOrigin) => (
+    <RunAnalysisButton blocker={buildBlocker} label={label} feedback={feedback(origin)} onRunAnalysis={() => void startAfterSaving(produce, origin)} />
+  );
+  // Carving's button builds both parts; its run is shown in the Envelope and massing step, which it opens.
+  const buildFromCarvingButton = (
+    <RunAnalysisButton blocker={buildBlocker} label={messages.buildEnvelopeAndMassing}
                        onRunAnalysis={() => {
-                         if (opensEnvelopeStep) context.openStep("envelope_and_massing");
+                         context.openStep("envelope_and_massing");
                          void startAfterSaving(BUILD_STAGES, "build");
                        }} />
   );
@@ -251,7 +263,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   };
   const changeMeshFormat = async (format: string) => {
     const outcome = await changeAndSave({ final_mesh_format: format });
-    if ((outcome === "saved" || outcome === "none") && stages.exporting !== "missing") void startRun(ENVELOPE_MESH_STAGES, "export_format");
+    if ((outcome === "saved" || outcome === "none") && stages.exporting !== "missing") void startRun(ENVELOPE_STAGES, "export_format");
   };
 
   const content = {
@@ -269,13 +281,16 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                    analysisFeedback={feedback("carving_run_analysis")} />
     ),
     envelope_and_massing: (
-      <EnvelopeAndMassingStep form={form} onChange={changeSettings} disabledReason={settingsDisabledReason} massing={results.summary?.massing ?? null}
-                              platesFile={results.platesFile} outOfDate={stages.exporting === "out_of_date" || stages.massing === "out_of_date"}
+      <EnvelopeAndMassingStep form={form} onChange={changeSettings} disabledReason={settingsDisabledReason}
+                              envelope={results.summary?.envelope ?? null} envelopeOutOfDate={stages.exporting === "out_of_date"}
+                              envelopeButton={buildButton(messages.buildEnvelope, ENVELOPE_STAGES, "build_envelope")}
+                              massing={results.summary?.massing ?? null} platesFile={results.platesFile} massingOutOfDate={stages.massing === "out_of_date"}
+                              massingButton={buildButton(messages.buildMassing, MASSING_STAGES, "build_massing")} buildFeedback={feedback("build")}
                               hasRunReport={stages.exporting !== "missing" || stages.massing !== "missing"} onOpenRunReport={() => setRunReportOpen(true)} />
     ),
     export: (
       <ExportStep form={form} disabledReason={runs.activeRun !== null ? messages.runInProgress : null} onFormatChange={(format) => void changeMeshFormat(format)}
-                  downloads={exportDownloads({ project, meshFormat, envelopeOutOfDate: stages.exporting === "out_of_date", massingOutOfDate: stages.massing === "out_of_date" })}
+                  downloads={exportDownloads({ project, meshFormat, envelope: stages.exporting, massing: stages.massing })}
                   onDownload={download} formatFeedback={feedback("export_format")} downloadProblem={downloadProblem} />
     ),
   };
@@ -285,7 +300,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
 
   return {
     content,
-    pinnedAction: { carving: buildButton(true), envelope_and_massing: buildButton(false) },
+    pinnedAction: { carving: buildFromCarvingButton },
     viewer: {
       results: { scorePoints: results.scorePoints, carving: results.summary?.carving ?? null, skyDome: results.skyDome, envelope: results.envelope,
                  massing: results.massing },
@@ -299,7 +314,10 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     results,
     warningsOfStep,
     feedback,
-    feedbackWhenNotUsable: { carving: <>{feedback("carving_run_analysis")}{feedback("carving_update")}</>, envelope_and_massing: feedback("build") },
+    feedbackWhenNotUsable: {
+      carving: <>{feedback("carving_run_analysis")}{feedback("carving_update")}</>,
+      envelope_and_massing: <>{feedback("build")}{feedback("build_envelope")}{feedback("build_massing")}</>,
+    },
     startRun,
   };
 }

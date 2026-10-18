@@ -112,6 +112,19 @@ def choose_stages(store: ProjectStore, name: str, produce: list[str]) -> StageCh
     return StageChoice(stages=stages, produce_for_engine=[stage for stage in stages if stage in produce])
 
 
+def envelope_voxel_size(store: ProjectStore, name: str) -> float | None:
+    """The voxel size of the grid the envelope mesh on disk was built from: the one of the settings exporting last completed
+    with, or, while a run redoes exporting (it removed the record when it began), the one of the stored settings the run uses,
+    which no save can change during it. None when those settings no longer validate.
+    """
+    record = store.read_project_json(name).stage_records.get("exporting")
+    settings = record.config if record is not None else store.read_stored_config(name)
+    try:
+        return store.config_from_settings(name, settings).voxel_size
+    except ConfigError:
+        return None
+
+
 def forget_stages(store: ProjectStore, name: str, stages) -> None:
     """Remove the records of *stages*, so they count as missing until a run completes them again."""
     with store.project_lock(name):

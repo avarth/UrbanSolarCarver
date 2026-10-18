@@ -1,6 +1,7 @@
 // The Export step (UX 5.7): the mesh file format of the carved envelope, whose change reruns the envelope mesh only, and the
 // downloads: the envelope in that format, the building massing (OBJ) and its data (JSON), the settings (config.yaml) and the
-// whole project as a zip. A file built from settings that changed since is labelled out of date and can still be downloaded.
+// whole project as a zip. Each file of a stage is offered once the stage exists (R2 5: the envelope and the massing are built
+// on their own); one built from settings that changed since is labelled out of date and can still be downloaded.
 // The files are fetched with the token and handed to the browser to save (a plain link cannot send the token header).
 import type { ReactNode } from "react";
 import { projectConfigUrl, projectDownloadUrl, runFileUrl } from "../api_client/client";
@@ -8,6 +9,7 @@ import { messages } from "../messages";
 import type { FormState } from "../settings_form/form_state";
 import { settingView } from "../settings_form/presentation";
 import { SettingField, WarningIcon } from "../settings_form/SettingField";
+import type { StageState } from "./step_summaries";
 import "./steps.css";
 
 export interface ExportDownload {
@@ -27,18 +29,26 @@ export function exportedMeshPath(meshFormat: string): string {
 interface DownloadListState {
   project: string;
   meshFormat: string;
-  envelopeOutOfDate: boolean;
-  massingOutOfDate: boolean;
+  /** The stage status of exporting and of massing. */
+  envelope: StageState;
+  massing: StageState;
 }
 
-/** The files of the Export step, in the order of UX 5.7. */
-export function exportDownloads({ project, meshFormat, envelopeOutOfDate, massingOutOfDate }: DownloadListState): ExportDownload[] {
+/** The files of the Export step, in the order of UX 5.7, the envelope's and the massing's once their stage exists. */
+export function exportDownloads({ project, meshFormat, envelope, massing }: DownloadListState): ExportDownload[] {
   const formatName = messages.meshFormatNames[meshFormat as keyof typeof messages.meshFormatNames] ?? meshFormat.toUpperCase();
-  return [
+  const envelopeFiles: ExportDownload[] = envelope === "missing" ? [] : [
     { label: messages.envelopeMeshDownload(formatName), address: runFileUrl(project, exportedMeshPath(meshFormat)),
-      fileName: `${project} envelope.${meshFormat}`, outOfDate: envelopeOutOfDate },
+      fileName: `${project} envelope.${meshFormat}`, outOfDate: envelope === "out_of_date" },
+  ];
+  const massingOutOfDate = massing === "out_of_date";
+  const massingFiles: ExportDownload[] = massing === "missing" ? [] : [
     { label: messages.massingObjDownload, address: runFileUrl(project, MASSING_OBJ_PATH), fileName: `${project} massing.obj`, outOfDate: massingOutOfDate },
     { label: messages.massingJsonDownload, address: runFileUrl(project, MASSING_JSON_PATH), fileName: `${project} massing.json`, outOfDate: massingOutOfDate },
+  ];
+  return [
+    ...envelopeFiles,
+    ...massingFiles,
     { label: messages.settingsDownload, address: projectConfigUrl(project), fileName: "config.yaml", outOfDate: false },
     { label: messages.projectZipDownload, address: projectDownloadUrl(project), fileName: `${project}.zip`, outOfDate: false },
   ];

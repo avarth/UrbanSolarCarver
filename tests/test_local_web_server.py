@@ -25,7 +25,7 @@ with warnings.catch_warnings():     # newer Starlette versions announce that Tes
     from starlette.testclient import TestClient
 
 from local_web_test_support import (
-    GOLDEN_EPW, FakeRecycleBin, WaitsForCancel, box_bytes, has_vertex_normals, make_link_to_folder, make_worker, write_fake_finished_run,
+    GOLDEN_EPW, FakeRecycleBin, WaitsForCancel, box_bytes, has_vertex_normals, make_link_to_folder, make_worker, write_fake_finished_run_with_envelope,
     write_fake_run, write_joined_test_surfaces_without_normals,
 )
 from urbansolarcarver import __version__
@@ -527,11 +527,14 @@ def test_stage_status_summary_and_sky_dome_routes(projects_folder):
 def test_results_of_a_finished_run_are_served(client_with_inputs, tmp_path):
     client = client_with_inputs
     project_run_folder = ProjectStore(tmp_path / "projects").open("p") / "run"
-    shutil.copytree(write_fake_finished_run(tmp_path / "scratch", obstruction_fraction_carved=0.35), project_run_folder,
+    shutil.copytree(write_fake_finished_run_with_envelope(tmp_path / "scratch", obstruction_fraction_carved=0.35), project_run_folder,
                     dirs_exist_ok=True)
     summary = client.get("/api/projects/p/run/summary").json()
     assert summary["carving"]["voxels_kept"] == 61 and summary["carving"]["obstruction_fraction_carved"] == 0.35
     assert summary["massing"]["total_floor_area_m2"] == 200.0
+    # No run of this project recorded exporting, so the envelope's voxel size is the stored one.
+    voxel_size = ProjectStore(tmp_path / "projects").load_project_config("p").voxel_size
+    assert summary["envelope"]["envelope_volume_m3"] == pytest.approx(50 * voxel_size ** 3)
     score_points = client.get("/api/projects/p/run/score-points")
     assert score_points.status_code == 200 and score_points.headers["content-type"] == "application/octet-stream"
     assert len(score_points.content) > 4

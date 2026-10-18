@@ -192,18 +192,18 @@
       "step": "envelope_and_massing", "group": "Building massing", "essential": "all", "slider": { "low": 2, "high": 6, "step": 0.1 }
     },
     "min_plate_dimension": {
-      "label": "Bay width", "unit": "m",
-      "help": "The grid the storeys are built from, and the narrowest piece of floor allowed.",
+      "label": "Grid module", "unit": "m",
+      "help": "The square module the storeys are built from, and the narrowest piece of floor allowed.",
       "step": "envelope_and_massing", "group": "Building massing", "essential": "all", "slider": { "low": 1, "high": 15, "step": 0.1 }
     },
     "plate_tolerance": {
-      "label": "Allowed overhang", "unit": "%",
-      "help": "Share of a bay on a storey that may lie outside the carved envelope. The massing never leaves the maximum volume.",
+      "label": "Permitted volume exceedance", "unit": "%",
+      "help": "Share of a module on a storey that may lie outside the carved envelope. The massing never leaves the maximum volume.",
       "step": "envelope_and_massing", "group": "Building massing", "essential": false, "display": "percent", "slider": { "low": 0, "high": 1, "step": 0.01 }
     },
     "plate_stacking": {
       "label": "Floors rest on floors below", "unit": "choice",
-      "help": "Supported: a bay is built only on a bay below. Free: each storey is decided on its own.",
+      "help": "Supported: a module is built only on a module below. Free: each storey is decided on its own.",
       "step": "envelope_and_massing", "group": "Building massing", "essential": false
     },
     "final_mesh_format": {

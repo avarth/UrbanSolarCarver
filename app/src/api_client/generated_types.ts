@@ -537,6 +537,14 @@ export interface components {
             mode: string;
         };
         /**
+         * EnvelopeSummary
+         * @description The numbers exporting reports for the envelope part of the envelope and massing screen.
+         */
+        EnvelopeSummary: {
+            /** Envelope Volume M3 */
+            envelope_volume_m3: number;
+        };
+        /**
          * ErrorDetailReply
          * @description The body of a request the service refuses with a message.
          */
@@ -761,6 +769,7 @@ export interface components {
          */
         RunSummary: {
             carving: components["schemas"]["CarvingSummary"] | null;
+            envelope: components["schemas"]["EnvelopeSummary"] | null;
             massing: components["schemas"]["MassingSummary"] | null;
         };
         /**

@@ -46,7 +46,7 @@ from .projects import (
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_score_points
-from .stage_records import stage_status
+from .stage_records import envelope_voxel_size, stage_status
 
 API_PREFIX = "/api"
 TOKEN_HEADER = "X-USC-Token"
@@ -464,7 +464,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/projects/{name}/run/summary")
     def run_summary(name: str) -> RunSummary:
-        return build_run_summary(run_folder_of(name))
+        return build_run_summary(run_folder_of(name), envelope_voxel_size=envelope_voxel_size(folder_in_use.store, name))
 
     @router.get("/projects/{name}/run/sky-patches")
     def run_sky_patches(name: str) -> SkyDome:

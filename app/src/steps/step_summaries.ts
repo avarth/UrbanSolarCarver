@@ -79,13 +79,26 @@ function carvingSummary(state: ProjectViewState): string {
   return messages.keptShare(formatPercent(state.keptPercent));
 }
 
+/**
+ * What exists of the two parts, each built on its own (R2 5): "Envelope built, massing not built"; "Not built yet" or "Out of
+ * date" when both are; the floor area and storeys of the massing when both are built and current (UX 4.1).
+ */
 function envelopeAndMassingSummary(state: ProjectViewState): string {
   const { exporting, massing } = state.stages;
-  if (exporting === "out_of_date" || massing === "out_of_date") return messages.outOfDateSummary;
-  if (massing === "current" && state.totalFloorArea !== null && state.storeys !== null) {
+  if (exporting === "missing" && massing === "missing") return messages.notBuiltYet;
+  if (exporting === "out_of_date" && massing === "out_of_date") return messages.outOfDateSummary;
+  if (exporting === "current" && massing === "current" && state.totalFloorArea !== null && state.storeys !== null) {
     return messages.massingSummary(formatNumber(state.totalFloorArea, "m²"), messages.storeyCount(state.storeys));
   }
-  return messages.notBuiltYet;
+  return messages.envelopeAndMassingParts(messages.envelopePartStates[exporting], messages.massingPartStates[massing]);
+}
+
+/** "Ready" once both parts are built, or the part that is (Export offers each file once its stage exists). */
+function exportSummary(state: ProjectViewState): string {
+  const hasEnvelope = state.stages.exporting !== "missing", hasMassing = state.stages.massing !== "missing";
+  if (hasEnvelope && hasMassing) return messages.exportReady;
+  if (hasEnvelope) return messages.envelopeReady;
+  return hasMassing ? messages.massingReady : messages.notBuiltYet;
 }
 
 /** The summary of a step's row: "1 volume, 2 test surfaces, weather", "Solar time-based", "21 Dec, 10 to 14 h; 1 m voxels" ... */
@@ -103,7 +116,7 @@ export function stepSummary(step: StepName, state: ProjectViewState): string {
     case "envelope_and_massing":
       return envelopeAndMassingSummary(state);
     case "export":
-      return state.stages.exporting !== "missing" && state.stages.massing !== "missing" ? messages.exportReady : messages.buildEnvelopeFirst;
+      return exportSummary(state);
   }
 }
 
@@ -134,7 +147,7 @@ export function stepNotUsableYet(step: StepName, state: ProjectViewState): strin
     case "envelope_and_massing":
       return state.stages.thresholding === "missing" ? messages.envelopeNeedsAnalysis : null;
     case "export":
-      return state.stages.exporting === "missing" || state.stages.massing === "missing" ? messages.exportNeedsBuild : null;
+      return state.stages.exporting === "missing" && state.stages.massing === "missing" ? messages.exportNeedsBuild : null;
     default:
       return null;
   }

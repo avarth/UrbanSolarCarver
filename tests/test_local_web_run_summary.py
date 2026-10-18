@@ -1,12 +1,13 @@
 """Run summary, sky dome and sun path of the local web service."""
 import math
+import shutil
 import subprocess
 import sys
 import warnings
 
 import pytest
 
-from local_web_test_support import GOLDEN_EPW, write_fake_finished_run, write_fake_run
+from local_web_test_support import GOLDEN_EPW, write_diagnostic, write_fake_finished_run, write_fake_run
 from urbansolarcarver.load_config import build_config_from_mode_starting_values
 from urbansolarcarver.local_web_service.run_summary import (
     build_run_summary, build_sky_dome, sun_marker_hours, sun_path_for_config,
@@ -28,8 +29,25 @@ def test_summary_carries_the_obstruction_fraction_of_weighted_modes(tmp_path):
 
 
 def test_summary_parts_are_none_without_their_stage(tmp_path):
-    summary = build_run_summary(tmp_path / "run")
-    assert summary.carving is None and summary.massing is None
+    summary = build_run_summary(tmp_path / "run", envelope_voxel_size=2.0)
+    assert summary.carving is None and summary.envelope is None and summary.massing is None
+
+
+def test_summary_envelope_volume_is_the_voxels_the_envelope_was_meshed_from(tmp_path):
+    """R2 5: the envelope part shows its own volume, so it needs only exporting: 50 voxels left after the cleanup, 2 m each side."""
+    run = write_fake_finished_run(tmp_path)
+    write_diagnostic(run / "exporting", {"voxels_original": 100, "voxels_retained": 50, "mesh_volume_m3": None})
+    assert build_run_summary(run, envelope_voxel_size=2.0).envelope.envelope_volume_m3 == 400.0
+    assert build_run_summary(run, envelope_voxel_size=None).envelope is None       # the voxel size is not known
+
+
+def test_summary_envelope_without_massing_and_massing_without_envelope(tmp_path):
+    run = write_fake_finished_run(tmp_path)
+    assert build_run_summary(run, envelope_voxel_size=2.0).envelope is None and build_run_summary(run).massing is not None
+    write_diagnostic(run / "exporting", {"voxels_retained": 50})
+    shutil.rmtree(run / "massing")
+    summary = build_run_summary(run, envelope_voxel_size=2.0)
+    assert summary.envelope is not None and summary.massing is None
 
 
 def test_summary_massing_needs_both_of_its_files(tmp_path):
