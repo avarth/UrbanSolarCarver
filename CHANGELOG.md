@@ -83,6 +83,53 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ring. The compass ring, the sun path and the sky dome are sized to
   everything loaded, not to the maximum volume alone.
 
+### Changed (massing)
+
+- **Floors are built from square modules.** Each face of the footprint is
+  now cut in depth too, into square modules of `min_plate_dimension`, and each
+  module is built on a floor on its own. Before, a bay ran from the facade to
+  the middle of the footprint, so in a perimeter block whose maximum volume
+  covers the courtyard, a wing lost its upper floors as soon as the courtyard
+  behind it in the same bay was carved lower (in the Perimeter block example
+  the north and south wings stopped at 14 m; the floor area goes from 53 634 to
+  65 446 m²). A module at the back of a row shallower than one module joins the
+  one in front of it. A plate can now be as shallow as one module behind any
+  facade, and such a strip is kept at any angle of the footprint to the voxel
+  grid. `plates.json` keeps the key `bays` for the number of modules of a
+  plate.
+
+### Changed (massing refinements)
+
+- **Rows of modules are laid from both ends of the building.** Along a
+  straight facade, rows of `min_plate_dimension` start at both ends of the
+  building's extent and what is left over widens the middle row (or the two
+  middle rows). Before, rows were cut from the footprint's centroid, so an
+  end row narrower than a module joined its neighbour into a row of 3 to 6 m;
+  an end wing shallower than that row could vanish (a 100 x 92 m courtyard
+  block with 3.5 m wings lost both 92 m wings above the courtyard: 600 m² on
+  the floor from 17 to 20 m, 1116 m² now). The Perimeter block example goes
+  from 65 446 to 64 642 m².
+- **A floor no longer depends on the angle of the footprint to the voxel
+  grid.** A column along a facade not aligned with the grid counts only for
+  its share inside the footprint in a module's share outside the envelope
+  and in the test for narrow parts (a 60 x 14 m slab sloping from 36 to
+  15 m across its depth: 840, 739, 686 and 660 m² on the floor from 14 to
+  17 m at 0, 17, 30 and 45 degrees, now 840 m² at each).
+- **Columns just outside the footprint join the face next to them.** Such a
+  column is assigned from the footprint point nearest to it, so the end of a
+  slab whose front rows step back is cut on the same lines as the rest (a
+  60 x 14 m slab set back 3 m on both long sides: a 480 m² strip, without the
+  0.13 x 1 m notches at its ends).
+
+### Fixed (massing)
+
+- Plates of different modules no longer overlap where modules at a slanted
+  end are drawn from their voxel columns, and where two module rectangles
+  overlap the overlap belongs to one of them instead of to neither.
+- A plate no longer loses whole modules when GEOS's inward mitre offset, used
+  to close gaps narrower than a voxel, drops part of the shape (up to 240 m²
+  of a parallelogram in a test sweep).
+
 ### Added (cold period)
 
 - **Cold period from the weather file:** `urbansolarcarver.cold_period`

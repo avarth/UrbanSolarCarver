@@ -1,9 +1,10 @@
 """USC Massing: stacked floor plates that follow the footprint (stage 4).
 
 Takes the thresholding result and builds floor plates: a ground floor and
-equal floors above it, each made of bays cut perpendicular to the facades
-and kept where they fit the carved envelope. The daemon writes the plates
-to <out_dir>/massing/ and the component returns them as closed Breps.
+equal floors above it, each made of square modules cut along the facades
+and in depth behind them, kept where they fit the carved envelope. The
+daemon writes the plates to <out_dir>/massing/ and the component returns
+them as closed Breps.
 
 Inputs
 ------
@@ -41,7 +42,7 @@ from pathlib import Path
 try:
     ghenv.Component.Name = "USC Massing"
     ghenv.Component.NickName = "USC_Massing"
-    ghenv.Component.Description = "Stage 4: builds stacked floor plates that follow the footprint, cut into bays perpendicular to the facades, kept where they fit the carved envelope. Returns closed Breps and floor areas."
+    ghenv.Component.Description = "Stage 4: builds stacked floor plates that follow the footprint, cut into square modules along the facades and in depth, kept where they fit the carved envelope. Returns closed Breps and floor areas."
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config."
