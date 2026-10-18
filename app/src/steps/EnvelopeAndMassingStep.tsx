@@ -110,11 +110,13 @@ export interface EnvelopeAndMassingStepProps {
   onChange: (values: Record<string, unknown>) => void;
   /** Why the settings cannot be changed now (a run of the project); null when they can. */
   disabledReason: string | null;
+  /** The numbers of the envelope built (exporting not missing); null when none is. */
   envelope: EnvelopeSummary | null;
   /** The envelope was built from settings or a carving that changed since. */
   envelopeOutOfDate: boolean;
   /** Build envelope, with the reason it waits and the progress of its run. */
   envelopeButton: ReactNode;
+  /** The numbers and plates.json of the massing built (massing not missing); null when none is. */
   massing: MassingSummary | null;
   platesFile: PlatesFile | null;
   /** The massing was built from settings or a carving that changed since. */
@@ -132,7 +134,7 @@ export interface EnvelopeAndMassingStepProps {
 function PartResults({ outOfDate, children }: { outOfDate: boolean; children: ReactNode }) {
   return (
     <section className={outOfDate ? "envelope-results envelope-results-out-of-date" : "envelope-results"}>
-      {outOfDate && <p className="out-of-date-label">{messages.outOfDateForCarving}</p>}
+      {outOfDate && <p className="out-of-date-label">{messages.outOfDateForSettings}</p>}
       {children}
     </section>
   );
@@ -157,7 +159,8 @@ export function EnvelopeAndMassingStep(props: EnvelopeAndMassingStepProps) {
       {part(ENVELOPE_GROUP, props.envelopeButton, envelope !== null && (
         <PartResults outOfDate={props.envelopeOutOfDate}>
           <div className="number-tiles number-tiles-two">
-            <NumberTile label={messages.envelopeVolume} value={formatNumber(envelope.envelope_volume_m3)} unit={messages.units.cubicMetres} />
+            <NumberTile label={messages.envelopeVolume} value={formatNumber(envelope.envelope_volume_m3)} unit={messages.units.cubicMetres}
+                        help={messages.envelopeVolumeHelp} />
           </div>
         </PartResults>
       ))}

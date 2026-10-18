@@ -261,11 +261,17 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       else setDownloadProblem(refusalDetailOf(error) ?? String(error));
     });
   };
+  // A format change rebuilds the envelope, which reads the carving: while Carving is locked the format is stored and the envelope
+  // keeps its out-of-date mark, as the build buttons wait (M10).
+  const formatRunReason = analysisOutOfDate ? messages.buildWaitsForAnalysis : null;
   const changeMeshFormat = async (format: string) => {
     const outcome = await changeAndSave({ final_mesh_format: format });
-    if ((outcome === "saved" || outcome === "none") && stages.exporting !== "missing") void startRun(ENVELOPE_STAGES, "export_format");
+    if ((outcome === "saved" || outcome === "none") && stages.exporting !== "missing" && !carvingLocked.current) void startRun(ENVELOPE_STAGES, "export_format");
   };
 
+  // A part's results show once its stage is recorded: a run that wrote the envelope and then failed recorded neither part, and
+  // the step does not call a missing stage's results built.
+  const envelopeBuilt = stages.exporting !== "missing", massingBuilt = stages.massing !== "missing";
   const content = {
     carving: (
       <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={results.summary?.carving ?? null} scorePoints={results.scorePoints}
@@ -282,14 +288,16 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     ),
     envelope_and_massing: (
       <EnvelopeAndMassingStep form={form} onChange={changeSettings} disabledReason={settingsDisabledReason}
-                              envelope={results.summary?.envelope ?? null} envelopeOutOfDate={stages.exporting === "out_of_date"}
+                              envelope={envelopeBuilt ? results.summary?.envelope ?? null : null} envelopeOutOfDate={stages.exporting === "out_of_date"}
                               envelopeButton={buildButton(messages.buildEnvelope, ENVELOPE_STAGES, "build_envelope")}
-                              massing={results.summary?.massing ?? null} platesFile={results.platesFile} massingOutOfDate={stages.massing === "out_of_date"}
+                              massing={massingBuilt ? results.summary?.massing ?? null : null} platesFile={massingBuilt ? results.platesFile : null}
+                              massingOutOfDate={stages.massing === "out_of_date"}
                               massingButton={buildButton(messages.buildMassing, MASSING_STAGES, "build_massing")} buildFeedback={feedback("build")}
                               hasRunReport={stages.exporting !== "missing" || stages.massing !== "missing"} onOpenRunReport={() => setRunReportOpen(true)} />
     ),
     export: (
-      <ExportStep form={form} disabledReason={runs.activeRun !== null ? messages.runInProgress : null} onFormatChange={(format) => void changeMeshFormat(format)}
+      <ExportStep form={form} disabledReason={runs.activeRun !== null ? messages.runInProgress : null} formatRunReason={formatRunReason}
+                  onFormatChange={(format) => void changeMeshFormat(format)}
                   downloads={exportDownloads({ project, meshFormat, envelope: stages.exporting, massing: stages.massing })}
                   onDownload={download} formatFeedback={feedback("export_format")} downloadProblem={downloadProblem} />
     ),

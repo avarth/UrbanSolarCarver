@@ -214,7 +214,7 @@ test("the storeys of plates.json, one row each from the ground up, heights from 
   expect(storeyRows(belowZero).map((row) => [row.bottom, row.top])).toEqual([[0, 5], [5, 8]]);
 });
 
-const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
+const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
 const ENVELOPE = { envelope_volume_m3: 4150 };
 
 function envelopeAndMassingProps(overrides: Partial<EnvelopeAndMassingStepProps> = {}): EnvelopeAndMassingStepProps {
@@ -239,7 +239,7 @@ test("Envelope and massing: two parts, each with its settings, its button and it
   expect([...rendered.container.querySelectorAll('[data-setting="min_plate_dimension"] label')].map((label) => label.textContent)).toEqual(["Grid module"]);
   expect([...envelope.querySelectorAll("button")].map((button) => button.textContent)).toContain("Build envelope");
   expect([...massing.querySelectorAll("button")].map((button) => button.textContent)).toContain("Build massing");
-  expect([...envelope.querySelectorAll(".number-tile")].map((tile) => tile.textContent)).toEqual(["Envelope volume4 150 m³"]);
+  expect([...envelope.querySelectorAll(".number-tile")].map((tile) => tile.textContent)).toEqual(["Envelope volume i4 150 m³"]);     // " i": the tile's "i"
   expect([...massing.querySelectorAll(".number-tile")].map((tile) => tile.textContent)).toEqual(["Gross floor area880 m²", "Storeys2"]);
   const table = massing.querySelector("table")!;
   expect(table.querySelector("caption")!.textContent).toBe("Floor area per storey");
@@ -247,6 +247,10 @@ test("Envelope and massing: two parts, each with its settings, its button and it
     ["Storey", "Bottom, m", "Top, m", "Area, m²"], ["1, ground", "0.0", "5.0", "500"], ["2", "5.0", "8.0", "380"], ["Total", "", "", "880"],
   ]);
   expect(rendered.container.querySelector(".envelope-results-out-of-date")).toBeNull();
+  // What the envelope volume counts is said in the tile's "i".
+  click(envelope.querySelector<HTMLButtonElement>('[aria-label="About envelope volume"]')!);
+  expect(document.querySelector('[role="tooltip"]')!.textContent).toBe(
+    "Counted on the kept voxels the envelope mesh was built from, after small pieces were dropped, not on the smoothed surface.");
   const lastChild = rendered.container.querySelector(".envelope-step")!.lastElementChild!;
   expect(lastChild.textContent).toBe("Open the run report");
 });
@@ -254,7 +258,7 @@ test("Envelope and massing: two parts, each with its settings, its button and it
 test("each part is greyed and labelled out of date on its own; a part not built shows no results", () => {
   rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ massingOutOfDate: true })} />);
   expect(partOf(rendered.container, "Envelope").querySelector(".envelope-results-out-of-date")).toBeNull();
-  expect(partOf(rendered.container, "Building massing").querySelector(".envelope-results-out-of-date")!.textContent).toContain("Out of date for the current carving");
+  expect(partOf(rendered.container, "Building massing").querySelector(".envelope-results-out-of-date")!.textContent).toContain("Out of date for the current settings");
   rendered.unmount();
   rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ envelopeOutOfDate: true, massing: null, platesFile: null })} />);
   expect(partOf(rendered.container, "Envelope").querySelector(".envelope-results-out-of-date")).not.toBeNull();
@@ -492,7 +496,7 @@ test("a run report that cannot be read says so instead of an empty panel", async
   rendered = renderForTest(<RunReportPanel token="t" project="p" onClose={vi.fn()} onServiceProblem={vi.fn()} />);
   await act(async () => {});
   expect(rendered.container.querySelector(".run-report-problem")!.textContent)
-    .toBe("The run report could not be read. Build the envelope and massing again to write it.");
+    .toBe("The run report could not be read. Build the envelope or the massing again to write it.");
   expect(rendered.container.querySelector("pre")).toBeNull();
   vi.unstubAllGlobals();
 });

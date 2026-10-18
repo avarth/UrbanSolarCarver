@@ -44,7 +44,7 @@ const CARVING = {
   carve_above_extra_voxels_removed: 0, slope_limit_extra_voxels_removed: 0,
 };
 const ENVELOPE = { envelope_volume_m3: 4150 };
-const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
+const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
 const NOTHING_RUN: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" };
 const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, preprocessing: "current", thresholding: "current" };
 
@@ -408,7 +408,7 @@ test("Build massing sends only massing and Build envelope only exporting; each l
   service.summary = { ...service.summary, envelope: { envelope_volume_m3: 3900 } };
   FakeWebSocket.opened[1].send({ type: "run_finished", stages: ["exporting"], files: [] });
   await settle();
-  expect(buildPart("Envelope").querySelector(".number-tile")!.textContent).toBe("Envelope volume3 900 m³");
+  expect(buildPart("Envelope").querySelector(".number-tile-value")!.textContent).toBe("3 900 m³");
   expect([envelopeOutOfDate(), massingOutOfDate()]).toEqual([false, false]);
 });
 
@@ -442,4 +442,58 @@ test("while Carving is locked, Build envelope, Build massing and Carving's Build
   openStep("Envelope and massing");
   expect(buttonIn(buildPart("Building massing"), "Build massing").disabled).toBe(true);
   expect(service.count("POST /runs")).toBe(0);
+});
+
+test("while Carving is locked, a mesh format change is stored but builds nothing, and Export says why (M10)", async () => {
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
+  service = new FakeService(built, CARVING);
+  await openWorkspace(project(built, { final_mesh_format: "ply" }));
+  const lockReason = "Settings changed since the analysis. Run the analysis again before building.";
+  const formatField = () => container().querySelector('[data-setting="final_mesh_format"]')!;
+  openStep("Export");
+  expect(formatField().textContent).not.toContain(lockReason);
+
+  openStep("Settings");
+  service.stages = { preprocessing: "out_of_date", thresholding: "out_of_date", exporting: "out_of_date", massing: "out_of_date" };
+  type(voxelSizeField(), "2");
+  await waitForTheSave();
+  await settle();
+  openStep("Export");
+  expect(formatField().textContent).toContain(lockReason);
+  await act(async () => formatField().querySelector<HTMLInputElement>('input[value="obj"]')!.click());
+  await settle();
+  expect(service.savedValues.at(-1)).toEqual({ mode: "time-based", final_mesh_format: "obj", voxel_size: 2 });
+  expect(service.count("POST /runs")).toBe(0);                  // a run would start with the analysis
+});
+
+test("Carving's Build envelope and massing opens the step, builds both parts, shows its run at the top of the step and blocks both buttons", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(project(CARVED));
+  openStep("Carving");
+  await act(async () => buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing").click());
+  await settle();
+  expect(stepRow("Envelope and massing").classList.contains("step-open")).toBe(true);
+  expect(service.runsStarted).toEqual([["exporting", "massing"]]);
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
+  await settle();
+  const stepContent = container().querySelector(".envelope-step")!;
+  const progress = stepContent.querySelector(":scope > .run-progress")!;
+  expect(progress.textContent).toContain("Envelope mesh");
+  expect(progress.compareDocumentPosition(buildPart("Envelope")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  for (const [part, label] of [["Envelope", "Build envelope"], ["Building massing", "Build massing"]]) {
+    expect(reasonOf(buttonIn(buildPart(part), label))).toBe("A run is in progress");
+    expect(buildPart(part).querySelector(".run-progress")).toBeNull();
+  }
+
+  // The envelope was written, then the massing failed: the run records neither, so the envelope's volume is not shown as built.
+  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: null };
+  run.send({ type: "stage_progress", stage: "massing", done: 0, total: 1 });
+  await settle();
+  run.send({ type: "run_failed", error_type: "RuntimeError", message: "massing failed", field_errors: [] });
+  await settle();
+  expect(service.count("GET /run/summary")).toBeGreaterThan(1);
+  expect(buildPart("Envelope").querySelector(".envelope-results")).toBeNull();
+  openStep("Carving");
+  expect(stepRow("Envelope and massing").querySelector(".step-summary")!.textContent).toBe("Not built yet");
 });

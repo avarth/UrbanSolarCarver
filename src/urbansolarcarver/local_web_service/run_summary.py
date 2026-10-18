@@ -79,7 +79,6 @@ def _massing_summary(run_folder: Path) -> MassingSummary | None:
         floor_area_m2_per_storey=plates["floor_area_m2_per_floor"],
         total_floor_area_m2=plates["total_floor_area_m2"],
         storeys_built=diagnostic["floors_built"],
-        envelope_volume_m3=diagnostic["envelope_volume_m3"],
     )
 
 

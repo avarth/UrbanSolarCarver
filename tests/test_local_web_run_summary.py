@@ -20,7 +20,7 @@ def test_summary_reads_carving_and_massing_numbers(tmp_path):
             summary.carving.voxels_removed) == (3.5, 100, 61, 39)
     assert (summary.carving.carve_above_extra_voxels_removed, summary.carving.slope_limit_extra_voxels_removed) == (4, 2)
     assert summary.massing.floor_area_m2_per_storey == [120.0, 80.0] and summary.massing.total_floor_area_m2 == 200.0
-    assert summary.massing.storeys_built == 2 and summary.massing.envelope_volume_m3 == 4321.5
+    assert summary.massing.storeys_built == 2 and "envelope_volume_m3" not in summary.massing.model_dump()
 
 
 def test_summary_carries_the_obstruction_fraction_of_weighted_modes(tmp_path):

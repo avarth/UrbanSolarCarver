@@ -641,8 +641,6 @@ export interface components {
             total_floor_area_m2: number;
             /** Storeys Built */
             storeys_built: number;
-            /** Envelope Volume M3 */
-            envelope_volume_m3: number;
         };
         /**
          * MissingInputsReply

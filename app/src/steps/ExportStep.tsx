@@ -59,6 +59,8 @@ interface ExportStepProps {
   downloads: ExportDownload[];
   /** Why the format cannot be changed now (a run); null when it can. */
   disabledReason: string | null;
+  /** Why a format change is stored without rebuilding the envelope (Carving is locked); null when it rebuilds it. */
+  formatRunReason: string | null;
   onFormatChange: (meshFormat: string) => void;
   onDownload: (download: ExportDownload) => void;
   /** The progress and outcome of the envelope mesh run a format change started. */
@@ -67,11 +69,12 @@ interface ExportStepProps {
   downloadProblem: string | null;
 }
 
-export function ExportStep({ form, downloads, disabledReason, onFormatChange, onDownload, formatFeedback, downloadProblem }: ExportStepProps) {
+export function ExportStep({ form, downloads, disabledReason, formatRunReason, onFormatChange, onDownload, formatFeedback, downloadProblem }: ExportStepProps) {
   return (
     <div className="export-step">
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
       <SettingField view={settingView("final_mesh_format", form.mode)} form={form} disabled={disabledReason !== null}
+                    extras={formatRunReason === null ? undefined : { note: formatRunReason }}
                     onChange={(values) => onFormatChange(String(values.final_mesh_format))} />
       {formatFeedback}
       <ul className="download-list">

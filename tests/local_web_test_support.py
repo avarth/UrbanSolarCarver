@@ -22,7 +22,7 @@ from urbansolarcarver.io import load_mesh, save_mesh
 from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunWorker
 from urbansolarcarver.local_web_service.stage_records import UPSTREAM_STAGE
-from urbansolarcarver.pydantic_schemas import PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
+from urbansolarcarver.pydantic_schemas import ExportingManifest, PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
 from urbansolarcarver.run_context import report_issue, report_progress, run_context, stage_context
 from urbansolarcarver.stage_settings import PIPELINE_STAGES, stages_needed_for
 
@@ -244,7 +244,10 @@ def write_fake_finished_run(tmp_path, obstruction_fraction_carved=None):
 
 
 def write_fake_finished_run_with_envelope(tmp_path, obstruction_fraction_carved=None):
-    """A finished run whose exporting left 50 voxels after its cleanup."""
+    """A finished run whose exporting, built on its thresholding run, left 50 voxels of 2 m after its cleanup."""
     run = write_fake_finished_run(tmp_path, obstruction_fraction_carved)
     write_diagnostic(run / "exporting", {"voxels_original": 100, "voxels_retained": 50})
+    (run / "exporting" / "manifest.json").write_text(schema_to_json(ExportingManifest(
+        run_id="exp-run", mesh_path="export.ply", upstream_manifest="../thresholding/manifest.json", upstream_run_id="thr-run")),
+        encoding="utf-8")
     return run

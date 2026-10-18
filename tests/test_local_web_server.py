@@ -532,9 +532,8 @@ def test_results_of_a_finished_run_are_served(client_with_inputs, tmp_path):
     summary = client.get("/api/projects/p/run/summary").json()
     assert summary["carving"]["voxels_kept"] == 61 and summary["carving"]["obstruction_fraction_carved"] == 0.35
     assert summary["massing"]["total_floor_area_m2"] == 200.0
-    # No run of this project recorded exporting, so the envelope's voxel size is the stored one.
-    voxel_size = ProjectStore(tmp_path / "projects").load_project_config("p").voxel_size
-    assert summary["envelope"]["envelope_volume_m3"] == pytest.approx(50 * voxel_size ** 3)
+    # No run of this project recorded exporting, so the envelope's voxel size is the one of its manifest chain: 2 m.
+    assert summary["envelope"]["envelope_volume_m3"] == 50 * 2.0 ** 3
     score_points = client.get("/api/projects/p/run/score-points")
     assert score_points.status_code == 200 and score_points.headers["content-type"] == "application/octet-stream"
     assert len(score_points.content) > 4

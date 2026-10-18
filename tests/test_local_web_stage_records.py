@@ -74,14 +74,50 @@ def test_massing_alone_runs_while_the_envelope_is_out_of_date_and_the_envelope_k
     assert stage_status(store, name) == {**ALL_CURRENT, "massing": "out_of_date"}
 
 
+def write_voxel_size_into_preprocessing_manifest(store, name, voxel_size):
+    """The fake engine writes no voxel size; the real preprocessing manifest has the one it ran with."""
+    manifest_path = store.open(name) / "run" / "preprocessing" / "manifest.json"
+    manifest_path.write_text(json.dumps({**json.loads(manifest_path.read_text()), "voxel_size": voxel_size}), encoding="utf-8")
+
+
 def test_the_envelope_voxel_size_is_the_one_exporting_last_completed_with(built_project):
     store, name, _worker = built_project
     built_voxel_size = store.load_project_config(name).voxel_size
     change_settings(store, name, voxel_size=built_voxel_size * 2)      # not built yet: the envelope on disk has the old voxels
     assert envelope_voxel_size(store, name) == built_voxel_size
-    # A run removes the record of a stage it redoes; it runs with the stored settings, which cannot change during it.
+
+
+def test_without_its_record_the_envelope_voxel_size_comes_from_the_manifest_chain(built_project):
+    """A run removes the record of a stage it redoes; meanwhile the envelope on disk is the one its manifests name."""
+    store, name, _worker = built_project
+    write_voxel_size_into_preprocessing_manifest(store, name, 0.5)
+    change_settings(store, name, voxel_size=2.0)
     forget_stages(store, name, ["exporting"])
-    assert envelope_voxel_size(store, name) == built_voxel_size * 2
+    assert envelope_voxel_size(store, name) == 0.5
+
+
+def test_mid_run_with_a_new_voxel_size_the_old_envelope_has_no_voxel_size(built_project):
+    """A run with a new voxel size has redone preprocessing and thresholding, not yet exporting: the envelope on disk was built
+    on grids that are gone, so its voxel size is not known and its volume is not given."""
+    store, name, _worker = built_project
+    change_settings(store, name, voxel_size=2.0)
+    forget_stages(store, name, PIPELINE_STAGES)
+    run_folder = store.open(name) / "run"
+    for stage in ("preprocessing", "thresholding"):
+        write_fake_stage_output(run_folder, stage)
+    write_voxel_size_into_preprocessing_manifest(store, name, 2.0)
+    assert envelope_voxel_size(store, name) is None
+    write_fake_stage_output(run_folder, "exporting")                 # the run's exporting is done: the chain holds again
+    assert envelope_voxel_size(store, name) == 2.0
+
+
+def test_a_broken_manifest_chain_gives_no_envelope_voxel_size(built_project):
+    store, name, _worker = built_project
+    write_voxel_size_into_preprocessing_manifest(store, name, 0.5)
+    forget_stages(store, name, ["exporting"])
+    manifest_path = store.open(name) / "run" / "thresholding" / "manifest.json"
+    manifest_path.write_text(json.dumps({**json.loads(manifest_path.read_text()), "upstream_run_id": "another"}), encoding="utf-8")
+    assert envelope_voxel_size(store, name) is None
 
 
 def test_mesh_format_change_reruns_exporting_only(built_project):

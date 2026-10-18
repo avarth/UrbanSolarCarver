@@ -131,7 +131,6 @@ class MassingSummary(BaseModel):
     floor_area_m2_per_storey: list[float]
     total_floor_area_m2: float
     storeys_built: int
-    envelope_volume_m3: float
 
 
 class RunSummary(BaseModel):
