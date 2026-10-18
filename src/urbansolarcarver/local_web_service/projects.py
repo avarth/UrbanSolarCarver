@@ -266,15 +266,25 @@ class ProjectStore:
         """Rename the project folder and the name in its project.json; the new folder.
 
         ProjectError: 422 for a bad new name, 404 for an unknown project, 409 when a project (or any folder) already has the
-        new name, also in another letter case (folder names ignore it on Windows), and 422 when the folder cannot be moved
-        (a program has a file of it open). Nothing changes then.
+        new name, also in another letter case (folder names ignore it on Windows), with its own message when the new name
+        differs from the old one only in letter case, and 422 when the folder cannot be moved (a program has a file of it
+        open). Nothing changes then.
+
+        A project made before project.json recorded the example counts as from an example only while its name is the
+        example's title (see is_from_example), so the example is recorded with the new name and the link survives the rename.
         """
         old_name, new_name = validate_project_name(name), validate_project_name(new_name)
         with self.project_locks(old_name, new_name):
             old_folder = self.open(old_name)
+            if new_name != old_name and new_name.lower() == old_name.lower():
+                raise ProjectError(f"'{new_name}' differs from '{old_name}' only in letter case. Names that differ only in letter case "
+                                   "are the same project, so choose a name that differs in more than letter case.", status_code=409)
             if any(folder.name.lower() == new_name.lower() for folder in self._projects_folder.iterdir()):
                 raise ProjectError(f"A project named '{new_name}' already exists (project names ignore letter case).", status_code=409)
             project_json = self.read_project_json(old_name)
+            if project_json.example is None:
+                example = example_of_project(project_json)
+                project_json.example = example.name if example is not None else None
             new_folder = self._project_folder(new_name)
             try:
                 os.replace(old_folder, new_folder)

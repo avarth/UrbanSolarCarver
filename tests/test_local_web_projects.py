@@ -640,7 +640,7 @@ def test_rename_refuses_a_bad_new_name_with_422_and_changes_nothing(tmp_path):
     assert [row.name for row in store.list()] == ["a"]
 
 
-@pytest.mark.parametrize("new_name", ["b", "B", "b ", "a", "A"])
+@pytest.mark.parametrize("new_name", ["b", "B", "b ", "a"])
 def test_rename_to_an_existing_name_or_the_same_name_in_another_letter_case_is_409_and_moves_nothing(tmp_path, new_name):
     store = ProjectStore(tmp_path)
     store.create("a", "time-based")
@@ -650,6 +650,17 @@ def test_rename_to_an_existing_name_or_the_same_name_in_another_letter_case_is_4
     assert err.value.status_code == 409 and "already exists" in str(err.value) and "letter case" in str(err.value)
     assert sorted(folder.name for folder in tmp_path.iterdir()) == ["a", "b"]
     assert [store.read_project_json(name).name for name in ("a", "b")] == ["a", "b"]
+
+
+def test_rename_that_changes_only_the_letter_case_is_409_with_its_own_message_and_moves_nothing(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("Perimeter block", "time-based")
+    with pytest.raises(ProjectError) as err:
+        store.rename_project("Perimeter block", "perimeter block")
+    assert err.value.status_code == 409
+    assert "already exists" not in str(err.value) and "differ only in letter case" in str(err.value)
+    assert [folder.name for folder in tmp_path.iterdir()] == ["Perimeter block"]
+    assert store.read_project_json("Perimeter block").name == "Perimeter block"
 
 
 def test_rename_of_an_unknown_project_is_404(tmp_path):
@@ -907,6 +918,24 @@ def test_project_of_example_finds_a_renamed_project_by_the_recorded_example(tmp_
     store.rename_project("first", "Renamed")
     assert store.project_of_example("new_building", "New building among neighbors") == "Renamed"
     assert store.project_of_example("basic_perimeter_block", "Perimeter block") is None
+
+
+def test_a_project_without_the_example_field_named_like_the_example_keeps_the_example_when_renamed(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("Perimeter block", "time-based")     # made before the field existed: no example recorded
+    assert store.read_project_json("Perimeter block").example is None
+    store.rename_project("Perimeter block", "My block")
+    assert store.read_project_json("My block").example == "basic_perimeter_block"
+    assert store.summary("My block").example == "basic_perimeter_block"
+    titles = {example.name: example.title for example in read_examples()}
+    assert store.projects_of_examples(titles)["basic_perimeter_block"] == "My block"
+
+
+def test_renaming_a_project_without_the_example_field_that_is_from_no_example_records_none(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("plain", "time-based")
+    store.rename_project("plain", "Perimeter block 2")
+    assert store.read_project_json("Perimeter block 2").example is None
 
 
 def test_project_of_example_counts_a_project_without_the_field_only_when_its_name_is_exactly_the_title(tmp_path):
