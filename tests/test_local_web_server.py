@@ -1,6 +1,6 @@
 """The HTTP service of the local web app: security checks, routes, run events, files and the device warm-up state.
 
-The engine is replaced by the fake of the stage record tests, so a run writes the files of a finished run
+The engine is replaced by the fake of local_web_test_support.py, so a run writes the files of a finished run
 without computing anything. Requests go through ``TestClient`` with the Host the service expects.
 """
 import io
@@ -20,9 +20,7 @@ with warnings.catch_warnings():     # newer Starlette versions announce that Tes
     warnings.filterwarnings("ignore", message=".*httpx.*testclient|.*testclient.*httpx", category=Warning)
     from starlette.testclient import TestClient
 
-from test_local_web_run_summary import GOLDEN_EPW, write_fake_finished_run
-from test_local_web_run_worker import WaitsForCancel
-from test_local_web_stage_records import box_bytes, make_worker
+from local_web_test_support import GOLDEN_EPW, WaitsForCancel, box_bytes, make_worker, write_fake_finished_run, write_fake_run
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
 from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
@@ -507,7 +505,6 @@ def test_results_of_a_finished_run_are_served(client_with_inputs, tmp_path):
 
 
 def test_sky_dome_of_a_weighted_run(client_with_inputs, tmp_path):
-    from test_local_web_score_points import write_fake_run
     client = client_with_inputs
     shutil.copytree(write_fake_run(tmp_path / "scratch", with_patch_weights=True),
                     ProjectStore(tmp_path / "projects").open("p") / "run", dirs_exist_ok=True)

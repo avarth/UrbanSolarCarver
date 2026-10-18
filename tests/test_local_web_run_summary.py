@@ -1,41 +1,16 @@
 """Run summary, sky dome and sun path of the local web service."""
-import json
 import math
 import subprocess
 import sys
 import warnings
-from pathlib import Path
 
 import pytest
 
-from test_local_web_score_points import write_fake_run
+from local_web_test_support import GOLDEN_EPW, write_fake_finished_run, write_fake_run
 from urbansolarcarver.load_config import build_config_from_mode_starting_values
 from urbansolarcarver.local_web_service.run_summary import (
     build_run_summary, build_sky_dome, sun_marker_hours, sun_path_for_config,
 )
-
-GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
-
-
-def write_diagnostic(stage_folder: Path, content: dict) -> None:
-    (stage_folder / "diagnostics").mkdir(parents=True)
-    (stage_folder / "diagnostics" / "diagnostic.json").write_text(json.dumps(content), encoding="utf-8")
-
-
-def write_fake_finished_run(tmp_path, obstruction_fraction_carved=None):
-    run = write_fake_run(tmp_path)
-    thresholding_diagnostic = {
-        "threshold_value": 3.5, "voxels_occupied": 100, "voxels_kept": 61, "voxels_removed": 39, "retention_pct": 61.0,
-        "carve_above_extra_voxels_removed": 4, "slope_limit_extra_voxels_removed": 2, "threshold_method": "cutoff"}
-    if obstruction_fraction_carved is not None:
-        thresholding_diagnostic["obstruction_fraction_carved"] = obstruction_fraction_carved
-    write_diagnostic(run / "thresholding", thresholding_diagnostic)
-    (run / "massing").mkdir()
-    (run / "massing" / "plates.json").write_text(
-        json.dumps({"plates": [], "floor_area_m2_per_floor": [120.0, 80.0], "total_floor_area_m2": 200.0}), encoding="utf-8")
-    write_diagnostic(run / "massing", {"floors": 3, "floors_built": 2, "envelope_volume_m3": 4321.5})
-    return run
-
 
 def test_summary_reads_carving_and_massing_numbers(tmp_path):
     summary = build_run_summary(write_fake_finished_run(tmp_path))

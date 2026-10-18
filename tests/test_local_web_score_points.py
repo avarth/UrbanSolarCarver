@@ -1,47 +1,12 @@
 """The score layer blob of the local web service."""
 import json
 import struct
-from pathlib import Path
 
 import numpy as np
 import pytest
 
+from local_web_test_support import write_fake_run
 from urbansolarcarver.local_web_service.score_points import build_score_points
-from urbansolarcarver.pydantic_schemas import PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
-
-
-def write_fake_run(tmp_path, shape=(4, 3, 2), with_mask=True, with_compared_scores=False, with_patch_weights=False,
-                   thresholding_upstream_run_id="pre-run"):
-    """Write the preprocessing (and thresholding) outputs of a run; every voxel with i < 3 is occupied."""
-    run = tmp_path / "run"
-    preprocessing = run / "preprocessing"
-    preprocessing.mkdir(parents=True)
-    voxel_grid = np.zeros(shape, dtype=bool)
-    voxel_grid[:3] = True
-    raw_scores = np.arange(np.prod(shape), dtype=np.float32).reshape(shape)
-    np.save(preprocessing / "voxel_grid.npy", voxel_grid)
-    np.save(preprocessing / "scores.npy", raw_scores)
-    if with_patch_weights:
-        np.save(preprocessing / "patch_weights.npy", np.linspace(0.0, 1.0, 145, dtype=np.float32))
-    (preprocessing / "manifest.json").write_text(schema_to_json(PreprocessingManifest(
-        run_id="pre-run", scores_path="scores.npy", scores_kind="violation_count", shape=shape, origin=(10.0, 20.0, 30.0),
-        voxel_size=2.0, mode="time-based", voxel_grid_path="voxel_grid.npy",
-        patch_weights_path="patch_weights.npy" if with_patch_weights else None,
-        sample_point_count=5, footprint_path="footprint.json")), encoding="utf-8")
-    if with_mask:
-        thresholding = run / "thresholding"
-        thresholding.mkdir()
-        np.save(thresholding / "mask.npy", raw_scores % 2 == 0)
-        compared_path = None
-        if with_compared_scores:
-            np.save(thresholding / "scores_compared_with_cutoff.npy", raw_scores + 100)
-            compared_path = "scores_compared_with_cutoff.npy"
-        (thresholding / "manifest.json").write_text(schema_to_json(ThresholdingManifest(
-            run_id="thr-run", mask_path="mask.npy", scores_compared_with_cutoff_path=compared_path,
-            upstream_manifest="../preprocessing/manifest.json", upstream_run_id=thresholding_upstream_run_id,
-            resolved_threshold=ThresholdSpec(method="cutoff", value=1.0), score_smoothing_m=0.0, max_slope_deg=None)),
-            encoding="utf-8")
-    return run
 
 
 def decode(blob):

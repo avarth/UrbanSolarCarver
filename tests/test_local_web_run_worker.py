@@ -3,9 +3,8 @@ import threading
 
 import pytest
 
-from test_local_web_stage_records import (
-    ALL_CURRENT, ALL_MISSING, FakeEngine, change_settings, make_worker, project_with_inputs,
-    run_and_wait, wait_until_finished,
+from local_web_test_support import (
+    ALL_CURRENT, ALL_MISSING, FakeEngine, WaitsForCancel, change_settings, make_worker, run_and_wait, wait_until_finished,
 )
 from urbansolarcarver.errors import ConfigError, ConfigFieldError, InputError, StageChainError
 from urbansolarcarver.local_web_service import run_worker as run_worker_module
@@ -14,18 +13,6 @@ from urbansolarcarver.local_web_service.run_worker import MissingInputs, RunConf
 from urbansolarcarver.local_web_service.stage_records import choose_stages, stage_status
 from urbansolarcarver.stage_settings import PIPELINE_STAGES
 from urbansolarcarver.run_context import report_issue, run_context, stage_context
-
-
-class WaitsForCancel:
-    """A handler that starts, then waits until the run is cancelled; ``started`` is set once it runs."""
-
-    def __init__(self):
-        self.started = threading.Event()
-
-    def __call__(self, request, session, context):
-        self.started.set()
-        assert context.cancel_event.wait(10), "the run was never cancelled"
-        context.raise_if_cancelled()
 
 
 def start_blocked_run(worker, name, produce):

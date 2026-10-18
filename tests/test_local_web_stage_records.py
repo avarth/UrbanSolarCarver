@@ -1,123 +1,20 @@
 """Stage records of the local web service: stage status, the choice of stages to run, and the records a run leaves.
 
-The engine is replaced by a fake that writes a manifest with a new run_id (and the current upstream run_id)
-for each stage it runs, as the real stages do.
+The engine is replaced by the fake of local_web_test_support.py, which writes a manifest with a new run_id (and the current
+upstream run_id) for each stage it runs, as the real stages do. The fixture project_with_inputs is in conftest.py.
 """
 import json
 import subprocess
 import sys
-import time
-import uuid
-from pathlib import Path
 
 import pytest
-import trimesh
 
-from urbansolarcarver.run_context import report_issue, report_progress, run_context, stage_context
-from urbansolarcarver.stage_settings import PIPELINE_STAGES, stages_needed_for
-from urbansolarcarver.local_web_service.projects import ProjectStore
-from urbansolarcarver.local_web_service.run_worker import RunWorker
-from urbansolarcarver.local_web_service.stage_records import (
-    UPSTREAM_STAGE, choose_stages, forget_stages, missing_inputs, record_stages, stage_status,
+from local_web_test_support import (
+    ALL_CURRENT, ALL_MISSING, GOLDEN_EPW, box_bytes, change_settings, make_worker, run_and_wait, write_fake_stage_output,
 )
-
-GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
-ALL_CURRENT = {stage: "current" for stage in PIPELINE_STAGES}
-ALL_MISSING = {stage: "missing" for stage in PIPELINE_STAGES}
-
-
-# ---- Fakes and helpers shared with the run worker tests ----
-
-def write_fake_stage_output(run_folder: Path, stage: str) -> None:
-    """What a finished stage leaves: a manifest with a new run_id and, for a stage that reads one, the upstream run_id."""
-    folder = run_folder / stage
-    folder.mkdir(parents=True, exist_ok=True)
-    manifest = {"run_id": uuid.uuid4().hex}
-    if stage in UPSTREAM_STAGE:
-        manifest["upstream_run_id"] = json.loads((run_folder / UPSTREAM_STAGE[stage] / "manifest.json").read_text())["run_id"]
-    (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
-    if stage == "exporting":
-        (folder / "export.ply").write_bytes(b"ply")
-    if stage == "massing":
-        (folder / "plates.json").write_text("{}", encoding="utf-8")
-        (folder / "plates.obj").write_text("", encoding="utf-8")
-        (run_folder / "run_report.md").write_text("report", encoding="utf-8")
-
-
-def stages_the_engine_runs(request) -> list[str]:
-    path = stages_needed_for(request.produce)
-    return path[path.index(request.start_from):]
-
-
-class FakeEngine:
-    """Stands in for ``handle_engine_request``; keeps the requests it received."""
-
-    def __init__(self):
-        self.requests = []
-
-    def __call__(self, request, session, context):
-        self.requests.append(request)
-        with run_context(context):
-            for stage in stages_the_engine_runs(request):
-                with stage_context(stage):
-                    report_progress(0, 1)
-                    context.raise_if_cancelled()
-                    if stage == "preprocessing":
-                        report_issue("fake_issue", "preprocessing noticed something")
-                    write_fake_stage_output(Path(request.run_folder), stage)
-                    report_progress(1, 1)
-
-
-class FakeSession:
-    def __init__(self, device="cpu"):
-        self.device = device
-
-    def release_memory(self):
-        pass
-
-
-def make_worker(store, handle_request=None, device="cpu") -> RunWorker:
-    return RunWorker(store, device, handle_request=handle_request or FakeEngine(), session_factory=FakeSession)
-
-
-def wait_until_finished(worker: RunWorker, run_id: str, deadline_seconds: float = 20.0) -> list[dict]:
-    """All events of a run once it has finished; fails the test when the run does not finish within the deadline."""
-    state = worker.run_state(run_id)
-    deadline = time.monotonic() + deadline_seconds
-    seen = 0
-    while not state.finished:
-        assert time.monotonic() < deadline, f"the run did not finish within {deadline_seconds} seconds"
-        seen += len(state.wait_for_events(seen, 0.2))
-    return list(state.events)
-
-
-def run_and_wait(worker: RunWorker, name: str, produce: list[str]):
-    """Start a run and wait for it to end; the start reply."""
-    reply = worker.start(name, produce)
-    if reply.run_id is not None:
-        wait_until_finished(worker, reply.run_id)
-    return reply
-
-
-def change_settings(store: ProjectStore, name: str, **changes) -> None:
-    store.write_config_from_values(name, {**store.read_settings(name), **changes})
-
-
-def box_bytes(center, extents=(10, 10, 10)) -> bytes:
-    box = trimesh.creation.box(extents=extents)
-    box.apply_translation(center)
-    return box.export(file_type="ply")
-
-
-@pytest.fixture
-def project_with_inputs(tmp_path):
-    """A daylight project (no weather file needed) with a max volume and a test surface."""
-    store = ProjectStore(tmp_path / "projects")
-    store.create("p", "daylight")
-    store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
-    store.add_input("p", "test_surfaces", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
-    return store, "p"
-
+from urbansolarcarver.stage_settings import PIPELINE_STAGES
+from urbansolarcarver.local_web_service.projects import ProjectStore
+from urbansolarcarver.local_web_service.stage_records import choose_stages, forget_stages, missing_inputs, record_stages, stage_status
 
 @pytest.fixture
 def built_project(project_with_inputs):
