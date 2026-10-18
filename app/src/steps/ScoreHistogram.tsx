@@ -26,7 +26,7 @@ interface ScoreHistogramProps {
   comparedScores: Float32Array;
   kept: Uint8Array;
   cutoff: number;
-  /** Sun at set hours: the scores are shading in m²·h; the weighted modes compare relative scores. */
+  /** Solar time-based: the scores are shading in m²·h; the weighted modes compare relative scores. */
   isShadowTolerated: boolean;
   slopeLimitVoxelsRemoved: number;
 }

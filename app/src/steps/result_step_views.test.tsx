@@ -75,7 +75,7 @@ function typeInto(input: HTMLInputElement, text: string) {
   });
 }
 
-test("Sun at set hours: Shadow tolerated with its slider ends, the histogram, the tiles two per row", () => {
+test("Solar time-based: Shadow tolerated with its slider ends, the histogram, the tiles two per row", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps()} />);
   const text = rendered.container.textContent!;
   expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Shadow tolerated");

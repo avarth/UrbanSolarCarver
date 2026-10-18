@@ -1,8 +1,9 @@
-// The Mode step (UX 5.3, 12): six tiles in a 3 × 2 radio group. Arrow keys move the focus, Space or Enter chooses. Hovering a
-// tile, focusing it with the keyboard, or clicking its "i", shows the tile's tooltip (plain name, longer description, what the
-// mode needs, engine name), which Escape closes. The focus a mouse click gives a tile does not hold the tooltip open: it goes
-// when the pointer leaves. A tooltip pinned with the "i" goes when a press lands anywhere but on that tile's "i", or another
-// mode is chosen. The tooltip lets the pointer through, so it never takes a click meant for the tile under it.
+// The Mode step (UX 5.3, 12; R2 3): six tiles in a 3 × 2 radio group, each with its symbol and plain name only. Arrow keys move
+// the focus, Space or Enter chooses. Hovering a tile, focusing it with the keyboard, or clicking its "i", shows the tile's tooltip
+// (plain name, one line, longer description, what the mode needs, engine name), which Escape closes. The same text, after the
+// name, is the tile's description for a screen reader at all times. The focus a mouse click gives a tile does not hold the
+// tooltip open: it goes when the pointer leaves. A tooltip pinned with the "i" goes when a press lands anywhere but on that
+// tile's "i", or another mode is chosen. The tooltip lets the pointer through, so it never takes a click meant for the tile under it.
 // A mode that needs a weather file the project lacks gets the weather drop zone under the tiles.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { listedWithAnd, messages } from "../messages";
@@ -53,7 +54,7 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
   // A pointer press is under way: the focus it gives a tile is not the keyboard's, and opens no tooltip.
   const pointerPressing = useRef(false);
   const tooltip = useRef<HTMLDivElement>(null);
-  const tooltipId = useId();
+  const descriptionIdPrefix = useId();
   const groupLabelId = useId();
   const openIndex = pinnedIndex ?? (dismissed ? null : hoveredIndex ?? focusedIndex);
   const disabled = disabledReason !== null;
@@ -135,12 +136,13 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
       <div className="mode-tiles" role="radiogroup" aria-labelledby={groupLabelId} aria-disabled={disabled || undefined}>
         {MODE_TILES.map((tile, index) => {
           const chosen = tile.engine_name === mode;
+          const descriptionId = `${descriptionIdPrefix}-${index}`;
           return (
             <div key={tile.engine_name} className="mode-tile-cell"
                  onMouseEnter={() => { setHoveredIndex(index); setDismissed(false); }}
                  onMouseLeave={() => setHoveredIndex((current) => (current === index ? null : current))}>
               <div ref={(element) => { tiles.current[index] = element; }} className="mode-tile" role="radio" aria-checked={chosen}
-                   aria-disabled={disabled || undefined} aria-describedby={openIndex === index ? tooltipId : undefined}
+                   aria-disabled={disabled || undefined} aria-describedby={descriptionId}
                    tabIndex={index === focusIndex ? 0 : -1} onClick={() => choose(index)} onKeyDown={(event) => onTileKeyDown(event, index)}
                    onFocus={() => {
                      setFocusIndex(index);
@@ -151,9 +153,11 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
                    onBlur={() => setFocusedIndex((current) => (current === index ? null : current))}>
                 <ModeTileSymbol symbol={tile.symbol} />
                 <span className="mode-tile-name">{tile.plain_name}</span>
-                <span className="mode-tile-line">{tile.one_line}</span>
-                {tile.experimental && <span className="mode-tile-experimental">{messages.experimental}</span>}
               </div>
+              {/* outside the radio, so it describes the tile without becoming part of its name */}
+              <span id={descriptionId} className="visually-hidden">
+                {messages.modeTileDescription(tile.one_line, tile.tooltip, tile.needs, tile.engine_name)}
+              </span>
               {/* outside the radio, so the tile holds no control of its own; the tile's focus already opens the tooltip */}
               <button ref={(element) => { infoButtons.current[index] = element; }} type="button" className="setting-info mode-tile-info" tabIndex={-1} aria-label={messages.aboutMode(tile.plain_name)}
                       aria-expanded={openIndex === index}
@@ -165,8 +169,11 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
         })}
       </div>
       {openTile && (
-        <div ref={tooltip} id={tooltipId} role="tooltip" className="setting-tooltip mode-tooltip" style={placedTooltipStyle(placement)}>
+        // Seen, not read: a screen reader has the same text as the tile's description already.
+        <div ref={tooltip} role="tooltip" aria-hidden="true" className="setting-tooltip mode-tooltip"
+             style={placedTooltipStyle(placement)}>
           <span className="mode-tooltip-name">{openTile.plain_name}</span>
+          <span className="mode-tooltip-line">{openTile.one_line}</span>
           <span>{openTile.tooltip}</span>
           <span>{openTile.needs}</span>
           <span className="setting-tooltip-config"><MessageParts parts={messages.engineName(openTile.engine_name)} /></span>

@@ -149,7 +149,9 @@ export const messages = {
     ? `${listedLabels} is back to its default: ${modeName} cannot use the value you had set.`
     : `${listedLabels} are back to their defaults: ${modeName} cannot use the values you had set.`),
   engineName: (engineName: string): MessagePart[] => ["Engine name: ", { code: String(engineName) }],
-  experimental: "Experimental",
+  // A tile's description for a screen reader: the text of its tooltip after the name, which the tile itself says.
+  modeTileDescription: (oneLine: string, description: string, needs: string, engineName: string) =>
+    `${oneLine}. ${description} ${needs} Engine name: ${engineName}`,
   aboutMode: (plainName: string) => `About ${plainName}`,
 
   // Run buttons (5.4, 6.4)

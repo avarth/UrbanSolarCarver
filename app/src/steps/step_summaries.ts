@@ -19,7 +19,6 @@ export interface ModeTile {
   tooltip: string;
   needs: string;
   symbol: string;
-  experimental: boolean;
 }
 
 export const MODE_TILES: readonly ModeTile[] = modeTiles;
@@ -89,7 +88,7 @@ function envelopeAndMassingSummary(state: ProjectViewState): string {
   return messages.notBuiltYet;
 }
 
-/** The summary of a step's row: "1 volume, 2 test surfaces, weather", "Sun at set hours", "21 Dec, 10 to 14 h; 1 m voxels" ... */
+/** The summary of a step's row: "1 volume, 2 test surfaces, weather", "Solar time-based", "21 Dec, 10 to 14 h; 1 m voxels" ... */
 export function stepSummary(step: StepName, state: ProjectViewState): string {
   if (step !== "settings" && settingsToFixIn(step, state) > 0) return messages.settingsToFix(settingsToFixIn(step, state));
   switch (step) {
@@ -116,7 +115,7 @@ export function stepMark(step: StepName, state: ProjectViewState): StepMark {
     case "inputs":
       return state.maxVolumeFiles > 0 && state.testSurfaceFiles > 0 ? "done" : "none";
     case "mode":
-      return "done";      // a project always has a mode, a new one Sun at set hours
+      return "done";      // a project always has a mode, a new one Solar time-based
     case "settings":
       return preprocessing === "current" ? "done" : "none";
     case "carving":

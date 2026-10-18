@@ -24,7 +24,7 @@ const accessToken = readTokenFromLaunchUrl();
 const HEALTH_POLL_MILLISECONDS = 1000;
 const FAILED_POLLS_BEFORE_ENGINE_STOPPED = 3;
 const PROJECT_NAME_MAXIMUM_LENGTH = 64;
-const NEW_PROJECT_MODE = "time-based";      // Sun at set hours (UX 3, 5.1)
+const NEW_PROJECT_MODE = "time-based";      // Solar time-based (UX 3, 5.1)
 
 type ServiceProblem = "access_lost" | "engine_stopped";
 

@@ -24,7 +24,7 @@ test("each of those messages, as the engine renders it, gets the interface's sen
   expect(shown("end_day=31 is invalid for month 4 (max 30 days)"))
     .toEqual({ settings: ["end_day"], message: "April has 30 days, so the end day cannot be 31." });
   expect(shown("mode 'benefit' requires analysis period fields: start_day", "benefit"))
-    .toEqual({ settings: ["start_month"], message: "Solar heat when cold needs the whole analysis period: every day, month and hour." });
+    .toEqual({ settings: ["start_month"], message: "Solar usefulness needs the whole analysis period: every day, month and hour." });
   expect(shown("mode 'irradiance' requires epw_path", "irradiance")).toEqual({ settings: [], message: "Add a weather file to run this mode" });
 });
 

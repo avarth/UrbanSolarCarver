@@ -134,3 +134,24 @@ MODE_TILES_PATH = APP_FOLDER / "src" / "steps" / "mode_tiles.json"
 def test_mode_tiles_name_every_engine_mode_once():
     tiles = json.loads(MODE_TILES_PATH.read_text(encoding="utf-8"))
     assert sorted(t["engine_name"] for t in tiles) == sorted(MODES)
+
+
+def test_mode_tiles_have_the_names_and_order_of_round_2():
+    """R2 3: the 3 x 2 grid reads left to right in this order, with these names."""
+    tiles = json.loads(MODE_TILES_PATH.read_text(encoding="utf-8"))
+    assert [(t["plain_name"], t["engine_name"]) for t in tiles] == [
+        ("Angle rule", "tilted_plane"),
+        ("Solar time-based", "time-based"),
+        ("Solar energy", "irradiance"),
+        ("Solar usefulness", "benefit"),
+        ("Daylight", "daylight"),
+        ("Night cooling", "radiative_cooling"),
+    ]
+
+
+@pytest.mark.parametrize("retired_name", ["Sun at set hours", "Solar heat when cold"])
+def test_retired_mode_names_are_gone_from_the_app_sources(retired_name):
+    """R2 3, 6: "Solar time-based" and "Solar usefulness" replace the names of milestone 1 everywhere in the interface."""
+    sources = [path for path in (APP_FOLDER / "src").rglob("*") if path.is_file() and path.suffix in {".ts", ".tsx", ".json", ".css"}]
+    assert APP_FOLDER / "src" / "messages.ts" in sources and MODE_TILES_PATH in sources
+    assert [path.name for path in sources if retired_name in path.read_text(encoding="utf-8")] == []

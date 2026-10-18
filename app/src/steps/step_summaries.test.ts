@@ -44,7 +44,7 @@ test("closed steps summarise their state in the UX spec's words", () => {
 });
 
 test("a new project's Mode summary names its starting mode", () => {
-  expect(stepSummary("mode", stateWith({ mode: "time-based" }))).toBe("Sun at set hours");
+  expect(stepSummary("mode", stateWith({ mode: "time-based" }))).toBe("Solar time-based");
   expect(stepSummary("mode", stateWith({ mode: "radiative_cooling" }))).toBe("Night cooling");
 });
 

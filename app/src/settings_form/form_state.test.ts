@@ -180,7 +180,7 @@ test("an error the engine names after a dot goes under its setting, and one of a
                             { field: "tilted_plane_angle_deg.float", message: "Input should be a valid number" },
                             { field: "mode", message: "mode must be one of the six modes" }], grid_plan: null },
   });
-  // The plane angle has no field in Sun at set hours: its error is said for the step, with its name.
+  // The plane angle has no field in Solar time-based: its error is said for the step, with its name.
   expect(state.fieldErrors).toEqual({ threshold: "Cutoff threshold must be >= 0" });
   expect(state.stepErrors).toEqual(["Plane angle: Input should be a valid number", "Mode: mode must be one of the six modes"]);
 });
@@ -349,7 +349,7 @@ test("an error of the whole config is put, in the interface's words, under each 
   state = reject(state, [{ field: null, message: "Value error, end_day=30 is invalid for month 2 (max 28 days)" }]);
   expect(state.fieldErrors).toEqual({ end_day: "February has 28 days, so the end day cannot be 30." });
   state = reject(state, [{ field: null, message: "Value error, mode 'time-based' requires analysis period fields: start_day, end_day" }]);
-  expect(state.fieldErrors).toEqual({ start_month: "Sun at set hours needs the whole analysis period: every day, month and hour." });
+  expect(state.fieldErrors).toEqual({ start_month: "Solar time-based needs the whole analysis period: every day, month and hour." });
   state = reject(state, [{ field: null, message: "Value error, mode 'time-based' requires epw_path" }]);
   expect(state.fieldErrors).toEqual({});
   expect(state.stepErrors).toEqual(["Add a weather file to run this mode"]);
@@ -436,9 +436,9 @@ test("the form knows when its mode or analysis settings are not the stored ones:
 });
 
 test("a stored setting the engine ignores in the mode is not sent again; one the engine's analysis reads in every mode is kept", () => {
-  // The balance temperature belongs to Solar heat when cold only: the engine leaves it out of every other mode.
+  // The balance temperature belongs to Solar usefulness only: the engine leaves it out of every other mode.
   expect(valuesToSend(storedProjectState({ mode: "time-based", balance_temperature: 99, voxel_size: 2 }))).toEqual({ mode: "time-based", voxel_size: 2 });
-  // The edge strip has no field in Sun at set hours, but the engine's analysis reads it in every mode: dropping it would make
+  // The edge strip has no field in Solar time-based, but the engine's analysis reads it in every mode: dropping it would make
   // the analysis out of date behind the form's back, so it is sent as stored.
   const state = storedProjectState({ mode: "time-based", edge_taper: 0.3 });
   expect(valuesToSend(state)).toEqual({ mode: "time-based", edge_taper: 0.3 });

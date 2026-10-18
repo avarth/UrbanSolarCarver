@@ -76,7 +76,7 @@ const AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION = /None \(default\): (\d+(?:\.\d+)?) 
 
 /**
  * What an empty setting does in the form's mode, for a setting whose empty value the engine fills by mode, or null. The slope
- * limit is the one: the engine's number in the weighted modes, off in Sun at set hours and the angle rule (score smoothing says
+ * limit is the one: the engine's number in the weighted modes, off in Solar time-based and the angle rule (score smoothing says
  * it in its help). Null in a weighted mode when the schema does not give the number.
  */
 export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" | "scoreKindByMode" | "schemaProperties">): string | null {

@@ -304,14 +304,14 @@ test("a refused mode change locks Carving: the old mode's carving is not shown a
     ? [{ field: "max_slope_deg", message: "Input should be greater than 0" }] : null);
   await openWorkspace(project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Mode");
-  act(() => [...container().querySelectorAll<HTMLElement>('[role="radio"]')][3].click());      // Daylight
-  // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Sun at set hours.
+  act(() => [...container().querySelectorAll<HTMLElement>('[role="radio"]')][4].click());      // Daylight
+  // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Solar time-based.
   openStep("Carving");
   expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   await waitForTheSave();
   await settle();
   expect(service.count("PUT /config")).toBe(1);
-  expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Sun at set hours
+  expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Solar time-based
   expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   expect(thresholdField().disabled).toBe(true);
   expect(dimmedCarvingLayers()).toEqual(["carved_voxels", "kept_voxels", "sky_dome"]);
