@@ -6,6 +6,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError, putConfig, type ConfigErrorReply, type ConfigReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "../steps/grid_budget";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
+import { engineIgnoresIn } from "./engine_modes";
 import { SETTING_PRESENTATIONS, settingIsReadBy } from "./presentation";
 
 export const SAVE_DELAY_MILLISECONDS = 400;
@@ -91,10 +92,11 @@ export function initialFormState({ schema, modes, settings, gridPlan }: FormStar
   const scoreKindByMode = Object.fromEntries(modes.map((mode) => [mode.name, mode.score_kind]));
   const mode = typeof settings.mode === "string" ? settings.mode : String(schemaProperties.mode?.default);
   const startingValues = startingValuesByMode[mode] ?? {};
-  // A stored setting the mode does not read (left from another mode, or written by hand) is not sent again: the engine would
-  // ignore it, but still refuse it when invalid, with no field in this mode to fix it in.
+  // A stored setting the engine ignores in the mode (one of another mode, left from it or written by hand) is not sent again:
+  // the engine would still refuse it when invalid, with no field in this mode to fix it in. A setting the engine reads in every
+  // mode stays, though the form may show no field for it (edge_taper): leaving it out would change what the analysis reads.
   const userValues = Object.fromEntries(Object.entries(settings).filter(([name, value]) =>
-    name !== "mode" && settingIsReadBy(name, mode) && !(name in startingValues && sameValue(value, startingValues[name]))));
+    name !== "mode" && !engineIgnoresIn(name, mode) && !(name in startingValues && sameValue(value, startingValues[name]))));
   // Stored settings whose grid is over the budget (a larger maximum volume came after them) open with Voxel size to fix, as a
   // save of them would be refused; the message under the field is the step's own (SettingsStep), so the text here stays empty.
   const fieldErrors: Record<string, string> = gridIsOverBudget(gridPlan) ? { voxel_size: "" } : {};

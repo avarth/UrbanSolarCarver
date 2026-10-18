@@ -405,9 +405,8 @@ test("a value carried to the new mode that its save refuses goes back to the def
   expect(state.valuesResetByModeChange).toBeNull();
 });
 
-test("an error on a setting the mode does not show is said for the step with the setting's name; a stored one is not sent", () => {
+test("an error on a setting the mode does not show is said for the step with the setting's name", () => {
   let state = storedProjectState({ mode: "time-based", edge_taper: -1, voxel_size: 2 });
-  expect(valuesToSend(state)).toEqual({ mode: "time-based", voxel_size: 2 });
   state = reject(state, [{ field: "edge_taper", message: "Input should be greater than or equal to 0" }]);
   expect(state.fieldErrors).toEqual({});
   expect(state.stepErrors).toEqual(["Edge strip with less weight: Input should be greater than or equal to 0"]);
@@ -434,4 +433,14 @@ test("the form knows when its mode or analysis settings are not the stored ones:
   expect(analysisDiffersFromStored(state)).toBe(false);
   state = formReducer(state, { type: "values_changed", values: { voxel_size: 2.0 } });
   expect(analysisDiffersFromStored(state)).toBe(true);
+});
+
+test("a stored setting the engine ignores in the mode is not sent again; one the engine's analysis reads in every mode is kept", () => {
+  // The balance temperature belongs to Solar heat when cold only: the engine leaves it out of every other mode.
+  expect(valuesToSend(storedProjectState({ mode: "time-based", balance_temperature: 99, voxel_size: 2 }))).toEqual({ mode: "time-based", voxel_size: 2 });
+  // The edge strip has no field in Sun at set hours, but the engine's analysis reads it in every mode: dropping it would make
+  // the analysis out of date behind the form's back, so it is sent as stored.
+  const state = storedProjectState({ mode: "time-based", edge_taper: 0.3 });
+  expect(valuesToSend(state)).toEqual({ mode: "time-based", edge_taper: 0.3 });
+  expect(analysisDiffersFromStored(state)).toBe(false);
 });
