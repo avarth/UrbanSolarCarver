@@ -1,6 +1,9 @@
-// The Mode step (UX 5.3, 12): six tiles in a 3 × 2 radio group. Arrow keys move the focus, Space or Enter chooses. Hovering or
-// focusing a tile, or clicking its "i", shows the tile's tooltip (plain name, longer description, what the mode needs, engine
-// name), which Escape closes. A mode that needs a weather file the project lacks gets the weather drop zone under the tiles.
+// The Mode step (UX 5.3, 12): six tiles in a 3 × 2 radio group. Arrow keys move the focus, Space or Enter chooses. Hovering a
+// tile, focusing it with the keyboard, or clicking its "i", shows the tile's tooltip (plain name, longer description, what the
+// mode needs, engine name), which Escape closes. The focus a mouse click gives a tile does not hold the tooltip open: it goes
+// when the pointer leaves. A tooltip pinned with the "i" goes when a press lands anywhere but on that tile's "i", or another
+// mode is chosen. The tooltip lets the pointer through, so it never takes a click meant for the tile under it.
+// A mode that needs a weather file the project lacks gets the weather drop zone under the tiles.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { messages } from "../messages";
 import { MessageParts, placedTooltipStyle, placementUnder, type TooltipPlacement } from "../settings_form/SettingTooltip";
@@ -37,15 +40,31 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone }: Mo
   const [dismissed, setDismissed] = useState(false);       // Escape closes the tooltip while the pointer or focus is still on it
   const [placement, setPlacement] = useState<TooltipPlacement | null>(null);
   const tiles = useRef<(HTMLDivElement | null)[]>([]);
+  const infoButtons = useRef<(HTMLButtonElement | null)[]>([]);
+  // A pointer press is under way: the focus it gives a tile is not the keyboard's, and opens no tooltip.
+  const pointerPressing = useRef(false);
   const tooltip = useRef<HTMLDivElement>(null);
-  const grid = useRef<HTMLDivElement>(null);
   const tooltipId = useId();
   const groupLabelId = useId();
   const openIndex = pinnedIndex ?? (dismissed ? null : hoveredIndex ?? focusedIndex);
   const disabled = disabledReason !== null;
 
   useEffect(() => setFocusIndex(chosenIndex), [chosenIndex]);
+  useEffect(() => setPinnedIndex(null), [mode]);      // another mode was chosen: a pinned tooltip goes
 
+  useEffect(() => {
+    const pressStarts = () => { pointerPressing.current = true; };
+    const pressEnds = () => { pointerPressing.current = false; };
+    document.addEventListener("pointerdown", pressStarts, true);
+    // A touch focuses the tile after the pointer is up, so the press ends with its click (or the next key, after a drag).
+    document.addEventListener("click", pressEnds, true);
+    document.addEventListener("keydown", pressEnds, true);
+    return () => {
+      document.removeEventListener("pointerdown", pressStarts, true);
+      document.removeEventListener("click", pressEnds, true);
+      document.removeEventListener("keydown", pressEnds, true);
+    };
+  }, []);
   useEffect(() => {
     if (openIndex === null) return;
     const closeOnEscape = (event: globalThis.KeyboardEvent) => {
@@ -53,8 +72,12 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone }: Mo
       setPinnedIndex(null);
       setDismissed(true);
     };
+    // A press on the pinned tile's own "i" toggles it there; any other press, another tile included, unpins it.
     const unpinOnPointerDownElsewhere = (event: Event) => {
-      if (!(event.target instanceof Node && grid.current?.contains(event.target))) setPinnedIndex(null);
+      setPinnedIndex((pinned) => {
+        const pinnedInfo = pinned === null ? null : infoButtons.current[pinned];
+        return event.target instanceof Node && pinnedInfo?.contains(event.target) ? pinned : null;
+      });
     };
     document.addEventListener("keydown", closeOnEscape);
     document.addEventListener("pointerdown", unpinOnPointerDownElsewhere);
@@ -100,7 +123,7 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone }: Mo
   return (
     <div className="mode-step">
       <span id={groupLabelId} className="visually-hidden">{messages.modeGroupLabel}</span>
-      <div ref={grid} className="mode-tiles" role="radiogroup" aria-labelledby={groupLabelId} aria-disabled={disabled || undefined}>
+      <div className="mode-tiles" role="radiogroup" aria-labelledby={groupLabelId} aria-disabled={disabled || undefined}>
         {MODE_TILES.map((tile, index) => {
           const chosen = tile.engine_name === mode;
           return (
@@ -110,7 +133,12 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone }: Mo
               <div ref={(element) => { tiles.current[index] = element; }} className="mode-tile" role="radio" aria-checked={chosen}
                    aria-disabled={disabled || undefined} aria-describedby={openIndex === index ? tooltipId : undefined}
                    tabIndex={index === focusIndex ? 0 : -1} onClick={() => choose(index)} onKeyDown={(event) => onTileKeyDown(event, index)}
-                   onFocus={() => { setFocusedIndex(index); setFocusIndex(index); setDismissed(false); }}
+                   onFocus={() => {
+                     setFocusIndex(index);
+                     if (pointerPressing.current) return;
+                     setFocusedIndex(index);
+                     setDismissed(false);
+                   }}
                    onBlur={() => setFocusedIndex((current) => (current === index ? null : current))}>
                 <ModeTileSymbol symbol={tile.symbol} />
                 <span className="mode-tile-name">{tile.plain_name}</span>
@@ -118,7 +146,7 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone }: Mo
                 {tile.experimental && <span className="mode-tile-experimental">{messages.experimental}</span>}
               </div>
               {/* outside the radio, so the tile holds no control of its own; the tile's focus already opens the tooltip */}
-              <button type="button" className="setting-info mode-tile-info" tabIndex={-1} aria-label={messages.aboutMode(tile.plain_name)}
+              <button ref={(element) => { infoButtons.current[index] = element; }} type="button" className="setting-info mode-tile-info" tabIndex={-1} aria-label={messages.aboutMode(tile.plain_name)}
                       aria-expanded={openIndex === index}
                       onClick={() => { setDismissed(pinnedIndex === index); setPinnedIndex(pinnedIndex === index ? null : index); }}>
                 i

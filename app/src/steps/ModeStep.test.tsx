@@ -1,6 +1,6 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { renderForTest, click, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, renderForTest, click, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ModeStep, tileAfterArrowKey } from "./ModeStep";
 
 let rendered: RenderedOverlay | null = null;
@@ -86,4 +86,79 @@ test("during a run the mode cannot change, and the reason is shown; the weather 
   expect(onChoose).not.toHaveBeenCalled();
   expect(rendered.container.textContent).toContain("A run is in progress");
   expect(rendered.container.querySelector(".mode-step")!.lastElementChild!.textContent).toBe("weather box");
+});
+
+// A pointer press on an element, as a browser sends it before the click: pointerdown, then mousedown.
+function pressPointer(target: Element): void {
+  act(() => {
+    target.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  });
+}
+
+// The pointer moves onto *target* from *from* (React's mouse enter and leave are read from mouseover and mouseout).
+function movePointer(from: Element, target: Element): void {
+  act(() => {
+    from.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: target }));
+    target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, relatedTarget: from }));
+  });
+}
+
+/** A click with the mouse, as a browser sends it: the press, the focus it gives the tile, the click. */
+function clickWithPointer(target: HTMLElement): void {
+  pressPointer(target);
+  act(() => target.focus());
+  click(target);
+}
+
+test("a click on a tile leaves no tooltip open once the pointer has left the tile", () => {
+  const outside = document.createElement("button");
+  document.body.appendChild(outside);
+  rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
+  movePointer(outside, tiles()[2]);
+  clickWithPointer(tiles()[2]);
+  expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Solar heat when cold");    // hovered
+  movePointer(tiles()[2], outside);
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  // The keyboard focus still shows the tooltip.
+  focus(tiles()[0]);
+  press(tiles()[0], "ArrowRight");
+  expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Solar energy");
+  outside.remove();
+});
+
+test("a tooltip pinned with the i closes when another tile is chosen or the pointer presses anywhere else", () => {
+  const onChoose = vi.fn();
+  const outside = document.createElement("button");
+  document.body.appendChild(outside);
+  rendered = renderForTest(<ModeStep mode="time-based" onChoose={onChoose} disabledReason={null} weatherDropZone={null} />);
+  const info = (name: string) => rendered!.container.querySelector(`[aria-label="About ${name}"]`)!;
+  pressPointer(info("Daylight"));
+  click(info("Daylight"));
+  expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("overcast sky");
+  // Another tile of the grid is chosen: the pinned tooltip goes.
+  clickWithPointer(tiles()[1]);
+  expect(onChoose).toHaveBeenLastCalledWith("irradiance");
+  rendered.rerender(<ModeStep mode="irradiance" onChoose={onChoose} disabledReason={null} weatherDropZone={null} />);
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  // Pinned again, then a press on another tile's i, which pins that tile's tooltip in its place.
+  pressPointer(info("Daylight"));
+  click(info("Daylight"));
+  pressPointer(info("Angle rule"));
+  click(info("Angle rule"));
+  expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Needs a plane angle.");
+  expect(document.querySelector('[role="tooltip"]')!.textContent).not.toContain("overcast sky");
+  // A press outside the step closes it.
+  pressPointer(outside);
+  expect(document.querySelector('[role="tooltip"]')).toBeNull();
+  outside.remove();
+});
+
+test("the tooltip lets the pointer through, so a click on the tile under it reaches the tile", () => {
+  const removeStyles = [addStyleSheetForTest("src/settings_form/settings_form.css"), addStyleSheetForTest("src/steps/steps.css")];
+  rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
+  focus(tiles()[0]);
+  const tooltip = document.querySelector<HTMLElement>('[role="tooltip"]')!;
+  expect(getComputedStyle(tooltip).pointerEvents).toBe("none");
+  removeStyles.forEach((remove) => remove());
 });
