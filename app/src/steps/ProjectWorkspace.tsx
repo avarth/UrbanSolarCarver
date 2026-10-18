@@ -72,6 +72,8 @@ export interface OpenProjectSettingsSaver {
   flush: () => Promise<SaveOutcome>;
   /** Drops a waiting or failed save, so closing the project sends nothing. */
   cancel: () => void;
+  /** Resolves once the uploads and removals of input files under way have ended, so none reaches a renamed, reset or deleted project. */
+  waitForInputChanges: () => Promise<void>;
 }
 
 /** Why a request about the inputs failed, in words for the file box. */
@@ -86,8 +88,18 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const formStart = useMemo(() => ({ schema: props.schema, modes, settings: project.settings, gridPlan: project.grid_plan }), []);
   const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useSettingsForm(token, project.name, formStart);
   const runActive = runs.activeRun?.project === project.name;
+  // The uploads and removals of input files under way, each until its reply (and the save it may start) is in.
+  const inputChangesUnderWay = useRef(new Set<Promise<unknown>>());
+  const waitForInputChanges = async () => {
+    await Promise.allSettled(inputChangesUnderWay.current);
+  };
+  const followedInputChange = <Reply,>(change: Promise<Reply>): Promise<Reply> => {
+    inputChangesUnderWay.current.add(change);
+    void change.finally(() => inputChangesUnderWay.current.delete(change)).catch(() => {});
+    return change;
+  };
   useEffect(() => {
-    props.onSettingsSaverReady?.({ flush: flushSave, cancel: cancelSave });
+    props.onSettingsSaverReady?.({ flush: flushSave, cancel: cancelSave, waitForInputChanges });
     return () => props.onSettingsSaverReady?.(null);
   }, []);
   const [files, setFiles] = useState<Record<InputRole, InputFileInfo[]>>({
@@ -172,7 +184,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     if (role === "max_volume") dispatch({ type: "values_changed", values: {} });
   };
 
-  const addFiles: AddInputFiles = async (role, chosenFiles) => {
+  const addFilesOneByOne: AddInputFiles = async (role, chosenFiles) => {
     const problems: string[] = [];
     for (const file of chosenFiles) {
       try {
@@ -189,7 +201,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     return problems;
   };
 
-  const removeFile: RemoveInputFile = async (role, fileName) => {
+  const removeFileAndApply: RemoveInputFile = async (role, fileName) => {
     try {
       applyFilesReply(await removeInput(token, project.name, role, fileName));
       afterInputsChanged(role);
@@ -199,6 +211,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       return inputProblemText(error, fileName);
     }
   };
+  // The app waits for both before a rename, reset or delete of the project (waitForInputChanges).
+  const addFiles: AddInputFiles = (role, chosenFiles) => followedInputChange(addFilesOneByOne(role, chosenFiles));
+  const removeFile: RemoveInputFile = (role, fileName) => followedInputChange(removeFileAndApply(role, fileName));
 
   const openTheStep = (step: StepName | null) => {
     setOpenStep(step);

@@ -12,7 +12,11 @@ import { click, renderForTest, type RenderedOverlay } from "./viewer_overlays/re
 // and what its settings saver sends around a rename, reset or delete. The stand-in saves as the settings form does: with the
 // config saver of the project, flushed when the workspace closes, and handed to the page.
 const workspaceMounts = vi.hoisted(() => [] as string[]);
-const workspaceSettings = vi.hoisted(() => ({ saver: null as { schedule: (values: Record<string, unknown>) => void } | null, delay: 0 }));
+const workspaceSettings = vi.hoisted(() => ({
+  saver: null as { schedule: (values: Record<string, unknown>) => void } | null, delay: 0,
+  /** While set, the uploads and removals of input files under way end only once this promise resolves. */
+  inputChangesEndWhen: null as Promise<void> | null,
+}));
 // The steps each mount of the workspace started with, and the latest workspace's way to say which step is open and its run loop.
 const workspaceSteps = vi.hoisted(() => ({
   startedWith: [] as (WorkspaceSteps | undefined)[], report: null as ((steps: WorkspaceSteps) => void) | null, runs: null as RunLoop | null,
@@ -24,7 +28,7 @@ vi.mock("./steps/ProjectWorkspace", async () => {
   return {
     ProjectWorkspace: ({ token, project, runs, startSteps, onStepsChange, onSettingsSaverReady }: {
       token: string; project: ProjectDetail; runs: RunLoop; startSteps?: WorkspaceSteps; onStepsChange?: (steps: WorkspaceSteps) => void;
-      onSettingsSaverReady?: (saver: { flush: () => Promise<string>; cancel: () => void } | null) => void;
+      onSettingsSaverReady?: (saver: { flush: () => Promise<string>; cancel: () => void; waitForInputChanges: () => Promise<void> } | null) => void;
     }) => {
       workspaceSteps.runs = runs;
       workspaceSteps.report = onStepsChange ?? null;
@@ -33,7 +37,7 @@ vi.mock("./steps/ProjectWorkspace", async () => {
         workspaceMounts.push(project.name);
         const saver = createConfigSaver((values) => putConfig(token, project.name, values), () => {}, workspaceSettings.delay);
         workspaceSettings.saver = saver;
-        onSettingsSaverReady?.({ flush: saver.flush, cancel: saver.cancel });
+        onSettingsSaverReady?.({ flush: saver.flush, cancel: saver.cancel, waitForInputChanges: async () => { await workspaceSettings.inputChangesEndWhen; } });
         return () => {
           onSettingsSaverReady?.(null);
           void saver.flush();
@@ -57,6 +61,7 @@ afterEach(() => {
   workspaceSteps.runs = null;
   workspaceSettings.saver = null;
   workspaceSettings.delay = 0;
+  workspaceSettings.inputChangesEndWhen = null;
   window.localStorage.clear();
 });
 
@@ -526,4 +531,30 @@ test("after a rename on the start screen, the examples wait to be read again: th
   await act(async () => click(startChoice("Perimeter block")!));
   await settle();
   expect(service.requests).toContain("GET /api/projects/Plot%208");
+});
+
+test("a rename or delete of the open project waits for its uploads under way, so none reaches the project after it", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await openPlot7();
+  let endInputChanges: () => void = () => {};
+  workspaceSettings.inputChangesEndWhen = new Promise((resolve) => { endInputChanges = resolve; });
+  await chooseFromTopBarMenu("Rename");
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await settle();
+  expect(service.requests.some((request) => request.includes("/rename"))).toBe(false);
+  await act(async () => endInputChanges());
+  await settle();
+  expect(service.requests).toContain("POST /api/projects/Plot%207/rename");
+
+  workspaceSettings.inputChangesEndWhen = new Promise((resolve) => { endInputChanges = resolve; });
+  await chooseFromTopBarMenu("Delete");
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => click(buttonNamed("Delete project", dialog())));
+  await settle();
+  expect(service.requests.some((request) => request.startsWith("DELETE"))).toBe(false);
+  await act(async () => endInputChanges());
+  await settle();
+  expect(service.requests).toContain("DELETE /api/projects/Plot%208?confirm_name=Plot%208");
 });

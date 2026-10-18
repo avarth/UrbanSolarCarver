@@ -7,7 +7,7 @@ import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { ProjectWorkspace } from "./ProjectWorkspace";
+import { ProjectWorkspace, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import { useRunLoop } from "./run_state";
 import type { PipelineStage, StageState } from "./step_summaries";
 
@@ -74,6 +74,8 @@ class FakeService {
   massingOnDisk = false;
   /** The contents of input files by path (for example "/inputs/test_surfaces/surfaces.obj"); one triangle for any other. */
   inputFileContents: Record<string, string> = {};
+  /** While set, an upload of an input file gets its reply only once this promise resolves. */
+  uploadsAnswerWhen: Promise<void> | null = null;
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -102,6 +104,11 @@ class FakeService {
       return json({ status: "started", run_id: `r${this.runsStarted.length}`, stages });
     }
     if (path === "/run/summary") return json(this.summary);
+    if (method === "POST" && path.startsWith("/inputs/")) {
+      await this.uploadsAnswerWhen;
+      return json({ role: path.replace("/inputs/", ""), files: [{ name: "more.obj", triangle_count: 1 }], joined_bounds: [[0, 0, 0], [1, 1, 0]],
+                    weather_location: "Golden, CO, USA" });
+    }
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
     if (path === "/run/files/exporting/export.obj" && this.summary.envelope?.mesh_file === "export.obj") return new Response(TRIANGLE_OBJ);
     if (path === "/run/files/massing/plates.obj" && this.massingOnDisk) return new Response(TRIANGLE_OBJ);
@@ -144,7 +151,8 @@ const settle = () => act(async () => {
 });
 const waitForTheSave = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, SAVE_DELAY_MILLISECONDS + 50)); });
 
-async function openWorkspace(opened: ProjectDetail, steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange"> = {}) {
+async function openWorkspace(opened: ProjectDetail,
+                             steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady"> = {}) {
   vi.stubGlobal("fetch", vi.fn(service.answer));
   function Page() {
     const runs = useRunLoop("token", () => {});
@@ -556,4 +564,24 @@ test("the 3D view draws no building massing while its stage is not recorded: a r
   await settle();
   expect(service.requests).toContain("GET /run/files/massing/plates.obj");
   expect(FakeViewerScene.latest!.layersWithObjects()).not.toContain("building_massing");
+});
+
+test("the saver of the open project waits for an upload in flight, so a rename, reset or delete comes after it", async () => {
+  service = new FakeService(CARVED, CARVING);
+  let answerUpload: () => void = () => {};
+  service.uploadsAnswerWhen = new Promise((resolve) => { answerUpload = resolve; });
+  let saver: OpenProjectSettingsSaver | null = null;
+  await openWorkspace(project(CARVED), { onSettingsSaverReady: (ready) => { saver = ready; } });
+  const maximumVolumePicker = container().querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(maximumVolumePicker, "files", { value: [new File([TRIANGLE_OBJ], "more.obj")], configurable: true });
+  act(() => maximumVolumePicker.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  expect(service.requests).toContain("POST /inputs/max_volume");
+  let uploadsEnded = false;
+  void saver!.waitForInputChanges().then(() => { uploadsEnded = true; });
+  await settle();
+  expect(uploadsEnded).toBe(false);
+  await act(async () => answerUpload());
+  await settle();
+  expect(uploadsEnded).toBe(true);
 });

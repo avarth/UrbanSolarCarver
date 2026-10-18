@@ -12,6 +12,7 @@ import {
   type ExampleInfo, type HealthReply, type ModeInfo, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
 import { messages, type MessagePart } from "./messages";
+import type { SaveOutcome } from "./settings_form/form_state";
 import { MessageParts } from "./settings_form/SettingTooltip";
 import { projectFolderPath, sameProjectName } from "./steps/ProjectDialogs";
 import { ProjectMenu, type ProjectActions } from "./steps/ProjectMenu";
@@ -215,11 +216,22 @@ export function App() {
     moveAutoUpdateChoice(name, keepsAutoUpdate ? newName : null);
   };
 
+  /**
+   * Before a rename, reset or delete of the open project: its uploads and removals of input files under way end, then its waiting
+   * or failed settings save is sent; resolves with how that save ended, or null for a project that is not open.
+   */
+  const settleOpenProject = async (name: string): Promise<SaveOutcome | null> => {
+    const saver = isOpenProject(name) ? openProjectSettings.current : null;
+    if (saver === null) return null;
+    await saver.waitForInputChanges();
+    return saver.flush();
+  };
+
   const projectActions: ProjectActions = {
     openFolder: (name) => reasonIfRefused(() => openProjectFolder(accessToken, name), () => {}),
     rename: async (name, newName) => {
       // The settings are saved under the old name first; a save that fails keeps the project as it is.
-      if (isOpenProject(name) && (await openProjectSettings.current?.flush()) === "failed") return messages.settingsNotSavedSoNotRenamed;
+      if ((await settleOpenProject(name)) === "failed") return messages.settingsNotSavedSoNotRenamed;
       return reasonIfRefused(() => renameProject(accessToken, name, newName), (renamed) => {
         afterProjectChange(name, renamed.name, true);
         if (!isOpenProject(name)) return readStartScreenLists();
@@ -228,7 +240,7 @@ export function App() {
       });
     },
     delete: async (name, confirmName) => {
-      if (isOpenProject(name)) await openProjectSettings.current?.flush();     // discarded with the project, failed or not
+      await settleOpenProject(name);     // the save is discarded with the project, failed or not
       return reasonIfRefused(() => deleteProject(accessToken, name, confirmName), () => {
         afterProjectChange(name, null, false);
         if (!isOpenProject(name)) return readStartScreenLists();
@@ -237,7 +249,7 @@ export function App() {
       });
     },
     resetToExample: async (name) => {
-      if (isOpenProject(name)) await openProjectSettings.current?.flush();     // replaced by the example's, failed or not
+      await settleOpenProject(name);     // the save is replaced by the example's, failed or not
       return reasonIfRefused(() => resetProjectToExample(accessToken, name), (reset) => {
         afterProjectChange(name, null, false);
         if (!isOpenProject(name)) return readStartScreenLists();
