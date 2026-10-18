@@ -19,17 +19,23 @@ simulation input (one closed prism per floor and plate).
    wherever it turns by more than 30 degrees. Curved or faceted outlines with smaller
    turns stay one facade.
 2. **Faces.** Every footprint column belongs to its nearest facade. Facades
-   shorter than two bays (`2 * min_plate_dimension`: chamfers, small steps)
+   shorter than two modules (`2 * min_plate_dimension`: chamfers, small steps)
    get no face of their own; their neighbours meet at one corner across
    them. At corners the longer facade takes the corner square (up to half
    the building's depth behind it), so every face ends in a line
    perpendicular to its facade. At equal lengths (a square) the facade
    closer to the x axis takes the corner.
-3. **Bays.** Each face is cut into bays of `min_plate_dimension` (3 m) along its
-   facade, perpendicular to it. Cuts on the two sides of a straight building
-   line up. A short end bay joins its neighbour.
+3. **Bays.** Each face is cut into square modules of `min_plate_dimension`
+   (3 m): along its facade, perpendicular to it, and in depth behind it,
+   parallel to it. Cuts on the two sides of a straight building line up. A
+   short row of modules at either end of a face joins its neighbour, and a
+   module at the back of a row (where the face meets the one opposite)
+   shallower than `min_plate_dimension` joins the one in front of it. Each
+   module is built on its own, so a wing keeps its floors whatever the
+   envelope does behind it in the same face, for example a courtyard of a
+   perimeter block carved lower.
 4. **Floors.** For each floor (ground floor `ground_floor_height`, then
-   `floor_height`), a bay is built when it stays inside the maximum volume over
+   `floor_height`), a module is built when it stays inside the maximum volume over
    the floor's full height, at most `plate_tolerance` of its volume lies outside
    the carved envelope, and (with `plate_stacking: supported`) it is built on
    the floor below. Parts narrower than `min_plate_dimension` are dropped.
@@ -46,12 +52,13 @@ simulation input (one closed prism per floor and plate).
    at the bottom of the lowest occupied layer and lets the top floor reach the
    top of the highest occupied layer, up to one voxel outside the maximum
    volume at each end; running preprocessing again gives the floors above.
-5. **Plates.** The connected built bays of a floor form a plate. A bay on a
+5. **Plates.** The connected built modules of a floor form a plate. A module on a
    straight facade is drawn as a rectangle in its facade's frame: cuts lie
-   on the cut lines, the back lies on the midline where the facade faces a
-   parallel one, and the facade edges are the footprint's own. Other edges
-   (face ends at corners) are within half a voxel of the voxel columns. Bays
-   on curved facades, and bays with a slanted end where a corner is not
+   on the cut lines (along the facade and in depth), the back of the last
+   module lies on the midline where the facade faces a parallel one, and the
+   facade edges are the footprint's own. Other edges
+   (face ends at corners) are within half a voxel of the voxel columns. Modules
+   on curved facades, and modules with a slanted end where a corner is not
    square, follow their voxel columns, straight to within half a voxel.
 
 ## Settings
@@ -60,9 +67,9 @@ simulation input (one closed prism per floor and plate).
 |---|---|---|
 | `ground_floor_height` | 5.0 | Height of the ground floor (m) |
 | `floor_height` | 3.0 | Height of every floor above it (m) |
-| `min_plate_dimension` | 3.0 | Bay width and minimum plate width (m); "Grid module" in the browser UI |
-| `plate_tolerance` | 0.2 | Largest share of a bay's volume on a floor outside the carved envelope; "Permitted volume exceedance" in the browser UI |
-| `plate_stacking` | supported | `supported`: build a bay only on a built bay; `free`: each floor on its own |
+| `min_plate_dimension` | 3.0 | Side of the square module and minimum plate width (m); "Grid module" in the browser UI |
+| `plate_tolerance` | 0.2 | Largest share of a module's volume on a floor outside the carved envelope; "Permitted volume exceedance" in the browser UI |
+| `plate_stacking` | supported | `supported`: build a module only on a built module; `free`: each floor on its own |
 
 Plates never leave the maximum volume. The three sizes must be at least the
 voxel size of the preprocessing run; the stage reports an error naming the
@@ -73,7 +80,7 @@ setting otherwise.
 In `<out_dir>/massing/`:
 
 - `plates.json`: one entry per plate (floor, z bottom and top, outline and
-  holes in world coordinates, area, number of bays, share of its volume outside
+  holes in world coordinates, area, number of modules (`bays`), share of its volume outside
   the envelope), plus the floor area per floor and in total;
 - `plates.obj`: one closed mesh per plate, named `floor_<n>_plate_<m>`;
 - `manifest.json` and `diagnostics/diagnostic.json` (floors built, plates,
@@ -98,5 +105,5 @@ The run report gets a Massing section.
   preprocessing), the voxel
   footprint is used, with a warning; plates can then be up to one voxel larger
   than the true footprint.
-- Bays are rectangles in their face's frame; there are no interior zones (core,
+- Modules are rectangles in their face's frame; there are no interior zones (core,
   perimeter) and roofs are flat.

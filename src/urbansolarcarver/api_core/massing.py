@@ -129,8 +129,8 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
     from the lowest point of the maximum volume.  The footprint (the plan
     projection of the maximum volume that preprocessing saved as
     ``footprint.json``, not the mesh named in *cfg*) is split into faces, one per
-    facade, and each face into bays ``min_plate_dimension`` wide, cut
-    perpendicular to its facade.  A bay is built on a floor when it stays in
+    facade, and each face into square modules of ``min_plate_dimension``, cut
+    along its facade and in depth behind it.  A module is built on a floor when it stays in
     the maximum volume over the floor's full height, at most
     ``plate_tolerance`` of its volume lies outside the carved envelope, and
     (with ``plate_stacking: supported``) it is built on the floor below.

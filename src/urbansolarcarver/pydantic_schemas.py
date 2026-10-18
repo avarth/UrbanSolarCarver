@@ -371,18 +371,18 @@ class UserConfig(BaseModel):
         3.0, gt=0.0, description="Massing: height of every floor above the ground floor (m)")
     min_plate_dimension: float = Field(
         3.0, gt=0.0,
-        description="Massing: bay width, and the minimum width of any floor plate (m)")
+        description="Massing: side of the square module floors are built from, and the minimum width of any floor plate (m)")
     plate_tolerance: float = Field(
         0.2, ge=0.0, le=1.0,
         description=(
-            "Massing: largest share (0-1) of a bay's volume on a floor that may lie "
+            "Massing: largest share (0-1) of a module's volume on a floor that may lie "
             "outside the carved envelope. Plates never leave the maximum volume."
         ),
     )
     plate_stacking: Literal["supported", "free"] = Field(
         "supported",
         description=(
-            "Massing: 'supported' builds a bay on a floor only where it is built on the "
+            "Massing: 'supported' builds a module on a floor only where it is built on the "
             "floor below; 'free' decides each floor on its own."
         ),
     )

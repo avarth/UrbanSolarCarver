@@ -83,6 +83,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ring. The compass ring, the sun path and the sky dome are sized to
   everything loaded, not to the maximum volume alone.
 
+### Changed (massing)
+
+- **Floors are built from square modules.** Each face of the footprint is
+  now cut in depth too, into square modules of `min_plate_dimension`, and each
+  module is built on a floor on its own. Before, a bay ran from the facade to
+  the middle of the footprint, so in a perimeter block whose maximum volume
+  covers the courtyard, a wing lost its upper floors as soon as the courtyard
+  behind it in the same bay was carved lower (in the Perimeter block example
+  the north and south wings stopped at 14 m; the floor area goes from 53 634 to
+  65 446 m²). A module at the back of a row shallower than one module joins the
+  one in front of it. `plates.json` keeps the key `bays` for the number of
+  modules of a plate.
+
 ### Added (cold period)
 
 - **Cold period from the weather file:** `urbansolarcarver.cold_period`

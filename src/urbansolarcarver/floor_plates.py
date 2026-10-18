@@ -165,9 +165,10 @@ def split_facades(polygons, corner_angle_deg=CORNER_ANGLE_DEG):
 # ----------------------------------------------------------------- faces
 @dataclass(frozen=True)
 class Faces:
-    """For each footprint column: its facade and its position along that facade."""
+    """For each footprint column: its facade, its position along that facade and its depth behind it."""
     face: np.ndarray   # (N,) facade index
     u: np.ndarray      # (N,) m along the facade
+    d: np.ndarray      # (N,) m behind the facade: from its line when straight, from the facade itself when curved
 
 
 def part_of_points(points, polygons):
@@ -284,7 +285,9 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
     ``u`` is the projection on the facade direction measured from the
     part's centroid for straight facades (so parallel facades share cut
     positions), the arc length otherwise, continued along the end edges
-    past either end.
+    past either end. ``d`` is the distance behind the facade: from the line
+    through a straight facade (so a corner square past its end keeps its
+    depth), from the facade itself when it is curved.
     """
     xy = np.asarray(xy, dtype=np.float64)
     # Columns whose centre lies exactly on a ridge (aligned grids, odd voxel
@@ -330,13 +333,17 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
 
     centroids = np.array([[p.centroid.x, p.centroid.y] for p in polygons])
     u = np.zeros(len(xy))
+    d = np.zeros(len(xy))
     for k, f in enumerate(facades):
         mine = face == k
         if not mine.any():
             continue
         if f.straight:
             u[mine] = (xy[mine] - centroids[f.part]) @ f.direction
+            inward = np.array([-f.direction[1], f.direction[0]])     # solid on the left
+            d[mine] = (xy[mine] - f.start) @ inward
         else:
+            d[mine] = shapely.distance(points[mine], f.line)
             t = shapely.line_locate_point(f.line, points[mine])
             if not f.closed:
                 # Past either end (corner squares at reflex corners) the arc
@@ -348,7 +355,7 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
                 t = np.where(t <= 1e-9, np.minimum(before, 0.0),
                              np.where(t >= f.length - 1e-9, f.length + np.maximum(after, 0.0), t))
             u[mine] = t
-    return Faces(face=face, u=u)
+    return Faces(face=face, u=u, d=d)
 
 
 # ----------------------------------------------------------------- bays
@@ -357,10 +364,14 @@ def _bay_span(u, voxel_size):
 
 
 def cut_bays(faces: Faces, bay_width, voxel_size):
-    """Cut each face into bays at ``u = k * bay_width`` (perpendicular to its facade).
+    """Cut each face into bays: square modules of *bay_width*, cut along the facade at ``u = k * bay_width`` and in
+    depth behind it at ``d = m * bay_width``.
 
-    A bay at either end of a face that is narrower than *bay_width* merges
-    into its neighbour.
+    A row of modules at either end of a face that is narrower than
+    *bay_width* merges into its neighbour, and so does a module at the back
+    of a row (the ridge where the face ends) shallower than *bay_width*. Each
+    module is built on a floor on its own, so a wing keeps its floors
+    whatever lies behind it in the same face (a courtyard carved lower).
 
     Returns
     -------
@@ -370,6 +381,7 @@ def cut_bays(faces: Faces, bay_width, voxel_size):
         Facade index of each bay.
     """
     k = np.floor(faces.u / bay_width + 1e-9).astype(np.int64)
+    m = np.floor(faces.d / bay_width + 1e-9).astype(np.int64)
     for f in np.unique(faces.face):
         mine = np.flatnonzero(faces.face == f)
         ks, us = k[mine], faces.u[mine]
@@ -380,7 +392,14 @@ def cut_bays(faces: Faces, bay_width, voxel_size):
         if hi > lo and _bay_span(us[ks == hi], voxel_size) < bay_width - 1e-9:
             ks[ks == hi] = hi - 1
         k[mine] = ks
-    keys, bay = np.unique(np.stack([faces.face, k], axis=1), axis=0, return_inverse=True)
+        for row in np.unique(ks):
+            in_row = mine[ks == row]
+            ms, ds = m[in_row], faces.d[in_row]
+            lo, hi = ms.min(), ms.max()
+            if hi > lo and _bay_span(ds[ms == hi], voxel_size) < bay_width - 1e-9:
+                ms[ms == hi] = hi - 1
+            m[in_row] = ms
+    keys, bay = np.unique(np.stack([faces.face, k, m], axis=1), axis=0, return_inverse=True)
     return bay.ravel().astype(np.int64), keys[:, 0].astype(np.int64)
 
 
@@ -397,8 +416,8 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
     centroid, d inward from the facade) a bay is the rectangle around its
     columns' squares, with its sides moved onto exact lines:
 
-    * a side with columns of the same face across it lies on its cut line
-      ``u = k * bay_width``;
+    * a side with columns of the same face across it lies on its cut line:
+      ``u = k * bay_width`` along the facade, ``d = m * bay_width`` in depth;
     * a back with only columns of the face of a parallel, opposite facade
       across it lies on the midline between the two facades (the ridge
       the nearest-facade rule draws there);
@@ -427,7 +446,9 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
         on_facade = origin + ((facade.start - origin) @ inward) * inward   # u = 0, d = 0
         u_all = (xy - on_facade) @ along
         d_all = (xy - on_facade) @ inward
-        k_face = np.floor(u_all[faces.face == f_index] / w + 1e-9)
+        on_face = faces.face == f_index
+        k_face = np.floor(u_all[on_face] / w + 1e-9)
+        d_face = d_all[on_face]
         u_start, u_end = (facade.start - on_facade) @ along, (facade.end - on_facade) @ along
         for b in np.flatnonzero(bay_face == f_index):
             mine = bay == b
@@ -446,19 +467,24 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
                 return edge + outward * (reach if beyond.any() else reach + vs)
 
             k_lo, k_hi = np.floor(u_lo / w + 1e-9), np.floor(u_hi / w + 1e-9)
-            u0 = (k_lo * w if (k_face == k_lo - 1).any()
+            at_depth = (d_face >= d_lo - 1e-9) & (d_face <= d_hi + 1e-9)    # the face's columns beside this module
+            u0 = (k_lo * w if ((k_face == k_lo - 1) & at_depth).any()
                   else side(u_lo, -1.0, in_d & (u_all < u_lo) & (u_all >= u_lo - gap)))
-            u1 = ((k_hi + 1) * w if (k_face == k_hi + 1).any()
+            u1 = ((k_hi + 1) * w if ((k_face == k_hi + 1) & at_depth).any()
                   else side(u_hi, 1.0, in_d & (u_all > u_hi) & (u_all <= u_hi + gap)))
-            d0 = side(d_lo, -1.0, in_u & (d_all < d_lo) & (d_all >= d_lo - gap))
+            in_front = in_u & (d_all < d_lo) & (d_all >= d_lo - gap)
             behind = in_u & (d_all > d_hi) & (d_all <= d_hi + gap)
-            d1 = side(d_hi, 1.0, behind)
+            module_in_front = (in_front & on_face).any()                # cut in depth: modules of the same row
+            module_behind = (behind & on_face).any()
+            m_lo = np.floor(d_lo / w + 1e-9)
+            d0 = m_lo * w if module_in_front else side(d_lo, -1.0, in_front)
+            d1 = (m_lo + 1) * w if module_behind else side(d_hi, 1.0, behind)
             across = np.unique(faces.face[behind])
-            if len(across) == 1 and facades[across[0]].straight                     and facades[across[0]].direction @ along < -1.0 + 1e-9:   # parallel, opposite
+            if not module_behind and len(across) == 1 and facades[across[0]].straight                     and facades[across[0]].direction @ along < -1.0 + 1e-9:   # parallel, opposite
                 d1 = 0.5 * ((facades[across[0]].start - on_facade) @ inward)
             pieces = [_rectangle(on_facade, along, inward, u0, u1, d0, d1)]
             a, z = max(u0, u_start), min(u1, u_end)
-            if z > a and d0 > -vs:
+            if z > a and d0 > -vs and not module_in_front:
                 pieces.append(_rectangle(on_facade, along, inward, a, z, -vs, d1))
             shapes[b] = shapely.union_all(pieces)
     return shapes

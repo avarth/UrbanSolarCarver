@@ -155,8 +155,22 @@ class TestBays:
             assert widths == [5.0, 5.0]
 
     def test_round_tower_bays_follow_the_curve(self):
-        _, _, facades, _, bay, bay_face = _bays(Point(0, 0).buffer(10, quad_segs=16), 0.5, 3.0)
-        assert abs(len(bay_face) - facades[0].length / 3.0) <= 1.0
+        _, _, facades, faces, bay, bay_face = _bays(Point(0, 0).buffer(10, quad_segs=16), 0.5, 3.0)
+        front = np.unique(bay[faces.d < 3.0])                 # the ring of modules along the facade
+        assert abs(len(front) - facades[0].length / 3.0) <= 1.0
+
+    def test_bays_are_square_modules_cut_in_depth_too(self):
+        # 30 m deep block: each long face is 15 m deep, so five 3 m modules from its facade.
+        _, _, _, faces, bay, bay_face = _bays(box(0, 0, 60, 30), 0.5, 3.0)
+        for b in range(len(bay_face)):
+            u, d = faces.u[bay == b], faces.d[bay == b]
+            assert 3.0 - 1e-9 <= np.ptp(u) + 0.5 < 6.0 and 3.0 - 1e-9 <= np.ptp(d) + 0.5 < 6.0
+
+    def test_a_shallow_back_module_joins_the_one_in_front(self):
+        # 14 m deep bar: each face is 7 m deep, cut at 3 and 6 m; the 1 m deep back slice joins the module in front.
+        _, _, _, faces, bay, bay_face = _bays(box(0, 0, 30, 14), 0.5, 3.0)
+        depths = sorted({round(np.ptp(faces.d[bay == b]) + 0.5, 6) for b in range(len(bay_face))})
+        assert depths == [3.0, 4.0]
 
 
 def _bar_grid(nx=20, ny=6, nz=40, top=33, bay=3.0):
@@ -258,6 +272,28 @@ class TestFloors:
                                  counted_layers=counted_layers)
         assert all(floor.kept_bays.all() for floor in floors)
         assert np.allclose(floors[-1].outside_share, 0.0)
+
+    def test_the_wings_of_a_courtyard_block_keep_their_upper_floors(self):
+        """A 40 x 30 m block carved into wings 9 m deep (8 m at the ends) around a courtyard kept only up to 5 m.
+
+        The faces of the long facades reach the middle of the block, 15 m deep; a module of a wing must not fail with the
+        courtyard behind it (as a 15 m deep strip, 7 of 15 m outside the envelope above 5 m).
+        """
+        poly = box(0, 0, 40, 30)
+        ij, xy = _cells(poly, 1.0)
+        facades, corners = mg.split_facades([poly])
+        bays, _ = mg.cut_bays(mg.assign_faces(xy, facades, corners, [poly], 1.0), 3.0, 1.0)
+        occ = np.zeros((40, 30, 40), bool)
+        occ[:, :, :33] = True
+        kept = occ.copy()
+        kept[8:32, 9:21, 5:] = False                         # the courtyard
+        floors = _floors(ij, bays, occ, kept, tolerance=0.3)
+        north_wing = ij[:, 1] >= 21
+        courtyard = (ij[:, 0] >= 11) & (ij[:, 0] < 29) & (ij[:, 1] >= 11) & (ij[:, 1] < 19)
+        for floor in floors:
+            assert (floor.plate[north_wing] >= 0).all()
+            if floor.zb >= 5:
+                assert not (floor.plate[courtyard] >= 0).any()
 
     def test_outside_share_by_length(self):
         ij, bays, occ = _bar_grid()
@@ -428,3 +464,16 @@ def test_footprint_with_a_hole_survives_the_json_round_trip():
     assert len(restored.interiors) == 1
     assert Polygon(restored.interiors[0]).area == pytest.approx(100.0)
     assert restored.equals(courtyard)
+
+
+def test_front_modules_draw_on_the_depth_cut_line():
+    # A 30 x 14 m bar at 0.5 m voxels: the first row of modules behind each long facade is 3 m deep, drawn exactly.
+    bar = box(0, 0, 30, 14)
+    vs = 0.5
+    ij, xy, facades, faces = _faces(bar, vs)
+    bay, bay_face = mg.cut_bays(faces, 3.0, vs)
+    shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [bar], 3.0, vs)
+    front = np.isin(bay, np.unique(bay[faces.d < 3.0]))
+    plates = mg.plate_polygons(ij, front, ~front, vs, bar, bay=bay, bay_shapes=shapes)
+    assert sorted(p.bounds for p in plates) == [(0.0, 0.0, 30.0, 3.0), (0.0, 11.0, 30.0, 14.0)]
+    assert all(p.area == pytest.approx(90.0) for p in plates)
