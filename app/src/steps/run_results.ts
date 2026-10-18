@@ -61,19 +61,20 @@ export function useRunResults({ token, project, origin, stagesWithResults, onSer
   const source = useRef({ token, origin, onServiceProblem });
   source.current = { token, origin, onServiceProblem };
 
-  const fetchResult = (name: ResultName): Promise<RunResults[ResultName]> => {
+  /** *summary*: the run summary of this round of fetches, asked for once however many results read it. */
+  const fetchResult = (name: ResultName, summary: () => Promise<RunSummary>): Promise<RunResults[ResultName]> => {
     const { token: currentToken, origin: currentOrigin } = source.current;
     switch (name) {
       case "summary":
-        return getRunSummary(currentToken, project);
+        return summary();
       case "scorePoints":
         return getScorePoints(currentToken, project).then(decodeScorePoints);
       case "skyDome":
         return getSkyPatches(currentToken, project);
       case "envelope":
         // The file exporting wrote, which the run summary names: a format chosen since without a build has no file yet.
-        return getRunSummary(currentToken, project).then((summary) => {
-          const meshFile = summary.envelope?.mesh_file;
+        return summary().then((reply) => {
+          const meshFile = reply.envelope?.mesh_file;
           return meshFile === undefined ? null : loadMesh(runFileUrl(project, exportedMeshPath(meshFile)), currentToken, meshFormatOf(meshFile), currentOrigin);
         });
       case "massing":
@@ -84,13 +85,15 @@ export function useRunResults({ token, project, origin, stagesWithResults, onSer
   };
 
   const fetchResults = useCallback((names: readonly ResultName[]): Promise<void> => {
+    let summaryRequest: Promise<RunSummary> | null = null;
+    const summary = () => (summaryRequest ??= getRunSummary(source.current.token, project));
     const fetches = names.map((name) => {
       const request = (latestRequest.current[name] ?? 0) + 1;
       latestRequest.current[name] = request;
       const keep = (value: RunResults[ResultName]) => {
         if (latestRequest.current[name] === request) setResults((current) => ({ ...current, [name]: value }));
       };
-      return fetchResult(name).then(keep).catch((error) => {
+      return fetchResult(name, summary).then(keep).catch((error) => {
         keep(null);
         // A result the stage has not written is a 404 and stays null. Any other failure that is not a refusal may be a lost
         // engine: the app asks GET health before it says so, so a mesh the view cannot read only costs that check.
