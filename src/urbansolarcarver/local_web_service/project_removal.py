@@ -21,8 +21,7 @@ from .api_models import ProjectJson
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, validate_project_name
 
 
-DRIVE_REMOVABLE = 2     # GetDriveTypeW results of a drive that has no recycle bin
-DRIVE_REMOTE = 4
+DRIVE_FIXED = 3     # the GetDriveTypeW result of a volume that has a recycle bin; every other kind (removable, network, CD, RAM disk) has none
 
 
 class ProjectRemovalRefused(ProjectError):
@@ -41,23 +40,36 @@ def _is_link(path: Path | str) -> bool:
     return bool(getattr(os.lstat(path), "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
 
 
-def _windows_drive_type(drive_root: str) -> int:
-    return ctypes.windll.kernel32.GetDriveTypeW(drive_root)
+def _windows_volume_root(path: str) -> str:
+    """The root of the volume *path* is on: a drive letter's root, or the folder a volume is mounted at."""
+    buffer = ctypes.create_unicode_buffer(1024)
+    if not ctypes.windll.kernel32.GetVolumePathNameW(path, buffer, len(buffer)):
+        raise ctypes.WinError()
+    return buffer.value
+
+
+def _windows_drive_type(volume_root: str) -> int:
+    return ctypes.windll.kernel32.GetDriveTypeW(volume_root)
 
 
 def _check_folder_has_a_recycle_bin(project_folder: Path) -> None:
-    """On Windows, raise ProjectRemovalRefused when the folder is on a network or removable drive.
+    """On Windows, raise ProjectRemovalRefused unless the folder is on a fixed volume.
 
     send2trash asks the shell to recycle the folder without a confirmation, and the shell then deletes for good what it
-    cannot recycle, which is everything on a network share or a USB stick. UNC paths count as network.
+    cannot recycle, which is everything on a network share or a USB stick. UNC paths count as network. The volume is
+    found with GetVolumePathNameW, so a removable or network volume mounted into a folder of a fixed drive is seen as what it is.
     """
     if sys.platform != "win32":
         return
-    drive, _ = ntpath.splitdrive(str(project_folder))
-    if drive.startswith("\\\\") or _windows_drive_type(drive + "\\") in (DRIVE_REMOTE, DRIVE_REMOVABLE):
+    try:
+        on_a_fixed_volume = not ntpath.splitdrive(str(project_folder))[0].startswith("\\\\") and (
+            _windows_drive_type(_windows_volume_root(str(project_folder))) == DRIVE_FIXED)
+    except OSError:
+        on_a_fixed_volume = False   # a volume that cannot be asked about is not trusted to have a recycle bin
+    if not on_a_fixed_volume:
         raise ProjectRemovalRefused(
-            f"The folder {project_folder} is on a network or removable drive that has no recycle bin, so UrbanSolarCarver leaves it in place "
-            "instead of deleting it for good. You can delete it in the file manager.")
+            f"The folder {project_folder} is not on a fixed disk of this computer (it is on a network, removable or other drive), which has "
+            "no recycle bin, so UrbanSolarCarver leaves it in place instead of deleting it for good. You can delete it in the file manager.")
 
 
 def _check_nothing_is_a_link(project_folder: Path) -> None:

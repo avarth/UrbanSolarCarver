@@ -1,5 +1,4 @@
 """Project folders, names and project.json of the local web service."""
-import ntpath
 import os
 import threading
 import warnings
@@ -20,11 +19,10 @@ from urbansolarcarver.run_context import RunContext, run_context
 from urbansolarcarver.surface_sampling import discretize_surface_with_normals
 
 from urbansolarcarver.local_web_service import project_removal, projects
+from urbansolarcarver.local_web_service.example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
 from urbansolarcarver.local_web_service.project_removal import ProjectRemovalRefused
 from urbansolarcarver.local_web_service.projects import SERVICE_PATHS, ProjectError, ProjectStore, sanitize_file_name
-from urbansolarcarver.local_web_service.server import (
-    EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, _example_input_files, _read_examples,
-)
+from urbansolarcarver.local_web_service.server import _example_input_files
 
 GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 
@@ -385,7 +383,7 @@ def test_joined_file_follows_sorted_file_names_whatever_the_upload_order(tmp_pat
 
 def _create_example_project(store, project_name, example_name):
     """A project made as POST /projects/{name}/examples/{example} makes it: the example's mode and input files."""
-    example = next(candidate for candidate in _read_examples() if candidate.name == example_name)
+    example = next(candidate for candidate in read_examples() if candidate.name == example_name)
     example_folder = EXAMPLE_PROJECTS_FOLDER / example.name
     store.create(project_name, example.mode)
     for role, file_names in (("max_volume", example.max_volume), ("test_surfaces", example.test_surfaces)):
@@ -606,7 +604,7 @@ def recycle_bin(monkeypatch):
 
 
 def example_by_name(name):
-    return next(example for example in _read_examples() if example.name == name)
+    return next(example for example in read_examples() if example.name == name)
 
 
 def create_example_project(store, project_name, example_name="new_building"):
@@ -986,45 +984,101 @@ def test_rename_whose_rollback_fails_tells_where_the_folder_is_and_keeps_the_fir
     assert [folder.name for folder in tmp_path.iterdir()] == ["b"]
 
 
-@pytest.mark.parametrize("drive_type, refused", [(2, True), (4, True), (3, False), (5, False)])
-def test_on_windows_a_removable_or_network_drive_is_refused_before_anything_moves(tmp_path, monkeypatch, drive_type, refused):
-    ProjectStore(tmp_path).create("p", "time-based")
-    asked_about = []
+def pretend_to_be_on_windows_volume(monkeypatch, volume_root, drive_type):
+    """Makes the drive check run as on Windows, with the volume of every folder at *volume_root* and of the given type; the questions asked."""
+    asked = {"paths": [], "volume_roots": []}
     monkeypatch.setattr(project_removal.sys, "platform", "win32")
-    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda drive_root: asked_about.append(drive_root) or drive_type)
-    if refused:
+    monkeypatch.setattr(project_removal, "_windows_volume_root", lambda path: asked["paths"].append(path) or volume_root)
+    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda root: asked["volume_roots"].append(root) or drive_type)
+    return asked
+
+
+@pytest.mark.parametrize("drive_type, allowed", [(0, False), (1, False), (2, False), (3, True), (4, False), (5, False), (6, False)])
+def test_on_windows_only_a_fixed_volume_is_allowed_and_a_refusal_comes_before_anything_moves(tmp_path, monkeypatch, drive_type, allowed):
+    ProjectStore(tmp_path).create("p", "time-based")
+    asked = pretend_to_be_on_windows_volume(monkeypatch, "M:\\mounted\\", drive_type)
+    if allowed:
+        assert project_removal.check_project_folder_can_be_removed(tmp_path, "p") == (tmp_path / "p").resolve()
+    else:
         with pytest.raises(ProjectRemovalRefused) as err:
             project_removal.check_project_folder_can_be_removed(tmp_path, "p")
         assert err.value.status_code == 422 and "no recycle bin" in str(err.value) and "file manager" in str(err.value)
-    else:
-        assert project_removal.check_project_folder_can_be_removed(tmp_path, "p") == (tmp_path / "p").resolve()
-    assert asked_about == [ntpath.splitdrive(str((tmp_path / "p").resolve()))[0] + "\\"]
+    assert asked["paths"] == [str((tmp_path / "p").resolve())]
+    assert asked["volume_roots"] == ["M:\\mounted\\"]       # the volume root, which may be a folder, not the drive letter
 
 
-def test_on_windows_a_network_path_is_refused_without_asking_the_drive_type(tmp_path, monkeypatch):
+def test_on_windows_a_network_path_is_refused_without_asking_the_volume(monkeypatch):
     monkeypatch.setattr(project_removal.sys, "platform", "win32")
-    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda drive_root: pytest.fail("a UNC path has no drive letter to ask about"))
-    with pytest.raises(ProjectRemovalRefused, match="network or removable"):
+    monkeypatch.setattr(project_removal, "_windows_volume_root", lambda path: pytest.fail("a UNC path is refused first"))
+    with pytest.raises(ProjectRemovalRefused, match="no recycle bin"):
         project_removal._check_folder_has_a_recycle_bin(Path("//server/share/projects/p"))
+
+
+def test_on_windows_a_volume_that_cannot_be_asked_about_is_refused(monkeypatch):
+    def cannot_ask(path):
+        raise OSError("the volume is not ready")
+
+    monkeypatch.setattr(project_removal.sys, "platform", "win32")
+    monkeypatch.setattr(project_removal, "_windows_volume_root", cannot_ask)
+    with pytest.raises(ProjectRemovalRefused, match="no recycle bin"):
+        project_removal._check_folder_has_a_recycle_bin(Path("C:/projects/p"))
 
 
 def test_the_drive_type_is_not_asked_off_windows(tmp_path, monkeypatch):
     ProjectStore(tmp_path).create("p", "time-based")
     monkeypatch.setattr(project_removal.sys, "platform", "linux")
-    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda drive_root: pytest.fail("only Windows has drive types"))
+    monkeypatch.setattr(project_removal, "_windows_volume_root", lambda path: pytest.fail("only Windows has volumes to ask about"))
     assert project_removal.check_project_folder_can_be_removed(tmp_path, "p") == (tmp_path / "p").resolve()
 
 
-def test_delete_and_reset_leave_a_project_on_a_removable_drive_in_place(tmp_path, monkeypatch, recycle_bin):
+@pytest.mark.skipif(os.name != "nt", reason="the Windows functions of the drive check")
+def test_the_real_volume_of_the_test_folder_is_asked_about_and_has_a_root_and_a_type(tmp_path):
+    volume_root = project_removal._windows_volume_root(str(tmp_path))
+    assert str(tmp_path.resolve()).lower().startswith(volume_root.lower()) and project_removal._windows_drive_type(volume_root) in range(7)
+
+
+def test_delete_and_reset_leave_a_project_on_a_removable_volume_in_place(tmp_path, monkeypatch, recycle_bin):
     store = ProjectStore(tmp_path)
     example = create_example_project(store, "p")
-    monkeypatch.setattr(project_removal.sys, "platform", "win32")
-    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda drive_root: 2)
+    pretend_to_be_on_windows_volume(monkeypatch, "E:\\", 2)
     with pytest.raises(ProjectRemovalRefused):
         store.delete_project("p")
     with pytest.raises(ProjectRemovalRefused):
         store.reset_project_to_example("p", example, _example_input_files(example))
     assert recycle_bin.folders == [] and (tmp_path / "p" / "project.json").is_file()
+
+
+def test_reset_refuses_a_project_json_that_names_another_project_before_it_moves_anything(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path)
+    example = create_example_project(store, "a")
+    store.create("b", "time-based")
+    project_json = store.read_project_json("a")
+    project_json.name = "b"     # a hand edit
+    store.write_project_json("a", project_json)
+    with pytest.raises(ProjectRemovalRefused) as err:
+        store.reset_project_to_example("a", example, _example_input_files(example))
+    assert err.value.status_code == 422 and "'b'" in str(err.value)
+    assert recycle_bin.folders == [] and sorted(folder.name for folder in tmp_path.iterdir()) == ["a", "b"]
+    assert [file.name for file in store.input_files("a", "max_volume")] == ["max_volume.ply"]
+
+
+@pytest.mark.skipif(os.name != "nt", reason="folder names ignore letter case on Windows only")
+def test_reset_works_when_the_name_in_the_address_differs_from_the_stored_name_in_letter_case_only(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path)
+    example = create_example_project(store, "Mine")
+    store.reset_project_to_example("mine", example, _example_input_files(example))
+    assert [row.name for row in store.list()] == ["Mine"] and len(recycle_bin.folders) == 1
+
+
+def test_a_project_summary_names_its_example_with_the_backfill_rule(tmp_path):
+    store = ProjectStore(tmp_path)
+    create_example_project(store, "made here", "basic_perimeter_block")
+    store.create("plain", "time-based")
+    store.create("Perimeter block", "time-based")       # no example field, named like the example's title
+    store.create("Perimeter block 2", "time-based")     # a numbered copy stays an ordinary project
+    assert {row.name: row.example for row in store.list()} == {
+        "Perimeter block": "basic_perimeter_block", "Perimeter block 2": None, "made here": "basic_perimeter_block", "plain": None}
+    assert store.summary("made here").example == "basic_perimeter_block"
 
 
 def test_the_examples_are_matched_to_projects_in_one_pass_over_the_projects(tmp_path, monkeypatch):
@@ -1034,6 +1088,6 @@ def test_the_examples_are_matched_to_projects_in_one_pass_over_the_projects(tmp_
     listings = []
     real_list = store.list
     monkeypatch.setattr(store, "list", lambda: listings.append(1) or real_list())
-    titles = {example.name: example.title for example in _read_examples()}
+    titles = {example.name: example.title for example in read_examples()}
     assert store.projects_of_examples(titles) == {"basic_perimeter_block": "b", "new_building": "a", "multiple_buildings": None}
     assert len(listings) == 1

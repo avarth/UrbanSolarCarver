@@ -1218,6 +1218,23 @@ def test_an_old_project_named_like_the_example_title_counts_as_from_the_example(
     assert {example["name"]: example["project"] for example in client.get("/api/examples").json()}["basic_perimeter_block"] == "Perimeter block"
 
 
+def test_the_project_list_and_the_opened_project_name_the_example_they_came_from(client):
+    assert client.post("/api/projects/mine/examples/new_building").status_code == 200
+    create_project(client, "plain")
+    create_project(client, "Perimeter block")       # no example field, named like the example's title
+    create_project(client, "Perimeter block 2")
+    assert {row["name"]: row["example"] for row in client.get("/api/projects").json()} == {
+        "mine": "new_building", "plain": None, "Perimeter block": "basic_perimeter_block", "Perimeter block 2": None}
+    assert client.get("/api/projects/mine").json()["example"] == "new_building"
+    assert client.get("/api/projects/plain").json()["example"] is None
+    assert client.get("/api/projects/Perimeter block").json()["example"] == "basic_perimeter_block"
+    assert client.get("/api/projects/Perimeter block 2").json()["example"] is None
+    renamed = client.post("/api/projects/mine/rename", json={"new_name": "Renamed"}).json()
+    assert renamed["example"] == "new_building"
+    reset = client.post("/api/projects/Renamed/reset-to-example")
+    assert reset.status_code == 200 and reset.json()["example"] == "new_building"
+
+
 def test_the_new_routes_need_the_token(projects_folder):
     bare_client = build_client(projects_folder, authorized=False)[0]
     assert bare_client.post("/api/projects/p/rename", json={"new_name": "q"}).status_code == 401
@@ -1233,6 +1250,7 @@ def test_the_openapi_document_describes_the_project_management_routes():
     assert "204" in paths["/api/projects/{name}"]["delete"]["responses"] and "204" in paths["/api/projects/{name}/open-folder"]["post"]["responses"]
     examples_schema = openapi_document()["components"]["schemas"]["ExampleInfo"]
     assert "project" in examples_schema["properties"]
+    assert all("example" in openapi_document()["components"]["schemas"][model]["properties"] for model in ("ProjectSummary", "ProjectDetail"))
 
 
 # ---- Device warm-up ----

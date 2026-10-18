@@ -27,8 +27,9 @@ from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
 from .api_models import ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
-from .project_removal import check_project_folder_can_be_removed, move_to_recycle_bin
+from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, move_to_recycle_bin
 
 CONFIG_FILE_NAME = "config.yaml"
 INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/joined")
@@ -73,6 +74,11 @@ def is_from_example(project_json: ProjectJson, example: str, example_title: str)
     if project_json.example is None:
         return project_json.name == example_title
     return project_json.example == example
+
+
+def example_of_project(project_json: ProjectJson) -> ExampleProject | None:
+    """The packaged example a project was made from (see is_from_example), None for any other project."""
+    return next((example for example in read_examples() if is_from_example(project_json, example.name, example.title)), None)
 
 
 def sanitize_file_name(name: str) -> str:
@@ -232,11 +238,13 @@ class ProjectStore:
         with self.project_lock(name):   # config.yaml is read here too, and a save replaces it
             project_json = self.read_project_json(name)
             project_folder = self.open(name)
+            example = example_of_project(project_json)
             return ProjectSummary(
                 name=project_json.name,
                 created=project_json.created,
                 modified=self._modified(project_folder),
                 mode=self._mode(project_folder),
+                example=example.name if example is not None else None,
             )
 
     def create_example_project(self, name: str, example: ExampleProject, example_files: list[tuple[str, str, bytes]]) -> Path:
@@ -302,6 +310,9 @@ class ProjectStore:
         with self.project_lock(name):
             project_json = self.read_project_json(name)
             project_name = project_json.name
+            if project_name.lower() != validate_project_name(name).lower():
+                # a hand-edited project.json: removing and making "project_name" would take the lock of a second project
+                raise ProjectRemovalRefused(f"{PROJECT_JSON_FILE_NAME} in the folder '{name}' names the project '{project_name}', so it is left as it is.")
             if not is_from_example(project_json, example.name, example.title):
                 raise ProjectError(f"'{project_name}' was not made from the example '{example.title}', so it cannot be reset to it.", status_code=422)
             self.delete_project(project_name)

@@ -62,6 +62,7 @@ class ProjectSummary(BaseModel):
     created: str                # ISO 8601, UTC
     modified: str               # ISO 8601, UTC: newest modification time of project.json and config.yaml
     mode: str
+    example: str | None = None  # the example the project came from (examples.json name), None for other projects
 
 
 class GridPlanReply(BaseModel):
@@ -233,6 +234,7 @@ class ProjectDetail(BaseModel):
     name: str
     created: str                # ISO 8601, UTC
     modified: str               # ISO 8601, UTC
+    example: str | None = None  # as in ProjectSummary: the app offers "Reset to the example" when it is set
     settings: dict              # without the paths and device the service owns
     inputs: dict[str, list[InputFileInfo]]      # role -> files, for every role
     joined_bounds: list[list[float]] | None     # as in InputFilesReply

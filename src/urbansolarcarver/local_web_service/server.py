@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import asyncio
 import hmac
-import json
 import os
 import tempfile
 import threading
@@ -38,10 +37,11 @@ from .api_models import (
     ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
 )
+from .example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
 from .folder_picker import FolderPickerUnavailable
 from .gpu_warm_up import GpuWarmUp
 from .projects import (
-    CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, is_from_example, validate_project_name,
+    CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, example_of_project, validate_project_name,
 )
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
@@ -57,8 +57,6 @@ WEBSOCKET_CLOSE_UNKNOWN_RUN = 4404
 LAST_EVENT_TYPES = ("run_finished", "run_failed", "run_cancelled")
 EVENT_WAIT_SECONDS = 1.0
 DEFAULT_STATIC_FOLDER = Path(__file__).resolve().parent.parent / "ui_static"
-EXAMPLE_PROJECTS_FOLDER = Path(__file__).resolve().parent.parent / "example_projects"
-EXAMPLE_WEATHER_FILE_NAME = "USA_CO_Golden-NREL.724666_TMY3.epw"    # in example_projects/weather/
 NO_CACHE = {"Cache-Control": "no-cache"}    # a result file is rewritten by the next run, so the browser asks each time
 
 _ERROR_RESPONSES = {
@@ -232,12 +230,6 @@ def _add_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(reply.model_dump(mode="json"), status_code=422)
 
 
-def _read_examples() -> list[ExampleProject]:
-    """The packaged example projects, in the order of examples.json."""
-    entries = json.loads((EXAMPLE_PROJECTS_FOLDER / "examples.json").read_text(encoding="utf-8"))
-    return [ExampleProject.model_validate(entry) for entry in entries]
-
-
 def _example_input_files(example: ExampleProject) -> list[tuple[str, str, bytes]]:
     """The packaged files of an example as (role, file name, content), all read before any project is made from them."""
     example_folder = EXAMPLE_PROJECTS_FOLDER / example.name
@@ -268,7 +260,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with store.project_lock(name):
             summary = store.summary(name)
             return ProjectDetail(
-                name=summary.name, created=summary.created, modified=summary.modified, settings=store.read_settings(name),
+                name=summary.name, created=summary.created, modified=summary.modified, example=summary.example, settings=store.read_settings(name),
                 inputs={role: store.input_files(name, role) for role in (*MESH_ROLES, WEATHER_ROLE)},
                 joined_bounds=store.joined_bounds(name), weather_location=store.weather_location(name),
                 stage_status=StageStatusReply(stages=stage_status(store, name)), grid_plan=store.stored_grid_plan(name))
@@ -324,7 +316,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/examples")
     def examples() -> list[ExampleInfo]:
-        examples_in_order = _read_examples()
+        examples_in_order = read_examples()
         project_of_example = folder_in_use.store.projects_of_examples({example.name: example.title for example in examples_in_order})
         return [ExampleInfo(name=example.name, title=example.title, description=example.description,
                             project=project_of_example[example.name]) for example in examples_in_order]
@@ -333,7 +325,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def create_example_project(name: str, example: str) -> ProjectDetail:
         """A new project named *name* with the mode and the input files of a packaged example."""
         store = folder_in_use.store
-        chosen = next((candidate for candidate in _read_examples() if candidate.name == example), None)
+        chosen = next((candidate for candidate in read_examples() if candidate.name == example), None)
         if chosen is None:
             raise ProjectError(f"There is no example '{example}'.", status_code=404)
         example_files = _example_input_files(chosen)
@@ -370,7 +362,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with store.project_lock(name):
             refuse_while_running(name)
             project_json = store.read_project_json(name)
-            example = next((candidate for candidate in _read_examples() if is_from_example(project_json, candidate.name, candidate.title)), None)
+            example = example_of_project(project_json)
             if example is None:
                 raise ProjectError(f"'{project_json.name}' was not made from an example, so there is nothing to reset it to.", status_code=422)
             store.reset_project_to_example(name, example, _example_input_files(example))
