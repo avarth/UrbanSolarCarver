@@ -1,6 +1,6 @@
 // One setting in the form (UX 7, 11): its plain label with the "i" of its tooltip, the control with the unit beside the value,
 // and, after a rejected save, the message under it with a warning icon and the field outlined in the error colour.
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
 import { withUnit } from "../steps/format_numbers";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
@@ -10,7 +10,7 @@ import {
 import { SettingTooltip } from "./SettingTooltip";
 import { AnalysisPeriod, type AnalysisPeriodField } from "./widgets/AnalysisPeriod";
 import { MeshFormat } from "./widgets/MeshFormat";
-import { NumberInput, type ControlProps } from "./widgets/NumberInput";
+import { NumberInput, type ControlProps, type NumberRange } from "./widgets/NumberInput";
 import { PercentSlider } from "./widgets/PercentSlider";
 import { SunStepsPerHour } from "./widgets/SunStepsPerHour";
 import { ThresholdRule, type ThresholdSpec } from "./widgets/ThresholdRule";
@@ -52,9 +52,10 @@ function typesOf(property: SchemaProperty | undefined): (string | undefined)[] {
   return property.anyOf ? property.anyOf.map((member) => member.type) : [property.type];
 }
 
-function rangeOf(property: SchemaProperty | undefined): { minimum?: number; maximum?: number } {
+/** The engine's bounds of a number setting, the exclusive ones ("more than 0", "less than 360") included. */
+export function rangeOf(property: SchemaProperty | undefined): NumberRange {
   const bounded = property?.anyOf?.find((member) => member.type === "number" || member.type === "integer") ?? property;
-  return { minimum: bounded?.minimum, maximum: bounded?.maximum };
+  return { minimum: bounded?.minimum, maximum: bounded?.maximum, exclusiveMinimum: bounded?.exclusiveMinimum, exclusiveMaximum: bounded?.exclusiveMaximum };
 }
 
 /** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */
@@ -89,8 +90,11 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;
-  const error = fieldErrorOf(form, view);
-  const control: ControlProps = { inputId, labelId, invalid: error !== undefined, describedBy: error === undefined ? undefined : errorId, disabled };
+  // A number refused in the field itself (out of range) is said under it, in place of the last save's message: it is newer.
+  const [refusedInput, setRefusedInput] = useState<string | null>(null);
+  const error = refusedInput ?? fieldErrorOf(form, view);
+  const control: ControlProps = { inputId, labelId, invalid: error !== undefined, describedBy: error === undefined ? undefined : errorId, disabled,
+                                  onRefusedInput: setRefusedInput };
   const property = form.schemaProperties[view.name];
   const types = typesOf(property);
   const unit = unitBesideValue(view);
@@ -148,7 +152,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
           <div className="setting-control">
             <NumberInput id={inputId} value={typeof shown === "number" ? shown : null} mayBeEmpty={types.includes("null")}
                          wholeNumbers={types.includes("integer")} invalid={control.invalid} describedBy={control.describedBy} disabled={disabled}
-                         minimum={isPercent ? 0 : range.minimum} maximum={isPercent ? 100 : range.maximum} onValue={changeTo} />
+                         {...(isPercent ? { minimum: 0, maximum: 100 } : range)} onValue={changeTo} onRefused={setRefusedInput} />
             {unit && <span className="setting-unit">{unit}</span>}
           </div>
         );
@@ -165,7 +169,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
                         extraLine={view.name === "voxel_size" && form.gridPlan ? messages.gridSize(form.gridPlan.resolution, form.gridPlan.total_voxels) : undefined} />
       </div>
       {controlElement}
-      {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{extras?.errorContent ?? error}</span></p>}
+      {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{refusedInput ?? extras?.errorContent ?? error}</span></p>}
       {error === undefined && extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
     </div>
   );

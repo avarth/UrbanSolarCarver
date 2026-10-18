@@ -8,13 +8,13 @@ interface PercentSliderProps extends ControlProps {
   onPercent: (percent: number) => void;
 }
 
-export function PercentSlider({ percent, unit, onPercent, inputId, labelId, invalid, describedBy, disabled }: PercentSliderProps) {
+export function PercentSlider({ percent, unit, onPercent, inputId, labelId, invalid, describedBy, disabled, onRefusedInput }: PercentSliderProps) {
   return (
     <div className="setting-control setting-percent-slider">
       <input type="range" className="setting-range" min={0} max={100} step={1} value={percent ?? 0} aria-labelledby={labelId}
              aria-describedby={describedBy} disabled={disabled} onChange={(event) => onPercent(Number(event.target.value))} />
       <NumberInput id={inputId} className="setting-number setting-number-short" value={percent} mayBeEmpty={false} minimum={0} maximum={100}
-                   invalid={invalid} describedBy={describedBy} disabled={disabled} onValue={(typed) => onPercent(typed!)} />
+                   invalid={invalid} describedBy={describedBy} disabled={disabled} onValue={(typed) => onPercent(typed!)} onRefused={onRefusedInput} />
       <span className="setting-unit">{unit}</span>
     </div>
   );

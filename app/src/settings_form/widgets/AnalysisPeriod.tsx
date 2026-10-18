@@ -15,7 +15,7 @@ const PERIOD_ENDS = [
   { title: messages.periodTo, day: "end_day", month: "end_month", hour: "end_hour" },
 ] as const;
 
-export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, describedBy, disabled }: AnalysisPeriodProps) {
+export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, describedBy, disabled, onRefusedInput }: AnalysisPeriodProps) {
   return (
     <div role="group" aria-labelledby={labelId} className="setting-period">
       {PERIOD_ENDS.map((periodEnd) => (
@@ -24,7 +24,7 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
           <NumberInput id={periodEnd.day === "start_day" ? inputId : undefined} className="setting-number setting-number-short"
                        ariaLabel={messages.periodFieldNames[periodEnd.day]} value={values[periodEnd.day]} mayBeEmpty={false}
                        minimum={1} maximum={31} wholeNumbers invalid={invalid} describedBy={describedBy} disabled={disabled}
-                       onValue={(day) => onChange({ [periodEnd.day]: day })} />
+                       onValue={(day) => onChange({ [periodEnd.day]: day })} onRefused={onRefusedInput} />
           <select className="setting-select" aria-label={messages.periodFieldNames[periodEnd.month]} value={values[periodEnd.month] ?? ""}
                   aria-invalid={invalid} aria-describedby={describedBy} disabled={disabled}
                   onChange={(event) => onChange({ [periodEnd.month]: Number(event.target.value) })}>
@@ -32,7 +32,7 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
           </select>
           <NumberInput className="setting-number setting-number-short" ariaLabel={messages.periodFieldNames[periodEnd.hour]}
                        value={values[periodEnd.hour]} mayBeEmpty={false} minimum={0} maximum={23} wholeNumbers invalid={invalid}
-                       describedBy={describedBy} disabled={disabled} onValue={(hour) => onChange({ [periodEnd.hour]: hour })} />
+                       describedBy={describedBy} disabled={disabled} onValue={(hour) => onChange({ [periodEnd.hour]: hour })} onRefused={onRefusedInput} />
           <span className="setting-unit">{messages.hourUnit}</span>
         </div>
       ))}

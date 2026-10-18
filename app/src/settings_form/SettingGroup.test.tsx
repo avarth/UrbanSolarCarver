@@ -256,3 +256,52 @@ test("a range given as the unit is shown beside the value but not after the defa
   expect(rendered.container.querySelector("[role='tooltip']")!.textContent).toContain("Config name: smooth_iters, default 2");
   expect(rendered.container.querySelector("[role='tooltip']")!.textContent).not.toContain("default 2 0 to 6");
 });
+
+test("a number outside the engine's range is refused in the field, with a message, and never reaches the form", () => {
+  const onChange = vi.fn();
+  const form = initialFormState({
+    schema: { properties: { ...SCHEMA.properties,
+      max_slope_deg: { anyOf: [{ type: "number", exclusiveMinimum: 0, maximum: 90 }, { type: "null" }], default: null },
+      north_deg: { default: 0.0, type: "number", minimum: 0, exclusiveMaximum: 360 },
+      carve_above_min_consecutive: { default: 1, type: "integer", minimum: 1 } } },
+    modes: MODES, settings: { mode: "daylight" }, gridPlan: GRID_PLAN });
+  const fieldOf = (step: Parameters<typeof settingsForStep>[0], name: string) => {
+    rendered?.unmount();
+    rendered = renderForTest(<SettingField view={viewOf(step, "daylight", name)} form={form} onChange={onChange} />);
+    return rendered.container.querySelector<HTMLInputElement>("input[type='number']")!;
+  };
+  const message = () => rendered!.container.querySelector(".setting-error")?.textContent ?? null;
+
+  let field = fieldOf("carving", "max_slope_deg");
+  expect([field.min, field.max]).toEqual(["0", "90"]);
+  typeInto(field, "0");
+  expect(onChange).not.toHaveBeenCalled();
+  expect(message()).toBe("Use a number above 0, up to 90.");
+  expect(field.getAttribute("aria-invalid")).toBe("true");
+  expect(field.getAttribute("aria-describedby")).toBe(rendered!.container.querySelector(".setting-error")!.id);
+  typeInto(field, "91");
+  expect(onChange).not.toHaveBeenCalled();
+  typeInto(field, "45");
+  expect(onChange).toHaveBeenLastCalledWith({ max_slope_deg: 45 });
+  expect(message()).toBeNull();
+
+  field = fieldOf("settings", "north_deg");
+  typeInto(field, "360");
+  expect(message()).toBe("Use 0 or more, below 360.");
+  typeInto(field, "-1");
+  expect(message()).toBe("Use 0 or more, below 360.");
+  // Leaving the field shows the value the form holds again, and the message says why the typed one was not taken.
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(field.value).toBe("0");
+  expect(message()).toBe("Use 0 or more, below 360.");
+  typeInto(field, "359.5");
+  expect(onChange).toHaveBeenLastCalledWith({ north_deg: 359.5 });
+  expect(message()).toBeNull();
+
+  field = fieldOf("carving", "carve_above_min_consecutive");
+  typeInto(field, "2.5");
+  expect(message()).toBe("Use a whole number.");
+  typeInto(field, "0");
+  expect(message()).toBe("Use 1 or more.");
+  expect(onChange).toHaveBeenCalledTimes(2);
+});

@@ -238,6 +238,16 @@ export const messages = {
   analysisPeriodConfigNames: "start_month ... end_hour",
   gridSize: (voxelsPerSide: number, totalVoxels: number) => `${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
   automatic: "automatic",
+  // A number refused in its field (UX 11): what to use instead. An exclusive bound is not allowed itself ("above 0").
+  useNumberInRange: (lower: { value: number; exclusive: boolean } | null, upper: { value: number; exclusive: boolean } | null) => {
+    if (lower !== null && upper !== null) {
+      if (lower.exclusive) return `Use a number above ${lower.value}${upper.exclusive ? ` and below ${upper.value}` : `, up to ${upper.value}`}.`;
+      return upper.exclusive ? `Use ${lower.value} or more, below ${upper.value}.` : `Use ${lower.value} to ${upper.value}.`;
+    }
+    if (lower !== null) return lower.exclusive ? `Use a number above ${lower.value}.` : `Use ${lower.value} or more.`;
+    return upper!.exclusive ? `Use a number below ${upper!.value}.` : `Use ${upper!.value} or less.`;
+  },
+  useWholeNumber: "Use a whole number.",
   switchedOn: "on",
   switchedOff: "off",
   monthNames: MONTH_NAMES,

@@ -22,6 +22,8 @@ export interface SchemaProperty {
   items?: SchemaProperty;
   minimum?: number;
   maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
   $ref?: string;
 }
 

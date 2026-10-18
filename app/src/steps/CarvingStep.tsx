@@ -120,7 +120,9 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
     if (heldNumber === stored) setHeldNumber(null);
     lastNumberHandedOn.current = stored;
   }, [stored]);
-  const error = fieldErrorOf(form, view);
+  // A number refused in the field (above 100 % for Carve amount, below 0) is said under it and never handed on.
+  const [refusedInput, setRefusedInput] = useState<string | null>(null);
+  const error = refusedInput ?? fieldErrorOf(form, view);
   const isShadowTolerated = view.name === "threshold";
   const shownNumber = heldNumber ?? stored;
   const highest = isShadowTolerated ? Math.max(highestScore ?? 0, stored) : 100;
@@ -149,7 +151,7 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
         <span className="threshold-number" onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") commit(); }}>
           <NumberInput id={inputId} className="setting-number setting-number-short" value={shownNumber} mayBeEmpty={false} minimum={0}
                        maximum={isShadowTolerated ? undefined : 100} invalid={error !== undefined} describedBy={describedBy} disabled={disabled}
-                       onValue={(typed) => change(typed!)} />
+                       onValue={(typed) => change(typed!)} onRefused={setRefusedInput} />
         </span>
         <span className="setting-unit">{view.unit}</span>
       </div>
