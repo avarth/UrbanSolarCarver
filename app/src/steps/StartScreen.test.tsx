@@ -228,3 +228,24 @@ test("Reset to the example is offered only once the examples are read, and names
   click(rendered.container.querySelector(".project-menu-button")!);
   expect(menuItems()).toContain("Reset to the example");
 });
+
+test("a rename the next list does not show gives up on the focus: a later list does not take it from where the user is", async () => {
+  const projectActions: ProjectActions = { ...NO_ACTIONS, rename: vi.fn(async () => null) };
+  rendered = renderForTest(startScreen(WARMING_UP, { projectActions }));
+  const menuOf = (name: string) => rendered!.container.querySelector<HTMLButtonElement>(`[aria-label="Actions for ${name}"]`);
+  click(menuOf("Older")!);
+  click([...rendered.container.querySelectorAll('[role="menuitem"]')].find((item) => item.textContent === "Rename")!);
+  const dialogField = rendered.container.querySelector<HTMLInputElement>('[role="dialog"] input')!;
+  act(() => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(dialogField, "Oldest");
+    dialogField.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => {
+    rendered!.container.querySelector('[role="dialog"] form')!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  rendered.rerender(startScreen(WARMING_UP, { projectActions, projects: [...PROJECTS] }));
+  const nameField = rendered.container.querySelector<HTMLInputElement>(".start-name-field")!;
+  nameField.focus();
+  rendered.rerender(startScreen(WARMING_UP, { projectActions, projects: [PROJECTS[1], { ...PROJECTS[0], name: "Oldest" }] }));
+  expect(document.activeElement).toBe(nameField);
+});

@@ -187,8 +187,11 @@ function ProjectsFolderLine({ projectsFolder, choosing, change, pickerLineId, on
   );
 }
 
-/** Where the focus goes once the project list shows a change: the renamed project's menu, or the heading once a project is gone. */
-type FocusAfterChange = { menuOf: string } | { headingOnceGone: string };
+/**
+ * Where the focus goes once the project list shows a change: the renamed project's menu, or the heading once a project is gone;
+ * and the list shown when the change was made. The next list is the last one waited for.
+ */
+type FocusAfterChange = ({ menuOf: string } | { headingOnceGone: string }) & { listAtChange: ProjectSummary[] | null };
 
 export function StartScreen({ health, projects, examples, projectsFolder, activeRunProject, projectActions, headingTakesFocus = false,
                               onCreateProject, onOpenProject, onTryExample, onChangeProjectsFolder }: StartScreenProps) {
@@ -201,23 +204,28 @@ export function StartScreen({ health, projects, examples, projectsFolder, active
   const pageHeading = useRef<HTMLHeadingElement>(null);
   const projectsCard = useRef<HTMLElement>(null);
   const projectsHeading = useRef<HTMLHeadingElement>(null);
+  const shownProjects = useRef(projects);
+  shownProjects.current = projects;
 
   useEffect(() => {
     if (headingTakesFocus) pageHeading.current?.focus();
   }, []);
 
-  // The renamed row is a new row, and a deleted one is gone: the focus moves on once the list read again shows it.
+  // The renamed row is a new row, and a deleted one is gone: the focus moves on once the list read again shows it. A list read
+  // again that does not show it ends the wait, so a later list does not take the focus from where the user has gone since.
   useEffect(() => {
     if (focusAfterChange === null || projects === null) return;
+    const listReadAgain = projects !== focusAfterChange.listAtChange;
     if ("menuOf" in focusAfterChange) {
       const menuLabel = messages.projectMenuOf(focusAfterChange.menuOf);
       const menuButton = [...projectsCard.current!.querySelectorAll<HTMLButtonElement>(".project-menu-button")]
         .find((button) => button.getAttribute("aria-label") === menuLabel);
-      if (menuButton === undefined) return;
-      menuButton.focus();
+      if (menuButton === undefined && !listReadAgain) return;
+      menuButton?.focus();
     } else {
-      if (projects.some((project) => sameProjectName(project.name, focusAfterChange.headingOnceGone))) return;
-      projectsHeading.current?.focus();
+      const stillListed = projects.some((project) => sameProjectName(project.name, focusAfterChange.headingOnceGone));
+      if (stillListed && !listReadAgain) return;
+      if (!stillListed) projectsHeading.current?.focus();
     }
     setFocusAfterChange(null);
   }, [focusAfterChange, projects]);
@@ -226,12 +234,12 @@ export function StartScreen({ health, projects, examples, projectsFolder, active
     ...projectActions,
     rename: async (name, newName) => {
       const reason = await projectActions.rename(name, newName);
-      if (reason === null) setFocusAfterChange({ menuOf: newName });
+      if (reason === null) setFocusAfterChange({ menuOf: newName, listAtChange: shownProjects.current });
       return reason;
     },
     delete: async (name, confirmName) => {
       const reason = await projectActions.delete(name, confirmName);
-      if (reason === null) setFocusAfterChange({ headingOnceGone: name });
+      if (reason === null) setFocusAfterChange({ headingOnceGone: name, listAtChange: shownProjects.current });
       return reason;
     },
   };
