@@ -1,4 +1,5 @@
 """Project folders, names and project.json of the local web service."""
+import ntpath
 import os
 import threading
 import warnings
@@ -614,7 +615,7 @@ def create_example_project(store, project_name, example_name="new_building"):
     return example
 
 
-def link_kinds():
+def link_kind_of_this_platform():
     return "junction" if os.name == "nt" else "symlink"
 
 
@@ -802,7 +803,7 @@ def test_a_project_with_a_link_inside_is_not_moved_to_the_recycle_bin(tmp_path, 
     project_folder = store.create("p", "time-based")
     (tmp_path / "outside").mkdir()
     (tmp_path / "outside" / "precious.txt").write_text("keep", encoding="utf-8")
-    make_link_to_folder(project_folder / "inputs" / "linked", tmp_path / "outside", link_kinds())
+    make_link_to_folder(project_folder / "inputs" / "linked", tmp_path / "outside", link_kind_of_this_platform())
     with pytest.raises(ProjectRemovalRefused):
         store.delete_project("p")
     assert recycle_bin.folders == [] and (tmp_path / "outside" / "precious.txt").is_file() and project_folder.is_dir()
@@ -862,7 +863,7 @@ def test_reset_checks_the_guardrails_before_it_moves_anything(tmp_path, recycle_
     store = ProjectStore(tmp_path / "projects")
     example = create_example_project(store, "p")
     (tmp_path / "outside").mkdir()
-    make_link_to_folder(tmp_path / "projects" / "p" / "run" / "linked", tmp_path / "outside", link_kinds())
+    make_link_to_folder(tmp_path / "projects" / "p" / "run" / "linked", tmp_path / "outside", link_kind_of_this_platform())
     with pytest.raises(ProjectRemovalRefused):
         store.reset_project_to_example("p", example, _example_input_files(example))
     assert recycle_bin.folders == [] and [file.name for file in store.input_files("p", "max_volume")] == ["max_volume.ply"]
@@ -933,3 +934,106 @@ def test_project_of_example_prefers_the_most_recently_modified_project(tmp_path)
 
 def test_project_of_example_with_no_projects_folder_is_none(tmp_path):
     assert ProjectStore(tmp_path / "missing").project_of_example("new_building", "New building among neighbors") is None
+
+
+# ---- Fix round: locks of two projects, the rename rollback, drives without a recycle bin, one pass over the examples ----
+
+def test_project_locks_are_taken_in_one_order_whatever_the_order_of_the_names(tmp_path):
+    store = ProjectStore(tmp_path)
+    taken = []
+
+    class RecordingLock:
+        def __init__(self, key):
+            self.key = key
+
+        def __enter__(self):
+            taken.append(self.key)
+
+        def __exit__(self, *exc_info):
+            return False
+
+    store.project_lock = RecordingLock
+    with store.project_locks("z", "A", "a"):
+        pass
+    with store.project_locks("a", "Z"):
+        pass
+    assert taken == ["a", "z", "a", "z"]        # each project once, in the same order for both calls
+
+
+def test_rename_whose_rollback_fails_tells_where_the_folder_is_and_keeps_the_first_error(tmp_path, monkeypatch):
+    store = ProjectStore(tmp_path)
+    store.create("a", "time-based")
+    real_replace = os.replace
+    moves = []
+
+    def move_once_then_fail(source, target):
+        moves.append((Path(source).name, Path(target).name))
+        if len(moves) == 1:
+            real_replace(source, target)
+        else:
+            raise PermissionError("the folder is open in another program")
+
+    def fail_to_write(name, data):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(projects.os, "replace", move_once_then_fail)
+    monkeypatch.setattr(store, "write_project_json", fail_to_write)
+    with pytest.raises(ProjectError) as err:
+        store.rename_project("a", "b")
+    assert err.value.status_code == 500 and "renamed to 'b'" in str(err.value)
+    assert "disk full" in str(err.value) and "open in another program" in str(err.value) and "now" in str(err.value)
+    assert isinstance(err.value.__cause__, OSError) and "disk full" in str(err.value.__cause__)
+    assert [folder.name for folder in tmp_path.iterdir()] == ["b"]
+
+
+@pytest.mark.parametrize("drive_type, refused", [(2, True), (4, True), (3, False), (5, False)])
+def test_on_windows_a_removable_or_network_drive_is_refused_before_anything_moves(tmp_path, monkeypatch, drive_type, refused):
+    ProjectStore(tmp_path).create("p", "time-based")
+    asked_about = []
+    monkeypatch.setattr(project_removal.sys, "platform", "win32")
+    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda drive_root: asked_about.append(drive_root) or drive_type)
+    if refused:
+        with pytest.raises(ProjectRemovalRefused) as err:
+            project_removal.check_project_folder_can_be_removed(tmp_path, "p")
+        assert err.value.status_code == 422 and "no recycle bin" in str(err.value) and "file manager" in str(err.value)
+    else:
+        assert project_removal.check_project_folder_can_be_removed(tmp_path, "p") == (tmp_path / "p").resolve()
+    assert asked_about == [ntpath.splitdrive(str((tmp_path / "p").resolve()))[0] + "\\"]
+
+
+def test_on_windows_a_network_path_is_refused_without_asking_the_drive_type(tmp_path, monkeypatch):
+    monkeypatch.setattr(project_removal.sys, "platform", "win32")
+    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda drive_root: pytest.fail("a UNC path has no drive letter to ask about"))
+    with pytest.raises(ProjectRemovalRefused, match="network or removable"):
+        project_removal._check_folder_has_a_recycle_bin(Path("//server/share/projects/p"))
+
+
+def test_the_drive_type_is_not_asked_off_windows(tmp_path, monkeypatch):
+    ProjectStore(tmp_path).create("p", "time-based")
+    monkeypatch.setattr(project_removal.sys, "platform", "linux")
+    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda drive_root: pytest.fail("only Windows has drive types"))
+    assert project_removal.check_project_folder_can_be_removed(tmp_path, "p") == (tmp_path / "p").resolve()
+
+
+def test_delete_and_reset_leave_a_project_on_a_removable_drive_in_place(tmp_path, monkeypatch, recycle_bin):
+    store = ProjectStore(tmp_path)
+    example = create_example_project(store, "p")
+    monkeypatch.setattr(project_removal.sys, "platform", "win32")
+    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda drive_root: 2)
+    with pytest.raises(ProjectRemovalRefused):
+        store.delete_project("p")
+    with pytest.raises(ProjectRemovalRefused):
+        store.reset_project_to_example("p", example, _example_input_files(example))
+    assert recycle_bin.folders == [] and (tmp_path / "p" / "project.json").is_file()
+
+
+def test_the_examples_are_matched_to_projects_in_one_pass_over_the_projects(tmp_path, monkeypatch):
+    store = ProjectStore(tmp_path)
+    create_example_project(store, "a", "new_building")
+    create_example_project(store, "b", "basic_perimeter_block")
+    listings = []
+    real_list = store.list
+    monkeypatch.setattr(store, "list", lambda: listings.append(1) or real_list())
+    titles = {example.name: example.title for example in _read_examples()}
+    assert store.projects_of_examples(titles) == {"basic_perimeter_block": "b", "new_building": "a", "multiple_buildings": None}
+    assert len(listings) == 1

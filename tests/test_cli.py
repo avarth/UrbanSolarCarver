@@ -310,7 +310,7 @@ class TestUiCommand:
         monkeypatch.setattr(importlib.util, "find_spec",
                             lambda name, *args, **kwargs: None if name == missing_module else real_find_spec(name, *args, **kwargs))
 
-    @pytest.mark.parametrize("missing_module", ["fastapi", "uvicorn", "multipart", "websockets"])
+    @pytest.mark.parametrize("missing_module", ["fastapi", "uvicorn", "multipart", "websockets", "send2trash"])
     def test_without_the_extra_names_the_install_command(self, monkeypatch, built_front_end, service_never_starts, missing_module):
         import sys
         self._without_module(monkeypatch, missing_module)

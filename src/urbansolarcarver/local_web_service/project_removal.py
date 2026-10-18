@@ -7,15 +7,22 @@ project is active belongs to the caller, which holds the project lock.
 """
 from __future__ import annotations
 
+import ctypes
+import ntpath
 import os
 import stat
+import sys
 from pathlib import Path
 
 import send2trash
 from pydantic import ValidationError
 
 from .api_models import ProjectJson
-from .projects import PROJECT_JSON_FILE_NAME, ProjectError, validate_project_name
+from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, validate_project_name
+
+
+DRIVE_REMOVABLE = 2     # GetDriveTypeW results of a drive that has no recycle bin
+DRIVE_REMOTE = 4
 
 
 class ProjectRemovalRefused(ProjectError):
@@ -29,7 +36,28 @@ def _is_link(path: Path | str) -> bool:
     """Whether *path* is a symbolic link or, on Windows, any reparse point (a junction, a mount point, ...), not followed."""
     if os.path.islink(path):
         return True
+    # Every reparse point is refused, not only the junction and symlink kinds: a reparse point may lead outside the project.
+    # OneDrive placeholders do not show the attribute through os.lstat since Python 3.8, so they are not refused by it.
     return bool(getattr(os.lstat(path), "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _windows_drive_type(drive_root: str) -> int:
+    return ctypes.windll.kernel32.GetDriveTypeW(drive_root)
+
+
+def _check_folder_has_a_recycle_bin(project_folder: Path) -> None:
+    """On Windows, raise ProjectRemovalRefused when the folder is on a network or removable drive.
+
+    send2trash asks the shell to recycle the folder without a confirmation, and the shell then deletes for good what it
+    cannot recycle, which is everything on a network share or a USB stick. UNC paths count as network.
+    """
+    if sys.platform != "win32":
+        return
+    drive, _ = ntpath.splitdrive(str(project_folder))
+    if drive.startswith("\\\\") or _windows_drive_type(drive + "\\") in (DRIVE_REMOTE, DRIVE_REMOVABLE):
+        raise ProjectRemovalRefused(
+            f"The folder {project_folder} is on a network or removable drive that has no recycle bin, so UrbanSolarCarver leaves it in place "
+            "instead of deleting it for good. You can delete it in the file manager.")
 
 
 def _check_nothing_is_a_link(project_folder: Path) -> None:
@@ -60,7 +88,7 @@ def check_project_folder_can_be_removed(projects_folder: Path, name: str) -> Pat
 
     Checks: the name passes the project-name rule; the folder is a direct child of the projects folder after resolving
     every link, and not the projects folder itself; it holds a project.json that reads as a project of that name; neither
-    it nor anything inside it is a symbolic link or a junction.
+    it nor anything inside it is a symbolic link or a junction; on Windows the folder is not on a network or removable drive.
     """
     project_name = validate_project_name(name)
     real_projects_folder = Path(projects_folder).resolve()
@@ -78,6 +106,7 @@ def check_project_folder_can_be_removed(projects_folder: Path, name: str) -> Pat
     if project_json.name != project_folder.name:
         raise ProjectRemovalRefused(
             f"{PROJECT_JSON_FILE_NAME} in the folder '{project_folder.name}' names the project '{project_json.name}', so it is left as it is.")
+    _check_folder_has_a_recycle_bin(project_folder)
     _check_nothing_is_a_link(Path(projects_folder) / project_name)
     return project_folder
 

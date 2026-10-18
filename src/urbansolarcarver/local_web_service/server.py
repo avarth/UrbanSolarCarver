@@ -324,9 +324,10 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/examples")
     def examples() -> list[ExampleInfo]:
-        store = folder_in_use.store
+        examples_in_order = _read_examples()
+        project_of_example = folder_in_use.store.projects_of_examples({example.name: example.title for example in examples_in_order})
         return [ExampleInfo(name=example.name, title=example.title, description=example.description,
-                            project=store.project_of_example(example.name, example.title)) for example in _read_examples()]
+                            project=project_of_example[example.name]) for example in examples_in_order]
 
     @router.post("/projects/{name}/examples/{example}", responses={404: {"model": ErrorDetailReply, "description": "There is no such example."}, **_ERROR_RESPONSES})
     def create_example_project(name: str, example: str) -> ProjectDetail:
@@ -343,7 +344,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def rename_project(name: str, request: RenameProjectRequest) -> ProjectDetail:
         """Rename the project and its folder; 409 when the new name exists in any letter case or a run of the project is active."""
         store = folder_in_use.store
-        with store.project_lock(name):
+        with store.project_locks(name, request.new_name):   # both names in one order: two renames in opposite directions must not deadlock
             refuse_while_running(name)
             store.rename_project(name, request.new_name)
         return project_detail(store, request.new_name)
@@ -351,13 +352,13 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     @router.delete("/projects/{name}", status_code=204, response_class=Response,
                    responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
     def delete_project(name: str, confirm_name: str) -> Response:
-        """Move the project folder to the recycle bin; *confirm_name* must be the project name as typed by the person (else 422)."""
+        """Move the project folder to the recycle bin; *confirm_name* must be the project's name as stored (else 422)."""
         store = folder_in_use.store
-        project_name = validate_project_name(name)
-        if confirm_name != project_name:
-            raise ProjectError(f"To delete the project, type its name '{project_name}' to confirm.", status_code=422)
         with store.project_lock(name):
             refuse_while_running(name)
+            project_name = store.read_project_json(name).name
+            if confirm_name != project_name:
+                raise ProjectError(f"To delete the project, type its name '{project_name}' to confirm.", status_code=422)
             store.delete_project(name)
         return Response(status_code=204)
 
@@ -376,17 +377,14 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             return project_detail(store, project_json.name)
 
     @router.post("/projects/{name}/open-folder", status_code=204, response_class=Response,
-                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, 422: _ERROR_RESPONSES[422]})
     def open_project_folder(name: str) -> Response:
-        """Open the project's folder in the file manager of this computer."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
-            project_folder = store.open(name)
-            try:
-                open_folder_function(project_folder)
-            except OSError as error:
-                raise ProjectError(f"The folder {project_folder} could not be opened: {error}", status_code=422) from error
+        """Open the project's folder in the file manager of this computer; also while a run of the project is active (it changes nothing)."""
+        project_folder = folder_in_use.store.open(name)
+        try:
+            open_folder_function(project_folder)
+        except OSError as error:
+            raise ProjectError(f"The folder {project_folder} could not be opened: {error}", status_code=422) from error
         return Response(status_code=204)
 
     @router.get("/projects/{name}")

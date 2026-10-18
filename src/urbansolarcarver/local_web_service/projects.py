@@ -6,6 +6,7 @@ a validated name and checked to be a direct child of the projects folder.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -26,9 +27,9 @@ from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
 from .api_models import ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
+from .project_removal import check_project_folder_can_be_removed, move_to_recycle_bin
 
-PROJECT_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
-PROJECT_JSON_FILE_NAME = "project.json"
 CONFIG_FILE_NAME = "config.yaml"
 INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/joined")
 RUN_FOLDER = "run"
@@ -48,8 +49,6 @@ SERVICE_PATHS = {
     "epw_path": "inputs/weather.epw",
     "out_dir": "run",
 }   # relative to the project folder; epw_path only for modes that read a weather file
-# Windows reserves these names for devices: a file or folder named so, with or without an extension, cannot be made there.
-WINDOWS_DEVICE_NAME_PATTERN = re.compile(r"(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])", re.IGNORECASE)
 UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
 FILE_NAME_SEPARATORS = re.compile(r"[\\/]")
 
@@ -65,14 +64,6 @@ class GridOverBudget(ConfigError):
         self.grid_plan = grid_plan
 
 
-class ProjectError(Exception):
-    """A project request that cannot be served; ``status_code`` is the HTTP status."""
-
-    def __init__(self, message: str, status_code: int):
-        super().__init__(message)
-        self.status_code = status_code
-
-
 def is_from_example(project_json: ProjectJson, example: str, example_title: str) -> bool:
     """Whether a project was made from the example named *example* (titled *example_title*).
 
@@ -82,26 +73,6 @@ def is_from_example(project_json: ProjectJson, example: str, example_title: str)
     if project_json.example is None:
         return project_json.name == example_title
     return project_json.example == example
-
-
-def _check_not_a_windows_device_name(name: str) -> None:
-    """Raise ProjectError(422) when the part of the name before its first '.' is a Windows device name (CON, NUL, COM1, ...)."""
-    if WINDOWS_DEVICE_NAME_PATTERN.fullmatch(name.split(".")[0]) is not None:
-        raise ProjectError(f"'{name}' is a Windows device name, which Windows does not allow for a file or folder: "
-                           "choose another name.", status_code=422)
-
-
-def validate_project_name(name: str) -> str:
-    """Return the name without surrounding spaces, or raise ProjectError(422)."""
-    stripped_name = name.strip(" ")
-    if PROJECT_NAME_PATTERN.fullmatch(stripped_name) is None:
-        raise ProjectError(
-            "A project name has 1 to 64 characters: letters A-Z and a-z, digits, spaces, "
-            "'-' and '_', starting with a letter or digit.",
-            status_code=422,
-        )
-    _check_not_a_windows_device_name(stripped_name)
-    return stripped_name
 
 
 def sanitize_file_name(name: str) -> str:
@@ -114,7 +85,7 @@ def sanitize_file_name(name: str) -> str:
     clean_name = UNWANTED_FILE_NAME_CHARACTERS.sub("", last_part)
     if not clean_name or clean_name.startswith("."):
         raise ProjectError(f"'{name}' has no usable file name: use letters, digits, '-', '_' and '.'.", status_code=422)
-    _check_not_a_windows_device_name(clean_name)
+    check_not_a_windows_device_name(clean_name)
     return clean_name
 
 
@@ -187,6 +158,18 @@ class ProjectStore:
         lock_key = validate_project_name(name).lower()   # Windows folder names ignore letter case
         with self._project_locks_guard:
             return self._project_locks.setdefault(lock_key, threading.RLock())
+
+    @contextlib.contextmanager
+    def project_locks(self, *names: str):
+        """Hold the locks of several projects at once, taken in one order (by lower-case name, each once).
+
+        A request that needs two projects (a rename needs the old and the new name) must take them through this, so that
+        two requests that name the same projects in opposite order cannot each hold one lock and wait for the other.
+        """
+        with contextlib.ExitStack() as held_locks:
+            for lock_key in sorted({validate_project_name(name).lower() for name in names}):
+                held_locks.enter_context(self.project_lock(lock_key))
+            yield
 
     def _project_folder(self, name: str) -> Path:
         """The folder of a project with a valid name, guaranteed to lie directly in the projects folder."""
@@ -279,8 +262,7 @@ class ProjectStore:
         (a program has a file of it open). Nothing changes then.
         """
         old_name, new_name = validate_project_name(name), validate_project_name(new_name)
-        first_lock_key, second_lock_key = sorted((old_name.lower(), new_name.lower()))   # one order for every rename, so two renames never wait on each other
-        with self.project_lock(first_lock_key), self.project_lock(second_lock_key):
+        with self.project_locks(old_name, new_name):
             old_folder = self.open(old_name)
             if any(folder.name.lower() == new_name.lower() for folder in self._projects_folder.iterdir()):
                 raise ProjectError(f"A project named '{new_name}' already exists (project names ignore letter case).", status_code=409)
@@ -293,8 +275,13 @@ class ProjectStore:
             project_json.name = new_name
             try:
                 self.write_project_json(new_name, project_json)
-            except BaseException:
-                os.replace(new_folder, old_folder)
+            except BaseException as error:
+                try:
+                    os.replace(new_folder, old_folder)
+                except OSError as rollback_error:
+                    raise ProjectError(f"'{old_name}' was renamed to '{new_name}', but its {PROJECT_JSON_FILE_NAME} could not be updated ({error}) "
+                                       f"and the folder could not be moved back ({rollback_error}). The folder is now {new_folder}.",
+                                       status_code=500) from error
                 raise
             return new_folder
 
@@ -303,9 +290,8 @@ class ProjectStore:
 
         The caller makes sure no run of the project is active.
         """
-        from . import project_removal   # imported here: project_removal needs ProjectError from this module
         with self.project_lock(name):
-            project_removal.move_to_recycle_bin(project_removal.check_project_folder_can_be_removed(self._projects_folder, name))
+            move_to_recycle_bin(check_project_folder_can_be_removed(self._projects_folder, name))
 
     def reset_project_to_example(self, name: str, example: ExampleProject, example_files: list[tuple[str, str, bytes]]) -> None:
         """Replace a project made from *example* by a fresh copy of it under the same name; the old folder goes to the recycle bin.
@@ -325,17 +311,26 @@ class ProjectStore:
                 raise ProjectError(f"'{project_name}' could not be made again from the example ({error}). Its old content is in the recycle bin.",
                                    status_code=500) from error
 
-    def project_of_example(self, example: str, example_title: str) -> str | None:
-        """The name of the project made from an example (see is_from_example); the most recently modified one when there are several, else None."""
-        newest = None
+    def projects_of_examples(self, example_titles: dict[str, str]) -> dict[str, str | None]:
+        """For each example (name -> title) the project made from it (see is_from_example), in one pass over the projects.
+
+        When several projects come from one example the most recently modified one is named; None when there is none.
+        """
+        newest_by_example: dict[str, ProjectSummary] = {}
         for summary in self.list():
             try:
                 project_json = self.read_project_json(summary.name)
             except ProjectError:
                 continue
-            if is_from_example(project_json, example, example_title) and (newest is None or summary.modified > newest.modified):
-                newest = summary
-        return newest.name if newest is not None else None
+            for example, example_title in example_titles.items():
+                newest = newest_by_example.get(example)
+                if is_from_example(project_json, example, example_title) and (newest is None or summary.modified > newest.modified):
+                    newest_by_example[example] = summary
+        return {example: newest_by_example[example].name if example in newest_by_example else None for example in example_titles}
+
+    def project_of_example(self, example: str, example_title: str) -> str | None:
+        """The name of the project made from one example (see projects_of_examples), None when there is none."""
+        return self.projects_of_examples({example: example_title})[example]
 
     def read_project_json(self, name: str) -> ProjectJson:
         """project.json of a project, read under the project lock.

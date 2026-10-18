@@ -935,7 +935,7 @@ UI_LOGGERS_SHOWING_REQUEST_PATHS = ("uvicorn.error", "uvicorn.access")
 # the other two, which the service needs for file uploads and for the run events.
 UI_LISTEN_POLL_SECONDS = 0.05  # how often the thread that opens the browser looks whether the server listens
 UI_BROWSER_THREAD_JOIN_SECONDS = 1.0  # how long stopping waits for that thread; webbrowser.open can block, the thread is a daemon
-UI_REQUIRED_MODULES = ("fastapi", "uvicorn", "multipart", "websockets")
+UI_REQUIRED_MODULES = ("fastapi", "uvicorn", "multipart", "websockets", "send2trash")
 
 
 def _ui_install_command() -> str:

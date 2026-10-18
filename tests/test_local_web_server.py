@@ -5,6 +5,7 @@ without computing anything. Requests go through ``TestClient`` with the Host the
 """
 import io
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -1033,6 +1034,15 @@ def test_delete_moves_the_project_folder_to_the_recycle_bin(client, projects_fol
     assert project_names(client) == ["kept"]
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="folder names ignore letter case on Windows only")
+def test_delete_compares_the_confirmation_with_the_stored_name_not_the_one_in_the_address(client, recycle_bin):
+    create_project(client, "gone")
+    assert client.delete("/api/projects/GONE", params={"confirm_name": "GONE"}).status_code == 422
+    assert recycle_bin.folders == []
+    assert client.delete("/api/projects/GONE", params={"confirm_name": "gone"}).status_code == 204
+    assert len(recycle_bin.folders) == 1
+
+
 def test_delete_needs_the_project_name_typed_exactly(client, recycle_bin):
     create_project(client, "gone")
     for wrong in ("Gone", "gon", "", "gone "):
@@ -1089,13 +1099,13 @@ def test_reset_is_422_for_a_project_that_is_not_from_an_example(client, recycle_
 
 
 def test_reset_finds_the_example_of_a_renamed_project(client, recycle_bin):
-    client.post("/api/projects/first/examples/basic_perimeter_block")
-    client.post("/api/projects/first/rename", json={"new_name": "Renamed"})
+    assert client.post("/api/projects/first/examples/basic_perimeter_block").status_code == 200
+    assert client.post("/api/projects/first/rename", json={"new_name": "Renamed"}).status_code == 200
     assert client.post("/api/projects/Renamed/reset-to-example").status_code == 200 and project_names(client) == ["Renamed"]
 
 
 def test_reset_with_a_link_inside_is_422_and_changes_nothing(client, projects_folder, tmp_path, recycle_bin):
-    client.post("/api/projects/mine/examples/new_building")
+    assert client.post("/api/projects/mine/examples/new_building").status_code == 200
     (tmp_path / "outside").mkdir()
     make_link_to_folder(projects_folder / "mine" / "run" / "linked", tmp_path / "outside", "junction" if sys.platform == "win32" else "symlink")
     assert client.post("/api/projects/mine/reset-to-example").status_code == 422
@@ -1124,11 +1134,11 @@ def test_open_folder_that_cannot_open_is_422_with_the_reason(projects_folder):
     assert reply.status_code == 422 and "no file manager is installed" in reply.json()["detail"]
 
 
-def test_rename_delete_reset_and_open_folder_are_409_during_a_run_of_the_project(projects_folder, recycle_bin):
+def test_rename_delete_and_reset_are_409_and_open_folder_is_not_during_a_run_of_the_project(projects_folder, recycle_bin):
     handler = WaitsForCancel()
     opener = RecordsOpenedFolders()
     client, worker = build_client(projects_folder, handle_request=handler, open_folder_function=opener)
-    client.post("/api/projects/p/examples/new_building")
+    assert client.post("/api/projects/p/examples/new_building").status_code == 200
     run_id = start_run(client, "p")["run_id"]
     assert handler.started.wait(10)
     try:
@@ -1136,11 +1146,51 @@ def test_rename_delete_reset_and_open_folder_are_409_during_a_run_of_the_project
         assert client.post("/api/projects/P/rename", json={"new_name": "q"}).status_code == 409      # the name in another letter case
         assert client.delete("/api/projects/p", params={"confirm_name": "p"}).status_code == 409
         assert client.post("/api/projects/p/reset-to-example").status_code == 409
-        assert client.post("/api/projects/p/open-folder").status_code == 409
-        assert recycle_bin.folders == [] and opener.folders == [] and project_names(client) == ["p"]
+        assert recycle_bin.folders == [] and project_names(client) == ["p"]
+        assert client.post("/api/projects/p/open-folder").status_code == 204        # R2 7.2 refuses only rename, delete and reset
+        assert opener.folders == [(projects_folder / "p").resolve()]
     finally:
         worker.cancel(run_id)
         worker.run_state(run_id).wait_for_events(10 ** 9, 10)
+
+
+def test_two_renames_in_opposite_directions_at_the_same_time_both_finish(projects_folder):
+    """Each rename waits, right after the checks of its own project, for the other: they would deadlock if each held only its own lock then."""
+    client, worker = build_client(projects_folder)
+    create_project(client, "z")
+    create_project(client, "a")
+    meeting = threading.Barrier(2, timeout=1.0)
+
+    def active_project_after_meeting_the_other_rename():
+        try:
+            meeting.wait()
+        except threading.BrokenBarrierError:
+            pass    # the other rename is waiting for a lock this one holds: it gets through only when both locks were taken together
+        return None
+
+    worker.active_project = active_project_after_meeting_the_other_rename
+    statuses = {}
+
+    def rename(old_name, new_name):
+        statuses[old_name] = client.post(f"/api/projects/{old_name}/rename", json={"new_name": new_name}).status_code
+
+    threads = [threading.Thread(target=rename, args=("z", "a"), daemon=True), threading.Thread(target=rename, args=("a", "z"), daemon=True)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(15)
+    assert not any(thread.is_alive() for thread in threads), "the two renames wait for each other"
+    assert statuses == {"z": 409, "a": 409}      # each new name is taken by the other project
+    assert project_names(client) == ["a", "z"]
+
+
+def test_a_renamed_project_keeps_the_results_of_its_run_current(client_after_fake_run):
+    stages_before = client_after_fake_run.get("/api/projects/p/stage-status").json()["stages"]
+    assert "current" in stages_before.values()
+    renamed = client_after_fake_run.post("/api/projects/p/rename", json={"new_name": "q"})
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["stage_status"]["stages"] == stages_before
+    assert client_after_fake_run.get("/api/projects/q/run/summary").status_code == 200
 
 
 def test_another_project_can_be_changed_during_a_run(client_with_blocking_run):
@@ -1149,15 +1199,16 @@ def test_another_project_can_be_changed_during_a_run(client_with_blocking_run):
     assert client.post("/api/projects/other/rename", json={"new_name": "renamed"}).status_code == 200
 
 
-def test_the_examples_report_the_project_made_from_them(client):
+def test_the_examples_report_the_project_made_from_them(client, projects_folder):
     assert [example["project"] for example in client.get("/api/examples").json()] == [None, None, None]
-    client.post("/api/projects/mine/examples/new_building")
-    client.post("/api/projects/Perimeter block/examples/basic_perimeter_block")
-    client.post("/api/projects/Perimeter block 2/examples/basic_perimeter_block")
+    for name, example in (("mine", "new_building"), ("Perimeter block", "basic_perimeter_block"), ("Perimeter block 2", "basic_perimeter_block")):
+        assert client.post(f"/api/projects/{name}/examples/{example}").status_code == 200
+    newer_seconds = (projects_folder / "Perimeter block" / "project.json").stat().st_mtime + 100
+    os.utime(projects_folder / "Perimeter block 2" / "project.json", (newer_seconds, newer_seconds))
     projects_by_example = {example["name"]: example["project"] for example in client.get("/api/examples").json()}
     assert projects_by_example["new_building"] == "mine" and projects_by_example["multiple_buildings"] is None
-    assert projects_by_example["basic_perimeter_block"] in ("Perimeter block", "Perimeter block 2")
-    client.post("/api/projects/mine/rename", json={"new_name": "Renamed"})
+    assert projects_by_example["basic_perimeter_block"] == "Perimeter block 2"      # the most recently modified of the two
+    assert client.post("/api/projects/mine/rename", json={"new_name": "Renamed"}).status_code == 200
     assert {example["name"]: example["project"] for example in client.get("/api/examples").json()}["new_building"] == "Renamed"
 
 
