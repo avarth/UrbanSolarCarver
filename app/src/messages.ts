@@ -152,7 +152,8 @@ export const messages = {
   // A tile's description for a screen reader: the text of its tooltip after the name, which the tile itself says.
   modeTileDescription: (oneLine: string, description: string, needs: string, engineName: string) =>
     `${oneLine}. ${description} ${needs} Engine name: ${engineName}`,
-  aboutMode: (plainName: string) => `About ${plainName}`,
+  // Under the tiles while Night cooling is the chosen mode (R2 3: the tile itself shows the symbol and the name only).
+  radiativeCoolingIsExperimental: (plainName: string) => `${plainName} is experimental and assumes horizontal test surfaces.`,
 
   // Run buttons (5.4, 6.4)
   runAnalysis: "Run analysis",

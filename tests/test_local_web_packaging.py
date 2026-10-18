@@ -1,6 +1,7 @@
 """What the package carries for the local web app: the example projects, which must stay copies of examples/, the built front-end, which must match app/, and the settings form's presentation file, which must match the engine's config."""
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -154,4 +155,11 @@ def test_retired_mode_names_are_gone_from_the_app_sources(retired_name):
     """R2 3, 6: "Solar time-based" and "Solar usefulness" replace the names of milestone 1 everywhere in the interface."""
     sources = [path for path in (APP_FOLDER / "src").rglob("*") if path.is_file() and path.suffix in {".ts", ".tsx", ".json", ".css"}]
     assert APP_FOLDER / "src" / "messages.ts" in sources and MODE_TILES_PATH in sources
-    assert [path.name for path in sources if retired_name in path.read_text(encoding="utf-8")] == []
+    assert [path.name for path in sources if retired_name in text_with_line_breaks_collapsed(path)] == []
+
+
+def text_with_line_breaks_collapsed(source: Path) -> str:
+    """The text of a source file with each line break, and the comment marker (//, /*, *) that starts the next line, read as one
+    space, and every run of white space as one space: a name wrapped across two lines of a comment reads as it does on one line."""
+    text = re.sub(r"\n[ \t]*(?:/\*+|//+|\*(?!/))?", " ", source.read_text(encoding="utf-8"))
+    return re.sub(r"\s+", " ", text)

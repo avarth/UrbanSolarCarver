@@ -22,6 +22,12 @@ function focus(element: HTMLElement): void {
 
 const tiles = () => [...rendered!.container.querySelectorAll<HTMLElement>('[role="radio"]')];
 
+/** The "i" of the tile named *name*. */
+function infoButtonOf(name: string): HTMLButtonElement {
+  const tile = tiles().find((candidate) => candidate.querySelector(".mode-tile-name")!.textContent === name)!;
+  return tile.parentElement!.querySelector<HTMLButtonElement>(".mode-tile-info")!;
+}
+
 test("the six tiles form one radio group, in the order of R2 3, with the chosen mode checked and alone in the tab order", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
   expect(rendered.container.querySelector('[role="radiogroup"]')).not.toBeNull();
@@ -100,10 +106,26 @@ test("focus on a tile shows its tooltip in the spec's order; Escape closes it", 
   expect(document.querySelector('[role="tooltip"]')).toBeNull();
 });
 
-test("the tile's i opens the same tooltip by click", () => {
+test("the tile's i opens the same tooltip by click, and is hidden from a screen reader, which has the text as the tile's description", () => {
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
-  click(rendered.container.querySelector('[aria-label="About Angle rule"]')!);
+  for (const name of ["Angle rule", "Solar time-based", "Solar energy", "Solar usefulness", "Daylight", "Night cooling"]) {
+    expect(infoButtonOf(name).getAttribute("aria-hidden")).toBe("true");
+    expect(infoButtonOf(name).hasAttribute("aria-expanded")).toBe(false);
+  }
+  click(infoButtonOf("Angle rule"));
   expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("Needs a plane angle.");
+  expect(infoButtonOf("Angle rule").dataset.open).toBe("true");      // drawn pressed while its tooltip is pinned
+  expect(infoButtonOf("Daylight").dataset.open).toBeUndefined();
+});
+
+test("Night cooling, chosen, is said under the tiles to be experimental; no other mode has the line", () => {
+  const experimentalLine = "Night cooling is experimental and assumes horizontal test surfaces.";
+  rendered = renderForTest(<ModeStep mode="radiative_cooling" onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
+  expect([...rendered.container.querySelectorAll(".mode-step-note")].map((note) => note.textContent)).toContain(experimentalLine);
+  for (const mode of ["tilted_plane", "time-based", "irradiance", "benefit", "daylight"]) {
+    rendered.rerender(<ModeStep mode={mode} onChoose={() => {}} disabledReason={null} weatherDropZone={null} />);
+    expect(rendered.container.textContent).not.toContain(experimentalLine);
+  }
 });
 
 test("during a run the mode cannot change, and the reason is shown; the weather drop zone sits under the tiles", () => {
@@ -159,7 +181,7 @@ test("a tooltip pinned with the i closes when another tile is chosen or the poin
   const outside = document.createElement("button");
   document.body.appendChild(outside);
   rendered = renderForTest(<ModeStep mode="time-based" onChoose={onChoose} disabledReason={null} weatherDropZone={null} />);
-  const info = (name: string) => rendered!.container.querySelector(`[aria-label="About ${name}"]`)!;
+  const info = infoButtonOf;
   pressPointer(info("Daylight"));
   click(info("Daylight"));
   expect(document.querySelector('[role="tooltip"]')!.textContent).toContain("overcast sky");

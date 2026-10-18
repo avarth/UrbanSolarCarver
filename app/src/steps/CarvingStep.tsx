@@ -1,6 +1,6 @@
-// The Carving step (UX 5.5, 11): the threshold control of the mode (Shadow tolerated in m²·h with its slider for Sun at set
-// hours, Carve amount in % for the weighted modes, the angle rule's message), the other carving settings folded under it, the
-// histogram, the numbers of the last carving, and the "Update when I change the threshold" switch, remembered per project.
+// The Carving step (UX 5.5, 11): the threshold control of the mode (Shadow tolerated in m²·h with its slider for Solar
+// time-based, Carve amount in % for the weighted modes, the angle rule's message), the other carving settings folded under it,
+// the histogram, the numbers of the last carving, and the "Update when I change the threshold" switch, remembered per project.
 // With the switch on, letting go of the slider or leaving the number field reruns the carving, as does a change of another
 // carving setting (a switch or a choice at once, a number field when the user leaves it); off, Update carving does.
 // When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with Run

@@ -429,6 +429,12 @@
 .mode-tile-name { font-size: var(--text-body); font-weight: 600; line-height: 1.25; }
 
 .mode-tile-info { position: absolute; top: 6px; right: 6px; }
+/* The "i" whose tooltip is open, drawn as .setting-info[aria-expanded="true"] (this one carries no ARIA state: it is hidden). */
+.mode-tile-info[data-open="true"] {
+  background: var(--colour-accent-soft);
+  border-color: var(--colour-accent);
+  color: var(--colour-accent);
+}
 /* The mode tooltip is read only, and lies over the tiles below its own: the pointer goes through it, to the tile under it. */
 .mode-tooltip { pointer-events: none; }
 .mode-tooltip-name { font-weight: 600; }

@@ -4,6 +4,8 @@
 // name, is the tile's description for a screen reader at all times. The focus a mouse click gives a tile does not hold the
 // tooltip open: it goes when the pointer leaves. A tooltip pinned with the "i" goes when a press lands anywhere but on that
 // tile's "i", or another mode is chosen. The tooltip lets the pointer through, so it never takes a click meant for the tile under it.
+// The "i" is for the pointer and touch only: a screen reader has its text as the tile's description already.
+// While Night cooling is chosen, a line under the tiles says that it is experimental.
 // A mode that needs a weather file the project lacks gets the weather drop zone under the tiles.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { listedWithAnd, messages } from "../messages";
@@ -14,6 +16,7 @@ import { MODE_TILES, plainModeName } from "./step_summaries";
 import "./steps.css";
 
 const TILES_PER_ROW = 3;
+const EXPERIMENTAL_MODE = "radiative_cooling";
 
 interface ModeStepProps {
   mode: string;
@@ -159,8 +162,8 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
                 {messages.modeTileDescription(tile.one_line, tile.tooltip, tile.needs, tile.engine_name)}
               </span>
               {/* outside the radio, so the tile holds no control of its own; the tile's focus already opens the tooltip */}
-              <button ref={(element) => { infoButtons.current[index] = element; }} type="button" className="setting-info mode-tile-info" tabIndex={-1} aria-label={messages.aboutMode(tile.plain_name)}
-                      aria-expanded={openIndex === index}
+              <button ref={(element) => { infoButtons.current[index] = element; }} type="button" className="setting-info mode-tile-info" tabIndex={-1}
+                      aria-hidden="true" data-open={openIndex === index || undefined}
                       onClick={() => { setDismissed(pinnedIndex === index); setPinnedIndex(pinnedIndex === index ? null : index); }}>
                 i
               </button>
@@ -180,6 +183,7 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
         </div>
       )}
       <p className="mode-step-note">{messages.modeFillsStartingValues}</p>
+      {mode === EXPERIMENTAL_MODE && <p className="mode-step-note">{messages.radiativeCoolingIsExperimental(plainModeName(mode))}</p>}
       {valuesReset !== null && valuesReset.settings.length > 0 && <p className="step-reason mode-values-reset" role="status">{valuesResetText(valuesReset)}</p>}
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
       {weatherDropZone}
