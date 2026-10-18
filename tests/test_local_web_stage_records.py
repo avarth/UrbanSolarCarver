@@ -129,6 +129,18 @@ def test_a_stage_whose_manifest_is_not_json_is_missing(built_project):
     assert stage_status(store, name)["massing"] == "missing"
 
 
+@pytest.mark.parametrize("field_name", ["max_volume_lowest_z", "max_volume_highest_z"])
+def test_a_preprocessing_run_from_before_the_manifest_recorded_the_max_volume_heights_is_out_of_date(built_project, field_name):
+    """Massing of such a run starts and ends the floors at the voxel layers, up to a voxel outside the max volume."""
+    store, name, _worker = built_project
+    manifest_path = store.open(name) / "run" / "preprocessing" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest[field_name]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
+    assert choose_stages(store, name, ["massing"]).stages == ["preprocessing", "thresholding", "massing"]
+
+
 def test_forgetting_stages_removes_only_their_records(built_project):
     store, name, _worker = built_project
     forget_stages(store, name, ["exporting", "massing"])

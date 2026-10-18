@@ -20,7 +20,10 @@ with warnings.catch_warnings():     # newer Starlette versions announce that Tes
     warnings.filterwarnings("ignore", message=".*httpx.*testclient|.*testclient.*httpx", category=Warning)
     from starlette.testclient import TestClient
 
-from local_web_test_support import GOLDEN_EPW, WaitsForCancel, box_bytes, make_worker, write_fake_finished_run, write_fake_run
+from local_web_test_support import (
+    GOLDEN_EPW, WaitsForCancel, box_bytes, has_vertex_normals, make_worker, write_fake_finished_run, write_fake_run,
+    write_joined_test_surfaces_without_normals,
+)
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
 from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
@@ -347,6 +350,23 @@ def test_a_project_file_that_is_not_utf8_hides_only_its_own_project(client, proj
     listed = client.get("/api/projects")
     assert listed.status_code == 200 and [row["name"] for row in listed.json()] == ["good"]
     assert client.get("/api/projects/bad json").status_code == 422
+
+
+def test_opening_a_project_rebuilds_a_joined_test_surface_file_written_without_normals(client_after_fake_run, projects_folder):
+    store = ProjectStore(projects_folder)
+    assert set(client_after_fake_run.get("/api/projects/p").json()["stage_status"]["stages"].values()) == {"current"}
+    joined_path = write_joined_test_surfaces_without_normals(store, "p")
+    stages = client_after_fake_run.get("/api/projects/p").json()["stage_status"]["stages"]
+    assert has_vertex_normals(joined_path) and set(stages.values()) == {"out_of_date"}
+
+
+def test_a_project_whose_old_joined_file_cannot_be_rebuilt_still_opens(client_with_inputs, projects_folder):
+    """An uploaded file missing on disk: the project opens with its old joined file, and the file can be removed."""
+    store = ProjectStore(projects_folder)
+    write_joined_test_surfaces_without_normals(store, "p")
+    (projects_folder / "p" / "inputs" / "test_surfaces" / "surface.ply").unlink()
+    assert client_with_inputs.get("/api/projects/p").status_code == 200
+    assert client_with_inputs.delete("/api/projects/p/inputs/test_surfaces/surface.ply").status_code == 200
 
 
 def test_the_examples_are_listed_with_a_description(client):

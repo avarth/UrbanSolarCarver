@@ -13,7 +13,8 @@ from pathlib import Path
 import numpy as np
 import trimesh
 
-from urbansolarcarver.local_web_service.projects import ProjectStore
+from urbansolarcarver.io import load_mesh, save_mesh
+from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunWorker
 from urbansolarcarver.local_web_service.stage_records import UPSTREAM_STAGE
 from urbansolarcarver.pydantic_schemas import PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
@@ -46,6 +47,23 @@ def change_settings(store: ProjectStore, name: str, **changes) -> None:
     store.write_config_from_values(name, {**store.read_settings(name), **changes})
 
 
+def write_joined_test_surfaces_without_normals(store: ProjectStore, name: str) -> Path:
+    """The joined test surface file as the service wrote it before it kept vertex normals: positions only; its path."""
+    project_folder = store.open(name)
+    file_names = sorted(store.read_project_json(name).input_files["test_surfaces"])
+    meshes = [load_mesh(str(project_folder / INPUTS_FOLDER / "test_surfaces" / file_name)) for file_name in file_names]
+    joined_path = project_folder / JOINED_FOLDER / "test_surfaces.ply"
+    save_mesh(trimesh.util.concatenate(meshes), str(joined_path))
+    assert not has_vertex_normals(joined_path)
+    return joined_path
+
+
+def has_vertex_normals(ply_path: Path) -> bool:
+    """Whether the header of a PLY file declares the vertex property nx."""
+    header_lines = ply_path.read_bytes().split(b"end_header", 1)[0].splitlines()
+    return any(line.split()[-1:] == [b"nx"] for line in header_lines if line.startswith(b"property"))
+
+
 # ---- The fake engine and the run worker ----
 
 def write_fake_stage_output(run_folder: Path, stage: str) -> None:
@@ -53,6 +71,8 @@ def write_fake_stage_output(run_folder: Path, stage: str) -> None:
     folder = run_folder / stage
     folder.mkdir(parents=True, exist_ok=True)
     manifest = {"run_id": uuid.uuid4().hex}
+    if stage == "preprocessing":
+        manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0)
     if stage in UPSTREAM_STAGE:
         manifest["upstream_run_id"] = json.loads((run_folder / UPSTREAM_STAGE[stage] / "manifest.json").read_text())["run_id"]
     (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -150,7 +170,8 @@ def write_fake_run(tmp_path, shape=(4, 3, 2), with_mask=True, with_compared_scor
         run_id="pre-run", scores_path="scores.npy", scores_kind="violation_count", shape=shape, origin=(10.0, 20.0, 30.0),
         voxel_size=2.0, mode="time-based", voxel_grid_path="voxel_grid.npy",
         patch_weights_path="patch_weights.npy" if with_patch_weights else None,
-        sample_point_count=5, footprint_path="footprint.json")), encoding="utf-8")
+        sample_point_count=5, footprint_path="footprint.json", max_volume_lowest_z=30.0, max_volume_highest_z=34.0)),
+        encoding="utf-8")
     if with_mask:
         thresholding = run / "thresholding"
         thresholding.mkdir()

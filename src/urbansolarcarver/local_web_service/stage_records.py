@@ -23,6 +23,9 @@ MANIFEST_FILE_NAME = "manifest.json"
 # The stage whose manifest each of these stages names as its upstream (the engine's chain).
 UPSTREAM_STAGE = {"thresholding": "preprocessing", "exporting": "thresholding", "massing": "thresholding"}
 ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every result is built on
+# Preprocessing manifest fields that massing reads; a manifest without them is from before preprocessing recorded
+# them, and massing of that run would start and end its floors up to a voxel outside the maximum volume.
+MAX_VOLUME_HEIGHT_FIELDS = ("max_volume_lowest_z", "max_volume_highest_z")
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,8 @@ def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
         elif current_config is None or record.inputs_revision != project_json.inputs_revision:
             status[stage] = "out_of_date"
         elif _settings_changed(store, name, stage, record, current_config):
+            status[stage] = "out_of_date"
+        elif stage == "preprocessing" and any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
             status[stage] = "out_of_date"
         elif stage in UPSTREAM_STAGE and not _reads_current_upstream(
                 status[UPSTREAM_STAGE[stage]], project_json.stage_records.get(UPSTREAM_STAGE[stage]), manifest):

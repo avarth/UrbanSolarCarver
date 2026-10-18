@@ -141,6 +141,18 @@ def _write_ply_with_vertex_normals(meshes: list[trimesh.Trimesh], path: Path) ->
         ply_file.write(face_rows.tobytes())
 
 
+def _ply_has_vertex_normals(path: Path) -> bool:
+    """Whether the header of a PLY file declares the vertex property nx (a PLY header is ASCII in every format)."""
+    with open(path, "rb") as ply_file:
+        for line in ply_file:
+            words = line.split()
+            if words == [b"end_header"]:
+                return False
+            if words[:1] == [b"property"] and words[-1:] == [b"nx"]:
+                return True
+    return False
+
+
 class ProjectStore:
     """The projects under one projects folder."""
 
@@ -397,6 +409,32 @@ class ProjectStore:
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
             return self._reply(name, role, project_json)
+
+    def rebuild_joined_test_surfaces_without_normals(self, name: str) -> bool:
+        """Rebuild the joined test surface file when it has no vertex normals and raise inputs_revision; whether it did.
+
+        The service wrote that file with positions only before it kept the vertex normals, so the engine welded
+        panels that share corners (see _write_ply_with_vertex_normals). Rebuilt from the uploaded files, with
+        inputs_revision raised, every stage built on the old file is out of date. Called when a project is opened
+        and when a run starts; raises ProjectError when an uploaded file cannot be read.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            joined_path = project_folder / JOINED_FOLDER / "test_surfaces.ply"
+            if not joined_path.is_file() or _ply_has_vertex_normals(joined_path):
+                return False
+            project_json = self.read_project_json(name)
+            file_names = list(project_json.input_files.get("test_surfaces", {}))
+            joined_temporary_path = self._write_joined_temporary_file(
+                project_folder, "test_surfaces", list(self._load_stored_meshes(project_folder, "test_surfaces", file_names).values()))
+            try:
+                self._replace_joined_file(project_folder, "test_surfaces", joined_temporary_path)
+            finally:
+                if joined_temporary_path is not None:
+                    joined_temporary_path.unlink(missing_ok=True)
+            project_json.inputs_revision += 1
+            self.write_project_json(name, project_json)
+            return True
 
     def input_files(self, name: str, role: str) -> list[InputFileInfo]:
         """The uploaded files of a role sorted by name, with their triangle counts."""

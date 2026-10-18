@@ -234,6 +234,10 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
 
     @router.get("/projects/{name}")
     def open_project(name: str) -> ProjectDetail:
+        try:
+            store.rebuild_joined_test_surfaces_without_normals(name)
+        except ProjectError:
+            pass    # an uploaded file that cannot be read: the project still opens, so it can be removed; a run reports it
         return project_detail(name)
 
     @router.get("/projects/{name}/stage-status")

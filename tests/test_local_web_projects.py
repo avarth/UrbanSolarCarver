@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import trimesh
 import yaml
-from local_web_test_support import wait_until_finished
+from local_web_test_support import has_vertex_normals, wait_until_finished, write_joined_test_surfaces_without_normals
 
 from urbansolarcarver.errors import ConfigError
 from urbansolarcarver.io import load_mesh
@@ -423,6 +423,26 @@ def test_the_joined_test_surfaces_of_an_example_sample_as_its_uploaded_files(tmp
     joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
     assert len(joined_panels) == len(uploaded_panels)
     np.testing.assert_allclose(_sorted_rows(joined_panels), _sorted_rows(uploaded_panels), atol=1e-4)
+
+
+def test_a_joined_test_surface_file_written_without_normals_is_rebuilt_once_and_raises_the_inputs_revision(tmp_path):
+    store = ProjectStore(tmp_path)
+    _create_example_project(store, "p", "basic_perimeter_block")
+    joined_path = write_joined_test_surfaces_without_normals(store, "p")
+    assert len(_sampled_panels([joined_path])) == 4             # the courtyard walls welded into one ring
+    inputs_revision = store.read_project_json("p").inputs_revision
+    assert store.rebuild_joined_test_surfaces_without_normals("p") is True
+    assert has_vertex_normals(joined_path) and len(_sampled_panels([joined_path])) == 8
+    assert store.read_project_json("p").inputs_revision == inputs_revision + 1
+    assert store.rebuild_joined_test_surfaces_without_normals("p") is False
+    assert store.read_project_json("p").inputs_revision == inputs_revision + 1
+
+
+def test_a_project_without_test_surfaces_has_no_joined_test_surface_file_to_rebuild(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    inputs_revision = store.read_project_json("p").inputs_revision
+    assert store.rebuild_joined_test_surfaces_without_normals("p") is False
+    assert store.read_project_json("p").inputs_revision == inputs_revision
 
 
 def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(tmp_path):

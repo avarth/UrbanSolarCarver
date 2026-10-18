@@ -198,6 +198,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   volume's highest point, which preprocessing records too
   (`max_volume_highest_z`), and a voxel layer whose centre lies above that
   point does not count against the top floor, as at the base.
+- Runs made before these changes keep the old ground and top, up to one
+  voxel outside the maximum volume, until the analysis (preprocessing) is
+  run again. The browser service marks such runs out of date. It also
+  rebuilds a project's joined test surface file when that file was written
+  without vertex normals (which welded panels sharing corners), when the
+  project is opened or a run starts, and the stages built on it go out of
+  date.
 
 ### Fixed (stage chain)
 
