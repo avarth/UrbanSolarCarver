@@ -93,7 +93,3 @@ fullText.pdf
 # Front-end (app/): installed packages and the intermediate OpenAPI file; the build goes to src/urbansolarcarver/ui_static/ and is committed
 app/node_modules/
 app/openapi.json
-
-# Browser app launchers written by setup_env.py; they hold this machine's paths
-/Start UrbanSolarCarver.cmd
-/Start UrbanSolarCarver.command

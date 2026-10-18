@@ -4,10 +4,6 @@
 
 ## Starting the interface
 
-Double-click **Start UrbanSolarCarver** in the UrbanSolarCarver folder: `Start UrbanSolarCarver.cmd` on Windows, `Start UrbanSolarCarver.command` on macOS (on Linux, run it from a terminal). `setup_env.py` writes this file at the end of the installation, with the paths of your installation in it, and writes it again each time it runs. A window opens and the interface opens in your browser once it is ready; keep the window open while you work and close it to stop UrbanSolarCarver. You can copy the file to your desktop; it keeps working from there.
-
-From a terminal with the environment active, the same command is:
-
 ```bash
 usc ui
 ```

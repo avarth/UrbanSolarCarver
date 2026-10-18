@@ -33,8 +33,6 @@ What this script does
    --no-ui: pip install -e .[dev])
 6. Verifies that torch, warp and urbansolarcarver import
 7. Precompiles the Warp kernels so the first run does not pay the compile time
-8. Unless --no-ui: writes a double-clickable launcher for the browser app in
-   the repo, "Start UrbanSolarCarver.cmd" (Windows) or ".command" (macOS, Linux)
 """
 
 from __future__ import annotations
@@ -43,7 +41,6 @@ import argparse
 import os
 import platform
 import re
-import shlex
 import shutil
 import subprocess
 import sys
@@ -180,69 +177,6 @@ def venv_python(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "python"
 
 
-BROWSER_APP_LAUNCHER_NAME = "Start UrbanSolarCarver"
-
-
-def write_browser_app_launcher(repository: Path, python: Path, system: str | None = None) -> Path:
-    """Write a double-clickable file in *repository* that starts the browser app.
-
-    The launcher holds the absolute paths of this installation (the venv's
-    *python* and the repository's ``src``), because the venv can live outside
-    the repository (``--venv-dir`` or the long-path fallback). It runs
-    ``usc ui``, which opens the browser once the service listens, and keeps
-    its window open on an error so the reason stays readable. Windows gets a
-    ``.cmd``; macOS and Linux get an executable ``.command`` shell script.
-    Running setup_env.py again rewrites it.
-    """
-    system = system or platform.system()
-    source_folder = repository / "src"
-    if system == "Windows":
-        launcher = repository / f"{BROWSER_APP_LAUNCHER_NAME}.cmd"
-        lines = [
-            "@echo off",
-            "rem Starts the UrbanSolarCarver browser app. Written by setup_env.py; run it again to update.",
-            "setlocal",
-            "title UrbanSolarCarver",
-            f'set "USC_PYTHON={python}"',
-            f'set "PYTHONPATH={source_folder}"',
-            # A goto rather than an if (...) block: a ")" in the path, as in
-            # "Program Files (x86)", would end such a block early.
-            'if exist "%USC_PYTHON%" goto start',
-            "echo The Python environment of UrbanSolarCarver was not found:",
-            "echo %USC_PYTHON%",
-            "echo Run setup_env.py again in this folder to repair it.",
-            "pause",
-            "exit /b 1",
-            ":start",
-            "echo Starting UrbanSolarCarver. Your browser opens when it is ready.",
-            "echo Keep this window open while you work; close it to stop UrbanSolarCarver.",
-            '"%USC_PYTHON%" -m urbansolarcarver.carver_cli ui %*',
-            "if errorlevel 1 pause",
-        ]
-        launcher.write_bytes(("\r\n".join(lines) + "\r\n").encode("utf-8"))
-        return launcher
-
-    launcher = repository / f"{BROWSER_APP_LAUNCHER_NAME}.command"
-    lines = [
-        "#!/bin/sh",
-        "# Starts the UrbanSolarCarver browser app. Written by setup_env.py; run it again to update.",
-        f"usc_python={shlex.quote(str(python))}",
-        'if [ ! -x "$usc_python" ]; then',
-        '  echo "The Python environment of UrbanSolarCarver was not found: $usc_python"',
-        '  echo "Run setup_env.py again in this folder to repair it."',
-        "  exit 1",
-        "fi",
-        f"PYTHONPATH={shlex.quote(str(source_folder))}",
-        "export PYTHONPATH",
-        'echo "Starting UrbanSolarCarver. Your browser opens when it is ready."',
-        'echo "Keep this window open while you work; close it to stop UrbanSolarCarver."',
-        'exec "$usc_python" -m urbansolarcarver.carver_cli ui "$@"',
-    ]
-    launcher.write_bytes(("\n".join(lines) + "\n").encode("utf-8"))
-    launcher.chmod(0o755)
-    return launcher
-
-
 def _windows_long_paths_enabled() -> bool:
     """True if Windows has long-path support enabled in the registry."""
     try:
@@ -352,9 +286,6 @@ def main():
         print(f"  1. python -m venv {venv_dir}")
         print(f"  2. pip install torch --index-url {index_url}")
         print(f"  3. pip install -e {install_target}")
-        if not args.no_ui:
-            launcher_suffix = ".cmd" if platform.system() == "Windows" else ".command"
-            print(f"  4. write {BROWSER_APP_LAUNCHER_NAME}{launcher_suffix} in {Path(__file__).resolve().parent}")
         return
 
     # ── 2. Create venv ──
@@ -435,11 +366,6 @@ def main():
     else:
         log("Kernel precompilation skipped; kernels will compile on first run", "warn")
 
-    launcher = None
-    if not args.no_ui:
-        launcher = write_browser_app_launcher(Path(__file__).resolve().parent, vpy)
-        log(f"Browser app launcher written: {launcher}", "ok")
-
     # ── Done ──
     print()
     log("Setup complete.", "ok")
@@ -447,8 +373,8 @@ def main():
     print(f"  Activate:  {venv_dir}\\Scripts\\activate" if platform.system() == "Windows"
           else f"  Activate:  source {venv_dir}/bin/activate")
     print(f"  CLI:       urbansolarcarver --help")
-    if launcher is not None:
-        print(f"  Browser:   double-click \"{launcher.name}\" in {launcher.parent}  (or run: usc ui)")
+    if not args.no_ui:
+        print(f"  Browser:   usc ui")
     print(f"  Jupyter:   {vpy} -m jupyter notebook")
     print()
 
