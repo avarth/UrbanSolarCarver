@@ -169,6 +169,7 @@ class Faces:
     face: np.ndarray   # (N,) facade index
     u: np.ndarray      # (N,) m along the facade
     d: np.ndarray      # (N,) m behind the facade: from its line when straight, from the facade itself when curved
+                       #      (past either end of a curved facade, from the line through its end edge)
 
 
 def part_of_points(points, polygons):
@@ -287,7 +288,9 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
     positions), the arc length otherwise, continued along the end edges
     past either end. ``d`` is the distance behind the facade: from the line
     through a straight facade (so a corner square past its end keeps its
-    depth), from the facade itself when it is curved.
+    depth), from the facade itself when it is curved, and past either end of
+    a curved facade from the line through its end edge, as ``u`` continues.
+    Columns whose centre lies outside a straight facade's line get ``d < 0``.
     """
     xy = np.asarray(xy, dtype=np.float64)
     # Columns whose centre lies exactly on a ridge (aligned grids, odd voxel
@@ -350,10 +353,16 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
                 # length continues along the end edge instead of stopping.
                 coords = np.asarray(f.line.coords)
                 first, last = coords[1] - coords[0], coords[-1] - coords[-2]
-                before = (xy[mine] - f.start) @ (first / np.hypot(*first))
-                after = (xy[mine] - f.end) @ (last / np.hypot(*last))
-                t = np.where(t <= 1e-9, np.minimum(before, 0.0),
-                             np.where(t >= f.length - 1e-9, f.length + np.maximum(after, 0.0), t))
+                first, last = first / np.hypot(*first), last / np.hypot(*last)
+                before, after = (xy[mine] - f.start) @ first, (xy[mine] - f.end) @ last
+                at_start, at_end = t <= 1e-9, t >= f.length - 1e-9
+                t = np.where(at_start, np.minimum(before, 0.0),
+                             np.where(at_end, f.length + np.maximum(after, 0.0), t))
+                # The depth there is measured from the line through the end
+                # edge too (solid on the left), so modules stay square.
+                inward_first, inward_last = np.array([-first[1], first[0]]), np.array([-last[1], last[0]])
+                d[mine] = np.where(at_start, (xy[mine] - f.start) @ inward_first,
+                                   np.where(at_end, (xy[mine] - f.end) @ inward_last, d[mine]))
             u[mine] = t
     return Faces(face=face, u=u, d=d)
 
@@ -381,7 +390,9 @@ def cut_bays(faces: Faces, bay_width, voxel_size):
         Facade index of each bay.
     """
     k = np.floor(faces.u / bay_width + 1e-9).astype(np.int64)
-    m = np.floor(faces.d / bay_width + 1e-9).astype(np.int64)
+    # Columns whose centre lies in front of the facade line (d < 0, along
+    # facades not aligned with the grid) belong to the first module.
+    m = np.floor(np.maximum(faces.d, 0.0) / bay_width + 1e-9).astype(np.int64)
     for f in np.unique(faces.face):
         mine = np.flatnonzero(faces.face == f)
         ks, us = k[mine], faces.u[mine]
@@ -476,7 +487,7 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
             behind = in_u & (d_all > d_hi) & (d_all <= d_hi + gap)
             module_in_front = (in_front & on_face).any()                # cut in depth: modules of the same row
             module_behind = (behind & on_face).any()
-            m_lo = np.floor(d_lo / w + 1e-9)
+            m_lo = np.floor(max(d_lo, 0.0) / w + 1e-9)
             d0 = m_lo * w if module_in_front else side(d_lo, -1.0, in_front)
             d1 = (m_lo + 1) * w if module_behind else side(d_hi, 1.0, behind)
             across = np.unique(faces.face[behind])
@@ -531,14 +542,24 @@ class Floor:
     plate: np.ndarray          # (N,) plate index of each column, -1 = not built
 
 
+def _disc(side):
+    """(side, side) bool: the cells whose centre lies within a disc of diameter *side* cells."""
+    offset = np.arange(side) - 0.5 * (side - 1)
+    return offset[:, None] ** 2 + offset[None, :] ** 2 <= (0.5 * side) ** 2
+
+
 def _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, n_cols):
     """Drop bays that keep less than half of their columns after a morphological
-    opening with a *side* x *side* square (parts narrower than the minimum)."""
+    opening with a disc *side* columns across (parts narrower than the minimum).
+
+    A disc fits a strip of the minimum width at any angle to the grid, as
+    the inward offset in ``plate_polygons`` does; a square fits only one
+    ``side * (cos t + sin t)`` wide at angle t."""
     from scipy.ndimage import binary_opening
     built = keep[bay]
     grid = np.zeros(grid_shape, dtype=bool)
     grid[cells_ij[built, 0], cells_ij[built, 1]] = True
-    opened = binary_opening(grid, structure=np.ones((side, side), dtype=bool))
+    opened = binary_opening(grid, structure=_disc(side))
     surviving = opened[cells_ij[:, 0], cells_ij[:, 1]] & built
     share = np.bincount(bay, weights=surviving.astype(np.float64), minlength=len(keep))
     return keep & (share >= 0.5 * np.maximum(n_cols, 1))
@@ -648,7 +669,7 @@ def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint, min_dimen
     """
     vs = float(voxel_size)
     if bay_shapes is None:
-        shape = _from_columns(cells_ij, in_plate, removed, vs)
+        shape = _from_columns(cells_ij, in_plate, removed, vs).intersection(footprint)
     else:
         has_shape = np.array([s is not None for s in bay_shapes])
         pieces = [bay_shapes[b] for b in np.unique(bay[in_plate]) if has_shape[b]]
@@ -660,8 +681,9 @@ def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint, min_dimen
         removed_rectangles = [bay_shapes[b] for b in nearby_removed if has_shape[b]]
         if removed_rectangles:
             shape = shape.difference(shapely.union_all(removed_rectangles))
-        shape = shape.simplify(1e-6)
-    shape = shape.intersection(footprint)
+        # Simplified after clipping: a rectangle side that ends on the facade
+        # line would otherwise leave a vertex a rounding error away.
+        shape = shape.intersection(footprint).simplify(1e-6)
     parts = [p for p in getattr(shape, "geoms", [shape]) if isinstance(p, Polygon) and p.area > vs * vs]
     if min_dimension > 0.0:
         parts = [p for p in parts if not p.buffer(-0.5 * min_dimension + 1e-3).is_empty]

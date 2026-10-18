@@ -477,3 +477,108 @@ def test_front_modules_draw_on_the_depth_cut_line():
     plates = mg.plate_polygons(ij, front, ~front, vs, bar, bay=bay, bay_shapes=shapes)
     assert sorted(p.bounds for p in plates) == [(0.0, 0.0, 30.0, 3.0), (0.0, 11.0, 30.0, 14.0)]
     assert all(p.area == pytest.approx(90.0) for p in plates)
+
+
+# ----------------------------------------------------------------- review fixes of the square modules
+def _surface_cells(polygon, vs):
+    """Grid columns (ij) and centres (xy) of every voxel square *polygon* covers, as the voxelizer marks the voxels
+    the surface passes through: columns along a facade that is not aligned with the grid have their centre outside."""
+    x0, y0, x1, y1 = polygon.bounds
+    i, j = np.meshgrid(np.arange(int(np.floor(x0 / vs)), int(np.ceil(x1 / vs))),
+                       np.arange(int(np.floor(y0 / vs)), int(np.ceil(y1 / vs))), indexing="ij")
+    ij = np.stack([i.ravel(), j.ravel()], axis=1)
+    squares = shapely.box(ij[:, 0] * vs, ij[:, 1] * vs, (ij[:, 0] + 1) * vs, (ij[:, 1] + 1) * vs)
+    covered = shapely.area(shapely.intersection(squares, polygon)) > 0.0
+    return ij[covered], (ij[covered] + 0.5) * vs
+
+
+def _modules(polygon, ij, xy, vs, width=3.0):
+    facades, corners = mg.split_facades([polygon])
+    faces = mg.assign_faces(xy, facades, corners, [polygon], vs, min_facade_length=2 * width)
+    bay, bay_face = mg.cut_bays(faces, width, vs)
+    shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [polygon], width, vs)
+    return facades, faces, bay, bay_face, shapes
+
+
+@pytest.mark.parametrize("base", [box(0, 0, 60, 14), L_SHAPE], ids=["slab", "L"])
+@pytest.mark.parametrize("angle", [12, 35, 45, 65, 75, 90])
+def test_plates_on_rotated_footprints_have_no_zero_length_edges_and_close_into_watertight_prisms(base, angle):
+    from shapely import affinity
+    poly = affinity.translate(affinity.rotate(base, angle, origin=(0, 0)), 20.13, 3.37)
+    vs = 0.5
+    ij, xy = _surface_cells(poly, vs)
+    _, faces, bay, _, shapes = _modules(poly, ij, xy, vs)
+    whole = np.ones(len(xy), bool)
+    every_other_module = bay % 2 == 0
+    front_row = np.isin(bay, np.unique(bay[faces.d < 3.0]))
+    for in_plate in (whole, every_other_module, front_row):
+        for plate in mg.plate_polygons(ij, in_plate, ~in_plate, vs, poly, min_dimension=3.0, bay=bay,
+                                       bay_shapes=shapes):
+            for ring in [plate.exterior, *plate.interiors]:
+                edge_lengths = np.hypot(*np.diff(np.asarray(ring.coords), axis=0).T)
+                assert edge_lengths.min() >= 1e-6
+            assert mg.prism_mesh(plate, 0.0, 3.0).is_watertight
+
+
+@pytest.mark.parametrize("angle", [17, 45])
+def test_strips_one_module_deep_keep_their_floors_at_any_angle(angle):
+    """A 100 x 92 m courtyard block, wings 4.5 m deep kept up to 33 m, the courtyard only up to 14 m.
+
+    Above the courtyard only the first row of modules (3 m deep) fits each wing: the second one, 3 to 6 m deep, is
+    half outside the envelope. The test for parts narrower than the minimum must keep that strip at any angle of the
+    block to the voxel grid, not only where it is aligned with the grid.
+    """
+    from shapely import affinity
+    vs, depth, offset = 0.5, 4.5, (60.13, 3.37)
+    areas = {}
+    for a in (0, angle):
+        poly = affinity.translate(affinity.rotate(box(0, 0, 100, 92), a, origin=(0, 0)), *offset)
+        ij, xy = _surface_cells(poly, vs)
+        _, _, bay, _, shapes = _modules(poly, ij, xy, vs)
+        cos, sin = np.cos(np.radians(a)), np.sin(np.radians(a))
+        x = (xy[:, 0] - offset[0]) * cos + (xy[:, 1] - offset[1]) * sin       # in the block's own frame
+        y = -(xy[:, 0] - offset[0]) * sin + (xy[:, 1] - offset[1]) * cos
+        in_wing = np.minimum.reduce([x, 100 - x, y, 92 - y]) < depth
+        top = np.where(in_wing, 33.0, 14.0)
+        grid_ij = ij - ij.min(axis=0)
+        occ = np.zeros((*(grid_ij.max(axis=0) + 1), 82), bool)
+        centres = (np.arange(occ.shape[2]) + 0.5) * vs
+        occ[grid_ij[:, 0], grid_ij[:, 1]] = centres[None, :] < 40.0
+        kept = np.zeros_like(occ)
+        kept[grid_ij[:, 0], grid_ij[:, 1]] = centres[None, :] < top[:, None]
+        levels = mg.floor_levels(0.0, 40.0, 5.0, 3.0)
+        floor = mg.build_floors(grid_ij, bay, occ, kept, 0.0, vs, levels, 0.2, "supported", 3.0)[5]   # 20 to 23 m
+        assert floor.zb > 14.0
+        areas[a] = sum(p.area for k in range(int(floor.plate.max()) + 1)
+                       for p in mg.plate_polygons(ij, floor.plate == k, floor.plate != k, vs, poly,
+                                                  min_dimension=3.0, bay=bay, bay_shapes=shapes))
+    one_voxel_row_around_the_wings = 2 * (100 + 92) * vs
+    assert areas[0] > 1000.0
+    assert abs(areas[angle] - areas[0]) <= one_voxel_row_around_the_wings
+
+
+def test_corner_square_of_a_curved_facade_is_cut_in_depth_from_its_end_edge():
+    # Past the end of the bent facade (the corner square at the reflex corner) depth is measured from the line
+    # through its last edge, as u continues along it, so the modules there are square like the others.
+    bent_l = Polygon([(0, 0), (60, 0), (60, 15), (37, 17), (15, 15), (15, 60), (0, 60)])
+    vs, width = 0.5, 3.0
+    _, xy, facades, faces = _faces(bent_l, vs)
+    bay, bay_face = mg.cut_bays(faces, width, vs)
+    bent = next(k for k, f in enumerate(facades) if not f.straight)
+    facade = facades[bent]
+    coords = np.asarray(facade.line.coords)
+    last = (coords[-1] - coords[-2]) / np.hypot(*(coords[-1] - coords[-2]))
+    past_end = (xy - facade.end) @ last > 0.0
+    depth = np.where(past_end, (xy - facade.end) @ np.array([-last[1], last[0]]),
+                     shapely.distance(shapely.points(xy), facade.line))
+    assert (past_end & (faces.face == bent)).sum() > 100
+    modules = np.flatnonzero(bay_face == bent)
+    for b in modules:
+        mine = bay == b
+        u_lo, u_hi = faces.u[mine].min(), faces.u[mine].max()
+        row_mates = [o for o in modules if o != b
+                     and faces.u[bay == o].min() <= u_hi and faces.u[bay == o].max() >= u_lo]
+        depth_span = np.ptp(depth[mine]) + vs
+        if not row_mates and depth_span < width:
+            continue                    # a row shallower than one module
+        assert width - 1e-9 <= depth_span < 2 * width
