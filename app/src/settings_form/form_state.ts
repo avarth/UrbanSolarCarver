@@ -259,6 +259,11 @@ export function shownValue(state: FormState, name: string): unknown {
   return name in state.userValues ? state.userValues[name] : defaultValue(state, name);
 }
 
+/** The value of a setting in the stored settings (FormState.stored): the user's stored value, else the stored mode's default. */
+export function storedValue(state: FormState, name: string): unknown {
+  return name in state.stored.values ? state.stored.values[name] : defaultValue({ ...state, mode: state.stored.mode }, name);
+}
+
 function isConfigErrorReply(body: unknown): body is ConfigErrorReply {
   return typeof body === "object" && body !== null && Array.isArray((body as ConfigErrorReply).field_errors);
 }

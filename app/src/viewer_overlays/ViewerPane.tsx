@@ -5,7 +5,7 @@
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
-import type { ModeInfo, RunSummary, SkyDome, SunPath } from "../api_client/client";
+import type { ModeInfo, RunSummary, SkyDome } from "../api_client/client";
 import { messages } from "../messages";
 import { keptScoreRange } from "../viewer/colour_scales";
 import {
@@ -16,7 +16,7 @@ import type { Point3 } from "../viewer/local_origin";
 import { DEFAULT_SKY_DOME_OPACITY, ViewerScene, type CameraState, type GroundAid, type LayerName, type ViewportTheme } from "../viewer/scene";
 import { voxelCentres, type ScorePoints } from "../viewer/score_points_decoder";
 import type { Hemisphere } from "../viewer/sky_dome";
-import { sunPathLegend, sunPathObjects } from "../viewer/sun_path";
+import { sunPathLegend, sunPathObjects, type SunPathWithNorth } from "../viewer/sun_path";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
@@ -39,7 +39,8 @@ export const NO_VIEWER_RESULTS: ViewerResults = { scorePoints: null, carving: nu
 export interface ViewerPaneProps {
   maxVolume: THREE.BufferGeometry | null;
   testSurfaces: THREE.BufferGeometry | null;
-  sunPath: SunPath | null;
+  /** The sun path of the stored settings; it turns by the North shown since (*northDegrees*), as the compass ring does. */
+  sunPath: SunPathWithNorth | null;
   /** Where the sun path and the sky dome are drawn, and the compass ring lies: around the maximum volume and the test surfaces together (R2 2). */
   hemisphere: Hemisphere | null;
   maxVolumeAppearance: MaxVolumeAppearance;
@@ -151,8 +152,10 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   // Every layer gets its own copy of the geometry: the scene disposes a layer's geometry when the layer is replaced.
   useEffect(() => scene?.setLayer("max_volume", maxVolume && maxVolumeLayer(maxVolume.clone(), maxVolumeAppearance)), [scene, maxVolume, maxVolumeAppearance]);
   useEffect(() => scene?.setLayer("test_surfaces", testSurfaces && testSurfacesLayer(testSurfaces.clone())), [scene, testSurfaces]);
-  useEffect(() => scene?.setLayer("sun_path", sunPath && hemisphere && sunPathLayer(sunPathObjects(sunPath, hemisphere), hemisphere)),
-    [scene, sunPath, hemisphere]);
+  useEffect(() => {
+    const northTurnDegrees = sunPath === null ? 0 : northDegrees - sunPath.northDegrees;
+    scene?.setLayer("sun_path", sunPath && hemisphere && sunPathLayer(sunPathObjects(sunPath.path, hemisphere, northTurnDegrees), hemisphere));
+  }, [scene, sunPath, hemisphere, northDegrees]);
 
   // The voxels need the mask and the cutoff of a carving: score points without them (the carving did not run) are not drawn.
   const voxels = useMemo(() => {
@@ -206,7 +209,7 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   ];
   const shown = (name: LayerName) => present.includes(name) && isVisible(name);
   const legend: LegendContent = {
-    sunPath: shown("sun_path") && sunPath ? sunPathLegend(sunPath) : undefined,
+    sunPath: shown("sun_path") && sunPath ? sunPathLegend(sunPath.path) : undefined,
     keptVoxels: shown("kept_voxels") && scorePoints && carving
       ? { title: keptVoxelsLegendTitle(scorePoints.header.scores_kind, scorePoints.header.weight_unit), cutoff: carving.threshold_value,
           unit: keptVoxelsLegendUnit(scorePoints.header.scores_kind, scorePoints.header.weight_unit),

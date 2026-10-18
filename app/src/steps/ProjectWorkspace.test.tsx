@@ -2,10 +2,11 @@
 // layers of the 3D view together, as the unit tests of each cannot show them.
 import { act, type ComponentProps } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { ModeInfo, ProjectDetail } from "../api_client/client";
+import type { ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
+import * as THREE from "three";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { ProjectWorkspace, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import { useRunLoop } from "./run_state";
@@ -74,6 +75,8 @@ class FakeService {
   massingOnDisk = false;
   /** The contents of input files by path (for example "/inputs/test_surfaces/surfaces.obj"); one triangle for any other. */
   inputFileContents: Record<string, string> = {};
+  /** The reply of GET sun-path; null: not there (404). */
+  sunPath: SunPath | null = null;
   /** While set, an upload of an input file gets its reply only once this promise resolves. */
   uploadsAnswerWhen: Promise<void> | null = null;
 
@@ -103,6 +106,7 @@ class FakeService {
       const stages = this.stages.preprocessing === "current" ? produce : ["preprocessing", ...produce];    // the analysis when it is out of date
       return json({ status: "started", run_id: `r${this.runsStarted.length}`, stages });
     }
+    if (path === "/sun-path" && this.sunPath !== null) return json(this.sunPath);
     if (path === "/run/summary") return json(this.summary);
     if (method === "POST" && path.startsWith("/inputs/")) {
       await this.uploadsAnswerWhen;
@@ -584,4 +588,22 @@ test("the saver of the open project waits for an upload in flight, so a rename, 
   await act(async () => answerUpload());
   await settle();
   expect(uploadsEnded).toBe(true);
+});
+
+test("a North not saved yet turns the drawn sun path with the compass ring, so the two agree until the new path comes", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.sunPath = { days: [{ date: "12-21", day_path: [[0, 1, 0], [0, 0, 1]], period_path: [], markers: [] }] };
+  await openWorkspace(project(NOTHING_RUN));
+  const towardFirstSun = () => {
+    let dayPath: THREE.Line | null = null;
+    FakeViewerScene.latest!.layers.get("sun_path")!.traverse((object) => { if (object instanceof THREE.Line) dayPath ??= object; });
+    const first = new THREE.Vector3().fromBufferAttribute(dayPath!.geometry.getAttribute("position") as THREE.BufferAttribute, 0);
+    return first.sub(new THREE.Vector3(...FakeViewerScene.latest!.sceneHemisphere!.centre)).normalize();
+  };
+  expect(towardFirstSun().y).toBeCloseTo(1);
+  openStep("Settings");
+  type(container().querySelector<HTMLInputElement>('[data-setting="north_deg"] input[type="number"]')!, "90");
+  expect(service.savedValues).toEqual([]);
+  expect(towardFirstSun().x).toBeCloseTo(1);
+  expect(towardFirstSun().y).toBeCloseTo(0);
 });

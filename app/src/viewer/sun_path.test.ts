@@ -34,3 +34,13 @@ test("sun path legend names the days and the hours with a sun", () => {
   expect(sunPathLegend({days: [day("12-21")]})).toBe("Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h");
   expect(sunPathLegend({days: [day("06-01"), day("08-31")]})).toBe("Sun path, 1 Jun and 31 Aug; sun at 10, 12 and 14\u00a0h");
 });
+
+test("a North turned since the sun path was computed turns the path clockwise about the centre, as the engine would", () => {
+  const day = {date: "06-21", day_path: [[0, 1, 0], [0, 0, 1]], period_path: [], markers: [{hour: 12, vector: [0, 1, 1]}]};
+  const objects = sunPathObjects({days: [day]}, {centre: [10, 20, 2], radius: 50}, 90);
+  const [towardNorth, overhead] = objects.lines.find(line => line.kind === "day_path")!.runs[0];
+  [60, 20, 2].forEach((coordinate, axis) => expect(towardNorth[axis]).toBeCloseTo(coordinate));
+  [10, 20, 52].forEach((coordinate, axis) => expect(overhead[axis]).toBeCloseTo(coordinate));
+  expect(objects.markers[0].position[0]).toBeGreaterThan(10);
+  expect(objects.markers[0].position[1]).toBeCloseTo(20);
+});
