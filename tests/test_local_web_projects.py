@@ -3,14 +3,20 @@ import threading
 import warnings
 from pathlib import Path
 
+import numpy as np
 import pytest
 import trimesh
 import yaml
+from local_web_test_support import wait_until_finished
 
 from urbansolarcarver.errors import ConfigError
+from urbansolarcarver.io import load_mesh
+from urbansolarcarver.run_context import RunContext, run_context
+from urbansolarcarver.surface_sampling import discretize_surface_with_normals
 
 from urbansolarcarver.local_web_service import projects
-from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore, sanitize_file_name
+from urbansolarcarver.local_web_service.projects import SERVICE_PATHS, ProjectError, ProjectStore, sanitize_file_name
+from urbansolarcarver.local_web_service.server import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, _read_examples
 
 GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 
@@ -367,6 +373,104 @@ def test_joined_file_follows_sorted_file_names_whatever_the_upload_order(tmp_pat
     assert _block_centres_x(joined_path) == [100, 200]
     store.add_input("p", "test_surfaces", "a.ply", _box_bytes([0, 0, 5]))
     assert _block_centres_x(joined_path) == [0, 100, 200]
+
+
+def _create_example_project(store, project_name, example_name):
+    """A project made as POST /projects/{name}/examples/{example} makes it: the example's mode and input files."""
+    example = next(candidate for candidate in _read_examples() if candidate.name == example_name)
+    example_folder = EXAMPLE_PROJECTS_FOLDER / example.name
+    store.create(project_name, example.mode)
+    for role, file_names in (("max_volume", example.max_volume), ("test_surfaces", example.test_surfaces)):
+        for file_name in file_names:
+            store.add_input(project_name, role, file_name, (example_folder / file_name).read_bytes())
+    store.add_input(project_name, "weather", EXAMPLE_WEATHER_FILE_NAME,
+                    (EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME).read_bytes())
+    return example
+
+
+def _sampled_panels(test_surface_paths):
+    """The sample points of every panel the engine samples, over the given test surface files as the engine reads them.
+
+    A panel is a connected component of the mesh load_mesh returns, sampled by the engine's surface sampling with the
+    default grid_step of 1 m; a component the sampling skips (degenerate, non-planar) gives no points and is left out.
+    """
+    points_by_panel = []
+    with run_context(RunContext()):     # the skipped components of the example data are recorded, not warned about
+        for test_surface_path in test_surface_paths:
+            mesh = load_mesh(str(test_surface_path))
+            for component in mesh.split(only_watertight=False, repair=False):
+                points = discretize_surface_with_normals(component, 1.0)[0]
+                if len(points):
+                    points_by_panel.append(points)
+    return points_by_panel
+
+
+def _sorted_rows(points_by_panel):
+    points = np.vstack(points_by_panel)
+    return points[np.lexsort(points.T[::-1])]
+
+
+@pytest.mark.parametrize("example_name", ["basic_perimeter_block", "new_building", "multiple_buildings"])
+def test_the_joined_test_surfaces_of_an_example_sample_as_its_uploaded_files(tmp_path, example_name):
+    """The engine finds in the joined test surface file the panels and sample points of the uploaded files.
+
+    The example files keep panels that share corners apart only through their per-vertex normals: load_mesh merges
+    coincident vertices whose normals are equal, so a joined file without normals fuses neighbouring panels.
+    """
+    store = ProjectStore(tmp_path)
+    example = _create_example_project(store, "p", example_name)
+    uploaded_panels = _sampled_panels(EXAMPLE_PROJECTS_FOLDER / example.name / name for name in example.test_surfaces)
+    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
+    assert len(joined_panels) == len(uploaded_panels)
+    np.testing.assert_allclose(_sorted_rows(joined_panels), _sorted_rows(uploaded_panels), atol=1e-4)
+
+
+def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(tmp_path):
+    store = ProjectStore(tmp_path)
+    _create_example_project(store, "p", "multiple_buildings")
+    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
+    assert (len(joined_panels), sum(len(points) for points in joined_panels)) == (423, 138_641)
+
+
+def test_the_joined_test_surfaces_keep_the_courtyard_facades_of_the_perimeter_block(tmp_path):
+    """The four courtyard walls stand on the rectangle x -1294.74..-1208.33, y -45.98..6.09, 20 m inside the block's edges."""
+    store = ProjectStore(tmp_path)
+    _create_example_project(store, "p", "basic_perimeter_block")
+    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
+    courtyard_panels = [points for points in joined_panels
+                        if (-1295.0 <= points[:, 0]).all() and (points[:, 0] <= -1208.0).all()
+                        and (-46.5 <= points[:, 1]).all() and (points[:, 1] <= 6.5).all()]
+    assert (len(joined_panels), len(courtyard_panels)) == (8, 4)
+
+
+@pytest.mark.slow
+def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_the_example_files(tmp_path):
+    """The service's run of the example project keeps the voxels the CLI keeps from the packaged files (150,679 of them)."""
+    from typer.testing import CliRunner
+    from urbansolarcarver.carver_cli import app
+    from urbansolarcarver.local_web_service.run_worker import RunWorker
+
+    store = ProjectStore(tmp_path / "projects")
+    example = _create_example_project(store, "block", "basic_perimeter_block")
+    worker = RunWorker(store, "auto")
+    events = wait_until_finished(worker, worker.start("block", ["thresholding"]).run_id, deadline_seconds=600)
+    assert events[-1]["type"] == "run_finished", events[-1]
+
+    example_folder = EXAMPLE_PROJECTS_FOLDER / example.name
+    cli_config = {**store.read_stored_config("block"),
+                  "max_volume_path": str(example_folder / example.max_volume[0]),
+                  "test_surface_path": str(example_folder / example.test_surfaces[0]),
+                  "epw_path": str(EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME),
+                  "out_dir": str(tmp_path / "cli_run")}
+    cli_config_path = tmp_path / "cli_config.yaml"
+    cli_config_path.write_text(yaml.safe_dump(cli_config), encoding="utf-8")
+    result = CliRunner().invoke(app, ["run", "-c", str(cli_config_path), "--produce", "thresholding"], env={"COLUMNS": "200"})
+    assert result.exit_code == 0, result.output
+
+    service_mask = np.load(store.open("block") / "run" / "thresholding" / "mask.npy")
+    cli_mask = np.load(tmp_path / "cli_run" / "thresholding" / "mask.npy")
+    assert int((cli_mask > 0).sum()) == 150_679
+    assert np.array_equal(service_mask, cli_mask)
 
 
 def test_config_yaml_round_trips_through_load_config(tmp_path):

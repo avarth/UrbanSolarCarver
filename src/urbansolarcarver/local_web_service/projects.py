@@ -14,6 +14,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import trimesh
 import yaml
 from pydantic import ValidationError
@@ -108,6 +109,36 @@ def sanitize_file_name(name: str) -> str:
 
 def _utc_iso(timestamp_seconds: float) -> str:
     return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(timespec="seconds")
+
+
+def _write_ply_with_vertex_normals(meshes: list[trimesh.Trimesh], path: Path) -> None:
+    """Write the meshes, concatenated, as one binary PLY with float64 positions and the vertex normals of each mesh.
+
+    The engine reads test surfaces with load_mesh, which merges coincident vertices only when their normals are
+    equal too (trimesh merges on position and, when the file has them, vertex normals). Test surface files keep
+    panels that share corners apart that way, and each panel is one connected component for the sampling. The
+    normals of a mesh as load_mesh returned it are those of its faces, so a vertex of one flat panel carries the
+    panel's normal, and panels that met at a corner in the uploaded file stay apart in the joined file. Without
+    normals they would merge into one component, which the sampling skips as degenerate or non-planar. Positions
+    are float64, as save_mesh writes georeferenced coordinates.
+    """
+    vertex_offsets = np.cumsum([0] + [len(mesh.vertices) for mesh in meshes[:-1]])
+    vertex_rows = np.empty(sum(len(mesh.vertices) for mesh in meshes), dtype=[("position", "<f8", (3,)), ("normal", "<f4", (3,))])
+    vertex_rows["position"] = np.vstack([mesh.vertices for mesh in meshes])
+    vertex_rows["normal"] = np.vstack([mesh.vertex_normals for mesh in meshes])
+    face_rows = np.empty(sum(len(mesh.faces) for mesh in meshes), dtype=[("count", "u1"), ("vertex_indices", "<i4", (3,))])
+    face_rows["count"] = 3
+    face_rows["vertex_indices"] = np.vstack([mesh.faces + offset for mesh, offset in zip(meshes, vertex_offsets)])
+    header = ("ply\nformat binary_little_endian 1.0\n"
+              f"element vertex {len(vertex_rows)}\n"
+              "property double x\nproperty double y\nproperty double z\n"
+              "property float nx\nproperty float ny\nproperty float nz\n"
+              f"element face {len(face_rows)}\n"
+              "property list uchar int vertex_indices\nend_header\n")
+    with open(path, "wb") as ply_file:
+        ply_file.write(header.encode("ascii"))
+        ply_file.write(vertex_rows.tobytes())
+        ply_file.write(face_rows.tobytes())
 
 
 class ProjectStore:
@@ -509,7 +540,8 @@ class ProjectStore:
         """Join the meshes of a role as the Grasshopper components do (spec 5.3) into a new temporary file.
 
         Max volume meshes are concatenated and their coincident vertices merged; test surface
-        meshes are only concatenated. Returns None for no meshes (the joined file is then removed).
+        meshes are only concatenated, and written with their vertex normals (see
+        _write_ply_with_vertex_normals). Returns None for no meshes (the joined file is then removed).
         The temporary name is unique, so concurrent builds never share a file.
         """
         if not meshes:
@@ -518,10 +550,12 @@ class ProjectStore:
         os.close(descriptor)
         temporary_path = Path(temporary_name)
         try:
-            joined_mesh = trimesh.util.concatenate(meshes)
             if role == "max_volume":
+                joined_mesh = trimesh.util.concatenate(meshes)
                 joined_mesh.merge_vertices()
-            save_mesh(joined_mesh, str(temporary_path))
+                save_mesh(joined_mesh, str(temporary_path))
+            else:
+                _write_ply_with_vertex_normals(meshes, temporary_path)
         except Exception as error:
             temporary_path.unlink(missing_ok=True)
             raise ProjectError(f"The joined {role} file could not be built: {error}", status_code=500) from error
