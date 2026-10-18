@@ -6,7 +6,7 @@
 // useRunLoop runs one pipeline at a time, as the engine does: it starts a run, follows its events and keeps the last run's
 // state, for any project, so a run goes on being followed while another project is open.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, cancelRun, refusalDetailOf, serviceProblemOf, startRun } from "../api_client/client";
+import { ApiError, cancelRun, failureTextOf, serviceProblemOf, startRun } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
 import { messages } from "../messages";
 import type { PipelineStage } from "./step_summaries";
@@ -121,8 +121,12 @@ export function runProgressShare(state: RunState): number {
 
 // The loop of runs -------------------------------------------------------------------------------------------------------
 
-/** The button that started a run: its progress and outcome are shown under it (UX 6.3). */
-export type RunOrigin = "settings_run_analysis" | "carving_run_analysis" | "carving_update" | "build" | "export_format";
+/**
+ * The button that started a run: its progress and outcome are shown under it (UX 6.3). "build" is Carving's Build envelope and
+ * massing, which opens the Envelope and massing step and shows its run there; "build_envelope" and "build_massing" are the
+ * buttons of that step's two parts (R2 5).
+ */
+export type RunOrigin = "settings_run_analysis" | "carving_run_analysis" | "carving_update" | "build" | "build_envelope" | "build_massing" | "export_format";
 
 export interface RunRecord {
   /** Counts the runs asked for in this page, so each one is followed once. */
@@ -163,6 +167,11 @@ export interface RunLoop {
    * "missing" for results on screen.
    */
   replyStillHolds: (project: string) => () => boolean;
+  /**
+   * Drops the last run's record when it is of *project* (names ignore letter case) and no run is starting or under way: a project
+   * renamed, reset or deleted does not show the failure, cancel or warnings of a run of its old content.
+   */
+  forget: (project: string) => void;
 }
 
 export interface RunNotice {
@@ -245,7 +254,7 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
         show({ serial, project, origin, runId: null, refusal: null, isSuperseded,
                state: { ...initialRunState([]), final: "failed", failure: settingsFailure, endedAt: Date.now() } });
       } else {
-        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: refusalDetailOf(error) ?? String(error), isSuperseded });
+        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: failureTextOf(error), isSuperseded });
       }
       return "not_started";
     }
@@ -284,5 +293,12 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     return () => !askedDuringARun && busyProject.current !== project && (runsAskedForByProject.current.get(project) ?? 0) === runsBefore;
   }, []);
 
-  return { current, activeRun, notice, start, cancel, replyStillHolds };
+  const forget = useCallback((project: string) => {
+    const record = latestRecord.current;
+    if (record === null || record.project.toLowerCase() !== project.toLowerCase() || busyProject.current !== null) return;
+    latestRecord.current = null;
+    setCurrent(null);
+  }, []);
+
+  return { current, activeRun, notice, start, cancel, replyStillHolds, forget };
 }

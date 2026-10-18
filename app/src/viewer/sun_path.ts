@@ -1,5 +1,5 @@
 // The sun path layer's content (UX 8.2): for each day of GET sun-path, the whole day's path (drawn dashed), the analysis hours on
-// it (drawn solid, 3 px) and a sun with an "<hour> h" label at each marker, all placed on the hemisphere around the model.
+// it (drawn solid, 3 px) and a sun with an "<hour> h" label at each marker, all placed on the hemisphere around the scene.
 import type { SunPath } from "../api_client/client";
 import { dayAndMonth, listedWithAnd, messages } from "../messages";
 import type { Point3 } from "./local_origin";
@@ -21,10 +21,23 @@ export interface SunPathObjects {
   markers: SunPathMarker[];
 }
 
+/** A sun path of the service and the North it was computed with (the stored north_deg then). */
+export interface SunPathWithNorth {
+  path: SunPath;
+  northDegrees: number;
+}
+
 // The engine samples the period path at a fixed time step, and the sun crosses the sky at a constant angular speed over a day,
 // so neighbouring samples are one angular step apart. A gap of more than this many steps is a jump between two stretches of the
 // period (a period over midnight lists its early hours first, then its evening hours).
 const LONGEST_UNBROKEN_GAP_IN_STEPS = 1.5;
+
+/** *vector* turned clockwise in plan (seen from above) by *degrees*, as a larger north_deg turns the engine's sun vectors. */
+function turnedClockwise(vector: ArrayLike<number>, degrees: number): number[] {
+  const angle = (degrees * Math.PI) / 180;
+  const [x, y, z] = [vector[0], vector[1], vector[2]];
+  return [x * Math.cos(angle) + y * Math.sin(angle), -x * Math.sin(angle) + y * Math.cos(angle), z];
+}
 
 function onHemisphere(vector: ArrayLike<number>, sphere: Hemisphere): Point3 {
   const length = Math.hypot(vector[0], vector[1], vector[2]);
@@ -54,13 +67,18 @@ function unbrokenRuns(vectors: number[][]): number[][][] {
   return runs;
 }
 
-export function sunPathObjects(sunPath: SunPath, sphere: Hemisphere): SunPathObjects {
+/**
+ * The lines and the suns of *sunPath* on *sphere*. *northTurnDegrees*: how far North has turned since the path was computed (a
+ * change not stored yet); the engine applies North as a turn about the vertical, so the path turns with it and the compass ring.
+ */
+export function sunPathObjects(sunPath: SunPath, sphere: Hemisphere, northTurnDegrees = 0): SunPathObjects {
+  const placed = (vector: ArrayLike<number>) => onHemisphere(turnedClockwise(vector, northTurnDegrees), sphere);
   const lines: SunPathLine[] = [];
   const markers: SunPathMarker[] = [];
   for (const day of sunPath.days) {
-    lines.push({ kind: "day_path", runs: day.day_path.length ? [day.day_path.map((vector) => onHemisphere(vector, sphere))] : [] });
-    lines.push({ kind: "period_path", runs: unbrokenRuns(day.period_path).map((run) => run.map((vector) => onHemisphere(vector, sphere))) });
-    for (const marker of day.markers) markers.push({ hour: marker.hour, label: messages.hourLabel(marker.hour), position: onHemisphere(marker.vector, sphere) });
+    lines.push({ kind: "day_path", runs: day.day_path.length ? [day.day_path.map(placed)] : [] });
+    lines.push({ kind: "period_path", runs: unbrokenRuns(day.period_path).map((run) => run.map(placed)) });
+    for (const marker of day.markers) markers.push({ hour: marker.hour, label: messages.hourLabel(marker.hour), position: placed(marker.vector) });
   }
   return { lines, markers };
 }

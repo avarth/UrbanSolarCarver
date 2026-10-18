@@ -10,7 +10,7 @@ import { loadMesh } from "../viewer/loaders";
 import type { Point3 } from "../viewer/local_origin";
 import { decodeScorePoints, type ScorePoints } from "../viewer/score_points_decoder";
 import type { PlatesFile } from "./EnvelopeAndMassingStep";
-import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH } from "./ExportStep";
+import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH, meshFormatOf } from "./ExportStep";
 import { stagesDone, type RunRecord } from "./run_state";
 import type { PipelineStage } from "./step_summaries";
 
@@ -27,11 +27,14 @@ type ResultName = keyof RunResults;
 
 const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null };
 
-/** What each stage writes. The score points need the carving's mask, so they follow thresholding, not the analysis. */
+/**
+ * What each stage writes. The score points need the carving's mask, so they follow thresholding, not the analysis; the run
+ * summary holds the numbers of the carving, the envelope and the massing.
+ */
 const RESULTS_OF_STAGE: Record<PipelineStage, ResultName[]> = {
   preprocessing: ["skyDome"],
   thresholding: ["summary", "scorePoints"],
-  exporting: ["envelope"],
+  exporting: ["summary", "envelope"],
   massing: ["summary", "massing", "platesFile"],
 };
 const MESH_RESULTS: ResultName[] = ["envelope", "massing"];
@@ -46,31 +49,34 @@ interface RunResultsSource {
   project: string;
   /** The local origin the meshes are drawn in; a new one reloads them. */
   origin: Point3;
-  /** The mesh file format of the envelope, as last saved. */
-  meshFormat: string;
   /** The stages with results when the project opens. */
   stagesWithResults: readonly string[];
   onServiceProblem: (error: unknown) => void;
 }
 
 /** The results, and the function that fetches again what the given stages write; its promise resolves once every fetch has ended. */
-export function useRunResults({ token, project, origin, meshFormat, stagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
+export function useRunResults({ token, project, origin, stagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
-  const source = useRef({ token, origin, meshFormat, onServiceProblem });
-  source.current = { token, origin, meshFormat, onServiceProblem };
+  const source = useRef({ token, origin, onServiceProblem });
+  source.current = { token, origin, onServiceProblem };
 
-  const fetchResult = (name: ResultName): Promise<RunResults[ResultName]> => {
-    const { token: currentToken, origin: currentOrigin, meshFormat: currentFormat } = source.current;
+  /** *summary*: the run summary of this round of fetches, asked for once however many results read it. */
+  const fetchResult = (name: ResultName, summary: () => Promise<RunSummary>): Promise<RunResults[ResultName]> => {
+    const { token: currentToken, origin: currentOrigin } = source.current;
     switch (name) {
       case "summary":
-        return getRunSummary(currentToken, project);
+        return summary();
       case "scorePoints":
         return getScorePoints(currentToken, project).then(decodeScorePoints);
       case "skyDome":
         return getSkyPatches(currentToken, project);
       case "envelope":
-        return loadMesh(runFileUrl(project, exportedMeshPath(currentFormat)), currentToken, currentFormat, currentOrigin);
+        // The file exporting wrote, which the run summary names: a format chosen since without a build has no file yet.
+        return summary().then((reply) => {
+          const meshFile = reply.envelope?.mesh_file;
+          return meshFile === undefined ? null : loadMesh(runFileUrl(project, exportedMeshPath(meshFile)), currentToken, meshFormatOf(meshFile), currentOrigin);
+        });
       case "massing":
         return loadMesh(runFileUrl(project, MASSING_OBJ_PATH), currentToken, "obj", currentOrigin);
       case "platesFile":
@@ -79,13 +85,15 @@ export function useRunResults({ token, project, origin, meshFormat, stagesWithRe
   };
 
   const fetchResults = useCallback((names: readonly ResultName[]): Promise<void> => {
+    let summaryRequest: Promise<RunSummary> | null = null;
+    const summary = () => (summaryRequest ??= getRunSummary(source.current.token, project));
     const fetches = names.map((name) => {
       const request = (latestRequest.current[name] ?? 0) + 1;
       latestRequest.current[name] = request;
       const keep = (value: RunResults[ResultName]) => {
         if (latestRequest.current[name] === request) setResults((current) => ({ ...current, [name]: value }));
       };
-      return fetchResult(name).then(keep).catch((error) => {
+      return fetchResult(name, summary).then(keep).catch((error) => {
         keep(null);
         // A result the stage has not written is a 404 and stays null. Any other failure that is not a refusal may be a lost
         // engine: the app asks GET health before it says so, so a mesh the view cannot read only costs that check.

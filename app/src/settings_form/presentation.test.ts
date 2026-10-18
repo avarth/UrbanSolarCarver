@@ -1,5 +1,7 @@
 import { expect, test } from "vitest";
-import { fromDisplayValue, presentedSettingOf, settingIsReadBy, settingsForStep, toDisplayValue } from "./presentation";
+import {
+  fieldSettingOf, fromDisplayValue, presentedSettingOf, settingIsReadBy, settingsForStep, settingsOfField, settingView, shownSliderOf, toDisplayValue,
+} from "./presentation";
 
 const names = (views: { name: string }[]) => views.map((view) => view.name);
 
@@ -13,21 +15,35 @@ test("essential settings of the Settings step per mode", () => {
 
 test("the Settings step groups, their folds and their fold labels", () => {
   const groups = settingsForStep("settings", "time-based");
-  expect(groups.map((group) => group.title)).toEqual(["When", "Detail", "Computer"]);     // no mode specific settings: left out
-  const [when, detail, computer] = groups;
+  expect(groups.map((group) => group.title)).toEqual(["When", "Detail"]);     // no mode specific settings: left out
+  const [when, detail] = groups;
   expect(names(when.folded)).toEqual(["sun_steps_per_hour", "min_altitude"]);
   expect(when.foldLabel).toBe("More sun settings");
-  expect(names(detail.folded)).toEqual(["grid_step", "ray_length", "margin_frac"]);      // the edge strip is for weighted modes
+  // R2 4.5: the computer's settings come last in the detail fold; the edge strip is for weighted modes.
+  expect(names(detail.folded)).toEqual(["grid_step", "ray_length", "margin_frac", "ray_batch_size", "diagnostics"]);
   expect(detail.foldLabel).toBe("More detail settings");
-  expect(computer.essential).toEqual([]);
-  expect(names(computer.folded)).toEqual(["ray_batch_size", "diagnostics"]);
-  expect(computer.foldLabel).toBe("Computer");
   const benefitModeGroup = settingsForStep("settings", "benefit")[1];
   expect(benefitModeGroup.title).toBe("Mode specific");
-  expect(names(benefitModeGroup.folded)).toEqual(["balance_offset", "include_harm"]);
+  expect(names(benefitModeGroup.essential)).toEqual(["balance_temperature"]);      // with its dead band, as one widget
+  expect(names(benefitModeGroup.folded)).toEqual(["include_harm"]);
   expect(benefitModeGroup.foldLabel).toBe("More mode settings");
   const irradianceDetail = settingsForStep("settings", "irradiance").find((group) => group.title === "Detail")!;
-  expect(names(irradianceDetail.folded)).toEqual(["grid_step", "edge_taper", "ray_length", "margin_frac"]);
+  expect(names(irradianceDetail.folded)).toEqual(["grid_step", "edge_taper", "ray_length", "margin_frac", "ray_batch_size", "diagnostics"]);
+});
+
+test("settings drawn as one field are found by the name of their first setting", () => {
+  expect(fieldSettingOf("end_hour")).toBe("start_month");
+  expect(fieldSettingOf("balance_offset")).toBe("balance_temperature");
+  expect(fieldSettingOf("voxel_size")).toBe("voxel_size");
+  expect(settingsOfField("balance_temperature")).toEqual(["balance_temperature", "balance_offset"]);
+  expect(settingsOfField("start_month")).toHaveLength(6);
+  expect(settingsOfField("voxel_size")).toEqual(["voxel_size"]);
+});
+
+test("a ranged setting has its slider in the units shown: a share stored as 0 to 1 slides from 0 to 100 %", () => {
+  expect(shownSliderOf(settingView("voxel_size", "daylight"))).toEqual({ low: 0.1, high: 5, step: 0.1 });
+  expect(shownSliderOf(settingView("plate_tolerance", "daylight"))).toEqual({ low: 0, high: 100, step: 1 });
+  expect(shownSliderOf(settingView("smooth_iters", "daylight"))).toBeUndefined();      // a count keeps its number field
 });
 
 test("the analysis period is one setting labelled by its start month entry", () => {

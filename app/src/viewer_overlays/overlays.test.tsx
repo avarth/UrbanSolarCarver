@@ -1,14 +1,15 @@
 import { readFileSync } from "node:fs";
 import { afterEach, expect, test, vi } from "vitest";
 import { messages } from "../messages";
+import { pretendTheBrowserHasNoWebGl } from "../viewer/fake_scene_for_test";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu } from "./LayersMenu";
 import { Legend, keptVoxelsLegendTitle, keptVoxelsLegendUnit } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
 import { ViewerPane, type ViewerPaneProps } from "./ViewerPane";
-import { ViewToolbar, rememberedViewportTheme } from "./ViewToolbar";
-import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
+import { ViewToolbar, rememberedGroundAid, rememberedViewportTheme } from "./ViewToolbar";
+import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "./render_for_test";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -16,6 +17,7 @@ afterEach(() => {
   rendered?.unmount();
   rendered = null;
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 test("the legend shows the kept voxel range, its note and the thinning", () => {
@@ -73,21 +75,82 @@ test("the compass shows the top view when clicked", () => {
   expect(rendered.container.querySelector("button")!.getAttribute("aria-label")).toBe("Compass. Show the top view with north up");
 });
 
-test("the axis gizmo letters its axes", () => {
+test("the axis gizmo letters its axes in the ink of the overlay, not in the axis colours", () => {
   rendered = renderForTest(<AxisGizmo theme="light" yawDegrees={0} elevationDegrees={60} />);
-  expect(Array.from(rendered.container.querySelectorAll("text")).map((letter) => letter.textContent)).toEqual(["X", "Y", "Z"]);
+  const letters = Array.from(rendered.container.querySelectorAll("text"));
+  expect(letters.map((letter) => letter.textContent)).toEqual(["X", "Y", "Z"]);
+  for (const letter of letters) expect(letter.getAttribute("fill")).toBe("currentColor");
 });
 
-test("the toolbar has three named buttons and remembers the viewport theme", () => {
+test("the axis gizmo is drawn straight on the viewport, without a background, a border or a shadow, its letters outlined in the viewport colour", () => {
+  const removeStyles = addStyleSheetForTest("src/viewer_overlays/overlays.css");
+  try {
+    for (const theme of ["light", "dark"] as const) {
+      rendered = renderForTest(<AxisGizmo theme={theme} yawDegrees={0} elevationDegrees={60} />);
+      const style = getComputedStyle(rendered.container.querySelector(".viewer-axis-gizmo")!);
+      expect(style.backgroundColor).toMatch(/^(transparent|rgba\(0, 0, 0, 0\))$/);
+      expect(style.backgroundImage).toMatch(/^(none|)$/);
+      expect(style.borderTopStyle).toMatch(/^(none|)$/);
+      expect(style.boxShadow).toBe("none");
+      for (const letter of rendered.container.querySelectorAll("text")) {
+        const letterStyle = getComputedStyle(letter);
+        expect(letterStyle.getPropertyValue("stroke")).toBe(`var(--colour-viewport-${theme})`);
+        expect(letterStyle.getPropertyValue("paint-order")).toBe("stroke");
+      }
+      rendered.unmount();
+      rendered = null;
+    }
+  } finally {
+    removeStyles();
+  }
+});
+
+const TOOLBAR_CALLBACKS = { onFrameAll: () => {}, onTopView: () => {}, onThemeChange: () => {}, onGroundAidChange: () => {} };
+
+test("the toolbar has four named buttons and remembers the viewport theme", () => {
   const onThemeChange = vi.fn();
   expect(rememberedViewportTheme()).toBe("light");
-  rendered = renderForTest(<ViewToolbar theme="light" onFrameAll={() => {}} onTopView={() => {}} onThemeChange={onThemeChange} />);
+  rendered = renderForTest(<ViewToolbar {...TOOLBAR_CALLBACKS} theme="light" groundAid="grid" onThemeChange={onThemeChange} />);
   const names = Array.from(rendered.container.querySelectorAll("button")).map((button) => button.getAttribute("aria-label"));
-  expect(names).toEqual(["Frame all", "Top view with north up", "Dark viewport"]);
-  click(rendered.container.querySelectorAll("button")[2]);
+  expect(names).toEqual(["Frame all", "Top view with north up", "Show the compass ring", "Dark viewport"]);
+  click(rendered.container.querySelectorAll("button")[3]);
   expect(onThemeChange).toHaveBeenCalledWith("dark");
   expect(window.localStorage.getItem("usc.viewportTheme")).toBe("dark");
   expect(rememberedViewportTheme()).toBe("dark");
+});
+
+test("the ground aid button names the aid it switches to, and the choice is remembered on this computer", () => {
+  const onGroundAidChange = vi.fn();
+  expect(rememberedGroundAid()).toBe("grid");          // nothing chosen yet: the ground grid
+  const groundAidButton = () => rendered!.container.querySelector<HTMLButtonElement>(".viewer-ground-aid-button")!;
+  const expected = [["off", "Show the ground grid", "grid"], ["grid", "Show the compass ring", "compass_ring"],
+                    ["compass_ring", "Hide the compass ring", "off"]] as const;
+  for (const [current, name, next] of expected) {
+    rendered?.unmount();
+    rendered = renderForTest(<ViewToolbar {...TOOLBAR_CALLBACKS} theme="light" groundAid={current} onGroundAidChange={onGroundAidChange} />);
+    expect(groundAidButton().getAttribute("aria-label")).toBe(name);
+    expect(groundAidButton().getAttribute("title")).toBe(name);
+    click(groundAidButton());
+    expect(onGroundAidChange).toHaveBeenLastCalledWith(next);
+    expect(window.localStorage.getItem("usc.groundAid")).toBe(next);
+    expect(rememberedGroundAid()).toBe(next);
+  }
+  window.localStorage.setItem("usc.groundAid", "something else");
+  expect(rememberedGroundAid()).toBe("grid");
+});
+
+test("the remembered ground aid is the ground grid when this browser blocks its storage", () => {
+  vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("storage is blocked"); });
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("storage is blocked"); });
+  try {
+    expect(rememberedGroundAid()).toBe("grid");
+    const onGroundAidChange = vi.fn();
+    rendered = renderForTest(<ViewToolbar {...TOOLBAR_CALLBACKS} theme="light" groundAid="grid" onGroundAidChange={onGroundAidChange} />);
+    click(rendered.container.querySelector(".viewer-ground-aid-button")!);
+    expect(onGroundAidChange).toHaveBeenCalledWith("compass_ring");     // the choice lasts for this page
+  } finally {
+    vi.restoreAllMocks();
+  }
 });
 
 test("the layers menu lists the layers that exist, with the missing-result note and the sky dome slider", () => {
@@ -118,6 +181,7 @@ const EMPTY_VIEW: ViewerPaneProps = {
 };
 
 test("without WebGL (jsdom has none, like a remote desktop) the view says so, and the run progress and the run report still show", () => {
+  pretendTheBrowserHasNoWebGl();
   rendered = renderForTest(<ViewerPane {...EMPTY_VIEW} runProgress={0.5} overlayContent={<div className="run-report-panel">Run report</div>} />);
   const unavailable = rendered.container.querySelector(".viewer-unavailable")!;
   expect(unavailable.textContent).toBe(messages.viewerNeedsWebGl);
@@ -130,6 +194,7 @@ test("without WebGL (jsdom has none, like a remote desktop) the view says so, an
 });
 
 test("without WebGL the empty project's way to start (the hint, Add files, the examples) stays under the message", () => {
+  pretendTheBrowserHasNoWebGl();
   const emptyState = <div className="viewer-empty-state"><p>{messages.noInputsYet}</p><button type="button">{messages.addFiles}</button></div>;
   rendered = renderForTest(<ViewerPane {...EMPTY_VIEW} centreContent={emptyState} />);
   const texts = [...rendered.container.querySelectorAll(".viewer-pane p, .viewer-pane button")].map((element) => element.textContent);

@@ -1,4 +1,4 @@
-// Text in the 3D scene (grid distances, hour labels, the N of the north arrow): a sprite that faces the camera, with its text
+// Text in the 3D scene (grid distances, hour labels, the letters of the compass ring): a sprite that faces the camera, with its text
 // drawn on a canvas in the interface font. Its height is given in metres, so it scales with the model like the geometry, or in
 // pixels, so it stays readable at any zoom (the scene then sizes it for the view with fitTextSpritesToView).
 import * as THREE from "three";

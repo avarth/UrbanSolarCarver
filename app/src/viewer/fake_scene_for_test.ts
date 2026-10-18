@@ -4,11 +4,20 @@
 //     ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene }));
 import type * as THREE from "three";
 import { vi } from "vitest";
-import type { CameraState, LayerName, ViewportTheme } from "./scene";
+import type { CameraState, GroundAid, LayerName, ViewportTheme } from "./scene";
+import type { Hemisphere } from "./sky_dome";
 
 /** Makes the canvas give a WebGL context, as a browser with WebGL does (jsdom gives none); vi.restoreAllMocks undoes it. */
 export function pretendTheBrowserHasWebGl(): void {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((kind: string) => (kind === "webgl2" ? ({} as RenderingContext) : null));
+}
+
+/**
+ * Makes the canvas give no context, as a browser without WebGL does, without jsdom's "Not implemented" line in the test output;
+ * vi.restoreAllMocks undoes it.
+ */
+export function pretendTheBrowserHasNoWebGl(): void {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => null);
 }
 
 export class FakeViewerScene {
@@ -19,6 +28,10 @@ export class FakeViewerScene {
   readonly layers = new Map<LayerName, THREE.Object3D | null>();
   readonly visibleLayers = new Set<LayerName>();
   readonly dimmed = new Set<LayerName>();
+  /** The ground aid the pane chose last; undefined until it chooses one. */
+  groundAid: GroundAid | undefined = undefined;
+  /** The scene hemisphere the pane gave last; undefined until it gives one. */
+  sceneHemisphere: Hemisphere | null | undefined = undefined;
   disposed = false;
 
   constructor(_container: HTMLElement) {
@@ -48,6 +61,14 @@ export class FakeViewerScene {
   }
 
   setNorth(_northDegrees: number): void {}
+  setSceneHemisphere(hemisphere: Hemisphere | null): void {
+    this.sceneHemisphere = hemisphere;
+  }
+
+  setGroundAid(aid: GroundAid): void {
+    this.groundAid = aid;
+  }
+
   setSkyDomeOpacity(_opacity: number): void {}
   setViewportTheme(_theme: ViewportTheme): void {}
   frameAll(): void {}

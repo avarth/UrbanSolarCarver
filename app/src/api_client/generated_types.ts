@@ -55,6 +55,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Projects Folder */
+        get: operations["projects_folder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects-folder/choose": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Choose Projects Folder
+         * @description Show the folder picker on this computer and switch to the folder chosen; the browser sends no path.
+         */
+        post: operations["choose_projects_folder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects": {
         parameters: {
             query?: never;
@@ -110,6 +147,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/rename": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rename Project
+         * @description Rename the project and its folder; 409 when the new name exists in any letter case or a run of the project is active.
+         */
+        post: operations["rename_project"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}": {
         parameters: {
             query?: never;
@@ -121,6 +178,50 @@ export interface paths {
         get: operations["open_project"];
         put?: never;
         post?: never;
+        /**
+         * Delete Project
+         * @description Move the project folder to the recycle bin; *confirm_name* must be the project's name as stored (else 422).
+         */
+        delete: operations["delete_project"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/reset-to-example": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Project To Example
+         * @description Replace a project made from an example by a fresh copy of it; the old folder goes to the recycle bin.
+         */
+        post: operations["reset_project_to_example"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/open-folder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Open Project Folder
+         * @description Open the project's folder in the file manager of this computer; also while a run of the project is active (it changes nothing).
+         */
+        post: operations["open_project_folder"];
         delete?: never;
         options?: never;
         head?: never;
@@ -436,6 +537,16 @@ export interface components {
             mode: string;
         };
         /**
+         * EnvelopeSummary
+         * @description What exporting left for the envelope part of the envelope and massing screen and for Export.
+         */
+        EnvelopeSummary: {
+            /** Mesh File */
+            mesh_file: string;
+            /** Envelope Volume M3 */
+            envelope_volume_m3: number | null;
+        };
+        /**
          * ErrorDetailReply
          * @description The body of a request the service refuses with a message.
          */
@@ -454,6 +565,8 @@ export interface components {
             title: string;
             /** Description */
             description: string;
+            /** Project */
+            project?: string | null;
         };
         /**
          * FieldErrorReply
@@ -530,8 +643,6 @@ export interface components {
             total_floor_area_m2: number;
             /** Storeys Built */
             storeys_built: number;
-            /** Envelope Volume M3 */
-            envelope_volume_m3: number;
         };
         /**
          * MissingInputsReply
@@ -581,6 +692,8 @@ export interface components {
             created: string;
             /** Modified */
             modified: string;
+            /** Example */
+            example?: string | null;
             /** Settings */
             settings: {
                 [key: string]: unknown;
@@ -609,6 +722,46 @@ export interface components {
             modified: string;
             /** Mode */
             mode: string;
+            /** Example */
+            example?: string | null;
+        };
+        /**
+         * ProjectsFolderChoiceReply
+         * @description The answer to Change folder: the folder changed, the user cancelled, or the folder picker cannot open here.
+         */
+        ProjectsFolderChoiceReply: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "changed" | "cancelled" | "unavailable";
+            /** Path */
+            path: string;
+            /** Problem */
+            problem: string | null;
+        };
+        /**
+         * ProjectsFolderReply
+         * @description The folder the projects live in, where that choice came from, and whether the browser may change it now.
+         */
+        ProjectsFolderReply: {
+            /** Path */
+            path: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "command_line" | "preference" | "default";
+            /** Can Change */
+            can_change: boolean;
+        };
+        /**
+         * RenameProjectRequest
+         * @description The body of a request to rename a project.
+         */
+        RenameProjectRequest: {
+            /** New Name */
+            new_name: string;
         };
         /**
          * RunSummary
@@ -616,6 +769,7 @@ export interface components {
          */
         RunSummary: {
             carving: components["schemas"]["CarvingSummary"] | null;
+            envelope: components["schemas"]["EnvelopeSummary"] | null;
             massing: components["schemas"]["MassingSummary"] | null;
         };
         /**
@@ -796,6 +950,64 @@ export interface operations {
             };
         };
     };
+    projects_folder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectsFolderReply"];
+                };
+            };
+        };
+    };
+    choose_projects_folder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectsFolderChoiceReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
     list_projects: {
         parameters: {
             query?: never;
@@ -928,6 +1140,59 @@ export interface operations {
             };
         };
     };
+    rename_project: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RenameProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
     open_project: {
         parameters: {
             query?: never;
@@ -955,6 +1220,142 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project: {
+        parameters: {
+            query: {
+                confirm_name: string;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    reset_project_to_example: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    open_project_folder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };

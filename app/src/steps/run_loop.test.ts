@@ -106,6 +106,9 @@ test("a start refused for invalid settings is a failed run naming its fields; an
   vi.stubGlobal("fetch", replyWith({ detail: "A run of project 'q' is active." }, 409));
   await act(async () => { await loop().start("p", ["thresholding"], "settings_run_analysis"); });
   expect(loop().current!.refusal).toBe("A run of project 'q' is active.");
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("Internal Server Error", { status: 500 })));
+  await act(async () => { await loop().start("p", ["thresholding"], "settings_run_analysis"); });
+  expect(loop().current!.refusal).toBe("The USC engine refused the request and gave no reason (status 500). Try again.");
   unmount();
 });
 
@@ -122,4 +125,21 @@ test("a connection lost during a run is passed on as a stopped engine, or a lost
     expect(problem instanceof ApiError).toBe(isAccessLost);
     unmount();
   }
+});
+
+test("forget drops the record of a project renamed, reset or deleted, and only that project's, and never during a run", async () => {
+  vi.stubGlobal("fetch", replyWith({ detail: "Add a maximum volume first." }, 409));
+  const { loop, unmount } = renderedLoop();
+  await act(async () => { await loop().start("Plot 7", ["thresholding"], "settings_run_analysis"); });
+  expect(loop().current!.refusal).toBe("Add a maximum volume first.");
+  act(() => loop().forget("Other"));
+  expect(loop().current).not.toBeNull();
+  act(() => loop().forget("plot 7"));       // names ignore letter case
+  expect(loop().current).toBeNull();
+
+  vi.stubGlobal("fetch", replyWith({ status: "started", run_id: "r1", stages: ["thresholding"] }));
+  await act(async () => { void loop().start("Plot 7", ["thresholding"], "carving_update"); });
+  act(() => loop().forget("Plot 7"));
+  expect(loop().current).toMatchObject({ project: "Plot 7", runId: "r1" });
+  unmount();
 });

@@ -1,7 +1,9 @@
-// The Envelope and massing step (UX 5.6): the envelope and building massing settings, then the results of the last build:
-// Gross floor area, Storeys and Envelope volume as tiles in one row, the floor area per storey as a table (storeys numbered
-// from 1, a swatch of each storey's colour in the 3D view, a bold total), and the link that opens the run report. Results of a
-// carving that changed since are greyed and say so. Build envelope and massing is the step's button, pinned under the steps.
+// The Envelope and massing step (UX 5.6, R2 5): two parts, each built on its own, since the massing reads the carving and not
+// the envelope. Envelope: its settings, Build envelope and the volume of the last envelope. Building massing: its settings, Build
+// massing, Gross floor area and Storeys as tiles and the floor area per storey as a table (storeys numbered from 1, a swatch of
+// each storey's colour in the 3D view, a bold total). A part's results built from settings or a carving that changed since are
+// greyed and say so. The link that opens the run report ends the step.
+import type { ReactNode } from "react";
 import type { RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import type { FormState } from "../settings_form/form_state";
@@ -12,7 +14,12 @@ import { NumberTile } from "./CarvingStep";
 import { formatNumber } from "./format_numbers";
 import "./steps.css";
 
+type EnvelopeSummary = NonNullable<RunSummary["envelope"]>;
 type MassingSummary = NonNullable<RunSummary["massing"]>;
+
+/** The setting group each part holds (setting_presentation.json). */
+const ENVELOPE_GROUP = "Envelope";
+const MASSING_GROUP = "Building massing";
 
 /** The building massing's plates.json, as much of it as the step reads (heights in model coordinates, metres). */
 export interface PlatesFile {
@@ -98,39 +105,75 @@ export function StoreyTable({ platesFile }: { platesFile: PlatesFile }) {
   );
 }
 
-interface EnvelopeAndMassingStepProps {
+export interface EnvelopeAndMassingStepProps {
   form: FormState;
   onChange: (values: Record<string, unknown>) => void;
   /** Why the settings cannot be changed now (a run of the project); null when they can. */
   disabledReason: string | null;
+  /** The numbers of the envelope built (exporting not missing); null when none is. */
+  envelope: EnvelopeSummary | null;
+  /** The envelope was built from settings or a carving that changed since. */
+  envelopeOutOfDate: boolean;
+  /** Build envelope, with the reason it waits and the progress of its run. */
+  envelopeButton: ReactNode;
+  /** The numbers and plates.json of the massing built (massing not missing); null when none is. */
   massing: MassingSummary | null;
   platesFile: PlatesFile | null;
-  /** The envelope or the massing was built from an earlier carving or other settings. */
-  outOfDate: boolean;
+  /** The massing was built from settings or a carving that changed since. */
+  massingOutOfDate: boolean;
+  /** Build massing, with the reason it waits and the progress of its run. */
+  massingButton: ReactNode;
+  /** The progress of a build of both parts started from Carving, which opened this step. */
+  buildFeedback: ReactNode;
   /** The run report exists. */
   hasRunReport: boolean;
   onOpenRunReport: () => void;
 }
 
-export function EnvelopeAndMassingStep({ form, onChange, disabledReason, massing, platesFile, outOfDate, hasRunReport, onOpenRunReport }: EnvelopeAndMassingStepProps) {
+/** A part's results, greyed with the out-of-date label when it was built from what changed since. */
+function PartResults({ outOfDate, children }: { outOfDate: boolean; children: ReactNode }) {
+  return (
+    <section className={outOfDate ? "envelope-results envelope-results-out-of-date" : "envelope-results"}>
+      {outOfDate && <p className="out-of-date-label">{messages.outOfDateForSettings}</p>}
+      {children}
+    </section>
+  );
+}
+
+export function EnvelopeAndMassingStep(props: EnvelopeAndMassingStepProps) {
+  const { form, onChange, disabledReason, envelope, massing, platesFile } = props;
+  const groups = settingsForStep("envelope_and_massing", form.mode);
+  const part = (groupTitle: string, button: ReactNode, results: ReactNode) => (
+    <div className="build-part">
+      {groups.filter((group) => group.title === groupTitle).map((group) => (
+        <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} />
+      ))}
+      {button}
+      {results}
+    </div>
+  );
   return (
     <div className="envelope-step">
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
-      {settingsForStep("envelope_and_massing", form.mode).map((group) => (
-        <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} />
+      {props.buildFeedback}
+      {part(ENVELOPE_GROUP, props.envelopeButton, envelope !== null && envelope.envelope_volume_m3 !== null && (
+        <PartResults outOfDate={props.envelopeOutOfDate}>
+          <div className="number-tiles number-tiles-two">
+            <NumberTile label={messages.envelopeVolume} value={formatNumber(envelope.envelope_volume_m3)} unit={messages.units.cubicMetres}
+                        help={messages.envelopeVolumeHelp} />
+          </div>
+        </PartResults>
       ))}
-      {massing !== null && (
-        <section className={outOfDate ? "envelope-results envelope-results-out-of-date" : "envelope-results"}>
-          {outOfDate && <p className="out-of-date-label">{messages.outOfDateForCarving}</p>}
-          <div className="number-tiles number-tiles-three">
+      {part(MASSING_GROUP, props.massingButton, massing !== null && (
+        <PartResults outOfDate={props.massingOutOfDate}>
+          <div className="number-tiles number-tiles-two">
             <NumberTile label={messages.grossFloorArea} value={formatNumber(massing.total_floor_area_m2)} unit={messages.units.squareMetres} />
             <NumberTile label={messages.storeys} value={formatNumber(massing.storeys_built)} />
-            <NumberTile label={messages.envelopeVolume} value={formatNumber(massing.envelope_volume_m3)} unit={messages.units.cubicMetres} />
           </div>
           {platesFile !== null && platesFile.plates.length > 0 && <StoreyTable platesFile={platesFile} />}
-        </section>
-      )}
-      {hasRunReport && <button type="button" className="link-button" onClick={onOpenRunReport}>{messages.openRunReport}</button>}
+        </PartResults>
+      ))}
+      {props.hasRunReport && <button type="button" className="link-button" onClick={props.onOpenRunReport}>{messages.openRunReport}</button>}
     </div>
   );
 }

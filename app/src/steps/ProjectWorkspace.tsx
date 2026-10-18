@@ -5,15 +5,15 @@
 // and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  addInput, ApiError, getStageStatus, refusalDetailOf, removeInput, serviceProblemOf,
+  addInput, ApiError, failureTextOf, getStageStatus, removeInput, serviceProblemOf,
   type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
-import { shownValue, useSettingsForm } from "../settings_form/form_state";
-import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
-import { localBounds, localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
+import { analysisDiffersFromStored, shownValue, useSettingsForm, type SaveOutcome } from "../settings_form/form_state";
+import { fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
+import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
-import { hemisphere } from "../viewer/sky_dome";
+import { sceneHemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
@@ -21,7 +21,7 @@ import { ModeStep } from "./ModeStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import type { RunLoop } from "./run_state";
 import {
-  RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, settingsToFixCount,
+  RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, SettingsToFix, settingsToFixByStep,
 } from "./SettingsStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
@@ -52,20 +52,59 @@ interface ProjectWorkspaceProps {
   /** A request failed: the app shows the engine-stopped or access-lost overlay when the failure is one of those. */
   onServiceProblem: (error: unknown) => void;
   onShowProjects: () => void;
+  /**
+   * Given the saver of the settings once the workspace is open, and null when it closes: before a rename, reset or delete the app
+   * waits for the input files under way, then saves or drops.
+   */
+  onSettingsSaverReady?: (saver: OpenProjectSettingsSaver | null) => void;
+  /** The steps to open with (the workspace made again for a renamed project); absent: Inputs. */
+  startSteps?: WorkspaceSteps;
+  /** Told the open step and the step the view shows whenever either changes. */
+  onStepsChange?: (steps: WorkspaceSteps) => void;
+}
+
+/** The step open in the panel (null when all are closed) and the step whose layers the 3D view shows: the last one opened. */
+export interface WorkspaceSteps {
+  open: StepName | null;
+  view: StepName;
+}
+
+/** The settings saver of the open project, as the app uses it around a rename, reset or delete of that project. */
+export interface OpenProjectSettingsSaver {
+  /** Sends a waiting or failed save now; resolves with how it ended. */
+  flush: () => Promise<SaveOutcome>;
+  /** Drops a waiting or failed save, so closing the project sends nothing. */
+  cancel: () => void;
+  /** Resolves once the uploads and removals of input files under way have ended, so none reaches a renamed, reset or deleted project. */
+  waitForInputChanges: () => Promise<void>;
 }
 
 /** Why a request about the inputs failed, in words for the file box. */
 function inputProblemText(error: unknown, fileName: string): string {
   if (error instanceof ApiError && error.status === 409) return messages.runInProgress;
-  const detail = refusalDetailOf(error) ?? String(error);
+  const detail = failureTextOf(error);
   return detail.includes(fileName) ? detail : messages.fileProblem(fileName, detail);
 }
 
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { token, project, modes, warmUpState, runs, onServiceProblem } = props;
   const formStart = useMemo(() => ({ schema: props.schema, modes, settings: project.settings, gridPlan: project.grid_plan }), []);
-  const { form, dispatch, flushSave, changeAndSave } = useSettingsForm(token, project.name, formStart);
+  const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useSettingsForm(token, project.name, formStart);
   const runActive = runs.activeRun?.project === project.name;
+  // The uploads and removals of input files under way, each until its reply (and the save it may start) is in.
+  const inputChangesUnderWay = useRef(new Set<Promise<unknown>>());
+  const waitForInputChanges = async () => {
+    await Promise.allSettled(inputChangesUnderWay.current);
+  };
+  const followedInputChange = <Reply,>(change: Promise<Reply>): Promise<Reply> => {
+    inputChangesUnderWay.current.add(change);
+    void change.finally(() => inputChangesUnderWay.current.delete(change)).catch(() => {});
+    return change;
+  };
+  useEffect(() => {
+    props.onSettingsSaverReady?.({ flush: flushSave, cancel: cancelSave, waitForInputChanges });
+    return () => props.onSettingsSaverReady?.(null);
+  }, []);
   const [files, setFiles] = useState<Record<InputRole, InputFileInfo[]>>({
     max_volume: project.inputs.max_volume ?? [], test_surfaces: project.inputs.test_surfaces ?? [], weather: project.inputs.weather ?? [],
   });
@@ -73,8 +112,13 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [weatherLocation, setWeatherLocation] = useState(project.weather_location);
   const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0 });
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
-  const [openStep, setOpenStep] = useState<StepName | null>("inputs");
-  const [viewStep, setViewStep] = useState<StepName>("inputs");     // the step whose layers the view shows: the last one opened
+  // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
+  const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
+  const storedAnalysisRevision = useRef(form.storedAnalysisRevision);
+  storedAnalysisRevision.current = form.storedAnalysisRevision;
+  const [openStep, setOpenStep] = useState<StepName | null>(props.startSteps?.open ?? "inputs");
+  const [viewStep, setViewStep] = useState<StepName>(props.startSteps?.view ?? "inputs");
+  useEffect(() => props.onStepsChange?.({ open: openStep, view: viewStep }), [openStep, viewStep]);
   const [framingRequest, setFramingRequest] = useState(0);
   const panel = useRef<HTMLElement>(null);
   const [addFilesRequest, setAddFilesRequest] = useState(0);
@@ -89,8 +133,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const testSurfacesMesh = useInputGeometry(token, project.name, "test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, frameAllInputs,
                                         onServiceProblem);
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
-  const inputsBounds = boundsOf([maxVolume, testSurfaces]);
-  const sunPathSphere = useMemo(() => (joinedBounds === null ? null : hemisphere(localBounds(joinedBounds, localOrigin(joinedBounds)))), [joinedBounds]);
+  // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
+  const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
+  const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
   // A stage status read across a run of this project says "missing" for results still on screen: such a reply is not used
@@ -99,10 +144,22 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const refreshStageStatus = (completedStages: readonly string[] = []) => {
     if (completedStages.length > 0) setStages((current) => ({ ...current, ...Object.fromEntries(completedStages.map((stage) => [stage, "current"])) }));
     const replyStillHolds = runs.replyStillHolds(project.name);
+    const revisionAsked = storedAnalysisRevision.current;
     getStageStatus(token, project.name).then((reply) => {
-      if (replyStillHolds()) setStages(reply.stages as Record<PipelineStage, StageState>);
+      if (!replyStillHolds()) return;
+      setStages(reply.stages as Record<PipelineStage, StageState>);
+      setRevisionOfStageStatus((revision) => Math.max(revision, revisionAsked));
     }).catch(onServiceProblem);
   };
+
+  // The stage status describes the stored settings. While the form's mode or analysis settings are not those (a save waits or
+  // was refused), or a save changed them and the stage status since is still to come, the analysis is out of date for the
+  // settings shown: every stage counts as out of date, so Carving is locked and its results are dimmed (UX 5.5), and no
+  // carving change can start the analysis of a mode the form does not show.
+  const analysisOfOtherSettings = analysisDiffersFromStored(form) || revisionOfStageStatus < form.storedAnalysisRevision;
+  const shownStages: Record<PipelineStage, StageState> = analysisOfOtherSettings
+    ? Object.fromEntries(Object.entries(stages).map(([stage, state]) => [stage, state === "current" ? "out_of_date" : state])) as Record<PipelineStage, StageState>
+    : stages;
 
   // A save changes what the stages were run with; its reply is in once no save waits.
   useEffect(() => {
@@ -130,7 +187,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     if (role === "max_volume") dispatch({ type: "values_changed", values: {} });
   };
 
-  const addFiles: AddInputFiles = async (role, chosenFiles) => {
+  const addFilesOneByOne: AddInputFiles = async (role, chosenFiles) => {
     const problems: string[] = [];
     for (const file of chosenFiles) {
       try {
@@ -147,7 +204,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     return problems;
   };
 
-  const removeFile: RemoveInputFile = async (role, fileName) => {
+  const removeFileAndApply: RemoveInputFile = async (role, fileName) => {
     try {
       applyFilesReply(await removeInput(token, project.name, role, fileName));
       afterInputsChanged(role);
@@ -157,6 +214,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       return inputProblemText(error, fileName);
     }
   };
+  // The app waits for both before a rename, reset or delete of the project (waitForInputChanges).
+  const addFiles: AddInputFiles = (role, chosenFiles) => followedInputChange(addFilesOneByOne(role, chosenFiles));
+  const removeFile: RemoveInputFile = (role, fileName) => followedInputChange(removeFileAndApply(role, fileName));
 
   const openTheStep = (step: StepName | null) => {
     setOpenStep(step);
@@ -165,7 +225,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // A failed run's link to the setting it names: the step that holds the setting opens and the focus goes to its field.
   const goToSetting = (settingName: string) => {
-    const shownName = (ANALYSIS_PERIOD_FIELDS as readonly string[]).includes(settingName) ? ANALYSIS_PERIOD_FIELDS[0] : settingName;
+    const shownName = fieldSettingOf(settingName);
     const step = SETTING_PRESENTATIONS[shownName]?.step;
     if (step === undefined) return;
     openTheStep(step);
@@ -173,7 +233,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   };
   useEffect(() => {
     if (settingToFocus === null) return;
-    panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"] :is(input, select)`)?.focus();
+    // The input the field's label targets: the number field of a slider, the balance temperature's number of the balance widget.
+    const field = panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"]`);
+    const labelled = field?.dataset.inputId === undefined ? null : document.getElementById(field.dataset.inputId);
+    (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
   }, [settingToFocus]);
 
   const runBlocker = runAnalysisBlocker({
@@ -181,7 +244,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     hasWeatherFile, form, warmUpState,
   });
   const resultSteps = useResultSteps({
-    token, project: project.name, form, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages,
+    token, project: project.name, form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
   });
 
@@ -192,8 +255,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     mode: form.mode,
     analysisPeriod: analysisPeriodOf(form, modeInfo?.needs_period ?? false),
     voxelSize: Number(shownValue(form, "voxel_size")),
-    settingsToFix: settingsToFixCount(form),
-    stages,
+    settingsToFix: settingsToFixByStep(form),
+    stages: shownStages,
     keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
     totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
     storeys: resultSteps.results.summary?.massing?.storeys_built ?? null,
@@ -212,6 +275,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     ),
     mode: (
       <ModeStep mode={form.mode} onChoose={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
+                valuesReset={form.valuesResetByModeChange}
                 weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} />
     ),
     settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason} />,
@@ -229,7 +293,15 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     mark: stepMark(name, viewState),
     notUsableYet: stepNotUsableYet(name, viewState),
     content: stepContent[name],
-    feedbackWhenNotUsable: resultSteps.feedbackWhenNotUsable[name],
+    // A step that cannot be used yet shows the fields it holds with an error, so a setting to fix is never out of reach.
+    feedbackWhenNotUsable: (
+      <>
+        {resultSteps.feedbackWhenNotUsable[name]}
+        {name !== "inputs" && name !== "mode" && (
+          <SettingsToFix step={name} form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason} />
+        )}
+      </>
+    ),
   }));
 
   const runAnalysis = () => void runAnalysisAfterSaving(flushSave, () => {
@@ -268,11 +340,11 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       </aside>
       <section className="workspace-view">
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaces} sunPath={sunPath}
-                    hemisphere={sunPathSphere}
+                    hemisphere={sceneSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={emptyViewContent} localOrigin={origin} mode={form.mode} modes={modes}
-                    analysisCurrent={stages.preprocessing === "current"} {...resultSteps.viewer} />
+                    analysisCurrent={shownStages.preprocessing === "current"} {...resultSteps.viewer} />
       </section>
     </div>
   );

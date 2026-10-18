@@ -14,8 +14,3 @@ export function localOrigin(bounds: Bounds3): Point3 {
 export function toLocal(point: ArrayLike<number>, origin: Point3): Point3 {
   return [point[0] - origin[0], point[1] - origin[1], point[2] - origin[2]];
 }
-
-/** Bounds in coordinates relative to the local origin. */
-export function localBounds(bounds: Bounds3, origin: Point3): Bounds3 {
-  return [toLocal(bounds[0], origin), toLocal(bounds[1], origin)];
-}

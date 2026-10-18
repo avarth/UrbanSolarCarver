@@ -6,6 +6,7 @@ a validated name and checked to be a direct child of the projects folder.
 """
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import shutil
@@ -14,6 +15,7 @@ import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 import trimesh
 import yaml
 from pydantic import ValidationError
@@ -24,10 +26,11 @@ from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from .api_models import ConfigReply, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from .api_models import ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from .example_catalog import read_examples
+from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
+from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, move_to_recycle_bin
 
-PROJECT_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
-PROJECT_JSON_FILE_NAME = "project.json"
 CONFIG_FILE_NAME = "config.yaml"
 INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/joined")
 RUN_FOLDER = "run"
@@ -47,8 +50,6 @@ SERVICE_PATHS = {
     "epw_path": "inputs/weather.epw",
     "out_dir": "run",
 }   # relative to the project folder; epw_path only for modes that read a weather file
-# Windows reserves these names for devices: a file or folder named so, with or without an extension, cannot be made there.
-WINDOWS_DEVICE_NAME_PATTERN = re.compile(r"(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])", re.IGNORECASE)
 UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
 FILE_NAME_SEPARATORS = re.compile(r"[\\/]")
 
@@ -64,32 +65,20 @@ class GridOverBudget(ConfigError):
         self.grid_plan = grid_plan
 
 
-class ProjectError(Exception):
-    """A project request that cannot be served; ``status_code`` is the HTTP status."""
+def is_from_example(project_json: ProjectJson, example: str, example_title: str) -> bool:
+    """Whether a project was made from the example named *example* (titled *example_title*).
 
-    def __init__(self, message: str, status_code: int):
-        super().__init__(message)
-        self.status_code = status_code
-
-
-def _check_not_a_windows_device_name(name: str) -> None:
-    """Raise ProjectError(422) when the part of the name before its first '.' is a Windows device name (CON, NUL, COM1, ...)."""
-    if WINDOWS_DEVICE_NAME_PATTERN.fullmatch(name.split(".")[0]) is not None:
-        raise ProjectError(f"'{name}' is a Windows device name, which Windows does not allow for a file or folder: "
-                           "choose another name.", status_code=422)
+    project.json records the example, so a renamed project is still found. A project made before the field existed counts
+    when its name is exactly the example's title; numbered copies ("Perimeter block 2") stay ordinary projects.
+    """
+    if project_json.example is None:
+        return project_json.name == example_title
+    return project_json.example == example
 
 
-def validate_project_name(name: str) -> str:
-    """Return the name without surrounding spaces, or raise ProjectError(422)."""
-    stripped_name = name.strip(" ")
-    if PROJECT_NAME_PATTERN.fullmatch(stripped_name) is None:
-        raise ProjectError(
-            "A project name has 1 to 64 characters: letters A-Z and a-z, digits, spaces, "
-            "'-' and '_', starting with a letter or digit.",
-            status_code=422,
-        )
-    _check_not_a_windows_device_name(stripped_name)
-    return stripped_name
+def example_of_project(project_json: ProjectJson) -> ExampleProject | None:
+    """The packaged example a project was made from (see is_from_example), None for any other project."""
+    return next((example for example in read_examples() if is_from_example(project_json, example.name, example.title)), None)
 
 
 def sanitize_file_name(name: str) -> str:
@@ -102,12 +91,54 @@ def sanitize_file_name(name: str) -> str:
     clean_name = UNWANTED_FILE_NAME_CHARACTERS.sub("", last_part)
     if not clean_name or clean_name.startswith("."):
         raise ProjectError(f"'{name}' has no usable file name: use letters, digits, '-', '_' and '.'.", status_code=422)
-    _check_not_a_windows_device_name(clean_name)
+    check_not_a_windows_device_name(clean_name)
     return clean_name
 
 
 def _utc_iso(timestamp_seconds: float) -> str:
     return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(timespec="seconds")
+
+
+def _write_ply_with_vertex_normals(meshes: list[trimesh.Trimesh], path: Path) -> None:
+    """Write the meshes, concatenated, as one binary PLY with float64 positions and the vertex normals of each mesh.
+
+    The engine reads test surfaces with load_mesh, which merges coincident vertices only when their normals are
+    equal too (trimesh merges on position and, when the file has them, vertex normals). Test surface files keep
+    panels that share corners apart that way, and each panel is one connected component for the sampling. The
+    normals of a mesh as load_mesh returned it are those of its faces, so a vertex of one flat panel carries the
+    panel's normal, and panels that met at a corner in the uploaded file stay apart in the joined file. Without
+    normals they would merge into one component, which the sampling skips as degenerate or non-planar. Positions
+    are float64, as save_mesh writes georeferenced coordinates.
+    """
+    vertex_offsets = np.cumsum([0] + [len(mesh.vertices) for mesh in meshes[:-1]])
+    vertex_rows = np.empty(sum(len(mesh.vertices) for mesh in meshes), dtype=[("position", "<f8", (3,)), ("normal", "<f4", (3,))])
+    vertex_rows["position"] = np.vstack([mesh.vertices for mesh in meshes])
+    vertex_rows["normal"] = np.vstack([mesh.vertex_normals for mesh in meshes])
+    face_rows = np.empty(sum(len(mesh.faces) for mesh in meshes), dtype=[("count", "u1"), ("vertex_indices", "<i4", (3,))])
+    face_rows["count"] = 3
+    face_rows["vertex_indices"] = np.vstack([mesh.faces + offset for mesh, offset in zip(meshes, vertex_offsets)])
+    header = ("ply\nformat binary_little_endian 1.0\n"
+              f"element vertex {len(vertex_rows)}\n"
+              "property double x\nproperty double y\nproperty double z\n"
+              "property float nx\nproperty float ny\nproperty float nz\n"
+              f"element face {len(face_rows)}\n"
+              "property list uchar int vertex_indices\nend_header\n")
+    with open(path, "wb") as ply_file:
+        ply_file.write(header.encode("ascii"))
+        ply_file.write(vertex_rows.tobytes())
+        ply_file.write(face_rows.tobytes())
+
+
+def _ply_has_vertex_normals(path: Path) -> bool:
+    """Whether the header of a PLY file declares the vertex property nx (a PLY header is ASCII in every format)."""
+    with open(path, "rb") as ply_file:
+        for line in ply_file:
+            words = line.split()
+            if words == [b"end_header"]:
+                return False
+            if words[:1] == [b"property"] and words[-1:] == [b"nx"]:
+                return True
+    return False
 
 
 class ProjectStore:
@@ -118,6 +149,10 @@ class ProjectStore:
         self._device = device
         self._project_locks: dict[str, threading.RLock] = {}
         self._project_locks_guard = threading.Lock()
+
+    @property
+    def projects_folder(self) -> Path:
+        return self._projects_folder
 
     def project_lock(self, name: str) -> threading.RLock:
         """The lock that serializes changes to one project.
@@ -130,6 +165,18 @@ class ProjectStore:
         with self._project_locks_guard:
             return self._project_locks.setdefault(lock_key, threading.RLock())
 
+    @contextlib.contextmanager
+    def project_locks(self, *names: str):
+        """Hold the locks of several projects at once, taken in one order (by lower-case name, each once).
+
+        A request that needs two projects (a rename needs the old and the new name) must take them through this, so that
+        two requests that name the same projects in opposite order cannot each hold one lock and wait for the other.
+        """
+        with contextlib.ExitStack() as held_locks:
+            for lock_key in sorted({validate_project_name(name).lower() for name in names}):
+                held_locks.enter_context(self.project_lock(lock_key))
+            yield
+
     def _project_folder(self, name: str) -> Path:
         """The folder of a project with a valid name, guaranteed to lie directly in the projects folder."""
         project_folder = (self._projects_folder / validate_project_name(name)).resolve()
@@ -137,8 +184,8 @@ class ProjectStore:
             raise ProjectError("The project name does not name a folder of the projects folder.", status_code=422)
         return project_folder
 
-    def create(self, name: str, mode: str) -> Path:
-        """Make the project folder with its layout, project.json and the first config.yaml of the mode.
+    def create(self, name: str, mode: str, example: str | None = None) -> Path:
+        """Make the project folder with its layout, project.json (recording the *example* it comes from) and the first config.yaml of the mode.
 
         Raises ConfigError, and leaves no folder behind, when the mode is not one the engine knows.
         """
@@ -151,7 +198,7 @@ class ProjectStore:
         for sub_folder in (*INPUT_ROLE_FOLDERS, RUN_FOLDER):
             (project_folder / sub_folder).mkdir(parents=True)
         created = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        self.write_project_json(project_name, ProjectJson(name=project_name, created=created))
+        self.write_project_json(project_name, ProjectJson(name=project_name, created=created, example=example))
         try:
             self.write_config_from_values(project_name, {"mode": mode})
         except BaseException:
@@ -191,12 +238,120 @@ class ProjectStore:
         with self.project_lock(name):   # config.yaml is read here too, and a save replaces it
             project_json = self.read_project_json(name)
             project_folder = self.open(name)
+            example = example_of_project(project_json)
             return ProjectSummary(
                 name=project_json.name,
                 created=project_json.created,
                 modified=self._modified(project_folder),
                 mode=self._mode(project_folder),
+                example=example.name if example is not None else None,
             )
+
+    def create_example_project(self, name: str, example: ExampleProject, example_files: list[tuple[str, str, bytes]]) -> Path:
+        """Make the project *name* with the mode and the input files (role, file name, content) of *example*, and record the example.
+
+        The project is complete before another request can reach it. A folder made by this call is removed again when it fails.
+        """
+        with self.project_lock(name):
+            project_folder = self.create(name, example.mode, example.name)
+            try:
+                for role, file_name, data in example_files:
+                    self.add_input(name, role, file_name, data)
+            except BaseException:
+                shutil.rmtree(project_folder, ignore_errors=True)   # the folder was made by this call, so no earlier project is lost
+                raise
+            return project_folder
+
+    def rename_project(self, name: str, new_name: str) -> Path:
+        """Rename the project folder and the name in its project.json; the new folder.
+
+        ProjectError: 422 for a bad new name, 404 for an unknown project, 409 when a project (or any folder) already has the
+        new name, also in another letter case (folder names ignore it on Windows), with its own message when the new name
+        differs from the old one only in letter case, and 422 when the folder cannot be moved (a program has a file of it
+        open). Nothing changes then.
+
+        A project made before project.json recorded the example counts as from an example only while its name is the
+        example's title (see is_from_example), so the example is recorded with the new name and the link survives the rename.
+        """
+        old_name, new_name = validate_project_name(name), validate_project_name(new_name)
+        with self.project_locks(old_name, new_name):
+            old_folder = self.open(old_name)
+            if new_name != old_name and new_name.lower() == old_name.lower():
+                raise ProjectError(f"'{new_name}' differs from '{old_name}' only in letter case. Names that differ only in letter case "
+                                   "are the same project, so choose a name that differs in more than letter case.", status_code=409)
+            if any(folder.name.lower() == new_name.lower() for folder in self._projects_folder.iterdir()):
+                raise ProjectError(f"A project named '{new_name}' already exists (project names ignore letter case).", status_code=409)
+            project_json = self.read_project_json(old_name)
+            if project_json.example is None:
+                example = example_of_project(project_json)
+                project_json.example = example.name if example is not None else None
+            new_folder = self._project_folder(new_name)
+            try:
+                os.replace(old_folder, new_folder)
+            except OSError as error:
+                raise ProjectError(f"'{old_name}' cannot be renamed: {error}. Close any program that has one of its files open.", status_code=422) from error
+            project_json.name = new_name
+            try:
+                self.write_project_json(new_name, project_json)
+            except BaseException as error:
+                try:
+                    os.replace(new_folder, old_folder)
+                except OSError as rollback_error:
+                    raise ProjectError(f"'{old_name}' was renamed to '{new_name}', but its {PROJECT_JSON_FILE_NAME} could not be updated ({error}) "
+                                       f"and the folder could not be moved back ({rollback_error}). The folder is now {new_folder}.",
+                                       status_code=500) from error
+                raise
+            return new_folder
+
+    def delete_project(self, name: str) -> None:
+        """Move the project folder to the recycle bin when the guardrails of project_removal allow it; ProjectError otherwise, and nothing changes.
+
+        The caller makes sure no run of the project is active.
+        """
+        with self.project_lock(name):
+            move_to_recycle_bin(check_project_folder_can_be_removed(self._projects_folder, name))
+
+    def reset_project_to_example(self, name: str, example: ExampleProject, example_files: list[tuple[str, str, bytes]]) -> None:
+        """Replace a project made from *example* by a fresh copy of it under the same name; the old folder goes to the recycle bin.
+
+        ProjectError 422 when the project is not from *example* or the guardrails refuse (see delete_project); nothing changes then.
+        When the move succeeds but the new project cannot be made, the error (500) says the old content is in the recycle bin.
+        """
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
+            project_name = project_json.name
+            if project_name.lower() != validate_project_name(name).lower():
+                # a hand-edited project.json: removing and making "project_name" would take the lock of a second project
+                raise ProjectRemovalRefused(f"{PROJECT_JSON_FILE_NAME} in the folder '{name}' names the project '{project_name}', so it is left as it is.")
+            if not is_from_example(project_json, example.name, example.title):
+                raise ProjectError(f"'{project_name}' was not made from the example '{example.title}', so it cannot be reset to it.", status_code=422)
+            self.delete_project(project_name)
+            try:
+                self.create_example_project(project_name, example, example_files)
+            except Exception as error:
+                raise ProjectError(f"'{project_name}' could not be made again from the example ({error}). Its old content is in the recycle bin.",
+                                   status_code=500) from error
+
+    def projects_of_examples(self, example_titles: dict[str, str]) -> dict[str, str | None]:
+        """For each example (name -> title) the project made from it (see is_from_example), in one pass over the projects.
+
+        When several projects come from one example the most recently modified one is named; None when there is none.
+        """
+        newest_by_example: dict[str, ProjectSummary] = {}
+        for summary in self.list():
+            try:
+                project_json = self.read_project_json(summary.name)
+            except ProjectError:
+                continue
+            for example, example_title in example_titles.items():
+                newest = newest_by_example.get(example)
+                if is_from_example(project_json, example, example_title) and (newest is None or summary.modified > newest.modified):
+                    newest_by_example[example] = summary
+        return {example: newest_by_example[example].name if example in newest_by_example else None for example in example_titles}
+
+    def project_of_example(self, example: str, example_title: str) -> str | None:
+        """The name of the project made from one example (see projects_of_examples), None when there is none."""
+        return self.projects_of_examples({example: example_title})[example]
 
     def read_project_json(self, name: str) -> ProjectJson:
         """project.json of a project, read under the project lock.
@@ -367,6 +522,32 @@ class ProjectStore:
             self.write_project_json(name, project_json)
             return self._reply(name, role, project_json)
 
+    def rebuild_joined_test_surfaces_without_normals(self, name: str) -> bool:
+        """Rebuild the joined test surface file when it has no vertex normals and raise inputs_revision; whether it did.
+
+        The service wrote that file with positions only before it kept the vertex normals, so the engine welded
+        panels that share corners (see _write_ply_with_vertex_normals). Rebuilt from the uploaded files, with
+        inputs_revision raised, every stage built on the old file is out of date. Called when a project is opened
+        and when a run starts; raises ProjectError when an uploaded file cannot be read.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            joined_path = project_folder / JOINED_FOLDER / "test_surfaces.ply"
+            if not joined_path.is_file() or _ply_has_vertex_normals(joined_path):
+                return False
+            project_json = self.read_project_json(name)
+            file_names = list(project_json.input_files.get("test_surfaces", {}))
+            joined_temporary_path = self._write_joined_temporary_file(
+                project_folder, "test_surfaces", list(self._load_stored_meshes(project_folder, "test_surfaces", file_names).values()))
+            try:
+                self._replace_joined_file(project_folder, "test_surfaces", joined_temporary_path)
+            finally:
+                if joined_temporary_path is not None:
+                    joined_temporary_path.unlink(missing_ok=True)
+            project_json.inputs_revision += 1
+            self.write_project_json(name, project_json)
+            return True
+
     def input_files(self, name: str, role: str) -> list[InputFileInfo]:
         """The uploaded files of a role sorted by name, with their triangle counts."""
         self._check_role(role)
@@ -509,7 +690,8 @@ class ProjectStore:
         """Join the meshes of a role as the Grasshopper components do (spec 5.3) into a new temporary file.
 
         Max volume meshes are concatenated and their coincident vertices merged; test surface
-        meshes are only concatenated. Returns None for no meshes (the joined file is then removed).
+        meshes are only concatenated, and written with their vertex normals (see
+        _write_ply_with_vertex_normals). Returns None for no meshes (the joined file is then removed).
         The temporary name is unique, so concurrent builds never share a file.
         """
         if not meshes:
@@ -518,10 +700,12 @@ class ProjectStore:
         os.close(descriptor)
         temporary_path = Path(temporary_name)
         try:
-            joined_mesh = trimesh.util.concatenate(meshes)
             if role == "max_volume":
+                joined_mesh = trimesh.util.concatenate(meshes)
                 joined_mesh.merge_vertices()
-            save_mesh(joined_mesh, str(temporary_path))
+                save_mesh(joined_mesh, str(temporary_path))
+            else:
+                _write_ply_with_vertex_normals(meshes, temporary_path)
         except Exception as error:
             temporary_path.unlink(missing_ok=True)
             raise ProjectError(f"The joined {role} file could not be built: {error}", status_code=500) from error

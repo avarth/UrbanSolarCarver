@@ -1,11 +1,12 @@
-// The Carving step (UX 5.5, 11): the threshold control of the mode (Shadow tolerated in m²·h with its slider for Sun at set
-// hours, Carve amount in % for the weighted modes, the angle rule's message), the other carving settings folded under it, the
-// histogram, the numbers of the last carving, and the "Update when I change the threshold" switch, remembered per project.
+// The Carving step (UX 5.5, 11): the threshold control of the mode (Shadow tolerated in m²·h with its slider for Solar
+// time-based, Carve amount in % for the weighted modes, the angle rule's message), the other carving settings folded under it,
+// the histogram, the numbers of the last carving, and the "Update when I change the threshold" switch, remembered per project.
 // With the switch on, letting go of the slider or leaving the number field reruns the carving, as does a change of another
-// carving setting (a switch or a choice at once, a number field when the user leaves it); off, Update carving does.
+// carving setting (a switch or a choice at once, a number field when the user leaves it, a slider when it is let go); off, Update
+// carving does.
 // When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with Run
 // analysis in the step.
-import { useEffect, useId, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import type { RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import { shownValue, type FormState } from "../settings_form/form_state";
@@ -38,6 +39,20 @@ export function readAutoUpdate(project: string): boolean {
     return window.localStorage.getItem(autoUpdateStorageKey(project)) !== "off";
   } catch {
     return true;
+  }
+}
+
+/**
+ * Carries the auto-update choice of a project to its new name (*to*), or drops it (*to* null) for a project deleted or reset
+ * to its example. Without storage there is nothing to carry.
+ */
+export function moveAutoUpdateChoice(from: string, to: string | null): void {
+  try {
+    const choice = window.localStorage.getItem(autoUpdateStorageKey(from));
+    window.localStorage.removeItem(autoUpdateStorageKey(from));
+    if (to !== null && choice !== null) window.localStorage.setItem(autoUpdateStorageKey(to), choice);
+  } catch {
+    // storage is blocked: no choice was kept
   }
 }
 
@@ -98,6 +113,8 @@ interface ThresholdControlProps {
   disabled: boolean;
   /** The element that says why the control is disabled, when it is not a run (Carve amount under another carving rule). */
   reasonId?: string;
+  /** The analysis is out of date: the control is disabled unless it holds an error, which stays open to be fixed. */
+  lockedUnlessError?: boolean;
   onChangeValue: (shownNumber: number) => void;
   onCommit: (shownNumber: number) => void;
 }
@@ -108,7 +125,8 @@ interface ThresholdControlProps {
  * form only when its run is next (it may wait behind a run in progress), so going back to the stored number is handed on too
  * while an earlier one is still on its way: it replaces the waiting one, and the run uses the number the user is at.
  */
-function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reasonId, onChangeValue, onCommit }: ThresholdControlProps) {
+function ThresholdControl({ view, form, highestScore, autoUpdate, disabled: disabledOtherwise, reasonId, lockedUnlessError = false, onChangeValue,
+                            onCommit }: ThresholdControlProps) {
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;
@@ -120,7 +138,10 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
     if (heldNumber === stored) setHeldNumber(null);
     lastNumberHandedOn.current = stored;
   }, [stored]);
-  const error = fieldErrorOf(form, view);
+  // A number refused in the field (above 100 % for Carve amount, below 0) is said under it and never handed on.
+  const [refusedInput, setRefusedInput] = useState<string | null>(null);
+  const error = refusedInput ?? fieldErrorOf(form, view);
+  const disabled = disabledOtherwise || (lockedUnlessError && fieldErrorOf(form, view) === undefined);
   const isShadowTolerated = view.name === "threshold";
   const shownNumber = heldNumber ?? stored;
   const highest = isShadowTolerated ? Math.max(highestScore ?? 0, stored) : 100;
@@ -128,7 +149,8 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   const commit = () => {
     if (heldNumber === null) return;
     const earlierNumberOnItsWay = lastNumberHandedOn.current !== stored;
-    if (heldNumber !== stored || earlierNumberOnItsWay) {
+    // A number refused in the field is not run; the field already went back to the number before it.
+    if (refusedInput === null && (heldNumber !== stored || earlierNumberOnItsWay)) {
       lastNumberHandedOn.current = heldNumber;
       onCommit(heldNumber);
     }
@@ -136,7 +158,7 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   };
   const describedBy = [error === undefined ? null : errorId, reasonId ?? null].filter((id) => id !== null).join(" ") || undefined;
   return (
-    <div className="setting-field threshold-control" data-setting={view.name}>
+    <div className="setting-field threshold-control" data-setting={view.name} data-input-id={inputId}>
       <div className="setting-label-row">
         <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>
         <SettingTooltip settingLabel={view.label} help={view.help} configName={view.name} defaultText={defaultTextOf(view, form, isShadowTolerated)} />
@@ -149,7 +171,7 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
         <span className="threshold-number" onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") commit(); }}>
           <NumberInput id={inputId} className="setting-number setting-number-short" value={shownNumber} mayBeEmpty={false} minimum={0}
                        maximum={isShadowTolerated ? undefined : 100} invalid={error !== undefined} describedBy={describedBy} disabled={disabled}
-                       onValue={(typed) => change(typed!)} />
+                       onValue={(typed) => change(typed!)} onRefused={setRefusedInput} />
         </span>
         <span className="setting-unit">{view.unit}</span>
       </div>
@@ -164,11 +186,14 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled, reas
   );
 }
 
-/** A key number on chrome (UX 5.5, 5.6): its label, then the value; the unit may wrap under the value in a narrow tile. */
-export function NumberTile({ label, value, unit }: { label: string; value: string; unit?: string }) {
+/**
+ * A key number on chrome (UX 5.5, 5.6): its label, with an "i" that says what it counts when *help* is given, then the value; the
+ * unit may wrap under the value in a narrow tile.
+ */
+export function NumberTile({ label, value, unit, help }: { label: string; value: string; unit?: string; help?: string }) {
   return (
     <div className="number-tile">
-      <span className="number-tile-label">{label}</span>
+      <span className="number-tile-label">{label}{help !== undefined && <> <SettingTooltip settingLabel={label} help={help} /></>}</span>
       <span className="number-tile-value">{value}{unit && <> <span className="number-tile-unit">{unit}</span></>}</span>
     </div>
   );
@@ -244,7 +269,10 @@ export function CarvingStep(props: CarvingStepProps) {
     ...group, essential: [], foldLabel: messages.moreSettingsOfGroup[group.title as keyof typeof messages.moreSettingsOfGroup] ?? group.foldLabel,
   }));
   const thresholdDisabled = props.thresholdDisabledReason !== null;
+  // While the analysis is out of date the carving settings wait for Run analysis, except one with an error, which stays open to
+  // be fixed (SettingGroup fieldsWithErrorEditable); a change there is saved but runs nothing.
   const settingsDisabled = analysisOutOfDate || props.settingsDisabledReason !== null;
+  const fieldsWithErrorEditable = analysisOutOfDate && props.settingsDisabledReason === null;
   // The angle rule has no threshold, so nothing updates on its own there: Update carving runs it.
   const autoUpdating = autoUpdate && thresholdView !== null;
   // Every change goes to the form at once; with auto-update on the run follows when the user is done with the field, so typing
@@ -256,15 +284,20 @@ export function CarvingStep(props: CarvingStepProps) {
   const commitCarvingSetting = () => {
     if (!settingChangedSinceCommit.current) return;
     settingChangedSinceCommit.current = false;
-    props.onCarvingSettingCommit();
+    if (!analysisOutOfDate) props.onCarvingSettingCommit();
   };
   const isNumberField = (target: EventTarget) => target instanceof HTMLInputElement && target.type === "number";
   const commitChoice = (event: FormEvent) => {
     const target = event.target;
     if (target instanceof HTMLSelectElement || (target instanceof HTMLInputElement && (target.type === "checkbox" || target.type === "radio"))) commitCarvingSetting();
   };
-  const commitNumberOnLeave = (event: FocusEvent) => { if (isNumberField(event.target)) commitCarvingSetting(); };
+  // A slider runs once the user lets it go, or after a key moved it, as the threshold slider does: not on every step of a drag.
+  // Leaving it runs a move not run yet (a drag let go outside the window).
+  const isSlider = (target: EventTarget) => target instanceof HTMLInputElement && target.type === "range";
+  const commitNumberOnLeave = (event: FocusEvent) => { if (isNumberField(event.target) || isSlider(event.target)) commitCarvingSetting(); };
   const commitNumberOnEnter = (event: KeyboardEvent) => { if (event.key === "Enter" && isNumberField(event.target)) commitCarvingSetting(); };
+  const commitSliderOnRelease = (event: PointerEvent) => { if (isSlider(event.target)) commitCarvingSetting(); };
+  const commitSliderAfterKey = (event: KeyboardEvent) => { if (SLIDER_KEYS.has(event.key) && isSlider(event.target)) commitCarvingSetting(); };
   const disabledReason = analysisOutOfDate ? null : (props.thresholdDisabledReason ?? props.settingsDisabledReason);
   const carveAmountReason = thresholdView === null ? null : carveAmountUnusedReason(form, thresholdView);
   const updateBlocker = analysisOutOfDate ? null : runBlocker;
@@ -291,14 +324,16 @@ export function CarvingStep(props: CarvingStepProps) {
       <div className="carving-content">
         {thresholdView === null ? <p className="step-reason">{messages.angleRuleHasNoThreshold}</p> : (
           <ThresholdControl view={thresholdView} form={form} highestScore={scorePoints?.header.score_max ?? null} autoUpdate={autoUpdating}
-                            disabled={thresholdDisabled || analysisOutOfDate || carveAmountReason !== null}
+                            disabled={thresholdDisabled || carveAmountReason !== null} lockedUnlessError={analysisOutOfDate}
                             reasonId={carveAmountReason !== null ? carveAmountReasonId : undefined}
                             onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(thresholdView, shownNumber))}
                             onCommit={props.onThresholdCommit} />
         )}
-        <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}>
+        <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}
+             onPointerUp={commitSliderOnRelease} onKeyUp={commitSliderAfterKey}>
           {groups.map((group) => (
-            <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled} />
+            <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled}
+                          fieldsWithErrorEditable={fieldsWithErrorEditable} />
           ))}
         </div>
         {thresholdView !== null && (

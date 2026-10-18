@@ -5,7 +5,9 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError, putConfig, type ConfigErrorReply, type ConfigReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "../steps/grid_budget";
-import { presentedSettingOf, settingIsReadBy } from "./presentation";
+import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
+import { engineIgnoresIn } from "./engine_modes";
+import { SETTING_PRESENTATIONS, settingIsReadBy } from "./presentation";
 
 export const SAVE_DELAY_MILLISECONDS = 400;
 
@@ -22,6 +24,9 @@ export interface SchemaProperty {
   items?: SchemaProperty;
   minimum?: number;
   maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+  description?: string;
   $ref?: string;
 }
 
@@ -30,10 +35,12 @@ export interface FormState {
   /** The settings the user set, which are what a save sends besides the mode. */
   userValues: Record<string, unknown>;
   startingValuesByMode: Record<string, Record<string, unknown>>;
+  /** How each mode scores ("weighted_sum", "violation_count"): some automatic values depend on it (the slope limit). */
+  scoreKindByMode: Record<string, string>;
   schemaProperties: Record<string, SchemaProperty>;
   /** The messages of the last rejected save, by setting name. */
   fieldErrors: Record<string, string>;
-  /** Messages of the last rejected save that name no single setting (grid_step above voxel_size), shown for the step. */
+  /** Messages of the last rejected save that name no setting the form shows (a missing weather file), shown for the step. */
   stepErrors: string[];
   gridPlan: GridPlanReply | null;
   /** A change has not been saved yet. */
@@ -42,6 +49,28 @@ export interface FormState {
   changeCount: number;
   /** Why the last save failed when the service did not answer with field errors (a run in progress, the engine stopped). */
   saveFailure: unknown;
+  /**
+   * The values the user set that the last mode change carried over, until the new mode's first save answers: a value it
+   * refuses goes back to the new mode's own (UX 5.3, choosing a mode fills its starting values).
+   */
+  carriedValues: Record<string, unknown>;
+  /** The settings the last mode change set back to the new mode's own value, as the new mode refused the user's; null when none. */
+  valuesResetByModeChange: { settings: string[]; mode: string } | null;
+  /**
+   * The settings the service holds (config.yaml): those the project opened with, then those of the last save it stored. The
+   * stage status and the results describe these, which are not the form's while a save waits or after one was refused.
+   */
+  stored: { mode: string; values: Record<string, unknown> };
+  /** Counts the stored saves that changed what the analysis reads (the mode, a setting of the Settings step). */
+  storedAnalysisRevision: number;
+  /** The sample spacing the form lowered to a smaller voxel size (R2 4.4), said under Voxel size; null when it lowered none. */
+  sampleSpacingLoweredTo: number | null;
+  /**
+   * While the change that lowered the sample spacing is not saved yet: the sample spacing the user had set before it (undefined:
+   * none). A voxel size changed again before the save is compared with that spacing, not with the lowered one. Only a stored save
+   * ends it: it deliberately outlives a refused or failed save, as config.yaml never stored the lowering then.
+   */
+  sampleSpacingBeforeUnsavedLowering: { userValue: unknown } | null;
 }
 
 export interface FormStart {
@@ -69,15 +98,51 @@ function startingValuesOf(state: Pick<FormState, "startingValuesByMode" | "mode"
 export function initialFormState({ schema, modes, settings, gridPlan }: FormStart): FormState {
   const schemaProperties = (schema.properties ?? {}) as Record<string, SchemaProperty>;
   const startingValuesByMode = Object.fromEntries(modes.map((mode) => [mode.name, mode.starting_values]));
+  const scoreKindByMode = Object.fromEntries(modes.map((mode) => [mode.name, mode.score_kind]));
   const mode = typeof settings.mode === "string" ? settings.mode : String(schemaProperties.mode?.default);
   const startingValues = startingValuesByMode[mode] ?? {};
+  // A stored setting the engine ignores in the mode (one of another mode, left from it or written by hand) is not sent again:
+  // the engine would still refuse it when invalid, with no field in this mode to fix it in. A setting the engine reads in every
+  // mode stays, though the form may show no field for it (edge_taper): leaving it out would change what the analysis reads.
   const userValues = Object.fromEntries(Object.entries(settings).filter(([name, value]) =>
-    name !== "mode" && !(name in startingValues && sameValue(value, startingValues[name]))));
+    name !== "mode" && !engineIgnoresIn(name, mode) && !(name in startingValues && sameValue(value, startingValues[name]))));
   // Stored settings whose grid is over the budget (a larger maximum volume came after them) open with Voxel size to fix, as a
   // save of them would be refused; the message under the field is the step's own (SettingsStep), so the text here stays empty.
   const fieldErrors: Record<string, string> = gridIsOverBudget(gridPlan) ? { voxel_size: "" } : {};
-  return { mode, userValues, startingValuesByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
-           pendingSave: false, changeCount: 0, saveFailure: null };
+  return { mode, userValues, startingValuesByMode, scoreKindByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
+           pendingSave: false, changeCount: 0, saveFailure: null, carriedValues: {}, valuesResetByModeChange: null,
+           stored: { mode, values: userValues }, storedAnalysisRevision: 0, sampleSpacingLoweredTo: null, sampleSpacingBeforeUnsavedLowering: null };
+}
+
+type SampleSpacingFollowing = Pick<FormState, "userValues" | "sampleSpacingLoweredTo" | "sampleSpacingBeforeUnsavedLowering">;
+
+/**
+ * The sample spacing after *changed* values (R2 4.4). The engine needs it no larger than the voxel size, so a voxel size below it
+ * lowers it to the voxel size, in the same change, and the form says so. The spacing compared is the one from before a lowering
+ * not saved yet: a voxel size typed as "0.25" passes 0.2 on the way, and a slider passes many values while dragged, but only the
+ * value the save sends counts, so the spacing ends at 0.25, and goes back to the user's own when the voxel size goes back above
+ * it. Once saved, a larger voxel size leaves the lowered spacing. A sample spacing the user sets is never changed here; one
+ * above the voxel size is refused by the engine, under Sample spacing.
+ */
+function followVoxelSize(state: FormState, changed: Record<string, unknown>, userValues: Record<string, unknown>): SampleSpacingFollowing {
+  if ("grid_step" in changed) return { userValues, sampleSpacingLoweredTo: null, sampleSpacingBeforeUnsavedLowering: null };
+  if (!("voxel_size" in changed)) {
+    return { userValues, sampleSpacingLoweredTo: state.sampleSpacingLoweredTo, sampleSpacingBeforeUnsavedLowering: state.sampleSpacingBeforeUnsavedLowering };
+  }
+  const before = state.sampleSpacingBeforeUnsavedLowering ?? { userValue: state.userValues.grid_step };
+  const spacingBefore = before.userValue ?? defaultValue(state, "grid_step");
+  const voxelSize = shownValue({ ...state, userValues }, "voxel_size");
+  const withSpacing = (userValue: unknown) => {
+    const values = { ...userValues };
+    if (userValue === undefined) delete values.grid_step;
+    else values.grid_step = userValue;
+    return values;
+  };
+  if (typeof voxelSize === "number" && typeof spacingBefore === "number" && voxelSize < spacingBefore) {
+    return { userValues: withSpacing(voxelSize), sampleSpacingLoweredTo: voxelSize, sampleSpacingBeforeUnsavedLowering: before };
+  }
+  const restored = state.sampleSpacingBeforeUnsavedLowering === null ? userValues : withSpacing(before.userValue);
+  return { userValues: restored, sampleSpacingLoweredTo: null, sampleSpacingBeforeUnsavedLowering: null };
 }
 
 /**
@@ -92,33 +157,90 @@ export function formReducer(state: FormState, action: FormAction): FormState {
         if (value === null || value === undefined) delete userValues[name];
         else userValues[name] = value;
       }
-      return { ...state, userValues, pendingSave: true, changeCount: state.changeCount + 1, saveFailure: null };
+      const carriedValues = Object.fromEntries(Object.entries(state.carriedValues).filter(([name]) => !(name in action.values)));
+      return { ...state, ...followVoxelSize(state, action.values, userValues), pendingSave: true, changeCount: state.changeCount + 1,
+               saveFailure: null, carriedValues, valuesResetByModeChange: null };
     }
     case "mode_chosen": {
       const startingValues = state.startingValuesByMode[action.mode] ?? {};
-      const userValues = Object.fromEntries(Object.entries(state.userValues).filter(([name]) =>
-        settingIsReadBy(name, action.mode) && !(name in startingValues) && !SETTINGS_OF_ONE_MODE_ONLY.has(name)));
-      return { ...state, mode: action.mode, userValues, pendingSave: true, changeCount: state.changeCount + 1, saveFailure: null };
+      const kept = Object.entries(state.userValues).filter(([name]) =>
+        settingIsReadBy(name, action.mode) && !(name in startingValues) && !SETTINGS_OF_ONE_MODE_ONLY.has(name));
+      // A value the last save refused is not carried over: the new mode would refuse it too.
+      const refused = kept.filter(([name]) => name in state.fieldErrors).map(([name]) => name);
+      const carried = kept.filter(([name]) => !refused.includes(name));
+      // The errors were the old mode's; the save of the new one brings its own, so none is left on a field this mode hides.
+      // A lowered sample spacing is the user's from here: the new mode's change is another one.
+      return { ...state, mode: action.mode, userValues: Object.fromEntries(carried), pendingSave: true, changeCount: state.changeCount + 1,
+               saveFailure: null, fieldErrors: {}, stepErrors: [], carriedValues: Object.fromEntries(carried),
+               valuesResetByModeChange: refused.length > 0 ? { settings: refused, mode: action.mode } : null, sampleSpacingBeforeUnsavedLowering: null };
     }
-    case "save_succeeded":
-      return { ...state, gridPlan: action.reply.grid_plan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null };
+    case "save_succeeded": {
+      // The reply gives the settings stored; without a mode in it (an older service), the form's are the ones sent.
+      const { mode: storedMode, ...storedValues } = action.reply.settings ?? {};
+      const stored = typeof storedMode === "string" ? { mode: storedMode, values: storedValues } : { mode: state.mode, values: state.userValues };
+      const analysisChanged = !sameAnalysisSettings(state, state.stored, stored);
+      return { ...state, gridPlan: action.reply.grid_plan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null, carriedValues: {},
+               stored, storedAnalysisRevision: state.storedAnalysisRevision + (analysisChanged ? 1 : 0), sampleSpacingBeforeUnsavedLowering: null };
+    }
     case "save_rejected": {
+      const shownErrors = action.reply.field_errors.map(({ field, message }) => shownConfigErrorOf(field, message, state.mode));
+      // The first save after a mode change: a value it carried over that the new mode refuses goes back to the mode's own,
+      // and the form saves again without it.
+      const carriedAndRefused = [...new Set(shownErrors.flatMap((shown) => shown.settings))].filter((name) =>
+        name in state.carriedValues && name in state.userValues && sameValue(state.userValues[name], state.carriedValues[name]));
       const fieldErrors: Record<string, string> = {};
       const stepErrors: string[] = [];
-      for (const { field, message } of action.reply.field_errors) {
-        // The engine names a part of a setting after a dot ("threshold.value"); the error goes under the setting the form shows.
-        // An error of a setting the form does not show ("mode") is shown for the step, with the engine's name for it.
-        const shownSetting = field === null ? null : presentedSettingOf(field);
-        if (shownSetting === null) stepErrors.push(field === null ? message : `${field}: ${message}`);
-        else fieldErrors[shownSetting] = shownSetting in fieldErrors ? `${fieldErrors[shownSetting]} ${message}` : message;
+      for (const shown of shownErrors) {
+        if (shown.settings.some((name) => carriedAndRefused.includes(name))) continue;      // its value is gone
+        // Under each setting the error names, in the interface's words (engine_errors.ts); one naming none is the step's,
+        // as is one on a setting this mode does not show, with the setting's name.
+        if (shown.settings.length === 0) stepErrors.push(shown.message);
+        for (const setting of shown.settings) {
+          if (!settingIsReadBy(setting, state.mode)) stepErrors.push(errorOfHiddenSetting(setting, shown.message, state.mode));
+          else fieldErrors[setting] = setting in fieldErrors ? `${fieldErrors[setting]} ${shown.message}` : shown.message;
+        }
       }
-      return { ...state, fieldErrors, stepErrors, gridPlan: action.reply.grid_plan, pendingSave: false, saveFailure: null };
+      if (carriedAndRefused.length > 0) {
+        const userValues = Object.fromEntries(Object.entries(state.userValues).filter(([name]) => !carriedAndRefused.includes(name)));
+        const resetSettings = [...(state.valuesResetByModeChange?.settings ?? []), ...carriedAndRefused];
+        return { ...state, userValues, fieldErrors, stepErrors: [...new Set(stepErrors)], pendingSave: true, changeCount: state.changeCount + 1,
+                 saveFailure: null, carriedValues: {}, valuesResetByModeChange: { settings: resetSettings, mode: state.mode } };
+      }
+      // A refusal plans no grid unless the grid is what it refuses (over the budget): the last grid planned stays, so the grid
+      // line under Voxel size is not lost to an error elsewhere.
+      const gridPlan = action.reply.grid_plan ?? (gridIsOverBudget(state.gridPlan) ? null : state.gridPlan);
+      return { ...state, fieldErrors, stepErrors: [...new Set(stepErrors)], gridPlan, pendingSave: false, saveFailure: null, carriedValues: {} };
     }
     case "save_failed":
       return { ...state, pendingSave: false, saveFailure: action.error };
     case "project_opened":
       return initialFormState(action.start);
   }
+}
+
+// The settings of the Settings step that change how the computer runs the analysis (how rays are batched) or what its report
+// holds (the statistics), not its results (R2 4.5).
+const SETTINGS_OF_THE_COMPUTER = new Set(["ray_batch_size", "diagnostics"]);
+
+// The settings preprocessing reads: those of the Settings step but the computer's.
+const ANALYSIS_SETTINGS = Object.keys(SETTING_PRESENTATIONS).filter((name) =>
+  SETTING_PRESENTATIONS[name].step === "settings" && !SETTINGS_OF_THE_COMPUTER.has(name));
+
+type SettingsOfMode = FormState["stored"];
+
+/** Whether two sets of settings give the analysis the same mode and the same values (the defaults of their mode filled in). */
+function sameAnalysisSettings(state: FormState, first: SettingsOfMode, second: SettingsOfMode): boolean {
+  if (first.mode !== second.mode) return false;
+  const valueIn = (settings: SettingsOfMode, name: string) => shownValue({ ...state, mode: settings.mode, userValues: settings.values }, name);
+  return ANALYSIS_SETTINGS.every((name) => sameValue(valueIn(first, name), valueIn(second, name)));
+}
+
+/**
+ * Whether the form's mode or analysis settings differ from the stored ones (a save waits, or was refused): the analysis the
+ * stage status calls current is then not the one of the settings shown, and the carving is locked as out of date (UX 5.5).
+ */
+export function analysisDiffersFromStored(state: FormState): boolean {
+  return !sameAnalysisSettings(state, state.stored, { mode: state.mode, values: state.userValues });
 }
 
 /** What a save sends: the mode and the settings the user set. */
@@ -135,6 +257,11 @@ export function defaultValue(state: FormState, name: string): unknown {
 /** The value the form shows for a setting, in the engine's units. */
 export function shownValue(state: FormState, name: string): unknown {
   return name in state.userValues ? state.userValues[name] : defaultValue(state, name);
+}
+
+/** The value of a setting in the stored settings (FormState.stored): the user's stored value, else the stored mode's default. */
+export function storedValue(state: FormState, name: string): unknown {
+  return name in state.stored.values ? state.stored.values[name] : defaultValue({ ...state, mode: state.stored.mode }, name);
 }
 
 function isConfigErrorReply(body: unknown): body is ConfigErrorReply {
@@ -232,11 +359,11 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
 }
 
 /**
- * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project
- * starts its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown.
- * *flushSave* sends a waiting change at once and resolves, with how the save ended, when its reply is in the form, for a run
- * that must use it (a save that failed is sent again). *changeAndSave* makes a change and saves it with the changes before it at once, without the delay (the
- * carving threshold, whose run follows its save).
+ * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project starts
+ * its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown. *flushSave* sends
+ * a waiting change at once and resolves, with how the save ended, when its reply is in the form, for a run that must use it (a
+ * save that failed is sent again). *changeAndSave* makes a change and saves it with the changes before it at once, without the
+ * delay (the carving threshold, whose run follows its save).
  */
 export function useSettingsForm(token: string, project: string, start: FormStart) {
   const [form, dispatchToReact] = useReducer(formReducer, start, initialFormState);
@@ -280,6 +407,8 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   }, [form.changeCount]);
 
   const flushSave = useCallback((): Promise<SaveOutcome> => saver.current?.flush() ?? Promise.resolve("none"), []);
+  // The form after every action so far, for code that reads it after awaiting a save, before the render that shows it.
+  const currentForm = useCallback(() => latestForm.current, []);
   const changeAndSave = useCallback((values: Record<string, unknown>): Promise<SaveOutcome> => {
     dispatch({ type: "values_changed", values });
     if (saver.current === null) return Promise.resolve("none");
@@ -287,5 +416,7 @@ export function useSettingsForm(token: string, project: string, start: FormStart
     saver.current.schedule(valuesToSend(latestForm.current));
     return saver.current.flush();
   }, []);
-  return { form, dispatch, flushSave, changeAndSave, pendingSave: form.pendingSave };
+  // Drops a waiting or failed save, so the flush when the project closes sends nothing: for a project renamed, reset or deleted.
+  const cancelSave = useCallback(() => saver.current?.cancel(), []);
+  return { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm, pendingSave: form.pendingSave };
 }

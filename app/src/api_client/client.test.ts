@@ -1,6 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
-  ApiError, addInput, getHealth, getScorePoints, projectDownloadUrl, putConfig, readTokenFromLaunchUrl, runFileUrl, serviceProblemOf, startRun,
+  ApiError, addInput, chooseProjectsFolder, deleteProject, failureTextOf, getHealth, getProjectsFolder, getScorePoints, openProjectFolder, projectDownloadUrl, putConfig,
+  readTokenFromLaunchUrl, renameProject, resetProjectToExample, runFileUrl, serviceProblemOf, startRun,
 } from "./client";
 
 afterEach(() => {
@@ -110,6 +111,13 @@ test("an error reply that is not JSON keeps its text as the body", async () => {
   expect(error.body).toBe("Bad gateway");
 });
 
+test("a failed request in words: the service's reason, a sentence with the status when it gave none, or that it did not reach the engine", () => {
+  expect(failureTextOf(new ApiError(409, { detail: "A run of this project is in progress." }))).toBe("A run of this project is in progress.");
+  expect(failureTextOf(new ApiError(422, { field_errors: [{ field: "voxel_size", message: "too small" }] }))).toBe("too small");
+  expect(failureTextOf(new ApiError(502, "Bad gateway"))).toBe("The USC engine refused the request and gave no reason (status 502). Try again.");
+  expect(failureTextOf(new TypeError("Failed to fetch"))).toBe("The request did not reach the USC engine. Check that it is still running, then try again.");
+});
+
 test("score points arrive as bytes", async () => {
   answerWith(new Uint8Array([1, 2, 3, 4]));
   expect(new Uint8Array(await getScorePoints("secret", "demo"))).toEqual(new Uint8Array([1, 2, 3, 4]));
@@ -118,4 +126,25 @@ test("score points arrive as bytes", async () => {
 test("file and download addresses encode each part of the path", () => {
   expect(runFileUrl("my project", "exporting/mesh 1.obj")).toBe("/api/projects/my%20project/run/files/exporting/mesh%201.obj");
   expect(projectDownloadUrl("my project")).toBe("/api/projects/my%20project/download");
+});
+
+test("the projects folder and the project management requests go to their routes", async () => {
+  const fetchStub = vi.fn(async (_address: string, options?: RequestInit) =>
+    options?.method === "DELETE" || _address.endsWith("/open-folder") ? new Response(null, { status: 204 }) : new Response("{}"));
+  vi.stubGlobal("fetch", fetchStub);
+  await getProjectsFolder("secret");
+  await chooseProjectsFolder("secret");
+  await renameProject("secret", "Plot 7", "Plot 8");
+  await deleteProject("secret", "Plot 7", "Plot 7");
+  await resetProjectToExample("secret", "Plot 7");
+  await openProjectFolder("secret", "Plot 7");
+  expect(fetchStub.mock.calls.map(([address, options]) => `${options?.method ?? "GET"} ${address}`)).toEqual([
+    "GET /api/projects-folder",
+    "POST /api/projects-folder/choose",
+    "POST /api/projects/Plot%207/rename",
+    "DELETE /api/projects/Plot%207?confirm_name=Plot%207",
+    "POST /api/projects/Plot%207/reset-to-example",
+    "POST /api/projects/Plot%207/open-folder",
+  ]);
+  expect(JSON.parse(fetchStub.mock.calls[2][1]!.body as string)).toEqual({ new_name: "Plot 8" });
 });

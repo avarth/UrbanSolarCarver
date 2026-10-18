@@ -1,7 +1,8 @@
 // The "i" beside a setting and its tooltip (UX 7, 12): the help text, then the config name and default in 12 px muted with the
-// name in monospace, then an extra line (the grid of the voxel size). It opens on hover, focus and click and closes with Escape;
-// a click opens it until the next click or a press elsewhere. The pointer may move from the "i" onto the tooltip without
-// closing it. It is placed in the window, under its "i", so the panel's scrolling never clips it.
+// name in monospace, then an extra line (the grid of the voxel size). Beside a result (a number tile) it holds the help alone. It
+// opens on hover, focus and click and closes with Escape; a click opens it until the next click or a press elsewhere. The pointer
+// may move from the "i" onto the tooltip without closing it. It is placed in the window, under its "i", so the panel's scrolling
+// never clips it.
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { messages, type MessagePart } from "../messages";
 import "./settings_form.css";
@@ -12,8 +13,9 @@ const GAP_UNDER_INFO_BUTTON_PIXELS = 8;
 interface SettingTooltipProps {
   settingLabel: string;
   help: string;
-  configName: string;
-  defaultText: string;
+  /** The config name and default of a setting; a result's "i" (a number tile) has neither. */
+  configName?: string;
+  defaultText?: string;
   extraLine?: string;
 }
 
@@ -107,7 +109,9 @@ export function SettingTooltip({ settingLabel, help, configName, defaultText, ex
       {open && (
         <span ref={tooltip} id={tooltipId} role="tooltip" className="setting-tooltip" style={tooltipStyle}>
           <span className="setting-tooltip-help">{help}</span>
-          <span className="setting-tooltip-config"><MessageParts parts={messages.configNameAndDefault(configName, defaultText)} /></span>
+          {configName !== undefined && defaultText !== undefined && (
+            <span className="setting-tooltip-config"><MessageParts parts={messages.configNameAndDefault(configName, defaultText)} /></span>
+          )}
           {extraLine && <span className="setting-tooltip-extra">{extraLine}</span>}
         </span>
       )}

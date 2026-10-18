@@ -1,10 +1,7 @@
-// Orientation aids of UX 8.1: the compass needle and the axis gizmo (drawn by the overlays from these angles) and the north arrow
-// on the ground grid. North is the USC north_deg: degrees clockwise from +Y. Camera yaw is the clockwise turn of the view about Z
-// from the top view with +Y up the screen; camera elevation is how far the view looks down, 90 in the top view.
-import * as THREE from "three";
-import { messages } from "../messages";
-import { colourToken, type ViewportTheme } from "./colour_scales";
-import { recolourTextSprite, textSprite } from "./text_sprite";
+// Orientation aids of UX 8.1: the compass needle and the axis gizmo, drawn by the overlays from these angles. North is the USC
+// north_deg: degrees clockwise from +Y. Camera yaw is the clockwise turn of the view about Z from the top view with +Y up the
+// screen; camera elevation is how far the view looks down, 90 in the top view. There is no north arrow on the ground (R2 2): the
+// compass overlay and, when chosen, the compass ring (compass_ring.ts) show north.
 
 const DEGREES = Math.PI / 180;
 
@@ -30,29 +27,4 @@ export function axisScreenDirections(cameraYawDegrees: number, cameraElevationDe
   const up = [away[0] * Math.sin(elevation), away[1] * Math.sin(elevation), Math.cos(elevation)];
   const onScreen = (axis: number): [number, number] => [right[axis], up[axis]];
   return { x: onScreen(0), y: onScreen(1), z: onScreen(2) };
-}
-
-/** The north arrow on the ground: a flat arrow *length* metres long pointing north, with an N at its tip; applyTheme in its userData. */
-export function northArrow(northDegrees: number, length: number): THREE.Group {
-  const shape = new THREE.Shape();
-  const halfWidth = length * 0.18;
-  shape.moveTo(0, length / 2);
-  shape.lineTo(halfWidth, -length / 2);
-  shape.lineTo(0, -length / 4);
-  shape.lineTo(-halfWidth, -length / 2);
-  shape.closePath();
-  const material = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, depthWrite: false, transparent: true, opacity: 0.85 });
-  const arrow = new THREE.Mesh(new THREE.ShapeGeometry(shape), material);
-  const letter = textSprite(messages.northLetter, "#000000", { metres: length * 0.4 }, [0.5, 0]);
-  letter.position.set(0, length * 0.6, 0);
-  const group = new THREE.Group();
-  group.name = "north_arrow";
-  group.add(arrow, letter);
-  group.rotation.z = -northDegrees * DEGREES;       // clockwise
-  group.userData.applyTheme = (theme: ViewportTheme) => {
-    const ink = colourToken(theme === "dark" ? "ink-on-dark" : "ink");
-    material.color.set(ink);
-    recolourTextSprite(letter, ink);
-  };
-  return group;
 }

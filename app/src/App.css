@@ -19,7 +19,6 @@
 }
 
 .top-bar-product { font-size: var(--text-step-title); font-weight: 700; }
-.top-bar-project { font-weight: 600; }
 .top-bar-device { position: relative; margin-left: auto; }
 
 .device-status {
@@ -82,6 +81,8 @@
   text-underline-offset: 2px;
   cursor: pointer;
 }
+
+.link-button:disabled { color: var(--colour-muted); text-decoration: none; cursor: default; }
 
 .service-problem-overlay {
   position: fixed;

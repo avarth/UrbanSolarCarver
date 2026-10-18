@@ -1,7 +1,7 @@
 // The interface texts of UX spec sections 4, 5, 6.1, 7, 8 and 11, in one place. A text that takes values is a function.
 // Texts that the engine writes (a file that cannot be read, why Warp cannot run, the message of a failed run) are shown as the
 // engine gives them and have no entry here. A unit follows its number after a no-break space (\u00a0), as in format_numbers.ts.
-import { groupedDigits } from "./steps/format_numbers";
+import { formattedNumber, groupedDigits, withUnit } from "./steps/format_numbers";
 
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -52,6 +52,43 @@ export const messages = {
   noProjectsYet: "No projects yet.",
   tryExample: "Try an example",
 
+  // The projects folder and the menu of a project (R2 7.1, 7.2). The service's own reasons for a refusal are shown as it gives them.
+  projectsFolderIs: "Projects folder: ",
+  changeFolder: "Change folder",
+  folderPickerOpen: "Choose a folder in the window that opened on this computer. It may be behind the browser.",
+  folderPickerUnavailableWay: [" To use another folder, start USC with ", { code: "usc ui --projects-folder <folder>" }, "."] as MessagePart[],
+  folderGivenOnCommandLine: ["This folder was given with ", { code: "--projects-folder" }, ". To change it here, start ", { code: "usc ui" },
+    " without it."] as MessagePart[],
+  folderChangesOnceRunEnds: "The projects folder can be changed once the run has ended.",
+  projectMenuOf: (projectName: string) => `Actions for ${projectName}`,
+  projectMenuSymbol: "⋯",      // the menu button beside a project of the start screen
+  projectMenuCaret: "▾",       // after the project name in the top bar
+  openProjectFolder: "Open folder",
+  renameProject: "Rename",
+  deleteProject: "Delete",
+  resetProjectToExample: "Reset to the example",
+  projectChangesWaitForRun: "A run of this project is in progress. Rename, delete and reset wait until it has ended.",
+  cancel: "Cancel",
+  openFolderFailedTitle: "The folder could not be opened",
+  renameProjectTitle: (projectName: string) => `Rename ${projectName}`,
+  newProjectNameLabel: "New name",
+  projectNameInvalid: "Use up to 64 letters, numbers, spaces, hyphens or underscores, starting with a letter or number.",
+  projectNameIsWindowsDeviceName: (projectName: string) => `Windows does not allow '${projectName}' as a folder name. Choose another name.`,
+  deleteProjectTitle: (projectName: string) => `Delete ${projectName}`,
+  deleteProjectExplanation: (projectName: string) =>
+    `The project ${projectName} and everything in its folder go to the recycle bin or trash, where you can restore them.`,
+  projectFolderIs: "Folder: ",
+  typeProjectNameToConfirm: (projectName: string) => `Type ${projectName} to confirm`,
+  deleteProjectButton: "Delete project",
+  resetProjectTitle: (projectName: string) => `Reset ${projectName} to the example`,
+  resetProjectExplanation: (projectName: string, exampleTitle: string) =>
+    `The inputs, settings and results of ${projectName} are replaced with a fresh copy of the example ${exampleTitle}. ` +
+    "The current ones go to the recycle bin or trash. The project keeps its name.",
+  resetProjectButton: "Reset project",
+  settingsNotSavedSoNotRenamed: "The last change to the settings was not saved, so the project was not renamed. Save the settings again, then rename it.",
+  requestDidNotReachEngine: "The request did not reach the USC engine. Check that it is still running, then try again.",
+  requestRefusedWithoutReason: (status: number) => `The USC engine refused the request and gave no reason (status ${status}). Try again.`,
+
   // The steps and their summary lines (4.1)
   stepTitles: {
     inputs: "Inputs",
@@ -67,9 +104,17 @@ export const messages = {
   maxVolumeMissing: "Maximum volume missing",
   testSurfacesMissing: "Test surfaces missing",
   maxVolumeAndTestSurfacesMissing: "Maximum volume and test surfaces missing",
+  // The analysis period in words (R2 4.3), in the step summary, under the period's strips and in its tooltip: "21 Dec, 10 to
+  // 14 h", "21 to 22 Dec, 22 to 2 h" (one month written once), "1 Oct to 30 Apr, 0 to 23 h", "22 Dec to 21 Dec, 10 to 14 h"
+  // (across the new year within one month). One date with hours across midnight is what the engine runs: every night of the year.
   periodSummary: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => {
-    const startDate = `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]}`, endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
-    return `${startDate === endDate ? startDate : `${startDate} to ${endDate}`}, ${startHour} to ${endHour}\u00a0h`;
+    const hours = `${startHour} to ${endHour}\u00a0h`;
+    const oneDate = startMonth === endMonth && startDay === endDay;
+    if (oneDate && startHour > endHour) return `Every day, ${hours}`;
+    const endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
+    const dates = oneDate ? endDate : startMonth === endMonth && startDay < endDay ? `${startDay} to ${endDate}`
+      : `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDate}`;
+    return `${dates}, ${hours}`;
   },
   voxelsOfSize: (voxelSizeText: string) => `${voxelSizeText} voxels`,
   settingsSummary: (periodText: string, voxelsText: string) => `${periodText}; ${voxelsText}`,
@@ -78,11 +123,16 @@ export const messages = {
   outOfDateSummary: "Out of date",
   massingSummary: (floorAreaText: string, storeysText: string) => `${floorAreaText}, ${storeysText}`,
   notBuiltYet: "Not built yet",
+  // What exists of the two parts of Envelope and massing (R2 5): "Envelope built, massing not built".
+  envelopePartStates: { current: "Envelope built", out_of_date: "Envelope out of date", missing: "Envelope not built" },
+  massingPartStates: { current: "massing built", out_of_date: "massing out of date", missing: "massing not built" },
+  envelopeAndMassingParts: (envelopeText: string, massingText: string) => `${envelopeText}, ${massingText}`,
   exportReady: "Ready",
-  buildEnvelopeFirst: "Build the envelope first",
+  envelopeReady: "Envelope ready",
+  massingReady: "Massing ready",
   carvingNeedsAnalysis: "Run the analysis in Settings to see the carving",
   envelopeNeedsAnalysis: "Run the analysis in Settings before building the envelope and massing",
-  exportNeedsBuild: "Build the envelope and massing to export them",
+  exportNeedsBuild: "Build the envelope or the massing to export them",
 
   // Inputs (5.2)
   maxVolumeTitle: "Maximum volume",
@@ -108,9 +158,16 @@ export const messages = {
   // Mode (5.3). The names, lines and tooltips of the six modes are in steps/mode_tiles.json.
   modeGroupLabel: "Mode",
   modeFillsStartingValues: "Choosing a mode fills its starting values in Settings.",
+  // After a mode change that set values the user had set back to the new mode's own (the new mode refuses them).
+  valuesResetForMode: (listedLabels: string, count: number, modeName: string) => (count === 1
+    ? `${listedLabels} is back to its default: ${modeName} cannot use the value you had set.`
+    : `${listedLabels} are back to their defaults: ${modeName} cannot use the values you had set.`),
   engineName: (engineName: string): MessagePart[] => ["Engine name: ", { code: String(engineName) }],
-  experimental: "Experimental",
-  aboutMode: (plainName: string) => `About ${plainName}`,
+  // A tile's description for a screen reader: the text of its tooltip after the name, which the tile itself says.
+  modeTileDescription: (oneLine: string, description: string, needs: string, engineName: string) =>
+    `${oneLine}. ${description} ${needs} Engine name: ${engineName}`,
+  // Under the tiles while Night cooling is the chosen mode (R2 3: the tile itself shows the symbol and the name only).
+  radiativeCoolingIsExperimental: (plainName: string) => `${plainName} is experimental and assumes horizontal test surfaces.`,
 
   // Run buttons (5.4, 6.4)
   runAnalysis: "Run analysis",
@@ -137,6 +194,7 @@ export const messages = {
   orTryAnExample: "or try an example",
   weatherFileNeeded: "Add a weather file to run this mode",
   fixSettingToRun: (settingLabel: string) => `Fix the ${String(settingLabel).toLowerCase()} to run the analysis.`,
+  fixSettingInStepToRun: (settingLabel: string, stepTitle: string) => `Fix the ${String(settingLabel).toLowerCase()} in ${stepTitle} to run the analysis.`,
   settingsToFix: (count: number) => `${count} ${count === 1 ? "setting" : "settings"} to fix`,
   gridOverBudget: (voxelsPerSide: number, totalVoxels: number, budgetVoxels: number, smallestVoxelSize: number) => ({
     description: `This grid would have ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total. ` +
@@ -170,7 +228,7 @@ export const messages = {
   errorType: (errorType: string) => `Error type: ${errorType}`,
   goToSetting: (settingLabel: string) => `Go to ${String(settingLabel).toLowerCase()}`,
   runConnectionLost: "The connection to the engine was lost during the run.",
-  runReportUnreadable: "The run report could not be read. Build the envelope and massing again to write it.",
+  runReportUnreadable: "The run report could not be read. Build the envelope or the massing again to write it.",
   warningsTitle: "Warnings",
   warningCount: (count: number) => `${count} ${count === 1 ? "warning" : "warnings"}`,
   summaryWithWarnings: (summary: string, warningsText: string) => `${summary}, ${warningsText}`,
@@ -183,6 +241,8 @@ export const messages = {
   updateWhenThresholdChanges: "Update when I change the threshold",
   updateCarving: "Update carving",
   buildEnvelopeAndMassing: "Build envelope and massing",
+  // Why the build buttons wait while Carving is locked: a build would run the analysis first (M10).
+  buildWaitsForAnalysis: "Settings changed since the analysis. Run the analysis again before building.",
   histogramTitle: "Scores of the voxels",
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",
@@ -202,21 +262,28 @@ export const messages = {
   obstructionRemoved: "Obstruction removed",
   lastAnalysisTook: "Last analysis took",
 
-  // Envelope and massing (5.6)
+  // Envelope and massing (5.6; R2 5: two parts, each built on its own)
+  buildEnvelope: "Build envelope",
+  buildMassing: "Build massing",
   grossFloorArea: "Gross floor area",
   storeys: "Storeys",
   envelopeVolume: "Envelope volume",
+  envelopeVolumeHelp: "Counted on the kept voxels the envelope mesh was built from, after small pieces were dropped, not on the smoothed surface.",
   floorAreaPerStorey: "Floor area per storey",
   storeyColumns: { storey: "Storey", bottom: "Bottom, m", top: "Top, m", area: "Area, m²" },
   storeyRowLabel: (storeyNumber: number) => (storeyNumber === 1 ? "1, ground" : String(storeyNumber)),
   totalRow: "Total",
-  outOfDateForCarving: "Out of date for the current carving",
+  // Under a part built from a carving or from settings of its own that changed since (R2 5).
+  outOfDateForSettings: "Out of date for the current settings",
   openRunReport: "Open the run report",
   runReportTitle: "Run report",
   closePanel: "Close",
 
   // Export (5.7)
   envelopeMeshDownload: (formatName: string) => `Carved envelope (${formatName})`,
+  // Beside the envelope file when the format chosen since was stored without a build (Carving was locked).
+  envelopeBuiltInOtherFormat: (builtFormatName: string, chosenFormatName: string) =>
+    `Built as ${builtFormatName}; the next envelope build writes ${chosenFormatName}.`,
   massingObjDownload: "Building massing (OBJ)",
   massingJsonDownload: "Building massing data (JSON)",
   settingsDownload: "Settings (config.yaml)",
@@ -237,7 +304,35 @@ export const messages = {
     ["Config name: ", { code: String(configName) }, `, default ${defaultText}`],
   analysisPeriodConfigNames: "start_month ... end_hour",
   gridSize: (voxelsPerSide: number, totalVoxels: number) => `${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
+  // The grid line while the voxel size shown was refused: the grid is the one of the voxel size last saved.
+  gridSizeAtSavedVoxelSize: (voxelSizeText: string, voxelsPerSide: number, totalVoxels: number) =>
+    `Grid at the saved voxel size of ${voxelSizeText}: ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
+  // Under Voxel size when a voxel size below the sample spacing lowered it (R2 4.4).
+  sampleSpacingLoweredToVoxelSize: (sampleSpacing: number) =>
+    `Sample spacing lowered to ${withUnit(formattedNumber(sampleSpacing), "m")} to match the voxel size.`,
+  // Errors of the whole config, said under the settings they name (UX 11); the engine's own words are for the YAML.
+  samplingAboveVoxelSize: (samplingLabel: string, samplingText: string, voxelSizeLabel: string, voxelSizeText: string) =>
+    `${samplingLabel} (${samplingText}) must not be larger than the ${String(voxelSizeLabel).toLowerCase()} (${voxelSizeText}). ` +
+    `Use a larger ${String(voxelSizeLabel).toLowerCase()} or a smaller ${String(samplingLabel).toLowerCase()}.`,
+  dayNotInMonth: (dayName: string, day: number, monthName: string, daysInMonth: number) =>
+    `${monthName} has ${daysInMonth} days, so the ${String(dayName).toLowerCase()} cannot be ${day}.`,
+  periodIncomplete: (modeName: string) => `${modeName} needs the whole analysis period: every day, month and hour.`,
+  settingProblem: (settingLabel: string, message: string) => `${settingLabel}: ${message}`,
   automatic: "automatic",
+  // An empty slider, to a screen reader: automatic, and the number the engine uses for it ("automatic, 75 °").
+  automaticValue: (valueText: string) => `automatic, ${valueText}`,
+  // What an empty setting does in the open mode, in its tooltip (UX 7): the engine's automatic value there.
+  emptyMeansInMode: (valueText: string, modeName: string) => `Left empty, it is ${valueText} in ${modeName}.`,
+  // A number refused in its field (UX 11): what to use instead. An exclusive bound is not allowed itself ("above 0").
+  useNumberInRange: (lower: { value: number; exclusive: boolean } | null, upper: { value: number; exclusive: boolean } | null) => {
+    if (lower !== null && upper !== null) {
+      if (lower.exclusive) return `Use a number above ${lower.value}${upper.exclusive ? ` and below ${upper.value}` : `, up to ${upper.value}`}.`;
+      return upper.exclusive ? `Use ${lower.value} or more, below ${upper.value}.` : `Use ${lower.value} to ${upper.value}.`;
+    }
+    if (lower !== null) return lower.exclusive ? `Use a number above ${lower.value}.` : `Use ${lower.value} or more.`;
+    return upper!.exclusive ? `Use a number below ${upper!.value}.` : `Use ${upper!.value} or less.`;
+  },
+  useWholeNumber: "Use a whole number.",
   switchedOn: "on",
   switchedOff: "off",
   monthNames: MONTH_NAMES,
@@ -248,8 +343,18 @@ export const messages = {
     end_day: "End day", end_month: "End month", end_hour: "End hour",
   },
   hourUnit: "h",
-  periodText: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) =>
-    `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} ${startHour}\u00a0h to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]} ${endHour}\u00a0h`,
+  // The analysis period control (R2 4.3): the month marks of the year strip, its four handles and what they say to a screen
+  // reader, the presets, and the words under the strips, which open the typed fields.
+  monthInitials: MONTH_ABBREVIATIONS.map((abbreviation) => abbreviation[0]),
+  periodHandleNames: { start_date: "Start date", end_date: "End date", start_hour: "Start hour", end_hour: "End hour" },
+  periodDateSpoken: (month: number, day: number) => `${day} ${MONTH_NAMES[month - 1]}`,
+  periodHourSpoken: (hour: number) => `${hour}\u00a0h`,
+  periodPresets: "Presets",
+  periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
+  periodWordsButton: (periodWords: string) => `${periodWords}: type exact dates and hours`,
+  periodNotSet: "Not set yet",
+  // The typed hour fields, named apart from the hour handles of the strip.
+  periodTypedHourNames: { start_hour: "Start hour, typed", end_hour: "End hour, typed" },
   oneAngle: "One angle",
   oneAnglePerDirection: "One per direction",
   compassDirections: ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
@@ -262,6 +367,10 @@ export const messages = {
   carveAmountNotUsed: (ruleName: string) =>
     `Carve amount is not used with the carving rule ${ruleName}. Choose Carve amount under More carving settings to use it.`,
   scoreCutoffValue: "Score cutoff value",
+  // The balance temperature slider (R2 4.2): its two handles, and the band between them.
+  balanceTemperatureHandle: "Balance temperature",
+  deadBandLowerEndHandle: "Lower end of the dead band",
+  deadBandOnTrack: "Dead band",
 
   // The 3D view (8)
   layerNames: {
@@ -289,6 +398,7 @@ export const messages = {
   hourLabel: (hour: number) => `${hour}\u00a0h`,
   storeyLabel: (storeyNumber: number) => `Storey ${storeyNumber}`,
   northLetter: "N",
+  compassRingLetters: ["N", "E", "S", "W"],       // clockwise from north, every 90 degrees on the compass ring
   scaleBar: (length: string) => `0 to ${length}\u00a0m`,
   lengthInMetres: (length: string) => `${length}\u00a0m`,
   compass: "Compass. Show the top view with north up",
@@ -297,6 +407,8 @@ export const messages = {
   topView: "Top view with north up",
   darkViewport: "Dark viewport",
   lightViewport: "Light viewport",
+  // The ground aid button names the aid it switches to: off, ground grid and compass ring follow each other in a cycle
+  groundAidSwitchTo: { grid: "Show the ground grid", compass_ring: "Show the compass ring", off: "Hide the compass ring" },
   keptVoxelsShadingCaused: "Shading caused, m²·h",
   keptVoxelsObstructionScore: "Obstruction score (relative)",
   keptVoxelsScoreIn: (unit: string) => `Score, ${unit}`,

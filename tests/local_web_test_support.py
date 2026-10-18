@@ -5,18 +5,24 @@ runs, as the real stages do; the run folders of finished runs are written withou
 ``project_with_inputs`` is in conftest.py and builds its project with ``add_project_with_inputs``.
 """
 import json
+import os
+import shutil
+import subprocess
+import sys
 import threading
 import time
 import uuid
 from pathlib import Path
 
 import numpy as np
+import pytest
 import trimesh
 
-from urbansolarcarver.local_web_service.projects import ProjectStore
+from urbansolarcarver.io import load_mesh, save_mesh
+from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunWorker
 from urbansolarcarver.local_web_service.stage_records import UPSTREAM_STAGE
-from urbansolarcarver.pydantic_schemas import PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
+from urbansolarcarver.pydantic_schemas import ExportingManifest, PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
 from urbansolarcarver.run_context import report_issue, report_progress, run_context, stage_context
 from urbansolarcarver.stage_settings import PIPELINE_STAGES, stages_needed_for
 
@@ -26,6 +32,36 @@ ALL_MISSING = {stage: "missing" for stage in PIPELINE_STAGES}
 
 
 # ---- Projects ----
+
+class FakeRecycleBin:
+    """Stands in for ``send2trash.send2trash``: records the folders it was given and removes them, as moving them away does.
+
+    ``error`` (an exception) makes every call fail instead, leaving the folder where it is.
+    """
+
+    def __init__(self, error: Exception | None = None):
+        self.folders: list[Path] = []
+        self.error = error
+
+    def __call__(self, folder) -> None:
+        if self.error is not None:
+            raise self.error
+        self.folders.append(Path(folder))
+        shutil.rmtree(folder)
+
+
+def make_link_to_folder(link: Path, target: Path, kind: str) -> None:
+    """A junction or a symbolic link at *link* to the folder *target*; the test is skipped where the kind cannot be made."""
+    if kind == "junction":
+        if sys.platform != "win32":
+            pytest.skip("junctions exist on Windows only")
+        subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], check=True, capture_output=True)
+        return
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"a symbolic link cannot be made here: {error}")
+
 
 def box_bytes(center, extents=(10, 10, 10)) -> bytes:
     box = trimesh.creation.box(extents=extents)
@@ -46,6 +82,23 @@ def change_settings(store: ProjectStore, name: str, **changes) -> None:
     store.write_config_from_values(name, {**store.read_settings(name), **changes})
 
 
+def write_joined_test_surfaces_without_normals(store: ProjectStore, name: str) -> Path:
+    """The joined test surface file as the service wrote it before it kept vertex normals: positions only; its path."""
+    project_folder = store.open(name)
+    file_names = sorted(store.read_project_json(name).input_files["test_surfaces"])
+    meshes = [load_mesh(str(project_folder / INPUTS_FOLDER / "test_surfaces" / file_name)) for file_name in file_names]
+    joined_path = project_folder / JOINED_FOLDER / "test_surfaces.ply"
+    save_mesh(trimesh.util.concatenate(meshes), str(joined_path))
+    assert not has_vertex_normals(joined_path)
+    return joined_path
+
+
+def has_vertex_normals(ply_path: Path) -> bool:
+    """Whether the header of a PLY file declares the vertex property nx."""
+    header_lines = ply_path.read_bytes().split(b"end_header", 1)[0].splitlines()
+    return any(line.split()[-1:] == [b"nx"] for line in header_lines if line.startswith(b"property"))
+
+
 # ---- The fake engine and the run worker ----
 
 def write_fake_stage_output(run_folder: Path, stage: str) -> None:
@@ -53,6 +106,8 @@ def write_fake_stage_output(run_folder: Path, stage: str) -> None:
     folder = run_folder / stage
     folder.mkdir(parents=True, exist_ok=True)
     manifest = {"run_id": uuid.uuid4().hex}
+    if stage == "preprocessing":
+        manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0)
     if stage in UPSTREAM_STAGE:
         manifest["upstream_run_id"] = json.loads((run_folder / UPSTREAM_STAGE[stage] / "manifest.json").read_text())["run_id"]
     (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -150,7 +205,8 @@ def write_fake_run(tmp_path, shape=(4, 3, 2), with_mask=True, with_compared_scor
         run_id="pre-run", scores_path="scores.npy", scores_kind="violation_count", shape=shape, origin=(10.0, 20.0, 30.0),
         voxel_size=2.0, mode="time-based", voxel_grid_path="voxel_grid.npy",
         patch_weights_path="patch_weights.npy" if with_patch_weights else None,
-        sample_point_count=5, footprint_path="footprint.json")), encoding="utf-8")
+        sample_point_count=5, footprint_path="footprint.json", max_volume_lowest_z=30.0, max_volume_highest_z=34.0)),
+        encoding="utf-8")
     if with_mask:
         thresholding = run / "thresholding"
         thresholding.mkdir()
@@ -184,4 +240,14 @@ def write_fake_finished_run(tmp_path, obstruction_fraction_carved=None):
     (run / "massing" / "plates.json").write_text(
         json.dumps({"plates": [], "floor_area_m2_per_floor": [120.0, 80.0], "total_floor_area_m2": 200.0}), encoding="utf-8")
     write_diagnostic(run / "massing", {"floors": 3, "floors_built": 2, "envelope_volume_m3": 4321.5})
+    return run
+
+
+def write_fake_finished_run_with_envelope(tmp_path, obstruction_fraction_carved=None):
+    """A finished run whose exporting, built on its thresholding run, left 50 voxels of 2 m after its cleanup."""
+    run = write_fake_finished_run(tmp_path, obstruction_fraction_carved)
+    write_diagnostic(run / "exporting", {"voxels_original": 100, "voxels_retained": 50})
+    (run / "exporting" / "manifest.json").write_text(schema_to_json(ExportingManifest(
+        run_id="exp-run", mesh_path="export.ply", upstream_manifest="../thresholding/manifest.json", upstream_run_id="thr-run")),
+        encoding="utf-8")
     return run

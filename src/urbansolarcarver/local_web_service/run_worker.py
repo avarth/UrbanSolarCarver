@@ -103,6 +103,15 @@ class RunWorker:
         """The project store the worker reads; the HTTP service shares it so both use the same per-project locks."""
         return self._store
 
+    def for_store(self, store: ProjectStore) -> RunWorker:
+        """A worker for another project store with this worker's engine handler and compute session, which are kept.
+
+        Call it while no run is active (the session is not shared between two runs).
+        """
+        worker = RunWorker(store, self._device, self._handle_request, self._session_factory)
+        worker._session = self._session
+        return worker
+
     def active_project(self) -> str | None:
         """The project a run is active for, None when idle. Takes no lock, so a caller holding a project lock may ask."""
         active = self._active
@@ -128,6 +137,7 @@ class RunWorker:
         with self._store.project_lock(name), self._start_lock:
             if self._active is not None:
                 raise RunConflict(self._active.state.project)
+            self._store.rebuild_joined_test_surfaces_without_normals(name)
             config = self._store.load_project_config(name)
             absent_roles = missing_inputs(self._store, name, config)
             if absent_roles:

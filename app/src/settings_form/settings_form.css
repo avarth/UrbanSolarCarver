@@ -24,17 +24,6 @@
   align-self: stretch;
 }
 
-/* The fields sit on their bottom edge, so the inputs line up when a label takes two lines. */
-.setting-group-side-by-side {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: end;
-  gap: calc(var(--space-unit) * 2);
-}
-
-.setting-group-side-by-side .setting-control { flex-wrap: nowrap; gap: var(--space-unit); }
-.setting-group-side-by-side .setting-number { flex: 1 1 auto; width: auto; min-width: 0; }
-
 /* The fold reads as a link: accent text, no box. */
 .setting-fold {
   padding: 0;
@@ -104,7 +93,245 @@
 .setting-number:disabled,
 .setting-select:disabled { color: var(--colour-muted); background: var(--colour-chrome); }
 
-.setting-range { flex: 1 1 120px; accent-color: var(--colour-accent); }
+/* A slider (R2 4.1): a thin track in the line colour and a round handle in the accent colour. Drawn by the stylesheet, not the
+   browser, so it reads the same in every browser and an empty (automatic) value can show a hollow handle. */
+.setting-range {
+  --slider-handle: 16px;
+  --slider-track: 4px;
+  flex: 1 1 120px;
+  min-width: 96px;
+  height: var(--slider-handle);
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  cursor: pointer;
+}
+
+.setting-range::-webkit-slider-runnable-track { height: var(--slider-track); border-radius: 2px; background: var(--colour-line); }
+.setting-range::-moz-range-track { height: var(--slider-track); border-radius: 2px; background: var(--colour-line); }
+
+.setting-range::-webkit-slider-thumb,
+.balance-handle::-webkit-slider-thumb {
+  width: var(--slider-handle);
+  height: var(--slider-handle);
+  margin-top: calc((var(--slider-track) - var(--slider-handle)) / 2);
+  border: 2px solid var(--colour-panel);
+  border-radius: 50%;
+  background: var(--colour-accent);
+  box-shadow: 0 0 0 1px var(--colour-accent);
+  appearance: none;
+}
+
+.setting-range::-moz-range-thumb,
+.balance-handle::-moz-range-thumb {
+  box-sizing: border-box;
+  width: var(--slider-handle);
+  height: var(--slider-handle);
+  border: 2px solid var(--colour-panel);
+  border-radius: 50%;
+  background: var(--colour-accent);
+  box-shadow: 0 0 0 1px var(--colour-accent);
+}
+
+/* Empty (automatic): a hollow handle at the value the engine uses, until the slider is moved. */
+.setting-range[data-empty="true"]::-webkit-slider-thumb { background: var(--colour-panel); }
+.setting-range[data-empty="true"]::-moz-range-thumb { background: var(--colour-panel); }
+
+.setting-range[aria-invalid="true"]::-webkit-slider-runnable-track { box-shadow: 0 0 0 1px var(--colour-error); }
+.setting-range[aria-invalid="true"]::-moz-range-track { box-shadow: 0 0 0 1px var(--colour-error); }
+
+.setting-range:disabled,
+.balance-handle:disabled { cursor: default; }
+.setting-range:disabled::-webkit-slider-thumb,
+.balance-handle:disabled::-webkit-slider-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+.setting-range:disabled::-moz-range-thumb,
+.balance-handle:disabled::-moz-range-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+
+.setting-slider-control { align-self: stretch; flex-wrap: nowrap; }
+
+/* The balance temperature (R2 4.2): two handles on one track, the dead band between them in the accent colour and named above
+   it. The two sliders lie over each other; only their handles take the pointer, so each handle can be dragged where it is. */
+.balance-slider { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); align-self: stretch; }
+
+.balance-track {
+  --slider-handle: 16px;
+  --slider-track: 4px;
+  position: relative;
+  height: calc(var(--slider-handle) + 20px);
+}
+
+.balance-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc((var(--slider-handle) - var(--slider-track)) / 2);
+  height: var(--slider-track);
+  border-radius: 2px;
+  background: var(--colour-line);
+}
+
+/* From the centre of the left handle to the centre of the right one: a handle's centre runs from half a handle in from the
+   left end to half a handle in from the right one. */
+.balance-dead-band {
+  position: absolute;
+  bottom: calc((var(--slider-handle) - var(--slider-track)) / 2);
+  left: calc(var(--slider-handle) / 2 + (100% - var(--slider-handle)) * var(--dead-band-start));
+  width: calc((100% - var(--slider-handle)) * (var(--dead-band-end) - var(--dead-band-start)));
+  height: var(--slider-track);
+  background: var(--colour-accent);
+}
+
+/* Over the middle of the band, kept on the track: at its left end the label starts there, at its right end it ends there. */
+.balance-dead-band-label {
+  --dead-band-middle: calc((var(--dead-band-start) + var(--dead-band-end)) / 2);
+  position: absolute;
+  bottom: var(--slider-handle);
+  left: calc(var(--slider-handle) / 2 + (100% - var(--slider-handle)) * var(--dead-band-middle));
+  transform: translateX(calc(var(--dead-band-middle) * -100%));
+  font-size: var(--text-secondary);
+  color: var(--colour-muted);
+  white-space: nowrap;
+}
+
+.balance-handle {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: var(--slider-handle);
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  pointer-events: none;
+}
+
+.balance-handle::-webkit-slider-runnable-track { height: var(--slider-handle); background: transparent; }
+.balance-handle::-moz-range-track { background: transparent; }
+.balance-handle::-webkit-slider-thumb { margin-top: 0; pointer-events: auto; cursor: pointer; }
+.balance-handle::-moz-range-thumb { pointer-events: auto; cursor: pointer; }
+.balance-handle-on-top { z-index: 1; }
+
+/* Both sliders span the whole track, so the focus mark of tokens.css would ring the whole overlay: each handle carries its own
+   instead, the same 2 px accent ring around the handle that has the focus (UX 12). */
+.balance-handle:focus-visible { outline: none; }
+.balance-handle:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--colour-accent), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent); }
+.balance-handle:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 1px var(--colour-accent), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent); }
+
+/* The track is the two handles' one, so a refused setting marks its own handle: a 2 px ring in the error colour, inside the focus
+   ring when the handle has the focus. */
+.balance-handle[aria-invalid="true"]::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--colour-error); }
+.balance-handle[aria-invalid="true"]::-moz-range-thumb { box-shadow: 0 0 0 2px var(--colour-error); }
+.balance-handle[aria-invalid="true"]:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 2px var(--colour-error), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent);
+}
+.balance-handle[aria-invalid="true"]:focus-visible::-moz-range-thumb {
+  box-shadow: 0 0 0 2px var(--colour-error), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent);
+}
+
+.balance-numbers { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2) calc(var(--space-unit) * 6); }
+.balance-numbers .setting-control { flex-wrap: nowrap; }
+
+/* The analysis period (R2 4.3): a year strip and an hour strip, each with its range in the soft accent colour, underlined in the
+   accent colour, and two handles; presets; the period in words, which opens the typed fields. A wrapped range (across the new year
+   or midnight) is two pieces, one at each end of its strip. */
+.period-control { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2); align-self: stretch; }
+
+.period-strip {
+  --period-handle-width: 10px;
+  --period-strip-height: 26px;
+  position: relative;
+  box-sizing: border-box;
+  align-self: stretch;
+  height: var(--period-strip-height);
+  /* Half a handle in from each side, so a handle at an end of the strip stays inside the panel. */
+  margin: calc(var(--space-unit) * 1.5) calc(var(--period-handle-width) / 2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  cursor: pointer;
+  touch-action: none;
+  user-select: none;
+}
+
+.period-strip[data-invalid="true"] { border-color: var(--colour-error); box-shadow: 0 0 0 1px var(--colour-error); }
+.period-strip[data-disabled="true"] { cursor: default; }
+
+.period-range {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(var(--range-start) * 100%);
+  width: calc((var(--range-end) - var(--range-start)) * 100%);
+  min-width: 2px;
+  background: var(--colour-accent-soft);
+  box-shadow: inset 0 -3px 0 var(--colour-accent);
+}
+
+.period-strip-cells { position: absolute; inset: 0; display: flex; }
+
+/* A label may run on over the next cells (12 h over 13 h, which has none); the handles lie above it. */
+.period-strip-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-left: 2px;
+  border-left: 1px solid var(--colour-line);
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+  line-height: calc(var(--period-strip-height) - 2px);
+  white-space: nowrap;
+}
+
+.period-strip-cell:first-child { border-left: 0; }
+
+.period-handle {
+  position: absolute;
+  z-index: 1;
+  top: calc(var(--space-unit) * -1.5);
+  bottom: calc(var(--space-unit) * -1.5);
+  left: calc(var(--handle-position) * 100%);
+  box-sizing: border-box;
+  width: var(--period-handle-width);
+  margin-left: calc(var(--period-handle-width) / -2);
+  border: 2px solid var(--colour-panel);
+  border-radius: var(--radius-small);
+  background: var(--colour-accent);
+  box-shadow: 0 0 0 1px var(--colour-accent);
+  cursor: grab;
+}
+
+.period-handle[aria-invalid="true"] { box-shadow: 0 0 0 1px var(--colour-error); }
+.period-handle[aria-disabled="true"] { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); cursor: default; }
+
+.period-presets { display: flex; flex-wrap: wrap; gap: var(--space-unit); }
+
+.period-preset {
+  padding: 2px calc(var(--space-unit) * 2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  font: inherit;
+  font-size: var(--text-secondary);
+  cursor: pointer;
+}
+
+.period-preset[aria-pressed="true"] { border-color: var(--colour-accent); background: var(--colour-accent-soft); color: var(--colour-accent); font-weight: 600; }
+.period-preset:disabled { color: var(--colour-muted); cursor: default; }
+
+/* The period in words reads as a link: it opens the typed fields. */
+.period-words {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--colour-accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.period-words:disabled { color: var(--colour-muted); text-decoration: none; cursor: default; }
 
 .setting-period { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
 .setting-period-end { width: 36px; color: var(--colour-muted); }
@@ -233,6 +460,10 @@
 .setting-tooltip code { font-family: var(--font-family-code); }
 
 /* A line under a valid field, such as the grid under Voxel size (UX 5.4). */
+/* The live region of a change the form made (the sample spacing lowered, R2 4.4): always there, so filling it is announced; while
+   empty it takes back the gap the field's column puts before it. */
+.setting-change-note:empty { margin-top: calc(var(--space-unit) * -1); }
+
 .setting-note {
   margin: 0;
   color: var(--colour-muted);

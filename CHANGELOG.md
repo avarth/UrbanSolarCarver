@@ -44,6 +44,81 @@ versioning follows [Semantic Versioning](https://semver.org/).
   in the thresholding manifest (`scores_compared_with_cutoff_path`, `None` in
   manifests from earlier versions). The browser UI draws its histogram from it.
 
+### Added (browser UI, round 2)
+
+- **Projects folder.** The start screen shows the projects folder with
+  **Change folder**, which opens the operating system's folder picker on
+  this computer (the browser never sends a path). The folder is remembered
+  in `~/.urbansolarcarver/ui.json` and used at the next launch;
+  `--projects-folder` wins for that launch. Change folder is offered on the
+  start screen only, with no run active. If the picker cannot open, the
+  start screen names `usc ui --projects-folder <folder>`.
+- **A menu for each project**, in the project list and in the top bar:
+  Open folder (also during a run), Rename, Delete (asks for the project name
+  to be typed) and, for projects made from an example, Reset to the example.
+  Rename, delete and reset wait while the project's run is active. Delete
+  and reset send the project folder to the recycle bin or trash with
+  `send2trash` (new in the `ui` extra), only for that one project folder, and
+  refuse a folder that is not a direct child of the projects folder, has no
+  matching `project.json`, or is or holds a link. On Windows they also refuse
+  a folder that is not on a fixed disk of this computer; Windows may delete a
+  folder larger than the recycle bin's size limit for good, which the app
+  cannot check.
+- **Try an example opens the project made from that example** if there is
+  one, and makes it only the first time. `project.json` records the example
+  a project came from.
+- **Sliders** beside the number field of every setting with a range, and the
+  balance temperature as one track from 10 to 30 degrees C with two handles
+  (the balance temperature and, below it, the dead band).
+- **The analysis period is one control**: a year strip and an hour strip with
+  two handles each, presets that set the dates and keep the hours (21
+  December, 21 June, Heating season, Whole year), the period in words that
+  opens typed fields, and keyboard steps. When the hours cross midnight on a
+  single date, the end date moves to the next day.
+- **Envelope and massing is two parts built on their own**: Build envelope
+  with the envelope settings and the envelope volume, and Build massing with
+  the massing settings and results, each with its own out-of-date mark.
+  Carving's Build envelope and massing still builds both.
+- **A ground aid button** in the 3D view cycles off, ground grid and compass
+  ring. The compass ring, the sun path and the sky dome are sized to
+  everything loaded, not to the maximum volume alone.
+
+### Changed (browser UI, round 2)
+
+- **Names in the interface.** The modes read Angle rule, Solar time-based
+  (was Sun at set hours), Solar energy, Solar usefulness (was Solar heat when
+  cold), Daylight and Night cooling, in a grid of three by two, with a
+  coloured symbol and the name on each tile and the rest in the tooltip.
+  Night cooling is marked experimental and assumes horizontal test surfaces.
+  Bay width reads Grid module, and Allowed overhang reads Permitted volume
+  exceedance. The engine names and settings are unchanged.
+- **The axis gizmo has no background box and the ground has no north
+  arrow**; north is shown by the compass overlay and the compass ring.
+- **A sample spacing larger than a new, smaller voxel size is lowered to the
+  voxel size** and the settings say so; it is not raised back when the voxel
+  size grows.
+- **Rays per batch and Detailed statistics** moved to the end of More detail
+  settings; the Computer group is gone.
+- **Envelope volume is counted on the kept voxels** the envelope mesh was
+  built from, after small pieces are dropped.
+- **While Carving is locked, the builds wait** and a mesh format change is
+  stored and written by the next envelope build; Export offers the envelope
+  file that was built.
+
+### Fixed (browser UI, round 2)
+
+- **Test surfaces lost their panel boundaries** when the service joined the
+  uploaded files (vertex normals were dropped), so panels sharing corners
+  were welded. The joined file keeps the normals, and a project with an older
+  joined file recovers when it is opened or a run starts.
+- **Settings form:** errors of the whole config are said in the interface's
+  words under the settings they name, a setting to fix is counted on the step
+  that holds it, a mode change leaves no stale error and a refused mode
+  change no longer leaves Carving unlocked, 0 is refused where the engine
+  needs more, and the settings that default to automatic say what automatic
+  means.
+- **Mode tooltips** no longer stay open and swallow clicks.
+
 ### Added (test markers)
 
 - **`slow` and `gpu` pytest markers**, registered in `pyproject.toml`.
@@ -178,6 +253,33 @@ versioning follows [Semantic Versioning](https://semver.org/).
   numeric cutoff, with score smoothing, carve_above and the slope limit
   (below). Configs that set `protect_share` or `threshold: protect_share`
   are rejected.
+
+### Fixed (massing ground and top floor)
+
+- **Massing could build no floor at all on a maximum volume whose facades
+  are not aligned with the voxel grid.** The ground floor started at the
+  bottom of the lowest occupied voxel layer, which can lie mostly below the
+  maximum volume and is filled only where rays hit its base; columns along
+  such facades lack it, every ground-floor bay failed the full-column test,
+  and with `plate_stacking: supported` nothing was built (the
+  `new_building` example). The ground floor now starts at the maximum
+  volume's lowest point, as docs/massing.md describes, which preprocessing
+  records in its manifest (`max_volume_lowest_z`), and a voxel layer whose
+  centre lies below that point does not count against it.
+- **The top floor could stand up to one voxel above the maximum volume.**
+  Floors ended at or below the top of the highest occupied voxel layer,
+  which can lie up to one voxel above the maximum volume's roof (a 19.5 m
+  box got a floor from 17 to 20 m). Floors now end at or below the maximum
+  volume's highest point, which preprocessing records too
+  (`max_volume_highest_z`), and a voxel layer whose centre lies above that
+  point does not count against the top floor, as at the base.
+- Runs made before these changes keep the old ground and top, up to one
+  voxel outside the maximum volume, until the analysis (preprocessing) is
+  run again. The browser service marks such runs out of date. It also
+  rebuilds a project's joined test surface file when that file was written
+  without vertex normals (which welded panels sharing corners), when the
+  project is opened or a run starts, and the stages built on it go out of
+  date.
 
 ### Fixed (stage chain)
 

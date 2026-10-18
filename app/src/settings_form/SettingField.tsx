@@ -1,26 +1,32 @@
 // One setting in the form (UX 7, 11): its plain label with the "i" of its tooltip, the control with the unit beside the value,
 // and, after a rejected save, the message under it with a warning icon and the field outlined in the error colour.
-import { useId, type ReactNode } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
-import { withUnit } from "../steps/format_numbers";
+import { formattedNumber, withUnit } from "../steps/format_numbers";
+import { plainModeName } from "../steps/step_summaries";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
-  ANALYSIS_PERIOD_FIELDS, fromDisplayValue, thresholdIsShadowToleratedIn, toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
+  ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, fromDisplayValue, settingsOfField, settingView, shownSliderOf, thresholdIsShadowToleratedIn,
+  toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
 } from "./presentation";
 import { SettingTooltip } from "./SettingTooltip";
 import { AnalysisPeriod, type AnalysisPeriodField } from "./widgets/AnalysisPeriod";
+import { BalanceTemperatureSlider } from "./widgets/BalanceTemperatureSlider";
 import { MeshFormat } from "./widgets/MeshFormat";
-import { NumberInput, type ControlProps } from "./widgets/NumberInput";
-import { PercentSlider } from "./widgets/PercentSlider";
+import { NumberInput, type ControlProps, type NumberRange } from "./widgets/NumberInput";
+import { RangeSlider, spokenValue, type AutomaticValue } from "./widgets/RangeSlider";
 import { SunStepsPerHour } from "./widgets/SunStepsPerHour";
 import { ThresholdRule, type ThresholdSpec } from "./widgets/ThresholdRule";
 import { TiltedPlaneAngles } from "./widgets/TiltedPlaneAngles";
 import "./settings_form.css";
 
-/** What a step adds under one of its fields: a note while the field is valid (the grid under Voxel size), and the error
- *  in the step's own words in place of the engine's message (the grid over the budget). */
+/** What a step adds under one of its fields: a note, under its error too (the grid under Voxel size), a change the form made
+ *  for the user, said above the note in a status region that is there while the field may need it (null: none now; the sample
+ *  spacing lowered to the voxel size, R2 4.4), and the error in the step's own words in place of the engine's message (the grid
+ *  over the budget). */
 export interface SettingFieldExtras {
   note?: ReactNode;
+  changeNote?: string | null;
   errorContent?: ReactNode;
 }
 
@@ -35,14 +41,9 @@ export interface SettingFieldProps {
 // The words shown for the options of a choice the engine names in code.
 const CHOICE_NAMES: Record<string, Record<string, string>> = { plate_stacking: messages.floorStackingChoices };
 
-/** The settings a view stands for: the six period settings for the analysis period, else its own. */
-function settingNamesOf(view: SettingView): readonly string[] {
-  return view.widget === "analysis_period" ? ANALYSIS_PERIOD_FIELDS : [view.name];
-}
-
-/** The messages of the last rejected save for the settings of *view*, or undefined. */
+/** The messages of the last rejected save for the settings *view* draws (the six of the analysis period), or undefined. */
 export function fieldErrorOf(form: FormState, view: SettingView): string | undefined {
-  const errors = settingNamesOf(view).map((name) => form.fieldErrors[name]).filter((error) => error !== undefined);
+  const errors = settingsOfField(view.name).map((name) => form.fieldErrors[name]).filter((error) => error !== undefined);
   return errors.length === 0 ? undefined : errors.join(" ");
 }
 
@@ -52,17 +53,74 @@ function typesOf(property: SchemaProperty | undefined): (string | undefined)[] {
   return property.anyOf ? property.anyOf.map((member) => member.type) : [property.type];
 }
 
-function rangeOf(property: SchemaProperty | undefined): { minimum?: number; maximum?: number } {
+/** The engine's bounds of a number setting, the exclusive ones ("more than 0", "less than 360") included. */
+export function rangeOf(property: SchemaProperty | undefined): NumberRange {
   const bounded = property?.anyOf?.find((member) => member.type === "number" || member.type === "integer") ?? property;
-  return { minimum: bounded?.minimum, maximum: bounded?.maximum };
+  return { minimum: bounded?.minimum, maximum: bounded?.maximum, exclusiveMinimum: bounded?.exclusiveMinimum, exclusiveMaximum: bounded?.exclusiveMaximum };
 }
 
-/** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */
+/**
+ * The grid line of Voxel size (under the field and in its tooltip): the grid last planned. A refused save plans none, so while
+ * the voxel size shown is not the one planned the line says it is the grid of the saved one. Null without a plan.
+ */
+export function gridLineOf(form: FormState): string | null {
+  const plan = form.gridPlan;
+  if (plan === null) return null;
+  if (shownValue(form, "voxel_size") === plan.voxel_size) return messages.gridSize(plan.resolution, plan.total_voxels);
+  return messages.gridSizeAtSavedVoxelSize(withUnit(formattedNumber(plan.voxel_size), "m"), plan.resolution, plan.total_voxels);
+}
+
+// The engine's automatic slope limit of the weighted modes, as the description of max_slope_deg in GET schema states it
+// (resolve_max_slope_deg; SettingGroup.test.ts checks the two agree).
+const AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION = /None \(default\): (\d+(?:\.\d+)?) for the weighted modes/;
+
+/**
+ * What an empty setting does in the form's mode, for a setting whose empty value the engine fills by mode, or null. The slope
+ * limit is the one: the engine's number in the weighted modes, off in Solar time-based and the angle rule (score smoothing says
+ * it in its help). Null in a weighted mode when the schema does not give the number.
+ */
+export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" | "scoreKindByMode" | "schemaProperties">): string | null {
+  if (view.name !== "max_slope_deg") return null;
+  if (form.scoreKindByMode[form.mode] !== "weighted_sum") return messages.emptyMeansInMode(messages.switchedOff, plainModeName(form.mode));
+  const degrees = AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION.exec(form.schemaProperties.max_slope_deg?.description ?? "")?.[1];
+  return degrees === undefined ? null : messages.emptyMeansInMode(withUnit(formattedNumber(Number(degrees)), unitOfValue(view)), plainModeName(form.mode));
+}
+
+// The value that switches the slope limit off, and the engine's automatic score smoothing as a multiple of the voxel size, as the
+// descriptions of max_slope_deg and score_smoothing in GET schema state them (test_local_web_packaging.py checks they still do).
+const SLOPE_LIMIT_OFF_IN_DESCRIPTION = /(\d+(?:\.\d+)?): off\b/;
+const AUTOMATIC_SMOOTHING_IN_DESCRIPTION = /auto: (\d+(?:\.\d+)?) × voxel_size/;
+
+/**
+ * What the engine does with an empty setting in the form's mode, where the schema says it, else null: the number (where an empty
+ * slider starts its handle, so a first key step moves from the value in use) and how it is said ("75 °", or "off" for the slope
+ * limit of Solar time-based and the angle rule, which 90 switches off, as the tooltip says). The slope limit of the weighted modes;
+ * the score smoothing, a multiple of the voxel size.
+ */
+export function automaticValueOf(view: SettingView, form: FormState): AutomaticValue | null {
+  const description = form.schemaProperties[view.name]?.description ?? "";
+  const numberIn = (pattern: RegExp) => {
+    const found = pattern.exec(description)?.[1];
+    return found === undefined ? null : Number(found);
+  };
+  const said = (value: number | null, text?: string) => (value === null ? null : { value, text: text ?? spokenValue(value, unitOfValue(view)) });
+  if (view.name === "max_slope_deg") {
+    return form.scoreKindByMode[form.mode] === "weighted_sum" ? said(numberIn(AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION))
+      : said(numberIn(SLOPE_LIMIT_OFF_IN_DESCRIPTION), messages.switchedOff);
+  }
+  if (view.name === "score_smoothing") {
+    const factor = numberIn(AUTOMATIC_SMOOTHING_IN_DESCRIPTION), voxelSize = shownValue(form, "voxel_size");
+    return said(factor === null || typeof voxelSize !== "number" ? null : Number((factor * voxelSize).toPrecision(12)));
+  }
+  return null;
+}
+
+/** The default as the tooltip writes it ("1.0 m", "on", "21 Dec, 10 to 14 h", "automatic"). */
 export function defaultTextOf(view: SettingView, form: FormState, isShadowTolerated: boolean): string {
   const unit = unitOfValue(view);
   if (view.widget === "analysis_period") {
     const period = ANALYSIS_PERIOD_FIELDS.map((name) => defaultValue(form, name));
-    return period.every((value) => typeof value === "number") ? messages.periodText(...(period as [number, number, number, number, number, number]))
+    return period.every((value) => typeof value === "number") ? messages.periodSummary(...(period as [number, number, number, number, number, number]))
       : messages.automatic;
   }
   const value = toDisplayValue(view.name, defaultValue(form, view.name));
@@ -89,8 +147,11 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;
-  const error = fieldErrorOf(form, view);
-  const control: ControlProps = { inputId, labelId, invalid: error !== undefined, describedBy: error === undefined ? undefined : errorId, disabled };
+  // A number refused in the field itself (out of range) is said under it, in place of the last save's message: it is newer.
+  const [refusedInput, setRefusedInput] = useState<string | null>(null);
+  const error = refusedInput ?? fieldErrorOf(form, view);
+  const control: ControlProps = { inputId, labelId, invalid: error !== undefined, describedBy: error === undefined ? undefined : errorId, disabled,
+                                  onRefusedInput: setRefusedInput };
   const property = form.schemaProperties[view.name];
   const types = typesOf(property);
   const unit = unitBesideValue(view);
@@ -98,7 +159,8 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   const shown = toDisplayValue(view.name, shownValue(form, view.name));
   const changeTo = (value: unknown) => onChange({ [view.name]: fromDisplayValue(view.name, value) });
   // Controls made of several inputs are labelled as a group; the others are the target of their label.
-  const isGroupOfInputs = view.widget === "analysis_period" || view.widget === "tilted_plane_angles" || view.widget === "mesh_format";
+  const isGroupOfInputs = view.widget === "analysis_period" || view.widget === "tilted_plane_angles" || view.widget === "mesh_format"
+    || view.widget === "balance_temperature";
 
   let controlElement: ReactNode;
   switch (view.widget) {
@@ -123,9 +185,21 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
     case "mesh_format":
       controlElement = <MeshFormat {...control} value={shown as string | null} onFormat={changeTo} />;
       break;
-    case "percent_slider":
-      controlElement = <PercentSlider {...control} percent={shown as number | null} unit={unit} onPercent={changeTo} />;
+    case "balance_temperature": {
+      const [, deadBandName] = BALANCE_TEMPERATURE_FIELDS;
+      const deadBandView = settingView(deadBandName, form.mode);
+      const deadBand = shownValue(form, deadBandName);
+      controlElement = (
+        <BalanceTemperatureSlider {...control} balanceTemperature={typeof shown === "number" ? shown : null}
+                                  deadBand={typeof deadBand === "number" ? deadBand : null} track={view.slider!} deadBandStep={deadBandView.slider!.step}
+                                  settingsWithError={BALANCE_TEMPERATURE_FIELDS.filter((name) => form.fieldErrors[name] !== undefined)}
+                                  balanceTemperatureRange={rangeOf(property)} deadBandRange={rangeOf(form.schemaProperties[deadBandName])} unit={unit}
+                                  deadBandLabel={deadBandView.label} onChange={onChange}
+                                  deadBandInfo={<SettingTooltip settingLabel={deadBandView.label} help={deadBandView.help} configName={deadBandName}
+                                                                defaultText={defaultTextOf(deadBandView, form, isShadowTolerated)} />} />
+      );
       break;
+    }
     default:
       if (types.includes("boolean")) {
         controlElement = (
@@ -142,13 +216,20 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
           </select>
         );
       } else {
-        const range = rangeOf(property);
-        const isPercent = view.display === "percent";
-        controlElement = (
+        // The engine's bounds, from GET schema; a share shown in percent is held to 0 to 100.
+        const engineRange = view.display === "percent" ? { minimum: 0, maximum: 100 } : rangeOf(property);
+        const value = typeof shown === "number" ? shown : null;
+        const mayBeEmpty = types.includes("null");
+        const placeholder = mayBeEmpty && defaultValue(form, view.name) === null ? messages.automatic : undefined;
+        const slider = shownSliderOf(view);
+        controlElement = slider !== undefined ? (
+          <RangeSlider {...control} value={value} slider={slider} engineRange={engineRange} mayBeEmpty={mayBeEmpty} unit={unit} placeholder={placeholder}
+                       automatic={value === null ? automaticValueOf(view, form) : null} onValue={changeTo} />
+        ) : (
           <div className="setting-control">
-            <NumberInput id={inputId} value={typeof shown === "number" ? shown : null} mayBeEmpty={types.includes("null")}
-                         wholeNumbers={types.includes("integer")} invalid={control.invalid} describedBy={control.describedBy} disabled={disabled}
-                         minimum={isPercent ? 0 : range.minimum} maximum={isPercent ? 100 : range.maximum} onValue={changeTo} />
+            <NumberInput id={inputId} value={value} mayBeEmpty={mayBeEmpty} wholeNumbers={types.includes("integer")} invalid={control.invalid}
+                         describedBy={control.describedBy} disabled={disabled} {...engineRange} onValue={changeTo} onRefused={setRefusedInput}
+                         placeholder={placeholder} />
             {unit && <span className="setting-unit">{unit}</span>}
           </div>
         );
@@ -156,17 +237,21 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   }
 
   return (
-    <div className="setting-field" data-setting={view.name}>
+    // data-input-id names the input the label targets (a group's first), which a link to the setting focuses.
+    <div className="setting-field" data-setting={view.name} data-input-id={inputId}>
       <div className="setting-label-row">
         {isGroupOfInputs ? <span id={labelId} className="setting-label">{view.label}</span>
           : <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>}
         <SettingTooltip settingLabel={view.label} help={view.help} defaultText={defaultTextOf(view, form, isShadowTolerated)}
                         configName={view.widget === "analysis_period" ? messages.analysisPeriodConfigNames : view.name}
-                        extraLine={view.name === "voxel_size" && form.gridPlan ? messages.gridSize(form.gridPlan.resolution, form.gridPlan.total_voxels) : undefined} />
+                        extraLine={(view.name === "voxel_size" ? gridLineOf(form) : emptyMeaningOf(view, form)) ?? undefined} />
       </div>
       {controlElement}
-      {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{extras?.errorContent ?? error}</span></p>}
-      {error === undefined && extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
+      {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{refusedInput ?? extras?.errorContent ?? error}</span></p>}
+      {extras?.changeNote !== undefined && (
+        <div className="setting-change-note" role="status">{extras.changeNote !== null && <p className="setting-note">{extras.changeNote}</p>}</div>
+      )}
+      {extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
     </div>
   );
 }

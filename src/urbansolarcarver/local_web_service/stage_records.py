@@ -23,6 +23,9 @@ MANIFEST_FILE_NAME = "manifest.json"
 # The stage whose manifest each of these stages names as its upstream (the engine's chain).
 UPSTREAM_STAGE = {"thresholding": "preprocessing", "exporting": "thresholding", "massing": "thresholding"}
 ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every result is built on
+# Preprocessing manifest fields that massing reads; a manifest without them is from before preprocessing recorded
+# them, and massing of that run would start and end its floors up to a voxel outside the maximum volume.
+MAX_VOLUME_HEIGHT_FIELDS = ("max_volume_lowest_z", "max_volume_highest_z")
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,8 @@ def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
         elif current_config is None or record.inputs_revision != project_json.inputs_revision:
             status[stage] = "out_of_date"
         elif _settings_changed(store, name, stage, record, current_config):
+            status[stage] = "out_of_date"
+        elif stage == "preprocessing" and any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
             status[stage] = "out_of_date"
         elif stage in UPSTREAM_STAGE and not _reads_current_upstream(
                 status[UPSTREAM_STAGE[stage]], project_json.stage_records.get(UPSTREAM_STAGE[stage]), manifest):
@@ -105,6 +110,34 @@ def choose_stages(store: ProjectStore, name: str, produce: list[str]) -> StageCh
         chosen = {*analysis_stages[first_stale_analysis:], *(stage for stage in needed if stage not in ANALYSIS_STAGES)}
     stages = [stage for stage in PIPELINE_STAGES if stage in chosen]
     return StageChoice(stages=stages, produce_for_engine=[stage for stage in stages if stage in produce])
+
+
+def envelope_voxel_size(store: ProjectStore, name: str) -> float | None:
+    """The voxel size of the grid the envelope mesh on disk was built from.
+
+    It is the one of the settings exporting last completed with. Without that record (a run that redoes exporting removed
+    it when it began, or a run was cut off) it is the one of the manifest chain: the preprocessing run that the thresholding
+    run exporting read was built on. None when that chain is broken (a later run replaced one of them) or the recorded
+    settings no longer validate.
+    """
+    record = store.read_project_json(name).stage_records.get("exporting")
+    if record is None:
+        return _voxel_size_of_the_exporting_chain(store.open(name) / RUN_FOLDER)
+    try:
+        return store.config_from_settings(name, record.config).voxel_size
+    except ConfigError:
+        return None
+
+
+def _voxel_size_of_the_exporting_chain(run_folder: Path) -> float | None:
+    """The preprocessing manifest's voxel size when exporting read the thresholding run on disk, and it the preprocessing run."""
+    exporting, thresholding, preprocessing = (_read_manifest(run_folder, stage) for stage in ("exporting", "thresholding", "preprocessing"))
+    if exporting is None or thresholding is None or preprocessing is None:
+        return None
+    if exporting.get("upstream_run_id") != thresholding.get("run_id") or thresholding.get("upstream_run_id") != preprocessing.get("run_id"):
+        return None
+    voxel_size = preprocessing.get("voxel_size")
+    return float(voxel_size) if isinstance(voxel_size, (int, float)) else None
 
 
 def forget_stages(store: ProjectStore, name: str, stages) -> None:

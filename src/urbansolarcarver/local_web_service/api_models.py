@@ -24,6 +24,7 @@ class ProjectJson(BaseModel):
     inputs_revision: int = 1    # raised by every upload and removal of an input file
     input_files: dict[str, dict[str, int]] = Field(default_factory=dict)  # role -> file name -> triangle count
     stage_records: dict[str, StageRecord] = Field(default_factory=dict)   # stage name -> record
+    example: str | None = None  # the example the project was made from (examples.json name); None for other projects and older ones
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -61,6 +62,7 @@ class ProjectSummary(BaseModel):
     created: str                # ISO 8601, UTC
     modified: str               # ISO 8601, UTC: newest modification time of project.json and config.yaml
     mode: str
+    example: str | None = None  # the example the project came from (examples.json name), None for other projects
 
 
 class GridPlanReply(BaseModel):
@@ -70,6 +72,23 @@ class GridPlanReply(BaseModel):
     total_voxels: int
     extent: float               # side of the grid in meters
     budget_voxels: int          # the most voxels preprocessing can score
+
+
+ProjectsFolderSource = Literal["command_line", "preference", "default"]
+
+
+class ProjectsFolderReply(BaseModel):
+    """The folder the projects live in, where that choice came from, and whether the browser may change it now."""
+    path: str
+    source: ProjectsFolderSource
+    can_change: bool            # false when the folder came from the command line, or while a run is active
+
+
+class ProjectsFolderChoiceReply(BaseModel):
+    """The answer to Change folder: the folder changed, the user cancelled, or the folder picker cannot open here."""
+    status: Literal["changed", "cancelled", "unavailable"]
+    path: str                   # the projects folder after the request
+    problem: str | None         # why the picker is unavailable; None otherwise
 
 
 class ConfigReply(BaseModel):
@@ -102,17 +121,23 @@ class CarvingSummary(BaseModel):
     slope_limit_extra_voxels_removed: int
 
 
+class EnvelopeSummary(BaseModel):
+    """What exporting left for the envelope part of the envelope and massing screen and for Export."""
+    mesh_file: str                      # the mesh in the run's exporting folder, in the format it was built in
+    envelope_volume_m3: float | None    # the voxels the mesh was built from, after its cleanup; None when their size is not known
+
+
 class MassingSummary(BaseModel):
     """The numbers massing reports for the run summary of the envelope and massing screen."""
     floor_area_m2_per_storey: list[float]
     total_floor_area_m2: float
     storeys_built: int
-    envelope_volume_m3: float
 
 
 class RunSummary(BaseModel):
     """What the finished stages of a run report; a part is None when its stage has no output."""
     carving: CarvingSummary | None
+    envelope: EnvelopeSummary | None
     massing: MassingSummary | None
 
 
@@ -186,12 +211,18 @@ class ExampleInfo(BaseModel):
     name: str
     title: str
     description: str
+    project: str | None = None  # the existing project made from this example (the most recently modified), None when there is none
 
 
 class CreateProjectRequest(BaseModel):
     """The body of a request to create a project."""
     name: str
     mode: str = "time-based"
+
+
+class RenameProjectRequest(BaseModel):
+    """The body of a request to rename a project."""
+    new_name: str
 
 
 class ConfigValuesRequest(BaseModel):
@@ -209,6 +240,7 @@ class ProjectDetail(BaseModel):
     name: str
     created: str                # ISO 8601, UTC
     modified: str               # ISO 8601, UTC
+    example: str | None = None  # as in ProjectSummary: the app offers "Reset to the example" when it is set
     settings: dict              # without the paths and device the service owns
     inputs: dict[str, list[InputFileInfo]]      # role -> files, for every role
     joined_bounds: list[list[float]] | None     # as in InputFilesReply

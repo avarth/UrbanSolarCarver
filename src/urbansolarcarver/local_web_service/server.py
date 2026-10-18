@@ -1,7 +1,8 @@
 """The HTTP service of the local browser app: security checks, routes, run events and the built front-end.
 
 ``create_app`` builds the FastAPI application. One ProjectStore is shared by every route and the run worker,
-so their per-project locks serialize requests that touch the same project. The routes are plain functions that
+so their per-project locks serialize requests that touch the same project. Change folder replaces the store and
+the worker together (``_ProjectsFolderInUse``); the routes read them from there on every request. The routes are plain functions that
 FastAPI runs on its thread pool; only the WebSocket handler is asynchronous, and it waits for events in a thread.
 Importing this module does not import torch (the engine is imported when the first run starts).
 """
@@ -9,11 +10,13 @@ from __future__ import annotations
 
 import asyncio
 import hmac
-import json
 import os
 import tempfile
+import threading
 import zipfile
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, get_args
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, FastAPI, File, Request, UploadFile, WebSocket, WebSocketDisconnect
@@ -28,17 +31,22 @@ from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
+from . import folder_picker, user_preferences
 from .api_models import (
     CancelRunReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateProjectRequest, ErrorDetailReply,
     ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
-    ProjectSummary, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
+    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
 )
+from .example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
+from .folder_picker import FolderPickerUnavailable
 from .gpu_warm_up import GpuWarmUp
-from .projects import CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, validate_project_name
+from .projects import (
+    CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, example_of_project, validate_project_name,
+)
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_score_points
-from .stage_records import stage_status
+from .stage_records import envelope_voxel_size, stage_status
 
 API_PREFIX = "/api"
 TOKEN_HEADER = "X-USC-Token"
@@ -49,8 +57,6 @@ WEBSOCKET_CLOSE_UNKNOWN_RUN = 4404
 LAST_EVENT_TYPES = ("run_finished", "run_failed", "run_cancelled")
 EVENT_WAIT_SECONDS = 1.0
 DEFAULT_STATIC_FOLDER = Path(__file__).resolve().parent.parent / "ui_static"
-EXAMPLE_PROJECTS_FOLDER = Path(__file__).resolve().parent.parent / "example_projects"
-EXAMPLE_WEATHER_FILE_NAME = "USA_CO_Golden-NREL.724666_TMY3.epw"    # in example_projects/weather/
 NO_CACHE = {"Cache-Control": "no-cache"}    # a result file is rewritten by the next run, so the browser asks each time
 
 _ERROR_RESPONSES = {
@@ -107,23 +113,93 @@ class SecurityMiddleware:
             await JSONResponse({"detail": message}, status_code=status_code)(scope, receive, send)
 
 
+@dataclass(frozen=True)
+class _FolderState:
+    store: ProjectStore
+    worker: RunWorker
+    source: ProjectsFolderSource
+
+
+class _ProjectsFolderInUse:
+    """The store and the run worker of the projects folder in use, and the switch to another folder.
+
+    Routes read ``store`` and ``worker`` from here on every request, so they follow a switch. ``folder_lock`` makes
+    starting a run and switching the folder exclusive: a run starts while holding it, and a switch checks for an active
+    run and swaps while holding it.
+    """
+
+    def __init__(self, store: ProjectStore, worker: RunWorker, source: ProjectsFolderSource, device: str):
+        self._current = _FolderState(store, worker, source)     # replaced whole, so a reader never sees a store of one folder with a worker of another
+        self._device = device
+        self.folder_lock = threading.Lock()
+        self.picker_lock = threading.Lock()     # one folder picker at a time
+
+    @property
+    def store(self) -> ProjectStore:
+        return self._current.store
+
+    @property
+    def worker(self) -> RunWorker:
+        return self._current.worker
+
+    @property
+    def source(self) -> ProjectsFolderSource:
+        return self._current.source
+
+    def can_change(self) -> bool:
+        current = self._current
+        return current.source != "command_line" and current.worker.active_project() is None
+
+    def refuse_unless_changeable(self) -> None:
+        """Raises ProjectError (409) when the folder was given on the command line or a run is active."""
+        current = self._current
+        if current.source == "command_line":
+            raise ProjectError("The projects folder was given with --projects-folder; start without it to change the folder here.", status_code=409)
+        active_project = current.worker.active_project()
+        if active_project is not None:
+            raise ProjectError(f"A run of project '{active_project}' is active. Wait for it to finish or cancel it before changing the projects folder.",
+                               status_code=409)
+
+    def switch_to(self, folder: Path) -> None:
+        """Remember *folder*, then use it: a new store, and a worker that keeps the engine handler and the compute session.
+
+        Raises ProjectError: 409 when a run is active, 422 when the folder cannot be made or remembered. Nothing changes then.
+        """
+        with self.folder_lock:
+            self.refuse_unless_changeable()
+            try:
+                user_preferences.write_projects_folder_preference(folder)
+            except OSError as error:
+                raise ProjectError(f"The folder {folder} cannot be used as the projects folder: {error}", status_code=422) from error
+            store = ProjectStore(folder, self._device)
+            self._current = _FolderState(store, self._current.worker.for_store(store), "preference")
+
+
 def create_app(projects_folder: Path, token: str, port: int, device: str = "auto", static_folder: Path | None = None,
-               worker: RunWorker | None = None, warm_up: GpuWarmUp | None = None) -> FastAPI:
+               worker: RunWorker | None = None, warm_up: GpuWarmUp | None = None, projects_folder_source: ProjectsFolderSource = "default",
+               choose_folder_function: Callable[[Path], Path | None] = folder_picker.choose_folder,
+               open_folder_function: Callable[[Path], None] = folder_picker.open_in_file_manager) -> FastAPI:
     """The service for the projects under *projects_folder*.
 
     *worker* defaults to a RunWorker for *device*; a given worker brings its own ProjectStore, which the
     routes then use, so its projects folder is the one that counts. *warm_up* defaults to a GpuWarmUp that
     is never started (the state stays ``not_started``); ``usc ui`` passes one it has started.
+    *projects_folder_source* says where the folder came from (``command_line``, ``preference`` or ``default``); a folder
+    from the command line cannot be changed in the app. *choose_folder_function* shows the folder picker and *open_folder_function*
+    opens a project's folder in the file manager (tests give fakes).
     A *static_folder* without ``index.html`` (the front-end is not built) leaves the app with the API only.
     """
+    if projects_folder_source not in get_args(ProjectsFolderSource):
+        raise ValueError(f"projects_folder_source is one of {', '.join(get_args(ProjectsFolderSource))}; got {projects_folder_source!r}.")
     store = worker.store if worker is not None else ProjectStore(projects_folder, device)
     worker = worker or RunWorker(store, device)
+    folder_in_use = _ProjectsFolderInUse(store, worker, projects_folder_source, device)
     warm_up = warm_up or GpuWarmUp(device)
     app = FastAPI(title="UrbanSolarCarver local service", version=__version__, docs_url=None, redoc_url=None,
                   openapi_url=None, generate_unique_id_function=lambda route: route.name)
     app.add_middleware(SecurityMiddleware, token=token, port=port)
     _add_exception_handlers(app)
-    app.include_router(_build_router(store, worker, warm_up), prefix=API_PREFIX)
+    app.include_router(_build_router(folder_in_use, warm_up, choose_folder_function, open_folder_function), prefix=API_PREFIX)
     static_folder = DEFAULT_STATIC_FOLDER if static_folder is None else Path(static_folder)
     if (static_folder / "index.html").is_file():
         app.mount("/", StaticFiles(directory=static_folder, html=True), name="front_end")
@@ -154,10 +230,15 @@ def _add_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(reply.model_dump(mode="json"), status_code=422)
 
 
-def _read_examples() -> list[ExampleProject]:
-    """The packaged example projects, in the order of examples.json."""
-    entries = json.loads((EXAMPLE_PROJECTS_FOLDER / "examples.json").read_text(encoding="utf-8"))
-    return [ExampleProject.model_validate(entry) for entry in entries]
+def _example_input_files(example: ExampleProject) -> list[tuple[str, str, bytes]]:
+    """The packaged files of an example as (role, file name, content), all read before any project is made from them."""
+    example_folder = EXAMPLE_PROJECTS_FOLDER / example.name
+    files = [(role, file_name, (example_folder / file_name).read_bytes())
+             for role, file_names in (("max_volume", example.max_volume), ("test_surfaces", example.test_surfaces))
+             for file_name in file_names]
+    if example.weather:
+        files.append((WEATHER_ROLE, EXAMPLE_WEATHER_FILE_NAME, (EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME).read_bytes()))
+    return files
 
 
 def _same_project(first_name: str, second_name: str) -> bool:
@@ -165,26 +246,27 @@ def _same_project(first_name: str, second_name: str) -> bool:
     return validate_project_name(first_name).lower() == validate_project_name(second_name).lower()
 
 
-def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) -> APIRouter:
+def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choose_folder_function: Callable[[Path], Path | None],
+                  open_folder_function: Callable[[Path], None]) -> APIRouter:
     router = APIRouter()
 
     def refuse_while_running(name: str) -> None:
         """Call with the project lock held: the worker records the settings and inputs it starts with, so they stay fixed during its run."""
-        active_project = worker.active_project()
+        active_project = folder_in_use.worker.active_project()
         if active_project is not None and _same_project(active_project, name):
             raise RunConflict(active_project)
 
-    def project_detail(name: str) -> ProjectDetail:
+    def project_detail(store: ProjectStore, name: str) -> ProjectDetail:
         with store.project_lock(name):
             summary = store.summary(name)
             return ProjectDetail(
-                name=summary.name, created=summary.created, modified=summary.modified, settings=store.read_settings(name),
+                name=summary.name, created=summary.created, modified=summary.modified, example=summary.example, settings=store.read_settings(name),
                 inputs={role: store.input_files(name, role) for role in (*MESH_ROLES, WEATHER_ROLE)},
                 joined_bounds=store.joined_bounds(name), weather_location=store.weather_location(name),
                 stage_status=StageStatusReply(stages=stage_status(store, name)), grid_plan=store.stored_grid_plan(name))
 
     def run_folder_of(name: str) -> Path:
-        return store.open(name) / RUN_FOLDER
+        return folder_in_use.store.open(name) / RUN_FOLDER
 
     @router.get("/health")
     def health() -> HealthReply:
@@ -200,52 +282,123 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
                          experimental=mode.experimental, score_kind=mode.score_kind, weight_unit=mode.weight_unit,
                          starting_values=dict(mode.starting_values)) for mode in MODES.values()]
 
+    @router.get("/projects-folder")
+    def projects_folder() -> ProjectsFolderReply:
+        return ProjectsFolderReply(path=str(folder_in_use.store.projects_folder), source=folder_in_use.source, can_change=folder_in_use.can_change())
+
+    @router.post("/projects-folder/choose", responses={409: _ERROR_RESPONSES[409], 422: _ERROR_RESPONSES[422]})
+    def choose_projects_folder() -> ProjectsFolderChoiceReply:
+        """Show the folder picker on this computer and switch to the folder chosen; the browser sends no path."""
+        folder_in_use.refuse_unless_changeable()
+        if not folder_in_use.picker_lock.acquire(blocking=False):
+            raise ProjectError("The folder picker is already open on this computer.", status_code=409)
+        try:
+            try:
+                chosen_folder = choose_folder_function(folder_in_use.store.projects_folder)
+            except FolderPickerUnavailable as error:
+                return ProjectsFolderChoiceReply(status="unavailable", path=str(folder_in_use.store.projects_folder), problem=str(error))
+            if chosen_folder is None:
+                return ProjectsFolderChoiceReply(status="cancelled", path=str(folder_in_use.store.projects_folder), problem=None)
+            folder_in_use.switch_to(chosen_folder.resolve())
+            return ProjectsFolderChoiceReply(status="changed", path=str(folder_in_use.store.projects_folder), problem=None)
+        finally:
+            folder_in_use.picker_lock.release()
+
     @router.get("/projects")
     def list_projects() -> list[ProjectSummary]:
-        return store.list()
+        return folder_in_use.store.list()
 
     @router.post("/projects", responses={409: _ERROR_RESPONSES[409], 422: {"model": ConfigErrorReply}})
     def create_project(request: CreateProjectRequest) -> ProjectDetail:
+        store = folder_in_use.store
         store.create(request.name, request.mode)
-        return project_detail(request.name)
+        return project_detail(store, request.name)
 
     @router.get("/examples")
     def examples() -> list[ExampleInfo]:
-        return [ExampleInfo(name=example.name, title=example.title, description=example.description) for example in _read_examples()]
+        examples_in_order = read_examples()
+        project_of_example = folder_in_use.store.projects_of_examples({example.name: example.title for example in examples_in_order})
+        return [ExampleInfo(name=example.name, title=example.title, description=example.description,
+                            project=project_of_example[example.name]) for example in examples_in_order]
 
     @router.post("/projects/{name}/examples/{example}", responses={404: {"model": ErrorDetailReply, "description": "There is no such example."}, **_ERROR_RESPONSES})
     def create_example_project(name: str, example: str) -> ProjectDetail:
         """A new project named *name* with the mode and the input files of a packaged example."""
-        chosen = next((candidate for candidate in _read_examples() if candidate.name == example), None)
+        store = folder_in_use.store
+        chosen = next((candidate for candidate in read_examples() if candidate.name == example), None)
         if chosen is None:
             raise ProjectError(f"There is no example '{example}'.", status_code=404)
-        example_folder = EXAMPLE_PROJECTS_FOLDER / chosen.name
-        files_to_add = [(role, file_name, (example_folder / file_name).read_bytes())    # all read before the project exists
-                        for role, file_names in (("max_volume", chosen.max_volume), ("test_surfaces", chosen.test_surfaces))
-                        for file_name in file_names]
-        if chosen.weather:
-            weather_path = EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME
-            files_to_add.append((WEATHER_ROLE, EXAMPLE_WEATHER_FILE_NAME, weather_path.read_bytes()))
-        with store.project_lock(name):      # the new project is complete before another request can reach it
-            store.create(name, chosen.mode)
-            for role, file_name, data in files_to_add:
-                store.add_input(name, role, file_name, data)
-            return project_detail(name)
+        example_files = _example_input_files(chosen)
+        store.create_example_project(name, chosen, example_files)
+        return project_detail(store, name)
+
+    @router.post("/projects/{name}/rename", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+    def rename_project(name: str, request: RenameProjectRequest) -> ProjectDetail:
+        """Rename the project and its folder; 409 when the new name exists in any letter case or a run of the project is active."""
+        store = folder_in_use.store
+        with store.project_locks(name, request.new_name):   # both names in one order: two renames in opposite directions must not deadlock
+            refuse_while_running(name)
+            store.rename_project(name, request.new_name)
+        return project_detail(store, request.new_name)
+
+    @router.delete("/projects/{name}", status_code=204, response_class=Response,
+                   responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+    def delete_project(name: str, confirm_name: str) -> Response:
+        """Move the project folder to the recycle bin; *confirm_name* must be the project's name as stored (else 422)."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            refuse_while_running(name)
+            project_name = store.read_project_json(name).name
+            if confirm_name != project_name:
+                raise ProjectError(f"To delete the project, type its name '{project_name}' to confirm.", status_code=422)
+            store.delete_project(name)
+        return Response(status_code=204)
+
+    @router.post("/projects/{name}/reset-to-example",
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+    def reset_project_to_example(name: str) -> ProjectDetail:
+        """Replace a project made from an example by a fresh copy of it; the old folder goes to the recycle bin."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            refuse_while_running(name)
+            project_json = store.read_project_json(name)
+            example = example_of_project(project_json)
+            if example is None:
+                raise ProjectError(f"'{project_json.name}' was not made from an example, so there is nothing to reset it to.", status_code=422)
+            store.reset_project_to_example(name, example, _example_input_files(example))
+            return project_detail(store, project_json.name)
+
+    @router.post("/projects/{name}/open-folder", status_code=204, response_class=Response,
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, 422: _ERROR_RESPONSES[422]})
+    def open_project_folder(name: str) -> Response:
+        """Open the project's folder in the file manager of this computer; also while a run of the project is active (it changes nothing)."""
+        project_folder = folder_in_use.store.open(name)
+        try:
+            open_folder_function(project_folder)
+        except OSError as error:
+            raise ProjectError(f"The folder {project_folder} could not be opened: {error}", status_code=422) from error
+        return Response(status_code=204)
 
     @router.get("/projects/{name}")
     def open_project(name: str) -> ProjectDetail:
-        return project_detail(name)
+        store = folder_in_use.store
+        try:
+            store.rebuild_joined_test_surfaces_without_normals(name)
+        except ProjectError:
+            pass    # an uploaded file that cannot be read: the project still opens, so it can be removed; a run reports it
+        return project_detail(store, name)
 
     @router.get("/projects/{name}/stage-status")
     def project_stage_status(name: str) -> StageStatusReply:
-        return StageStatusReply(stages=stage_status(store, name))
+        return StageStatusReply(stages=stage_status(folder_in_use.store, name))
 
     @router.get("/projects/{name}/sun-path")
     def sun_path(name: str) -> SunPath:
-        return sun_path_for_config(store.load_project_config(name))
+        return sun_path_for_config(folder_in_use.store.load_project_config(name))
 
     @router.post("/projects/{name}/inputs/{role}", responses=_ERROR_RESPONSES)
     def add_input(name: str, role: str, file: UploadFile = File(...)) -> InputFilesReply:
+        store = folder_in_use.store
         data = file.file.read()
         with store.project_lock(name):
             refuse_while_running(name)
@@ -253,20 +406,22 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
 
     @router.get("/projects/{name}/inputs/{role}")
     def input_files(name: str, role: str) -> list[InputFileInfo]:
-        return store.input_files(name, role)
+        return folder_in_use.store.input_files(name, role)
 
     @router.get("/projects/{name}/inputs/{role}/{file_name}")
     def input_file(name: str, role: str, file_name: str) -> FileResponse:
-        return FileResponse(store.input_file_path(name, role, file_name), headers=NO_CACHE)
+        return FileResponse(folder_in_use.store.input_file_path(name, role, file_name), headers=NO_CACHE)
 
     @router.delete("/projects/{name}/inputs/{role}/{file_name}", responses=_ERROR_RESPONSES)
     def remove_input(name: str, role: str, file_name: str) -> InputFilesReply:
+        store = folder_in_use.store
         with store.project_lock(name):
             refuse_while_running(name)
             return store.remove_input(name, role, file_name)
 
     @router.put("/projects/{name}/config", responses={409: _ERROR_RESPONSES[409], 422: {"model": ConfigErrorReply}})
     def save_config(name: str, request: ConfigValuesRequest) -> ConfigReply:
+        store = folder_in_use.store
         with store.project_lock(name):
             refuse_while_running(name)
             return store.write_config_from_values(name, request.values)
@@ -276,18 +431,19 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
         unknown_stages = [stage for stage in request.produce if stage not in PIPELINE_STAGES]
         if unknown_stages or not request.produce:
             raise ProjectError(f"'produce' names one or more of {', '.join(PIPELINE_STAGES)}; got {request.produce}.", status_code=422)
-        return worker.start(name, request.produce)
+        with folder_in_use.folder_lock:     # not while the projects folder is being switched
+            return folder_in_use.worker.start(name, request.produce)
 
     @router.post("/runs/{run_id}/cancel")
     def cancel_run(run_id: str) -> CancelRunReply:
-        if worker.run_state(run_id) is None:
+        if folder_in_use.worker.run_state(run_id) is None:
             raise ProjectError(f"There is no run '{run_id}'.", status_code=404)
-        return CancelRunReply(cancelled=worker.cancel(run_id))
+        return CancelRunReply(cancelled=folder_in_use.worker.cancel(run_id))
 
     @router.websocket("/runs/{run_id}/events")
     async def run_events(websocket: WebSocket, run_id: str) -> None:
         """Every event of the run from the first, then new ones as they come; closes after the run's last event."""
-        run_state = worker.run_state(run_id)
+        run_state = folder_in_use.worker.run_state(run_id)
         if run_state is None:
             await websocket.accept()    # accepted, then closed: a close before the accept would reach the browser as 1006
             await websocket.close(code=WEBSOCKET_CLOSE_UNKNOWN_RUN)
@@ -308,7 +464,7 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
 
     @router.get("/projects/{name}/run/summary")
     def run_summary(name: str) -> RunSummary:
-        return build_run_summary(run_folder_of(name))
+        return build_run_summary(run_folder_of(name), envelope_voxel_size=envelope_voxel_size(folder_in_use.store, name))
 
     @router.get("/projects/{name}/run/sky-patches")
     def run_sky_patches(name: str) -> SkyDome:
@@ -339,14 +495,14 @@ def _build_router(store: ProjectStore, worker: RunWorker, warm_up: GpuWarmUp) ->
     @router.get("/projects/{name}/config.yaml", response_class=FileResponse, responses={200: {"content": {"application/yaml": {}}}})
     def download_config(name: str) -> FileResponse:
         """The project's config.yaml as stored, for the Export step's settings download; 404 when the project has none."""
-        config_path = store.open(name) / CONFIG_FILE_NAME
+        config_path = folder_in_use.store.open(name) / CONFIG_FILE_NAME
         if not config_path.is_file():
             raise ProjectError(f"Project '{name}' has no {CONFIG_FILE_NAME}.", status_code=404)
         return FileResponse(config_path, media_type="application/yaml", filename=CONFIG_FILE_NAME, headers=NO_CACHE)
 
     @router.get("/projects/{name}/download", response_class=FileResponse, responses={200: {"content": {"application/zip": {}}}})
     def download_project(name: str) -> FileResponse:
-        project_folder = store.open(name)
+        project_folder = folder_in_use.store.open(name)
         descriptor, archive_name = tempfile.mkstemp(prefix="usc-download-", suffix=".zip")
         os.close(descriptor)
         try:

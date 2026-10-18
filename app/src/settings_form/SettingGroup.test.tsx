@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { act } from "react";
+import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
@@ -17,7 +17,10 @@ const SCHEMA = {
     threshold: { anyOf: [{ $ref: "#/$defs/ThresholdSpec" }, { type: "null" }], default: null },
     carve_above: { default: true, type: "boolean" },
     carve_above_min_consecutive: { default: 1, type: "integer" },
-    max_slope_deg: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
+    // The engine's description says the automatic slope limit of the weighted modes (pydantic_schemas.py).
+    max_slope_deg: { anyOf: [{ type: "number" }, { type: "null" }], default: null,
+                     description: "It only ever removes voxels. None (default): 60 for the weighted modes (irradiance, benefit, daylight, " +
+                       "radiative_cooling), off for time-based and tilted_plane. 90: off." },
     score_smoothing: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
     ray_batch_size: { default: 0, type: "integer" },
     diagnostics: { default: false, type: "boolean" },
@@ -122,9 +125,12 @@ test("the analysis period is one widget that changes the six period settings", (
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "start_month")} form={formFor("time-based")} onChange={onChange} />);
   expect(rendered.container.textContent).toContain("Analysis period");
+  // The period in words opens the exact fields (R2 4.3); a typed day is sent when its field is left.
+  click(rendered.container.querySelector(".period-words")!);
   const startDay = rendered.container.querySelector<HTMLInputElement>("input[aria-label='Start day']")!;
   expect(startDay.value).toBe("21");
   typeInto(startDay, "5");
+  act(() => startDay.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(onChange).toHaveBeenLastCalledWith({ start_day: 5 });
   const endMonth = rendered.container.querySelector<HTMLSelectElement>("select[aria-label='End month']")!;
   expect(endMonth.value).toBe("12");
@@ -171,16 +177,19 @@ test("a group folds its other settings under a link-styled button named after th
 });
 
 test("a group without essential settings is one fold titled with the group name", () => {
-  const computer = settingsForStep("settings", "daylight").find((group) => group.title === "Computer")!;
-  rendered = renderForTest(<SettingGroup group={computer} form={formFor("daylight")} onChange={() => {}} />);
+  const [carving] = settingsForStep("carving", "tilted_plane");      // the angle rule has no threshold
+  rendered = renderForTest(<SettingGroup group={carving} form={formFor("tilted_plane")} onChange={() => {}} />);
   expect(rendered.container.querySelector(".setting-group-title")).toBeNull();
-  expect(rendered.container.querySelector("button.setting-fold")!.textContent).toBe("Computer");
+  expect(rendered.container.querySelector("button.setting-fold")!.textContent).toBe("How much to carve");
 });
 
-test("the building massing essentials sit side by side", () => {
+test("the building massing sliders each take a row of their own, as in every other group", () => {
   const [, massing] = settingsForStep("envelope_and_massing", "daylight");
   rendered = renderForTest(<SettingGroup group={massing} form={formFor("daylight")} onChange={() => {}} />);
-  expect(rendered.container.querySelector(".setting-group-essential")!.classList).toContain("setting-group-side-by-side");
+  const essentials = rendered.container.querySelector(".setting-group-essential")!;
+  expect([...essentials.classList]).toEqual(["setting-group-essential"]);
+  expect(essentials.querySelectorAll(":scope > .setting-field input[type='range']")).toHaveLength(3);
+  expect(readFileSync("src/settings_form/settings_form.css", "utf8")).not.toMatch(/side-by-side/);
 });
 
 test("a field error is shown under its field, and opens the fold that holds it", () => {
@@ -190,9 +199,11 @@ test("a field error is shown under its field, and opens the fold that holds it",
   rendered = renderForTest(<SettingGroup group={group} form={form} onChange={() => {}} />);
   const error = rendered.container.querySelector(".setting-error")!;
   expect(error.textContent).toContain("Input should be less than or equal to 90");
-  const invalidFields = rendered.container.querySelectorAll<HTMLInputElement>("input[aria-invalid='true']");
-  expect(invalidFields).toHaveLength(1);
-  expect(invalidFields[0].getAttribute("aria-describedby")).toContain(error.id);
+  // The slider and the number field of that setting, and nothing else.
+  const invalidFields = [...rendered.container.querySelectorAll<HTMLInputElement>("input[aria-invalid='true']")];
+  expect(invalidFields.map((field) => field.type)).toEqual(["range", "number"]);
+  expect(invalidFields.every((field) => field.closest("[data-setting='max_slope_deg']") !== null)).toBe(true);
+  expect(invalidFields.every((field) => field.getAttribute("aria-describedby")!.includes(error.id))).toBe(true);
   expect(rendered.container.querySelector("button.setting-fold")!.getAttribute("aria-expanded")).toBe("true");
 });
 
@@ -222,7 +233,12 @@ test("an invalid field is marked without the outline, which stays the focus mark
     expect(rule).not.toMatch(/outline(-offset)?\s*:/);
     expect(rule).toMatch(/box-shadow:[^;]*var\(--colour-error\)/);
   }
-  expect(formCss).not.toMatch(/outline\s*:/);       // nothing in the form replaces the focus outline of tokens.css
+  // Nothing in the form replaces the focus outline of tokens.css, but the balance handles: their sliders span the whole track, so
+  // each handle carries the ring itself, 2 px in the accent colour.
+  const withoutBalanceHandles = formCss.replace(/\.balance-handle:focus-visible\s*{\s*outline: none;\s*}/, "");
+  expect(withoutBalanceHandles).not.toMatch(/outline\s*:/);
+  expect(formCss).toMatch(/\.balance-handle:focus-visible::-webkit-slider-thumb\s*{[^}]*0 0 0 5px var\(--colour-accent\)/);
+  expect(formCss).toMatch(/\.balance-handle:focus-visible::-moz-range-thumb\s*{[^}]*0 0 0 5px var\(--colour-accent\)/);
 });
 
 test("the tooltip stays open while the pointer moves from the i onto it, over a strip across the gap", () => {
@@ -255,4 +271,133 @@ test("a range given as the unit is shown beside the value but not after the defa
   click(rendered.container.querySelector("button.setting-info")!);
   expect(rendered.container.querySelector("[role='tooltip']")!.textContent).toContain("Config name: smooth_iters, default 2");
   expect(rendered.container.querySelector("[role='tooltip']")!.textContent).not.toContain("default 2 0 to 6");
+});
+
+test("a number outside the engine's range is refused in the field, with a message, and never reaches the form", () => {
+  const onChange = vi.fn();
+  const form = initialFormState({
+    schema: { properties: { ...SCHEMA.properties,
+      max_slope_deg: { anyOf: [{ type: "number", exclusiveMinimum: 0, maximum: 90 }, { type: "null" }], default: null },
+      north_deg: { default: 0.0, type: "number", minimum: 0, exclusiveMaximum: 360 },
+      carve_above_min_consecutive: { default: 1, type: "integer", minimum: 1 } } },
+    modes: MODES, settings: { mode: "daylight" }, gridPlan: GRID_PLAN });
+  const fieldOf = (step: Parameters<typeof settingsForStep>[0], name: string) => {
+    rendered?.unmount();
+    rendered = renderForTest(<SettingField view={viewOf(step, "daylight", name)} form={form} onChange={onChange} />);
+    return rendered.container.querySelector<HTMLInputElement>("input[type='number']")!;
+  };
+  const message = () => rendered!.container.querySelector(".setting-error")?.textContent ?? null;
+
+  let field = fieldOf("carving", "max_slope_deg");
+  expect([field.min, field.max]).toEqual(["0", "90"]);
+  typeInto(field, "0");
+  expect(onChange).not.toHaveBeenCalled();
+  expect(message()).toBe("Use a number above 0, up to 90.");
+  expect(field.getAttribute("aria-invalid")).toBe("true");
+  expect(field.getAttribute("aria-describedby")).toBe(rendered!.container.querySelector(".setting-error")!.id);
+  typeInto(field, "91");
+  expect(onChange).not.toHaveBeenCalled();
+  typeInto(field, "45");
+  expect(onChange).toHaveBeenLastCalledWith({ max_slope_deg: 45 });
+  expect(message()).toBeNull();
+
+  field = fieldOf("settings", "north_deg");
+  typeInto(field, "360");
+  expect(message()).toBe("Use 0 or more, below 360.");
+  typeInto(field, "-1");
+  expect(message()).toBe("Use 0 or more, below 360.");
+  // Leaving the field shows the value the form holds again, and the message says why the typed one was not taken.
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(field.value).toBe("0");
+  expect(message()).toBe("Use 0 or more, below 360.");
+  typeInto(field, "359.5");
+  expect(onChange).toHaveBeenLastCalledWith({ north_deg: 359.5 });
+  expect(message()).toBeNull();
+
+  field = fieldOf("carving", "carve_above_min_consecutive");
+  typeInto(field, "2.5");
+  expect(message()).toBe("Use a whole number.");
+  typeInto(field, "0");
+  expect(message()).toBe("Use 1 or more.");
+  expect(onChange).toHaveBeenCalledTimes(2);
+});
+
+test("a setting whose empty value is automatic shows 'automatic' in the empty field and says in its tooltip what empty does in the mode", () => {
+  const tooltipOf = (mode: string) => {
+    rendered?.unmount();
+    rendered = renderForTest(<SettingField view={viewOf("carving", mode, "max_slope_deg")} form={formFor(mode)} onChange={() => {}} />);
+    expect(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!.placeholder).toBe("automatic");
+    click(rendered.container.querySelector("button.setting-info")!);
+    return rendered.container.querySelector("[role='tooltip']")!.textContent;
+  };
+  expect(tooltipOf("daylight")).toContain("Left empty, it is 60 ° in Daylight.");
+  expect(tooltipOf("time-based")).toContain("Left empty, it is off in Solar time-based.");
+  expect(tooltipOf("tilted_plane")).toContain("Left empty, it is off in Angle rule.");
+  // A setting with a value of its own shows no placeholder.
+  rendered?.unmount();
+  rendered = renderForTest(<SettingField view={viewOf("settings", "daylight", "voxel_size")} form={formFor("daylight")} onChange={() => {}} />);
+  expect(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!.placeholder).toBe("");
+});
+
+/** Types *text* one character at a time, as a keyboard does. */
+function typeKeys(field: HTMLInputElement, text: string): void {
+  typeInto(field, "");
+  for (let length = 1; length <= text.length; length++) typeInto(field, text.slice(0, length));
+}
+
+test("a number typed past its bound keystroke by keystroke leaves the value the field had before, not the part typed in range", () => {
+  // The form behind the field, as the app holds it: every change the field passes on is the value the next save sends.
+  function NorthField() {
+    const [form, dispatch] = useReducer(formReducer, initialFormState({
+      schema: { properties: { ...SCHEMA.properties, north_deg: { default: 0.0, type: "number", minimum: 0, exclusiveMaximum: 360 } } },
+      modes: MODES, settings: { mode: "daylight", north_deg: 20 }, gridPlan: GRID_PLAN }));
+    latestNorth = form.userValues.north_deg;
+    return <SettingField view={viewOf("settings", "daylight", "north_deg")} form={form} onChange={(values) => dispatch({ type: "values_changed", values })} />;
+  }
+  let latestNorth: unknown;
+  rendered = renderForTest(<NorthField />);
+  const field = rendered.container.querySelector<HTMLInputElement>("input[type='number']")!;
+  act(() => field.focus());
+  typeKeys(field, "360");
+  expect(latestNorth).toBe(20);
+  expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 0 or more, below 360.");
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(field.value).toBe("20");
+  // A later edit starts from the value then: 45 is taken.
+  typeKeys(field, "45");
+  expect(latestNorth).toBe(45);
+  expect(rendered.container.querySelector(".setting-error")).toBeNull();
+});
+
+test("the message of a refused number goes when the value changes from elsewhere", () => {
+  const form = formFor("daylight");
+  const view = viewOf("carving", "daylight", "max_slope_deg");
+  const schemaForm = { ...form, schemaProperties: { ...form.schemaProperties,
+    max_slope_deg: { anyOf: [{ type: "number", exclusiveMinimum: 0, maximum: 90 }, { type: "null" }], default: null } } } as FormState;
+  rendered = renderForTest(<SettingField view={view} form={schemaForm} onChange={() => {}} />);
+  const field = rendered.container.querySelector<HTMLInputElement>("input[type='number']")!;
+  typeKeys(field, "0");
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(rendered.container.querySelector(".setting-error")).not.toBeNull();
+  rendered.rerender(<SettingField view={view} form={formReducer(schemaForm, { type: "values_changed", values: { max_slope_deg: 30 } })} onChange={() => {}} />);
+  expect(rendered.container.querySelector(".setting-error")).toBeNull();
+});
+
+test("each input of the analysis period keeps its own refusal: a valid hour does not hide a refused day", () => {
+  const form = formFor("time-based");
+  rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "start_month")} form={form} onChange={() => {}} />);
+  click(rendered.container.querySelector(".period-words")!);
+  const [startDay, startHour] = [...rendered.container.querySelectorAll<HTMLInputElement>("input[type='number']")];
+  typeKeys(startDay, "32");
+  expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 31.");
+  typeKeys(startHour, "9");
+  expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 31.");
+  typeKeys(startDay, "3");
+  expect(rendered.container.querySelector(".setting-error")).toBeNull();
+});
+
+test("the automatic slope limit is the engine's: its description and resolve_max_slope_deg say the same number", () => {
+  const schemas = readFileSync("../src/urbansolarcarver/pydantic_schemas.py", "utf8");
+  const described = /None \(default\): (\d+) for the weighted modes/.exec(schemas)![1];
+  expect(schemas).toContain(`return ${described}.0 if MODES[mode].score_kind == "weighted_sum" else None`);
 });

@@ -10,7 +10,7 @@ afterEach(() => {
   rendered = null;
 });
 
-const WEATHER_HINT = "Needed for Sun at set hours, Solar energy and Solar heat when cold.";
+const WEATHER_HINT = "Needed for Solar time-based, Solar energy and Solar usefulness.";
 const NO_FILES = { max_volume: [], test_surfaces: [], weather: [] };
 const SOME_FILES = {
   max_volume: [{ name: "max_volume.ply", triangle_count: 1152 }],

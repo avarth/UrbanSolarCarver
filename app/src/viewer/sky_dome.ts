@@ -1,4 +1,5 @@
-// The hemisphere the sun path and the sky dome are drawn on (UX 8.2), and the outline of each of the 145 Tregenza sky patches.
+// The hemisphere the sun path, the sky dome and the compass ring are drawn on (UX 8.2, R2 2), and the outline of each of the 145
+// Tregenza sky patches.
 import type { Bounds3, Point3 } from "./local_origin";
 
 export interface Hemisphere {
@@ -9,9 +10,12 @@ export interface Hemisphere {
 const HEMISPHERE_RADIUS_SHARE = 1.5;
 const DEGREES = 180 / Math.PI;
 
-/** Centred on the footprint centre of the maximum volume at its lowest z, radius 1.5 times its larger horizontal side. */
-export function hemisphere(maxVolumeBounds: Bounds3): Hemisphere {
-  const [low, high] = maxVolumeBounds;
+/**
+ * The hemisphere around the whole scene: *sceneBounds* are the bounds of the maximum volume and the test surfaces together.
+ * Centred on their footprint centre at their lowest z, radius 1.5 times their larger horizontal side.
+ */
+export function sceneHemisphere(sceneBounds: Bounds3): Hemisphere {
+  const [low, high] = sceneBounds;
   return {
     centre: [(low[0] + high[0]) / 2, (low[1] + high[1]) / 2, low[2]],
     radius: HEMISPHERE_RADIUS_SHARE * Math.max(high[0] - low[0], high[1] - low[1]),

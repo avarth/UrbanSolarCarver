@@ -226,6 +226,39 @@ class TestFloors:
             if fl.zb >= 20:
                 assert (fl.plate < 0).all()
 
+    def test_a_layer_mostly_below_the_base_does_not_count_against_the_ground_floor(self):
+        """The grid starts 0.62 m below the base at z 0, so layer 0 spans -0.62..0.38 and its centre lies below the base.
+
+        Such a layer is filled only where rays hit the base; here it is empty in the bar's first two rows of columns.
+        """
+        ij, bays, occ = _bar_grid()
+        occ[:, :2, 0] = False
+        levels = mg.floor_levels(0.0, 32.38, 5.0, 3.0)
+        counted_layers = mg.layers_centred_within(-0.62, 1.0, occ.shape[2], 0.0, 32.38)
+        assert not counted_layers[0] and counted_layers[1:33].all()
+        floors = mg.build_floors(ij, bays, occ, occ.copy(), -0.62, 1.0, levels, 0.0, "supported", 3.0,
+                                 counted_layers=counted_layers)
+        assert all(floor.kept_bays.all() for floor in floors)
+        assert np.allclose(floors[0].outside_share, 0.0)
+
+    def test_a_layer_mostly_above_the_top_does_not_count_against_the_top_floor(self):
+        """The grid starts 0.2 m below the base at z 0 and the volume ends at z 17.1: layer 17 spans 16.8..17.8 and
+        its centre lies above the top.
+
+        Such a layer is filled only where rays hit the roof; here it is empty in the bar's first two rows of columns.
+        The floor 14..17 reaches 0.2 m into it.
+        """
+        ij, bays, occ = _bar_grid(top=18)
+        occ[:, :2, 17] = False
+        levels = mg.floor_levels(0.0, 17.1, 5.0, 3.0)
+        assert levels[-1] == (14.0, 17.0)
+        counted_layers = mg.layers_centred_within(-0.2, 1.0, occ.shape[2], 0.0, 17.1)
+        assert counted_layers[:17].all() and not counted_layers[17:].any()
+        floors = mg.build_floors(ij, bays, occ, occ.copy(), -0.2, 1.0, levels, 0.0, "supported", 3.0,
+                                 counted_layers=counted_layers)
+        assert all(floor.kept_bays.all() for floor in floors)
+        assert np.allclose(floors[-1].outside_share, 0.0)
+
     def test_outside_share_by_length(self):
         ij, bays, occ = _bar_grid()
         kept = occ.copy()

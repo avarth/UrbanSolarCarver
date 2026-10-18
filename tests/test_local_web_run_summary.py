@@ -1,12 +1,14 @@
 """Run summary, sky dome and sun path of the local web service."""
+import json
 import math
+import shutil
 import subprocess
 import sys
 import warnings
 
 import pytest
 
-from local_web_test_support import GOLDEN_EPW, write_fake_finished_run, write_fake_run
+from local_web_test_support import GOLDEN_EPW, write_fake_finished_run, write_fake_finished_run_with_envelope, write_fake_run
 from urbansolarcarver.load_config import build_config_from_mode_starting_values
 from urbansolarcarver.local_web_service.run_summary import (
     build_run_summary, build_sky_dome, sun_marker_hours, sun_path_for_config,
@@ -19,7 +21,7 @@ def test_summary_reads_carving_and_massing_numbers(tmp_path):
             summary.carving.voxels_removed) == (3.5, 100, 61, 39)
     assert (summary.carving.carve_above_extra_voxels_removed, summary.carving.slope_limit_extra_voxels_removed) == (4, 2)
     assert summary.massing.floor_area_m2_per_storey == [120.0, 80.0] and summary.massing.total_floor_area_m2 == 200.0
-    assert summary.massing.storeys_built == 2 and summary.massing.envelope_volume_m3 == 4321.5
+    assert summary.massing.storeys_built == 2 and "envelope_volume_m3" not in summary.massing.model_dump()
 
 
 def test_summary_carries_the_obstruction_fraction_of_weighted_modes(tmp_path):
@@ -28,8 +30,39 @@ def test_summary_carries_the_obstruction_fraction_of_weighted_modes(tmp_path):
 
 
 def test_summary_parts_are_none_without_their_stage(tmp_path):
-    summary = build_run_summary(tmp_path / "run")
-    assert summary.carving is None and summary.massing is None
+    summary = build_run_summary(tmp_path / "run", envelope_voxel_size=2.0)
+    assert summary.carving is None and summary.envelope is None and summary.massing is None
+
+
+def test_summary_envelope_volume_is_the_voxels_the_envelope_was_meshed_from(tmp_path):
+    """R2 5: the envelope part shows its own volume, so it needs only exporting: 50 voxels left after the cleanup, 2 m each side."""
+    run = write_fake_finished_run_with_envelope(tmp_path)
+    assert build_run_summary(run, envelope_voxel_size=2.0).envelope.envelope_volume_m3 == 400.0
+    assert build_run_summary(run, envelope_voxel_size=None).envelope.envelope_volume_m3 is None     # the voxel size is not known
+    (run / "exporting" / "diagnostics" / "diagnostic.json").unlink()
+    assert build_run_summary(run, envelope_voxel_size=2.0).envelope.envelope_volume_m3 is None
+
+
+def test_summary_envelope_names_the_mesh_file_its_manifest_names(tmp_path):
+    """The file on disk decides which envelope is offered and drawn, not the format chosen since (a change while Carving is locked
+    is stored without rebuilding it)."""
+    run = write_fake_finished_run_with_envelope(tmp_path)
+    assert build_run_summary(run).envelope.mesh_file == "export.ply"
+    manifest_path = run / "exporting" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_path.write_text(json.dumps({**manifest, "mesh_path": str(run / "exporting" / "export.glb")}), encoding="utf-8")
+    assert build_run_summary(run).envelope.mesh_file == "export.glb"        # an absolute path: the file's name in the folder
+    manifest_path.unlink()
+    assert build_run_summary(run, envelope_voxel_size=2.0).envelope is None    # no manifest, no envelope
+
+
+def test_summary_envelope_without_massing_and_massing_without_envelope(tmp_path):
+    run = write_fake_finished_run(tmp_path)
+    assert build_run_summary(run, envelope_voxel_size=2.0).envelope is None and build_run_summary(run).massing is not None
+    run = write_fake_finished_run_with_envelope(tmp_path / "with_envelope")
+    shutil.rmtree(run / "massing")
+    summary = build_run_summary(run, envelope_voxel_size=2.0)
+    assert summary.envelope is not None and summary.massing is None
 
 
 def test_summary_massing_needs_both_of_its_files(tmp_path):

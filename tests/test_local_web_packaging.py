@@ -1,6 +1,7 @@
 """What the package carries for the local web app: the example projects, which must stay copies of examples/, the built front-end, which must match app/, and the settings form's presentation file, which must match the engine's config."""
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -8,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from urbansolarcarver.mode_registry import MODES
-from urbansolarcarver.pydantic_schemas import UserConfig
+from urbansolarcarver.pydantic_schemas import UserConfig, resolve_max_slope_deg
 from urbansolarcarver.stage_settings import (
     ExportingSettings, MassingSettings, PreprocessingSettings, RunOptions, ThresholdingSettings,
 )
@@ -126,6 +127,55 @@ def test_mode_lists_name_engine_modes():
                 assert set(entry[key]) <= set(MODES), (name, key)
 
 
+def decimal_bounds_of(name: str) -> dict | None:
+    """The engine's bounds of a decimal setting (the number member of an optional one), or None for any other setting: a count
+    (integer), a switch, a choice, a list."""
+    schema = UserConfig.model_json_schema()["properties"][name]
+    members = schema.get("anyOf", [schema])
+    decimal = next((member for member in members if member.get("type") == "number"), None)
+    if decimal is None or any(member.get("type") in ("integer", "array") for member in members):
+        return None
+    return {key: decimal[key] for key in ("minimum", "maximum", "exclusiveMinimum", "exclusiveMaximum") if key in decimal}
+
+
+def test_every_decimal_setting_with_an_engine_range_has_a_slider():
+    """R2 4.1: every decimal setting the engine bounds is entered with a slider; counts and switches keep their controls."""
+    settings = presented_settings()
+    ranged = [name for name in settings if decimal_bounds_of(name)]
+    assert ranged and [name for name in ranged if "slider" not in settings[name]] == []
+    assert [name for name in settings if "slider" in settings[name] and decimal_bounds_of(name) is None] == []
+
+
+def test_the_automatic_values_the_form_reads_are_in_the_engine_descriptions():
+    """An empty slope limit or score smoothing slider starts at the value the engine uses, which the front end reads from these
+    descriptions (SettingField.tsx: AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION, SLOPE_LIMIT_OFF_IN_DESCRIPTION,
+    AUTOMATIC_SMOOTHING_IN_DESCRIPTION): a change of their wording must change those patterns too."""
+    properties = UserConfig.model_json_schema()["properties"]
+    slope, smoothing = properties["max_slope_deg"]["description"], properties["score_smoothing"]["description"]
+    weighted_limit = re.search(r"None \(default\): (\d+(?:\.\d+)?) for the weighted modes", slope)
+    assert weighted_limit and float(weighted_limit[1]) == resolve_max_slope_deg("irradiance", None)
+    off = re.search(r"(\d+(?:\.\d+)?): off\b", slope)
+    assert off and float(off[1]) == 90.0 == properties["max_slope_deg"]["anyOf"][0]["maximum"]
+    assert re.search(r"auto: (\d+(?:\.\d+)?) × voxel_size", smoothing)[1] == "1.1"
+
+
+def test_each_slider_lies_within_the_engine_limits():
+    """The slider is the range people normally use: inside what the engine accepts, low below high, a whole number of steps
+    from one end to the other. balance_offset's entry gives the step of the balance slider's left handle; its range is unused,
+    as that handle runs on balance_temperature's track."""
+    for name, entry in presented_settings().items():
+        if "slider" not in entry:
+            continue
+        slider, bounds = entry["slider"], decimal_bounds_of(name)
+        assert set(slider) == {"low", "high", "step"}, name
+        assert slider["low"] < slider["high"] and 0 < slider["step"] <= slider["high"] - slider["low"], name
+        steps = (slider["high"] - slider["low"]) / slider["step"]
+        assert abs(steps - round(steps)) < 1e-9, (name, steps)
+        for end in (slider["low"], slider["high"]):
+            assert end >= bounds.get("minimum", end) and end <= bounds.get("maximum", end), name
+            assert end > bounds.get("exclusiveMinimum", end - 1) and end < bounds.get("exclusiveMaximum", end + 1), name
+
+
 # ---- The Mode step: mode_tiles.json against the engine's modes (UX 5.3) ----
 
 MODE_TILES_PATH = APP_FOLDER / "src" / "steps" / "mode_tiles.json"
@@ -134,3 +184,32 @@ MODE_TILES_PATH = APP_FOLDER / "src" / "steps" / "mode_tiles.json"
 def test_mode_tiles_name_every_engine_mode_once():
     tiles = json.loads(MODE_TILES_PATH.read_text(encoding="utf-8"))
     assert sorted(t["engine_name"] for t in tiles) == sorted(MODES)
+
+
+def test_mode_tiles_have_the_names_and_order_of_round_2():
+    """R2 3: the 3 x 2 grid reads left to right in this order, with these names."""
+    tiles = json.loads(MODE_TILES_PATH.read_text(encoding="utf-8"))
+    assert [(t["plain_name"], t["engine_name"]) for t in tiles] == [
+        ("Angle rule", "tilted_plane"),
+        ("Solar time-based", "time-based"),
+        ("Solar energy", "irradiance"),
+        ("Solar usefulness", "benefit"),
+        ("Daylight", "daylight"),
+        ("Night cooling", "radiative_cooling"),
+    ]
+
+
+@pytest.mark.parametrize("retired_name", ["Sun at set hours", "Solar heat when cold", "Bay width", "Allowed overhang"])
+def test_retired_names_are_gone_from_the_app_sources(retired_name):
+    """R2 3, 6: "Solar time-based", "Solar usefulness", "Grid module" and "Permitted volume exceedance" replace the names of
+    milestone 1 everywhere in the interface."""
+    sources = [path for path in (APP_FOLDER / "src").rglob("*") if path.is_file() and path.suffix in {".ts", ".tsx", ".json", ".css"}]
+    assert APP_FOLDER / "src" / "messages.ts" in sources and MODE_TILES_PATH in sources
+    assert [path.name for path in sources if retired_name in text_with_line_breaks_collapsed(path)] == []
+
+
+def text_with_line_breaks_collapsed(source: Path) -> str:
+    """The text of a source file with each line break, and the comment marker (//, /*, *) that starts the next line, read as one
+    space, and every run of white space as one space: a name wrapped across two lines of a comment reads as it does on one line."""
+    text = re.sub(r"\n[ \t]*(?:/\*+|//+|\*(?!/))?", " ", source.read_text(encoding="utf-8"))
+    return re.sub(r"\s+", " ", text)

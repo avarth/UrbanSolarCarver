@@ -1,4 +1,5 @@
 // The axis gizmo of UX 8.1, bottom left of the 3D view: X, Y and Z as the camera sees them, in the axis colours and lettered.
+// It has no background (R2 2): the axes are drawn straight on the viewport, the letters in the overlay ink of the viewport theme.
 import { messages } from "../messages";
 import { axisScreenDirections } from "../viewer/compass";
 import type { ViewportTheme } from "../viewer/scene";
@@ -24,7 +25,7 @@ export function AxisGizmo({ yawDegrees, elevationDegrees, theme }: AxisGizmoProp
           return (
             <g key={axis}>
               <line x1="0" y1="0" x2={right * AXIS_LENGTH} y2={-up * AXIS_LENGTH} stroke={`var(${colour})`} strokeWidth="2.5" strokeLinecap="round" />
-              <text x={right * LETTER_DISTANCE} y={-up * LETTER_DISTANCE} textAnchor="middle" dominantBaseline="central" fill={`var(${colour})`}>{letter}</text>
+              <text x={right * LETTER_DISTANCE} y={-up * LETTER_DISTANCE} textAnchor="middle" dominantBaseline="central" fill="currentColor">{letter}</text>
             </g>
           );
         })}

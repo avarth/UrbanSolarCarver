@@ -1,5 +1,6 @@
 // Typed access to the local service: one function per route, each sending the launch token in X-USC-Token.
 // The shapes come from generated_types.ts (npm run api-types), which is made from the service's own OpenAPI document.
+import { messages } from "../messages";
 import type { components } from "./generated_types";
 
 type Schemas = components["schemas"];
@@ -19,6 +20,8 @@ export type StartRunReply = Schemas["StartRunReply"];
 export type CancelRunReply = Schemas["CancelRunReply"];
 export type RunSummary = Schemas["RunSummary"];
 export type SkyDome = Schemas["SkyDome"];
+export type ProjectsFolderReply = Schemas["ProjectsFolderReply"];
+export type ProjectsFolderChoiceReply = Schemas["ProjectsFolderChoiceReply"];
 
 export const TOKEN_HEADER = "X-USC-Token";
 const TOKEN_QUERY_PARAMETER = "token";
@@ -65,7 +68,10 @@ function storeToken(token: string): void {
   }
 }
 
-/** What a failed request says about the service: 401 means this page has no valid token; a request that never got a reply means the engine is not running. */
+/**
+ * What a failed request says about the service: 401 means this page has no valid token; a request that never got a reply means the
+ * engine is not running.
+ */
 export function serviceProblemOf(error: unknown): "access_lost" | "engine_stopped" | "other" {
   if (error instanceof ApiError) return error.status === 401 ? "access_lost" : "other";
   return "engine_stopped";
@@ -82,6 +88,16 @@ export function refusalDetailOf(error: unknown): string | null {
   if (typeof body.detail === "string") return body.detail;
   if (Array.isArray(body.field_errors)) return body.field_errors.map((fieldError) => fieldError.message).join(" ");
   return null;
+}
+
+/**
+ * A failed request in words, the same wherever it is shown: the service's reason; a sentence with the status when the service
+ * gave none (a 500 without a body the service wrote); or that the request did not reach the engine.
+ */
+export function failureTextOf(error: unknown): string {
+  const reason = refusalDetailOf(error);
+  if (reason !== null) return reason;
+  return error instanceof ApiError ? messages.requestRefusedWithoutReason(error.status) : messages.requestDidNotReachEngine;
 }
 
 /** The address of an uploaded input file. A request for it needs the token header like any other. */
@@ -141,6 +157,27 @@ export const getProject = (token: string, name: string) => requestJson<ProjectDe
 
 export const createProjectFromExample = (token: string, name: string, example: string) =>
   requestJson<ProjectDetail>(token, `${projectPath(name)}/examples/${encodeURIComponent(example)}`, "POST");
+
+export const getProjectsFolder = (token: string) => requestJson<ProjectsFolderReply>(token, "/api/projects-folder");
+
+/** Shows the folder picker on this computer (the browser sends no path); resolves once it is closed. */
+export const chooseProjectsFolder = (token: string) => requestJson<ProjectsFolderChoiceReply>(token, "/api/projects-folder/choose", "POST");
+
+export const renameProject = (token: string, name: string, newName: string) =>
+  requestJson<ProjectDetail>(token, `${projectPath(name)}/rename`, "POST", { new_name: newName });
+
+/** Moves the project folder to the recycle bin; *confirmName* is the name the user typed, which the service checks again. */
+export async function deleteProject(token: string, name: string, confirmName: string): Promise<void> {
+  await send(token, `${projectPath(name)}?confirm_name=${encodeURIComponent(confirmName)}`, "DELETE");
+}
+
+export const resetProjectToExample = (token: string, name: string) =>
+  requestJson<ProjectDetail>(token, `${projectPath(name)}/reset-to-example`, "POST");
+
+/** Opens the project folder in the file manager of this computer. */
+export async function openProjectFolder(token: string, name: string): Promise<void> {
+  await send(token, `${projectPath(name)}/open-folder`, "POST");
+}
 
 export async function addInput(token: string, project: string, role: string, file: File): Promise<InputFilesReply> {
   const form = new FormData();

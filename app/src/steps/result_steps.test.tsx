@@ -55,6 +55,7 @@ test("a run that stopped early lists the layers its stages left without data; a 
 test("each stage names the results it writes; the score points follow the carving, not the analysis", () => {
   expect(resultsOfStages(["preprocessing"])).toEqual(["skyDome"]);
   expect(resultsOfStages(["thresholding", "exporting", "massing"])).toEqual(["summary", "scorePoints", "envelope", "massing", "platesFile"]);
+  expect(resultsOfStages(["exporting"])).toEqual(["summary", "envelope"]);       // the envelope volume is in the run summary (R2 5)
 });
 
 function followedRun(initial: RunRecord | null) {
@@ -139,7 +140,7 @@ test("threshold moves during a carving run: one more run with the last value, an
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
-      token: "token", project: "p", form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
+      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
       refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
@@ -201,7 +202,7 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
-      token: "token", project: "p", form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
+      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
       refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
@@ -261,7 +262,7 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
-      token: "token", project: "p", form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
+      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
       stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
       openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
@@ -309,7 +310,7 @@ test("Run analysis answered with up to date asks for the stage status again and 
   function Workspace() {
     const runs = useRunLoop("token", vi.fn());
     const steps = useResultSteps({
-      token: "token", project: "p", form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
+      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
       stages, refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
@@ -327,4 +328,41 @@ test("Run analysis answered with up to date asks for the stage status again and 
   // The carving asked for, and the analysis before it that the page did not hold as current; not the envelope or the massing.
   expect(requests.slice(requestsAtOpen).filter((request) => request.startsWith("GET")).map((request) => request.split("/api/projects/p/")[1]).sort())
     .toEqual(["run/score-points", "run/sky-patches", "run/summary"]);
+});
+
+test("a threshold change whose save stores a mode or an analysis setting a refused save had left starts no carving run", async () => {
+  FakeWebSocket.opened = [];
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  const requests: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (address: string, init?: RequestInit) => {
+    requests.push(`${init?.method ?? "GET"} ${address}`);
+    if ((init?.method ?? "GET") === "POST" && address.endsWith("/runs")) return new Response(JSON.stringify(STARTED("r1")));
+    if (address.endsWith("/run/summary")) return new Response(JSON.stringify({ carving: null, massing: null }));
+    return new Response(JSON.stringify({ detail: "none" }), { status: 404 });
+  }));
+  const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, exporting: "missing", massing: "missing" };
+  const form = initialFormState({ schema: { properties: { mode: { default: "time-based" }, threshold: { default: null } } }, modes: [],
+                                  settings: { mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }, gridPlan: null });
+  // The save stores what the analysis reads: the form after it counts one more stored analysis change.
+  let formNow = form;
+  const changeAndSave = vi.fn(async (): Promise<SaveOutcome> => {
+    formNow = { ...form, storedAnalysisRevision: form.storedAnalysisRevision + 1 };
+    return "saved";
+  });
+  function Workspace() {
+    const runs = useRunLoop("token", vi.fn());
+    const steps = useResultSteps({
+      token: "token", project: "p", form, currentForm: () => formNow, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false,
+      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+    });
+    return <>{steps.content.carving}</>;
+  }
+  rendered = renderForTest(<Workspace />);
+  await settle();
+  typeAndLeave(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!, "1");
+  await settle();
+  expect(changeAndSave).toHaveBeenCalledOnce();
+  expect(requests.filter((request) => request.startsWith("POST"))).toEqual([]);
+  expect(FakeWebSocket.opened).toHaveLength(0);
 });

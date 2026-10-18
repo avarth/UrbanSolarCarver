@@ -19,14 +19,14 @@ interface ThresholdRuleProps extends ControlProps {
   onThreshold: (value: ThresholdSpec | null) => void;
 }
 
-export function ThresholdRule({ value, isShadowTolerated, unit, onThreshold, inputId, invalid, describedBy, disabled }: ThresholdRuleProps) {
+export function ThresholdRule({ value, isShadowTolerated, unit, onThreshold, inputId, invalid, describedBy, disabled, onRefusedInput }: ThresholdRuleProps) {
   const cutoffValue = value?.method === "cutoff" ? (value.value ?? null) : null;
   if (isShadowTolerated) {
     // Unset, the engine applies a cutoff of 0 to time-based scores.
     return (
       <div className="setting-control">
         <NumberInput id={inputId} value={cutoffValue ?? 0} mayBeEmpty minimum={0} invalid={invalid} describedBy={describedBy} disabled={disabled}
-                     onValue={(cutoff) => onThreshold(cutoff === null ? null : { method: "cutoff", value: cutoff })} />
+                     onValue={(cutoff) => onThreshold(cutoff === null ? null : { method: "cutoff", value: cutoff })} onRefused={onRefusedInput} />
         <span className="setting-unit">{unit}</span>
       </div>
     );
@@ -45,7 +45,8 @@ export function ThresholdRule({ value, isShadowTolerated, unit, onThreshold, inp
       </select>
       {chosenRule === "cutoff" && (
         <NumberInput ariaLabel={messages.scoreCutoffValue} value={cutoffValue} mayBeEmpty={false} minimum={0} invalid={invalid}
-                     describedBy={describedBy} disabled={disabled} onValue={(cutoff) => onThreshold({ method: "cutoff", value: cutoff })} />
+                     describedBy={describedBy} disabled={disabled} onValue={(cutoff) => onThreshold({ method: "cutoff", value: cutoff })}
+                     onRefused={onRefusedInput} />
       )}
     </div>
   );

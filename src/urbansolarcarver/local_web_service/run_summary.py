@@ -11,9 +11,9 @@ from pathlib import Path
 import numpy as np
 
 from ..mode_registry import canonical_mode_name
-from ..pydantic_schemas import PreprocessingManifest, UserConfig
+from ..pydantic_schemas import ExportingManifest, PreprocessingManifest, UserConfig
 from ..stage_settings import stage_folder
-from .api_models import CarvingSummary, MassingSummary, RunSummary, SkyDome, SunMarker, SunPath, SunPathDay
+from .api_models import CarvingSummary, EnvelopeSummary, MassingSummary, RunSummary, SkyDome, SunMarker, SunPath, SunPathDay
 from .score_points import read_stage_manifest, resolve_stored_path
 
 DIAGNOSTIC_PATH = Path("diagnostics") / "diagnostic.json"
@@ -28,9 +28,15 @@ HORIZON_SEARCH_MINUTES = 5      # sunrise and sunset are rounded to a minute, wh
 SUN_PATH_MODE = "time-based"
 
 
-def build_run_summary(run_folder: Path) -> RunSummary:
-    """The numbers of the thresholding and massing stages; each part is None when its stage has no output."""
-    return RunSummary(carving=_carving_summary(Path(run_folder)), massing=_massing_summary(Path(run_folder)))
+def build_run_summary(run_folder: Path, envelope_voxel_size: float | None = None) -> RunSummary:
+    """The numbers of the thresholding, exporting and massing stages; each part is None when its stage has no output.
+
+    *envelope_voxel_size* is the voxel size of the grid exporting meshed (stage_records.envelope_voxel_size); without it the
+    envelope part is None, since the exporting diagnostic counts voxels only.
+    """
+    run_folder = Path(run_folder)
+    return RunSummary(carving=_carving_summary(run_folder), envelope=_envelope_summary(run_folder, envelope_voxel_size),
+                      massing=_massing_summary(run_folder))
 
 
 def _read_json(path: Path) -> dict | None:
@@ -56,6 +62,16 @@ def _carving_summary(run_folder: Path) -> CarvingSummary | None:
     )
 
 
+def _envelope_summary(run_folder: Path, voxel_size: float | None) -> EnvelopeSummary | None:
+    """The envelope mesh exporting wrote, named by its manifest (a format chosen since does not rename it), and its volume."""
+    manifest = read_stage_manifest(run_folder, "exporting", ExportingManifest)
+    if manifest is None:
+        return None
+    diagnostic = _read_json(stage_folder(run_folder, "exporting") / DIAGNOSTIC_PATH)
+    volume = None if diagnostic is None or voxel_size is None else diagnostic["voxels_retained"] * voxel_size ** 3
+    return EnvelopeSummary(mesh_file=Path(manifest[0].mesh_path).name, envelope_volume_m3=volume)
+
+
 def _massing_summary(run_folder: Path) -> MassingSummary | None:
     massing_folder = stage_folder(run_folder, "massing")
     plates = _read_json(massing_folder / PLATES_FILE_NAME)
@@ -66,7 +82,6 @@ def _massing_summary(run_folder: Path) -> MassingSummary | None:
         floor_area_m2_per_storey=plates["floor_area_m2_per_floor"],
         total_floor_area_m2=plates["total_floor_area_m2"],
         storeys_built=diagnostic["floors_built"],
-        envelope_volume_m3=diagnostic["envelope_volume_m3"],
     )
 
 

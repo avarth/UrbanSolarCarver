@@ -310,7 +310,7 @@ class TestUiCommand:
         monkeypatch.setattr(importlib.util, "find_spec",
                             lambda name, *args, **kwargs: None if name == missing_module else real_find_spec(name, *args, **kwargs))
 
-    @pytest.mark.parametrize("missing_module", ["fastapi", "uvicorn", "multipart", "websockets"])
+    @pytest.mark.parametrize("missing_module", ["fastapi", "uvicorn", "multipart", "websockets", "send2trash"])
     def test_without_the_extra_names_the_install_command(self, monkeypatch, built_front_end, service_never_starts, missing_module):
         import sys
         self._without_module(monkeypatch, missing_module)
@@ -467,6 +467,74 @@ class TestUiCommand:
         assert result.exit_code == 1, result.output
         assert f"port {taken_port}" in result.output and "--port" in result.output
         assert f"http://127.0.0.1:{taken_port}/?token=" in result.output      # the launch URL is still printed
+
+    @pytest.fixture
+    def home_folder(self, tmp_path, monkeypatch):
+        """A home folder of its own: the default projects folder and the preference file live under it."""
+        home = tmp_path / "home"
+        home.mkdir()
+        monkeypatch.setenv("USERPROFILE", str(home))
+        monkeypatch.setenv("HOME", str(home))
+        return home
+
+    @pytest.fixture
+    def created_services(self, monkeypatch, built_front_end):
+        """Runs `usc ui` without a real server and records the projects folder and its source that create_app received."""
+        import uvicorn
+        from urbansolarcarver.local_web_service import server
+        from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
+
+        created = []
+        real_create_app = server.create_app
+
+        def recording_create_app(projects_folder, *args, **kwargs):
+            created.append((projects_folder, kwargs.get("projects_folder_source")))
+            return real_create_app(projects_folder, *args, **kwargs)
+
+        def listening_run(server_object, sockets=None):
+            server_object.started = True
+
+        monkeypatch.setattr(server, "create_app", recording_create_app)
+        monkeypatch.setattr(GpuWarmUp, "start", lambda self: None)
+        monkeypatch.setattr(uvicorn.Server, "run", listening_run)
+        return created
+
+    def test_without_the_option_the_default_folder_is_used(self, tmp_path, home_folder, created_services):
+        result = _invoke(["ui", "--no-browser"])
+        default_folder = (home_folder / "UrbanSolarCarver" / "projects").resolve()
+        assert result.exit_code == 0, result.output
+        assert created_services == [(default_folder, "default")]
+        assert default_folder.is_dir()
+
+    def test_without_the_option_the_stored_preference_is_used(self, tmp_path, home_folder, created_services):
+        from urbansolarcarver.local_web_service.user_preferences import write_projects_folder_preference
+        preferred = tmp_path / "preferred projects"
+        write_projects_folder_preference(preferred)
+        result = _invoke(["ui", "--no-browser"])
+        assert result.exit_code == 0, result.output
+        assert created_services == [(preferred.resolve(), "preference")]
+        assert f"Projects folder: {preferred.resolve()}" in result.output
+
+    def test_the_option_wins_over_the_stored_preference_and_leaves_it_alone(self, tmp_path, home_folder, created_services):
+        from urbansolarcarver.local_web_service.user_preferences import read_projects_folder_preference, write_projects_folder_preference
+        preferred = tmp_path / "preferred projects"
+        write_projects_folder_preference(preferred)
+        given = tmp_path / "given projects"
+        result = _invoke(["ui", "--no-browser", "--projects-folder", str(given)])
+        assert result.exit_code == 0, result.output
+        assert created_services == [(given.resolve(), "command_line")]
+        assert read_projects_folder_preference() == preferred
+
+    def test_a_stored_folder_that_cannot_be_made_falls_back_to_the_default_and_says_so(self, tmp_path, home_folder, created_services):
+        from urbansolarcarver.local_web_service.user_preferences import write_projects_folder_preference
+        write_projects_folder_preference(tmp_path / "gone")
+        (tmp_path / "gone").rmdir()
+        (tmp_path / "gone").write_text("a file where the folder was", encoding="utf-8")    # mkdir now fails
+        result = _invoke(["ui", "--no-browser"])
+        default_folder = (home_folder / "UrbanSolarCarver" / "projects").resolve()
+        assert result.exit_code == 0, result.output
+        assert created_services == [(default_folder, "default")]
+        assert str(tmp_path / "gone") in result.output and "not available" in result.output
 
     def test_an_unknown_device_is_refused(self, tmp_path, built_front_end):
         result = _invoke(["ui", "--no-browser", "--device", "tpu", "--projects-folder", str(tmp_path / "projects")])

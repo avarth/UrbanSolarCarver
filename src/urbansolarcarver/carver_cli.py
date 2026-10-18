@@ -929,14 +929,13 @@ def schema(
 # keeps working without the extra.
 # ---------------------------------------------------------------------------
 UI_DEFAULT_PORT = 8770
-UI_DEFAULT_PROJECTS_FOLDER = Path.home() / "UrbanSolarCarver" / "projects"
 UI_HOST = "127.0.0.1"          # the service is never reachable from another machine
 UI_LOGGERS_SHOWING_REQUEST_PATHS = ("uvicorn.error", "uvicorn.access")
 # The modules of the ui extra (fastapi, uvicorn, python-multipart, websockets): fastapi and uvicorn import without
 # the other two, which the service needs for file uploads and for the run events.
 UI_LISTEN_POLL_SECONDS = 0.05  # how often the thread that opens the browser looks whether the server listens
 UI_BROWSER_THREAD_JOIN_SECONDS = 1.0  # how long stopping waits for that thread; webbrowser.open can block, the thread is a daemon
-UI_REQUIRED_MODULES = ("fastapi", "uvicorn", "multipart", "websockets")
+UI_REQUIRED_MODULES = ("fastapi", "uvicorn", "multipart", "websockets", "send2trash")
 
 
 def _ui_install_command() -> str:
@@ -947,6 +946,34 @@ def _ui_install_command() -> str:
     if (repository_folder / "pyproject.toml").is_file():
         return f'{python_command} -m pip install -e "{repository_folder}[ui]"'
     return f'{python_command} -m pip install "urbansolarcarver[ui]"'
+
+
+def _ui_default_projects_folder() -> Path:
+    return Path.home() / "UrbanSolarCarver" / "projects"
+
+
+def _ui_projects_folder_in_use(given_on_command_line: Path | None) -> tuple[Path, str]:
+    """The projects folder for this launch, made if it does not exist, and where it came from.
+
+    The command line wins, then the folder the user chose in the app (``~/.urbansolarcarver/ui.json``), then the default.
+    A chosen folder that cannot be made now (a drive that is gone) is named and the default is used instead.
+    """
+    from .local_web_service.user_preferences import read_projects_folder_preference
+    if given_on_command_line is not None:
+        folder = given_on_command_line.expanduser().resolve()
+        folder.mkdir(parents=True, exist_ok=True)
+        return folder, "command_line"
+    preferred = read_projects_folder_preference()
+    if preferred is not None:
+        try:
+            folder = preferred.expanduser().resolve()
+            folder.mkdir(parents=True, exist_ok=True)
+            return folder, "preference"
+        except OSError as error:
+            typer.secho(f"  The projects folder you chose, {preferred}, is not available ({error}); using the default folder.", fg="yellow")
+    folder = _ui_default_projects_folder().resolve()
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder, "default"
 
 
 def _ui_static_folder() -> Path:
@@ -987,8 +1014,9 @@ class _TokenRedactingFilter(logging.Filter):
 @app.command(help="Open the browser interface (needs the ui extra)")
 def ui(
     port: int = Option(UI_DEFAULT_PORT, "--port", help="Port on 127.0.0.1"),
-    projects_folder: Path = Option(UI_DEFAULT_PROJECTS_FOLDER, "--projects-folder",
-                                   help="Folder that holds one subfolder per project"),
+    projects_folder: Optional[Path] = Option(None, "--projects-folder",
+                                             help="Folder that holds one subfolder per project (default: the folder chosen in the app, "
+                                                  "else ~/UrbanSolarCarver/projects)"),
     no_browser: bool = Option(False, "--no-browser", help="Print the address without opening the browser"),
     device: str = Option("auto", "--device", "-d", help="Compute device: 'auto', 'cpu', or 'cuda'"),
 ):
@@ -1018,12 +1046,12 @@ def ui(
     from .local_web_service.gpu_warm_up import GpuWarmUp
     from .local_web_service.server import create_app
 
-    projects_folder = projects_folder.expanduser().resolve()
-    projects_folder.mkdir(parents=True, exist_ok=True)
+    projects_folder, projects_folder_source = _ui_projects_folder_in_use(projects_folder)
     token = secrets.token_hex(32)
     warm_up = GpuWarmUp(device)
     warm_up.start()
-    service = create_app(projects_folder, token, port, device=device, static_folder=static_folder, warm_up=warm_up)
+    service = create_app(projects_folder, token, port, device=device, static_folder=static_folder, warm_up=warm_up,
+                         projects_folder_source=projects_folder_source)
 
     launch_url = f"http://{UI_HOST}:{port}/?token={token}"
     typer.echo(f"  Projects folder: {projects_folder}")

@@ -5,7 +5,7 @@ import { formReducer, initialFormState, type FormState } from "../settings_form/
 import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { CarvingStep, readAutoUpdate, type CarvingStepProps } from "./CarvingStep";
-import { EnvelopeAndMassingStep, storeyRows, type PlatesFile } from "./EnvelopeAndMassingStep";
+import { EnvelopeAndMassingStep, storeyRows, type EnvelopeAndMassingStepProps, type PlatesFile } from "./EnvelopeAndMassingStep";
 import { exportDownloads } from "./ExportStep";
 import { RunProgress } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
@@ -75,7 +75,7 @@ function typeInto(input: HTMLInputElement, text: string) {
   });
 }
 
-test("Sun at set hours: Shadow tolerated with its slider ends, the histogram, the tiles two per row", () => {
+test("Solar time-based: Shadow tolerated with its slider ends, the histogram, the tiles two per row", () => {
   rendered = renderForTest(<CarvingStep {...carvingProps()} />);
   const text = rendered.container.textContent!;
   expect(rendered.container.querySelector(".threshold-control label")!.textContent).toBe("Shadow tolerated");
@@ -214,20 +214,56 @@ test("the storeys of plates.json, one row each from the ground up, heights from 
   expect(storeyRows(belowZero).map((row) => [row.bottom, row.top])).toEqual([[0, 5], [5, 8]]);
 });
 
-test("Envelope and massing: three tiles, the per-storey table with a total, greyed and labelled when out of date", () => {
-  const massing = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
-  rendered = renderForTest(<EnvelopeAndMassingStep form={formFor("time-based")} onChange={vi.fn()} disabledReason={null} massing={massing}
-                                                   platesFile={PLATES} outOfDate hasRunReport onOpenRunReport={vi.fn()} />);
-  expect([...rendered.container.querySelectorAll(".number-tile")].map((tile) => tile.textContent))
-    .toEqual(["Gross floor area880 m²", "Storeys2", "Envelope volume4 200 m³"]);
-  const table = rendered.container.querySelector("table")!;
+const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
+const ENVELOPE = { mesh_file: "export.ply", envelope_volume_m3: 4150 };
+
+function envelopeAndMassingProps(overrides: Partial<EnvelopeAndMassingStepProps> = {}): EnvelopeAndMassingStepProps {
+  return {
+    form: formFor("time-based"), onChange: vi.fn(), disabledReason: null, envelope: ENVELOPE, envelopeOutOfDate: false,
+    envelopeButton: <button type="button">Build envelope</button>, massing: MASSING, platesFile: PLATES, massingOutOfDate: false,
+    massingButton: <button type="button">Build massing</button>, buildFeedback: null, hasRunReport: true, onOpenRunReport: vi.fn(), ...overrides,
+  };
+}
+
+/** The part of the step whose heading is *title*: its settings, its button and its results. */
+function partOf(container: Element, title: string): Element {
+  return [...container.querySelectorAll(".build-part")].find((part) => part.querySelector(".setting-group-title")!.textContent === title)!;
+}
+
+test("Envelope and massing: two parts, each with its settings, its button and its results; the run report link at the bottom (R2 5)", () => {
+  rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps()} />);
+  const envelope = partOf(rendered.container, "Envelope"), massing = partOf(rendered.container, "Building massing");
+  expect(envelope.querySelector('[data-setting="apply_smoothing"]')).not.toBeNull();
+  expect(envelope.querySelector('[data-setting="ground_floor_height"]')).toBeNull();
+  expect(massing.querySelector('[data-setting="min_plate_dimension"]')).not.toBeNull();
+  expect([...rendered.container.querySelectorAll('[data-setting="min_plate_dimension"] label')].map((label) => label.textContent)).toEqual(["Grid module"]);
+  expect([...envelope.querySelectorAll("button")].map((button) => button.textContent)).toContain("Build envelope");
+  expect([...massing.querySelectorAll("button")].map((button) => button.textContent)).toContain("Build massing");
+  expect([...envelope.querySelectorAll(".number-tile")].map((tile) => tile.textContent)).toEqual(["Envelope volume i4 150 m³"]);     // " i": the tile's "i"
+  expect([...massing.querySelectorAll(".number-tile")].map((tile) => tile.textContent)).toEqual(["Gross floor area880 m²", "Storeys2"]);
+  const table = massing.querySelector("table")!;
   expect(table.querySelector("caption")!.textContent).toBe("Floor area per storey");
   expect([...table.querySelectorAll("tr")].map((row) => [...row.children].map((cell) => cell.textContent))).toEqual([
     ["Storey", "Bottom, m", "Top, m", "Area, m²"], ["1, ground", "0.0", "5.0", "500"], ["2", "5.0", "8.0", "380"], ["Total", "", "", "880"],
   ]);
-  expect(rendered.container.querySelector(".envelope-results-out-of-date")).not.toBeNull();
-  expect(rendered.container.textContent).toContain("Out of date for the current carving");
-  expect(rendered.container.textContent).toContain("Open the run report");
+  expect(rendered.container.querySelector(".envelope-results-out-of-date")).toBeNull();
+  // What the envelope volume counts is said in the tile's "i".
+  click(envelope.querySelector<HTMLButtonElement>('[aria-label="About envelope volume"]')!);
+  expect(document.querySelector('[role="tooltip"]')!.textContent).toBe(
+    "Counted on the kept voxels the envelope mesh was built from, after small pieces were dropped, not on the smoothed surface.");
+  const lastChild = rendered.container.querySelector(".envelope-step")!.lastElementChild!;
+  expect(lastChild.textContent).toBe("Open the run report");
+});
+
+test("each part is greyed and labelled out of date on its own; a part not built shows no results", () => {
+  rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ massingOutOfDate: true })} />);
+  expect(partOf(rendered.container, "Envelope").querySelector(".envelope-results-out-of-date")).toBeNull();
+  expect(partOf(rendered.container, "Building massing").querySelector(".envelope-results-out-of-date")!.textContent).toContain("Out of date for the current settings");
+  rendered.unmount();
+  rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ envelopeOutOfDate: true, massing: null, platesFile: null })} />);
+  expect(partOf(rendered.container, "Envelope").querySelector(".envelope-results-out-of-date")).not.toBeNull();
+  expect(partOf(rendered.container, "Building massing").querySelector(".envelope-results")).toBeNull();
+  expect(partOf(rendered.container, "Building massing").textContent).toContain("Build massing");
 });
 
 /** The elements that hold text of their own (HTML or SVG) inside *root*. */
@@ -261,9 +297,7 @@ test("dimmed and greyed results keep their text at full opacity in the muted col
     expect(Number(getComputedStyle(carvingResults.querySelector(".histogram-swatch")!).opacity)).toBeLessThan(1);
     rendered.unmount();
 
-    const massing = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2, envelope_volume_m3: 4200 };
-    rendered = renderForTest(<EnvelopeAndMassingStep form={formFor("time-based")} onChange={vi.fn()} disabledReason={null} massing={massing}
-                                                     platesFile={PLATES} outOfDate hasRunReport onOpenRunReport={vi.fn()} />);
+    rendered = renderForTest(<EnvelopeAndMassingStep {...envelopeAndMassingProps({ massingOutOfDate: true })} />);
     const massingResults = rendered.container.querySelector(".envelope-results-out-of-date")!;
     const massingTexts = textBearingElementsIn(massingResults);
     expect(massingTexts.map((element) => element.textContent)).toEqual(expect.arrayContaining(["Gross floor area", "Floor area per storey", "1, ground", "880"]));
@@ -276,7 +310,7 @@ test("dimmed and greyed results keep their text at full opacity in the muted col
 });
 
 test("the Export downloads in the format chosen, out-of-date files labelled", () => {
-  const downloads = exportDownloads({ project: "my project", meshFormat: "glb", envelopeOutOfDate: true, massingOutOfDate: false });
+  const downloads = exportDownloads({ project: "my project", meshFormat: "glb", envelopeFile: "export.glb", envelope: "out_of_date", massing: "current" });
   expect(downloads.map((download) => [download.label, download.fileName, download.outOfDate])).toEqual([
     ["Carved envelope (GLB)", "my project envelope.glb", true],
     ["Building massing (OBJ)", "my project massing.obj", false],
@@ -286,6 +320,24 @@ test("the Export downloads in the format chosen, out-of-date files labelled", ()
   ]);
   expect(downloads[0].address).toBe("/api/projects/my%20project/run/files/exporting/export.glb");
   expect(downloads[3].address).toBe("/api/projects/my%20project/config.yaml");
+});
+
+test("Export offers each file once its stage exists: the envelope without the massing, the massing without the envelope (R2 5)", () => {
+  const labelsWith = (envelope: "current" | "missing", massing: "current" | "missing") =>
+    exportDownloads({ project: "p", meshFormat: "ply", envelopeFile: "export.ply", envelope, massing }).map((download) => download.label);
+  expect(labelsWith("current", "missing")).toEqual(["Carved envelope (PLY)", "Settings (config.yaml)", "Whole project (zip)"]);
+  expect(labelsWith("missing", "current")).toEqual(["Building massing (OBJ)", "Building massing data (JSON)", "Settings (config.yaml)", "Whole project (zip)"]);
+});
+
+test("Export offers the envelope file that was built, under its own format, when the format chosen since was not built yet", () => {
+  // OBJ was chosen while Carving was locked: stored, not built; the PLY on disk is what can be downloaded.
+  const [envelope] = exportDownloads({ project: "p", meshFormat: "obj", envelopeFile: "export.ply", envelope: "out_of_date", massing: "missing" });
+  expect([envelope.label, envelope.address, envelope.fileName, envelope.outOfDate, envelope.note])
+    .toEqual(["Carved envelope (PLY)", "/api/projects/p/run/files/exporting/export.ply", "p envelope.ply", true, "Built as PLY; the next envelope build writes OBJ."]);
+  expect(exportDownloads({ project: "p", meshFormat: "ply", envelopeFile: "export.ply", envelope: "current", massing: "missing" })[0].note).toBeUndefined();
+  // Until the run summary names the file, no envelope file is offered.
+  expect(exportDownloads({ project: "p", meshFormat: "ply", envelopeFile: null, envelope: "current", massing: "missing" }).map((download) => download.label))
+    .toEqual(["Settings (config.yaml)", "Whole project (zip)"]);
 });
 
 function runs(record: RunRecord | null, notice: RunLoop["notice"] = null) {
@@ -360,6 +412,24 @@ test("with auto-update on, a carving number field runs once the user leaves it, 
   click(rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above"] input')!);
   expect(onChange).toHaveBeenLastCalledWith({ carve_above: false });
   expect(onCarvingSettingCommit).toHaveBeenCalledTimes(3);
+});
+
+test("with auto-update on, a carving slider changes the form while dragged and runs once it is let go, or after a key moved it", () => {
+  const onChange = vi.fn(), onCarvingSettingCommit = vi.fn();
+  rendered = renderForTest(<CarvingStep {...carvingProps({ onChange, onCarvingSettingCommit })} />);
+  unfoldCarvingSettings(rendered.container);
+  const slider = rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="range"]')!;
+  typeInto(slider, "60");
+  typeInto(slider, "55");
+  expect(onChange.mock.calls).toEqual([[{ max_slope_deg: 60 }], [{ max_slope_deg: 55 }]]);
+  expect(onCarvingSettingCommit).not.toHaveBeenCalled();
+  act(() => slider.dispatchEvent(new Event("pointerup", { bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledOnce();
+  typeInto(slider, "56");
+  act(() => slider.dispatchEvent(new KeyboardEvent("keyup", { key: "ArrowRight", bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledTimes(2);
+  act(() => slider.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", bubbles: true })));
+  expect(onCarvingSettingCommit).toHaveBeenCalledTimes(2);       // no slider key, nothing moved
 });
 
 test("with auto-update off, carving settings only change the form", () => {
@@ -437,7 +507,43 @@ test("a run report that cannot be read says so instead of an empty panel", async
   rendered = renderForTest(<RunReportPanel token="t" project="p" onClose={vi.fn()} onServiceProblem={vi.fn()} />);
   await act(async () => {});
   expect(rendered.container.querySelector(".run-report-problem")!.textContent)
-    .toBe("The run report could not be read. Build the envelope and massing again to write it.");
+    .toBe("The run report could not be read. Build the envelope or the massing again to write it.");
   expect(rendered.container.querySelector("pre")).toBeNull();
   vi.unstubAllGlobals();
+});
+
+/** Types *text* one character at a time, as a keyboard does: each keystroke is an input event with the text so far. */
+function typeKeys(input: HTMLInputElement, text: string) {
+  typeInto(input, "");
+  for (let length = 1; length <= text.length; length++) typeInto(input, text.slice(0, length));
+}
+
+test("Carve amount typed past 100 keystroke by keystroke keeps the stored amount and runs nothing on leave", () => {
+  const onThresholdCommit = vi.fn(), onChange = vi.fn();
+  rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("daylight"), isWeightedMode: true, onThresholdCommit, onChange })} />);
+  const field = rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
+  typeKeys(field, "150");
+  expect(rendered.container.querySelector(".threshold-control .setting-error")!.textContent).toBe("Use 0 to 100.");
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(onThresholdCommit).not.toHaveBeenCalled();
+  expect(field.value).toBe("70");
+  expect(onChange).not.toHaveBeenCalled();
+});
+
+test("while the analysis is out of date, only a carving setting with an error stays editable, and its change runs nothing", () => {
+  const onCarvingSettingCommit = vi.fn(), onChange = vi.fn();
+  let form = formFor("daylight");
+  form = formReducer(form, { type: "save_rejected", reply: { field_errors: [{ field: "max_slope_deg", message: "Input should be greater than 0" }], grid_plan: null } });
+  rendered = renderForTest(<CarvingStep {...carvingProps({ form, isWeightedMode: true, analysisOutOfDate: true, onCarvingSettingCommit, onChange })} />);
+  const slope = rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!;
+  expect(slope.disabled).toBe(false);
+  expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="carve_above"] input')!.disabled).toBe(true);
+  expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.disabled).toBe(true);
+  // A slider is locked with its number field, and stays editable with it when it holds the error.
+  expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="score_smoothing"] input[type="range"]')!.disabled).toBe(true);
+  expect(rendered.container.querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="range"]')!.disabled).toBe(false);
+  typeKeys(slope, "45");
+  act(() => slope.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(onChange).toHaveBeenLastCalledWith({ max_slope_deg: 45 });
+  expect(onCarvingSettingCommit).not.toHaveBeenCalled();
 });
