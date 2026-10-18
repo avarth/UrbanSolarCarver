@@ -4,6 +4,10 @@
 
 ## Starting the interface
 
+In the UrbanSolarCarver folder, double-click `start-urbansolarcarver.bat` on Windows, or run `./start-urbansolarcarver.sh` in a terminal on Linux and macOS. The first time, the launcher installs UrbanSolarCarver with `setup_env.py` (this takes several minutes and needs Python 3.10 or newer); after that it starts the interface at once. A window stays open while the interface runs: close it (Windows) or press Ctrl+C (Linux, macOS) to stop UrbanSolarCarver. The launcher passes its arguments on to `usc ui`, so `start-urbansolarcarver.bat --port 8780` works too. It uses the environment in `.venv` in the folder, or `~/.usc-venv` when `setup_env.py` had to put it there; for an environment made with `setup_env.py --venv-dir`, set `USC_VENV` to that folder.
+
+From a terminal with the environment active, the same command is:
+
 ```bash
 usc ui
 ```

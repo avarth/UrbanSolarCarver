@@ -374,7 +374,8 @@ def main():
           else f"  Activate:  source {venv_dir}/bin/activate")
     print(f"  CLI:       urbansolarcarver --help")
     if not args.no_ui:
-        print(f"  Browser:   usc ui")
+        launcher = "start-urbansolarcarver.bat" if platform.system() == "Windows" else "./start-urbansolarcarver.sh"
+        print(f"  Browser:   {launcher}  (or: usc ui)")
     print(f"  Jupyter:   {vpy} -m jupyter notebook")
     print()
 

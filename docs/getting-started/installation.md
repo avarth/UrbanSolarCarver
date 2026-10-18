@@ -40,7 +40,7 @@ The browser interface is an optional extra of the package (`ui`). `setup_env.py`
 python -m pip install -e ".[ui]"
 ```
 
-Then start it with `usc ui`. Without the extra, every other `usc` command works as before, and `usc ui` prints the install command above and exits.
+Then start it by double-clicking `start-urbansolarcarver.bat` (Windows) or running `./start-urbansolarcarver.sh` (Linux, macOS) in the repository folder; on a fresh clone the launcher runs `setup_env.py` first. From a terminal, `usc ui` does the same. Without the extra, every other `usc` command works as before, and `usc ui` prints the install command above and exits.
 
 ## Requirements
 

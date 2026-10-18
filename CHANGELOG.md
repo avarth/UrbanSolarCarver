@@ -9,6 +9,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added (browser UI)
 
+- **Launchers for the browser interface:** `start-urbansolarcarver.bat`
+  (Windows, double-click) and `start-urbansolarcarver.sh` (Linux, macOS) in
+  the repository. On a fresh clone they install with `setup_env.py`, then
+  start `usc ui`; they find `.venv` or `~/.usc-venv`, or the environment named
+  by `USC_VENV`, and pass their arguments on to `usc ui`.
+
 - **`usc ui` opens a browser interface** served from this machine
   (`--port`, `--projects-folder`, `--no-browser`, `--device`). It is an
   optional extra (`ui`: fastapi, uvicorn, python-multipart, websockets) that
