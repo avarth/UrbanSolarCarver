@@ -12,6 +12,7 @@ import re
 import shutil
 import tempfile
 import threading
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -20,13 +21,14 @@ import trimesh
 import yaml
 from pydantic import ValidationError
 
+from ..cold_period import cold_period_from_weather_file
 from ..errors import ConfigError, InputError
 from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_budget, plan_voxel_grid
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from .api_models import ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from .api_models import ColdPeriodDates, ColdPeriodReply, ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
 from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, move_to_recycle_bin
@@ -571,10 +573,28 @@ class ProjectStore:
             return None
         return trimesh.load(str(joined_path), force="mesh").bounds.tolist()
 
+    def weather_file_path(self, name: str) -> Path | None:
+        """The project's weather file; None when none was added."""
+        weather_path = self.open(name) / INPUTS_FOLDER / WEATHER_FILE_NAME
+        return weather_path if weather_path.is_file() else None
+
+    def cold_period(self, name: str, base_temperature: float) -> ColdPeriodReply:
+        """The cold period of the project's weather file for *base_temperature* (cold_period.py)."""
+        weather_path = self.weather_file_path(name)
+        if weather_path is None:
+            return ColdPeriodReply(status="no_weather_file")
+        try:
+            period = cold_period_from_weather_file(str(weather_path), base_temperature)
+        except Exception as error:      # Ladybug's reader fails with AssertionError, IndexError or ValueError, by what is wrong
+            raise ProjectError(f"The weather file cannot be read for the cold period: {error}", status_code=422) from error
+        if period is None:
+            return ColdPeriodReply(status="none")
+        return ColdPeriodReply(status="found", period=ColdPeriodDates(**asdict(period)))
+
     def weather_location(self, name: str) -> str | None:
         """'<city>, <country>' from the LOCATION line of the weather file; None without a usable file."""
-        weather_path = self.open(name) / INPUTS_FOLDER / WEATHER_FILE_NAME
-        if not weather_path.is_file():
+        weather_path = self.weather_file_path(name)
+        if weather_path is None:
             return None
         with weather_path.open(encoding="utf-8", errors="replace") as weather_file:
             location_fields = weather_file.readline().strip().split(",")

@@ -262,6 +262,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/cold-period": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cold Period
+         * @description The cold period of the weather file for a base temperature; the page sends balance_temperature - balance_offset as shown.
+         */
+        get: operations["cold_period"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/inputs/{role}": {
         parameters: {
             query?: never;
@@ -492,6 +512,32 @@ export interface components {
             carve_above_extra_voxels_removed: number;
             /** Slope Limit Extra Voxels Removed */
             slope_limit_extra_voxels_removed: number;
+        };
+        /**
+         * ColdPeriodDates
+         * @description Start and end of the cold period (inclusive); start after end wraps across the new year.
+         */
+        ColdPeriodDates: {
+            /** Start Month */
+            start_month: number;
+            /** Start Day */
+            start_day: number;
+            /** End Month */
+            end_month: number;
+            /** End Day */
+            end_day: number;
+        };
+        /**
+         * ColdPeriodReply
+         * @description The cold period of the project's weather file for a base temperature (cold_period.py).
+         */
+        ColdPeriodReply: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "found" | "none" | "no_weather_file";
+            period?: components["schemas"]["ColdPeriodDates"] | null;
         };
         /**
          * ConfigErrorReply
@@ -1418,6 +1464,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cold_period: {
+        parameters: {
+            query: {
+                base_temperature: number;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColdPeriodReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };

@@ -565,6 +565,30 @@ def test_sun_path_follows_the_uploaded_weather_file(client):
     assert [marker["hour"] for marker in sun_path["days"][0]["markers"]] == [10, 12, 14]
 
 
+def test_the_cold_period_needs_the_weather_file(client):
+    create_project(client, "p", "benefit")
+    reply = client.get("/api/projects/p/cold-period", params={"base_temperature": 13})
+    assert reply.status_code == 200 and reply.json() == {"status": "no_weather_file", "period": None}
+
+
+@pytest.mark.skipif(not GOLDEN_EPW.is_file(), reason="the bundled weather file is missing")
+def test_the_cold_period_comes_from_the_uploaded_weather_file_and_the_base_temperature(client):
+    create_project(client, "p", "benefit")
+    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    found = client.get("/api/projects/p/cold-period", params={"base_temperature": 13}).json()
+    assert found == {"status": "found", "period": {"start_month": 9, "start_day": 30, "end_month": 5, "end_day": 15}}
+    warmer_base = client.get("/api/projects/p/cold-period", params={"base_temperature": 18}).json()
+    assert warmer_base["period"]["end_month"] == 6      # a higher base makes a longer cold period
+    assert client.get("/api/projects/p/cold-period", params={"base_temperature": -40}).json() == {"status": "none", "period": None}
+
+
+def test_the_cold_period_of_an_unreadable_weather_file_is_refused_with_a_reason(client, projects_folder):
+    create_project(client, "p", "benefit")
+    (projects_folder / "p" / "inputs" / "weather.epw").write_text("not a weather file", encoding="utf-8")
+    reply = client.get("/api/projects/p/cold-period", params={"base_temperature": 13})
+    assert reply.status_code == 422 and "weather file" in reply.json()["detail"]
+
+
 def test_the_project_downloads_as_a_zip(client_after_fake_run):
     reply = client_after_fake_run.get("/api/projects/p/download")
     assert reply.status_code == 200 and reply.headers["content-type"] == "application/zip"
