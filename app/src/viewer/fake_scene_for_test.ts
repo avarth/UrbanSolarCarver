@@ -12,6 +12,14 @@ export function pretendTheBrowserHasWebGl(): void {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation((kind: string) => (kind === "webgl2" ? ({} as RenderingContext) : null));
 }
 
+/**
+ * Makes the canvas give no context, as a browser without WebGL does, without jsdom's "Not implemented" line in the test output;
+ * vi.restoreAllMocks undoes it.
+ */
+export function pretendTheBrowserHasNoWebGl(): void {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => null);
+}
+
 export class FakeViewerScene {
   /** The scene the last ViewerPane made. */
   static latest: FakeViewerScene | null = null;

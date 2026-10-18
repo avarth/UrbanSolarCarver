@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { afterEach, expect, test, vi } from "vitest";
 import { messages } from "../messages";
+import { pretendTheBrowserHasNoWebGl } from "../viewer/fake_scene_for_test";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu } from "./LayersMenu";
@@ -16,6 +17,7 @@ afterEach(() => {
   rendered?.unmount();
   rendered = null;
   window.localStorage.clear();
+  vi.restoreAllMocks();
 });
 
 test("the legend shows the kept voxel range, its note and the thinning", () => {
@@ -179,6 +181,7 @@ const EMPTY_VIEW: ViewerPaneProps = {
 };
 
 test("without WebGL (jsdom has none, like a remote desktop) the view says so, and the run progress and the run report still show", () => {
+  pretendTheBrowserHasNoWebGl();
   rendered = renderForTest(<ViewerPane {...EMPTY_VIEW} runProgress={0.5} overlayContent={<div className="run-report-panel">Run report</div>} />);
   const unavailable = rendered.container.querySelector(".viewer-unavailable")!;
   expect(unavailable.textContent).toBe(messages.viewerNeedsWebGl);
@@ -191,6 +194,7 @@ test("without WebGL (jsdom has none, like a remote desktop) the view says so, an
 });
 
 test("without WebGL the empty project's way to start (the hint, Add files, the examples) stays under the message", () => {
+  pretendTheBrowserHasNoWebGl();
   const emptyState = <div className="viewer-empty-state"><p>{messages.noInputsYet}</p><button type="button">{messages.addFiles}</button></div>;
   rendered = renderForTest(<ViewerPane {...EMPTY_VIEW} centreContent={emptyState} />);
   const texts = [...rendered.container.querySelectorAll(".viewer-pane p, .viewer-pane button")].map((element) => element.textContent);
