@@ -5,7 +5,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { downloadWithToken, refusalDetailOf, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
-import { shownValue, type FormState, type FormAction, type SaveOutcome } from "../settings_form/form_state";
+import { analysisDiffersFromStored, shownValue, type FormState, type FormAction, type SaveOutcome } from "../settings_form/form_state";
 import type { Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
@@ -103,6 +103,8 @@ export interface ResultStepsContext {
   token: string;
   project: string;
   form: FormState;
+  /** The form after every action so far, read after a save is awaited. */
+  currentForm: () => FormState;
   dispatch: (action: FormAction) => void;
   flushSave: () => Promise<SaveOutcome>;
   changeAndSave: (values: Record<string, unknown>) => Promise<SaveOutcome>;
@@ -188,14 +190,35 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   };
   const startAfterSaving = (produce: string[], origin: RunOrigin) => runAnalysisAfterSaving(flushSave, () => void startRun(produce, origin));
 
+  // The carving is locked while the analysis is out of date for the settings shown (ProjectWorkspace counts every stage out of
+  // date while the form's mode or analysis settings are not the stored ones). A carving run then would run the analysis first.
+  const analysisOutOfDate = stages.preprocessing !== "current";
+  const carvingLocked = useRef(analysisOutOfDate);
+  carvingLocked.current = analysisOutOfDate;
+  /** Whether the save just stored changed what the analysis reads, or the form still shows other analysis settings. */
+  const analysisChangedBy = (revisionBefore: number) => {
+    const latest = context.currentForm();
+    return latest.storedAnalysisRevision !== revisionBefore || analysisDiffersFromStored(latest);
+  };
+  // Update carving: saved first, and run only when the save left the analysis as it was.
+  const updateCarvingAfterSaving = async () => {
+    if (carvingLocked.current) return;
+    const revisionBefore = context.currentForm().storedAnalysisRevision;
+    const outcome = await flushSave();
+    if ((outcome === "saved" || outcome === "none") && !analysisChangedBy(revisionBefore) && !carvingLocked.current) void startRun(CARVING_STAGES, "carving_update");
+  };
+
   // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value next. A run whose value
   // the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the carving stays dimmed
   // until the next value's run, or, when none follows, until the results the service holds have been fetched.
   const thresholdQueue = useMemo(() => createThresholdUpdateQueue(async (shownNumber, isSuperseded) => {
     const view = thresholdControlOf(form.mode);
-    if (view === null) return false;
+    if (view === null || carvingLocked.current) return false;
+    const revisionBefore = context.currentForm().storedAnalysisRevision;
     const outcome = await changeAndSave(thresholdControlValues(view, shownNumber));
     if (outcome !== "saved" && outcome !== "none") return false;
+    // The save stored a mode or an analysis setting a refused save had left in the form: the carving waits for Run analysis.
+    if (analysisChangedBy(revisionBefore) || carvingLocked.current) return false;
     const runOutcome = await runs.start(project, CARVING_STAGES, "carving_update", isSuperseded);
     return runOutcome !== "up_to_date" && runOutcome !== "not_started";
   }, () => showResultsTheServiceHolds.current(CARVING_STAGES)), [form.mode]);
@@ -204,8 +227,6 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} />
   );
 
-
-  const analysisOutOfDate = stages.preprocessing !== "current";
   const carvingUpdateRunning = runs.activeRun?.project === project && runs.activeRun.origin === "carving_update";
   const otherRunActive = runs.activeRun !== null && !(autoUpdate && carvingUpdateRunning);
   const settingsDisabledReason = projectRunActive ? messages.runInProgress : null;
@@ -242,7 +263,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                    runBlocker={runBlocker} onChange={changeSettings}
                    onThresholdCommit={(shownNumber) => thresholdQueue.submit(shownNumber)}
                    onCarvingSettingCommit={() => { if (thresholdView !== null) thresholdQueue.submit(thresholdControlNumber(form, thresholdView)); }}
-                   onUpdateCarving={() => void startAfterSaving(CARVING_STAGES, "carving_update")}
+                   onUpdateCarving={() => void updateCarvingAfterSaving()}
                    onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")}
                    lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")}
                    analysisFeedback={feedback("carving_run_analysis")} />

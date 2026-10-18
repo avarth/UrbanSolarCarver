@@ -35,6 +35,8 @@ const SCHEMA = {
 const MODES: ModeInfo[] = [
   { name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false, score_kind: "violation_count", weight_unit: "m²·h",
     starting_values: { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 } },
+  { name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum", weight_unit: "",
+    starting_values: {} },
 ];
 const TRIANGLE_OBJ = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
 const CARVING = {
@@ -64,6 +66,8 @@ class FakeService {
   runStartsWaitFor: Promise<void> | null = null;
   /** Every stage asked for is current already (a run the page did not follow made them so). */
   everythingUpToDate = false;
+  /** The field errors a save of these values is refused with (422), or null when it is stored. */
+  configErrorsOf: (values: Record<string, unknown>) => { field: string | null; message: string }[] | null = () => null;
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -77,6 +81,8 @@ class FakeService {
     if (method === "PUT" && path === "/config") {
       if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const { values } = JSON.parse(String(init!.body)) as { values: Record<string, unknown> };
+      const fieldErrors = this.configErrorsOf(values);
+      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null }, 422);
       this.savedValues.push(values);
       return json({ settings: values, grid_plan: null });
     }
@@ -287,4 +293,32 @@ test("threshold values given during a carving run: one more run follows with the
   expect(service.count("GET /run/summary")).toBe(2);
   expect(dimmedCarvingLayers()).toEqual([]);
   expect(service.runsStarted).toHaveLength(2);
+});
+
+test("a refused mode change locks Carving: the old mode's carving is not shown as current, and no carving setting starts the analysis", async () => {
+  service = new FakeService(CARVED, CARVING);
+  service.configErrorsOf = (values) => (values.mode === "daylight" ? [{ field: null, message: "Value error, the settings do not fit together" }] : null);
+  await openWorkspace(project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  openStep("Mode");
+  act(() => [...container().querySelectorAll<HTMLElement>('[role="radio"]')][3].click());      // Daylight
+  // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Sun at set hours.
+  openStep("Carving");
+  expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  await waitForTheSave();
+  await settle();
+  expect(service.count("PUT /config")).toBe(1);
+  expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Sun at set hours
+  expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(thresholdField().disabled).toBe(true);
+  expect(dimmedCarvingLayers()).toEqual(["carved_voxels", "kept_voxels", "sky_dome"]);
+
+  // The refusal is fixed; a carving setting changed now must not start a run, which would run the whole analysis.
+  service.configErrorsOf = () => null;
+  act(() => container().querySelector<HTMLButtonElement>(".carving-settings button.setting-fold")!.click());
+  const carveAbove = container().querySelector<HTMLInputElement>('[data-setting="carve_above"] input')!;
+  act(() => carveAbove.click());
+  await waitForTheSave();
+  await settle();
+  expect(service.runsStarted).toEqual([]);
+  expect(FakeWebSocket.opened).toHaveLength(0);
 });

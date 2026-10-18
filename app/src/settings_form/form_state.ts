@@ -6,7 +6,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { ApiError, putConfig, type ConfigErrorReply, type ConfigReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "../steps/grid_budget";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
-import { settingIsReadBy } from "./presentation";
+import { SETTING_PRESENTATIONS, settingIsReadBy } from "./presentation";
 
 export const SAVE_DELAY_MILLISECONDS = 400;
 
@@ -54,6 +54,13 @@ export interface FormState {
   carriedValues: Record<string, unknown>;
   /** The settings the last mode change set back to the new mode's own value, as the new mode refused the user's; null when none. */
   valuesResetByModeChange: { settings: string[]; mode: string } | null;
+  /**
+   * The settings the service holds (config.yaml): those the project opened with, then those of the last save it stored. The
+   * stage status and the results describe these, which are not the form's while a save waits or after one was refused.
+   */
+  stored: { mode: string; values: Record<string, unknown> };
+  /** Counts the stored saves that changed what the analysis reads (the mode, a setting of the Settings step). */
+  storedAnalysisRevision: number;
 }
 
 export interface FormStart {
@@ -92,7 +99,8 @@ export function initialFormState({ schema, modes, settings, gridPlan }: FormStar
   // save of them would be refused; the message under the field is the step's own (SettingsStep), so the text here stays empty.
   const fieldErrors: Record<string, string> = gridIsOverBudget(gridPlan) ? { voxel_size: "" } : {};
   return { mode, userValues, startingValuesByMode, scoreKindByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
-           pendingSave: false, changeCount: 0, saveFailure: null, carriedValues: {}, valuesResetByModeChange: null };
+           pendingSave: false, changeCount: 0, saveFailure: null, carriedValues: {}, valuesResetByModeChange: null,
+           stored: { mode, values: userValues }, storedAnalysisRevision: 0 };
 }
 
 /**
@@ -123,8 +131,14 @@ export function formReducer(state: FormState, action: FormAction): FormState {
                saveFailure: null, fieldErrors: {}, stepErrors: [], carriedValues: Object.fromEntries(carried),
                valuesResetByModeChange: refused.length > 0 ? { settings: refused, mode: action.mode } : null };
     }
-    case "save_succeeded":
-      return { ...state, gridPlan: action.reply.grid_plan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null, carriedValues: {} };
+    case "save_succeeded": {
+      // The reply gives the settings stored; without a mode in it (an older service), the form's are the ones sent.
+      const { mode: storedMode, ...storedValues } = action.reply.settings ?? {};
+      const stored = typeof storedMode === "string" ? { mode: storedMode, values: storedValues } : { mode: state.mode, values: state.userValues };
+      const analysisChanged = !sameAnalysisSettings(state, state.stored, stored);
+      return { ...state, gridPlan: action.reply.grid_plan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null, carriedValues: {},
+               stored, storedAnalysisRevision: state.storedAnalysisRevision + (analysisChanged ? 1 : 0) };
+    }
     case "save_rejected": {
       const shownErrors = action.reply.field_errors.map(({ field, message }) => shownConfigErrorOf(field, message, state.mode));
       // The first save after a mode change: a value it carried over that the new mode refuses goes back to the mode's own,
@@ -159,6 +173,27 @@ export function formReducer(state: FormState, action: FormAction): FormState {
     case "project_opened":
       return initialFormState(action.start);
   }
+}
+
+// The settings preprocessing reads: those of the Settings step but the computer's (how rays are batched, the statistics).
+const ANALYSIS_SETTINGS = Object.keys(SETTING_PRESENTATIONS).filter((name) =>
+  SETTING_PRESENTATIONS[name].step === "settings" && SETTING_PRESENTATIONS[name].group !== "Computer");
+
+type SettingsOfMode = FormState["stored"];
+
+/** Whether two sets of settings give the analysis the same mode and the same values (the defaults of their mode filled in). */
+function sameAnalysisSettings(state: FormState, first: SettingsOfMode, second: SettingsOfMode): boolean {
+  if (first.mode !== second.mode) return false;
+  const valueIn = (settings: SettingsOfMode, name: string) => shownValue({ ...state, mode: settings.mode, userValues: settings.values }, name);
+  return ANALYSIS_SETTINGS.every((name) => sameValue(valueIn(first, name), valueIn(second, name)));
+}
+
+/**
+ * Whether the form's mode or analysis settings differ from the stored ones (a save waits, or was refused): the analysis the
+ * stage status calls current is then not the one of the settings shown, and the carving is locked as out of date (UX 5.5).
+ */
+export function analysisDiffersFromStored(state: FormState): boolean {
+  return !sameAnalysisSettings(state, state.stored, { mode: state.mode, values: state.userValues });
 }
 
 /** What a save sends: the mode and the settings the user set. */
@@ -320,6 +355,8 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   }, [form.changeCount]);
 
   const flushSave = useCallback((): Promise<SaveOutcome> => saver.current?.flush() ?? Promise.resolve("none"), []);
+  // The form after every action so far, for code that reads it after awaiting a save, before the render that shows it.
+  const currentForm = useCallback(() => latestForm.current, []);
   const changeAndSave = useCallback((values: Record<string, unknown>): Promise<SaveOutcome> => {
     dispatch({ type: "values_changed", values });
     if (saver.current === null) return Promise.resolve("none");
@@ -327,5 +364,5 @@ export function useSettingsForm(token: string, project: string, start: FormStart
     saver.current.schedule(valuesToSend(latestForm.current));
     return saver.current.flush();
   }, []);
-  return { form, dispatch, flushSave, changeAndSave, pendingSave: form.pendingSave };
+  return { form, dispatch, flushSave, changeAndSave, currentForm, pendingSave: form.pendingSave };
 }

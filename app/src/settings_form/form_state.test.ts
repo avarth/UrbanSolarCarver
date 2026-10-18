@@ -2,7 +2,7 @@ import { act, createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, type ConfigErrorReply, type ConfigReply, type ModeInfo } from "../api_client/client";
 import { renderForTest } from "../viewer_overlays/render_for_test";
-import { createConfigSaver, defaultValue, formReducer, initialFormState, shownValue, useSettingsForm, valuesToSend, type FormAction } from "./form_state";
+import { analysisDiffersFromStored, createConfigSaver, defaultValue, formReducer, initialFormState, shownValue, useSettingsForm, valuesToSend, type FormAction } from "./form_state";
 
 const SCHEMA = {
   properties: {
@@ -411,4 +411,27 @@ test("an error on a setting the mode does not show is said for the step with the
   state = reject(state, [{ field: "edge_taper", message: "Input should be greater than or equal to 0" }]);
   expect(state.fieldErrors).toEqual({});
   expect(state.stepErrors).toEqual(["Edge strip with less weight: Input should be greater than or equal to 0"]);
+});
+
+test("the form knows when its mode or analysis settings are not the stored ones: a save waits or was refused", () => {
+  let state = storedProjectState({ mode: "daylight" });
+  expect(analysisDiffersFromStored(state)).toBe(false);
+  state = formReducer(state, { type: "mode_chosen", mode: "time-based" });
+  expect(analysisDiffersFromStored(state)).toBe(true);           // the save waits
+  state = reject(state, [{ field: null, message: "Value error, the settings do not fit together" }]);
+  expect(analysisDiffersFromStored(state)).toBe(true);           // refused: the service still holds Daylight
+  expect(state.storedAnalysisRevision).toBe(0);
+  state = formReducer(state, { type: "save_succeeded", reply: { settings: { mode: "time-based" }, grid_plan: null } });
+  expect(analysisDiffersFromStored(state)).toBe(false);
+  expect(state.storedAnalysisRevision).toBe(1);                  // the stored analysis changed: its stage status is to come
+  // A carving setting is not one the analysis reads.
+  state = formReducer(state, { type: "values_changed", values: { carve_fraction: 0.5 } });
+  expect(analysisDiffersFromStored(state)).toBe(false);
+  state = formReducer(state, { type: "save_succeeded", reply: { settings: { mode: "time-based", carve_fraction: 0.5 }, grid_plan: null } });
+  expect(state.storedAnalysisRevision).toBe(1);
+  // A value typed back to the stored one is no change.
+  state = formReducer(state, { type: "values_changed", values: { voxel_size: 1.0 } });
+  expect(analysisDiffersFromStored(state)).toBe(false);
+  state = formReducer(state, { type: "values_changed", values: { voxel_size: 2.0 } });
+  expect(analysisDiffersFromStored(state)).toBe(true);
 });

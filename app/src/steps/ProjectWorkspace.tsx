@@ -9,7 +9,7 @@ import {
   type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
-import { shownValue, useSettingsForm } from "../settings_form/form_state";
+import { analysisDiffersFromStored, shownValue, useSettingsForm } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { localBounds, localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
@@ -64,7 +64,7 @@ function inputProblemText(error: unknown, fileName: string): string {
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { token, project, modes, warmUpState, runs, onServiceProblem } = props;
   const formStart = useMemo(() => ({ schema: props.schema, modes, settings: project.settings, gridPlan: project.grid_plan }), []);
-  const { form, dispatch, flushSave, changeAndSave } = useSettingsForm(token, project.name, formStart);
+  const { form, dispatch, flushSave, changeAndSave, currentForm } = useSettingsForm(token, project.name, formStart);
   const runActive = runs.activeRun?.project === project.name;
   const [files, setFiles] = useState<Record<InputRole, InputFileInfo[]>>({
     max_volume: project.inputs.max_volume ?? [], test_surfaces: project.inputs.test_surfaces ?? [], weather: project.inputs.weather ?? [],
@@ -73,6 +73,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [weatherLocation, setWeatherLocation] = useState(project.weather_location);
   const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0 });
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
+  // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
+  const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
+  const storedAnalysisRevision = useRef(form.storedAnalysisRevision);
+  storedAnalysisRevision.current = form.storedAnalysisRevision;
   const [openStep, setOpenStep] = useState<StepName | null>("inputs");
   const [viewStep, setViewStep] = useState<StepName>("inputs");     // the step whose layers the view shows: the last one opened
   const [framingRequest, setFramingRequest] = useState(0);
@@ -99,10 +103,22 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const refreshStageStatus = (completedStages: readonly string[] = []) => {
     if (completedStages.length > 0) setStages((current) => ({ ...current, ...Object.fromEntries(completedStages.map((stage) => [stage, "current"])) }));
     const replyStillHolds = runs.replyStillHolds(project.name);
+    const revisionAsked = storedAnalysisRevision.current;
     getStageStatus(token, project.name).then((reply) => {
-      if (replyStillHolds()) setStages(reply.stages as Record<PipelineStage, StageState>);
+      if (!replyStillHolds()) return;
+      setStages(reply.stages as Record<PipelineStage, StageState>);
+      setRevisionOfStageStatus((revision) => Math.max(revision, revisionAsked));
     }).catch(onServiceProblem);
   };
+
+  // The stage status describes the stored settings. While the form's mode or analysis settings are not those (a save waits or
+  // was refused), or a save changed them and the stage status since is still to come, the analysis is out of date for the
+  // settings shown: every stage counts as out of date, so Carving is locked and its results are dimmed (UX 5.5), and no
+  // carving change can start the analysis of a mode the form does not show.
+  const analysisOfOtherSettings = analysisDiffersFromStored(form) || revisionOfStageStatus < form.storedAnalysisRevision;
+  const shownStages: Record<PipelineStage, StageState> = analysisOfOtherSettings
+    ? Object.fromEntries(Object.entries(stages).map(([stage, state]) => [stage, state === "current" ? "out_of_date" : state])) as Record<PipelineStage, StageState>
+    : stages;
 
   // A save changes what the stages were run with; its reply is in once no save waits.
   useEffect(() => {
@@ -181,7 +197,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     hasWeatherFile, form, warmUpState,
   });
   const resultSteps = useResultSteps({
-    token, project: project.name, form, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages,
+    token, project: project.name, form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
   });
 
@@ -193,7 +209,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     analysisPeriod: analysisPeriodOf(form, modeInfo?.needs_period ?? false),
     voxelSize: Number(shownValue(form, "voxel_size")),
     settingsToFix: settingsToFixByStep(form),
-    stages,
+    stages: shownStages,
     keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
     totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
     storeys: resultSteps.results.summary?.massing?.storeys_built ?? null,
@@ -281,7 +297,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={emptyViewContent} localOrigin={origin} mode={form.mode} modes={modes}
-                    analysisCurrent={stages.preprocessing === "current"} {...resultSteps.viewer} />
+                    analysisCurrent={shownStages.preprocessing === "current"} {...resultSteps.viewer} />
       </section>
     </div>
   );

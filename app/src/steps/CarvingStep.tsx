@@ -246,7 +246,10 @@ export function CarvingStep(props: CarvingStepProps) {
     ...group, essential: [], foldLabel: messages.moreSettingsOfGroup[group.title as keyof typeof messages.moreSettingsOfGroup] ?? group.foldLabel,
   }));
   const thresholdDisabled = props.thresholdDisabledReason !== null;
-  const settingsDisabled = analysisOutOfDate || props.settingsDisabledReason !== null;
+  // While the analysis is out of date the carving settings wait for Run analysis, except one with an error, which stays open to
+  // be fixed; a change there is saved but runs nothing.
+  const carvingHoldsAnError = groups.some((group) => group.folded.some((view) => fieldErrorOf(form, view) !== undefined));
+  const settingsDisabled = (analysisOutOfDate && !carvingHoldsAnError) || props.settingsDisabledReason !== null;
   // The angle rule has no threshold, so nothing updates on its own there: Update carving runs it.
   const autoUpdating = autoUpdate && thresholdView !== null;
   // Every change goes to the form at once; with auto-update on the run follows when the user is done with the field, so typing
@@ -258,7 +261,7 @@ export function CarvingStep(props: CarvingStepProps) {
   const commitCarvingSetting = () => {
     if (!settingChangedSinceCommit.current) return;
     settingChangedSinceCommit.current = false;
-    props.onCarvingSettingCommit();
+    if (!analysisOutOfDate) props.onCarvingSettingCommit();
   };
   const isNumberField = (target: EventTarget) => target instanceof HTMLInputElement && target.type === "number";
   const commitChoice = (event: FormEvent) => {
