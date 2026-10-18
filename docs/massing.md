@@ -33,6 +33,15 @@ simulation input (one closed prism per floor and plate).
    the floor's full height, at most `plate_tolerance` of its volume lies outside
    the carved envelope, and (with `plate_stacking: supported`) it is built on
    the floor below. Parts narrower than `min_plate_dimension` are dropped.
+   The ground floor starts at the maximum volume's lowest point, which
+   preprocessing records in its manifest. The voxel grid is not aligned with
+   that point, so the lowest occupied voxel layer can lie mostly below it (its
+   centre below the base). Such a layer is filled only where rays hit the
+   base, which they miss in columns along facades that are not aligned with
+   the grid, so it does not count: a floor's height and its share outside the
+   envelope are measured over the layers whose centre is at or above the
+   base. A preprocessing run from before the manifest recorded the lowest
+   point starts the ground floor at the bottom of the lowest occupied layer.
 5. **Plates.** The connected built bays of a floor form a plate. A bay on a
    straight facade is drawn as a rectangle in its facade's frame: cuts lie
    on the cut lines, the back lies on the midline where the facade faces a

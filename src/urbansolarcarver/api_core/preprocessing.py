@@ -389,6 +389,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         patch_weights_path=stored_path(pw_path, out_path) if pw_path else None,
         sample_point_count=int(pts.shape[0]),
         footprint_path=stored_path(footprint_path, out_path),
+        max_volume_lowest_z=float(frame[2]),
     )
 
     # Per-stage diagnostics: the stage builds the summary and the writer puts

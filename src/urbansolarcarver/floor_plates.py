@@ -525,6 +525,14 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
     *tolerance*, and, with ``stacking == "supported"``, it is built on the
     floor below.  Bays left in parts narrower than *min_dimension* are then
     dropped.  The connected built columns of a floor are its plates.
+
+    The base is the bottom of the first level (the maximum volume's lowest
+    point).  A voxel layer whose centre lies below it lies mostly below the
+    maximum volume, and its voxels are filled only where rays hit the base,
+    so columns along facades that are not aligned with the grid lack them.
+    Such a layer does not count: the floor's height and the share outside
+    the envelope are measured over the layers whose centre is at or above
+    the base.
     """
     n_bays = int(bay.max()) + 1 if bay.size else 0
     occ_cols = occupancy[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
@@ -532,10 +540,14 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
     n_cols = np.bincount(bay, minlength=n_bays)
     grid_shape = occupancy.shape[:2]
     side = max(1, int(round(min_dimension / voxel_size)))
+    n_layers = occupancy.shape[2]
+    base = levels[0][0] if levels else z_grid0
+    below_base = z_grid0 + (np.arange(n_layers) + 0.5) * voxel_size < base - 1e-9
     floors, below = [], None
     for zb, zt in levels:
-        overlap = layer_overlaps(z_grid0, voxel_size, occupancy.shape[2], zb, zt)
-        height = zt - zb
+        overlap = layer_overlaps(z_grid0, voxel_size, n_layers, zb, zt)
+        height = zt - zb - overlap[below_base].sum()
+        overlap[below_base] = 0.0
         column_full = occ_cols @ overlap >= height - 1e-6
         in_max = np.bincount(bay, weights=(~column_full).astype(np.float64), minlength=n_bays) == 0
         outside = (np.bincount(bay, weights=height - kept_cols @ overlap, minlength=n_bays)

@@ -695,6 +695,9 @@ class PreprocessingManifest(BaseModel):
     sample_point_count: int
     # The max volume's plan projection in world xy; massing reads it.
     footprint_path: str
+    # The max volume's lowest point (world z), where massing starts the ground
+    # floor; None in manifests written before preprocessing recorded it.
+    max_volume_lowest_z: Optional[float] = None
 
 class ThresholdingManifest(BaseModel):
     """Manifest written by thresholding, read by exporting and massing."""

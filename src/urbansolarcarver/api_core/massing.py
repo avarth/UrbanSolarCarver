@@ -215,9 +215,15 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
     n_cols = np.bincount(bay)
 
     layers = np.flatnonzero(occ.any(axis=(0, 1)))
-    z0 = origin[2] + layers.min() * vs
+    lowest_layer_bottom = origin[2] + layers.min() * vs
     z_top = origin[2] + (layers.max() + 1) * vs
-    _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin[2], vs)
+    _warn_raised_parts(polygons, cells_ij, xy, occ, lowest_layer_bottom, origin[2], vs)
+    # The ground floor starts at the maximum volume's lowest point, which lies
+    # within the lowest occupied voxel layer.  A preprocessing run from before
+    # the manifest recorded it gives the bottom of that layer instead.
+    z0 = chain.pre.manifest.max_volume_lowest_z
+    if z0 is None:
+        z0 = lowest_layer_bottom
     levels = mg.floor_levels(z0, z_top, settings.ground_floor_height, settings.floor_height)
     floors = mg.build_floors(cells_ij, bay, occ, kept, origin[2], vs, levels,
                              settings.plate_tolerance, settings.plate_stacking, settings.min_plate_dimension)

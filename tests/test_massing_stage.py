@@ -150,6 +150,76 @@ def test_uneven_base_still_builds_plates(tmp_path):
     assert res.floor_areas[0] == pytest.approx(30 * 12, rel=0.02)
 
 
+def test_ground_floor_starts_at_the_lowest_point_of_a_volume_not_aligned_with_the_grid(tmp_path):
+    """A box turned 30 degrees in plan: columns along its facades are filled only where a wall passes through them.
+
+    At 19.5 m high, the lowest occupied voxel layer spans z -0.75..0.25: it lies mostly below the box's base and is
+    filled only where rays hit the base, which they miss in those facade columns. The ground floor starts at the base
+    (z 0), and that layer does not count against it.
+    """
+    volume = _box([30, 12, 19.5])
+    volume.apply_transform(trimesh.transformations.rotation_matrix(np.radians(30.0), [0, 0, 1]))
+    cfg, thr = _run_upstream(tmp_path, volume)
+    preprocessing_folder = tmp_path / "out" / "preprocessing"
+    pre_manifest = json.loads((preprocessing_folder / "manifest.json").read_text(encoding="utf-8"))
+    occupancy = np.load(preprocessing_folder / pre_manifest["voxel_grid_path"]).astype(bool)
+    lowest_layer = np.flatnonzero(occupancy.any(axis=(0, 1))).min()
+    assert pre_manifest["origin"][2] + (lowest_layer + 0.5) * pre_manifest["voxel_size"] < 0.0    # the scene this test is about
+    assert (occupancy.any(axis=2) & ~occupancy[:, :, lowest_layer]).any()
+    _set_mask(thr, lambda occ: occ)
+    res = _massing(cfg, thr, tmp_path / "m")
+    ground_floor_plates = [p for p in json.loads(res.plates_path.read_text())["plates"] if p["floor"] == 0]
+    assert ground_floor_plates and all(p["z_bottom"] == pytest.approx(0.0) for p in ground_floor_plates)
+    assert res.floor_areas[0] == pytest.approx(30 * 12, rel=1e-6)
+
+
+def test_a_preprocessing_manifest_without_the_lowest_point_starts_the_ground_floor_at_the_lowest_layer(tmp_path):
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
+    _set_mask(thr, lambda occ: occ)
+    manifest_path = tmp_path / "out" / "preprocessing" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["max_volume_lowest_z"] == 0.0
+    del manifest["max_volume_lowest_z"]          # as preprocessing wrote it before recording the lowest point
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    occupancy = np.load(manifest_path.parent / manifest["voxel_grid_path"]).astype(bool)
+    lowest_layer_bottom = manifest["origin"][2] + np.flatnonzero(occupancy.any(axis=(0, 1))).min() * manifest["voxel_size"]
+    res = _massing(cfg, thr, tmp_path / "m")
+    ground_floor_plates = [p for p in json.loads(res.plates_path.read_text())["plates"] if p["floor"] == 0]
+    assert ground_floor_plates and all(p["z_bottom"] == pytest.approx(lowest_layer_bottom) for p in ground_floor_plates)
+
+
+def _join_keeping_panels(mesh_paths, joined_path):
+    """One PLY of several test surface files with vertex normals, so load_mesh keeps their panels apart."""
+    meshes = [trimesh.load(path, force="mesh", process=False) for path in mesh_paths]
+    joined = trimesh.Trimesh(np.vstack([mesh.vertices for mesh in meshes]),
+                             np.vstack([mesh.faces + offset for mesh, offset in
+                                        zip(meshes, np.cumsum([0] + [len(mesh.vertices) for mesh in meshes[:-1]]))]),
+                             vertex_normals=np.vstack([mesh.vertex_normals for mesh in meshes]), process=False)
+    joined.export(joined_path, vertex_normal=True)
+
+
+@pytest.mark.slow
+def test_new_building_example_builds_a_ground_floor_with_supported_stacking(tmp_path):
+    """The packaged new_building example with the irradiance starting values (full year) and massing defaults."""
+    from pathlib import Path
+    from urbansolarcarver import api
+    from urbansolarcarver.load_config import build_config_from_mode_starting_values
+    from urbansolarcarver.run_context import RunContext
+    example_folder = Path(__file__).resolve().parent.parent / "src" / "urbansolarcarver" / "example_projects"
+    _join_keeping_panels([example_folder / "new_building" / "neighbor_roofs.ply",
+                          example_folder / "new_building" / "neighbor_windows.ply"], tmp_path / "test_surfaces.ply")
+    cfg = build_config_from_mode_starting_values({
+        "mode": "irradiance", "max_volume_path": str(example_folder / "new_building" / "max_volume.ply"),
+        "test_surface_path": str(tmp_path / "test_surfaces.ply"),
+        "epw_path": str(example_folder / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"), "out_dir": str(tmp_path / "run")})
+    assert cfg.plate_stacking == "supported"
+    api.run_pipeline(cfg, tmp_path / "run", produce=["massing"], context=RunContext())
+    plates = json.loads((tmp_path / "run" / "massing" / "plates.json").read_text(encoding="utf-8"))
+    ground_floor_plates = [plate for plate in plates["plates"] if plate["floor"] == 0]
+    assert ground_floor_plates and all(plate["z_bottom"] == pytest.approx(0.0) for plate in ground_floor_plates)
+    assert plates["floor_area_m2_per_floor"][0] > 0
+
+
 def test_massing_ignores_a_max_volume_file_edited_after_preprocessing(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
     _set_mask(thr, lambda occ: occ)

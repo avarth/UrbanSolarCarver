@@ -179,6 +179,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (below). Configs that set `protect_share` or `threshold: protect_share`
   are rejected.
 
+### Fixed (massing ground floor)
+
+- **Massing could build no floor at all on a maximum volume whose facades
+  are not aligned with the voxel grid.** The ground floor started at the
+  bottom of the lowest occupied voxel layer, which can lie mostly below the
+  maximum volume and is filled only where rays hit its base; columns along
+  such facades lack it, every ground-floor bay failed the full-column test,
+  and with `plate_stacking: supported` nothing was built (the
+  `new_building` example). The ground floor now starts at the maximum
+  volume's lowest point, as docs/massing.md describes, which preprocessing
+  records in its manifest (`max_volume_lowest_z`), and a voxel layer whose
+  centre lies below that point does not count against it.
+
 ### Fixed (stage chain)
 
 - **Exporting and massing could combine outputs of two different
