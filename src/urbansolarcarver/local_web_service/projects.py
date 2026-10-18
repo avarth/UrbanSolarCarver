@@ -162,6 +162,10 @@ class ProjectStore:
         self._project_locks: dict[str, threading.RLock] = {}
         self._project_locks_guard = threading.Lock()
 
+    @property
+    def projects_folder(self) -> Path:
+        return self._projects_folder
+
     def project_lock(self, name: str) -> threading.RLock:
         """The lock that serializes changes to one project.
 

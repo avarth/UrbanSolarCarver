@@ -72,6 +72,20 @@ class GridPlanReply(BaseModel):
     budget_voxels: int          # the most voxels preprocessing can score
 
 
+class ProjectsFolderReply(BaseModel):
+    """The folder the projects live in, where that choice came from, and whether the browser may change it now."""
+    path: str
+    source: Literal["command_line", "preference", "default"]
+    can_change: bool            # false when the folder came from the command line, or while a run is active
+
+
+class ProjectsFolderChoiceReply(BaseModel):
+    """The answer to Change folder: the folder changed, the user cancelled, or the folder picker cannot open here."""
+    status: Literal["changed", "cancelled", "unavailable"]
+    path: str                   # the projects folder after the request
+    problem: str | None         # why the picker is unavailable; None otherwise
+
+
 class ConfigReply(BaseModel):
     """The settings of a project after a save, without the paths and device the service owns."""
     settings: dict

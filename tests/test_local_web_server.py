@@ -4,6 +4,7 @@ The engine is replaced by the fake of local_web_test_support.py, so a run writes
 without computing anything. Requests go through ``TestClient`` with the Host the service expects.
 """
 import io
+import json
 import shutil
 import subprocess
 import sys
@@ -11,6 +12,7 @@ import threading
 import time
 import warnings
 import zipfile
+from pathlib import Path
 
 import pytest
 import yaml
@@ -26,6 +28,8 @@ from local_web_test_support import (
 )
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
+from urbansolarcarver.local_web_service import folder_picker, user_preferences
+from urbansolarcarver.local_web_service.folder_picker import FolderPickerUnavailable
 from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
 from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.server import (
@@ -42,10 +46,13 @@ VOLUME = ("volume.ply", box_bytes([0, 0, 5]))
 SURFACE = ("surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
 
 
-def build_client(projects_folder, handle_request=None, authorized=True, warm_up=None, static_folder=None):
+def build_client(projects_folder, handle_request=None, authorized=True, warm_up=None, static_folder=None,
+                 projects_folder_source="default", choose_folder_function=None):
     """A client for a service whose worker uses *handle_request* (the fake engine by default); the client and the worker."""
     worker = make_worker(ProjectStore(projects_folder), handle_request=handle_request)
-    app = create_app(projects_folder, TOKEN, PORT, worker=worker, warm_up=warm_up, static_folder=static_folder)
+    extra_arguments = {} if choose_folder_function is None else {"choose_folder_function": choose_folder_function}
+    app = create_app(projects_folder, TOKEN, PORT, worker=worker, warm_up=warm_up, static_folder=static_folder,
+                     projects_folder_source=projects_folder_source, **extra_arguments)
     client = TestClient(app, base_url=f"http://127.0.0.1:{PORT}", headers=AUTH if authorized else None)
     return client, worker
 
@@ -566,6 +573,298 @@ def test_the_settings_download_as_config_yaml(client_with_inputs, projects_folde
     assert client_with_inputs.get("/api/projects/missing/config.yaml").status_code == 404
     (projects_folder / "p" / "config.yaml").unlink()
     assert client_with_inputs.get("/api/projects/p/config.yaml").status_code == 404
+
+
+# ---- The projects folder ----
+
+@pytest.fixture
+def home_folder(tmp_path, monkeypatch):
+    """A home folder of its own, so the preference file of the user is never read or written."""
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("HOME", str(home))
+    assert Path.home() == home
+    return home
+
+
+class FakeFolderPicker:
+    """Stands in for the operating system's folder picker: answers with *answer* (a folder, None, or an exception to raise)."""
+
+    def __init__(self, answer):
+        self.answer = answer
+        self.initial_folders = []
+
+    def __call__(self, initial_folder):
+        self.initial_folders.append(initial_folder)
+        if isinstance(self.answer, Exception):
+            raise self.answer
+        return self.answer
+
+
+def test_the_preference_file_is_in_the_home_folder(home_folder):
+    assert user_preferences.preferences_file() == home_folder / ".urbansolarcarver" / "ui.json"
+
+
+def test_the_projects_folder_preference_round_trips_and_creates_the_folder(home_folder, tmp_path):
+    assert user_preferences.read_projects_folder_preference() is None
+    chosen = tmp_path / "elsewhere" / "projects"
+    user_preferences.write_projects_folder_preference(chosen)
+    assert chosen.is_dir()
+    assert user_preferences.read_projects_folder_preference() == chosen
+    other = tmp_path / "other"
+    user_preferences.write_projects_folder_preference(other)
+    assert user_preferences.read_projects_folder_preference() == other
+    assert [path.name for path in user_preferences.preferences_file().parent.iterdir()] == ["ui.json"]     # no temporary file is left
+
+
+def test_writing_the_projects_folder_keeps_the_other_preferences(home_folder, tmp_path):
+    user_preferences.preferences_file().parent.mkdir(parents=True)
+    user_preferences.preferences_file().write_text(json.dumps({"something_else": 3}), encoding="utf-8")
+    user_preferences.write_projects_folder_preference(tmp_path / "projects")
+    stored = json.loads(user_preferences.preferences_file().read_text(encoding="utf-8"))
+    assert stored == {"something_else": 3, "projects_folder": str(tmp_path / "projects")}
+
+
+@pytest.mark.parametrize("content", [b"", b"{not json", b"\xff\xfe", b"[1, 2]", b'{"projects_folder": 7}', b'{"projects_folder": ""}', b"{}"])
+def test_an_unreadable_preference_file_means_no_preference(home_folder, content):
+    user_preferences.preferences_file().parent.mkdir(parents=True)
+    user_preferences.preferences_file().write_bytes(content)
+    assert user_preferences.read_projects_folder_preference() is None
+
+
+def test_a_damaged_preference_file_is_replaced_by_the_next_write(home_folder, tmp_path):
+    user_preferences.preferences_file().parent.mkdir(parents=True)
+    user_preferences.preferences_file().write_bytes(b"{not json")
+    user_preferences.write_projects_folder_preference(tmp_path / "projects")
+    assert user_preferences.read_projects_folder_preference() == tmp_path / "projects"
+
+
+@pytest.mark.parametrize("source, can_change", [("default", True), ("preference", True), ("command_line", False)])
+def test_the_projects_folder_is_reported_with_its_source(projects_folder, source, can_change):
+    client, _ = build_client(projects_folder, projects_folder_source=source)
+    reply = client.get("/api/projects-folder")
+    assert reply.status_code == 200
+    assert reply.json() == {"path": str(projects_folder), "source": source, "can_change": can_change}
+
+
+def test_the_projects_folder_cannot_be_changed_during_a_run(client_with_blocking_run):
+    client, _ = client_with_blocking_run
+    assert client.get("/api/projects-folder").json()["can_change"] is False
+
+
+def test_choosing_a_folder_switches_the_projects_and_remembers_the_folder(projects_folder, tmp_path, home_folder):
+    new_folder = tmp_path / "new projects"
+    picker = FakeFolderPicker(new_folder)
+    client, _ = build_client(projects_folder, projects_folder_source="default", choose_folder_function=picker)
+    create_project(client, "old")
+    ProjectStore(new_folder).create("in-new", "daylight")
+
+    reply = client.post("/api/projects-folder/choose")
+
+    assert reply.status_code == 200
+    assert reply.json() == {"status": "changed", "path": str(new_folder), "problem": None}
+    assert picker.initial_folders == [projects_folder]
+    assert [project["name"] for project in client.get("/api/projects").json()] == ["in-new"]
+    assert client.get("/api/projects-folder").json() == {"path": str(new_folder), "source": "preference", "can_change": True}
+    assert user_preferences.read_projects_folder_preference() == new_folder
+    assert (projects_folder / "old").is_dir()       # existing projects are not moved
+
+
+def test_after_choosing_a_folder_new_projects_and_runs_use_it(projects_folder, tmp_path, home_folder):
+    new_folder = tmp_path / "new projects"
+    client, _ = build_client(projects_folder, choose_folder_function=FakeFolderPicker(new_folder))
+    assert client.post("/api/projects-folder/choose").json()["status"] == "changed"
+    create_project_with_inputs(client, "fresh")
+    assert (new_folder / "fresh" / "project.json").is_file()
+    assert not (projects_folder / "fresh").exists()
+    run_id = start_run(client, "fresh")["run_id"]
+    assert read_events(client, run_id)[-1]["type"] == "run_finished"
+    assert (new_folder / "fresh" / "run").is_dir()
+
+
+def test_choosing_the_same_folder_again_keeps_the_projects(projects_folder, home_folder):
+    client, _ = build_client(projects_folder, choose_folder_function=FakeFolderPicker(projects_folder))
+    create_project(client, "kept")
+    assert client.post("/api/projects-folder/choose").json()["status"] == "changed"
+    assert [project["name"] for project in client.get("/api/projects").json()] == ["kept"]
+
+
+def test_cancelling_the_folder_picker_changes_nothing(projects_folder, home_folder):
+    client, _ = build_client(projects_folder, choose_folder_function=FakeFolderPicker(None))
+    create_project(client, "p")
+    reply = client.post("/api/projects-folder/choose")
+    assert reply.status_code == 200
+    assert reply.json() == {"status": "cancelled", "path": str(projects_folder), "problem": None}
+    assert [project["name"] for project in client.get("/api/projects").json()] == ["p"]
+    assert client.get("/api/projects-folder").json()["source"] == "default"
+    assert not user_preferences.preferences_file().exists()
+
+
+def test_an_unavailable_folder_picker_names_the_problem_and_changes_nothing(projects_folder, home_folder):
+    picker = FakeFolderPicker(FolderPickerUnavailable("There is no display to show the folder picker on."))
+    client, _ = build_client(projects_folder, choose_folder_function=picker)
+    create_project(client, "p")
+    reply = client.post("/api/projects-folder/choose")
+    assert reply.status_code == 200
+    assert reply.json() == {"status": "unavailable", "path": str(projects_folder), "problem": "There is no display to show the folder picker on."}
+    assert [project["name"] for project in client.get("/api/projects").json()] == ["p"]
+    assert not user_preferences.preferences_file().exists()
+
+
+def test_choosing_a_folder_during_a_run_is_409_and_does_not_open_the_picker(projects_folder, tmp_path, home_folder):
+    handler = WaitsForCancel()
+    picker = FakeFolderPicker(tmp_path / "new")
+    client, worker = build_client(projects_folder, handle_request=handler, choose_folder_function=picker)
+    create_project_with_inputs(client)
+    run_id = start_run(client)["run_id"]
+    assert handler.started.wait(10)
+    try:
+        reply = client.post("/api/projects-folder/choose")
+        assert reply.status_code == 409
+        assert "run" in reply.json()["detail"]
+        assert picker.initial_folders == []
+        assert not user_preferences.preferences_file().exists()
+    finally:
+        worker.cancel(run_id)
+        worker.run_state(run_id).wait_for_events(10 ** 9, 10)
+
+
+def test_a_run_that_starts_while_the_picker_is_open_blocks_the_change(projects_folder, tmp_path, home_folder):
+    handler = WaitsForCancel()
+    holder = {}
+
+    def picker_while_a_run_starts(initial_folder):
+        holder["run_id"] = start_run(holder["client"])["run_id"]
+        assert handler.started.wait(10)
+        return tmp_path / "new"
+
+    client, worker = build_client(projects_folder, handle_request=handler, choose_folder_function=picker_while_a_run_starts)
+    holder["client"] = client
+    create_project_with_inputs(client)
+    try:
+        assert client.post("/api/projects-folder/choose").status_code == 409
+        assert client.get("/api/projects-folder").json()["path"] == str(projects_folder)
+        assert not user_preferences.preferences_file().exists()
+    finally:
+        worker.cancel(holder["run_id"])
+        worker.run_state(holder["run_id"]).wait_for_events(10 ** 9, 10)
+
+
+def test_a_folder_given_on_the_command_line_cannot_be_changed(projects_folder, tmp_path, home_folder):
+    picker = FakeFolderPicker(tmp_path / "new")
+    client, _ = build_client(projects_folder, projects_folder_source="command_line", choose_folder_function=picker)
+    reply = client.post("/api/projects-folder/choose")
+    assert reply.status_code == 409
+    assert "--projects-folder" in reply.json()["detail"]
+    assert picker.initial_folders == []
+    assert not user_preferences.preferences_file().exists()
+
+
+def test_a_folder_that_cannot_be_remembered_is_not_switched_to(projects_folder, tmp_path, home_folder, monkeypatch):
+    def refuse(folder):
+        raise OSError("disk is read-only")
+
+    monkeypatch.setattr(user_preferences, "write_projects_folder_preference", refuse)
+    client, _ = build_client(projects_folder, choose_folder_function=FakeFolderPicker(tmp_path / "new"))
+    reply = client.post("/api/projects-folder/choose")
+    assert reply.status_code == 422
+    assert "disk is read-only" in reply.json()["detail"]
+    assert client.get("/api/projects-folder").json()["path"] == str(projects_folder)
+
+
+def test_the_folder_routes_need_the_token(projects_folder):
+    client, _ = build_client(projects_folder, authorized=False)
+    assert client.get("/api/projects-folder").status_code == 401
+    assert client.post("/api/projects-folder/choose").status_code == 401
+
+
+def test_the_openapi_document_describes_the_folder_routes():
+    document = openapi_document()
+    assert "ProjectsFolderReply" in document["components"]["schemas"]
+    assert "ProjectsFolderChoiceReply" in document["components"]["schemas"]
+    assert "/api/projects-folder" in document["paths"] and "/api/projects-folder/choose" in document["paths"]
+
+
+# ---- The folder picker and the file manager ----
+
+class FakeTkinter:
+    """Stands in for the tkinter module and its filedialog: the Tk root records what was done to it."""
+
+    TclError = type("TclError", (Exception,), {})
+
+    def __init__(self, dialog_answer, no_display=False):
+        self.log = []
+        fake = self
+
+        class Tk:
+            def __init__(self):
+                if no_display:
+                    raise fake.TclError("no display name and no $DISPLAY environment variable")
+                fake.log.append("root")
+
+            def withdraw(self):
+                fake.log.append("withdraw")
+
+            def attributes(self, name, value):
+                fake.log.append((name, value))
+
+            def destroy(self):
+                fake.log.append("destroy")
+
+        def ask_directory(**options):
+            fake.log.append(("ask", options["initialdir"]))
+            return dialog_answer
+
+        self.Tk = Tk
+        self.filedialog = type("filedialog", (), {"askdirectory": staticmethod(ask_directory)})
+
+    def install(self, monkeypatch):
+        monkeypatch.setitem(sys.modules, "tkinter", self)
+
+
+def test_the_folder_picker_is_a_hidden_topmost_dialog_that_is_destroyed_afterwards(monkeypatch, tmp_path):
+    fake = FakeTkinter(str(tmp_path / "chosen"))
+    fake.install(monkeypatch)
+    assert folder_picker.choose_folder(tmp_path) == tmp_path / "chosen"
+    assert fake.log == ["root", "withdraw", ("-topmost", True), ("ask", str(tmp_path)), "destroy"]
+
+
+@pytest.mark.parametrize("cancelled_answer", ["", ()])
+def test_a_cancelled_folder_picker_gives_none(monkeypatch, tmp_path, cancelled_answer):
+    fake = FakeTkinter(cancelled_answer)
+    fake.install(monkeypatch)
+    assert folder_picker.choose_folder(tmp_path) is None
+    assert fake.log[-1] == "destroy"
+
+
+def test_a_computer_without_a_display_makes_the_folder_picker_unavailable(monkeypatch, tmp_path):
+    FakeTkinter("", no_display=True).install(monkeypatch)
+    with pytest.raises(FolderPickerUnavailable, match="display"):
+        folder_picker.choose_folder(tmp_path)
+
+
+def test_a_python_without_tkinter_makes_the_folder_picker_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "tkinter", None)       # an import of a module set to None raises ImportError
+    with pytest.raises(FolderPickerUnavailable, match="tkinter"):
+        folder_picker.choose_folder(tmp_path)
+
+
+@pytest.mark.parametrize("platform, expected_command", [("darwin", ["open"]), ("linux", ["xdg-open"])])
+def test_the_folder_opens_in_the_file_manager_of_the_platform(monkeypatch, tmp_path, platform, expected_command):
+    started = []
+    monkeypatch.setattr(sys, "platform", platform)
+    monkeypatch.setattr(subprocess, "Popen", lambda command, *args, **kwargs: started.append(command))
+    folder_picker.open_in_file_manager(tmp_path)
+    assert started == [[*expected_command, str(tmp_path)]]
+
+
+def test_the_folder_opens_in_explorer_on_windows(monkeypatch, tmp_path):
+    opened = []
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(folder_picker.os, "startfile", lambda folder: opened.append(folder), raising=False)
+    folder_picker.open_in_file_manager(tmp_path)
+    assert opened == [tmp_path]
 
 
 # ---- Device warm-up ----
