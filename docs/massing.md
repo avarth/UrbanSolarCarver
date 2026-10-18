@@ -24,13 +24,24 @@ simulation input (one closed prism per floor and plate).
    them. At corners the longer facade takes the corner square (up to half
    the building's depth behind it), so every face ends in a line
    perpendicular to its facade. At equal lengths (a square) the facade
-   closer to the x axis takes the corner.
+   closer to the x axis takes the corner. Along a facade not aligned with the
+   voxel grid, the voxelizer also fills columns whose centre lies just
+   outside the footprint; such a column belongs to the face of the footprint
+   point nearest to it, so the end of a slab is cut on the same lines as the
+   rest of it.
 3. **Bays.** Each face is cut into square modules of `min_plate_dimension`
    (3 m): along its facade, perpendicular to it, and in depth behind it,
-   parallel to it. Cuts on the two sides of a straight building line up. A
-   short row of modules at either end of a face joins its neighbour, and a
-   module at the back of a row (where the face meets the one opposite)
-   shallower than `min_plate_dimension` joins the one in front of it. Each
+   parallel to it. Along a straight facade the rows of modules are laid from
+   both ends of the building (its extent along the facade) towards the
+   middle; what is left over widens the middle row, or the two middle rows
+   equally (a 10 m bar: 3, 4 and 3 m; 13 m: 3, 3.5, 3.5 and 3 m). An end wing
+   therefore starts with a whole row whatever the building's length, and the
+   cuts on the two sides of a straight building line up. Along a curved
+   facade the rows are cut every module of length from its start. A row
+   narrower than a module at the end of a face that ends inside the building
+   (at a corner square) joins its neighbour, and a module at the back of a
+   row (where the face meets the one opposite) shallower than
+   `min_plate_dimension` joins the one in front of it. Each
    module is built on its own, so a wing keeps its floors whatever the
    envelope does behind it in the same face, for example a courtyard of a
    perimeter block carved lower. Behind any facade a plate can therefore be
@@ -39,7 +50,12 @@ simulation input (one closed prism per floor and plate).
    `floor_height`), a module is built when it stays inside the maximum volume over
    the floor's full height, at most `plate_tolerance` of its volume lies outside
    the carved envelope, and (with `plate_stacking: supported`) it is built on
-   the floor below. Parts narrower than `min_plate_dimension` are dropped
+   the floor below. A column along a facade not aligned with the voxel grid
+   counts only for its share inside the footprint, so whether a module is
+   built does not depend on the angle of the footprint to the grid. A module
+   over the tolerance is not built even when built modules enclose it, so a
+   local dip in the envelope can leave a hole of one or two modules in a
+   floor; holes are not filled. Parts narrower than `min_plate_dimension` are dropped
    (the test is the same at any angle of the footprint to the voxel grid), so
    a strip one module deep, `min_plate_dimension`, is kept.
    The ground floor starts at the maximum volume's lowest point, and the top
@@ -62,7 +78,10 @@ simulation input (one closed prism per floor and plate).
    facade edges are the footprint's own. Other edges
    (face ends at corners) are within half a voxel of the voxel columns. Modules
    on curved facades, and modules with a slanted end where a corner is not
-   square, follow their voxel columns, straight to within half a voxel.
+   square, follow their voxel columns, straight to within half a voxel; they
+   stay off the columns of modules not in the plate. Where the rectangles of
+   two modules overlap at a slanted end, the overlap belongs to one of them,
+   so plates of different modules never overlap.
 
 ## Settings
 
