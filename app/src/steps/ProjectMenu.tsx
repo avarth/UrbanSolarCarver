@@ -39,7 +39,10 @@ interface ProjectMenuProps {
   /** A run of this project is active: Rename, Delete and Reset wait. */
   runActive: boolean;
   actions: ProjectActions;
-  /** "top_bar": the button is the project name, the menu opens under its left edge; "project_row": a small button, the menu ends at its right edge. */
+  /**
+   * "top_bar": the button is the project name, the menu opens under its left edge; "project_row": a small button, the menu ends at
+   * its right edge.
+   */
   placement: "top_bar" | "project_row";
   /** The id of the line that says why the whole menu waits (the folder picker is open); the button is then disabled. */
   waitReasonId?: string | null;

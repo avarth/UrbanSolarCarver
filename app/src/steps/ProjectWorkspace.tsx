@@ -52,7 +52,10 @@ interface ProjectWorkspaceProps {
   /** A request failed: the app shows the engine-stopped or access-lost overlay when the failure is one of those. */
   onServiceProblem: (error: unknown) => void;
   onShowProjects: () => void;
-  /** Given the saver of the settings once the workspace is open, and null when it closes: the app saves or drops before a rename, reset or delete. */
+  /**
+   * Given the saver of the settings once the workspace is open, and null when it closes: before a rename, reset or delete the app
+   * waits for the input files under way, then saves or drops.
+   */
   onSettingsSaverReady?: (saver: OpenProjectSettingsSaver | null) => void;
   /** The steps to open with (the workspace made again for a renamed project); absent: Inputs. */
   startSteps?: WorkspaceSteps;

@@ -201,12 +201,18 @@ export interface RangeSegment {
   end: number;
 }
 
-/** One piece from *start* to *end*, or two where it wraps (the start after the end): from the start to the strip's end, and from its beginning to the end. */
+/**
+ * One piece from *start* to *end*, or two where it wraps (the start after the end): from the start to the strip's end, and from its
+ * beginning to the end.
+ */
 function segments(start: number, end: number): RangeSegment[] {
   return start < end ? [{ start, end }] : [{ start, end: 1 }, { start: 0, end }];
 }
 
-/** The year strip's range: from the start of the start day to the end of the end day; the whole year where the engine runs every night of it. */
+/**
+ * The year strip's range: from the start of the start day to the end of the end day; the whole year where the engine runs every
+ * night of it.
+ */
 export function dateRangeSegments(period: Period): RangeSegment[] {
   if (runsEveryNightOfTheYear(period)) return [{ start: 0, end: 1 }];
   const startDay = dayOfYear(period.startMonth, period.startDay), endDay = dayOfYear(period.endMonth, period.endDay);
@@ -214,7 +220,10 @@ export function dateRangeSegments(period: Period): RangeSegment[] {
   return segments((startDay - 1) / DAYS_IN_YEAR, endDay / DAYS_IN_YEAR);
 }
 
-/** The hour strip's range: the end hour is inclusive (10 to 14 h samples 10:00 through 14:00), so it runs to the end of that hour's mark. */
+/**
+ * The hour strip's range: the end hour is inclusive (10 to 14 h samples 10:00 through 14:00), so it runs to the end of that hour's
+ * mark.
+ */
 export function hourRangeSegments(period: Period): RangeSegment[] {
   if (period.startHour <= period.endHour) return [{ start: period.startHour / HOURS_IN_DAY, end: (period.endHour + 1) / HOURS_IN_DAY }];
   return segments(period.startHour / HOURS_IN_DAY, (period.endHour + 1) / HOURS_IN_DAY);

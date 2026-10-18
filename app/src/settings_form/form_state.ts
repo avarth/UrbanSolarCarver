@@ -359,11 +359,11 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
 }
 
 /**
- * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project
- * starts its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown.
- * *flushSave* sends a waiting change at once and resolves, with how the save ended, when its reply is in the form, for a run
- * that must use it (a save that failed is sent again). *changeAndSave* makes a change and saves it with the changes before it at once, without the delay (the
- * carving threshold, whose run follows its save).
+ * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project starts
+ * its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown. *flushSave* sends
+ * a waiting change at once and resolves, with how the save ended, when its reply is in the form, for a run that must use it (a
+ * save that failed is sent again). *changeAndSave* makes a change and saves it with the changes before it at once, without the
+ * delay (the carving threshold, whose run follows its save).
  */
 export function useSettingsForm(token: string, project: string, start: FormStart) {
   const [form, dispatchToReact] = useReducer(formReducer, start, initialFormState);

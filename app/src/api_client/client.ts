@@ -68,7 +68,10 @@ function storeToken(token: string): void {
   }
 }
 
-/** What a failed request says about the service: 401 means this page has no valid token; a request that never got a reply means the engine is not running. */
+/**
+ * What a failed request says about the service: 401 means this page has no valid token; a request that never got a reply means the
+ * engine is not running.
+ */
 export function serviceProblemOf(error: unknown): "access_lost" | "engine_stopped" | "other" {
   if (error instanceof ApiError) return error.status === 401 ? "access_lost" : "other";
   return "engine_stopped";

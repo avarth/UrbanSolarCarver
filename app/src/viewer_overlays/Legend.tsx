@@ -26,7 +26,10 @@ export function keptVoxelsLegendTitle(scoresKind: ScorePointsHeader["scores_kind
   return weightUnit.startsWith("m²·h") ? messages.keptVoxelsShadingCaused : messages.keptVoxelsScoreIn(weightUnit);
 }
 
-/** The unit written after a kept score: "m²·h" for Solar time-based, none for the relative obstruction score, else the unit of the weights. */
+/**
+ * The unit written after a kept score: "m²·h" for Solar time-based, none for the relative obstruction score, else the unit of the
+ * weights.
+ */
 export function keptVoxelsLegendUnit(scoresKind: ScorePointsHeader["scores_kind"], weightUnit: string): string | undefined {
   if (scoresKind === "weighted_sum") return undefined;
   return weightUnit.startsWith(messages.units.shadeHours) ? messages.units.shadeHours : weightUnit;

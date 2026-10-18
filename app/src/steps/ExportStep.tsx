@@ -1,10 +1,10 @@
 // The Export step (UX 5.7): the mesh file format of the carved envelope, whose change reruns the envelope mesh only, and the
-// downloads: the envelope file that was built (named by the run summary; a format chosen while Carving was locked is stored
-// and written by the next envelope build, which the download says), the building massing (OBJ) and its data (JSON), the
-// settings (config.yaml) and the whole project as a zip. Each file of a stage is offered once the stage exists (R2 5: the envelope and the massing are built
-// on their own); one built from settings that changed since is labelled out of date and can still be downloaded.
-// The files are fetched with the token and handed to the browser to save (a plain link cannot send the token header). A part's
-// files wait while a run of the project rebuilds it: its stage removes them when it begins.
+// downloads: the envelope file that was built (named by the run summary; a format chosen while Carving was locked is stored and
+// written by the next envelope build, which the download says), the building massing (OBJ) and its data (JSON), the settings
+// (config.yaml) and the whole project as a zip. Each file of a stage is offered once the stage exists (R2 5: the envelope and the
+// massing are built on their own); one built from settings that changed since is labelled out of date and can still be
+// downloaded. The files are fetched with the token and handed to the browser to save (a plain link cannot send the token header).
+// A part's files wait while a run of the project rebuilds it: its stage removes them when it begins.
 import { useId, type ReactNode } from "react";
 import { projectConfigUrl, projectDownloadUrl, runFileUrl } from "../api_client/client";
 import { messages } from "../messages";

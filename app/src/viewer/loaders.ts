@@ -48,7 +48,10 @@ function shiftKeywordLines(text: string, keyword: string, origin: Point3): strin
 
 interface PlyElement { name: string; count: number; properties: string[]; hasList: boolean }
 
-/** ASCII PLY with the x, y and z properties of its vertices shifted by the origin; null when its vertex lines cannot be read by position. */
+/**
+ * ASCII PLY with the x, y and z properties of its vertices shifted by the origin; null when its vertex lines cannot be read by
+ * position.
+ */
 function shiftAsciiPly(text: string, origin: Point3): string | null {
   const lines = text.split(/\r?\n/);
   const headerEnd = lines.findIndex((line) => line.trim() === "end_header");

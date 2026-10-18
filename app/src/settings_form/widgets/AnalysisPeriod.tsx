@@ -8,8 +8,9 @@
 // year strip, "Every day, 22 to 2 h" in words; it is not changed until the next change in the control.
 //
 // How changes are sent: a key or a preset is one change; a drag is held here and sent once, on release; the typed fields are sent
-// when one is left or Enter is pressed, or when the fields close (and a month when it is chosen). So a value on the way (end hour "1" on the way to "18", a
-// drag that crosses the end hour and comes back) never moves the end date. The form saves once the changes stop.
+// when one is left or Enter is pressed, or when the fields close (and a month when it is chosen). So a value on the way (end hour
+// "1" on the way to "18", a drag that crosses the end hour and comes back) never moves the end date. The form saves once the
+// changes stop.
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../../messages";
 import {

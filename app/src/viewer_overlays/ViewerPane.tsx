@@ -41,7 +41,10 @@ export interface ViewerPaneProps {
   testSurfaces: THREE.BufferGeometry | null;
   /** The sun path of the stored settings; it turns by the North shown since (*northDegrees*), as the compass ring does. */
   sunPath: SunPathWithNorth | null;
-  /** Where the sun path and the sky dome are drawn, and the compass ring lies: around the maximum volume and the test surfaces together (R2 2). */
+  /**
+   * Where the sun path and the sky dome are drawn, and the compass ring lies: around the maximum volume and the test surfaces
+   * together (R2 2).
+   */
   hemisphere: Hemisphere | null;
   maxVolumeAppearance: MaxVolumeAppearance;
   /** The layers the open step shows; a change of step brings these back. */
