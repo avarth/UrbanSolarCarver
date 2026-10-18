@@ -1,17 +1,22 @@
-// The page (UX 4, 5.1, 6.1, 11): the top bar with the device status, then the start screen or the open project. The device
+// The page (UX 4, 5.1, 6.1, 11, R2 7): the top bar with the device status, then the start screen or the open project. The device
 // status is polled every second while the GPU warms up. A request that finds no engine is checked against GET health a few
 // times before the page says the engine stopped, so one lost request does not end the session. The runs are followed here, one
-// at a time as the engine runs them, so a run goes on being followed while the start screen or another project is open.
+// at a time as the engine runs them, so a run goes on being followed while the start screen or another project is open. The
+// projects folder and the project menus (on the start screen and on the project name in the top bar) send their requests here:
+// a rename keeps the open project open under its new name, a delete of it returns to the start screen, a reset opens it afresh.
 import { useEffect, useRef, useState } from "react";
 import {
-  createProject, createProjectFromExample, getExamples, getHealth, getModes, getProject, getSchema, listProjects, readTokenFromLaunchUrl,
-  refusalDetailOf, serviceProblemOf, type ExampleInfo, type HealthReply, type ModeInfo, type ProjectDetail, type ProjectSummary,
+  chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, getExamples, getHealth, getModes, getProject, getProjectsFolder,
+  getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, refusalDetailOf, renameProject, resetProjectToExample, serviceProblemOf,
+  type ExampleInfo, type HealthReply, type ModeInfo, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
 import { messages, type MessagePart } from "./messages";
 import { MessageParts } from "./settings_form/SettingTooltip";
+import { projectFolderPath, sameProjectName } from "./steps/ProjectDialogs";
+import { ProjectMenu, type ProjectActions } from "./steps/ProjectMenu";
 import { ProjectWorkspace } from "./steps/ProjectWorkspace";
 import { useRunLoop } from "./steps/run_state";
-import { cpuChosenAtLaunch, isWarmingUp, Spinner, StartScreen } from "./steps/StartScreen";
+import { cpuChosenAtLaunch, exampleTitleOf, isWarmingUp, Spinner, StartScreen, type ProjectsFolderChange } from "./steps/StartScreen";
 import "./App.css";
 
 const accessToken = readTokenFromLaunchUrl();
@@ -103,6 +108,9 @@ export function App() {
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [examples, setExamples] = useState<ExampleInfo[] | null>(null);
   const [openProject, setOpenProject] = useState<ProjectDetail | null>(null);
+  const [projectsFolder, setProjectsFolder] = useState<ProjectsFolderReply | null>(null);
+  // Counts the resets of the open project: the workspace is made again for the fresh copy, which keeps the project's name.
+  const [openProjectResets, setOpenProjectResets] = useState(0);
   const engineCheck = useRef<(() => void) | null>(null);
   const runs = useRunLoop(accessToken, (error) => handleServiceProblem(error));
 
@@ -127,16 +135,27 @@ export function App() {
       ask: () => getHealth(accessToken), onReply: setHealth, onProblem: setProblem, askAgainAfter: (reply) => isWarmingUp(reply.warm_up),
     });
     Promise.all([getSchema(accessToken), getModes(accessToken)]).then(([schema, modes]) => setSetup({ schema, modes })).catch(handleServiceProblem);
-    getExamples(accessToken).then(setExamples).catch(handleServiceProblem);
     return () => {
       stopPolling();
       engineCheck.current?.();
     };
   }, []);
 
+  /** The projects and the examples, whose project (the one made from each) changes with every project made, renamed or deleted. */
+  const readStartScreenLists = () => {
+    listProjects(accessToken).then(setProjects).catch(handleServiceProblem);
+    getExamples(accessToken).then(setExamples).catch(handleServiceProblem);
+  };
+  const readProjectsFolder = () => getProjectsFolder(accessToken).then(setProjectsFolder).catch(handleServiceProblem);
+
   useEffect(() => {
-    if (openProject === null) listProjects(accessToken).then(setProjects).catch(handleServiceProblem);
+    if (openProject === null) readStartScreenLists();
   }, [openProject === null]);
+
+  // Whether the folder may change depends on a run being active, so it is asked again when a run starts or ends.
+  useEffect(() => {
+    if (openProject === null) void readProjectsFolder();
+  }, [openProject === null, runs.activeRun === null]);
 
   /** Opens the project the request gives; resolves with the reason it failed, or null. */
   const openFrom = async (request: Promise<ProjectDetail>): Promise<string | null> => {
@@ -149,6 +168,50 @@ export function App() {
     }
   };
 
+  /** Resolves with the service's reason when the request fails, or null once it and *then* are done. */
+  const reasonIfRefused = async <Reply,>(request: Promise<Reply>, then: (reply: Reply) => void): Promise<string | null> => {
+    try {
+      then(await request);
+      return null;
+    } catch (error) {
+      handleServiceProblem(error);
+      return refusalDetailOf(error) ?? String(error);
+    }
+  };
+  const isOpenProject = (name: string) => openProject !== null && sameProjectName(openProject.name, name);
+
+  const projectActions: ProjectActions = {
+    openFolder: (name) => reasonIfRefused(openProjectFolder(accessToken, name), () => {}),
+    rename: (name, newName) => reasonIfRefused(renameProject(accessToken, name, newName), (renamed) => {
+      if (isOpenProject(name)) setOpenProject(renamed);
+      else readStartScreenLists();
+    }),
+    delete: (name, confirmName) => reasonIfRefused(deleteProject(accessToken, name, confirmName), () => {
+      if (isOpenProject(name)) setOpenProject(null);     // the start screen then reads its lists
+      else readStartScreenLists();
+    }),
+    resetToExample: (name) => reasonIfRefused(resetProjectToExample(accessToken, name), (reset) => {
+      if (!isOpenProject(name)) return readStartScreenLists();
+      setOpenProject(reset);
+      setOpenProjectResets((resets) => resets + 1);
+    }),
+  };
+
+  const changeProjectsFolder = async (): Promise<ProjectsFolderChange> => {
+    try {
+      const choice = await chooseProjectsFolder(accessToken);
+      if (choice.status === "changed") readStartScreenLists();
+      return choice.status === "unavailable" ? { status: "unavailable", problem: choice.problem ?? "" } : { status: choice.status };
+    } catch (error) {
+      handleServiceProblem(error);
+      return { status: "refused", reason: refusalDetailOf(error) ?? String(error) };
+    } finally {
+      void readProjectsFolder();      // the folder in use, and whether it may change (a run elsewhere may have started)
+    }
+  };
+
+  const runActiveFor = (name: string) => runs.activeRun !== null && sameProjectName(runs.activeRun.project, name);
+
   if (problem !== null) {
     return <div className="service-problem-overlay" role="alert"><MessageText parts={problem === "access_lost" ? messages.accessLost : messages.engineStopped} /></div>;
   }
@@ -158,21 +221,26 @@ export function App() {
         <span className="top-bar-product">{messages.productName}</span>
         {openProject && (
           <>
-            <span className="top-bar-project">{openProject.name}</span>
+            <ProjectMenu projectName={openProject.name} exampleTitle={exampleTitleOf(openProject.example, examples)}
+                         projectFolderPath={projectsFolder && projectFolderPath(projectsFolder.path, openProject.name)}
+                         runActive={runActiveFor(openProject.name)} actions={projectActions} placement="top_bar" />
             <button type="button" className="link-button" onClick={() => setOpenProject(null)}>{messages.projectsLink}</button>
           </>
         )}
         <span className="top-bar-device">{health && <DeviceStatus warmUp={health.warm_up} />}</span>
       </header>
       {openProject === null && (
-        <StartScreen health={health} projects={projects} examples={examples}
+        <StartScreen health={health} projects={projects} examples={examples} projectsFolder={projectsFolder}
+                     activeRunProject={runs.activeRun?.project ?? null} projectActions={projectActions}
                      onCreateProject={(name) => openFrom(createProject(accessToken, name, NEW_PROJECT_MODE))}
                      onOpenProject={(name) => openFrom(getProject(accessToken, name))}
-                     onTryExample={(example) => openFrom(createProjectFromExample(accessToken,
-                       freeProjectName(example.title, (projects ?? []).map((project) => project.name)), example.name))} />
+                     onTryExample={(example) => openFrom(example.project
+                       ? getProject(accessToken, example.project)       // made from this example before (R2 7.4)
+                       : createProjectFromExample(accessToken, freeProjectName(example.title, (projects ?? []).map((project) => project.name)), example.name))}
+                     onChangeProjectsFolder={changeProjectsFolder} />
       )}
       {openProject !== null && setup !== null && (
-        <ProjectWorkspace key={openProject.name} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes}
+        <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes}
                           warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
                           onShowProjects={() => setOpenProject(null)} />
       )}

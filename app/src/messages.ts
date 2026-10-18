@@ -52,6 +52,40 @@ export const messages = {
   noProjectsYet: "No projects yet.",
   tryExample: "Try an example",
 
+  // The projects folder and the menu of a project (R2 7.1, 7.2). The service's own reasons for a refusal are shown as it gives them.
+  projectsFolderIs: "Projects folder: ",
+  changeFolder: "Change folder",
+  folderPickerOpen: "Choose a folder in the window that opened on this computer. It may be behind the browser.",
+  folderPickerUnavailableWay: [" To use another folder, start USC with ", { code: "usc ui --projects-folder <folder>" }, "."] as MessagePart[],
+  folderGivenOnCommandLine: ["This folder was given with ", { code: "--projects-folder" }, ". To change it here, start ", { code: "usc ui" },
+    " without it."] as MessagePart[],
+  folderChangesOnceRunEnds: "The projects folder can be changed once the run has ended.",
+  projectMenuOf: (projectName: string) => `Actions for ${projectName}`,
+  projectMenuSymbol: "⋯",      // the menu button beside a project of the start screen
+  projectMenuCaret: "▾",       // after the project name in the top bar
+  openProjectFolder: "Open folder",
+  renameProject: "Rename",
+  deleteProject: "Delete",
+  resetProjectToExample: "Reset to the example",
+  projectChangesWaitForRun: "A run of this project is in progress. Rename, delete and reset wait until it has ended.",
+  cancel: "Cancel",
+  openFolderFailedTitle: "The folder could not be opened",
+  renameProjectTitle: (projectName: string) => `Rename ${projectName}`,
+  newProjectNameLabel: "New name",
+  projectNameInvalid: "Use up to 64 letters, numbers, spaces, hyphens or underscores, starting with a letter or number.",
+  projectNameIsWindowsDeviceName: (projectName: string) => `Windows does not allow '${projectName}' as a folder name. Choose another name.`,
+  deleteProjectTitle: (projectName: string) => `Delete ${projectName}`,
+  deleteProjectExplanation: (projectName: string) =>
+    `The project ${projectName} and everything in its folder go to the recycle bin or trash, where you can restore them.`,
+  projectFolderIs: "Folder: ",
+  typeProjectNameToConfirm: (projectName: string) => `Type ${projectName} to confirm`,
+  deleteProjectButton: "Delete project",
+  resetProjectTitle: (projectName: string) => `Reset ${projectName} to the example`,
+  resetProjectExplanation: (projectName: string, exampleTitle: string) =>
+    `The inputs, settings and results of ${projectName} are replaced with a fresh copy of the example ${exampleTitle}. ` +
+    "The current ones go to the recycle bin or trash. The project keeps its name.",
+  resetProjectButton: "Reset project",
+
   // The steps and their summary lines (4.1)
   stepTitles: {
     inputs: "Inputs",

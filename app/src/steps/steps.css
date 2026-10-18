@@ -88,6 +88,126 @@
 .start-choice:disabled { cursor: default; }
 .start-choice-name { font-weight: 600; }
 .start-choice-detail { color: var(--colour-muted); font-size: var(--text-secondary); }
+.start-choice-row { display: flex; align-items: flex-start; gap: var(--space-unit); }
+.start-choice-row .start-choice { flex: 1; min-width: 0; }
+
+.start-projects-folder {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-unit);
+}
+
+.start-projects-folder p { margin: 0; }
+.start-projects-folder code { font-family: var(--font-family-code); }
+.start-projects-folder-path { overflow-wrap: anywhere; }
+
+/* The menu of a project and its dialogs (R2 7.2) ------------------------------------------------------------------------ */
+
+.project-menu { flex: none; }
+
+.project-menu-button {
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.project-menu-button:hover,
+.project-menu-button[aria-expanded="true"] { border-color: var(--colour-line); background: var(--colour-chrome); }
+.project-menu-button-row { padding: calc(var(--space-unit) * 2); font-size: var(--text-step-title); line-height: 1; }
+
+.project-menu-button-top-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 1.5);
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  font-weight: 600;
+}
+
+.project-menu-caret { color: var(--colour-muted); }
+
+.project-menu-popup {
+  position: fixed;
+  z-index: 30;
+  min-width: 200px;
+  max-width: 320px;
+  padding: var(--space-unit);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+}
+
+.project-menu-popup ul { margin: 0; padding: 0; list-style: none; }
+
+.project-menu-popup [role="menuitem"] {
+  display: block;
+  width: 100%;
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  font-weight: 400;
+  text-align: left;
+  cursor: pointer;
+}
+
+.project-menu-popup [role="menuitem"]:hover,
+.project-menu-popup [role="menuitem"]:focus { background: var(--colour-accent-soft); }
+.project-menu-popup [role="menuitem"][aria-disabled="true"] { color: var(--colour-muted); cursor: default; }
+
+.project-menu-reason {
+  margin: var(--space-unit) calc(var(--space-unit) * 3) calc(var(--space-unit) * 2);
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+}
+
+.project-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--space-unit) * 4);
+  background: color-mix(in srgb, var(--colour-ink) 35%, transparent);
+}
+
+.project-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+  box-sizing: border-box;
+  width: min(440px, 100%);
+  max-height: 100%;       /* a window shorter than the dialog (browser zoom) scrolls it */
+  overflow-y: auto;
+  padding: calc(var(--space-unit) * 5);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  font-weight: 400;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+}
+
+.project-dialog h2 { margin: 0; font-size: var(--text-step-title); font-weight: 600; overflow-wrap: anywhere; }
+.project-dialog p { margin: 0; }
+.project-dialog-form { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.project-dialog-field.setting-number { box-sizing: border-box; width: 100%; }
+.project-dialog-path { font-family: var(--font-family-code); overflow-wrap: anywhere; }
+
+.project-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: calc(var(--space-unit) * 2);
+  margin-top: calc(var(--space-unit) * 2);
+}
+
+.project-dialog-buttons .secondary-button { align-self: auto; }
 
 /* The step list ---------------------------------------------------------------------------------------------------------- */
 

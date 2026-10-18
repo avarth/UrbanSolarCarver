@@ -19,6 +19,8 @@ export type StartRunReply = Schemas["StartRunReply"];
 export type CancelRunReply = Schemas["CancelRunReply"];
 export type RunSummary = Schemas["RunSummary"];
 export type SkyDome = Schemas["SkyDome"];
+export type ProjectsFolderReply = Schemas["ProjectsFolderReply"];
+export type ProjectsFolderChoiceReply = Schemas["ProjectsFolderChoiceReply"];
 
 export const TOKEN_HEADER = "X-USC-Token";
 const TOKEN_QUERY_PARAMETER = "token";
@@ -141,6 +143,27 @@ export const getProject = (token: string, name: string) => requestJson<ProjectDe
 
 export const createProjectFromExample = (token: string, name: string, example: string) =>
   requestJson<ProjectDetail>(token, `${projectPath(name)}/examples/${encodeURIComponent(example)}`, "POST");
+
+export const getProjectsFolder = (token: string) => requestJson<ProjectsFolderReply>(token, "/api/projects-folder");
+
+/** Shows the folder picker on this computer (the browser sends no path); resolves once it is closed. */
+export const chooseProjectsFolder = (token: string) => requestJson<ProjectsFolderChoiceReply>(token, "/api/projects-folder/choose", "POST");
+
+export const renameProject = (token: string, name: string, newName: string) =>
+  requestJson<ProjectDetail>(token, `${projectPath(name)}/rename`, "POST", { new_name: newName });
+
+/** Moves the project folder to the recycle bin; *confirmName* is the name the user typed, which the service checks again. */
+export async function deleteProject(token: string, name: string, confirmName: string): Promise<void> {
+  await send(token, `${projectPath(name)}?confirm_name=${encodeURIComponent(confirmName)}`, "DELETE");
+}
+
+export const resetProjectToExample = (token: string, name: string) =>
+  requestJson<ProjectDetail>(token, `${projectPath(name)}/reset-to-example`, "POST");
+
+/** Opens the project folder in the file manager of this computer. */
+export async function openProjectFolder(token: string, name: string): Promise<void> {
+  await send(token, `${projectPath(name)}/open-folder`, "POST");
+}
 
 export async function addInput(token: string, project: string, role: string, file: File): Promise<InputFilesReply> {
   const form = new FormData();
