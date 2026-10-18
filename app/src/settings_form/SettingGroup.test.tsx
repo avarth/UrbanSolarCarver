@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { act } from "react";
+import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../api_client/client";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
@@ -321,4 +321,60 @@ test("a setting whose empty value is automatic shows 'automatic' in the empty fi
   rendered?.unmount();
   rendered = renderForTest(<SettingField view={viewOf("settings", "daylight", "voxel_size")} form={formFor("daylight")} onChange={() => {}} />);
   expect(rendered.container.querySelector<HTMLInputElement>("input[type='number']")!.placeholder).toBe("");
+});
+
+/** Types *text* one character at a time, as a keyboard does. */
+function typeKeys(field: HTMLInputElement, text: string): void {
+  typeInto(field, "");
+  for (let length = 1; length <= text.length; length++) typeInto(field, text.slice(0, length));
+}
+
+test("a number typed past its bound keystroke by keystroke leaves the value the field had before, not the part typed in range", () => {
+  // The form behind the field, as the app holds it: every change the field passes on is the value the next save sends.
+  function NorthField() {
+    const [form, dispatch] = useReducer(formReducer, initialFormState({
+      schema: { properties: { ...SCHEMA.properties, north_deg: { default: 0.0, type: "number", minimum: 0, exclusiveMaximum: 360 } } },
+      modes: MODES, settings: { mode: "daylight", north_deg: 20 }, gridPlan: GRID_PLAN }));
+    latestNorth = form.userValues.north_deg;
+    return <SettingField view={viewOf("settings", "daylight", "north_deg")} form={form} onChange={(values) => dispatch({ type: "values_changed", values })} />;
+  }
+  let latestNorth: unknown;
+  rendered = renderForTest(<NorthField />);
+  const field = rendered.container.querySelector<HTMLInputElement>("input[type='number']")!;
+  act(() => field.focus());
+  typeKeys(field, "360");
+  expect(latestNorth).toBe(20);
+  expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 0 or more, below 360.");
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(field.value).toBe("20");
+  // A later edit starts from the value then: 45 is taken.
+  typeKeys(field, "45");
+  expect(latestNorth).toBe(45);
+  expect(rendered.container.querySelector(".setting-error")).toBeNull();
+});
+
+test("the message of a refused number goes when the value changes from elsewhere", () => {
+  const form = formFor("daylight");
+  const view = viewOf("carving", "daylight", "max_slope_deg");
+  const schemaForm = { ...form, schemaProperties: { ...form.schemaProperties,
+    max_slope_deg: { anyOf: [{ type: "number", exclusiveMinimum: 0, maximum: 90 }, { type: "null" }], default: null } } } as FormState;
+  rendered = renderForTest(<SettingField view={view} form={schemaForm} onChange={() => {}} />);
+  const field = rendered.container.querySelector<HTMLInputElement>("input[type='number']")!;
+  typeKeys(field, "0");
+  act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+  expect(rendered.container.querySelector(".setting-error")).not.toBeNull();
+  rendered.rerender(<SettingField view={view} form={formReducer(schemaForm, { type: "values_changed", values: { max_slope_deg: 30 } })} onChange={() => {}} />);
+  expect(rendered.container.querySelector(".setting-error")).toBeNull();
+});
+
+test("each input of the analysis period keeps its own refusal: a valid hour does not hide a refused day", () => {
+  const form = formFor("time-based");
+  rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "start_month")} form={form} onChange={() => {}} />);
+  const [startDay, startHour] = [...rendered.container.querySelectorAll<HTMLInputElement>("input[type='number']")];
+  typeKeys(startDay, "32");
+  expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 31.");
+  typeKeys(startHour, "9");
+  expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 31.");
+  typeKeys(startDay, "3");
+  expect(rendered.container.querySelector(".setting-error")).toBeNull();
 });

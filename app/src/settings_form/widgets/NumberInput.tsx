@@ -2,8 +2,10 @@
 // in the setting's range is passed on, an empty one is passed on as null (unset) only for a setting that may be empty, and
 // leaving the field shows the setting's value again. A number outside the range (the engine's bounds, an exclusive bound such
 // as "more than 0" included), or a fraction where a whole number is needed, is refused here and *onRefused* gets the message
-// that says what to use; it gets null again once a number is taken or the field is emptied.
-import { useState } from "react";
+// that says what to use; it gets null again once a number is taken, the field is emptied, or the value changes from elsewhere.
+// A refusal gives the setting back the value it had when the editing began, so the part typed in range before the refused
+// keystroke ("36" on the way to "360") is never kept.
+import { useEffect, useRef, useState } from "react";
 import { messages } from "../../messages";
 
 /** What SettingField gives every control: the ids that tie it to its label and error message, and whether it may be used. */
@@ -58,7 +60,17 @@ export function refusalOf(value: number, range: NumberRange, wholeNumbers = fals
 export function NumberInput({ value, onValue, mayBeEmpty, id, ariaLabel, ariaLabelledBy, invalid, describedBy, disabled, minimum, maximum,
                               exclusiveMinimum, exclusiveMaximum, wholeNumbers, className, placeholder, onRefused }: NumberInputProps) {
   const [typedText, setTypedText] = useState<string | null>(null);
+  const valueAtEditStart = useRef<number | null>(value);
+  const refusing = useRef(false);
   const shownText = typedText ?? (value === null ? "" : String(value));
+  const report = (refusal: string | null) => {
+    refusing.current = refusal !== null;
+    onRefused?.(refusal);
+  };
+  // A value set from elsewhere while the field is not being edited (a mode change, another control) ends a refusal's message.
+  useEffect(() => {
+    if (typedText === null && refusing.current) report(null);
+  }, [value]);
   // The browser's own limits for the spinner: an exclusive bound is the nearest the spinner may go, and is refused there.
   const lowest = minimum ?? exclusiveMinimum, highest = maximum ?? exclusiveMaximum;
   return (
@@ -67,17 +79,19 @@ export function NumberInput({ value, onValue, mayBeEmpty, id, ariaLabel, ariaLab
            aria-invalid={invalid} aria-describedby={describedBy} disabled={disabled} placeholder={placeholder}
            onChange={(event) => {
              const text = event.target.value;
+             if (typedText === null) valueAtEditStart.current = value;      // the editing begins
              setTypedText(text);
              if (text.trim() === "") {
-               onRefused?.(null);
+               report(null);
                if (mayBeEmpty) onValue(null);
                return;
              }
              const typedNumber = Number(text);
              if (!Number.isFinite(typedNumber)) return;
              const refusal = refusalOf(typedNumber, { minimum, maximum, exclusiveMinimum, exclusiveMaximum }, wholeNumbers);
-             onRefused?.(refusal);
+             report(refusal);
              if (refusal === null) onValue(typedNumber);
+             else if (value !== valueAtEditStart.current && (valueAtEditStart.current !== null || mayBeEmpty)) onValue(valueAtEditStart.current);
            }}
            onBlur={() => setTypedText(null)} />
   );
