@@ -28,10 +28,10 @@ def choose_folder(initial_folder: Path) -> Path | None:
 
     Waits as long as the dialog stays open. Raises FolderPickerUnavailable, with the child's own message when it gave one.
     """
-    environment = {**os.environ, "PYTHONIOENCODING": "utf-8"}
+    # -I ignores every PYTHON* variable, so the child's UTF-8 streams are asked for with -X utf8 instead.
     try:
-        completed = subprocess.run([sys.executable, "-I", str(CHILD_SCRIPT), str(initial_folder)], capture_output=True,
-                                   text=True, encoding="utf-8", errors="replace", env=environment)
+        completed = subprocess.run([sys.executable, "-I", "-X", "utf8", str(CHILD_SCRIPT), str(initial_folder)],
+                                   capture_output=True, text=True, encoding="utf-8", errors="replace")
     except OSError as error:
         raise FolderPickerUnavailable(f"The folder picker program could not start: {error}") from error
     if completed.returncode == EXIT_CANCELLED:

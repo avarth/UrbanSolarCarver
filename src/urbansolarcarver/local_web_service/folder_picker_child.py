@@ -1,4 +1,4 @@
-"""The program that shows the folder picker: ``python -I folder_picker_child.py <initial folder>``.
+"""The program that shows the folder picker: ``python -I -X utf8 folder_picker_child.py <initial folder>``.
 
 ``folder_picker.choose_folder`` starts it as a short-lived child process, so the service never loads Tcl/Tk: a Tk root must
 be created, used and freed on one thread (the main thread on macOS), and a service thread cannot promise that. This file
@@ -51,6 +51,9 @@ def main(arguments: list[str]) -> int:
         chosen = choose_folder_in_this_process(arguments[0])
     except PickerUnavailable as error:
         sys.stderr.write(str(error))
+        return EXIT_UNAVAILABLE
+    except Exception as error:      # a Tk error inside the dialog: one readable line, not a traceback on the start screen
+        sys.stderr.write(f"The folder picker failed: {error}")
         return EXIT_UNAVAILABLE
     if chosen is None:
         return EXIT_CANCELLED

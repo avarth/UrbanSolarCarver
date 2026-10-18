@@ -892,6 +892,14 @@ def test_the_dialog_program_answers_with_exit_codes_and_json(monkeypatch, tmp_pa
     assert "display" in capsys.readouterr().err
 
 
+def test_an_unexpected_error_in_the_dialog_program_is_one_readable_line(monkeypatch, tmp_path, capsys):
+    def dialog_that_breaks(initial_folder):
+        raise RuntimeError("bad window path name")
+    monkeypatch.setattr(folder_picker_child, "choose_folder_in_this_process", dialog_that_breaks)
+    assert folder_picker_child.main([str(tmp_path)]) == folder_picker_child.EXIT_UNAVAILABLE
+    assert capsys.readouterr().err == "The folder picker failed: bad window path name"
+
+
 def test_the_dialog_program_ships_with_the_package():
     assert folder_picker.CHILD_SCRIPT.is_file() and folder_picker.CHILD_SCRIPT.parent == Path(folder_picker.__file__).parent
 
@@ -916,6 +924,12 @@ def test_choose_folder_gives_none_when_the_dialog_program_reports_a_cancel(monke
 def test_choose_folder_is_unavailable_with_the_reason_the_dialog_program_gives(monkeypatch, tmp_path):
     use_fake_dialog_program(monkeypatch, tmp_path, f"import sys\nsys.stderr.write('There is no display.')\nsys.exit({folder_picker_child.EXIT_UNAVAILABLE})\n")
     with pytest.raises(FolderPickerUnavailable, match="There is no display."):
+        folder_picker.choose_folder(tmp_path)
+
+
+def test_the_reason_the_dialog_program_gives_keeps_its_greek_letters(monkeypatch, tmp_path):
+    use_fake_dialog_program(monkeypatch, tmp_path, f"import sys\nsys.stderr.write('Δεν υπάρχει οθόνη.')\nsys.exit({folder_picker_child.EXIT_UNAVAILABLE})\n")
+    with pytest.raises(FolderPickerUnavailable, match="Δεν υπάρχει οθόνη."):
         folder_picker.choose_folder(tmp_path)
 
 
