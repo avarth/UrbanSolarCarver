@@ -209,10 +209,13 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
     # face of at most one bay; its columns go to the neighbouring facades.
     faces = mg.assign_faces(xy, facades, corners, polygons, vs,
                             min_facade_length=2.0 * settings.min_plate_dimension)
-    bay, bay_face = mg.cut_bays(faces, settings.min_plate_dimension, vs)
+    bay, bay_face = mg.cut_bays(faces, facades, polygons, settings.min_plate_dimension, vs)
     bay_shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, polygons,
                                  settings.min_plate_dimension, vs)
-    n_cols = np.bincount(bay)
+    footprint = shapely.union_all(polygons)
+    # A column along a facade not aligned with the grid counts by its share inside the footprint.
+    column_share = mg.column_shares_inside(cells_ij, vs, footprint)
+    bay_columns = mg.bay_column_counts(bay, len(bay_face), column_share)
 
     layers = np.flatnonzero(occ.any(axis=(0, 1)))
     lowest_layer_bottom = origin[2] + layers.min() * vs
@@ -231,17 +234,16 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
     counted_layers = mg.layers_centred_within(origin[2], vs, occ.shape[2], z0, z_top)
     floors = mg.build_floors(cells_ij, bay, occ, kept, origin[2], vs, levels,
                              settings.plate_tolerance, settings.plate_stacking, settings.min_plate_dimension,
-                             counted_layers=counted_layers)
+                             counted_layers=counted_layers, column_share=column_share)
 
-    footprint = shapely.union_all(polygons)
     plates, meshes, floor_areas = [], [], []
     for n, floor in enumerate(floors):
         area_this_floor, count_this_floor = 0.0, 0
         for p in range(int(floor.plate.max()) + 1):
             in_plate = floor.plate == p
             bays_in = np.unique(bay[in_plate])
-            outside = float((floor.outside_share[bays_in] * n_cols[bays_in]).sum()
-                            / n_cols[bays_in].sum())
+            outside = float((floor.outside_share[bays_in] * bay_columns[bays_in]).sum()
+                            / bay_columns[bays_in].sum())
             for poly in mg.plate_polygons(cells_ij, in_plate, ~in_plate, vs, footprint,
                                           min_dimension=settings.min_plate_dimension,
                                           bay=bay, bay_shapes=bay_shapes):

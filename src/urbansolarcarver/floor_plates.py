@@ -262,6 +262,26 @@ def _distance_to_tangent(facade, at_end, xy):
     return np.abs(rel[:, 0] * d[1] - rel[:, 1] * d[0])
 
 
+def _outside_columns_onto_the_footprint(probe, part, polygons, step_inside=1e-4):
+    """*probe* with each point outside its part moved to the nearest point of the part, then *step_inside* further
+    in the same direction (into the part).
+
+    Along a facade not aligned with the grid the voxelizer fills columns whose centre lies just outside it.  Beside
+    a corner such a column would be nearest to the other facade there and past the end of the facade that takes the
+    corner square, so it would keep a face of its own, cut in rows that do not line up with the depth cuts of the
+    faces beside it.  Assigned from the point of the footprint nearest to it, it joins the face that point is in."""
+    probe = probe.copy()
+    for k, polygon in enumerate(polygons):
+        outside = np.flatnonzero((part == k) & ~shapely.contains_xy(polygon, probe[:, 0], probe[:, 1]))
+        if not outside.size:
+            continue
+        on_outline = shapely.get_coordinates(shapely.shortest_line(shapely.points(probe[outside]), polygon))[1::2]
+        towards = on_outline - probe[outside]
+        length = np.maximum(np.hypot(towards[:, 0], towards[:, 1]), 1e-12)
+        probe[outside] = on_outline + towards / length[:, None] * step_inside
+    return probe
+
+
 def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0.0) -> Faces:
     """Assign footprint columns (centres *xy*, local) to faces.
 
@@ -283,6 +303,8 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
       its tangent line, move to the longer facade, extending it past its end.
 
     Equal lengths go to the facade closer to the x axis (see ``_longer``).
+    A column whose centre lies outside the footprint gets the face of the
+    footprint point nearest to it (see ``_outside_columns_onto_the_footprint``).
     ``u`` is the projection on the facade direction measured from the
     part's centroid for straight facades (so parallel facades share cut
     positions), the arc length otherwise, continued along the end edges
@@ -297,8 +319,9 @@ def assign_faces(xy, facades, corners, polygons, voxel_size, min_facade_length=0
     # counts) would make every test below a tie; a fixed sub-micrometre shift
     # sends all of them to the same side, so faces stay rectangular.
     probe = xy + _TIE_SHIFT
+    part = part_of_points(shapely.points(probe), polygons)
+    probe = _outside_columns_onto_the_footprint(probe, part, polygons)
     points = shapely.points(probe)
-    part = part_of_points(points, polygons)
     facade_part = np.array([f.part for f in facades])
     short = np.array([f.length < min_facade_length for f in facades])
     for p in np.unique(facade_part):
@@ -372,13 +395,44 @@ def _bay_span(u, voxel_size):
     return float(u.max() - u.min()) + voxel_size
 
 
-def cut_bays(faces: Faces, bay_width, voxel_size):
-    """Cut each face into bays: square modules of *bay_width*, cut along the facade at ``u = k * bay_width`` and in
-    depth behind it at ``d = m * bay_width``.
+def row_cut_lines(facade, polygon, bay_width):
+    """Positions ``u`` (along a straight *facade*, from the centroid of its
+    part *polygon*) of the cuts between rows of modules, in increasing order.
+
+    Rows of *bay_width* are laid from both ends of the part's extent along
+    the facade; what is left over widens the middle row, or the two middle
+    rows equally.  An end wing therefore starts with a whole row, whatever
+    the building's length, and the cuts are the same lines for the parallel
+    facade opposite (the extent and its middle do not depend on the
+    direction)."""
+    w = float(bay_width)
+    centroid = np.array(polygon.centroid.coords[0])
+    extent = (np.asarray(polygon.exterior.coords) - centroid) @ facade.direction
+    lo, hi = float(extent.min()), float(extent.max())
+    n = int(np.floor((hi - lo) / w + 1e-9))       # whole rows
+    from_each_end = max(n - 1, 0) // 2
+    cuts = [lo + w * np.arange(1, from_each_end + 1), hi - w * np.arange(from_each_end, 0, -1)]
+    if n >= 2 and n % 2 == 0:
+        cuts.append([0.5 * (lo + hi)])
+    return np.sort(np.concatenate(cuts))
+
+
+def _rows(faces, mine, facade, polygon, bay_width):
+    """Row of each of the columns *mine* of *facade*'s face: between the cut lines of ``row_cut_lines`` on a straight
+    facade, every *bay_width* of arc length from its start on a curved one."""
+    if facade.straight:
+        return np.searchsorted(row_cut_lines(facade, polygon, bay_width), faces.u[mine] + 1e-9, side="right")
+    return np.floor(faces.u[mine] / bay_width + 1e-9).astype(np.int64)
+
+
+def cut_bays(faces: Faces, facades, polygons, bay_width, voxel_size):
+    """Cut each face into bays: square modules of *bay_width*, cut along the facade in rows (see ``row_cut_lines``;
+    on a curved facade every *bay_width* of arc length) and in depth behind it at ``d = m * bay_width``.
 
     A row of modules at either end of a face that is narrower than
-    *bay_width* merges into its neighbour, and so does a module at the back
-    of a row (the ridge where the face ends) shallower than *bay_width*. Each
+    *bay_width* (where the face ends inside the building, at a corner square)
+    merges into its neighbour, and so does a module at the back of a row
+    (the ridge where the face ends) shallower than *bay_width*. Each
     module is built on a floor on its own, so a wing keeps its floors
     whatever lies behind it in the same face (a courtyard carved lower).
 
@@ -389,7 +443,10 @@ def cut_bays(faces: Faces, bay_width, voxel_size):
     bay_face : ndarray (B,) int
         Facade index of each bay.
     """
-    k = np.floor(faces.u / bay_width + 1e-9).astype(np.int64)
+    k = np.zeros(len(faces.u), dtype=np.int64)
+    for f in np.unique(faces.face):
+        mine = faces.face == f
+        k[mine] = _rows(faces, mine, facades[f], polygons[facades[f].part], bay_width)
     # Columns whose centre lies in front of the facade line (d < 0, along
     # facades not aligned with the grid) belong to the first module.
     m = np.floor(np.maximum(faces.d, 0.0) / bay_width + 1e-9).astype(np.int64)
@@ -428,7 +485,7 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
     columns' squares, with its sides moved onto exact lines:
 
     * a side with columns of the same face across it lies on its cut line:
-      ``u = k * bay_width`` along the facade, ``d = m * bay_width`` in depth;
+      a line of ``row_cut_lines`` along the facade, ``d = m * bay_width`` in depth;
     * a back with only columns of the face of a parallel, opposite facade
       across it lies on the midline between the two facades (the ridge
       the nearest-facade rule draws there);
@@ -477,6 +534,7 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
         u_all = (xy - on_facade) @ along
         d_all = (xy - on_facade) @ inward
         u_start, u_end = (facade.start - on_facade) @ along, (facade.end - on_facade) @ along
+        cuts = row_cut_lines(facade, polygons[facade.part], w)
 
         def side(edge, outward, beyond):
             """Edge of the columns' squares, or one voxel further when nothing lies beyond."""
@@ -486,9 +544,12 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
             mine = columns_of_bay[b]
             u, d = u_all[mine], d_all[mine]
             u_lo, u_hi, d_lo, d_hi = u.min(), u.max(), d.min(), d.max()
-            k_lo, k_hi = np.floor(u_lo / w + 1e-9), np.floor(u_hi / w + 1e-9)
-            # Every column the tests below look at lies in this rectangle of the facade's frame.
-            u_min, u_max = min((k_lo - 1) * w, u_lo - gap) - vs, max((k_hi + 2) * w, u_hi + gap) + vs
+            k_lo, k_hi = np.searchsorted(cuts, [u_lo + 1e-9, u_hi + 1e-9], side="right")
+            # Every column the tests below look at lies in this rectangle of the facade's frame: the rows on either
+            # side (an end row is at most two modules wide).
+            row_before = cuts[k_lo - 2] if k_lo >= 2 else u_lo - 2 * w
+            row_after = cuts[k_hi + 1] if k_hi + 1 < len(cuts) else u_hi + 2 * w
+            u_min, u_max = min(row_before, u_lo - gap) - vs, max(row_after, u_hi + gap) + vs
             d_min, d_max = d_lo - gap - vs, d_hi + gap + vs
             near = columns_near(np.array([on_facade + uu * along + dd * inward
                                           for uu in (u_min, u_max) for dd in (d_min, d_max)]))
@@ -501,11 +562,11 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
             in_d = (d_o >= d_lo - 1e-9) & (d_o <= d_hi + 1e-9)
             others_on_face = faces.face[others] == f_index
             face_near = near[faces.face[near] == f_index]
-            k_face, d_face = np.floor(u_all[face_near] / w + 1e-9), d_all[face_near]
+            k_face, d_face = np.searchsorted(cuts, u_all[face_near] + 1e-9, side="right"), d_all[face_near]
             at_depth = (d_face >= d_lo - 1e-9) & (d_face <= d_hi + 1e-9)    # the face's columns beside this module
-            u0 = (k_lo * w if ((k_face == k_lo - 1) & at_depth).any()
+            u0 = (cuts[k_lo - 1] if ((k_face == k_lo - 1) & at_depth).any()
                   else side(u_lo, -1.0, in_d & (u_o < u_lo) & (u_o >= u_lo - gap)))
-            u1 = ((k_hi + 1) * w if ((k_face == k_hi + 1) & at_depth).any()
+            u1 = (cuts[k_hi] if ((k_face == k_hi + 1) & at_depth).any()
                   else side(u_hi, 1.0, in_d & (u_o > u_hi) & (u_o <= u_hi + gap)))
             in_front = in_u & (d_o < d_lo) & (d_o >= d_lo - gap)
             behind = in_u & (d_o > d_hi) & (d_o <= d_hi + gap)
@@ -523,6 +584,30 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
             if z > a and d0 > -vs and not module_in_front:
                 pieces.append(_rectangle(on_facade, along, inward, a, z, -vs, d1))
             shapes[b] = shapely.union_all(pieces)
+    return _without_overlaps(shapes)
+
+
+def _without_overlaps(shapes):
+    """*shapes* with each one's overlap with a shape of lower index removed.
+
+    At a slanted end the rectangles of two modules can overlap where neither
+    holds the other's column centres; the overlap goes to the module of lower
+    index, so plates made of different modules neither overlap nor both leave
+    it out."""
+    indices = np.array([b for b, shape in enumerate(shapes) if shape is not None], dtype=np.int64)
+    if not len(indices):
+        return shapes
+    geoms = np.array([shapes[b] for b in indices], dtype=object)
+    this, other = shapely.STRtree(geoms).query(geoms, predicate="intersects")
+    lower = other < this
+    this, other = this[lower], other[lower]
+    interiors_meet = shapely.relate_pattern(geoms[this], geoms[other], "2********")    # not only touching
+    this, other = this[interiors_meet], other[interiors_meet]
+    overlap = shapely.area(shapely.intersection(geoms[this], geoms[other])) > 1e-9
+    shapes = list(shapes)
+    for n in np.unique(this[overlap]):           # increasing, so each lower shape is already final
+        b = indices[n]
+        shapes[b] = shapes[b].difference(shapely.union_all([shapes[indices[m]] for m in other[overlap & (this == n)]]))
     return shapes
 
 
@@ -573,9 +658,10 @@ def _disc(side):
     return offset[:, None] ** 2 + offset[None, :] ** 2 <= (0.5 * side) ** 2
 
 
-def _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, n_cols):
-    """Drop bays that keep less than half of their columns after a morphological
-    opening with a disc *side* columns across (parts narrower than the minimum).
+def _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, column_share, bay_columns):
+    """Drop bays that keep less than half of their columns (counted by *column_share*,
+    *bay_columns* in all) after a morphological opening with a disc *side* columns
+    across (parts narrower than the minimum).
 
     A disc fits a strip of the minimum width at any angle to the grid, as
     the inward offset in ``plate_polygons`` does; a square fits only one
@@ -586,8 +672,8 @@ def _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, n_cols):
     grid[cells_ij[built, 0], cells_ij[built, 1]] = True
     opened = binary_opening(grid, structure=_disc(side))
     surviving = opened[cells_ij[:, 0], cells_ij[:, 1]] & built
-    share = np.bincount(bay, weights=surviving.astype(np.float64), minlength=len(keep))
-    return keep & (share >= 0.5 * np.maximum(n_cols, 1))
+    share = np.bincount(bay, weights=surviving * column_share, minlength=len(keep))
+    return keep & (share >= 0.5 * bay_columns)
 
 
 def _label_plates(built, cells_ij, grid_shape):
@@ -600,8 +686,29 @@ def _label_plates(built, cells_ij, grid_shape):
     return plate
 
 
+def column_shares_inside(cells_ij, voxel_size, footprint):
+    """(N,) share of each column's square inside *footprint* (local xy).
+
+    Along a facade not aligned with the grid the voxelizer fills every column
+    the facade passes through, so these columns lie partly, some mostly,
+    outside the footprint."""
+    i, j = cells_ij[:, 0], cells_ij[:, 1]
+    vs = float(voxel_size)
+    squares = shapely.box(i * vs, j * vs, (i + 1) * vs, (j + 1) * vs)
+    shapely.prepare(footprint)
+    share = np.ones(len(squares))
+    on_outline = ~shapely.contains_properly(footprint, squares)
+    share[on_outline] = shapely.area(shapely.intersection(squares[on_outline], footprint)) / (vs * vs)
+    return np.clip(share, 0.0, 1.0)
+
+
+def bay_column_counts(bay, n_bays, column_share=None):
+    """(B,) number of columns of each bay, each counted by its share inside the footprint (None: 1 each)."""
+    return np.bincount(bay, weights=column_share, minlength=n_bays).astype(np.float64)
+
+
 def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
-                 tolerance, stacking, min_dimension, counted_layers=None):
+                 tolerance, stacking, min_dimension, counted_layers=None, column_share=None):
     """Decide, floor by floor, which bays are built.
 
     A bay is built on a floor when every one of its columns is filled by
@@ -616,11 +723,19 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
     and its share outside the envelope are measured over them, so a layer
     mostly outside the maximum volume, filled only where rays hit its base or
     roof, does not fail the columns that lack it.
+
+    Each column counts by *column_share* ((N,), from ``column_shares_inside``;
+    None: 1 for every column), its share inside the footprint, in a bay's share
+    outside the envelope and in the test for narrow parts: a column along a
+    facade not aligned with the grid counts only for the part of its volume
+    inside the building, so a module's share does not depend on the angle of
+    the footprint to the grid.
     """
     n_bays = int(bay.max()) + 1 if bay.size else 0
+    column_share = np.ones(len(bay)) if column_share is None else np.asarray(column_share, dtype=np.float64)
     occ_cols = occupancy[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
     kept_cols = (kept & occupancy)[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
-    n_cols = np.bincount(bay, minlength=n_bays)
+    bay_columns = np.maximum(bay_column_counts(bay, n_bays, column_share), 1e-9)
     grid_shape = occupancy.shape[:2]
     side = max(1, int(round(min_dimension / voxel_size)))
     n_layers = occupancy.shape[2]
@@ -632,12 +747,12 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
         overlap[not_counted] = 0.0
         column_full = occ_cols @ overlap >= height - 1e-6
         in_max = np.bincount(bay, weights=(~column_full).astype(np.float64), minlength=n_bays) == 0
-        outside = (np.bincount(bay, weights=height - kept_cols @ overlap, minlength=n_bays)
-                   / (np.maximum(n_cols, 1) * height))
+        outside = (np.bincount(bay, weights=(height - kept_cols @ overlap) * column_share, minlength=n_bays)
+                   / (bay_columns * height))
         keep = in_max & (outside <= tolerance + 1e-9)
         if stacking == "supported" and below is not None:
             keep &= below
-        keep = _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, n_cols)
+        keep = _drop_narrow_bays(keep, bay, cells_ij, grid_shape, side, column_share, bay_columns)
         floors.append(Floor(zb=zb, zt=zt, kept_bays=keep, outside_share=outside,
                             plate=_label_plates(keep[bay], cells_ij, grid_shape)))
         below = keep
@@ -697,12 +812,28 @@ def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint, min_dimen
         shape = _from_columns(cells_ij, in_plate, removed, vs).intersection(footprint)
     else:
         has_shape = np.array([s is not None for s in bay_shapes])
-        pieces = [bay_shapes[b] for b in np.unique(bay[in_plate]) if has_shape[b]]
+        rectangles = shapely.union_all([bay_shapes[b] for b in np.unique(bay[in_plate]) if has_shape[b]])
+        pieces = [rectangles]
         by_columns = in_plate & ~has_shape[bay]
         if by_columns.any():
             pieces.append(_from_columns(cells_ij, by_columns, removed, vs))
-        shape = shapely.union_all(pieces).buffer(vs / 2, join_style="mitre").buffer(-vs / 2, join_style="mitre")
-        nearby_removed = np.unique(bay[removed & _near(cells_ij, in_plate, 2)])
+        # Gaps narrower than a voxel closed by an outward then inward offset.  GEOS's inward mitre offset can drop
+        # whole parts of what it offsets, so the pieces themselves are kept as well.
+        pieces = shapely.union_all(pieces)
+        shape = shapely.union_all([pieces, pieces.buffer(vs / 2, join_style="mitre").buffer(-vs / 2, join_style="mitre")])
+        removed_near = removed & _near(cells_ij, in_plate, 2)
+        if removed_near.any():
+            # Outside its rectangles the plate (pieces drawn from columns, gaps
+            # closed) stays off the squares of columns not in it.
+            beyond_rectangles = shapely.get_parts(shape.difference(rectangles))
+            # Rounding leaves lines and slivers along the rectangles' edges; they reach no square.
+            beyond_rectangles = beyond_rectangles[shapely.area(beyond_rectangles) > 1e-9]
+            i, j = cells_ij[removed_near, 0], cells_ij[removed_near, 1]
+            squares = shapely.box(i * vs, j * vs, (i + 1) * vs, (j + 1) * vs)
+            reached = squares[np.unique(shapely.STRtree(squares).query(beyond_rectangles, predicate="intersects")[1])]
+            if len(reached):
+                shape = shape.difference(shapely.coverage_union_all(reached).difference(rectangles))
+        nearby_removed = np.unique(bay[removed_near])
         removed_rectangles = [bay_shapes[b] for b in nearby_removed if has_shape[b]]
         if removed_rectangles:
             shape = shape.difference(shapely.union_all(removed_rectangles))

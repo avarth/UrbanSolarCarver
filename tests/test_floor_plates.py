@@ -127,7 +127,7 @@ class TestFaces:
 
 def _bays(polygon, vs, width):
     ij, xy, facades, faces = _faces(polygon, vs)
-    bay, bay_face = mg.cut_bays(faces, width, vs)
+    bay, bay_face = mg.cut_bays(faces, facades, [polygon], width, vs)
     return ij, xy, facades, faces, bay, bay_face
 
 
@@ -147,12 +147,14 @@ class TestBays:
             u = faces.u[bay == b]
             assert u.max() - u.min() + 0.5 >= 3.0 - 1e-9
 
-    def test_short_end_bays_merge(self):
-        # 10 m bar, centroid at x = 5: cuts at x = 2, 5, 8; the 2 m end bays merge.
-        _, xy, _, _, bay, bay_face = _bays(box(0, 0, 10, 6), 0.5, 3.0)
+    @pytest.mark.parametrize("length, widths", [(10, [3.0, 4.0, 3.0]), (13, [3.0, 3.5, 3.5, 3.0]),
+                                                (12, [3.0, 3.0, 3.0, 3.0]), (7, [3.5, 3.5])])
+    def test_rows_are_laid_from_both_ends_with_the_rest_in_the_middle(self, length, widths):
+        # Rows of 3 m from each end of the bar; what is left widens the middle row, or the two middle rows equally.
+        _, xy, _, _, bay, bay_face = _bays(box(0, 0, length, 6), 0.5, 3.0)
         for f in np.unique(bay_face):
-            widths = sorted(np.ptp(xy[bay == b, 0]) + 0.5 for b in np.flatnonzero(bay_face == f))
-            assert widths == [5.0, 5.0]
+            rows = sorted((xy[bay == b, 0].min() - 0.25, xy[bay == b, 0].max() + 0.25) for b in np.flatnonzero(bay_face == f))
+            assert [hi - lo for lo, hi in rows] == widths
 
     def test_round_tower_bays_follow_the_curve(self):
         _, _, facades, faces, bay, bay_face = _bays(Point(0, 0).buffer(10, quad_segs=16), 0.5, 3.0)
@@ -178,7 +180,7 @@ def _bar_grid(nx=20, ny=6, nz=40, top=33, bay=3.0):
     poly = box(0, 0, nx, ny)
     ij, xy = _cells(poly, 1.0)
     facades, corners = mg.split_facades([poly])
-    bays, _ = mg.cut_bays(mg.assign_faces(xy, facades, corners, [poly], 1.0), bay, 1.0)
+    bays, _ = mg.cut_bays(mg.assign_faces(xy, facades, corners, [poly], 1.0), facades, [poly], bay, 1.0)
     occ = np.zeros((nx, ny, nz), bool)
     occ[:, :, :top] = True
     return ij, bays, occ
@@ -282,7 +284,7 @@ class TestFloors:
         poly = box(0, 0, 40, 30)
         ij, xy = _cells(poly, 1.0)
         facades, corners = mg.split_facades([poly])
-        bays, _ = mg.cut_bays(mg.assign_faces(xy, facades, corners, [poly], 1.0), 3.0, 1.0)
+        bays, _ = mg.cut_bays(mg.assign_faces(xy, facades, corners, [poly], 1.0), facades, [poly], 3.0, 1.0)
         occ = np.zeros((40, 30, 40), bool)
         occ[:, :, :33] = True
         kept = occ.copy()
@@ -401,7 +403,7 @@ def test_cut_edges_are_straight_on_rotated_footprints():
     ij, xy = _cells(bar, vs)
     facades, corners = mg.split_facades([bar])
     faces = mg.assign_faces(xy, facades, corners, [bar], vs)
-    bay, bay_face = mg.cut_bays(faces, 3.0, vs)
+    bay, bay_face = mg.cut_bays(faces, facades, [bar], 3.0, vs)
     shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [bar], 3.0, vs)
     # Both long faces are cut at the bar's middle (u is measured from the
     # centroid); split the bar there, by whole bays.
@@ -423,7 +425,7 @@ def test_plates_do_not_cover_neighbouring_bays_on_a_rotated_l():
     ij, xy = _cells(poly, vs)
     facades, corners = mg.split_facades([poly])
     faces = mg.assign_faces(xy, facades, corners, [poly], vs, min_facade_length=6.0)
-    bay, bay_face = mg.cut_bays(faces, 3.0, vs)
+    bay, bay_face = mg.cut_bays(faces, facades, [poly], 3.0, vs)
     shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [poly], 3.0, vs)
     in_a = bay % 2 == 0                       # every other bay, on both sides of every ridge
     a = shapely.union_all(mg.plate_polygons(ij, in_a, ~in_a, vs, poly, bay=bay, bay_shapes=shapes))
@@ -447,7 +449,7 @@ def test_corner_square_of_a_curved_facade_is_cut_into_bays():
     # Those columns must be cut into bays like the rest, not lumped into one.
     bent_l = Polygon([(0, 0), (60, 0), (60, 15), (37, 17), (15, 15), (15, 60), (0, 60)])
     ij, xy, facades, faces = _faces(bent_l, 0.5)
-    bay, bay_face = mg.cut_bays(faces, 3.0, 0.5)
+    bay, bay_face = mg.cut_bays(faces, facades, [bent_l], 3.0, 0.5)
     bent = next(k for k, f in enumerate(facades) if not f.straight)
     for b in np.flatnonzero(bay_face == bent):
         x = xy[bay == b, 0]
@@ -471,7 +473,7 @@ def test_front_modules_draw_on_the_depth_cut_line():
     bar = box(0, 0, 30, 14)
     vs = 0.5
     ij, xy, facades, faces = _faces(bar, vs)
-    bay, bay_face = mg.cut_bays(faces, 3.0, vs)
+    bay, bay_face = mg.cut_bays(faces, facades, [bar], 3.0, vs)
     shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [bar], 3.0, vs)
     front = np.isin(bay, np.unique(bay[faces.d < 3.0]))
     plates = mg.plate_polygons(ij, front, ~front, vs, bar, bay=bay, bay_shapes=shapes)
@@ -495,7 +497,7 @@ def _surface_cells(polygon, vs):
 def _modules(polygon, ij, xy, vs, width=3.0):
     facades, corners = mg.split_facades([polygon])
     faces = mg.assign_faces(xy, facades, corners, [polygon], vs, min_facade_length=2 * width)
-    bay, bay_face = mg.cut_bays(faces, width, vs)
+    bay, bay_face = mg.cut_bays(faces, facades, [polygon], width, vs)
     shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [polygon], width, vs)
     return facades, faces, bay, bay_face, shapes
 
@@ -563,7 +565,7 @@ def test_corner_square_of_a_curved_facade_is_cut_in_depth_from_its_end_edge():
     bent_l = Polygon([(0, 0), (60, 0), (60, 15), (37, 17), (15, 15), (15, 60), (0, 60)])
     vs, width = 0.5, 3.0
     _, xy, facades, faces = _faces(bent_l, vs)
-    bay, bay_face = mg.cut_bays(faces, width, vs)
+    bay, bay_face = mg.cut_bays(faces, facades, [bent_l], width, vs)
     bent = next(k for k, f in enumerate(facades) if not f.straight)
     facade = facades[bent]
     coords = np.asarray(facade.line.coords)
@@ -582,3 +584,155 @@ def test_corner_square_of_a_curved_facade_is_cut_in_depth_from_its_end_edge():
         if not row_mates and depth_span < width:
             continue                    # a row shallower than one module
         assert width - 1e-9 <= depth_span < 2 * width
+
+
+# ----------------------------------------------------------------- refinements of the square modules
+def _floor_on(base, angle, top, floor, vs=0.5, width=3.0, offset=(20.13, 3.37), z_top=40.0, tolerance=0.2,
+              stacking="supported"):
+    """Floor *floor* of *base* turned by *angle* and moved by *offset* on a voxel grid of *vs*, with the surface
+    columns the voxelizer fills, the maximum volume up to *z_top* and the envelope up to ``top(x, y)`` (x, y in the
+    block's own frame).  Returns the footprint, the floor, its plates and the columns' (x, y)."""
+    from shapely import affinity
+    poly = affinity.translate(affinity.rotate(base, angle, origin=(0, 0)), *offset)
+    ij, xy = _surface_cells(poly, vs)
+    _, _, bay, _, shapes = _modules(poly, ij, xy, vs, width)
+    cos, sin = np.cos(np.radians(angle)), np.sin(np.radians(angle))
+    x = (xy[:, 0] - offset[0]) * cos + (xy[:, 1] - offset[1]) * sin
+    y = -(xy[:, 0] - offset[0]) * sin + (xy[:, 1] - offset[1]) * cos
+    grid_ij = ij - ij.min(axis=0)
+    centres = (np.arange(int(np.ceil(z_top / vs)) + 2) + 0.5) * vs
+    occ = np.zeros((*(grid_ij.max(axis=0) + 1), len(centres)), bool)
+    occ[grid_ij[:, 0], grid_ij[:, 1]] = centres[None, :] < z_top
+    kept = np.zeros_like(occ)
+    kept[grid_ij[:, 0], grid_ij[:, 1]] = centres[None, :] < top(x, y)[:, None]
+    levels = mg.floor_levels(0.0, z_top, 5.0, 3.0)
+    floors = mg.build_floors(grid_ij, bay, occ, kept, 0.0, vs, levels, tolerance, stacking, width,
+                             column_share=mg.column_shares_inside(ij, vs, poly))
+    plates = [p for k in range(int(floors[floor].plate.max()) + 1)
+              for p in mg.plate_polygons(ij, floors[floor].plate == k, floors[floor].plate != k, vs, poly,
+                                         min_dimension=width, bay=bay, bay_shapes=shapes)]
+    return poly, floors[floor], plates, (x, y)
+
+
+def _setbacks_on_both_long_sides(x, y):
+    return np.where((y < 3.0) | (y > 11.0), 14.0, 33.0)
+
+
+@pytest.mark.parametrize("angle", [0, 12, 30, 35, 65])
+def test_a_slab_set_back_on_both_long_sides_keeps_a_straight_middle_strip_at_any_angle(angle):
+    """A 60 x 14 m slab whose front 3 m on both long sides stop at 14 m: above, the plate is the middle strip, 60 x 8 m,
+    without notches where the end facades are.  Columns whose centre lies just outside an end facade belong to the
+    face of the footprint next to them, cut on the same depth lines."""
+    from shapely import affinity
+    _, _, plates, _ = _floor_on(box(0, 0, 60, 14), angle, _setbacks_on_both_long_sides, floor=5)
+    strip = affinity.translate(affinity.rotate(box(0, 3, 60, 11), angle, origin=(0, 0)), 20.13, 3.37)
+    assert len(plates) == 1
+    assert plates[0].symmetric_difference(strip).area < 1e-4
+
+
+def test_a_column_counts_by_its_share_inside_the_footprint():
+    ij = np.array([[0, 0], [1, 0], [2, 0]])
+    assert np.allclose(mg.column_shares_inside(ij, 1.0, box(0, 0, 2.5, 1)), [1.0, 1.0, 0.5])
+
+
+def _sloping_across_the_depth(x, y):
+    return 36.0 - 1.5 * y                         # 36 m on one long side, 15 m on the other
+
+
+@pytest.mark.parametrize("angle", [17, 30, 45])
+def test_a_floor_near_the_tolerance_does_not_depend_on_the_angle_to_the_grid(angle):
+    """A 60 x 14 m slab whose envelope slopes across its depth from 36 to 15 m; on the floor from 14 to 17 m the front
+    modules on the low side are close to the tolerance.  Columns along the facades that lie partly outside the
+    footprint count only for their share inside it, so the floor is the same at any angle (840 m2, the whole slab)."""
+    areas = [sum(p.area for p in _floor_on(box(0, 0, 60, 14), a, _sloping_across_the_depth, floor=4,
+                                           stacking="free")[2]) for a in (0, angle)]
+    one_voxel_row_around_the_slab = 2 * (60 + 14) * 0.5
+    assert areas[0] == pytest.approx(840.0)
+    assert abs(areas[1] - areas[0]) <= one_voxel_row_around_the_slab
+
+
+def _parallelogram(shear):
+    return Polygon([(0, 0), (60, 0), (60 + shear, 14), (shear, 14)])
+
+
+def _plates_of_two_complementary_module_sets(polygon, vs, every):
+    ij, xy = _surface_cells(polygon, vs)
+    _, _, bay, _, shapes = _modules(polygon, ij, xy, vs)
+    in_a = bay % every == 0
+    a = shapely.union_all(mg.plate_polygons(ij, in_a, ~in_a, vs, polygon, bay=bay, bay_shapes=shapes))
+    b = shapely.union_all(mg.plate_polygons(ij, ~in_a, in_a, vs, polygon, bay=bay, bay_shapes=shapes))
+    return a, b
+
+
+def _assert_disjoint_and_covering(polygon, a, b, vs):
+    assert a.intersection(b).area < 1e-6
+    # What the two leave uncovered are slivers along module edges drawn from columns, never a module or a strip
+    # a voxel wide.
+    assert polygon.difference(a).difference(b).buffer(-0.5 * vs).is_empty
+
+
+@pytest.mark.parametrize("offset", [(20.13, 3.37), (20.0, 3.0)])
+@pytest.mark.parametrize("angle", [0, 20])
+@pytest.mark.parametrize("shear", [10, 20])
+@pytest.mark.parametrize("every", [2, 3])
+def test_plates_of_neighbouring_modules_at_slanted_ends_neither_overlap_nor_leave_a_module_out(shear, angle, offset,
+                                                                                                every):
+    """A parallelogram's slanted ends have modules drawn from their columns.  Two plates made of complementary sets of
+    modules (every other module, every third) do not overlap, and together they cover the footprint up to slivers."""
+    from shapely import affinity
+    poly = affinity.translate(affinity.rotate(_parallelogram(shear), angle, origin=(0, 0)), *offset)
+    a, b = _plates_of_two_complementary_module_sets(poly, 0.5, every)
+    _assert_disjoint_and_covering(poly, a, b, 0.5)
+
+
+def _wings(length, width, depth):
+    def top(x, y):
+        return np.where(np.minimum.reduce([x, length - x, y, width - y]) < depth, 33.0, 14.0)
+    return top
+
+
+@pytest.mark.parametrize("length", [100, 101, 102])
+def test_the_end_wings_of_a_courtyard_block_keep_a_row_of_modules_whatever_its_length(length):
+    """A courtyard block whose wings, 3.5 m deep, reach 33 m and whose courtyard is carved to 14 m.  Rows of modules
+    are laid from both ends of the block, so each 92 m end wing keeps its first row (3 m) on the upper floors, whatever
+    the length of the block; from the centroid, a 2 m end row joined its neighbour into a 5 m row, 30% outside the
+    envelope, and the end wings vanished."""
+    _, floor, _, (x, y) = _floor_on(box(0, 0, length, 92), 0, _wings(length, 92, 3.5), floor=5,
+                                    offset=(60.13, 3.37))
+    assert floor.zb > 14.0
+    from_end = np.minimum(x, length - x)
+    end_wings = (from_end > 0.5) & (from_end < 2.5) & (y > 5) & (y < 87)
+    assert end_wings.sum() > 600
+    assert (floor.plate[end_wings] >= 0).all()
+
+
+def test_a_module_over_the_tolerance_leaves_a_hole_even_when_built_modules_enclose_it():
+    """A local dip in the envelope (a cone 3 m deep, 5 m in radius) under the top floor of a 40 x 30 m block: the
+    module over it has 41% of its volume outside the envelope, more than the tolerance, so it is not built and the
+    plate has a hole of one module (9 m2).  Holes are not filled."""
+    def dip(x, y):
+        return 33.0 - 3.0 * np.clip(1.0 - np.hypot(x - 10.0, y - 10.0) / 5.0, 0.0, None)
+    _, floor, plates, _ = _floor_on(box(0, 0, 40, 30), 0, dip, floor=9, z_top=33.0)
+    assert (floor.zb, floor.zt) == (29.0, 32.0)
+    unbuilt = np.flatnonzero(~floor.kept_bays)
+    assert len(unbuilt) == 1 and floor.outside_share[unbuilt[0]] > 0.2
+    assert len(plates) == 1 and [Polygon(h).area for h in plates[0].interiors] == [pytest.approx(9.0)]
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("vs", [0.5, 1.0])
+def test_sweep_of_angles_and_shapes(vs):
+    """The conditions above over more angles, shears and both voxel sizes."""
+    from shapely import affinity
+    for angle in range(0, 90, 7):
+        _, _, plates, _ = _floor_on(box(0, 0, 60, 14), angle, _setbacks_on_both_long_sides, floor=5, vs=vs)
+        strip = affinity.translate(affinity.rotate(box(0, 3, 60, 11), angle, origin=(0, 0)), 20.13, 3.37)
+        assert len(plates) == 1 and plates[0].symmetric_difference(strip).area < 1e-4, angle
+        area = sum(p.area for p in _floor_on(box(0, 0, 60, 14), angle, _sloping_across_the_depth, floor=4, vs=vs,
+                                             stacking="free")[2])
+        assert abs(area - 840.0) <= 2 * (60 + 14) * vs, angle
+        for shear in (5, 10, 15, 20):
+            poly = affinity.translate(affinity.rotate(_parallelogram(shear), angle, origin=(0, 0)), 20.13, 3.37)
+            for every in (2, 3):
+                a, b = _plates_of_two_complementary_module_sets(poly, vs, every)
+                _assert_disjoint_and_covering(poly, a, b, vs)
