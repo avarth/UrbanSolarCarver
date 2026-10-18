@@ -1,13 +1,13 @@
 // The legend of UX 8.1 and 8.2, bottom right of the 3D view: the colourings on screen and their units.
 import { messages } from "../messages";
-import { formattedNumber } from "../steps/format_numbers";
-import { cividis, colourToken, storeyColour, sunRamp } from "../viewer/colour_scales";
+import { formattedNumber, withUnit } from "../steps/format_numbers";
+import { cividis, colourToken, keptScoreRange, storeyColour, sunRamp } from "../viewer/colour_scales";
 import type { ScorePointsHeader } from "../viewer/score_points_decoder";
 import type { ViewportTheme } from "../viewer/scene";
 import "./overlays.css";
 
 export interface LegendContent {
-  keptVoxels?: { title: string; cutoff: number; thinningStep: number };
+  keptVoxels?: { title: string; cutoff: number; unit?: string; thinningStep: number };
   skyDome?: { title: string; lowestWeight: number; highestWeight: number };
   sunPath?: string;                               // sunPathLegend(sunPath)
   buildingMassing?: { storeyCount: number };
@@ -24,6 +24,12 @@ const RAMP_STOPS = 11;
 export function keptVoxelsLegendTitle(scoresKind: ScorePointsHeader["scores_kind"], weightUnit: string): string {
   if (scoresKind === "weighted_sum") return messages.keptVoxelsObstructionScore;
   return weightUnit.startsWith("m²·h") ? messages.keptVoxelsShadingCaused : messages.keptVoxelsScoreIn(weightUnit);
+}
+
+/** The unit written after a kept score: "m²·h" for Sun at set hours, none for the relative obstruction score, else the unit of the weights. */
+export function keptVoxelsLegendUnit(scoresKind: ScorePointsHeader["scores_kind"], weightUnit: string): string | undefined {
+  if (scoresKind === "weighted_sum") return undefined;
+  return weightUnit.startsWith(messages.units.shadeHours) ? messages.units.shadeHours : weightUnit;
 }
 
 function relativeLuminance(hex: string): number {
@@ -56,6 +62,15 @@ function Ramp({ colourAt, low, high }: { colourAt: (t: number) => string; low: s
   );
 }
 
+/** The range of the kept voxels: a ramp from 0 to the cutoff, or, when the range is a single value, that value for all of them. */
+function KeptVoxelsRange({ cutoff, unit }: { cutoff: number; unit?: string }) {
+  const [low, high] = keptScoreRange(cutoff);
+  if (low === high) {
+    return <p className="viewer-legend-single-value">{messages.keptVoxelsSingleValue(withUnit(formattedNumber(low), unit))}</p>;
+  }
+  return <Ramp colourAt={cividis} low={formattedNumber(low)} high={formattedNumber(high)} />;
+}
+
 export function Legend({ content, theme }: LegendProps) {
   const { keptVoxels, skyDome, sunPath, buildingMassing } = content;
   if (!keptVoxels && !skyDome && !sunPath && !buildingMassing) return null;
@@ -64,7 +79,7 @@ export function Legend({ content, theme }: LegendProps) {
       {keptVoxels && (
         <section>
           <h3>{keptVoxels.title}</h3>
-          <Ramp colourAt={cividis} low="0" high={formattedNumber(keptVoxels.cutoff)} />
+          <KeptVoxelsRange cutoff={keptVoxels.cutoff} unit={keptVoxels.unit} />
           <p className="viewer-muted">{messages.keptVoxelsNote(formattedNumber(keptVoxels.cutoff))}</p>
           {keptVoxels.thinningStep > 1 && <p className="viewer-muted">{messages.thinnedVoxels(keptVoxels.thinningStep)}</p>}
         </section>

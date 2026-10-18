@@ -20,7 +20,7 @@ import { sunPathLegend, sunPathObjects } from "../viewer/sun_path";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
-import { keptVoxelsLegendTitle, Legend, type LegendContent } from "./Legend";
+import { keptVoxelsLegendTitle, keptVoxelsLegendUnit, Legend, type LegendContent } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
 import { rememberedViewportTheme, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
@@ -206,6 +206,7 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
     sunPath: shown("sun_path") && sunPath ? sunPathLegend(sunPath) : undefined,
     keptVoxels: shown("kept_voxels") && scorePoints && carving
       ? { title: keptVoxelsLegendTitle(scorePoints.header.scores_kind, scorePoints.header.weight_unit), cutoff: carving.threshold_value,
+          unit: keptVoxelsLegendUnit(scorePoints.header.scores_kind, scorePoints.header.weight_unit),
           thinningStep: scorePoints.header.thinning_step }
       : undefined,
     skyDome: shown("sky_dome") && skyDome

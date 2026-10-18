@@ -301,6 +301,7 @@ export const messages = {
   keptVoxelsObstructionScore: "Obstruction score (relative)",
   keptVoxelsScoreIn: (unit: string) => `Score, ${unit}`,
   keptVoxelsNote: (cutoff: string) => `Kept voxels. Carved voxels score above ${cutoff}.`,
+  keptVoxelsSingleValue: (valueWithUnit: string) => `All kept voxels: ${valueWithUnit}`,
   thinnedVoxels: (step: number) => `Showing 1 of every ${groupedDigits(step)} voxels`,
   sunPathLegend: (days: string, hours: string) => `Sun path, ${days}; sun at ${hours}\u00a0h`,
   skyDomeLegend: (mode: string | null) => mode !== null && Object.hasOwn(SKY_PATCH_WEIGHT_OF_MODE, mode)
