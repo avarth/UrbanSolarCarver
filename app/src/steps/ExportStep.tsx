@@ -3,8 +3,9 @@
 // and written by the next envelope build, which the download says), the building massing (OBJ) and its data (JSON), the
 // settings (config.yaml) and the whole project as a zip. Each file of a stage is offered once the stage exists (R2 5: the envelope and the massing are built
 // on their own); one built from settings that changed since is labelled out of date and can still be downloaded.
-// The files are fetched with the token and handed to the browser to save (a plain link cannot send the token header).
-import type { ReactNode } from "react";
+// The files are fetched with the token and handed to the browser to save (a plain link cannot send the token header). A part's
+// files wait while a run of the project rebuilds it: its stage removes them when it begins.
+import { useId, type ReactNode } from "react";
 import { projectConfigUrl, projectDownloadUrl, runFileUrl } from "../api_client/client";
 import { messages } from "../messages";
 import type { FormState } from "../settings_form/form_state";
@@ -20,6 +21,8 @@ export interface ExportDownload {
   outOfDate: boolean;
   /** What else the user should know about the file (built in another format than the one chosen). */
   note?: string;
+  /** A run under way rebuilds the file, so there is none to download until its stage is done. */
+  waitsForRun?: boolean;
 }
 
 export const MASSING_OBJ_PATH = "massing/plates.obj";
@@ -46,13 +49,15 @@ interface DownloadListState {
   /** The stage status of exporting and of massing. */
   envelope: StageState;
   massing: StageState;
+  /** The stages a run under way has still to finish (their files are removed); none when no run of the project is under way. */
+  stagesBeingRebuilt?: readonly string[];
 }
 
 /**
  * The files of the Export step, in the order of UX 5.7, the envelope's and the massing's once their stage exists. The envelope is
  * the file that was built, under its own format: a format chosen since without a build has no file yet.
  */
-export function exportDownloads({ project, meshFormat, envelopeFile, envelope, massing }: DownloadListState): ExportDownload[] {
+export function exportDownloads({ project, meshFormat, envelopeFile, envelope, massing, stagesBeingRebuilt = [] }: DownloadListState): ExportDownload[] {
   const envelopeFiles: ExportDownload[] = [];
   if (envelope !== "missing" && envelopeFile !== null) {
     const builtFormat = meshFormatOf(envelopeFile);
@@ -60,12 +65,15 @@ export function exportDownloads({ project, meshFormat, envelopeFile, envelope, m
       label: messages.envelopeMeshDownload(meshFormatName(builtFormat)), address: runFileUrl(project, exportedMeshPath(envelopeFile)),
       fileName: `${project} envelope.${builtFormat}`, outOfDate: envelope === "out_of_date",
       note: builtFormat === meshFormat ? undefined : messages.envelopeBuiltInOtherFormat(meshFormatName(builtFormat), meshFormatName(meshFormat)),
+      waitsForRun: stagesBeingRebuilt.includes("exporting"),
     });
   }
-  const massingOutOfDate = massing === "out_of_date";
+  const massingOutOfDate = massing === "out_of_date", massingWaitsForRun = stagesBeingRebuilt.includes("massing");
   const massingFiles: ExportDownload[] = massing === "missing" ? [] : [
-    { label: messages.massingObjDownload, address: runFileUrl(project, MASSING_OBJ_PATH), fileName: `${project} massing.obj`, outOfDate: massingOutOfDate },
-    { label: messages.massingJsonDownload, address: runFileUrl(project, MASSING_JSON_PATH), fileName: `${project} massing.json`, outOfDate: massingOutOfDate },
+    { label: messages.massingObjDownload, address: runFileUrl(project, MASSING_OBJ_PATH), fileName: `${project} massing.obj`, outOfDate: massingOutOfDate,
+      waitsForRun: massingWaitsForRun },
+    { label: messages.massingJsonDownload, address: runFileUrl(project, MASSING_JSON_PATH), fileName: `${project} massing.json`, outOfDate: massingOutOfDate,
+      waitsForRun: massingWaitsForRun },
   ];
   return [
     ...envelopeFiles,
@@ -91,9 +99,10 @@ interface ExportStepProps {
 }
 
 export function ExportStep({ form, downloads, disabledReason, formatRunReason, onFormatChange, onDownload, formatFeedback, downloadProblem }: ExportStepProps) {
+  const reasonId = useId();
   return (
     <div className="export-step">
-      {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
+      {disabledReason !== null && <p id={reasonId} className="step-reason">{disabledReason}</p>}
       <SettingField view={settingView("final_mesh_format", form.mode)} form={form} disabled={disabledReason !== null}
                     extras={formatRunReason === null ? undefined : { note: formatRunReason }}
                     onChange={(values) => onFormatChange(String(values.final_mesh_format))} />
@@ -101,7 +110,8 @@ export function ExportStep({ form, downloads, disabledReason, formatRunReason, o
       <ul className="download-list">
         {downloads.map((download) => (
           <li key={download.label}>
-            <button type="button" className="link-button" onClick={() => onDownload(download)}>{download.label}</button>
+            <button type="button" className="link-button" disabled={download.waitsForRun} aria-describedby={download.waitsForRun ? reasonId : undefined}
+                    onClick={() => onDownload(download)}>{download.label}</button>
             {download.outOfDate && <span className="out-of-date-tag">{messages.outOfDateFile}</span>}
             {download.note !== undefined && <span className="download-note">{download.note}</span>}
           </li>

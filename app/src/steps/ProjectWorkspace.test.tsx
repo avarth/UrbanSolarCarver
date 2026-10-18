@@ -641,3 +641,27 @@ test("a finished envelope stage asks for the run summary once: the envelope's fi
   expect(service.count("GET /run/summary")).toBe(summariesBefore + 1);
   expect(service.requests).toContain("GET /run/files/exporting/export.obj");
 });
+
+test("while a format change rebuilds the envelope, its old file waits: the run removes it, so a download would find none", async () => {
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
+  service = new FakeService(built, CARVING);
+  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: MASSING };
+  await openWorkspace(project(built, { final_mesh_format: "ply" }));
+  openStep("Export");
+  const download = (label: string) => buttonIn(container().querySelector(".download-list")!, label);
+  expect(download("Carved envelope (PLY)").disabled).toBe(false);
+  await act(async () => container().querySelector<HTMLInputElement>('[data-setting="final_mesh_format"] input[value="obj"]')!.click());
+  await waitForTheSave();
+  await settle();
+  expect(service.runsStarted).toEqual([["exporting"]]);
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
+  await settle();
+  expect(download("Carved envelope (PLY)").disabled).toBe(true);
+  expect(reasonOf(download("Carved envelope (PLY)"))).toBe("A run is in progress");
+  expect(download("Building massing (OBJ)").disabled).toBe(false);          // the run leaves the massing as it is
+  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: MASSING };
+  run.send({ type: "run_finished", stages: ["exporting"], files: [] });
+  await settle();
+  expect(download("Carved envelope (OBJ)").disabled).toBe(false);
+});

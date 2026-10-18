@@ -273,6 +273,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // the envelope and then failed recorded neither part, and the step does not call a missing stage's results built.
   const builtBy = (stage: PipelineStage) => stages[stage] !== "missing" || (running && record.state.stages[stage]?.state === "done");
   const envelopeBuilt = builtBy("exporting"), massingBuilt = builtBy("massing");
+  // The stages the run under way has still to finish: each removes its old files when it begins, so Export does not offer them.
+  const stagesStillToFinish = running ? record.state.order.filter((stage) => record.state.stages[stage].state !== "done") : [];
   const content = {
     carving: (
       <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={results.summary?.carving ?? null} scorePoints={results.scorePoints}
@@ -300,7 +302,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       <ExportStep form={form} disabledReason={runs.activeRun !== null ? messages.runInProgress : null} formatRunReason={formatRunReason}
                   onFormatChange={(format) => void changeMeshFormat(format)}
                   downloads={exportDownloads({ project, meshFormat, envelopeFile: results.summary?.envelope?.mesh_file ?? null, envelope: stages.exporting,
-                                               massing: stages.massing })}
+                                               massing: stages.massing, stagesBeingRebuilt: stagesStillToFinish })}
                   onDownload={download} formatFeedback={feedback("export_format")} downloadProblem={downloadProblem} />
     ),
   };
