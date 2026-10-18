@@ -4,8 +4,9 @@
 import { useId, type ReactNode } from "react";
 import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from "../api_client/client";
 import { messages } from "../messages";
+import type { ColdPeriodState } from "../settings_form/analysis_period";
 import { shownValue, type FormState, type SaveOutcome } from "../settings_form/form_state";
-import { fieldSettingOf, SETTING_PRESENTATIONS, settingsForStep, settingView, type StepName as FormStepName } from "../settings_form/presentation";
+import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS, settingsForStep, settingView, type StepName as FormStepName } from "../settings_form/presentation";
 import { fieldErrorOf, gridLineOf, SettingField, WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
@@ -147,10 +148,12 @@ interface SettingsStepProps {
   onChange: (values: Record<string, unknown>) => void;
   /** Why the settings cannot be changed now (a run is in progress: the service refuses to save); null when they can. */
   disabledReason: string | null;
+  /** The cold period of the weather file, for the period's preset; null in the modes without one. */
+  coldPeriod?: ColdPeriodState | null;
 }
 
-export function SettingsStep({ form, onChange, disabledReason }: SettingsStepProps) {
-  const fieldExtras = { voxel_size: voxelSizeExtras(form) };
+export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null }: SettingsStepProps) {
+  const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod } };
   return (
     <div className="settings-step">
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}

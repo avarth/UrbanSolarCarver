@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Callable, get_args
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, FastAPI, File, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, FastAPI, File, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
@@ -33,7 +33,7 @@ from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
 from . import folder_picker, user_preferences
 from .api_models import (
-    CancelRunReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateProjectRequest, ErrorDetailReply,
+    CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateProjectRequest, ErrorDetailReply,
     ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
 )
@@ -395,6 +395,11 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     @router.get("/projects/{name}/sun-path")
     def sun_path(name: str) -> SunPath:
         return sun_path_for_config(folder_in_use.store.load_project_config(name))
+
+    @router.get("/projects/{name}/cold-period", responses=_ERROR_RESPONSES)
+    def cold_period(name: str, base_temperature: float = Query(ge=-60, le=60, allow_inf_nan=False)) -> ColdPeriodReply:
+        """The cold period of the weather file for a base temperature; the page sends balance_temperature - balance_offset as shown."""
+        return folder_in_use.store.cold_period(name, base_temperature)
 
     @router.post("/projects/{name}/inputs/{role}", responses=_ERROR_RESPONSES)
     def add_input(name: str, role: str, file: UploadFile = File(...)) -> InputFilesReply:

@@ -11,13 +11,16 @@
 // when one is left or Enter is pressed, or when the fields close (and a month when it is chosen). So a value on the way (end hour
 // "1" on the way to "18", a drag that crosses the end hour and comes back) never moves the end date. The form saves once the
 // changes stop.
+//
+// In Solar usefulness a fifth preset, "Cold period from the weather file", sets the dates of the weather file's cold period
+// (steps/cold_period_request.ts), with the line under the presets saying what it found, or why it cannot be used yet.
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../../messages";
 import {
   changedPeriodSettings, dateHandleValueAfterKey, dateRangeSegments, dayOfYearAt, daysInMonth, DAYS_IN_YEAR, handlePositionOf, handleValueOf,
-  hourAt, hourHandleValueAfterKey, hourRangeSegments, HOURS_IN_DAY, monthDayOf, PERIOD_PRESETS, periodFromSettings, periodInWords,
-  periodWithDayTyped, periodWithHandleAt, periodWithMonthChosen, presetMatches, presetPeriod, withOvernightHoursOnOneDateAsOneNight,
-  type AnalysisPeriodField, type Period, type PeriodEnd, type PeriodHandle, type RangeSegment,
+  datesMatch, hourAt, hourHandleValueAfterKey, hourRangeSegments, HOURS_IN_DAY, monthDayOf, PERIOD_PRESETS, periodFromSettings, periodInWords,
+  periodWithDates, periodWithDayTyped, periodWithHandleAt, periodWithMonthChosen, presetMatches, presetPeriod, withOvernightHoursOnOneDateAsOneNight,
+  type AnalysisPeriodField, type ColdPeriodState, type Period, type PeriodEnd, type PeriodHandle, type RangeSegment,
 } from "../analysis_period";
 import { ANALYSIS_PERIOD_FIELDS } from "../presentation";
 import { NumberInput, type ControlProps } from "./NumberInput";
@@ -27,6 +30,22 @@ export type { AnalysisPeriodField } from "../analysis_period";
 interface AnalysisPeriodProps extends ControlProps {
   values: Record<AnalysisPeriodField, number | null>;
   onChange: (values: Partial<Record<AnalysisPeriodField, number | null>>) => void;
+  /** The cold period of the weather file, for its preset; null in the modes without one. */
+  coldPeriod?: ColdPeriodState | null;
+}
+
+/** The line under the presets about the cold period: what it found, or why its preset cannot be used yet. */
+function coldPeriodLine(coldPeriod: ColdPeriodState): string {
+  switch (coldPeriod.kind) {
+    case "needs_weather_file": return messages.coldPeriodNeedsWeatherFile;
+    case "finding": return messages.coldPeriodFinding;
+    case "found": {
+      const { startDay, startMonth, endDay, endMonth } = coldPeriod.dates;
+      return messages.coldPeriodFound(startDay, startMonth, endDay, endMonth, messages.temperatureText(coldPeriod.baseTemperature));
+    }
+    case "none": return messages.coldPeriodNone(messages.temperatureText(coldPeriod.baseTemperature));
+    case "failed": return messages.coldPeriodFailed(coldPeriod.reason);
+  }
 }
 
 // Where a handle is drawn while the period is not set yet (the words say so): the whole year, every hour.
@@ -43,7 +62,7 @@ function spokenValueOf(period: Period, handle: PeriodHandle): string {
   return messages.periodDateSpoken(month, day);
 }
 
-export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, describedBy, disabled, onRefusedInput }: AnalysisPeriodProps) {
+export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, describedBy, disabled, onRefusedInput, coldPeriod = null }: AnalysisPeriodProps) {
   const stored = periodFromSettings(values);
   const current = stored ?? WHOLE_YEAR_EVERY_HOUR;
   // The period of a drag, as dragged (the end date of one night is applied to what is shown and sent, not kept), else null.
@@ -53,6 +72,7 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
   const shown = draggedPeriod === null ? current : withOvernightHoursOnOneDateAsOneNight(draggedPeriod);
   const [typing, setTyping] = useState(false);
   const typedFieldsId = useId();
+  const coldPeriodLineId = useId();
 
   const send = (next: Period) => {
     const changes = changedPeriodSettings(values, withOvernightHoursOnOneDateAsOneNight(next));
@@ -94,7 +114,17 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
             {messages.periodPresetNames[preset]}
           </button>
         ))}
+        {coldPeriod !== null && (
+          // Not ready yet: aria-disabled, not disabled, so the button stays in the tab order and its line is read with it.
+          <button type="button" className="period-preset" disabled={disabled} aria-disabled={coldPeriod.kind !== "found" || undefined}
+                  aria-describedby={coldPeriodLineId}
+                  aria-pressed={stored !== null && coldPeriod.kind === "found" && datesMatch(current, coldPeriod.dates)}
+                  onClick={() => { if (coldPeriod.kind === "found") send(periodWithDates(current, coldPeriod.dates)); }}>
+            {messages.coldPeriodPreset}
+          </button>
+        )}
       </div>
+      {coldPeriod !== null && <p id={coldPeriodLineId} className="setting-note" role="status">{coldPeriodLine(coldPeriod)}</p>}
       <button type="button" className="period-words" aria-label={messages.periodWordsButton(words)} aria-expanded={typing}
               aria-controls={typing ? typedFieldsId : undefined} disabled={disabled}
               onClick={() => {

@@ -16,6 +16,7 @@ export type ConfigErrorReply = Schemas["ConfigErrorReply"];
 export type GridPlanReply = Schemas["GridPlanReply"];
 export type StageStatusReply = Schemas["StageStatusReply"];
 export type SunPath = Schemas["SunPath"];
+export type ColdPeriodReply = Schemas["ColdPeriodReply"];
 export type StartRunReply = Schemas["StartRunReply"];
 export type CancelRunReply = Schemas["CancelRunReply"];
 export type RunSummary = Schemas["RunSummary"];
@@ -196,6 +197,8 @@ export const getStageStatus = (token: string, project: string) =>
   requestJson<StageStatusReply>(token, `${projectPath(project)}/stage-status`);
 
 export const getSunPath = (token: string, project: string) => requestJson<SunPath>(token, `${projectPath(project)}/sun-path`);
+export const getColdPeriod = (token: string, project: string, baseTemperature: number) =>
+  requestJson<ColdPeriodReply>(token, `${projectPath(project)}/cold-period?base_temperature=${encodeURIComponent(String(baseTemperature))}`);
 
 /** Starts a run of the given stages; without *produce* the service runs its default (export and massing). */
 export const startRun = (token: string, project: string, produce?: string[]) =>

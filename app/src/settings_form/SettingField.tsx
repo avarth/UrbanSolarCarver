@@ -4,6 +4,7 @@ import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { plainModeName } from "../steps/step_summaries";
+import type { ColdPeriodState } from "./analysis_period";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
   ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, fromDisplayValue, settingsOfField, settingView, shownSliderOf, thresholdIsShadowToleratedIn,
@@ -28,6 +29,8 @@ export interface SettingFieldExtras {
   note?: ReactNode;
   changeNote?: string | null;
   errorContent?: ReactNode;
+  /** The cold period of the weather file, for the period control's preset in Solar usefulness; null or absent in the other modes. */
+  coldPeriod?: ColdPeriodState | null;
 }
 
 export interface SettingFieldProps {
@@ -166,7 +169,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   switch (view.widget) {
     case "analysis_period":
       controlElement = (
-        <AnalysisPeriod {...control} onChange={onChange}
+        <AnalysisPeriod {...control} onChange={onChange} coldPeriod={extras?.coldPeriod ?? null}
                         values={Object.fromEntries(ANALYSIS_PERIOD_FIELDS.map((name) => [name, shownValue(form, name)])) as Record<AnalysisPeriodField, number | null>} />
       );
       break;

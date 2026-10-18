@@ -167,6 +167,20 @@ class SunPath(BaseModel):
     days: list[SunPathDay]
 
 
+class ColdPeriodDates(BaseModel):
+    """Start and end of the cold period (inclusive); start after end wraps across the new year."""
+    start_month: int
+    start_day: int
+    end_month: int
+    end_day: int
+
+
+class ColdPeriodReply(BaseModel):
+    """The cold period of the project's weather file for a base temperature (cold_period.py)."""
+    status: Literal["found", "none", "no_weather_file"]     # "none": no day of the year is cold enough
+    period: ColdPeriodDates | None = None
+
+
 class WarmUpState(BaseModel):
     """How far the background preparation of the compute device has come."""
     state: Literal["not_started", "running", "ready", "cpu", "failed"]     # "cpu": the CPU is used

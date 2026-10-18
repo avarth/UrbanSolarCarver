@@ -15,6 +15,7 @@ import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
+import { useColdPeriod } from "./cold_period_request";
 import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ModeStep } from "./ModeStep";
@@ -111,6 +112,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [joinedBounds, setJoinedBounds] = useState<Bounds3 | null>(project.joined_bounds as Bounds3 | null);
   const [weatherLocation, setWeatherLocation] = useState(project.weather_location);
   const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0 });
+  // Goes up whenever the weather file is added, replaced or removed: the service keeps one name for it, so its file list may not change.
+  const [weatherFileRevision, setWeatherFileRevision] = useState(0);
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
   // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
   const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
@@ -172,6 +175,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
   const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, onServiceProblem });
+  const coldPeriod = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision, onServiceProblem });
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
 
@@ -179,7 +183,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     setFiles((current) => ({ ...current, [reply.role]: reply.files }));
     setJoinedBounds(reply.joined_bounds as Bounds3 | null);
     setWeatherLocation(reply.weather_location);
-    if (reply.role !== "weather") setInputRevisions((current) => ({ ...current, [reply.role]: current[reply.role as MeshRole] + 1 }));
+    if (reply.role === "weather") setWeatherFileRevision((revision) => revision + 1);
+    else setInputRevisions((current) => ({ ...current, [reply.role]: current[reply.role as MeshRole] + 1 }));
   };
   const afterInputsChanged = (role: InputRole) => {
     refreshStageStatus();
@@ -278,7 +283,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                 valuesReset={form.valuesResetByModeChange}
                 weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} />
     ),
-    settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason} />,
+    settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason}
+                            coldPeriod={coldPeriod} />,
     ...resultSteps.content,
   };
   const summaryOf = (name: StepName) => {

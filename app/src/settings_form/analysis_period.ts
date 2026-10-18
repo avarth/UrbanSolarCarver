@@ -84,23 +84,44 @@ export function withOvernightHoursOnOneDateAsOneNight(period: Period): Period {
 export const PERIOD_PRESETS = ["winter_solstice", "summer_solstice", "heating_season", "whole_year"] as const;
 export type PeriodPreset = (typeof PERIOD_PRESETS)[number];
 
-const PRESET_DATES: Record<PeriodPreset, Pick<Period, "startMonth" | "startDay" | "endMonth" | "endDay">> = {
+/** The dates of a period, without its hours: what a preset sets. */
+export type PeriodDates = Pick<Period, "startMonth" | "startDay" | "endMonth" | "endDay">;
+
+/** Where the cold period of the weather file stands (steps/cold_period_request.ts), for its preset and the line under the presets. */
+export type ColdPeriodState =
+  | { kind: "needs_weather_file" }
+  | { kind: "finding" }
+  | { kind: "found"; dates: PeriodDates; baseTemperature: number }
+  | { kind: "none"; baseTemperature: number }
+  | { kind: "failed"; reason: string };
+
+const PRESET_DATES: Record<PeriodPreset, PeriodDates> = {
   winter_solstice: { startMonth: 12, startDay: 21, endMonth: 12, endDay: 21 },
   summer_solstice: { startMonth: 6, startDay: 21, endMonth: 6, endDay: 21 },
   heating_season: { startMonth: 10, startDay: 1, endMonth: 4, endDay: 30 },
   whole_year: { startMonth: 1, startDay: 1, endMonth: 12, endDay: 31 },
 };
 
-/** The period a preset gives: its dates, the hours of *current*; one night where those hours cross midnight on its one date. */
+/** The period of *dates* with the hours of *current*; one night where those hours cross midnight on its one date. */
+export function periodWithDates(current: Period, dates: PeriodDates): Period {
+  return withOvernightHoursOnOneDateAsOneNight({ ...current, ...dates });
+}
+
+/** Whether the dates of *current* are the ones *dates* give it: the preset that sets them shows as chosen. */
+export function datesMatch(current: Period, dates: PeriodDates): boolean {
+  const given = periodWithDates(current, dates);
+  return given.startMonth === current.startMonth && given.startDay === current.startDay
+    && given.endMonth === current.endMonth && given.endDay === current.endDay;
+}
+
+/** The period a preset gives: its dates, the hours of *current*. */
 export function presetPeriod(preset: PeriodPreset, current: Period): Period {
-  return withOvernightHoursOnOneDateAsOneNight({ ...current, ...PRESET_DATES[preset] });
+  return periodWithDates(current, PRESET_DATES[preset]);
 }
 
 /** Whether the dates of *current* are the ones the preset gives it: the preset shows as chosen. */
 export function presetMatches(preset: PeriodPreset, current: Period): boolean {
-  const given = presetPeriod(preset, current);
-  return given.startMonth === current.startMonth && given.startDay === current.startDay
-    && given.endMonth === current.endMonth && given.endDay === current.endDay;
+  return datesMatch(current, PRESET_DATES[preset]);
 }
 
 /** The value a handle shows: a day of the year for a date handle, an hour for an hour handle. */
