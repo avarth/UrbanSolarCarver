@@ -607,3 +607,37 @@ test("a North not saved yet turns the drawn sun path with the compass ring, so t
   expect(towardFirstSun().x).toBeCloseTo(1);
   expect(towardFirstSun().y).toBeCloseTo(0);
 });
+
+test("on a first build of both parts the 3D view draws the envelope once its stage is done, before the massing ends", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(project(CARVED));
+  openStep("Carving");
+  await act(async () => buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing").click());
+  await settle();
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
+  await settle();
+  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
+  run.send({ type: "stage_progress", stage: "massing", done: 0, total: 1 });
+  await settle();
+  expect(FakeViewerScene.latest!.layersWithObjects()).toContain("envelope");
+  expect(buildPart("Envelope").querySelector(".envelope-results")).not.toBeNull();
+});
+
+test("a finished envelope stage asks for the run summary once: the envelope's file name comes from the same reply", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(project(CARVED));
+  openStep("Envelope and massing");
+  await act(async () => buttonIn(buildPart("Envelope"), "Build envelope").click());
+  await settle();
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
+  await settle();
+  const summariesBefore = service.count("GET /run/summary");
+  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
+  service.stages = { ...CARVED, exporting: "current" };
+  run.send({ type: "run_finished", stages: ["exporting"], files: [] });
+  await settle();
+  expect(service.count("GET /run/summary")).toBe(summariesBefore + 1);
+  expect(service.requests).toContain("GET /run/files/exporting/export.obj");
+});

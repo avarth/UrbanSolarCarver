@@ -269,9 +269,10 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     if ((outcome === "saved" || outcome === "none") && stages.exporting !== "missing" && !carvingLocked.current) void startRun(ENVELOPE_STAGES, "export_format");
   };
 
-  // A part's results show once its stage is recorded: a run that wrote the envelope and then failed recorded neither part, and
-  // the step does not call a missing stage's results built.
-  const envelopeBuilt = stages.exporting !== "missing", massingBuilt = stages.massing !== "missing";
+  // A part's results show once its stage is recorded, or done in the run under way (as isStageDimmed counts it): a run that wrote
+  // the envelope and then failed recorded neither part, and the step does not call a missing stage's results built.
+  const builtBy = (stage: PipelineStage) => stages[stage] !== "missing" || (running && record.state.stages[stage]?.state === "done");
+  const envelopeBuilt = builtBy("exporting"), massingBuilt = builtBy("massing");
   const content = {
     carving: (
       <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={results.summary?.carving ?? null} scorePoints={results.scorePoints}
