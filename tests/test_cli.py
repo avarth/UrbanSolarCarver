@@ -403,6 +403,37 @@ class TestUiCommand:
         assert result.exit_code == 0, result.output
         assert urls_opened_before_listening == [] and len(opened_urls) == 1
 
+    def test_stopping_does_not_wait_for_a_browser_that_is_still_opening(self, monkeypatch, tmp_path, built_front_end):
+        import threading
+        import time
+        import uvicorn
+        import webbrowser
+        from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
+
+        browser_asked = threading.Event()
+        browser_may_return = threading.Event()
+
+        def open_that_blocks(url):      # webbrowser.open can block, for example while a browser starts
+            browser_asked.set()
+            browser_may_return.wait(10)
+
+        def run(server, sockets=None):  # listens, then stops as Ctrl+C stops it, while the browser is still opening
+            server.started = True
+            assert browser_asked.wait(10)
+
+        monkeypatch.setattr(GpuWarmUp, "start", lambda self: None)
+        monkeypatch.setattr(uvicorn.Server, "run", run)
+        monkeypatch.setattr(webbrowser, "open", open_that_blocks)
+        threading.Timer(6, browser_may_return.set).start()      # frees the thread in any case
+
+        started = time.monotonic()
+        result = _invoke(["ui", "--projects-folder", str(tmp_path / "projects")])
+        elapsed = time.monotonic() - started
+        browser_may_return.set()
+
+        assert result.exit_code == 0, result.output
+        assert elapsed < 4, f"the command waited {elapsed:.1f} s for the browser"
+
     def test_no_browser_prints_the_url_and_opens_nothing(self, monkeypatch, tmp_path, built_front_end):
         import webbrowser
         from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp

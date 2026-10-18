@@ -935,6 +935,7 @@ UI_LOGGERS_SHOWING_REQUEST_PATHS = ("uvicorn.error", "uvicorn.access")
 # The modules of the ui extra (fastapi, uvicorn, python-multipart, websockets): fastapi and uvicorn import without
 # the other two, which the service needs for file uploads and for the run events.
 UI_LISTEN_POLL_SECONDS = 0.05  # how often the thread that opens the browser looks whether the server listens
+UI_BROWSER_THREAD_JOIN_SECONDS = 1.0  # how long stopping waits for that thread; webbrowser.open can block, the thread is a daemon
 UI_REQUIRED_MODULES = ("fastapi", "uvicorn", "multipart", "websockets")
 
 
@@ -1047,7 +1048,7 @@ def ui(
     finally:
         server_ended.set()
         if browser_thread is not None:
-            browser_thread.join()
+            browser_thread.join(UI_BROWSER_THREAD_JOIN_SECONDS)
     if not server.started:
         typer.secho(f"  The service could not start on port {port} of {UI_HOST}: another program may be using it. "
                     "Choose a free port with --port.", fg="red")
