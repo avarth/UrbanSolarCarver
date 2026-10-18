@@ -1,22 +1,29 @@
 """Project folders, names and project.json of the local web service."""
+import os
 import threading
 import warnings
 from pathlib import Path
 
 import numpy as np
 import pytest
+import send2trash
 import trimesh
 import yaml
-from local_web_test_support import has_vertex_normals, wait_until_finished, write_joined_test_surfaces_without_normals
+from local_web_test_support import (
+    FakeRecycleBin, has_vertex_normals, make_link_to_folder, wait_until_finished, write_joined_test_surfaces_without_normals,
+)
 
 from urbansolarcarver.errors import ConfigError
 from urbansolarcarver.io import load_mesh
 from urbansolarcarver.run_context import RunContext, run_context
 from urbansolarcarver.surface_sampling import discretize_surface_with_normals
 
-from urbansolarcarver.local_web_service import projects
+from urbansolarcarver.local_web_service import project_removal, projects
+from urbansolarcarver.local_web_service.project_removal import ProjectRemovalRefused
 from urbansolarcarver.local_web_service.projects import SERVICE_PATHS, ProjectError, ProjectStore, sanitize_file_name
-from urbansolarcarver.local_web_service.server import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, _read_examples
+from urbansolarcarver.local_web_service.server import (
+    EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, _example_input_files, _read_examples,
+)
 
 GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
 
@@ -586,3 +593,343 @@ def test_grid_plan_and_budget_use_the_joined_max_volume(tmp_path):
     assert err.value.errors[0].field == "voxel_size"
     assert err.value.grid_plan.total_voxels > err.value.grid_plan.budget_voxels == 500_000_000
     assert store.load_project_config("p").voxel_size == 1.0   # the rejected value was not stored
+
+
+# ---- Rename, delete, reset and the example a project came from ----
+
+@pytest.fixture
+def recycle_bin(monkeypatch):
+    bin_stub = FakeRecycleBin()
+    monkeypatch.setattr(send2trash, "send2trash", bin_stub)
+    return bin_stub
+
+
+def example_by_name(name):
+    return next(example for example in _read_examples() if example.name == name)
+
+
+def create_example_project(store, project_name, example_name="new_building"):
+    example = example_by_name(example_name)
+    store.create_example_project(project_name, example, _example_input_files(example))
+    return example
+
+
+def link_kinds():
+    return "junction" if os.name == "nt" else "symlink"
+
+
+def test_rename_moves_the_folder_and_changes_the_name_in_project_json(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("Old", "time-based")
+    store.add_input("Old", "max_volume", "volume.ply", _box_bytes([0, 0, 5]))
+    new_folder = store.rename_project("Old", "New name")
+    assert new_folder == (tmp_path / "New name").resolve() and not (tmp_path / "Old").exists()
+    assert store.read_project_json("New name").name == "New name"
+    assert [file.name for file in store.input_files("New name", "max_volume")] == ["volume.ply"]
+    assert store.joined_bounds("New name") is not None
+    assert [row.name for row in store.list()] == ["New name"]
+    assert not list(new_folder.glob("*.tmp"))
+
+
+def test_rename_refuses_a_bad_new_name_with_422_and_changes_nothing(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("a", "time-based")
+    for bad in ("", "..", "x/y", "con"):
+        with pytest.raises(ProjectError) as err:
+            store.rename_project("a", bad)
+        assert err.value.status_code == 422
+    assert [row.name for row in store.list()] == ["a"]
+
+
+@pytest.mark.parametrize("new_name", ["b", "B", "b ", "a", "A"])
+def test_rename_to_an_existing_name_or_the_same_name_in_another_letter_case_is_409_and_moves_nothing(tmp_path, new_name):
+    store = ProjectStore(tmp_path)
+    store.create("a", "time-based")
+    store.create("b", "time-based")
+    with pytest.raises(ProjectError) as err:
+        store.rename_project("a", new_name)
+    assert err.value.status_code == 409 and "already exists" in str(err.value) and "letter case" in str(err.value)
+    assert sorted(folder.name for folder in tmp_path.iterdir()) == ["a", "b"]
+    assert [store.read_project_json(name).name for name in ("a", "b")] == ["a", "b"]
+
+
+def test_rename_of_an_unknown_project_is_404(tmp_path):
+    with pytest.raises(ProjectError) as err:
+        ProjectStore(tmp_path).rename_project("nothing", "other")
+    assert err.value.status_code == 404
+
+
+def test_rename_that_cannot_move_the_folder_is_422_and_changes_nothing(tmp_path, monkeypatch):
+    store = ProjectStore(tmp_path)
+    store.create("a", "time-based")
+
+    def refuse_to_move(source, target):
+        raise PermissionError("the folder is open in another program")
+
+    monkeypatch.setattr(projects.os, "replace", refuse_to_move)
+    with pytest.raises(ProjectError) as err:
+        store.rename_project("a", "b")
+    assert err.value.status_code == 422 and "open in another program" in str(err.value)
+    assert store.read_project_json("a").name == "a"
+
+
+def test_rename_whose_project_json_cannot_be_written_puts_the_folder_back(tmp_path, monkeypatch):
+    store = ProjectStore(tmp_path)
+    store.create("a", "time-based")
+
+    def fail_to_write(name, data):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(store, "write_project_json", fail_to_write)
+    with pytest.raises(OSError):
+        store.rename_project("a", "b")
+    assert [folder.name for folder in tmp_path.iterdir()] == ["a"]
+
+
+def test_rename_waits_for_the_lock_of_the_new_name_too(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("a", "time-based")
+    finished = threading.Event()
+    with store.project_lock("B"):       # a request that is working on the name the project is to get
+        renaming = threading.Thread(target=lambda: (store.rename_project("a", "b"), finished.set()))
+        renaming.start()
+        assert not finished.wait(0.3)
+    renaming.join(10)
+    assert finished.is_set() and (tmp_path / "b").is_dir()
+
+
+def test_check_returns_the_resolved_folder_of_a_project(tmp_path):
+    ProjectStore(tmp_path).create("Block", "time-based")
+    assert project_removal.check_project_folder_can_be_removed(tmp_path, "Block") == (tmp_path / "Block").resolve()
+
+
+@pytest.mark.parametrize("bad_name", ["", "..", "a/b", "con", "../outside"])
+def test_check_applies_the_project_name_rule(tmp_path, bad_name):
+    with pytest.raises(ProjectError) as err:
+        project_removal.check_project_folder_can_be_removed(tmp_path, bad_name)
+    assert err.value.status_code == 422
+
+
+def test_check_of_a_project_that_is_not_there_is_404(tmp_path):
+    with pytest.raises(ProjectError) as err:
+        project_removal.check_project_folder_can_be_removed(tmp_path, "nothing")
+    assert err.value.status_code == 404
+
+
+def test_check_refuses_a_folder_without_project_json(tmp_path):
+    (tmp_path / "plain").mkdir()
+    with pytest.raises(ProjectRemovalRefused) as err:
+        project_removal.check_project_folder_can_be_removed(tmp_path, "plain")
+    assert err.value.status_code == 422 and "project.json" in str(err.value)
+
+
+@pytest.mark.parametrize("content", ["not json", "{}", '{"name": "other", "created": "2026-01-01T00:00:00+00:00"}'])
+def test_check_refuses_a_project_json_that_does_not_read_as_a_project_of_that_name(tmp_path, content):
+    (tmp_path / "p").mkdir()
+    (tmp_path / "p" / "project.json").write_text(content, encoding="utf-8")
+    with pytest.raises(ProjectRemovalRefused):
+        project_removal.check_project_folder_can_be_removed(tmp_path, "p")
+
+
+@pytest.mark.parametrize("kind", ["junction", "symlink"])
+def test_check_refuses_a_link_inside_the_project_and_the_folder_it_leads_to_is_untouched(tmp_path, kind):
+    store = ProjectStore(tmp_path / "projects")
+    project_folder = store.create("p", "time-based")
+    outside = tmp_path / "outside"
+    (outside / "deep").mkdir(parents=True)
+    (outside / "deep" / "precious.txt").write_text("keep", encoding="utf-8")
+    make_link_to_folder(project_folder / "inputs" / "linked", outside, kind)
+    with pytest.raises(ProjectRemovalRefused) as err:
+        project_removal.check_project_folder_can_be_removed(store.projects_folder, "p")
+    assert err.value.status_code == 422 and "linked" in str(err.value)
+    assert (outside / "deep" / "precious.txt").read_text(encoding="utf-8") == "keep" and project_folder.is_dir()
+
+
+@pytest.mark.parametrize("kind", ["junction", "symlink"])
+def test_check_refuses_a_link_many_levels_down(tmp_path, kind):
+    store = ProjectStore(tmp_path / "projects")
+    project_folder = store.create("p", "time-based")
+    (tmp_path / "outside").mkdir()
+    (project_folder / "run" / "a" / "b").mkdir(parents=True)
+    make_link_to_folder(project_folder / "run" / "a" / "b" / "deep link", tmp_path / "outside", kind)
+    with pytest.raises(ProjectRemovalRefused):
+        project_removal.check_project_folder_can_be_removed(store.projects_folder, "p")
+
+
+def test_check_refuses_a_file_that_is_a_symbolic_link(tmp_path):
+    store = ProjectStore(tmp_path / "projects")
+    project_folder = store.create("p", "time-based")
+    (tmp_path / "outside.txt").write_text("keep", encoding="utf-8")
+    try:
+        os.symlink(tmp_path / "outside.txt", project_folder / "run" / "result.txt")
+    except OSError as error:
+        pytest.skip(f"a symbolic link cannot be made here: {error}")
+    with pytest.raises(ProjectRemovalRefused):
+        project_removal.check_project_folder_can_be_removed(store.projects_folder, "p")
+
+
+@pytest.mark.parametrize("kind", ["junction", "symlink"])
+def test_check_refuses_a_project_folder_that_is_itself_a_link_out_of_the_projects_folder(tmp_path, kind):
+    projects_folder = tmp_path / "projects"
+    projects_folder.mkdir()
+    ProjectStore(tmp_path / "elsewhere").create("p", "time-based")
+    make_link_to_folder(projects_folder / "p", tmp_path / "elsewhere" / "p", kind)
+    with pytest.raises(ProjectRemovalRefused):
+        project_removal.check_project_folder_can_be_removed(projects_folder, "p")
+    assert (tmp_path / "elsewhere" / "p" / "project.json").is_file()
+
+
+@pytest.mark.parametrize("kind", ["junction", "symlink"])
+def test_check_refuses_a_project_folder_that_is_a_link_to_another_project(tmp_path, kind):
+    store = ProjectStore(tmp_path)
+    store.create("real", "time-based")
+    make_link_to_folder(tmp_path / "alias", tmp_path / "real", kind)
+    with pytest.raises(ProjectRemovalRefused):
+        project_removal.check_project_folder_can_be_removed(tmp_path, "alias")
+
+
+def test_a_project_is_moved_to_the_recycle_bin_with_its_folder_only(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path)
+    store.create("a", "time-based")
+    store.create("b", "time-based")
+    store.delete_project("a")
+    assert recycle_bin.folders == [(tmp_path / "a").resolve()]
+    assert [row.name for row in store.list()] == ["b"]
+
+
+def test_a_project_with_a_link_inside_is_not_moved_to_the_recycle_bin(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path / "projects")
+    project_folder = store.create("p", "time-based")
+    (tmp_path / "outside").mkdir()
+    (tmp_path / "outside" / "precious.txt").write_text("keep", encoding="utf-8")
+    make_link_to_folder(project_folder / "inputs" / "linked", tmp_path / "outside", link_kinds())
+    with pytest.raises(ProjectRemovalRefused):
+        store.delete_project("p")
+    assert recycle_bin.folders == [] and (tmp_path / "outside" / "precious.txt").is_file() and project_folder.is_dir()
+
+
+@pytest.mark.parametrize("error", [PermissionError("the folder is in use"), send2trash.TrashPermissionError("no permission"), OSError("no bin")])
+def test_a_recycle_bin_that_fails_leaves_the_project_and_says_why(tmp_path, monkeypatch, error):
+    monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=error))
+    store = ProjectStore(tmp_path)
+    store.create("a", "time-based")
+    with pytest.raises(ProjectRemovalRefused) as err:
+        store.delete_project("a")
+    assert err.value.status_code == 422 and "recycle bin" in str(err.value) and str(error) in str(err.value)
+    assert [row.name for row in store.list()] == ["a"]
+
+
+def test_reset_gives_a_fresh_copy_of_the_example_under_the_same_name(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path)
+    example = create_example_project(store, "My copy")
+    store.write_config_from_values("My copy", {"mode": "daylight"})
+    store.remove_input("My copy", "test_surfaces", "neighbor_roofs.ply")
+    (tmp_path / "My copy" / "run" / "old_result.txt").write_text("old", encoding="utf-8")
+    store.reset_project_to_example("My copy", example, _example_input_files(example))
+    assert recycle_bin.folders == [(tmp_path / "My copy").resolve()]
+    assert [row.name for row in store.list()] == ["My copy"]
+    assert store.read_settings("My copy")["mode"] == "irradiance"
+    assert [file.name for file in store.input_files("My copy", "test_surfaces")] == ["neighbor_roofs.ply", "neighbor_windows.ply"]
+    assert [file.name for file in store.input_files("My copy", "weather")] == ["weather.epw"]
+    assert list((tmp_path / "My copy" / "run").iterdir()) == [] and store.read_project_json("My copy").example == "new_building"
+
+
+def test_reset_refuses_a_project_that_did_not_come_from_the_example(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path)
+    store.create("plain", "time-based")
+    example = example_by_name("new_building")
+    with pytest.raises(ProjectError) as err:
+        store.reset_project_to_example("plain", example, _example_input_files(example))
+    assert err.value.status_code == 422 and recycle_bin.folders == []
+    create_example_project(store, "other", "basic_perimeter_block")
+    with pytest.raises(ProjectError):       # recorded as from another example
+        store.reset_project_to_example("other", example, _example_input_files(example))
+    assert recycle_bin.folders == []
+
+
+def test_reset_counts_a_project_without_the_example_field_as_from_the_example_when_its_name_is_the_title(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path)
+    example = example_by_name("new_building")
+    create_example_project(store, example.title)
+    project_json = store.read_project_json(example.title)
+    project_json.example = None     # a project made before the field existed
+    store.write_project_json(example.title, project_json)
+    store.reset_project_to_example(example.title, example, _example_input_files(example))
+    assert store.read_project_json(example.title).example == "new_building" and len(recycle_bin.folders) == 1
+
+
+def test_reset_checks_the_guardrails_before_it_moves_anything(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path / "projects")
+    example = create_example_project(store, "p")
+    (tmp_path / "outside").mkdir()
+    make_link_to_folder(tmp_path / "projects" / "p" / "run" / "linked", tmp_path / "outside", link_kinds())
+    with pytest.raises(ProjectRemovalRefused):
+        store.reset_project_to_example("p", example, _example_input_files(example))
+    assert recycle_bin.folders == [] and [file.name for file in store.input_files("p", "max_volume")] == ["max_volume.ply"]
+
+
+def test_reset_with_a_recycle_bin_that_fails_changes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=OSError("no bin")))
+    store = ProjectStore(tmp_path)
+    example = create_example_project(store, "p")
+    (tmp_path / "p" / "run" / "result.txt").write_text("keep", encoding="utf-8")
+    with pytest.raises(ProjectRemovalRefused):
+        store.reset_project_to_example("p", example, _example_input_files(example))
+    assert (tmp_path / "p" / "run" / "result.txt").is_file()
+
+
+def test_reset_that_cannot_recreate_the_project_says_the_old_content_is_in_the_recycle_bin(tmp_path, recycle_bin):
+    store = ProjectStore(tmp_path)
+    example = create_example_project(store, "p")
+    with pytest.raises(ProjectError) as err:
+        store.reset_project_to_example("p", example, [("max_volume", "max_volume.ply", b"not a mesh")])
+    assert err.value.status_code == 500 and "old content" in str(err.value) and "recycle bin" in str(err.value)
+    assert len(recycle_bin.folders) == 1 and not (tmp_path / "p").exists()      # no half-made project is left
+
+
+def test_an_example_project_that_fails_midway_leaves_no_folder_and_a_name_that_is_free(tmp_path):
+    store = ProjectStore(tmp_path)
+    example = example_by_name("new_building")
+    with pytest.raises(ProjectError):
+        store.create_example_project("p", example, [("max_volume", "max_volume.ply", b"not a mesh")])
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_project_made_from_an_example_records_the_example(tmp_path):
+    store = ProjectStore(tmp_path)
+    create_example_project(store, "p")
+    store.create("q", "time-based")
+    assert store.read_project_json("p").example == "new_building" and store.read_project_json("q").example is None
+
+
+def test_project_of_example_finds_a_renamed_project_by_the_recorded_example(tmp_path):
+    store = ProjectStore(tmp_path)
+    create_example_project(store, "first")
+    store.rename_project("first", "Renamed")
+    assert store.project_of_example("new_building", "New building among neighbors") == "Renamed"
+    assert store.project_of_example("basic_perimeter_block", "Perimeter block") is None
+
+
+def test_project_of_example_counts_a_project_without_the_field_only_when_its_name_is_exactly_the_title(tmp_path):
+    numbered_copies = ProjectStore(tmp_path / "copies")
+    for name in ("Perimeter block 2", "perimeter block"):
+        numbered_copies.create(name, "time-based")
+    assert numbered_copies.project_of_example("basic_perimeter_block", "Perimeter block") is None
+    exact = ProjectStore(tmp_path / "exact")
+    exact.create("Perimeter block", "time-based")
+    assert exact.project_of_example("basic_perimeter_block", "Perimeter block") == "Perimeter block"
+
+
+def test_project_of_example_prefers_the_most_recently_modified_project(tmp_path):
+    store = ProjectStore(tmp_path)
+    create_example_project(store, "older")
+    create_example_project(store, "newer")
+    create_example_project(store, "newest", "basic_perimeter_block")
+    for name, seconds in (("older", 1_700_000_000), ("newer", 1_800_000_000), ("newest", 1_900_000_000)):
+        for file_name in ("project.json", "config.yaml"):
+            os.utime(tmp_path / name / file_name, (seconds, seconds))
+    assert store.project_of_example("new_building", "New building among neighbors") == "newer"
+
+
+def test_project_of_example_with_no_projects_folder_is_none(tmp_path):
+    assert ProjectStore(tmp_path / "missing").project_of_example("new_building", "New building among neighbors") is None

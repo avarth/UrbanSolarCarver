@@ -25,7 +25,7 @@ from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from .api_models import ConfigReply, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from .api_models import ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
 
 PROJECT_NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9 _-]{0,63}")
 PROJECT_JSON_FILE_NAME = "project.json"
@@ -71,6 +71,17 @@ class ProjectError(Exception):
     def __init__(self, message: str, status_code: int):
         super().__init__(message)
         self.status_code = status_code
+
+
+def is_from_example(project_json: ProjectJson, example: str, example_title: str) -> bool:
+    """Whether a project was made from the example named *example* (titled *example_title*).
+
+    project.json records the example, so a renamed project is still found. A project made before the field existed counts
+    when its name is exactly the example's title; numbered copies ("Perimeter block 2") stay ordinary projects.
+    """
+    if project_json.example is None:
+        return project_json.name == example_title
+    return project_json.example == example
 
 
 def _check_not_a_windows_device_name(name: str) -> None:
@@ -184,8 +195,8 @@ class ProjectStore:
             raise ProjectError("The project name does not name a folder of the projects folder.", status_code=422)
         return project_folder
 
-    def create(self, name: str, mode: str) -> Path:
-        """Make the project folder with its layout, project.json and the first config.yaml of the mode.
+    def create(self, name: str, mode: str, example: str | None = None) -> Path:
+        """Make the project folder with its layout, project.json (recording the *example* it comes from) and the first config.yaml of the mode.
 
         Raises ConfigError, and leaves no folder behind, when the mode is not one the engine knows.
         """
@@ -198,7 +209,7 @@ class ProjectStore:
         for sub_folder in (*INPUT_ROLE_FOLDERS, RUN_FOLDER):
             (project_folder / sub_folder).mkdir(parents=True)
         created = datetime.now(timezone.utc).isoformat(timespec="seconds")
-        self.write_project_json(project_name, ProjectJson(name=project_name, created=created))
+        self.write_project_json(project_name, ProjectJson(name=project_name, created=created, example=example))
         try:
             self.write_config_from_values(project_name, {"mode": mode})
         except BaseException:
@@ -244,6 +255,87 @@ class ProjectStore:
                 modified=self._modified(project_folder),
                 mode=self._mode(project_folder),
             )
+
+    def create_example_project(self, name: str, example: ExampleProject, example_files: list[tuple[str, str, bytes]]) -> Path:
+        """Make the project *name* with the mode and the input files (role, file name, content) of *example*, and record the example.
+
+        The project is complete before another request can reach it. A folder made by this call is removed again when it fails.
+        """
+        with self.project_lock(name):
+            project_folder = self.create(name, example.mode, example.name)
+            try:
+                for role, file_name, data in example_files:
+                    self.add_input(name, role, file_name, data)
+            except BaseException:
+                shutil.rmtree(project_folder, ignore_errors=True)   # the folder was made by this call, so no earlier project is lost
+                raise
+            return project_folder
+
+    def rename_project(self, name: str, new_name: str) -> Path:
+        """Rename the project folder and the name in its project.json; the new folder.
+
+        ProjectError: 422 for a bad new name, 404 for an unknown project, 409 when a project (or any folder) already has the
+        new name, also in another letter case (folder names ignore it on Windows), and 422 when the folder cannot be moved
+        (a program has a file of it open). Nothing changes then.
+        """
+        old_name, new_name = validate_project_name(name), validate_project_name(new_name)
+        first_lock_key, second_lock_key = sorted((old_name.lower(), new_name.lower()))   # one order for every rename, so two renames never wait on each other
+        with self.project_lock(first_lock_key), self.project_lock(second_lock_key):
+            old_folder = self.open(old_name)
+            if any(folder.name.lower() == new_name.lower() for folder in self._projects_folder.iterdir()):
+                raise ProjectError(f"A project named '{new_name}' already exists (project names ignore letter case).", status_code=409)
+            project_json = self.read_project_json(old_name)
+            new_folder = self._project_folder(new_name)
+            try:
+                os.replace(old_folder, new_folder)
+            except OSError as error:
+                raise ProjectError(f"'{old_name}' cannot be renamed: {error}. Close any program that has one of its files open.", status_code=422) from error
+            project_json.name = new_name
+            try:
+                self.write_project_json(new_name, project_json)
+            except BaseException:
+                os.replace(new_folder, old_folder)
+                raise
+            return new_folder
+
+    def delete_project(self, name: str) -> None:
+        """Move the project folder to the recycle bin when the guardrails of project_removal allow it; ProjectError otherwise, and nothing changes.
+
+        The caller makes sure no run of the project is active.
+        """
+        from . import project_removal   # imported here: project_removal needs ProjectError from this module
+        with self.project_lock(name):
+            project_removal.move_to_recycle_bin(project_removal.check_project_folder_can_be_removed(self._projects_folder, name))
+
+    def reset_project_to_example(self, name: str, example: ExampleProject, example_files: list[tuple[str, str, bytes]]) -> None:
+        """Replace a project made from *example* by a fresh copy of it under the same name; the old folder goes to the recycle bin.
+
+        ProjectError 422 when the project is not from *example* or the guardrails refuse (see delete_project); nothing changes then.
+        When the move succeeds but the new project cannot be made, the error (500) says the old content is in the recycle bin.
+        """
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
+            project_name = project_json.name
+            if not is_from_example(project_json, example.name, example.title):
+                raise ProjectError(f"'{project_name}' was not made from the example '{example.title}', so it cannot be reset to it.", status_code=422)
+            self.delete_project(project_name)
+            try:
+                self.create_example_project(project_name, example, example_files)
+            except Exception as error:
+                raise ProjectError(f"'{project_name}' could not be made again from the example ({error}). Its old content is in the recycle bin.",
+                                   status_code=500) from error
+
+    def project_of_example(self, example: str, example_title: str) -> str | None:
+        """The name of the project made from an example (see is_from_example); the most recently modified one when there are several, else None."""
+        newest = None
+        for summary in self.list():
+            try:
+                project_json = self.read_project_json(summary.name)
+            except ProjectError:
+                continue
+            if is_from_example(project_json, example, example_title) and (newest is None or summary.modified > newest.modified):
+                newest = summary
+        return newest.name if newest is not None else None
 
     def read_project_json(self, name: str) -> ProjectJson:
         """project.json of a project, read under the project lock.

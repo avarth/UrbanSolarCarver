@@ -36,11 +36,13 @@ from . import folder_picker, user_preferences
 from .api_models import (
     CancelRunReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateProjectRequest, ErrorDetailReply,
     ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
-    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
+    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
 )
 from .folder_picker import FolderPickerUnavailable
 from .gpu_warm_up import GpuWarmUp
-from .projects import CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, validate_project_name
+from .projects import (
+    CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, is_from_example, validate_project_name,
+)
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_score_points
@@ -177,14 +179,16 @@ class _ProjectsFolderInUse:
 
 def create_app(projects_folder: Path, token: str, port: int, device: str = "auto", static_folder: Path | None = None,
                worker: RunWorker | None = None, warm_up: GpuWarmUp | None = None, projects_folder_source: ProjectsFolderSource = "default",
-               choose_folder_function: Callable[[Path], Path | None] = folder_picker.choose_folder) -> FastAPI:
+               choose_folder_function: Callable[[Path], Path | None] = folder_picker.choose_folder,
+               open_folder_function: Callable[[Path], None] = folder_picker.open_in_file_manager) -> FastAPI:
     """The service for the projects under *projects_folder*.
 
     *worker* defaults to a RunWorker for *device*; a given worker brings its own ProjectStore, which the
     routes then use, so its projects folder is the one that counts. *warm_up* defaults to a GpuWarmUp that
     is never started (the state stays ``not_started``); ``usc ui`` passes one it has started.
     *projects_folder_source* says where the folder came from (``command_line``, ``preference`` or ``default``); a folder
-    from the command line cannot be changed in the app. *choose_folder_function* shows the folder picker (tests give a fake).
+    from the command line cannot be changed in the app. *choose_folder_function* shows the folder picker and *open_folder_function*
+    opens a project's folder in the file manager (tests give fakes).
     A *static_folder* without ``index.html`` (the front-end is not built) leaves the app with the API only.
     """
     if projects_folder_source not in get_args(ProjectsFolderSource):
@@ -197,7 +201,7 @@ def create_app(projects_folder: Path, token: str, port: int, device: str = "auto
                   openapi_url=None, generate_unique_id_function=lambda route: route.name)
     app.add_middleware(SecurityMiddleware, token=token, port=port)
     _add_exception_handlers(app)
-    app.include_router(_build_router(folder_in_use, warm_up, choose_folder_function), prefix=API_PREFIX)
+    app.include_router(_build_router(folder_in_use, warm_up, choose_folder_function, open_folder_function), prefix=API_PREFIX)
     static_folder = DEFAULT_STATIC_FOLDER if static_folder is None else Path(static_folder)
     if (static_folder / "index.html").is_file():
         app.mount("/", StaticFiles(directory=static_folder, html=True), name="front_end")
@@ -234,12 +238,24 @@ def _read_examples() -> list[ExampleProject]:
     return [ExampleProject.model_validate(entry) for entry in entries]
 
 
+def _example_input_files(example: ExampleProject) -> list[tuple[str, str, bytes]]:
+    """The packaged files of an example as (role, file name, content), all read before any project is made from them."""
+    example_folder = EXAMPLE_PROJECTS_FOLDER / example.name
+    files = [(role, file_name, (example_folder / file_name).read_bytes())
+             for role, file_names in (("max_volume", example.max_volume), ("test_surfaces", example.test_surfaces))
+             for file_name in file_names]
+    if example.weather:
+        files.append((WEATHER_ROLE, EXAMPLE_WEATHER_FILE_NAME, (EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME).read_bytes()))
+    return files
+
+
 def _same_project(first_name: str, second_name: str) -> bool:
     """Whether two request names address one project folder (Windows folder names ignore letter case)."""
     return validate_project_name(first_name).lower() == validate_project_name(second_name).lower()
 
 
-def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choose_folder_function: Callable[[Path], Path | None]) -> APIRouter:
+def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choose_folder_function: Callable[[Path], Path | None],
+                  open_folder_function: Callable[[Path], None]) -> APIRouter:
     router = APIRouter()
 
     def refuse_while_running(name: str) -> None:
@@ -308,7 +324,9 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/examples")
     def examples() -> list[ExampleInfo]:
-        return [ExampleInfo(name=example.name, title=example.title, description=example.description) for example in _read_examples()]
+        store = folder_in_use.store
+        return [ExampleInfo(name=example.name, title=example.title, description=example.description,
+                            project=store.project_of_example(example.name, example.title)) for example in _read_examples()]
 
     @router.post("/projects/{name}/examples/{example}", responses={404: {"model": ErrorDetailReply, "description": "There is no such example."}, **_ERROR_RESPONSES})
     def create_example_project(name: str, example: str) -> ProjectDetail:
@@ -317,18 +335,59 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         chosen = next((candidate for candidate in _read_examples() if candidate.name == example), None)
         if chosen is None:
             raise ProjectError(f"There is no example '{example}'.", status_code=404)
-        example_folder = EXAMPLE_PROJECTS_FOLDER / chosen.name
-        files_to_add = [(role, file_name, (example_folder / file_name).read_bytes())    # all read before the project exists
-                        for role, file_names in (("max_volume", chosen.max_volume), ("test_surfaces", chosen.test_surfaces))
-                        for file_name in file_names]
-        if chosen.weather:
-            weather_path = EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME
-            files_to_add.append((WEATHER_ROLE, EXAMPLE_WEATHER_FILE_NAME, weather_path.read_bytes()))
-        with store.project_lock(name):      # the new project is complete before another request can reach it
-            store.create(name, chosen.mode)
-            for role, file_name, data in files_to_add:
-                store.add_input(name, role, file_name, data)
-            return project_detail(store, name)
+        example_files = _example_input_files(chosen)
+        store.create_example_project(name, chosen, example_files)
+        return project_detail(store, name)
+
+    @router.post("/projects/{name}/rename", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+    def rename_project(name: str, request: RenameProjectRequest) -> ProjectDetail:
+        """Rename the project and its folder; 409 when the new name exists in any letter case or a run of the project is active."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            refuse_while_running(name)
+            store.rename_project(name, request.new_name)
+        return project_detail(store, request.new_name)
+
+    @router.delete("/projects/{name}", status_code=204, response_class=Response,
+                   responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+    def delete_project(name: str, confirm_name: str) -> Response:
+        """Move the project folder to the recycle bin; *confirm_name* must be the project name as typed by the person (else 422)."""
+        store = folder_in_use.store
+        project_name = validate_project_name(name)
+        if confirm_name != project_name:
+            raise ProjectError(f"To delete the project, type its name '{project_name}' to confirm.", status_code=422)
+        with store.project_lock(name):
+            refuse_while_running(name)
+            store.delete_project(name)
+        return Response(status_code=204)
+
+    @router.post("/projects/{name}/reset-to-example",
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+    def reset_project_to_example(name: str) -> ProjectDetail:
+        """Replace a project made from an example by a fresh copy of it; the old folder goes to the recycle bin."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            refuse_while_running(name)
+            project_json = store.read_project_json(name)
+            example = next((candidate for candidate in _read_examples() if is_from_example(project_json, candidate.name, candidate.title)), None)
+            if example is None:
+                raise ProjectError(f"'{project_json.name}' was not made from an example, so there is nothing to reset it to.", status_code=422)
+            store.reset_project_to_example(name, example, _example_input_files(example))
+            return project_detail(store, project_json.name)
+
+    @router.post("/projects/{name}/open-folder", status_code=204, response_class=Response,
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+    def open_project_folder(name: str) -> Response:
+        """Open the project's folder in the file manager of this computer."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            refuse_while_running(name)
+            project_folder = store.open(name)
+            try:
+                open_folder_function(project_folder)
+            except OSError as error:
+                raise ProjectError(f"The folder {project_folder} could not be opened: {error}", status_code=422) from error
+        return Response(status_code=204)
 
     @router.get("/projects/{name}")
     def open_project(name: str) -> ProjectDetail:

@@ -15,6 +15,7 @@ import zipfile
 from pathlib import Path
 
 import pytest
+import send2trash
 import yaml
 from starlette.websockets import WebSocketDisconnect
 
@@ -23,8 +24,8 @@ with warnings.catch_warnings():     # newer Starlette versions announce that Tes
     from starlette.testclient import TestClient
 
 from local_web_test_support import (
-    GOLDEN_EPW, WaitsForCancel, box_bytes, has_vertex_normals, make_worker, write_fake_finished_run, write_fake_run,
-    write_joined_test_surfaces_without_normals,
+    GOLDEN_EPW, FakeRecycleBin, WaitsForCancel, box_bytes, has_vertex_normals, make_link_to_folder, make_worker, write_fake_finished_run,
+    write_fake_run, write_joined_test_surfaces_without_normals,
 )
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
@@ -47,10 +48,14 @@ SURFACE = ("surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
 
 
 def build_client(projects_folder, handle_request=None, authorized=True, warm_up=None, static_folder=None,
-                 projects_folder_source="default", choose_folder_function=None):
+                 projects_folder_source="default", choose_folder_function=None, open_folder_function=None):
     """A client for a service whose worker uses *handle_request* (the fake engine by default); the client and the worker."""
     worker = make_worker(ProjectStore(projects_folder), handle_request=handle_request)
-    extra_arguments = {} if choose_folder_function is None else {"choose_folder_function": choose_folder_function}
+    extra_arguments = {}
+    if choose_folder_function is not None:
+        extra_arguments["choose_folder_function"] = choose_folder_function
+    if open_folder_function is not None:
+        extra_arguments["open_folder_function"] = open_folder_function
     app = create_app(projects_folder, TOKEN, PORT, worker=worker, warm_up=warm_up, static_folder=static_folder,
                      projects_folder_source=projects_folder_source, **extra_arguments)
     client = TestClient(app, base_url=f"http://127.0.0.1:{PORT}", headers=AUTH if authorized else None)
@@ -379,7 +384,7 @@ def test_a_project_whose_old_joined_file_cannot_be_rebuilt_still_opens(client_wi
 def test_the_examples_are_listed_with_a_description(client):
     examples = client.get("/api/examples").json()
     assert [example["name"] for example in examples] == ["basic_perimeter_block", "new_building", "multiple_buildings"]
-    assert all(set(example) == {"name", "title", "description"} and example["title"] and example["description"] for example in examples)
+    assert all(set(example) == {"name", "title", "description", "project"} and example["title"] and example["description"] for example in examples)
 
 
 def test_example_project_joins_two_test_surface_files(client):
@@ -973,6 +978,210 @@ def test_the_folder_opens_in_explorer_on_windows(monkeypatch, tmp_path):
     monkeypatch.setattr(folder_picker.os, "startfile", lambda folder: opened.append(folder), raising=False)
     folder_picker.open_in_file_manager(tmp_path)
     assert opened == [tmp_path]
+
+
+# ---- Rename, delete, reset, open folder and example links ----
+
+@pytest.fixture
+def recycle_bin(monkeypatch):
+    bin_stub = FakeRecycleBin()
+    monkeypatch.setattr(send2trash, "send2trash", bin_stub)
+    return bin_stub
+
+
+class RecordsOpenedFolders:
+    def __init__(self):
+        self.folders = []
+
+    def __call__(self, folder):
+        self.folders.append(folder)
+
+
+def project_names(client):
+    return [row["name"] for row in client.get("/api/projects").json()]
+
+
+def test_rename_changes_the_name_and_returns_the_project(client_with_inputs, projects_folder):
+    reply = client_with_inputs.post("/api/projects/p/rename", json={"new_name": "Block 2"})
+    assert reply.status_code == 200, reply.text
+    detail = reply.json()
+    assert detail["name"] == "Block 2" and [file["name"] for file in detail["inputs"]["max_volume"]] == ["volume.ply"]
+    assert detail["joined_bounds"] is not None and project_names(client_with_inputs) == ["Block 2"]
+    assert not (projects_folder / "p").exists()
+    assert client_with_inputs.get("/api/projects/p").status_code == 404
+
+
+def test_rename_to_a_bad_name_is_422_and_to_an_existing_name_is_409_whatever_the_letter_case(client):
+    create_project(client, "Block")
+    create_project(client, "other")
+    assert client.post("/api/projects/Block/rename", json={"new_name": "not.a.name"}).status_code == 422
+    assert client.post("/api/projects/Block/rename", json={"new_name": "  "}).status_code == 422
+    for existing in ("other", "OTHER", "block", "Block"):
+        reply = client.post("/api/projects/Block/rename", json={"new_name": existing})
+        assert reply.status_code == 409 and "letter case" in reply.json()["detail"], existing
+    assert client.post("/api/projects/nothing/rename", json={"new_name": "fresh"}).status_code == 404
+    assert client.post("/api/projects/Block/rename", json={}).status_code == 422
+    assert project_names(client) == ["Block", "other"]
+
+
+def test_delete_moves_the_project_folder_to_the_recycle_bin(client, projects_folder, recycle_bin):
+    create_project(client, "gone")
+    create_project(client, "kept")
+    reply = client.delete("/api/projects/gone", params={"confirm_name": "gone"})
+    assert reply.status_code == 204 and reply.content == b""
+    assert recycle_bin.folders == [(projects_folder / "gone").resolve()]
+    assert project_names(client) == ["kept"]
+
+
+def test_delete_needs_the_project_name_typed_exactly(client, recycle_bin):
+    create_project(client, "gone")
+    for wrong in ("Gone", "gon", "", "gone "):
+        reply = client.delete("/api/projects/gone", params={"confirm_name": wrong})
+        assert reply.status_code == 422, wrong
+    assert client.delete("/api/projects/gone").status_code == 422       # no confirm_name at all
+    assert recycle_bin.folders == [] and project_names(client) == ["gone"]
+
+
+def test_delete_of_an_unknown_project_is_404_and_of_a_bad_name_is_422(client, recycle_bin):
+    assert client.delete("/api/projects/nothing", params={"confirm_name": "nothing"}).status_code == 404
+    assert client.delete("/api/projects/not.a.name", params={"confirm_name": "not.a.name"}).status_code == 422
+    assert recycle_bin.folders == []
+
+
+def test_delete_with_a_link_inside_is_422_and_the_folder_it_leads_to_is_untouched(client, projects_folder, tmp_path, recycle_bin):
+    create_project(client, "p")
+    (tmp_path / "outside").mkdir()
+    (tmp_path / "outside" / "precious.txt").write_text("keep", encoding="utf-8")
+    make_link_to_folder(projects_folder / "p" / "inputs" / "linked", tmp_path / "outside", "junction" if sys.platform == "win32" else "symlink")
+    reply = client.delete("/api/projects/p", params={"confirm_name": "p"})
+    assert reply.status_code == 422 and "linked" in reply.json()["detail"]
+    assert recycle_bin.folders == [] and (tmp_path / "outside" / "precious.txt").is_file() and (projects_folder / "p").is_dir()
+
+
+def test_delete_when_the_recycle_bin_fails_is_422_with_the_reason(client, monkeypatch):
+    monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=OSError("the recycle bin is full")))
+    create_project(client, "p")
+    reply = client.delete("/api/projects/p", params={"confirm_name": "p"})
+    assert reply.status_code == 422 and "the recycle bin is full" in reply.json()["detail"] and project_names(client) == ["p"]
+
+
+def test_reset_to_the_example_gives_the_example_inputs_and_no_results(client, recycle_bin):
+    assert client.post("/api/projects/mine/examples/new_building").status_code == 200
+    assert client.put("/api/projects/mine/config", json={"values": {"mode": "daylight"}}).status_code == 200
+    assert client.delete("/api/projects/mine/inputs/test_surfaces/neighbor_windows.ply").status_code == 200
+    run_id = start_run(client, "mine")["run_id"]
+    assert read_events(client, run_id)[-1]["type"] == "run_finished"
+    reply = client.post("/api/projects/mine/reset-to-example")
+    assert reply.status_code == 200, reply.text
+    detail = reply.json()
+    assert detail["name"] == "mine" and detail["settings"]["mode"] == "irradiance"
+    assert [file["name"] for file in detail["inputs"]["test_surfaces"]] == ["neighbor_roofs.ply", "neighbor_windows.ply"]
+    assert set(detail["stage_status"]["stages"].values()) == {"missing"}
+    assert len(recycle_bin.folders) == 1 and project_names(client) == ["mine"]
+
+
+def test_reset_is_422_for_a_project_that_is_not_from_an_example(client, recycle_bin):
+    create_project(client, "plain")
+    reply = client.post("/api/projects/plain/reset-to-example")
+    assert reply.status_code == 422 and "example" in reply.json()["detail"]
+    assert client.post("/api/projects/nothing/reset-to-example").status_code == 404
+    assert recycle_bin.folders == []
+
+
+def test_reset_finds_the_example_of_a_renamed_project(client, recycle_bin):
+    client.post("/api/projects/first/examples/basic_perimeter_block")
+    client.post("/api/projects/first/rename", json={"new_name": "Renamed"})
+    assert client.post("/api/projects/Renamed/reset-to-example").status_code == 200 and project_names(client) == ["Renamed"]
+
+
+def test_reset_with_a_link_inside_is_422_and_changes_nothing(client, projects_folder, tmp_path, recycle_bin):
+    client.post("/api/projects/mine/examples/new_building")
+    (tmp_path / "outside").mkdir()
+    make_link_to_folder(projects_folder / "mine" / "run" / "linked", tmp_path / "outside", "junction" if sys.platform == "win32" else "symlink")
+    assert client.post("/api/projects/mine/reset-to-example").status_code == 422
+    assert recycle_bin.folders == [] and client.get("/api/projects/mine").json()["inputs"]["max_volume"]
+
+
+def test_open_folder_gives_the_opener_the_project_folder_only(projects_folder):
+    opener = RecordsOpenedFolders()
+    client, _ = build_client(projects_folder, open_folder_function=opener)
+    create_project(client, "p")
+    reply = client.post("/api/projects/p/open-folder")
+    assert reply.status_code == 204 and reply.content == b""
+    assert opener.folders == [(projects_folder / "p").resolve()]
+    assert client.post("/api/projects/nothing/open-folder").status_code == 404
+    assert client.post("/api/projects/not.a.name/open-folder").status_code == 422
+    assert len(opener.folders) == 1
+
+
+def test_open_folder_that_cannot_open_is_422_with_the_reason(projects_folder):
+    def cannot_open(folder):
+        raise OSError("no file manager is installed")
+
+    client, _ = build_client(projects_folder, open_folder_function=cannot_open)
+    create_project(client, "p")
+    reply = client.post("/api/projects/p/open-folder")
+    assert reply.status_code == 422 and "no file manager is installed" in reply.json()["detail"]
+
+
+def test_rename_delete_reset_and_open_folder_are_409_during_a_run_of_the_project(projects_folder, recycle_bin):
+    handler = WaitsForCancel()
+    opener = RecordsOpenedFolders()
+    client, worker = build_client(projects_folder, handle_request=handler, open_folder_function=opener)
+    client.post("/api/projects/p/examples/new_building")
+    run_id = start_run(client, "p")["run_id"]
+    assert handler.started.wait(10)
+    try:
+        assert client.post("/api/projects/p/rename", json={"new_name": "q"}).status_code == 409
+        assert client.post("/api/projects/P/rename", json={"new_name": "q"}).status_code == 409      # the name in another letter case
+        assert client.delete("/api/projects/p", params={"confirm_name": "p"}).status_code == 409
+        assert client.post("/api/projects/p/reset-to-example").status_code == 409
+        assert client.post("/api/projects/p/open-folder").status_code == 409
+        assert recycle_bin.folders == [] and opener.folders == [] and project_names(client) == ["p"]
+    finally:
+        worker.cancel(run_id)
+        worker.run_state(run_id).wait_for_events(10 ** 9, 10)
+
+
+def test_another_project_can_be_changed_during_a_run(client_with_blocking_run):
+    client, _ = client_with_blocking_run
+    create_project(client, "other")
+    assert client.post("/api/projects/other/rename", json={"new_name": "renamed"}).status_code == 200
+
+
+def test_the_examples_report_the_project_made_from_them(client):
+    assert [example["project"] for example in client.get("/api/examples").json()] == [None, None, None]
+    client.post("/api/projects/mine/examples/new_building")
+    client.post("/api/projects/Perimeter block/examples/basic_perimeter_block")
+    client.post("/api/projects/Perimeter block 2/examples/basic_perimeter_block")
+    projects_by_example = {example["name"]: example["project"] for example in client.get("/api/examples").json()}
+    assert projects_by_example["new_building"] == "mine" and projects_by_example["multiple_buildings"] is None
+    assert projects_by_example["basic_perimeter_block"] in ("Perimeter block", "Perimeter block 2")
+    client.post("/api/projects/mine/rename", json={"new_name": "Renamed"})
+    assert {example["name"]: example["project"] for example in client.get("/api/examples").json()}["new_building"] == "Renamed"
+
+
+def test_an_old_project_named_like_the_example_title_counts_as_from_the_example(client, projects_folder):
+    create_project(client, "Perimeter block")      # no example field, as a project made before the field existed
+    create_project(client, "Perimeter block 2")
+    assert {example["name"]: example["project"] for example in client.get("/api/examples").json()}["basic_perimeter_block"] == "Perimeter block"
+
+
+def test_the_new_routes_need_the_token(projects_folder):
+    bare_client = build_client(projects_folder, authorized=False)[0]
+    assert bare_client.post("/api/projects/p/rename", json={"new_name": "q"}).status_code == 401
+    assert bare_client.delete("/api/projects/p", params={"confirm_name": "p"}).status_code == 401
+    assert bare_client.post("/api/projects/p/reset-to-example").status_code == 401
+    assert bare_client.post("/api/projects/p/open-folder").status_code == 401
+
+
+def test_the_openapi_document_describes_the_project_management_routes():
+    paths = openapi_document()["paths"]
+    assert {"post"} <= set(paths["/api/projects/{name}/rename"]) and "delete" in paths["/api/projects/{name}"]
+    assert "post" in paths["/api/projects/{name}/reset-to-example"] and "post" in paths["/api/projects/{name}/open-folder"]
+    assert "204" in paths["/api/projects/{name}"]["delete"]["responses"] and "204" in paths["/api/projects/{name}/open-folder"]["post"]["responses"]
+    examples_schema = openapi_document()["components"]["schemas"]["ExampleInfo"]
+    assert "project" in examples_schema["properties"]
 
 
 # ---- Device warm-up ----

@@ -24,6 +24,7 @@ class ProjectJson(BaseModel):
     inputs_revision: int = 1    # raised by every upload and removal of an input file
     input_files: dict[str, dict[str, int]] = Field(default_factory=dict)  # role -> file name -> triangle count
     stage_records: dict[str, StageRecord] = Field(default_factory=dict)   # stage name -> record
+    example: str | None = None  # the example the project was made from (examples.json name); None for other projects and older ones
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -203,12 +204,18 @@ class ExampleInfo(BaseModel):
     name: str
     title: str
     description: str
+    project: str | None = None  # the existing project made from this example (the most recently modified), None when there is none
 
 
 class CreateProjectRequest(BaseModel):
     """The body of a request to create a project."""
     name: str
     mode: str = "time-based"
+
+
+class RenameProjectRequest(BaseModel):
+    """The body of a request to rename a project."""
+    new_name: str
 
 
 class ConfigValuesRequest(BaseModel):

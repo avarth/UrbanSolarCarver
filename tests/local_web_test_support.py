@@ -5,12 +5,17 @@ runs, as the real stages do; the run folders of finished runs are written withou
 ``project_with_inputs`` is in conftest.py and builds its project with ``add_project_with_inputs``.
 """
 import json
+import os
+import shutil
+import subprocess
+import sys
 import threading
 import time
 import uuid
 from pathlib import Path
 
 import numpy as np
+import pytest
 import trimesh
 
 from urbansolarcarver.io import load_mesh, save_mesh
@@ -27,6 +32,36 @@ ALL_MISSING = {stage: "missing" for stage in PIPELINE_STAGES}
 
 
 # ---- Projects ----
+
+class FakeRecycleBin:
+    """Stands in for ``send2trash.send2trash``: records the folders it was given and removes them, as moving them away does.
+
+    ``error`` (an exception) makes every call fail instead, leaving the folder where it is.
+    """
+
+    def __init__(self, error: Exception | None = None):
+        self.folders: list[Path] = []
+        self.error = error
+
+    def __call__(self, folder) -> None:
+        if self.error is not None:
+            raise self.error
+        self.folders.append(Path(folder))
+        shutil.rmtree(folder)
+
+
+def make_link_to_folder(link: Path, target: Path, kind: str) -> None:
+    """A junction or a symbolic link at *link* to the folder *target*; the test is skipped where the kind cannot be made."""
+    if kind == "junction":
+        if sys.platform != "win32":
+            pytest.skip("junctions exist on Windows only")
+        subprocess.run(["cmd", "/c", "mklink", "/J", str(link), str(target)], check=True, capture_output=True)
+        return
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"a symbolic link cannot be made here: {error}")
+
 
 def box_bytes(center, extents=(10, 10, 10)) -> bytes:
     box = trimesh.creation.box(extents=extents)

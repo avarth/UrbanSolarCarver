@@ -1,0 +1,90 @@
+"""The guardrails for removing a project folder, and the move to the recycle bin.
+
+Deleting or resetting a project must never remove anything but that one project folder (spec R2 7.3). A folder is
+removed only when the checks below pass, and then it is moved to the recycle bin (Windows) or trash (macOS, Linux)
+with the ``send2trash`` package, not deleted for good, so a mistake can be undone. The check that no run of the
+project is active belongs to the caller, which holds the project lock.
+"""
+from __future__ import annotations
+
+import os
+import stat
+from pathlib import Path
+
+import send2trash
+from pydantic import ValidationError
+
+from .api_models import ProjectJson
+from .projects import PROJECT_JSON_FILE_NAME, ProjectError, validate_project_name
+
+
+class ProjectRemovalRefused(ProjectError):
+    """A project folder that must not be removed, or that could not be moved to the recycle bin; the status is 422."""
+
+    def __init__(self, message: str):
+        super().__init__(message, status_code=422)
+
+
+def _is_link(path: Path | str) -> bool:
+    """Whether *path* is a symbolic link or, on Windows, any reparse point (a junction, a mount point, ...), not followed."""
+    if os.path.islink(path):
+        return True
+    return bool(getattr(os.lstat(path), "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+
+
+def _check_nothing_is_a_link(project_folder: Path) -> None:
+    """Raise ProjectRemovalRefused for the first link at or below *project_folder*; links are never followed.
+
+    ``os.walk`` goes into a folder only when the caller asks for the next entry, so a link to a folder is refused
+    here before the walk could enter it.
+    """
+    try:
+        if _is_link(project_folder):
+            raise ProjectRemovalRefused(f"The project folder {project_folder} is a link to another place, so it is left as it is.")
+        for current_folder, folder_names, file_names in os.walk(project_folder, onerror=_raise_unreadable_folder):
+            for entry_name in (*folder_names, *file_names):
+                if _is_link(os.path.join(current_folder, entry_name)):
+                    raise ProjectRemovalRefused(
+                        f"{os.path.join(current_folder, entry_name)} is a link to another place, which a project folder must not contain: "
+                        "the project is left as it is. Remove the link first if you want to remove the project.")
+    except OSError as error:
+        raise ProjectRemovalRefused(f"The project folder {project_folder} cannot be checked for links ({error}), so it is left as it is.") from error
+
+
+def _raise_unreadable_folder(error: OSError) -> None:
+    raise error
+
+
+def check_project_folder_can_be_removed(projects_folder: Path, name: str) -> Path:
+    """The resolved folder of project *name* when it may be removed; ProjectError otherwise (404 when there is none, 422 when refused).
+
+    Checks: the name passes the project-name rule; the folder is a direct child of the projects folder after resolving
+    every link, and not the projects folder itself; it holds a project.json that reads as a project of that name; neither
+    it nor anything inside it is a symbolic link or a junction.
+    """
+    project_name = validate_project_name(name)
+    real_projects_folder = Path(projects_folder).resolve()
+    project_folder = (Path(projects_folder) / project_name).resolve()
+    if project_folder.parent != real_projects_folder or project_folder == real_projects_folder:
+        raise ProjectRemovalRefused(f"'{project_name}' is not a folder directly inside the projects folder, so it is left as it is.")
+    if not project_folder.is_dir():
+        raise ProjectError(f"There is no project named '{project_name}'.", status_code=404)
+    try:
+        project_json = ProjectJson.model_validate_json((project_folder / PROJECT_JSON_FILE_NAME).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise ProjectRemovalRefused(f"'{project_name}' has no {PROJECT_JSON_FILE_NAME}, so it is not a project of this app and is left as it is.") from None
+    except (ValidationError, OSError, UnicodeDecodeError) as error:
+        raise ProjectRemovalRefused(f"{PROJECT_JSON_FILE_NAME} of '{project_name}' cannot be read as a project ({error}), so it is left as it is.") from error
+    if project_json.name != project_folder.name:
+        raise ProjectRemovalRefused(
+            f"{PROJECT_JSON_FILE_NAME} in the folder '{project_folder.name}' names the project '{project_json.name}', so it is left as it is.")
+    _check_nothing_is_a_link(Path(projects_folder) / project_name)
+    return project_folder
+
+
+def move_to_recycle_bin(folder: Path) -> None:
+    """Move *folder* to the recycle bin or trash; ProjectRemovalRefused, with the reason, when that fails (the folder then stays)."""
+    try:
+        send2trash.send2trash(str(folder))
+    except OSError as error:        # send2trash's TrashPermissionError is an OSError
+        raise ProjectRemovalRefused(f"The folder {folder} could not be moved to the recycle bin: {error}") from error
