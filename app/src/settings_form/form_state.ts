@@ -67,7 +67,8 @@ export interface FormState {
   sampleSpacingLoweredTo: number | null;
   /**
    * While the change that lowered the sample spacing is not saved yet: the sample spacing the user had set before it (undefined:
-   * none). A voxel size changed again before the save is compared with that spacing, not with the lowered one.
+   * none). A voxel size changed again before the save is compared with that spacing, not with the lowered one. Only a stored save
+   * ends it: it deliberately outlives a refused or failed save, as config.yaml never stored the lowering then.
    */
   sampleSpacingBeforeUnsavedLowering: { userValue: unknown } | null;
 }

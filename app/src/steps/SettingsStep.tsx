@@ -133,7 +133,7 @@ export function SettingsToFix({ step, form, onChange, disabledReason }: Settings
  */
 function voxelSizeExtras(form: FormState): SettingFieldExtras {
   const lowered = form.sampleSpacingLoweredTo;
-  const changeNote = lowered !== null && shownValue(form, "grid_step") === lowered ? messages.sampleSpacingLoweredToVoxelSize(lowered) : undefined;
+  const changeNote = lowered !== null && shownValue(form, "grid_step") === lowered ? messages.sampleSpacingLoweredToVoxelSize(lowered) : null;
   const plan = form.gridPlan;
   if (plan === null) return { changeNote };
   if (!gridIsOverBudget(plan)) return { changeNote, note: gridLineOf(form)! };

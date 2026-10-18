@@ -73,15 +73,18 @@ test("dragging the left handle changes only the dead band, and it cannot pass th
   expect(onChange.mock.calls.every(([values]) => !("balance_temperature" in values))).toBe(true);
 });
 
+// The form behind the widget, as the app holds it: every change goes through the form's reducer.
+let latest: FormState | null = null;
+function Balance({ start }: { start: FormState }) {
+  const [state, dispatch] = useReducer(formReducer, start);
+  latest = state;
+  return <SettingField view={balanceView()} form={state} onChange={(values) => dispatch({ type: "values_changed", values })} />;
+}
+
+const press = (handle: HTMLInputElement, type: "pointerdown" | "pointerup") => act(() => { handle.dispatchEvent(new Event(type, { bubbles: true })); });
+
 test("dragging the right handle moves the band with it: only the balance temperature changes", () => {
-  // The form behind the widget, as the app holds it.
-  let latest: FormState | null = null;
-  function Balance() {
-    const [state, dispatch] = useReducer(formReducer, form());
-    latest = state;
-    return <SettingField view={balanceView()} form={state} onChange={(values) => dispatch({ type: "values_changed", values })} />;
-  }
-  rendered = renderForTest(<Balance />);
+  rendered = renderForTest(<Balance start={form()} />);
   setValue(balanceHandle(), "20");
   expect(latest!.userValues).toEqual({ balance_temperature: 20 });
   expect(lowerEndHandle().value).toBe("18");
@@ -121,4 +124,48 @@ test("the dead band has its own tooltip, and its error is shown under the widget
 test("both handles and both number fields are disabled while the field is", () => {
   rendered = renderForTest(<SettingField view={balanceView()} form={form()} onChange={() => {}} disabled />);
   expect([...rendered.container.querySelectorAll<HTMLInputElement>("input")].map((input) => input.disabled)).toEqual([true, true, true, true]);
+});
+
+test("on one spot (a dead band of 0) the left handle is on top, and the drag's direction picks the handle", () => {
+  rendered = renderForTest(<Balance start={form({ balance_offset: 0 })} />);
+  expect(lowerEndHandle().classList).toContain("balance-handle-on-top");
+  expect(rendered.container.querySelector(".balance-dead-band-label")).toBeNull();      // no band to name
+  // To the right: the balance temperature moves, the band stays 0 wide, for the whole drag.
+  press(lowerEndHandle(), "pointerdown");
+  setValue(lowerEndHandle(), "17");
+  setValue(lowerEndHandle(), "18");
+  press(lowerEndHandle(), "pointerup");
+  expect(latest!.userValues).toEqual({ balance_temperature: 18, balance_offset: 0 });
+  // To the left: the band opens.
+  press(lowerEndHandle(), "pointerdown");
+  setValue(lowerEndHandle(), "15");
+  press(lowerEndHandle(), "pointerup");
+  expect(latest!.userValues).toEqual({ balance_temperature: 18, balance_offset: 3 });
+  expect(lowerEndHandle().classList).not.toContain("balance-handle-on-top");
+});
+
+test("both pinned at the low end (5 °C typed, dead band 2): a drag to the right moves the balance temperature and keeps the band", () => {
+  rendered = renderForTest(<Balance start={form({ balance_temperature: 5 })} />);
+  expect([lowerEndHandle().value, balanceHandle().value]).toEqual(["10", "10"]);
+  press(lowerEndHandle(), "pointerdown");
+  setValue(lowerEndHandle(), "12");
+  expect(latest!.userValues).toEqual({ balance_temperature: 12 });
+  // The handles are apart now, but the drag keeps moving the balance temperature: the band is never closed on the way.
+  setValue(lowerEndHandle(), "12.5");
+  press(lowerEndHandle(), "pointerup");
+  expect(latest!.userValues).toEqual({ balance_temperature: 12.5 });
+  expect(lowerEndHandle().value).toBe("10.5");
+});
+
+test("on one spot, a key to the right on the left handle moves the balance temperature, not the dead band", () => {
+  rendered = renderForTest(<Balance start={form({ balance_offset: 0 })} />);
+  setValue(lowerEndHandle(), "15.5");
+  expect(latest!.userValues).toEqual({ balance_temperature: 15.5, balance_offset: 0 });
+});
+
+test("an error of one of the two marks only its own handle and number field", () => {
+  const refused = formReducer(form(), { type: "save_rejected", reply: { field_errors: [{ field: "balance_offset", message: "Input should be greater than or equal to 0" }], grid_plan: null } });
+  renderBalance(refused);
+  expect([lowerEndHandle(), deadBandNumber()].map((input) => input.getAttribute("aria-invalid"))).toEqual(["true", "true"]);
+  expect([balanceHandle(), balanceNumber()].map((input) => input.getAttribute("aria-invalid"))).toEqual(["false", "false"]);
 });

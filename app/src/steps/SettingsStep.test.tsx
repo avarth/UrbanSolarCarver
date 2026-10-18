@@ -211,15 +211,26 @@ test("a voxel size below the sample spacing lowers it to the voxel size, said un
   expect(notes).toHaveLength(2);                // the grid line stays under it
 });
 
-test("a sample spacing typed above the voxel size is not changed: the engine's error shows on it and opens its fold", () => {
+test("the status region of the sample spacing note is there before the note, so the note is announced when it comes", () => {
   rendered = renderForTest(<SettingsStepWithItsForm start={formWithSampleSpacing()} />);
-  const foldButton = [...rendered.container.querySelectorAll<HTMLButtonElement>("button.setting-fold")].find((button) => button.textContent === "More detail settings")!;
-  click(foldButton);
-  typeInto(fieldNamed("grid_step").querySelector<HTMLInputElement>("input[type='number']")!, "2");
-  expect(latestForm!.userValues).toEqual({ grid_step: 2 });
-  const refused = formReducer(latestForm!, { type: "save_rejected", reply: { field_errors: [{ field: null,
+  const status = fieldNamed("voxel_size").querySelector("[role='status']")!;
+  expect(status.textContent).toBe("");
+  typeInto(fieldNamed("voxel_size").querySelector<HTMLInputElement>("input[type='number']")!, "0.5");
+  expect(fieldNamed("voxel_size").querySelector("[role='status']")).toBe(status);
+  expect(status.textContent).toBe("Sample spacing lowered to 0.5 m to match the voxel size.");
+});
+
+test("a sample spacing typed above the voxel size is not changed: the engine's error shows on it and opens its fold", () => {
+  const typed = formReducer(formWithSampleSpacing(), { type: "values_changed", values: { grid_step: 2 } });
+  expect(typed.userValues).toEqual({ grid_step: 2 });
+  rendered = renderForTest(<SettingsStep form={typed} onChange={() => {}} disabledReason={null} />);
+  const detailFold = () => [...rendered!.container.querySelectorAll<HTMLButtonElement>("button.setting-fold")]
+    .find((button) => button.textContent === "More detail settings")!;
+  expect(detailFold().getAttribute("aria-expanded")).toBe("false");
+  const refused = formReducer(typed, { type: "save_rejected", reply: { field_errors: [{ field: null,
     message: "Value error, grid_step (2 m) must be ≤ voxel_size (1 m). Increase voxel_size or decrease grid_step." }], grid_plan: null } });
   rendered.rerender(<SettingsStep form={refused} onChange={() => {}} disabledReason={null} />);
+  expect(detailFold().getAttribute("aria-expanded")).toBe("true");          // opened by the error, not by the user
   expect(fieldNamed("grid_step").querySelector(".setting-error")!.textContent).toContain("must not be larger than the voxel size");
   expect(fieldNamed("grid_step").querySelector<HTMLInputElement>("input[type='number']")!.value).toBe("2");
   expect(refused.userValues.grid_step).toBe(2);

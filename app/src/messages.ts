@@ -296,6 +296,8 @@ export const messages = {
   periodIncomplete: (modeName: string) => `${modeName} needs the whole analysis period: every day, month and hour.`,
   settingProblem: (settingLabel: string, message: string) => `${settingLabel}: ${message}`,
   automatic: "automatic",
+  // An empty slider, to a screen reader: automatic, and the number the engine uses for it ("automatic, 75 °").
+  automaticValue: (valueText: string) => `automatic, ${valueText}`,
   // What an empty setting does in the open mode, in its tooltip (UX 7): the engine's automatic value there.
   emptyMeansInMode: (valueText: string, modeName: string) => `Left empty, it is ${valueText} in ${modeName}.`,
   // A number refused in its field (UX 11): what to use instead. An exclusive bound is not allowed itself ("above 0").

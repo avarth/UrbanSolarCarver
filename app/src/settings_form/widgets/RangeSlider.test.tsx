@@ -86,14 +86,28 @@ test("a share stored as 0 to 1 slides in percent and is stored as a share", () =
   expect(onChange).toHaveBeenLastCalledWith({ plate_tolerance: 0.35 });
 });
 
-test("an empty automatic setting has no handle on its slider until it is moved, and reads 'automatic'", () => {
+test("an empty automatic setting starts its hollow handle at the value the engine uses, and stays empty until the slider moves", () => {
   const onChange = vi.fn();
-  rendered = renderForTest(<SettingField view={viewOf("carving", "score_smoothing")} form={form()} onChange={onChange} />);
+  // The engine's descriptions name the automatic values (pydantic_schemas.py): 1.1 x voxel size; 75 ° in the weighted modes.
+  const described = initialFormState({ schema: { properties: { ...SCHEMA.properties,
+    score_smoothing: { ...SCHEMA.properties.score_smoothing, description: "None (default) = auto: 1.1 × voxel_size, recommended for most runs." },
+    max_slope_deg: { anyOf: [{ type: "number", exclusiveMinimum: 0, maximum: 90 }, { type: "null" }], default: null,
+                     description: "None (default): 75 for the weighted modes (irradiance, benefit, daylight, radiative_cooling), off for time-based and tilted_plane. 90: off." } } },
+    modes: MODES, settings: { mode: "daylight", voxel_size: 2 }, gridPlan: null });
+  rendered = renderForTest(<SettingField view={viewOf("carving", "score_smoothing")} form={described} onChange={onChange} />);
   expect(slider().dataset.empty).toBe("true");
-  expect(slider().getAttribute("aria-valuetext")).toBe("automatic");
+  expect(slider().value).toBe("2.2");
+  expect(slider().getAttribute("aria-valuetext")).toBe("automatic, 2.2 m");
   expect(numberField().placeholder).toBe("automatic");
-  setValue(slider(), "1.2");
-  expect(onChange).toHaveBeenLastCalledWith({ score_smoothing: 1.2 });
+  expect(onChange).not.toHaveBeenCalled();
+  setValue(slider(), "2.3");
+  expect(onChange).toHaveBeenLastCalledWith({ score_smoothing: 2.3 });
+  rendered.rerender(<SettingField view={viewOf("carving", "max_slope_deg")} form={described} onChange={onChange} />);
+  expect(slider().value).toBe("75");
+  // Without the engine's number the handle waits in the middle, and the value stays empty.
+  rendered.rerender(<SettingField view={viewOf("carving", "score_smoothing")} form={form()} onChange={onChange} />);
+  expect(slider().value).toBe("2.5");
+  expect(slider().getAttribute("aria-valuetext")).toBe("automatic");
   rendered.rerender(<SettingField view={viewOf("carving", "score_smoothing")} form={form({ score_smoothing: 1.2 })} onChange={onChange} />);
   expect(slider().dataset.empty).toBeUndefined();
 });

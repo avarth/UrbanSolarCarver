@@ -340,3 +340,15 @@ test("the sun path, the sky dome and the compass ring are sized to the maximum v
   // The scene runs from 0 to 10 m along x and 0 to 1 m along y: centred at (5, 0.5) on the ground, 1.5 x 10 m wide
   expect(FakeViewerScene.latest!.sceneHemisphere).toEqual({ centre: [5, 0.5, 0], radius: 15 });
 });
+
+test("a failed run's link to a setting opens its step and focuses the input its label names: a slider's number field", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(project(NOTHING_RUN));
+  openStep("Settings");
+  await pressRunAnalysis();
+  FakeWebSocket.opened[0].send({ type: "run_failed", error_type: "ConfigError", message: "invalid", field_errors: [{ field: "voxel_size", message: "too small" }] });
+  await settle();
+  const link = [...container().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Go to voxel size")!;
+  act(() => link.click());
+  expect(document.activeElement).toBe(voxelSizeField());
+});

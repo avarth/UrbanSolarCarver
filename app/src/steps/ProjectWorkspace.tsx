@@ -204,7 +204,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   };
   useEffect(() => {
     if (settingToFocus === null) return;
-    panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"] :is(input, select)`)?.focus();
+    // The input the field's label targets: the number field of a slider, the balance temperature's number of the balance widget.
+    const field = panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"]`);
+    const labelled = field?.dataset.inputId === undefined ? null : document.getElementById(field.dataset.inputId);
+    (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
   }, [settingToFocus]);
 
   const runBlocker = runAnalysisBlocker({

@@ -147,13 +147,17 @@ def test_every_decimal_setting_with_an_engine_range_has_a_slider():
 
 
 def test_each_slider_lies_within_the_engine_limits():
-    """The slider is the range people normally use: inside what the engine accepts, low below high, a step that fits in it."""
+    """The slider is the range people normally use: inside what the engine accepts, low below high, a whole number of steps
+    from one end to the other. balance_offset's entry gives the step of the balance slider's left handle; its range is unused,
+    as that handle runs on balance_temperature's track."""
     for name, entry in presented_settings().items():
         if "slider" not in entry:
             continue
         slider, bounds = entry["slider"], decimal_bounds_of(name)
         assert set(slider) == {"low", "high", "step"}, name
         assert slider["low"] < slider["high"] and 0 < slider["step"] <= slider["high"] - slider["low"], name
+        steps = (slider["high"] - slider["low"]) / slider["step"]
+        assert abs(steps - round(steps)) < 1e-9, (name, steps)
         for end in (slider["low"], slider["high"]):
             assert end >= bounds.get("minimum", end) and end <= bounds.get("maximum", end), name
             assert end > bounds.get("exclusiveMinimum", end - 1) and end < bounds.get("exclusiveMaximum", end + 1), name

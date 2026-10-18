@@ -59,7 +59,7 @@
     "balance_offset": {
       "label": "Dead band", "unit": "°C",
       "help": "Hours within this many degrees below the balance temperature do not count either.",
-      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["benefit"], "slider": { "low": 0, "high": 20, "step": 0.5 }
+      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["benefit"], "slider": { "low": 0, "high": 5, "step": 0.5 }
     },
     "include_harm": {
       "label": "Subtract summer overheating (experimental)", "unit": "on/off",
@@ -194,7 +194,7 @@
     "min_plate_dimension": {
       "label": "Bay width", "unit": "m",
       "help": "The grid the storeys are built from, and the narrowest piece of floor allowed.",
-      "step": "envelope_and_massing", "group": "Building massing", "essential": "all", "slider": { "low": 1, "high": 15, "step": 0.5 }
+      "step": "envelope_and_massing", "group": "Building massing", "essential": "all", "slider": { "low": 1, "high": 15, "step": 0.1 }
     },
     "plate_tolerance": {
       "label": "Allowed overhang", "unit": "%",

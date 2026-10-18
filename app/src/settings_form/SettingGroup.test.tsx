@@ -227,7 +227,12 @@ test("an invalid field is marked without the outline, which stays the focus mark
     expect(rule).not.toMatch(/outline(-offset)?\s*:/);
     expect(rule).toMatch(/box-shadow:[^;]*var\(--colour-error\)/);
   }
-  expect(formCss).not.toMatch(/outline\s*:/);       // nothing in the form replaces the focus outline of tokens.css
+  // Nothing in the form replaces the focus outline of tokens.css, but the balance handles: their sliders span the whole track, so
+  // each handle carries the ring itself, 2 px in the accent colour.
+  const withoutBalanceHandles = formCss.replace(/\.balance-handle:focus-visible\s*{\s*outline: none;\s*}/, "");
+  expect(withoutBalanceHandles).not.toMatch(/outline\s*:/);
+  expect(formCss).toMatch(/\.balance-handle:focus-visible::-webkit-slider-thumb\s*{[^}]*0 0 0 5px var\(--colour-accent\)/);
+  expect(formCss).toMatch(/\.balance-handle:focus-visible::-moz-range-thumb\s*{[^}]*0 0 0 5px var\(--colour-accent\)/);
 });
 
 test("the tooltip stays open while the pointer moves from the i onto it, over a strip across the gap", () => {

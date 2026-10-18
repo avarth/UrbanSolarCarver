@@ -105,7 +105,7 @@
 .setting-select:disabled { color: var(--colour-muted); background: var(--colour-chrome); }
 
 /* A slider (R2 4.1): a thin track in the line colour and a round handle in the accent colour. Drawn by the stylesheet, not the
-   browser, so it reads the same in every browser and an empty (automatic) value can show no handle. */
+   browser, so it reads the same in every browser and an empty (automatic) value can show a hollow handle. */
 .setting-range {
   --slider-handle: 16px;
   --slider-track: 4px;
@@ -144,9 +144,9 @@
   box-shadow: 0 0 0 1px var(--colour-accent);
 }
 
-/* Empty (automatic): no handle until the slider is moved; a press on the track sets a value there. */
-.setting-range[data-empty="true"]::-webkit-slider-thumb { opacity: 0; }
-.setting-range[data-empty="true"]::-moz-range-thumb { opacity: 0; }
+/* Empty (automatic): a hollow handle at the value the engine uses, until the slider is moved. */
+.setting-range[data-empty="true"]::-webkit-slider-thumb { background: var(--colour-panel); }
+.setting-range[data-empty="true"]::-moz-range-thumb { background: var(--colour-panel); }
 
 .setting-range[aria-invalid="true"]::-webkit-slider-runnable-track { box-shadow: 0 0 0 1px var(--colour-error); }
 .setting-range[aria-invalid="true"]::-moz-range-track { box-shadow: 0 0 0 1px var(--colour-error); }
@@ -227,6 +227,12 @@
 .balance-handle::-webkit-slider-thumb { margin-top: 0; pointer-events: auto; cursor: pointer; }
 .balance-handle::-moz-range-thumb { pointer-events: auto; cursor: pointer; }
 .balance-handle-on-top { z-index: 1; }
+
+/* Both sliders span the whole track, so the focus mark of tokens.css would ring the whole overlay: each handle carries its own
+   instead, the same 2 px accent ring around the handle that has the focus (UX 12). */
+.balance-handle:focus-visible { outline: none; }
+.balance-handle:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--colour-accent), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent); }
+.balance-handle:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 1px var(--colour-accent), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent); }
 
 .balance-numbers { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2) calc(var(--space-unit) * 6); }
 .balance-numbers .setting-control { flex-wrap: nowrap; }
@@ -358,6 +364,10 @@
 .setting-tooltip code { font-family: var(--font-family-code); }
 
 /* A line under a valid field, such as the grid under Voxel size (UX 5.4). */
+/* The live region of a change the form made (the sample spacing lowered, R2 4.4): always there, so filling it is announced; while
+   empty it takes back the gap the field's column puts before it. */
+.setting-change-note:empty { margin-top: calc(var(--space-unit) * -1); }
+
 .setting-note {
   margin: 0;
   color: var(--colour-muted);

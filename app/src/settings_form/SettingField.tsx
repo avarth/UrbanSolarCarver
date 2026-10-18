@@ -21,11 +21,12 @@ import { TiltedPlaneAngles } from "./widgets/TiltedPlaneAngles";
 import "./settings_form.css";
 
 /** What a step adds under one of its fields: a note, under its error too (the grid under Voxel size), a change the form made
- *  for the user, said above the note (the sample spacing lowered to the voxel size, R2 4.4), and the error in the step's own
- *  words in place of the engine's message (the grid over the budget). */
+ *  for the user, said above the note in a status region that is there while the field may need it (null: none now; the sample
+ *  spacing lowered to the voxel size, R2 4.4), and the error in the step's own words in place of the engine's message (the grid
+ *  over the budget). */
 export interface SettingFieldExtras {
   note?: ReactNode;
-  changeNote?: ReactNode;
+  changeNote?: string | null;
   errorContent?: ReactNode;
 }
 
@@ -83,6 +84,32 @@ export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" |
   if (form.scoreKindByMode[form.mode] !== "weighted_sum") return messages.emptyMeansInMode(messages.switchedOff, plainModeName(form.mode));
   const degrees = AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION.exec(form.schemaProperties.max_slope_deg?.description ?? "")?.[1];
   return degrees === undefined ? null : messages.emptyMeansInMode(withUnit(formattedNumber(Number(degrees)), unitOfValue(view)), plainModeName(form.mode));
+}
+
+// The value that switches the slope limit off, and the engine's automatic score smoothing as a multiple of the voxel size, as the
+// descriptions of max_slope_deg and score_smoothing in GET schema state them.
+const SLOPE_LIMIT_OFF_IN_DESCRIPTION = /(\d+(?:\.\d+)?): off/;
+const AUTOMATIC_SMOOTHING_IN_DESCRIPTION = /auto: (\d+(?:\.\d+)?) × voxel_size/;
+
+/**
+ * The number the engine uses for an empty setting in the form's mode, where the schema says it, else null: the slope limit of the
+ * weighted modes, or the value that is off in the others; the score smoothing, a multiple of the voxel size. An empty slider
+ * starts its handle there, so a first key step moves from the value in use.
+ */
+export function automaticValueOf(view: SettingView, form: FormState): number | null {
+  const description = form.schemaProperties[view.name]?.description ?? "";
+  const numberIn = (pattern: RegExp) => {
+    const found = pattern.exec(description)?.[1];
+    return found === undefined ? null : Number(found);
+  };
+  if (view.name === "max_slope_deg") {
+    return numberIn(form.scoreKindByMode[form.mode] === "weighted_sum" ? AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION : SLOPE_LIMIT_OFF_IN_DESCRIPTION);
+  }
+  if (view.name === "score_smoothing") {
+    const factor = numberIn(AUTOMATIC_SMOOTHING_IN_DESCRIPTION), voxelSize = shownValue(form, "voxel_size");
+    return factor === null || typeof voxelSize !== "number" ? null : Number((factor * voxelSize).toPrecision(12));
+  }
+  return null;
 }
 
 /** The default as the tooltip writes it ("1.0 m", "on", "21 Dec 10 h to 21 Dec 14 h", "automatic"). */
@@ -162,6 +189,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       controlElement = (
         <BalanceTemperatureSlider {...control} balanceTemperature={typeof shown === "number" ? shown : null}
                                   deadBand={typeof deadBand === "number" ? deadBand : null} track={view.slider!} deadBandStep={deadBandView.slider!.step}
+                                  settingsWithError={BALANCE_TEMPERATURE_FIELDS.filter((name) => form.fieldErrors[name] !== undefined)}
                                   balanceTemperatureRange={rangeOf(property)} deadBandRange={rangeOf(form.schemaProperties[deadBandName])} unit={unit}
                                   deadBandLabel={deadBandView.label} onChange={onChange}
                                   deadBandInfo={<SettingTooltip settingLabel={deadBandView.label} help={deadBandView.help} configName={deadBandName}
@@ -193,7 +221,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
         const slider = shownSliderOf(view);
         controlElement = slider !== undefined ? (
           <RangeSlider {...control} value={value} slider={slider} engineRange={engineRange} mayBeEmpty={mayBeEmpty} unit={unit} placeholder={placeholder}
-                       onValue={changeTo} />
+                       automaticValue={value === null ? automaticValueOf(view, form) : null} onValue={changeTo} />
         ) : (
           <div className="setting-control">
             <NumberInput id={inputId} value={value} mayBeEmpty={mayBeEmpty} wholeNumbers={types.includes("integer")} invalid={control.invalid}
@@ -206,7 +234,8 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   }
 
   return (
-    <div className="setting-field" data-setting={view.name}>
+    // data-input-id names the input the label targets (a group's first), which a link to the setting focuses.
+    <div className="setting-field" data-setting={view.name} data-input-id={inputId}>
       <div className="setting-label-row">
         {isGroupOfInputs ? <span id={labelId} className="setting-label">{view.label}</span>
           : <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>}
@@ -216,7 +245,9 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       </div>
       {controlElement}
       {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{refusedInput ?? extras?.errorContent ?? error}</span></p>}
-      {extras?.changeNote !== undefined && <p className="setting-note" role="status">{extras.changeNote}</p>}
+      {extras?.changeNote !== undefined && (
+        <div className="setting-change-note" role="status">{extras.changeNote !== null && <p className="setting-note">{extras.changeNote}</p>}</div>
+      )}
       {extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
     </div>
   );

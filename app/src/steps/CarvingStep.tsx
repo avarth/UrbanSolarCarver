@@ -158,7 +158,7 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled: disa
   };
   const describedBy = [error === undefined ? null : errorId, reasonId ?? null].filter((id) => id !== null).join(" ") || undefined;
   return (
-    <div className="setting-field threshold-control" data-setting={view.name}>
+    <div className="setting-field threshold-control" data-setting={view.name} data-input-id={inputId}>
       <div className="setting-label-row">
         <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>
         <SettingTooltip settingLabel={view.label} help={view.help} configName={view.name} defaultText={defaultTextOf(view, form, isShadowTolerated)} />
