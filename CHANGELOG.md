@@ -179,7 +179,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (below). Configs that set `protect_share` or `threshold: protect_share`
   are rejected.
 
-### Fixed (massing ground floor)
+### Fixed (massing ground and top floor)
 
 - **Massing could build no floor at all on a maximum volume whose facades
   are not aligned with the voxel grid.** The ground floor started at the
@@ -191,6 +191,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   volume's lowest point, as docs/massing.md describes, which preprocessing
   records in its manifest (`max_volume_lowest_z`), and a voxel layer whose
   centre lies below that point does not count against it.
+- **The top floor could stand up to one voxel above the maximum volume.**
+  Floors ended at or below the top of the highest occupied voxel layer,
+  which can lie up to one voxel above the maximum volume's roof (a 19.5 m
+  box got a floor from 17 to 20 m). Floors now end at or below the maximum
+  volume's highest point, which preprocessing records too
+  (`max_volume_highest_z`), and a voxel layer whose centre lies above that
+  point does not count against the top floor, as at the base.
 
 ### Fixed (stage chain)
 

@@ -290,6 +290,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
     # that lie exactly on panel edges, so the same scene placed elsewhere
     # would sample (and carve) slightly differently.
     frame = np.asarray(mesh_env.bounds[0], dtype=np.float64)
+    max_volume_highest_z = float(mesh_env.bounds[1][2])     # world z, for massing
     footprint = _max_volume_footprint(mesh_env)   # world xy, before the shift
     mesh_env = mesh_env.copy()
     mesh_env.vertices = np.round(mesh_env.vertices - frame, 6)
@@ -390,6 +391,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         sample_point_count=int(pts.shape[0]),
         footprint_path=stored_path(footprint_path, out_path),
         max_volume_lowest_z=float(frame[2]),
+        max_volume_highest_z=max_volume_highest_z,
     )
 
     # Per-stage diagnostics: the stage builds the summary and the writer puts

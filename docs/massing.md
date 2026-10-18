@@ -33,15 +33,19 @@ simulation input (one closed prism per floor and plate).
    the floor's full height, at most `plate_tolerance` of its volume lies outside
    the carved envelope, and (with `plate_stacking: supported`) it is built on
    the floor below. Parts narrower than `min_plate_dimension` are dropped.
-   The ground floor starts at the maximum volume's lowest point, which
-   preprocessing records in its manifest. The voxel grid is not aligned with
-   that point, so the lowest occupied voxel layer can lie mostly below it (its
-   centre below the base). Such a layer is filled only where rays hit the
-   base, which they miss in columns along facades that are not aligned with
-   the grid, so it does not count: a floor's height and its share outside the
-   envelope are measured over the layers whose centre is at or above the
-   base. A preprocessing run from before the manifest recorded the lowest
-   point starts the ground floor at the bottom of the lowest occupied layer.
+   The ground floor starts at the maximum volume's lowest point, and the top
+   floor ends at or below its highest point; preprocessing records both in
+   its manifest. The voxel grid is not aligned with these points, so the
+   lowest occupied voxel layer can lie mostly below the base (its centre below
+   it) and the highest mostly above the roof. Such a layer is filled only
+   where rays hit the base or the roof, which they miss in columns along
+   facades that are not aligned with the grid, so it does not count: a floor's
+   height and its share outside the envelope are measured over the layers
+   whose centre lies between the lowest and the highest point. A preprocessing
+   run from before the manifest recorded these points starts the ground floor
+   at the bottom of the lowest occupied layer and lets the top floor reach the
+   top of the highest occupied layer, up to one voxel outside the maximum
+   volume at each end; running preprocessing again gives the floors above.
 5. **Plates.** The connected built bays of a floor form a plate. A bay on a
    straight facade is drawn as a rectangle in its facade's frame: cuts lie
    on the cut lines, the back lies on the midline where the facade faces a

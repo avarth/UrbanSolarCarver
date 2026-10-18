@@ -173,15 +173,47 @@ def test_ground_floor_starts_at_the_lowest_point_of_a_volume_not_aligned_with_th
     assert res.floor_areas[0] == pytest.approx(30 * 12, rel=1e-6)
 
 
+def test_the_top_floor_ends_at_or_below_the_highest_point_of_the_volume(tmp_path):
+    """A 19.5 m box: the highest occupied voxel layer spans 19.25..20.25, and every column has it (rays hit the roof).
+
+    Floors of 5 m, then 3 m, from z 0 end at 5, 8, 11, 14, 17 and 20 m; the floor 17..20 would stand 0.5 m above the box.
+    """
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 19.5]))
+    _set_mask(thr, lambda occ: occ)
+    res = _massing(cfg, thr, tmp_path / "m")
+    plates = json.loads(res.plates_path.read_text())["plates"]
+    assert len(res.floor_areas) == 5 and all(area == pytest.approx(30 * 12, rel=1e-6) for area in res.floor_areas)
+    assert max(p["z_top"] for p in plates) == pytest.approx(17.0)
+
+
+def _remove_from_preprocessing_manifest(tmp_path, *field_names):
+    """The preprocessing manifest as preprocessing wrote it before it recorded *field_names*; returns the manifest."""
+    manifest_path = tmp_path / "out" / "preprocessing" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for field_name in field_names:
+        del manifest[field_name]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return manifest
+
+
+def test_a_preprocessing_manifest_without_the_highest_point_keeps_the_top_of_the_highest_layer(tmp_path):
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 19.5]))
+    _set_mask(thr, lambda occ: occ)
+    manifest = json.loads((tmp_path / "out" / "preprocessing" / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["max_volume_highest_z"] == 19.5
+    _remove_from_preprocessing_manifest(tmp_path, "max_volume_highest_z")
+    res = _massing(cfg, thr, tmp_path / "m")
+    plates = json.loads(res.plates_path.read_text())["plates"]
+    assert len(res.floor_areas) == 6 and max(p["z_top"] for p in plates) == pytest.approx(20.0)
+
+
 def test_a_preprocessing_manifest_without_the_lowest_point_starts_the_ground_floor_at_the_lowest_layer(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
     _set_mask(thr, lambda occ: occ)
-    manifest_path = tmp_path / "out" / "preprocessing" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    assert manifest["max_volume_lowest_z"] == 0.0
-    del manifest["max_volume_lowest_z"]          # as preprocessing wrote it before recording the lowest point
-    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
-    occupancy = np.load(manifest_path.parent / manifest["voxel_grid_path"]).astype(bool)
+    preprocessing_folder = tmp_path / "out" / "preprocessing"
+    assert json.loads((preprocessing_folder / "manifest.json").read_text(encoding="utf-8"))["max_volume_lowest_z"] == 0.0
+    manifest = _remove_from_preprocessing_manifest(tmp_path, "max_volume_lowest_z", "max_volume_highest_z")
+    occupancy = np.load(preprocessing_folder / manifest["voxel_grid_path"]).astype(bool)
     lowest_layer_bottom = manifest["origin"][2] + np.flatnonzero(occupancy.any(axis=(0, 1))).min() * manifest["voxel_size"]
     res = _massing(cfg, thr, tmp_path / "m")
     ground_floor_plates = [p for p in json.loads(res.plates_path.read_text())["plates"] if p["floor"] == 0]
@@ -218,6 +250,8 @@ def test_new_building_example_builds_a_ground_floor_with_supported_stacking(tmp_
     ground_floor_plates = [plate for plate in plates["plates"] if plate["floor"] == 0]
     assert ground_floor_plates and all(plate["z_bottom"] == pytest.approx(0.0) for plate in ground_floor_plates)
     assert plates["floor_area_m2_per_floor"][0] > 0
+    highest_z = json.loads((tmp_path / "run" / "preprocessing" / "manifest.json").read_text(encoding="utf-8"))["max_volume_highest_z"]
+    assert max(plate["z_top"] for plate in plates["plates"]) <= highest_z + 1e-6
 
 
 def test_massing_ignores_a_max_volume_file_edited_after_preprocessing(tmp_path):
