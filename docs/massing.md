@@ -60,8 +60,8 @@ simulation input (one closed prism per floor and plate).
 |---|---|---|
 | `ground_floor_height` | 5.0 | Height of the ground floor (m) |
 | `floor_height` | 3.0 | Height of every floor above it (m) |
-| `min_plate_dimension` | 3.0 | Bay width and minimum plate width (m) |
-| `plate_tolerance` | 0.2 | Largest share of a bay's volume on a floor outside the carved envelope |
+| `min_plate_dimension` | 3.0 | Bay width and minimum plate width (m); "Grid module" in the browser UI |
+| `plate_tolerance` | 0.2 | Largest share of a bay's volume on a floor outside the carved envelope; "Permitted volume exceedance" in the browser UI |
 | `plate_stacking` | supported | `supported`: build a bay only on a built bay; `free`: each floor on its own |
 
 Plates never leave the maximum volume. The three sizes must be at least the
