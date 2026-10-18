@@ -1,0 +1,56 @@
+[
+  {
+    "engine_name": "time-based",
+    "plain_name": "Sun at set hours",
+    "one_line": "Direct sun in a chosen period",
+    "tooltip": "Keeps direct sun on the test surfaces during the hours you choose, for example 21 December, 10 to 14 h.",
+    "needs": "Needs a weather file and an analysis period.",
+    "symbol": "sun_with_clock",
+    "experimental": false
+  },
+  {
+    "engine_name": "irradiance",
+    "plain_name": "Solar energy",
+    "one_line": "Sun and sky energy over a season",
+    "tooltip": "Keeps the sun and sky energy that reaches the surfaces over the period.",
+    "needs": "Needs a weather file and an analysis period.",
+    "symbol": "sun_over_heat_waves",
+    "experimental": false
+  },
+  {
+    "engine_name": "benefit",
+    "plain_name": "Solar heat when cold",
+    "one_line": "Sun in hours that need heating",
+    "tooltip": "Like solar energy, counting only hours cold enough to need heating.",
+    "needs": "Needs a weather file and an analysis period.",
+    "symbol": "sun_with_thermometer",
+    "experimental": false
+  },
+  {
+    "engine_name": "daylight",
+    "plain_name": "Daylight",
+    "one_line": "Light from an overcast sky",
+    "tooltip": "Keeps the view of an overcast sky, for daylight rules and visual comfort.",
+    "needs": "Needs nothing extra.",
+    "symbol": "overcast_sky_dome",
+    "experimental": false
+  },
+  {
+    "engine_name": "tilted_plane",
+    "plain_name": "Angle rule",
+    "one_line": "A fixed plane from each facade",
+    "tooltip": "Removes everything above a plane at a fixed angle from each facade.",
+    "needs": "Needs a plane angle.",
+    "symbol": "facade_with_angled_line",
+    "experimental": false
+  },
+  {
+    "engine_name": "radiative_cooling",
+    "plain_name": "Night cooling",
+    "one_line": "View of the cold night sky",
+    "tooltip": "Keeps a flat roof's view of the cold night sky. Experimental; assumes horizontal test surfaces.",
+    "needs": "Needs a night dew point.",
+    "symbol": "crescent_moon_with_arrow",
+    "experimental": true
+  }
+]

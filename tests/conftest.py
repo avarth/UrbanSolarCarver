@@ -50,6 +50,13 @@ def example_epw_path():
     return Path(epw)
 
 
+@pytest.fixture
+def project_with_inputs(tmp_path):
+    """For the local web service tests: a daylight project with a max volume and a test surface; the store and its name."""
+    from local_web_test_support import add_project_with_inputs
+    return add_project_with_inputs(tmp_path)
+
+
 def pytest_collection_modifyitems(config, items):
     """Skip the tests marked ``gpu`` when torch sees no CUDA GPU."""
     import torch

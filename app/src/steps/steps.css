@@ -1,0 +1,561 @@
+/* The start screen and the steps of the left panel (UX 4.1, 5.1 to 5.4, 10, 11). Every colour, size and radius comes from
+   tokens.css. */
+
+/* Start screen ---------------------------------------------------------------------------------------------------------- */
+
+.start-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 4);
+  overflow-y: auto;
+  padding: calc(var(--space-unit) * 8) max(16px, calc((100% - 1080px) / 2));
+}
+
+.start-heading h1 { margin: 0; font-size: var(--text-key-number); font-weight: 700; }
+.start-version { margin: 0; color: var(--colour-muted); }
+.start-device-line { margin: 0; }
+
+.start-device-card,
+.start-card {
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+}
+
+.start-device-card { padding: calc(var(--space-unit) * 3) calc(var(--space-unit) * 4); }
+
+.start-device-status {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+  margin: 0 0 var(--space-unit);
+  font-weight: 600;
+}
+
+.start-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--space-unit) * 4);
+  align-items: start;
+}
+
+.start-card {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 4);
+}
+
+.start-card h2 { margin: 0; font-size: var(--text-step-title); font-weight: 600; }
+
+.start-new-project {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.start-name-field.setting-number { width: 100%; }
+.start-hint { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.start-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-unit);
+  max-height: 360px;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.start-choice {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: calc(var(--space-unit) * 2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.start-choice:hover { border-color: var(--colour-line); background: var(--colour-chrome); }
+.start-choice:disabled { cursor: default; }
+.start-choice-name { font-weight: 600; }
+.start-choice-detail { color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* The step list ---------------------------------------------------------------------------------------------------------- */
+
+.step-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.step-list {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  margin: 0;
+  padding: calc(var(--space-unit) * 3);
+  overflow-y: auto;
+  list-style: none;
+}
+
+.step {
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+}
+
+.step-heading { margin: 0; font: inherit; }
+
+.step-header {
+  display: flex;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 3);
+  width: 100%;
+  padding: calc(var(--space-unit) * 3);
+  border: 0;
+  border-radius: var(--radius-large);
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.step-mark {
+  flex: none;
+  box-sizing: border-box;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border: 2px solid var(--colour-line);
+  border-radius: 50%;
+  font-size: var(--text-secondary);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.step-mark-open { border-color: var(--colour-accent); }
+.step-mark-done { border-color: var(--colour-ready); background: var(--colour-ready); color: var(--colour-panel); }
+.step-mark-error { border-color: var(--colour-error); background: var(--colour-error); color: var(--colour-panel); }
+
+.step-header-text { display: flex; flex-direction: column; min-width: 0; }
+.step-title { font-size: var(--text-step-title); font-weight: 600; }
+.step-summary { color: var(--colour-muted); font-size: var(--text-secondary); }
+.step-summary-error { color: var(--colour-error); font-weight: 600; }
+
+.step-content { padding: 0 calc(var(--space-unit) * 3) calc(var(--space-unit) * 3); }
+.step-not-usable { margin: 0; color: var(--colour-muted); }
+.step-reason { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+.step-error { margin-bottom: calc(var(--space-unit) * 3); }
+
+/* The open step's run button with its progress, failure details and warnings: at most half the panel, scrolling beyond that,
+   so a long list at 200 % zoom (UX 12) never pushes the step list out of the panel. */
+.step-pinned-action {
+  flex: none;
+  box-sizing: border-box;     /* the half includes the padding and the border */
+  max-height: 50%;
+  overflow-y: auto;
+  padding: calc(var(--space-unit) * 3);
+  border-top: 1px solid var(--colour-line);
+  background: var(--colour-panel);
+}
+
+.save-failure { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-unit); }
+.save-failure:not(:last-child) { margin-bottom: calc(var(--space-unit) * 3); }   /* above the open step's run button */
+
+.run-button-area .primary-button { width: 100%; }
+.run-button-reason { margin: var(--space-unit) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* Inputs ---------------------------------------------------------------------------------------------------------------- */
+
+.inputs-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+
+.input-box {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+}
+
+.input-box-empty { border-style: dashed; }
+.input-box-drop-target { border-color: var(--colour-accent); background: var(--colour-accent-soft); }
+
+.input-box-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.input-box-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
+.input-box-required { color: var(--colour-muted); font-size: var(--text-secondary); }
+.input-box-hint { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* Room for a "Draw" button beside "Add files" in milestone 2 (UX 5.2). */
+.input-box-actions { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.input-box-drop-hint { color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.input-add {
+  padding: var(--space-unit) calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-accent);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  color: var(--colour-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.input-add:disabled { border-color: var(--colour-line); color: var(--colour-muted); cursor: default; }
+
+.input-file-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
+
+.input-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+}
+
+.input-file-name { overflow-wrap: anywhere; }
+.input-file-detail { color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.input-remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-muted);
+  cursor: pointer;
+}
+
+.input-remove:hover:not(:disabled) { background: var(--colour-chrome); color: var(--colour-ink); }
+.input-remove:disabled { cursor: default; opacity: 0.5; }
+
+.input-box-reason { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+.input-box-problem,
+.inputs-size-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-unit);
+  margin: 0;
+  font-size: var(--text-secondary);
+}
+
+.input-box-problem { color: var(--colour-error); }
+.inputs-size-warning { color: var(--colour-muted); }
+.inputs-size-title { color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* Mode ------------------------------------------------------------------------------------------------------------------ */
+
+.mode-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+
+.mode-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: calc(var(--space-unit) * 2);
+}
+
+.mode-tile-cell { position: relative; }
+
+.mode-tile {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  height: 100%;
+  padding: calc(var(--space-unit) * 2);       /* the "i" sits on the symbol's row, right of it */
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  cursor: pointer;
+}
+
+.mode-tile:hover { border-color: var(--colour-muted); }
+
+/* The chosen tile: a 2 px accent edge on accent soft; the padding loses the extra pixel so the content does not move. */
+.mode-tile[aria-checked="true"] {
+  padding: calc(var(--space-unit) * 2 - 1px);
+  border: 2px solid var(--colour-accent);
+  background: var(--colour-accent-soft);
+}
+
+.mode-tile[aria-disabled="true"] { cursor: default; opacity: 0.6; }
+.mode-tile-symbol { margin-bottom: var(--space-unit); color: var(--colour-ink); }
+.mode-tile-name { font-size: var(--text-body); font-weight: 600; line-height: 1.25; }
+.mode-tile-line { color: var(--colour-muted); font-size: var(--text-secondary); line-height: 1.3; }
+
+.mode-tile-experimental {
+  margin-top: var(--space-unit);
+  padding: 0 var(--space-unit);
+  border: 1px solid var(--colour-muted);
+  border-radius: var(--radius-small);
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+}
+
+.mode-tile-info { position: absolute; top: 6px; right: 6px; }
+.mode-tooltip-name { font-weight: 600; }
+.mode-step-note { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
+
+/* Runs: the progress and outcome under the button that started one (UX 6.3, 11) ------------------------------------------ */
+
+.secondary-button {
+  align-self: flex-start;
+  padding: var(--space-unit) calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-accent);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  color: var(--colour-accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-button:disabled { border-color: var(--colour-line); color: var(--colour-muted); cursor: default; }
+
+.run-progress {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 2);
+  margin-top: calc(var(--space-unit) * 2);
+  font-size: var(--text-secondary);
+}
+
+.run-progress-stages ol { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.run-stage { display: flex; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.run-stage-state { color: var(--colour-muted); font-variant-numeric: tabular-nums; }
+.run-stage-running .run-stage-name { font-weight: 600; }
+.run-stage-done .run-stage-state { color: var(--colour-ready); }
+
+.run-progress-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: calc(var(--space-unit) * 2);
+  margin-top: calc(var(--space-unit) * 2);
+}
+
+.run-progress-elapsed { color: var(--colour-muted); font-variant-numeric: tabular-nums; }
+.run-outcome { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-unit); margin: 0; }
+.run-outcome p { margin: 0; }
+.run-outcome-error > p:first-child,
+p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
+.run-failure-details summary { color: var(--colour-accent); cursor: pointer; }
+.run-failure-details p { margin: var(--space-unit) 0 0; }
+.run-failure-message { overflow-wrap: anywhere; white-space: pre-wrap; }
+.run-issues ul { margin: var(--space-unit) 0 0; padding-left: calc(var(--space-unit) * 4); }
+.run-issues-title { margin: 0; font-weight: 600; }
+
+/* Carving (UX 5.5) -------------------------------------------------------------------------------------------------------- */
+
+.carving-step,
+.carving-content,
+.envelope-step,
+.export-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+
+/* Dimmed results (UX 5.5, 6.3): the text turns muted, which keeps AA contrast on white and on chrome (UX 12); only the graphics
+   without text fade. Opacity on text would bring muted text to about 2.3:1. */
+.carving-content-dimmed { color: var(--colour-muted); }
+.carving-content-dimmed .histogram-bar,
+.carving-content-dimmed .histogram-swatch,
+.carving-content-dimmed .histogram-cutoff { opacity: 0.55; }
+.carving-content-dimmed .histogram-cutoff-label rect { fill: var(--colour-muted); }
+
+.carving-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-chrome);
+}
+
+.threshold-number { display: inline-flex; }
+
+.threshold-slider-ends {
+  display: flex;
+  justify-content: space-between;
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+}
+
+.switch-row { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+
+/* Number tiles on chrome: the label 12 px muted, the value 20 px bold (UX 5.5, 5.6, screens). */
+.number-tiles { display: grid; gap: calc(var(--space-unit) * 2); }
+.number-tiles-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.number-tiles-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+.number-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border-radius: var(--radius-large);
+  background: var(--colour-chrome);
+}
+
+.number-tile-label { color: var(--colour-muted); font-size: var(--text-secondary); }
+.number-tile-value { font-size: var(--text-key-number); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.number-tile-unit { white-space: nowrap; }
+.number-tiles-three .number-tile { padding: calc(var(--space-unit) * 2); }
+
+/* The histogram (UX 5.5, screens): kept bars in accent, carved bars in the carved colour, the cutoff a dashed ink line. */
+.score-histogram { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; }
+.score-histogram-title-row { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.score-histogram-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
+
+.segmented-switch { display: inline-flex; border: 1px solid var(--colour-line); border-radius: var(--radius-small); overflow: hidden; }
+
+.segmented-switch button {
+  padding: 2px calc(var(--space-unit) * 2);
+  border: 0;
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  font: inherit;
+  font-size: var(--text-secondary);
+  cursor: pointer;
+  outline-offset: -2px;
+}
+
+.segmented-switch button + button { border-left: 1px solid var(--colour-line); }
+.segmented-switch button[aria-pressed="true"] { background: var(--colour-accent-soft); color: var(--colour-accent); font-weight: 600; }
+
+.score-histogram-chart { position: relative; }
+.score-histogram-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.histogram-kept { fill: var(--colour-accent); }
+.histogram-carved { fill: var(--colour-carved); }
+.histogram-bar-active rect { stroke: var(--colour-ink); stroke-width: 0.75; }
+.histogram-axis { stroke: var(--colour-ink); stroke-width: 1; }
+.histogram-grid-line { stroke: var(--colour-line); stroke-width: 0.5; }
+.histogram-tick { fill: var(--colour-muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.histogram-cutoff { stroke: var(--colour-ink); stroke-width: 1.25; stroke-dasharray: 4 3; }
+.histogram-cutoff-label rect { fill: var(--colour-ink); }
+.histogram-cutoff-label text { fill: var(--colour-panel); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.score-histogram-readout {
+  position: absolute;
+  top: 22px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  padding: 2px calc(var(--space-unit) * 2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-ink) 16%, transparent);
+  font-size: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-histogram-caption { display: flex; flex-direction: column; gap: var(--space-unit); font-size: var(--text-secondary); }
+.score-histogram-axis-title { color: var(--colour-muted); text-align: center; }
+.score-histogram-key { display: flex; gap: calc(var(--space-unit) * 4); }
+.score-histogram-key > span { display: inline-flex; align-items: center; gap: var(--space-unit); }
+.histogram-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.histogram-swatch-kept { background: var(--colour-accent); }
+.histogram-swatch-carved { background: var(--colour-carved); }
+.score-histogram-note { color: var(--colour-muted); }
+
+/* Envelope and massing (UX 5.6) -------------------------------------------------------------------------------------------- */
+
+.envelope-results { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+/* Greyed when out of date (UX 5.6), as the dimmed carving: muted text, faded swatches. */
+.envelope-results-out-of-date .number-tiles,
+.envelope-results-out-of-date .storey-table { color: var(--colour-muted); }
+.envelope-results-out-of-date .storey-swatch { opacity: 0.55; }
+.out-of-date-label { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); font-weight: 600; }
+
+.storey-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.storey-table caption { margin-bottom: var(--space-unit); font-weight: 600; text-align: left; }
+.storey-table th,
+.storey-table td { padding: var(--space-unit) calc(var(--space-unit) * 1.5); border-bottom: 1px solid var(--colour-line); text-align: right; font-weight: 400; }
+.storey-table th:first-child { text-align: left; }
+.storey-table thead th { color: var(--colour-muted); font-size: var(--text-secondary); }
+.storey-table tfoot th,
+.storey-table tfoot td { border-bottom: 0; font-weight: 700; }
+
+.storey-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: calc(var(--space-unit) * 1.5);
+  border: 1px solid var(--colour-line);
+  border-radius: 2px;
+  vertical-align: -1px;
+}
+
+/* The run report over the 3D view. */
+.run-report-panel {
+  position: absolute;
+  inset: 12px;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+}
+
+.run-report-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: calc(var(--space-unit) * 3);
+  border-bottom: 1px solid var(--colour-line);
+}
+
+.run-report-header h2 { margin: 0; font-size: var(--text-step-title); font-weight: 600; }
+.run-report-problem { padding: calc(var(--space-unit) * 3); font-size: var(--text-body); }
+
+.run-report-text {
+  flex: 1;
+  margin: 0;
+  padding: calc(var(--space-unit) * 3);
+  overflow: auto;
+  font-family: var(--font-family-code);
+  font-size: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+/* Export (UX 5.7) ---------------------------------------------------------------------------------------------------------- */
+
+.download-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
+.download-list li { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+
+.out-of-date-tag {
+  padding: 0 var(--space-unit);
+  border: 1px solid var(--colour-muted);
+  border-radius: var(--radius-small);
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+}

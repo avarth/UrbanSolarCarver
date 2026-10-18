@@ -1,0 +1,217 @@
+/* The overlays on the 3D view (UX 8.1): placed in the corners of the view, which is their positioned parent. On the dark
+   viewport they take the *-on-dark tokens (UX 10.1). */
+
+.viewer-overlay {
+  --overlay-gap: 12px;
+  --layers-button-width: 96px;
+  position: absolute;
+  box-sizing: border-box;
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-ink) 16%, transparent);
+  font-family: var(--font-family);
+  font-size: var(--text-secondary);
+  line-height: var(--line-height);
+}
+
+.viewer-overlay[data-viewport-theme="dark"] {
+  background: var(--colour-overlay-on-dark);
+  color: var(--colour-ink-on-dark);
+  border-color: var(--colour-line-on-dark);
+  box-shadow: 0 1px 4px color-mix(in srgb, var(--colour-ink) 60%, transparent);
+}
+
+/* The accent outline of tokens.css is too dark against the dark overlays; the lighter blue of the dark viewport keeps it visible. */
+.viewer-overlay[data-viewport-theme="dark"] :focus-visible,
+.viewer-overlay[data-viewport-theme="dark"]:focus-visible {
+  outline-color: var(--colour-test-surface-on-dark);
+}
+
+.viewer-overlay .viewer-muted { color: var(--colour-muted); }
+.viewer-overlay[data-viewport-theme="dark"] .viewer-muted { color: var(--colour-muted-on-dark); }
+
+.viewer-overlay button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.viewer-compass {
+  top: var(--overlay-gap);
+  left: var(--overlay-gap);
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+.viewer-compass svg { display: block; }
+
+.viewer-toolbar {
+  top: var(--overlay-gap);
+  right: calc(var(--overlay-gap) + var(--layers-button-width) + 8px);     /* left of the layers menu */
+  display: flex;
+  padding: 0;
+  overflow: hidden;
+}
+
+.viewer-toolbar button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  outline-offset: -2px;     /* the toolbar clips its rounded corners, so the focus outline is drawn inside the button */
+}
+
+.viewer-toolbar button + button { border-left: 1px solid var(--colour-line); }
+.viewer-toolbar[data-viewport-theme="dark"] button + button { border-left-color: var(--colour-line-on-dark); }
+
+.viewer-layers-menu {
+  top: var(--overlay-gap);
+  right: var(--overlay-gap);
+}
+
+.viewer-layers-menu > button {
+  width: var(--layers-button-width);
+  height: 40px;
+  font-weight: 600;
+  font-size: var(--text-body);
+}
+
+.viewer-layers-panel {
+  width: 260px;
+  margin: 0;
+  padding: 4px 12px 12px;
+  list-style: none;
+  border-top: 1px solid var(--colour-line);
+}
+
+.viewer-layers-menu[data-viewport-theme="dark"] .viewer-layers-panel { border-top-color: var(--colour-line-on-dark); }
+
+.viewer-layers-panel li { padding-top: 8px; }
+.viewer-layers-panel label { display: flex; gap: 8px; align-items: center; font-size: var(--text-body); }
+.viewer-layers-panel .viewer-layer-note { margin: 2px 0 0 24px; }
+.viewer-layers-panel .viewer-sky-dome-slider { display: flex; gap: 8px; align-items: center; margin: 4px 0 0 24px; font-size: var(--text-secondary); }
+.viewer-layers-panel input[type="range"] { flex: 1; accent-color: var(--colour-accent); }
+
+.viewer-axis-gizmo {
+  bottom: var(--overlay-gap);
+  left: var(--overlay-gap);
+  width: 72px;
+  height: 72px;
+}
+
+.viewer-axis-gizmo svg { display: block; }
+.viewer-axis-gizmo text { font-weight: 700; font-size: 12px; }
+
+.viewer-scale-bar {
+  bottom: var(--overlay-gap);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 12px 6px;
+  text-align: center;
+}
+
+.viewer-scale-bar-line {
+  height: 6px;
+  margin: 2px auto 0;
+  border: 2px solid currentColor;
+  border-top: 0;
+  box-sizing: border-box;
+}
+
+.viewer-legend {
+  bottom: var(--overlay-gap);
+  right: var(--overlay-gap);
+  width: 240px;
+  padding: 8px 12px;
+}
+
+.viewer-legend section + section { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--colour-line); }
+.viewer-legend[data-viewport-theme="dark"] section + section { border-top-color: var(--colour-line-on-dark); }
+.viewer-legend h3 { margin: 0 0 4px; font-size: var(--text-secondary); font-weight: 600; }
+.viewer-legend p { margin: 4px 0 0; }
+
+.viewer-legend-ramp { height: 10px; border-radius: 2px; }
+
+.viewer-legend-ramp-ends {
+  display: flex;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}
+
+.viewer-sun-path-swatch {
+  display: inline-block;
+  width: 24px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 3px solid var(--colour-sun);
+}
+
+.viewer-storey-swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.viewer-storey-swatch {
+  display: grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 3px;
+  font-size: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* The view and its centre message (the empty state of UX 11). */
+.viewer-pane { position: absolute; inset: 0; overflow: hidden; }
+.viewer-canvas { position: absolute; inset: 0; }
+
+/* Without WebGL: the message in the middle of the view, on the page background. */
+.viewer-pane-unavailable { display: grid; place-items: center; padding: 16px; background: var(--colour-chrome); }
+.viewer-unavailable-content { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 420px; color: var(--colour-ink); text-align: center; }
+.viewer-unavailable { margin: 0; }
+
+.viewer-centre {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 320px;
+  text-align: center;
+  color: var(--colour-ink);
+}
+
+.viewer-centre[data-viewport-theme="dark"] { color: var(--colour-ink-on-dark); }
+
+.viewer-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.viewer-empty-state p { margin: 0; }
+.viewer-centre[data-viewport-theme="dark"] .link-button { color: var(--colour-test-surface-on-dark); }
+
+/* The progress of a run, a thin bar along the top edge of the view (UX 4, 6.3). */
+.viewer-run-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  height: 3px;
+  background: color-mix(in srgb, var(--colour-accent) 20%, transparent);
+}
+
+.viewer-run-progress-bar {
+  height: 100%;
+  background: var(--colour-accent);
+  transition: width 150ms linear;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .viewer-run-progress-bar { transition: none; }
+}

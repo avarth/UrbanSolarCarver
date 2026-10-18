@@ -32,6 +32,7 @@ nav:
     - Installation: getting-started/installation.md
     - Quick Start: getting-started/quick-start.md
     - Configuration: getting-started/configuration.md
+  - Browser UI: ui.md
   - Carving Modes: modes.md
   - Floor-plate massing: massing.md
   - Simulated Weights: simulated-weights.md

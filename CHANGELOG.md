@@ -7,6 +7,43 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (browser UI)
+
+- **Launchers for the browser interface:** `start-urbansolarcarver.bat`
+  (Windows, double-click) and `start-urbansolarcarver.sh` (Linux, macOS) in
+  the repository. On a fresh clone they install with `setup_env.py`, then
+  start `usc ui`; they find `.venv` or `~/.usc-venv`, or the environment named
+  by `USC_VENV`, and pass their arguments on to `usc ui`.
+
+- **`usc ui` opens a browser interface** served from this machine
+  (`--port`, `--projects-folder`, `--no-browser`, `--device`). It is an
+  optional extra (`ui`: fastapi, uvicorn, python-multipart, websockets) that
+  `setup_env.py` installs unless `--no-ui` is given; without it the other
+  commands work as before and `usc ui` prints the install command. A start
+  screen (new project, open a project, three packaged examples) leads to six
+  steps: Inputs, Mode, Settings, Carving, Envelope and massing, Export, with
+  a 3D view (compass, ground grid, scale bar, axes, legend, layers menu, light
+  or dark viewport). A run has two phases: Run analysis (sun analysis and
+  carving), then, after adjusting the threshold against the score histogram
+  (optionally updating as the slider moves), Build envelope and massing.
+  Results that no longer match the settings stay visible, dimmed. See
+  [Browser UI](docs/ui.md).
+- **`urbansolarcarver.local_web_service`**, the service behind it, and
+  `app/`, the front-end source (React and three.js); the built front-end is
+  committed in `ui_static/` and a test compares its `build_info.json` with the
+  sources. The service listens on `127.0.0.1`, checks the `Host` header and
+  needs a per-launch token on every API call. The GPU kernels are compiled in
+  the background at launch; without a CUDA-enabled GPU the engine runs on the
+  CPU.
+- **Projects are folders** under the projects folder
+  (`~/UrbanSolarCarver/projects` by default) with `inputs/`, a `config.yaml`
+  that `usc run -c` loads, `project.json` (one record per completed stage) and
+  `run/`.
+- **Thresholding writes `scores_compared_with_cutoff.npy`**, the values the
+  cutoff is applied to (float32, the voxel grid's shape), and records its path
+  in the thresholding manifest (`scores_compared_with_cutoff_path`, `None` in
+  manifests from earlier versions). The browser UI draws its histogram from it.
+
 ### Added (test markers)
 
 - **`slow` and `gpu` pytest markers**, registered in `pyproject.toml`.

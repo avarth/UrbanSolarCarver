@@ -1,0 +1,42 @@
+[
+  {
+    "name": "basic_perimeter_block",
+    "title": "Perimeter block",
+    "description": "A perimeter block 126 by 92 m and 50 m high, with eight facades around it as test surfaces; the smallest example.",
+    "mode": "time-based",
+    "max_volume": [
+      "maxVolume.ply"
+    ],
+    "test_surfaces": [
+      "testSrfs.ply"
+    ],
+    "weather": true
+  },
+  {
+    "name": "new_building",
+    "title": "New building among neighbors",
+    "description": "A plot of about 18 by 17 m for one new building 29 m high among existing neighbors, with their roofs and their windows as two test surface files.",
+    "mode": "irradiance",
+    "max_volume": [
+      "max_volume.ply"
+    ],
+    "test_surfaces": [
+      "neighbor_roofs.ply",
+      "neighbor_windows.ply"
+    ],
+    "weather": true
+  },
+  {
+    "name": "multiple_buildings",
+    "title": "District of many buildings",
+    "description": "A district about 208 by 227 m with many buildings up to 30 m high, with their facades as test surfaces; the largest example.",
+    "mode": "irradiance",
+    "max_volume": [
+      "max_volume.ply"
+    ],
+    "test_surfaces": [
+      "test_surfaces.ply"
+    ],
+    "weather": true
+  }
+]

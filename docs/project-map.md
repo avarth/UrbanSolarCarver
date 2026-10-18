@@ -7,6 +7,7 @@ Overview of the files and directories in the repository.
 ```
 UrbanSolarCarver/
 ├── src/urbansolarcarver/   Core Python package
+├── app/                    Source of the browser UI front-end (React, three.js)
 ├── configs/                YAML config templates (one per mode + reference + archetype example)
 ├── examples/               Example data, weather file, and Jupyter notebook tutorials
 ├── tests/                  Pytest suite
@@ -33,7 +34,7 @@ UrbanSolarCarver/
 | `api.py` | Public facade. Defines `run_pipeline(config, out_dir, produce, start_from, context)`, the sequencer: it runs the stages needed for `produce`, each writing into `<out_dir>/<stage>`, and returns a `PipelineResult` (one Result per stage that ran, plus the run's issues). Re-exports `stages_to_rerun()`, `preprocessing()`, `thresholding()`, `exporting()`, `massing()`, their result types, `load_config()` and `build_config()`. |
 | `api_core/__init__.py` | Collects the three stage modules and their result types into one importable sub-package. |
 | `api_core/preprocessing.py` | **Stage 1.** Voxelizes the max-volume mesh into a dense 3D grid, samples test surfaces into evenly spaced points with outward normals, generates rays toward sky patches (or sun positions, or the tilted-plane direction, depending on mode), traces them through the grid with the DDA kernel, and writes the per-voxel obstruction scores to `scores.npy`. Also writes `voxel_grid.npy`, `footprint.json` (the plan projection of the voxelized mesh, which massing reads), the sample points and normals, the manifest, and diagnostics (JSON always; plots with `diagnostic_plots: true`). |
-| `api_core/thresholding.py` | **Stage 2.** Loads `scores.npy` from Stage 1, optionally applies Gaussian score smoothing (weighted modes), applies the selected thresholding strategy (`carve_fraction`, `headtail`, or a numeric cutoff) to the raw scores of the occupied voxels together with `carve_above` (`column_postprocessing.carve_above_scores`, so `carve_fraction` counts what carve_above removes), applies the slope limit (`column_postprocessing.limit_column_slope`; 75 degrees by default for the weighted modes), and writes the binary mask `mask.npy`. Can be re-run with different threshold parameters without re-computing scores. |
+| `api_core/thresholding.py` | **Stage 2.** Loads `scores.npy` from Stage 1, optionally applies Gaussian score smoothing (weighted modes), applies the selected thresholding strategy (`carve_fraction`, `headtail`, or a numeric cutoff) to the raw scores of the occupied voxels together with `carve_above` (`column_postprocessing.carve_above_scores`, so `carve_fraction` counts what carve_above removes), applies the slope limit (`column_postprocessing.limit_column_slope`; 75 degrees by default for the weighted modes), and writes the binary mask `mask.npy` and `scores_compared_with_cutoff.npy` (the values the cutoff was applied to, which the browser UI draws its histogram from). Can be re-run with different threshold parameters without re-computing scores. |
 | `api_core/massing.py` | **Stage 4.** Reads the thresholding chain, builds floor plates with `floor_plates.py`, writes `plates.json` (world outlines), `plates.obj` (one closed prism per plate), the manifest, diagnostics and the run report with a Massing section. |
 | `floor_plates.py` | Floor-plate massing geometry: base outline and facades split at corners, faces by nearest facade with squared corners, bays cut perpendicular to the facades, floor-by-floor bay selection (tolerance, maximum volume, stacking, minimum width), plate outlines and closed prisms. |
 | `api_core/exporting.py` | **Stage 3.** Loads the binary mask from Stage 2, removes small disconnected voxel clusters, reconstructs a triangle mesh (cubic voxel faces, or SDF-smoothed marching cubes with Taubin polishing), writes `export.<format>`, and writes `run_report.md` for the whole run. |
@@ -90,7 +91,23 @@ UrbanSolarCarver/
 | `engine_requests.py` | The request core every transport uses. **`parse_engine_request`** validates a message into a typed request (`run`, the stage commands, `run_pipeline`, `simulate_weights`, `ping`); **`config_for_engine_request`** builds its config from a YAML path or from the mode's starting values plus overrides; **`handle_engine_request`** runs it in a run context and returns a typed reply with the run's `issues`; **`answer_engine_message`** does all of this for dict transports and turns any failure into an error reply with `error_type` and, for config errors, `config_errors`. Does not import torch until a request runs. |
 | `daemon.py` | Persistent background process for Grasshopper and the CLI's `--daemon` flag, a transport over `engine_requests`. **`serve`**: listens on `127.0.0.1` (localhost only) with Python's `multiprocessing.connection`, authenticated with a random key stored in `~/.urbansolarcarver/.daemon_authkey`. Creates a `CarverSession` on startup and keeps it for the daemon's lifetime; each request goes to `answer_engine_message`, and only `shutdown` is handled by the daemon itself. Started and stopped with the CLI (`urbansolarcarver daemon start/stop`) or from Grasshopper with the `USC_Session` component. |
 | `daemon_client.py` | The client side of the daemon, standard library only: the authkey file (`resolve_daemon_authkey`), the default host and port, and `send_daemon_request`. The CLI's daemon commands use it, so they do not load torch; the daemon reads its key through it too. |
-| `carver_cli.py` | Command-line interface built with Typer, registered in `pyproject.toml` as both `urbansolarcarver` and `usc`. Commands: `run` (the sequencer, with `--produce` and `--start-from`), `preprocessing`, `thresholding`, `exporting`, `massing` (each with a config file `-c`, overrides `-o`, and optional `--daemon`), `validate`, `schema` (prints the config parameter table, filterable by `--mode` or `--search`), `warmup`, `simulate-weights`, `archetype`, and `daemon start/stop/status`. |
+| `carver_cli.py` | Command-line interface built with Typer, registered in `pyproject.toml` as both `urbansolarcarver` and `usc`. Commands: `run` (the sequencer, with `--produce` and `--start-from`), `preprocessing`, `thresholding`, `exporting`, `massing` (each with a config file `-c`, overrides `-o`, and optional `--daemon`), `validate`, `schema` (prints the config parameter table, filterable by `--mode` or `--search`), `warmup`, `simulate-weights`, `archetype`, `ui` (the browser interface) and `daemon start/stop/status`. |
+
+### Browser UI
+
+| File | Purpose |
+|------|---------|
+| `local_web_service/server.py` | The FastAPI application behind `usc ui`. `create_app` builds it; `SecurityMiddleware` refuses a `Host` header that is not the service's address and an API call or WebSocket without the launch token. Routes for projects, input files, settings, modes, examples, stage status, run summaries, result files, downloads and run events; serves the built front-end. Does not import torch. |
+| `local_web_service/api_models.py` | The Pydantic models of the requests and replies; the front-end's types are generated from them. |
+| `local_web_service/projects.py` | Project folders: name validation, the folder layout, `project.json`, uploads (several mesh files of a role are joined into one), `config.yaml` built from the settings the browser sends on top of the mode's starting values, and the voxel grid check. |
+| `local_web_service/stage_records.py` | Which stages of a project are current, out of date or missing, and which stages a run has to execute. |
+| `local_web_service/run_worker.py` | Runs a project in a background thread in two phases (analysis, then envelope and massing), publishes progress events and handles cancel. |
+| `local_web_service/run_summary.py`, `score_points.py` | What the app shows of a run: the numbers of the carving and massing, the sun path and sky dome, and the scored voxels. |
+| `local_web_service/gpu_warm_up.py` | Compiles the GPU kernels in the background at launch and reports the device or why the CPU is used. |
+| `example_projects/` | The three packaged examples (`examples.json`, mesh files and one weather file). |
+| `ui_static/` | The built front-end, committed. `build_info.json` holds a hash of the sources in `app/`. |
+
+`app/` holds the front-end source (`src/steps/` the six steps, `src/settings_form/` the settings, `src/viewer/` and `src/viewer_overlays/` the 3D view, `src/api_client/` the typed client). See [Browser UI](ui.md#rebuilding-the-front-end-after-changing-app) for building it.
 
 ## Grasshopper plugin (`grasshopper/`)
 
@@ -142,6 +159,7 @@ tests/
 ├── test_daemon.py           Daemon survives misbehaving clients and failing requests
 ├── test_engine_requests.py  Request parsing, configs from starting values, replies and real runs through the request core
 ├── test_exporting.py        Exporting stage: mesh placement, diagnostics, run report
+├── test_local_web_*.py      The browser UI service: packaging and build hash, projects, stage records, run worker, run summaries, score points, HTTP routes and security
 ├── test_floor_plates.py     Floor-plate geometry: facades, faces, bays, floors, outlines, prisms
 ├── test_massing_stage.py    Massing stage end to end on synthetic scenes
 ├── test_meshing.py          Cubic and smoothed meshing, pruning, diffusion, Taubin polish, cleanup
