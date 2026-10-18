@@ -533,7 +533,7 @@ def test_results_of_a_finished_run_are_served(client_with_inputs, tmp_path):
     assert summary["carving"]["voxels_kept"] == 61 and summary["carving"]["obstruction_fraction_carved"] == 0.35
     assert summary["massing"]["total_floor_area_m2"] == 200.0
     # No run of this project recorded exporting, so the envelope's voxel size is the one of its manifest chain: 2 m.
-    assert summary["envelope"]["envelope_volume_m3"] == 50 * 2.0 ** 3
+    assert summary["envelope"] == {"mesh_file": "export.ply", "envelope_volume_m3": 50 * 2.0 ** 3}
     score_points = client.get("/api/projects/p/run/score-points")
     assert score_points.status_code == 200 and score_points.headers["content-type"] == "application/octet-stream"
     assert len(score_points.content) > 4

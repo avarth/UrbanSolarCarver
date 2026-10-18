@@ -156,7 +156,7 @@ export function EnvelopeAndMassingStep(props: EnvelopeAndMassingStepProps) {
     <div className="envelope-step">
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
       {props.buildFeedback}
-      {part(ENVELOPE_GROUP, props.envelopeButton, envelope !== null && (
+      {part(ENVELOPE_GROUP, props.envelopeButton, envelope !== null && envelope.envelope_volume_m3 !== null && (
         <PartResults outOfDate={props.envelopeOutOfDate}>
           <div className="number-tiles number-tiles-two">
             <NumberTile label={messages.envelopeVolume} value={formatNumber(envelope.envelope_volume_m3)} unit={messages.units.cubicMetres}

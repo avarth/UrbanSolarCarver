@@ -673,7 +673,8 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 /* Export (UX 5.7) ---------------------------------------------------------------------------------------------------------- */
 
 .download-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
-.download-list li { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.download-list li { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); }
+.download-note { color: var(--colour-muted); font-size: var(--text-secondary); }
 
 .out-of-date-tag {
   padding: 0 var(--space-unit);

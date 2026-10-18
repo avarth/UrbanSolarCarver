@@ -148,7 +148,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const { token, project, form, dispatch, flushSave, changeAndSave, stages, runs, runBlocker, projectRunActive } = context;
   const meshFormat = String(shownValue(form, "final_mesh_format") ?? "ply");
   const [results, reloadResults] = useRunResults({
-    token, project, origin: context.origin, meshFormat, onServiceProblem: context.onServiceProblem,
+    token, project, origin: context.origin, onServiceProblem: context.onServiceProblem,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
   });
   const [autoUpdate, setAutoUpdate] = useAutoUpdate(project);
@@ -298,7 +298,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     export: (
       <ExportStep form={form} disabledReason={runs.activeRun !== null ? messages.runInProgress : null} formatRunReason={formatRunReason}
                   onFormatChange={(format) => void changeMeshFormat(format)}
-                  downloads={exportDownloads({ project, meshFormat, envelope: stages.exporting, massing: stages.massing })}
+                  downloads={exportDownloads({ project, meshFormat, envelopeFile: results.summary?.envelope?.mesh_file ?? null, envelope: stages.exporting,
+                                               massing: stages.massing })}
                   onDownload={download} formatFeedback={feedback("export_format")} downloadProblem={downloadProblem} />
     ),
   };

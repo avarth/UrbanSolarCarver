@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from ..mode_registry import canonical_mode_name
-from ..pydantic_schemas import PreprocessingManifest, UserConfig
+from ..pydantic_schemas import ExportingManifest, PreprocessingManifest, UserConfig
 from ..stage_settings import stage_folder
 from .api_models import CarvingSummary, EnvelopeSummary, MassingSummary, RunSummary, SkyDome, SunMarker, SunPath, SunPathDay
 from .score_points import read_stage_manifest, resolve_stored_path
@@ -63,10 +63,13 @@ def _carving_summary(run_folder: Path) -> CarvingSummary | None:
 
 
 def _envelope_summary(run_folder: Path, voxel_size: float | None) -> EnvelopeSummary | None:
-    diagnostic = _read_json(stage_folder(run_folder, "exporting") / DIAGNOSTIC_PATH)
-    if diagnostic is None or voxel_size is None:
+    """The envelope mesh exporting wrote, named by its manifest (a format chosen since does not rename it), and its volume."""
+    manifest = read_stage_manifest(run_folder, "exporting", ExportingManifest)
+    if manifest is None:
         return None
-    return EnvelopeSummary(envelope_volume_m3=diagnostic["voxels_retained"] * voxel_size ** 3)
+    diagnostic = _read_json(stage_folder(run_folder, "exporting") / DIAGNOSTIC_PATH)
+    volume = None if diagnostic is None or voxel_size is None else diagnostic["voxels_retained"] * voxel_size ** 3
+    return EnvelopeSummary(mesh_file=Path(manifest[0].mesh_path).name, envelope_volume_m3=volume)
 
 
 def _massing_summary(run_folder: Path) -> MassingSummary | None:

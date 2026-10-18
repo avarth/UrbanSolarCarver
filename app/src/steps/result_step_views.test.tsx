@@ -215,7 +215,7 @@ test("the storeys of plates.json, one row each from the ground up, heights from 
 });
 
 const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
-const ENVELOPE = { envelope_volume_m3: 4150 };
+const ENVELOPE = { mesh_file: "export.ply", envelope_volume_m3: 4150 };
 
 function envelopeAndMassingProps(overrides: Partial<EnvelopeAndMassingStepProps> = {}): EnvelopeAndMassingStepProps {
   return {
@@ -310,7 +310,7 @@ test("dimmed and greyed results keep their text at full opacity in the muted col
 });
 
 test("the Export downloads in the format chosen, out-of-date files labelled", () => {
-  const downloads = exportDownloads({ project: "my project", meshFormat: "glb", envelope: "out_of_date", massing: "current" });
+  const downloads = exportDownloads({ project: "my project", meshFormat: "glb", envelopeFile: "export.glb", envelope: "out_of_date", massing: "current" });
   expect(downloads.map((download) => [download.label, download.fileName, download.outOfDate])).toEqual([
     ["Carved envelope (GLB)", "my project envelope.glb", true],
     ["Building massing (OBJ)", "my project massing.obj", false],
@@ -324,9 +324,20 @@ test("the Export downloads in the format chosen, out-of-date files labelled", ()
 
 test("Export offers each file once its stage exists: the envelope without the massing, the massing without the envelope (R2 5)", () => {
   const labelsWith = (envelope: "current" | "missing", massing: "current" | "missing") =>
-    exportDownloads({ project: "p", meshFormat: "ply", envelope, massing }).map((download) => download.label);
+    exportDownloads({ project: "p", meshFormat: "ply", envelopeFile: "export.ply", envelope, massing }).map((download) => download.label);
   expect(labelsWith("current", "missing")).toEqual(["Carved envelope (PLY)", "Settings (config.yaml)", "Whole project (zip)"]);
   expect(labelsWith("missing", "current")).toEqual(["Building massing (OBJ)", "Building massing data (JSON)", "Settings (config.yaml)", "Whole project (zip)"]);
+});
+
+test("Export offers the envelope file that was built, under its own format, when the format chosen since was not built yet", () => {
+  // OBJ was chosen while Carving was locked: stored, not built; the PLY on disk is what can be downloaded.
+  const [envelope] = exportDownloads({ project: "p", meshFormat: "obj", envelopeFile: "export.ply", envelope: "out_of_date", massing: "missing" });
+  expect([envelope.label, envelope.address, envelope.fileName, envelope.outOfDate, envelope.note])
+    .toEqual(["Carved envelope (PLY)", "/api/projects/p/run/files/exporting/export.ply", "p envelope.ply", true, "Built as PLY; the next envelope build writes OBJ."]);
+  expect(exportDownloads({ project: "p", meshFormat: "ply", envelopeFile: "export.ply", envelope: "current", massing: "missing" })[0].note).toBeUndefined();
+  // Until the run summary names the file, no envelope file is offered.
+  expect(exportDownloads({ project: "p", meshFormat: "ply", envelopeFile: null, envelope: "current", massing: "missing" }).map((download) => download.label))
+    .toEqual(["Settings (config.yaml)", "Whole project (zip)"]);
 });
 
 function runs(record: RunRecord | null, notice: RunLoop["notice"] = null) {

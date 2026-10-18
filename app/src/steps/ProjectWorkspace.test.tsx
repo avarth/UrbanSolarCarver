@@ -43,7 +43,7 @@ const CARVING = {
   threshold_value: 1.5, voxels_occupied: 1000, voxels_kept: 610, voxels_removed: 390, retention_pct: 61, obstruction_fraction_carved: null,
   carve_above_extra_voxels_removed: 0, slope_limit_extra_voxels_removed: 0,
 };
-const ENVELOPE = { envelope_volume_m3: 4150 };
+const ENVELOPE = { mesh_file: "export.ply", envelope_volume_m3: 4150 };
 const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
 const NOTHING_RUN: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" };
 const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, preprocessing: "current", thresholding: "current" };
@@ -405,7 +405,7 @@ test("Build massing sends only massing and Build envelope only exporting; each l
   expect(FakeWebSocket.opened).toHaveLength(2);
   // Its volume arrives with the run summary once the envelope mesh is done.
   service.stages = { ...service.stages, exporting: "current" };
-  service.summary = { ...service.summary, envelope: { envelope_volume_m3: 3900 } };
+  service.summary = { ...service.summary, envelope: { mesh_file: "export.ply", envelope_volume_m3: 3900 } };
   FakeWebSocket.opened[1].send({ type: "run_finished", stages: ["exporting"], files: [] });
   await settle();
   expect(buildPart("Envelope").querySelector(".number-tile-value")!.textContent).toBe("3 900 m³");
@@ -496,4 +496,16 @@ test("Carving's Build envelope and massing opens the step, builds both parts, sh
   expect(buildPart("Envelope").querySelector(".envelope-results")).toBeNull();
   openStep("Carving");
   expect(stepRow("Envelope and massing").querySelector(".step-summary")!.textContent).toBe("Not built yet");
+});
+
+test("the 3D view and Export use the envelope file that was built, not a format stored since without a build", async () => {
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "out_of_date", massing: "missing" };
+  service = new FakeService(built, CARVING);
+  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: null };          // export.ply on disk
+  await openWorkspace(project(built, { final_mesh_format: "obj" }));                  // OBJ stored while Carving was locked
+  const envelopeRequests = service.requests.filter((request) => request.includes("/run/files/exporting/"));
+  expect(envelopeRequests).toEqual(["GET /run/files/exporting/export.ply"]);
+  openStep("Export");
+  const envelopeDownload = container().querySelector(".download-list li")!;
+  expect(envelopeDownload.textContent).toBe("Carved envelope (PLY)Out of dateBuilt as PLY; the next envelope build writes OBJ.");
 });

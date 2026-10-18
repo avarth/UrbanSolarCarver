@@ -10,7 +10,7 @@ import { loadMesh } from "../viewer/loaders";
 import type { Point3 } from "../viewer/local_origin";
 import { decodeScorePoints, type ScorePoints } from "../viewer/score_points_decoder";
 import type { PlatesFile } from "./EnvelopeAndMassingStep";
-import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH } from "./ExportStep";
+import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH, meshFormatOf } from "./ExportStep";
 import { stagesDone, type RunRecord } from "./run_state";
 import type { PipelineStage } from "./step_summaries";
 
@@ -49,22 +49,20 @@ interface RunResultsSource {
   project: string;
   /** The local origin the meshes are drawn in; a new one reloads them. */
   origin: Point3;
-  /** The mesh file format of the envelope, as last saved. */
-  meshFormat: string;
   /** The stages with results when the project opens. */
   stagesWithResults: readonly string[];
   onServiceProblem: (error: unknown) => void;
 }
 
 /** The results, and the function that fetches again what the given stages write; its promise resolves once every fetch has ended. */
-export function useRunResults({ token, project, origin, meshFormat, stagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
+export function useRunResults({ token, project, origin, stagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
-  const source = useRef({ token, origin, meshFormat, onServiceProblem });
-  source.current = { token, origin, meshFormat, onServiceProblem };
+  const source = useRef({ token, origin, onServiceProblem });
+  source.current = { token, origin, onServiceProblem };
 
   const fetchResult = (name: ResultName): Promise<RunResults[ResultName]> => {
-    const { token: currentToken, origin: currentOrigin, meshFormat: currentFormat } = source.current;
+    const { token: currentToken, origin: currentOrigin } = source.current;
     switch (name) {
       case "summary":
         return getRunSummary(currentToken, project);
@@ -73,7 +71,11 @@ export function useRunResults({ token, project, origin, meshFormat, stagesWithRe
       case "skyDome":
         return getSkyPatches(currentToken, project);
       case "envelope":
-        return loadMesh(runFileUrl(project, exportedMeshPath(currentFormat)), currentToken, currentFormat, currentOrigin);
+        // The file exporting wrote, which the run summary names: a format chosen since without a build has no file yet.
+        return getRunSummary(currentToken, project).then((summary) => {
+          const meshFile = summary.envelope?.mesh_file;
+          return meshFile === undefined ? null : loadMesh(runFileUrl(project, exportedMeshPath(meshFile)), currentToken, meshFormatOf(meshFile), currentOrigin);
+        });
       case "massing":
         return loadMesh(runFileUrl(project, MASSING_OBJ_PATH), currentToken, "obj", currentOrigin);
       case "platesFile":

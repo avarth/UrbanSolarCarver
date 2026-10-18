@@ -122,8 +122,9 @@ class CarvingSummary(BaseModel):
 
 
 class EnvelopeSummary(BaseModel):
-    """The numbers exporting reports for the envelope part of the envelope and massing screen."""
-    envelope_volume_m3: float       # the voxels the envelope mesh was built from, after its cleanup
+    """What exporting left for the envelope part of the envelope and massing screen and for Export."""
+    mesh_file: str                      # the mesh in the run's exporting folder, in the format it was built in
+    envelope_volume_m3: float | None    # the voxels the mesh was built from, after its cleanup; None when their size is not known
 
 
 class MassingSummary(BaseModel):

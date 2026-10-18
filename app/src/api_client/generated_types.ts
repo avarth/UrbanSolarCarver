@@ -538,11 +538,13 @@ export interface components {
         };
         /**
          * EnvelopeSummary
-         * @description The numbers exporting reports for the envelope part of the envelope and massing screen.
+         * @description What exporting left for the envelope part of the envelope and massing screen and for Export.
          */
         EnvelopeSummary: {
+            /** Mesh File */
+            mesh_file: string;
             /** Envelope Volume M3 */
-            envelope_volume_m3: number;
+            envelope_volume_m3: number | null;
         };
         /**
          * ErrorDetailReply

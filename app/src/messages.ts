@@ -280,6 +280,9 @@ export const messages = {
 
   // Export (5.7)
   envelopeMeshDownload: (formatName: string) => `Carved envelope (${formatName})`,
+  // Beside the envelope file when the format chosen since was stored without a build (Carving was locked).
+  envelopeBuiltInOtherFormat: (builtFormatName: string, chosenFormatName: string) =>
+    `Built as ${builtFormatName}; the next envelope build writes ${chosenFormatName}.`,
   massingObjDownload: "Building massing (OBJ)",
   massingJsonDownload: "Building massing data (JSON)",
   settingsDownload: "Settings (config.yaml)",
