@@ -92,6 +92,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
   balance temperature, although the engine reads it on both sides (cold hours
   below `balance_temperature - balance_offset`, warm hours above
   `balance_temperature + balance_offset`).
+- **A new weather file asks about the analysis period.** Adding or replacing
+  the weather file shows one notice in Settings with **Keep** beside the
+  offer: in Solar usefulness the cold period of the new file, when its dates
+  differ from the period's (the hours kept); in Solar time-based and Solar
+  energy, when the new file is in the other hemisphere, the same dates six
+  months on (30 Apr gives 31 Oct). Before, a new weather file left the period
+  as it was without a word. The project detail and the reply to an input file
+  change carry `weather_latitude`, read from the weather file's `LOCATION`
+  line.
+- **The heating season preset follows the hemisphere** of the weather file:
+  1 April to 31 October in the south, 1 October to 30 April in the north and
+  without a weather file.
 
 ### Changed (massing)
 

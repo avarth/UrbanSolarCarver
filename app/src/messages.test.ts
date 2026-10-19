@@ -40,3 +40,9 @@ test("dates and lists for the 3D view", () => {
   expect(listedWithAnd(["10", "12", "14"])).toBe("10, 12 and 14");
   expect(listedWithAnd(["21 Dec"])).toBe("21 Dec");
 });
+
+test("the notice of a new weather file names its location when the file has one", () => {
+  expect(messages.weatherChangeColdPeriod(null, messages.periodDates(5, 3, 9, 20), messages.periodDates(9, 30, 5, 15)))
+    .toBe("The cold period of the new weather file is 3 May to 20 Sep; the analysis period reads 30 Sep to 15 May.");
+  expect(messages.periodDates(12, 21, 12, 22)).toBe("21 to 22 Dec");
+});

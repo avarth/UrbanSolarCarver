@@ -54,6 +54,7 @@ class InputFilesReply(BaseModel):
     files: list[InputFileInfo]  # sorted by name
     joined_bounds: list[list[float]] | None   # [[xmin, ymin, zmin], [xmax, ymax, zmax]] of the joined max volume, whatever the role
     weather_location: str | None              # "<city>, <country>" from the weather file, None without one
+    weather_latitude: float | None            # degrees north, negative in the southern hemisphere; None without a usable weather file
 
 
 class ProjectSummary(BaseModel):
@@ -260,6 +261,7 @@ class ProjectDetail(BaseModel):
     inputs: dict[str, list[InputFileInfo]]      # role -> files, for every role
     joined_bounds: list[list[float]] | None     # as in InputFilesReply
     weather_location: str | None
+    weather_latitude: float | None              # as in InputFilesReply
     stage_status: StageStatusReply
     grid_plan: GridPlanReply | None             # of the stored settings, as a save would plan it; None without a max volume
 

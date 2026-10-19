@@ -240,6 +240,29 @@ def test_weather_location_comes_from_the_epw_header(tmp_path):
     assert err.value.status_code == 422
 
 
+def test_weather_latitude_comes_from_the_epw_location_line(tmp_path):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    assert store.weather_latitude("p") is None
+    reply = store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())   # LOCATION,...,39.74,-105.18,...
+    assert reply.weather_latitude == 39.74
+    assert store.weather_latitude("p") == 39.74
+
+
+@pytest.mark.parametrize("location_line, expected_latitude", [
+    (b"LOCATION,Brisbane,QLD,AUS,IWEC,945780,-27.38,153.10,10.0,5.0", -27.38),
+    (b"LOCATION,Brisbane,QLD,AUS,IWEC,945780, -27.38 ,153.10,10.0,5.0", -27.38),
+    (b"LOCATION,Brisbane,QLD,AUS,IWEC,945780,not a number,153.10,10.0,5.0", None),
+    (b"LOCATION,Brisbane,QLD,AUS,IWEC,945780,-127.0,153.10,10.0,5.0", None),     # outside -90 to 90
+    (b"LOCATION,Brisbane,QLD,AUS,IWEC,945780", None),                            # no latitude field
+    (b"DESIGN CONDITIONS,1", None),
+])
+def test_weather_latitude_is_none_without_a_usable_latitude_field(tmp_path, location_line, expected_latitude):
+    store = ProjectStore(tmp_path); store.create("p", "time-based")
+    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    (tmp_path / "p/inputs/weather.epw").write_bytes(location_line + b"\n" + b"".join(_golden_epw_lines()[1:]))
+    assert store.weather_latitude("p") == expected_latitude
+
+
 def _golden_epw_lines():
     return GOLDEN_EPW.read_bytes().splitlines(keepends=True)
 

@@ -677,6 +677,8 @@ export interface components {
             joined_bounds: number[][] | null;
             /** Weather Location */
             weather_location: string | null;
+            /** Weather Latitude */
+            weather_latitude: number | null;
         };
         /**
          * MassingSummary
@@ -754,6 +756,8 @@ export interface components {
             joined_bounds: number[][] | null;
             /** Weather Location */
             weather_location: string | null;
+            /** Weather Latitude */
+            weather_latitude: number | null;
             stage_status: components["schemas"]["StageStatusReply"];
             grid_plan: components["schemas"]["GridPlanReply"] | null;
         };
