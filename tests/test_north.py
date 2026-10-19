@@ -6,6 +6,7 @@ places north matters: sun vectors (time-based), sky matrices
 (irradiance/benefit), and the tilted-plane octant lookup.
 """
 import os
+import types
 from pathlib import Path
 
 import numpy as np
@@ -48,12 +49,20 @@ def test_sky_matrix_receives_negated_north(monkeypatch):
 
     class FakeSkyMatrix:
         @classmethod
-        def from_epw(cls, epw_path, hoys=None, north=0, high_density=False,
-                     ground_reflectance=0.2):
+        def from_components(cls, location, direct_normal_irradiance,
+                            diffuse_horizontal_irradiance, hoys=None, north=0,
+                            high_density=False, ground_reflectance=0.2):
             captured["north"] = north
             return FakeSky()
 
+    class FakeWeatherFile:
+        @staticmethod
+        def solar_irradiance_wea():
+            return types.SimpleNamespace(location=None, direct_normal_irradiance=None,
+                                         diffuse_horizontal_irradiance=None)
+
     monkeypatch.setattr(sp, "_sky_matrix_cls", FakeSkyMatrix)
+    monkeypatch.setattr(sp, "read_weather_file", lambda path: FakeWeatherFile())
     monkeypatch.setattr(os.path, "isfile", lambda p: True)
     weights = sp.compute_EPW_based_weights(
         "irradiance", "dummy.epw", [12], torch.device("cpu"), north=90.0,

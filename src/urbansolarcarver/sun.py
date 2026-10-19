@@ -8,75 +8,24 @@ drops positions at or below ``min_altitude`` degrees, and returns an
 (N, 3) float32 tensor of unit vectors pointing from the model toward the
 sun, in model coordinates.
 
-Parsed EPW files (``_load_epw_file``) and Sunpath objects
-(``_initialize_sunpath``) are cached, so repeated calls, for example in
-the daemon, do not re-read or rebuild them.
+EPW files are read through the cached ``weather_file.read_weather_file``
+and Sunpath objects (``_initialize_sunpath``) are cached, so repeated
+calls, for example in the daemon, do not re-read or rebuild them.
 
 ``sample_period`` turns the analysis period of the preprocessing settings
 into the Ladybug ``DateTime`` list the sun positions are computed for.
 """
 
-import os
 from functools import lru_cache
 from typing import Sequence
 import torch
 from ladybug.analysisperiod import AnalysisPeriod
 from ladybug.dt import DateTime
-from ladybug.epw import EPW
 from ladybug.sunpath import Sunpath
 
 from .run_context import report_issue
+from .weather_file import read_weather_file
 from .stage_settings import PreprocessingSettings
-
-@lru_cache(maxsize=16)
-def _load_epw_file(weather_file_path: str, mtime_ns: int, size: int) -> EPW:
-    """Parse an EPW file (cached).
-
-    The modification time and size are part of the cache key, so an EPW
-    replaced on disk while the daemon runs is read again.
-
-    Args:
-      weather_file_path: Normalised absolute path of the EPW file.
-      mtime_ns, size: File modification time (ns) and size (bytes), used
-        only as part of the cache key.
-
-    Raises:
-      ValueError: If the path is empty or not a string.
-      FileNotFoundError: If no file exists at the path.
-      IOError: If the EPW reader fails to parse the file.
-
-    Returns:
-      A Ladybug EPW object with weather and location attributes.
-    """
-    if not isinstance(weather_file_path, str) or not weather_file_path:
-        raise ValueError(f"_load_epw_file: invalid path: {weather_file_path!r}")
-    if not os.path.isfile(weather_file_path):
-        raise FileNotFoundError(f"_load_epw_file: file not found: {weather_file_path}")
-    try:
-        epw_object = EPW(weather_file_path)
-    except Exception as err:
-        raise IOError(
-            f"_load_epw_file: failed to load EPW '{weather_file_path}': {err}"
-        ) from err
-    return epw_object
-
-
-def _load_epw(weather_file_path: str) -> EPW:
-    """Normalize the file path, then call the cached loader.
-
-    Normalizing makes different spellings of one path (for example
-    forward and back slashes on Windows) share a single cache entry.
-
-    Raises ValueError for an empty or non-string path and
-    FileNotFoundError if the file does not exist.
-    """
-    if not isinstance(weather_file_path, str) or not weather_file_path:
-        raise ValueError(f"_load_epw: invalid path: {weather_file_path!r}")
-    canonical = os.path.normpath(os.path.abspath(weather_file_path))
-    if not os.path.isfile(canonical):
-        raise FileNotFoundError(f"_load_epw: file not found: {weather_file_path}")
-    stat = os.stat(canonical)
-    return _load_epw_file(canonical, stat.st_mtime_ns, stat.st_size)
 
 @lru_cache(maxsize=None)
 def _initialize_sunpath(
@@ -139,8 +88,7 @@ def get_sun_vectors(
       RuntimeError: If the sun position calculation fails.
     """
     # Step 1: Load EPW and extract geographic info
-    weather_data = _load_epw(epw_file)
-    location_info = weather_data.location
+    location_info = read_weather_file(epw_file).location
 
     # Step 2: Validate the list of DateTime inputs
     if not hasattr(date_list, '__iter__'):

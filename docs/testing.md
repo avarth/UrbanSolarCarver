@@ -1,6 +1,6 @@
 # Running the tests
 
-The Python suite (about 1320 tests in `tests/`) and the front-end suite (about 480 vitest tests in `app/`) run locally:
+The Python suite (about 1330 tests in `tests/`) and the front-end suite (about 480 vitest tests in `app/`) run locally:
 there is no CI, because the engine runs on the GPU and hosted runners have none. Tests marked `gpu` are skipped
 automatically without CUDA.
 
@@ -17,8 +17,8 @@ Times are wall times on an 8-core / 16-thread AMD Zen 2 with an RTX 3060, measur
 |---|---|---|---|
 | 0 | While editing | `python -m pytest tests/test_floor_plates.py -m "not slow"` | seconds |
 | 1 | After every change | `python -m pytest -m "not slow" -n 8` | about 45 s |
-| 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 80 s |
-| 3 | Before merging | `python -m pytest -n 8` | about 115 s |
+| 2 | Before each commit | `python -m pytest -m "not sweep" -n 8` | about 65 s |
+| 3 | Before merging | `python -m pytest -n 8` | about 100 s |
 
 When `app/` changed, also run the front-end checks of the same tier (see below): `npm test` takes about 12 s,
 `npm run typecheck` 5 s and `npm run build` 7 s.
@@ -75,7 +75,7 @@ npm test && npm run build
 python -m pytest -n 8
 ```
 
-The whole suite, sweeps included. From time to time, and before a release, run it without `-n` (about 6 minutes): a
+The whole suite, sweeps included. From time to time, and before a release, run it without `-n` (about 5 minutes): a
 serial run catches a test that only passes after another one has run. Also run, when they apply:
 
 - after a change to the engine's numerics, the randomised Monte Carlo sweep: `python tests/montecarlo.py` (see its
@@ -104,7 +104,7 @@ the new value after a deliberate change of the example files or of the code that
 ## Running in parallel
 
 `-n 8` starts 8 worker processes and hands out single tests to them; each worker pays about 8 s of imports and
-collection once. Tests must not depend on one another or on a shared file: each uses its own `tmp_path`, and the
-fixtures in `tests/conftest.py` give each worker its own Ladybug weather folder (ladybug_radiance writes its sky
-matrix input to a fixed file there, which two processes would otherwise share). When another checkout is testing on
+collection once. Tests must not depend on one another or on a shared file: each uses its own `tmp_path`. The engine computes each
+sky matrix in a temporary folder of its own, so workers computing sky matrices at the same time do not share
+Ladybug's weather folder. When another checkout is testing on
 the same machine at the same time, `-n 4` leaves it room.

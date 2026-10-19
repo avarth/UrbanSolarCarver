@@ -65,8 +65,9 @@ UrbanSolarCarver/
 
 | File | Purpose |
 |------|---------|
-| `sky_patches.py` | Tregenza hemisphere subdivision (145 patches) used by the weighted carving modes. **`fetch_tregenza_patch_directions`**: the 145 unit direction vectors. **`fetch_tregenza_patch_solid_angles`**: the solid angle (sr) of each patch. **`compute_EPW_based_weights`**: for `irradiance` and `benefit`, builds a Ladybug `SkyMatrix` (Perez all-weather model) from the EPW's direct-normal and diffuse-horizontal irradiance over the analysis period; benefit keeps only the hours below the balance point, or scales each hour by simulated weights. For `daylight`, returns the CIE standard overcast luminance distribution (brightest at the zenith, no EPW). **`compute_radiative_cooling_weights`**: long-wave cooling potential per patch from the Martin-Berdahl clear-sky emissivity with Bliss angular attenuation, for a horizontal surface; patches near the zenith get higher weights than those near the horizon. |
+| `sky_patches.py` | Tregenza hemisphere subdivision (145 patches) used by the weighted carving modes. **`fetch_tregenza_patch_directions`**: the 145 unit direction vectors. **`fetch_tregenza_patch_solid_angles`**: the solid angle (sr) of each patch. **`compute_EPW_based_weights`**: for `irradiance` and `benefit`, builds a Ladybug `SkyMatrix` (Perez all-weather model) from the EPW's direct-normal and diffuse-horizontal irradiance over the analysis period, each computation in a temporary folder of its own; benefit keeps only the hours below the balance point, or scales each hour by simulated weights. For `daylight`, returns the CIE standard overcast luminance distribution (brightest at the zenith, no EPW). **`compute_radiative_cooling_weights`**: long-wave cooling potential per patch from the Martin-Berdahl clear-sky emissivity with Bliss angular attenuation, for a horizontal surface; patches near the zenith get higher weights than those near the horizon. |
 | `sun.py` | Solar position vectors. **`get_sun_vectors`**: uses Ladybug's `Sunpath` with the location from the EPW header to return unit vectors toward the sun for each sampled date-time of the analysis period (`sun_steps_per_hour` per hour), dropping positions below `min_altitude` and rotating by `north_deg`. **`sample_period`** builds the analysis date/time list with Ladybug's `AnalysisPeriod`. |
+| `weather_file.py` | **`read_weather_file`**: parses an EPW file with Ladybug once per path, modification time and size, and returns a `ParsedWeatherFile` that hands out copies (the location, the hourly dry-bulb temperatures, a Wea of the solar irradiance), so one caller's change cannot reach another. Used by the sun vectors, sky weights, cold period, simulated weights and the service's sun path. |
 | `scoring.py` | Sky-patch weight dispatch and threshold selection. **`get_weights`**: calls the weighting function for the selected mode (Perez irradiance, heating benefit, CIE daylight, or radiative cooling). **`carve_fraction_threshold`**: the score cutoff above which the voxels hold a given fraction of the total score mass (two-pass weighted histogram, O(N)). **`headtail_threshold`**: Jiang (2013) head/tail breaks for heavy-tailed score distributions. Inside a `CarverSession`, `get_weights` is cached, keyed by every argument and by the contents of the EPW and simulated-weights files. |
 | `simulated_weights.py` | Simulated benefit weights (opt-in via `simulated_weights_path`). Implements the ISO 13790 Annex C hourly thermal model ("5R1C": five conductances, one lumped mass capacitance, one zone) in NumPy, and derives the hourly *marginal* benefit/harm of solar gain by perturbation: for each hour of the year, one watt of solar gain is added and removed and the change in annual heating and cooling demand is attributed to that hour (`benefit[t]` / `harm[t]`, both in [0, 1]; all 17,521 year-simulations, the base run plus two per hour, march as one vectorized batch). **`generate_simulated_weights`**: EPW + archetype → `simulated_weights.json` artifact with provenance metadata plus a `.png` heatmap preview. **`ZoneParams.from_archetype`** builds the thermal network from about 10 physical inputs; **`expand_shoebox`** derives all areas from a width/length/height + per-facade window-to-wall ratio shorthand. Validated against ETH's RC_BuildingSimulator (`tests/data/oracle_5r1c_reference.json`). Design note: `design/simulated-weights.md`. |
 
@@ -177,17 +178,18 @@ tests/
 ├── test_sequencer.py        run_pipeline: produce, start_from, collected issues, progress, cancel
 ├── test_setup_env.py        setup_env.py: choosing the PyTorch wheel index for the driver
 ├── test_session.py          CarverSession caching and the session_cache decorator
+├── test_sky_matrix_folder.py  Sky matrices in their own temporary folder: concurrent runs, nothing left behind
 ├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
 │                            steady-state closure, attribution, shoebox expansion, artifact I/O
 ├── test_stage_chain.py      Run IDs, upstream checks, relative manifest paths
 ├── test_stage_outputs.py    Outputs cleared before a stage, manifest written last, run report sections
 ├── test_stage_settings.py   Per-stage settings models and stages_to_rerun
-├── test_sun.py              Sun and weather input: the EPW cache
 ├── test_surface_sampling.py  Test-surface sampling: coplanarity, boundary samples, edge taper, degenerate faces
 ├── test_typologies.py       End-to-end carving checks on procedural urban typologies
 ├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
 ├── test_util.py             Diagnostics helpers and the grid memory estimate
 ├── test_version.py          The version in pyproject.toml, the package, the CLI and CITATION.cff
 ├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
-└── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
+├── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
+└── test_weather_file.py     The cached EPW reader: re-read on a changed file, copies for each caller
 ```
