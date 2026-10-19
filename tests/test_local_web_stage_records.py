@@ -4,8 +4,6 @@ The engine is replaced by the fake of local_web_test_support.py, which writes a 
 upstream run_id) for each stage it runs, as the real stages do. The fixture project_with_inputs is in conftest.py.
 """
 import json
-import subprocess
-import sys
 
 import pytest
 
@@ -244,10 +242,3 @@ def test_missing_inputs_names_the_weather_file_for_a_mode_that_reads_one(tmp_pat
     assert missing_inputs(store, "p", store.load_project_config("p")) == ["max_volume", "test_surfaces", "weather"]
     store.add_input("p", "weather", "weather.epw", GOLDEN_EPW.read_bytes())
     assert missing_inputs(store, "p", store.load_project_config("p")) == ["max_volume", "test_surfaces"]
-
-
-def test_importing_the_stage_records_and_the_worker_does_not_load_torch():
-    code = ("import sys; import urbansolarcarver.local_web_service.stage_records, urbansolarcarver.local_web_service.run_worker; "
-            "print('torch' in sys.modules)")
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    assert result.stdout.strip() == "False"

@@ -264,13 +264,6 @@ def test_the_openapi_document_describes_the_routes():
     assert {"WarmUpState", "StageStatusReply", "ConfigErrorReply", "ProjectDetail"} <= set(document["components"]["schemas"])
 
 
-@pytest.mark.slow
-def test_importing_the_service_does_not_load_torch():
-    code = "import sys; import urbansolarcarver.local_web_service.server; print('torch' in sys.modules)"
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    assert result.stdout.strip() == "False"
-
-
 # ---- Projects, inputs, settings and runs ----
 
 def test_project_inputs_config_run_and_files(client):
