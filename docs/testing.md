@@ -104,7 +104,7 @@ the new value after a deliberate change of the example files or of the code that
 ## Running in parallel
 
 `-n 8` starts 8 worker processes and hands out single tests to them; each worker pays about 8 s of imports and
-collection once. Tests must not depend on one another or on a shared file: each uses its own `tmp_path`, and the
-fixtures in `tests/conftest.py` give each worker its own Ladybug weather folder (ladybug_radiance writes its sky
-matrix input to a fixed file there, which two processes would otherwise share). When another checkout is testing on
+collection once. Tests must not depend on one another or on a shared file: each uses its own `tmp_path`. The engine computes each
+sky matrix in a temporary folder of its own, so workers computing sky matrices at the same time do not share
+Ladybug's weather folder. When another checkout is testing on
 the same machine at the same time, `-n 4` leaves it room.

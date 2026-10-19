@@ -29,6 +29,8 @@ exposure scores. The Tregenza vectors and solid angles are also usable on
 their own for diagnostics or custom weighting schemes.
 """
 
+import tempfile
+
 import numpy as np
 import torch
 
@@ -62,6 +64,34 @@ def _load_sky_matrix() -> type:
         from ladybug_radiance.skymatrix import SkyMatrix
         _sky_matrix_cls = SkyMatrix
     return _sky_matrix_cls
+
+def _summed_patch_irradiance(sky_matrix, expected_patches: int, dtype) -> np.ndarray:
+    """Direct plus diffuse cumulative irradiance per sky patch [kWh/m²] of a
+    Ladybug SkyMatrix, computed in a temporary folder of its own.
+
+    Ladybug writes the sky's Wea file to ``<Ladybug weather
+    folder>/sky_matrices/<city>.wea`` and runs Radiance's gendaymtx on it.
+    Every process on the machine shares that path, so two computations for
+    the same city at the same time (the browser service and a CLI or
+    Grasshopper run, or parallel tests) could read each other's Wea.  A new
+    folder per computation, removed afterwards, gives each its own file;
+    the values do not depend on where the file is written.
+
+    Negative values (gendaymtx numerical noise) are clipped to 0 in
+    ``dtype`` before the sum.  Raises RuntimeError if Ladybug returns a
+    different patch count than ``expected_patches``.
+    """
+    with tempfile.TemporaryDirectory(prefix="usc_sky_matrix_") as folder:
+        sky_matrix.folder = folder
+        direct = np.clip(np.asarray(sky_matrix.direct_values, dtype=dtype), 0.0, None)
+        diffuse = np.clip(np.asarray(sky_matrix.diffuse_values, dtype=dtype), 0.0, None)
+    summed = direct + diffuse
+    if summed.shape[0] != expected_patches:
+        raise RuntimeError(
+            f"SkyMatrix returned {summed.shape[0]} patches, "
+            f"expected {expected_patches}"
+        )
+    return summed
 
 @session_cache("{args[0]}")
 def fetch_tregenza_patch_directions(
@@ -298,15 +328,7 @@ def _scaled_cumulative_matrix(epw_path: str, hourly_weights, lb_north: float,
     SkyMatrix = _load_sky_matrix()
     sky = SkyMatrix(Wea(wea.location, dni, dhi), north=lb_north,
                     high_density=False)
-    d = np.clip(np.asarray(sky.direct_values, dtype=np.float64), 0.0, None)
-    f = np.clip(np.asarray(sky.diffuse_values, dtype=np.float64), 0.0, None)
-    out = d + f
-    if out.shape[0] != expected_patches:
-        raise RuntimeError(
-            f"SkyMatrix returned {out.shape[0]} patches, "
-            f"expected {expected_patches}"
-        )
-    return out
+    return _summed_patch_irradiance(sky, expected_patches, np.float64)
 
 
 # Main function: compute weights per sky patch
@@ -532,13 +554,7 @@ def compute_EPW_based_weights(
             north=lb_north,
             high_density=False,
         )
-        direct  = np.clip(np.asarray(sky.direct_values,  dtype=np.float32), 0.0, None)
-        diffuse = np.clip(np.asarray(sky.diffuse_values, dtype=np.float32), 0.0, None)
-        weights = direct + diffuse
-        if weights.shape[0] != P:
-            raise RuntimeError(
-                f"SkyMatrix returned {weights.shape[0]} patches, expected {P}"
-            )
+        weights = _summed_patch_irradiance(sky, P, np.float32)
         return torch.from_numpy(weights).to(device)
 
     if key == 'benefit':
@@ -625,19 +641,10 @@ def compute_EPW_based_weights(
         def _cumulative_patch_matrix(sel_hoys):
             # Ladybug's SkyMatrix already includes solid angles in the
             # kWh/m² values, no Ωᵢ multiply needed (same as irradiance).
-            # Clip guards against small negative values from gendaymtx
-            # numerical noise; all physical values are non-negative here.
             sky = SkyMatrix.from_epw(
                 epw_path, hoys=sel_hoys, north=lb_north, high_density=False,
             )
-            d = np.clip(np.asarray(sky.direct_values,  dtype=np.float32), 0.0, None)
-            f = np.clip(np.asarray(sky.diffuse_values, dtype=np.float32), 0.0, None)
-            w = d + f
-            if w.shape[0] != P:
-                raise RuntimeError(
-                    f"SkyMatrix returned {w.shape[0]} patches, expected {P}"
-                )
-            return w
+            return _summed_patch_irradiance(sky, P, np.float32)
 
         weights_np = _cumulative_patch_matrix(cold_hoys)
 

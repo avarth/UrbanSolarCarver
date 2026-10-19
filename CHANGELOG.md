@@ -270,6 +270,21 @@ versioning follows [Semantic Versioning](https://semver.org/).
   means.
 - **Mode tooltips** no longer stay open and swallow clicks.
 
+### Fixed (sky matrices)
+
+- **Each sky matrix is computed in a temporary folder of its own.**
+  ladybug_radiance writes the Wea file of every sky matrix to
+  `<Ladybug weather folder>/sky_matrices/<city>.wea` and runs gendaymtx on
+  it, one file per city for every process on the machine. Two irradiance
+  or benefit computations for the same weather file at the same time (the
+  browser service and a CLI or Grasshopper run, two checkouts testing)
+  could read each other's file: two threads computing two analysis periods
+  of the Golden EPW got wrong weights in 9 rounds of 10. The engine now
+  sets the folder of each `SkyMatrix` to a new temporary folder and removes
+  it afterwards; the weights are bit for bit the same. The per-process
+  weather folder that `tests/conftest.py` set up for the tests is removed,
+  since the engine no longer writes to that folder.
+
 ### Added (test markers)
 
 - **`slow` and `gpu` pytest markers**, registered in `pyproject.toml`.
