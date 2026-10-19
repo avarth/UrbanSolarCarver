@@ -7,7 +7,7 @@ import { plainModeName } from "../steps/step_summaries";
 import type { ColdPeriodState } from "./analysis_period";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
-  ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, fromDisplayValue, settingsOfField, settingView, shownSliderOf, thresholdIsShadowToleratedIn,
+  ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, fromDisplayValue, settingsOfField, shownSliderOf, thresholdIsShadowToleratedIn,
   toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
 } from "./presentation";
 import { SettingTooltip } from "./SettingTooltip";
@@ -190,16 +190,11 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       break;
     case "balance_temperature": {
       const [, deadBandName] = BALANCE_TEMPERATURE_FIELDS;
-      const deadBandView = settingView(deadBandName, form.mode);
       const deadBand = shownValue(form, deadBandName);
       controlElement = (
         <BalanceTemperatureSlider {...control} balanceTemperature={typeof shown === "number" ? shown : null}
-                                  deadBand={typeof deadBand === "number" ? deadBand : null} track={view.slider!} deadBandStep={deadBandView.slider!.step}
-                                  settingsWithError={BALANCE_TEMPERATURE_FIELDS.filter((name) => form.fieldErrors[name] !== undefined)}
-                                  balanceTemperatureRange={rangeOf(property)} deadBandRange={rangeOf(form.schemaProperties[deadBandName])} unit={unit}
-                                  deadBandLabel={deadBandView.label} onChange={onChange}
-                                  deadBandInfo={<SettingTooltip settingLabel={deadBandView.label} help={deadBandView.help} configName={deadBandName}
-                                                                defaultText={defaultTextOf(deadBandView, form, isShadowTolerated)} />} />
+                                  deadBand={typeof deadBand === "number" ? deadBand : null} track={view.slider!} unit={unit} onChange={onChange}
+                                  invalid={control.invalid || BALANCE_TEMPERATURE_FIELDS.some((name) => form.fieldErrors[name] !== undefined)} />
       );
       break;
     }

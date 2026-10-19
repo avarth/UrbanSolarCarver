@@ -378,9 +378,9 @@ export const messages = {
   carveAmountNotUsed: (ruleName: string) =>
     `Carve amount is not used with the carving rule ${ruleName}. Choose Carve amount under More carving settings to use it.`,
   scoreCutoffValue: "Score cutoff value",
-  // The balance temperature slider (R2 4.2): its two handles, and the band between them.
-  balanceTemperatureHandle: "Balance temperature",
-  deadBandLowerEndHandle: "Lower end of the dead band",
+  // The balance temperature slider: the two ends of the dead band, and the band between them.
+  balanceLowerEnd: "Counts below",
+  balanceUpperEnd: "Too warm above",
   deadBandOnTrack: "Dead band",
 
   // The 3D view (8)

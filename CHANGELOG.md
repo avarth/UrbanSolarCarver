@@ -83,6 +83,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ring. The compass ring, the sun path and the sky dome are sized to
   everything loaded, not to the maximum volume alone.
 
+### Changed (browser UI)
+
+- **Balance temperature is a range.** Its two handles are the two ends of
+  the dead band, "Counts below" and "Too warm above", each moved or typed on
+  its own; the app sends the middle as `balance_temperature` and half the
+  width as `balance_offset`. The earlier slider drew the band only below the
+  balance temperature, although the engine reads it on both sides (cold hours
+  below `balance_temperature - balance_offset`, warm hours above
+  `balance_temperature + balance_offset`).
+
 ### Changed (massing)
 
 - **Facades within half a voxel of straight are straight.** Footprints cut
