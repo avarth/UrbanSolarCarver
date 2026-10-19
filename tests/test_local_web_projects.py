@@ -461,6 +461,9 @@ def test_a_project_without_test_surfaces_has_no_joined_test_surface_file_to_rebu
 @pytest.mark.slow
 def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(example_project_to_read):
     _example, joined_panels = example_project_to_read("multiple_buildings")
+    # Counts of the packaged district files at the default 1 m grid_step. After a deliberate change of those files or of
+    # the surface sampling, check that every facade is still there and take the new counts from len(joined_panels) and
+    # the summed sample points.
     assert (len(joined_panels), sum(len(points) for points in joined_panels)) == (423, 138_641)
 
 
@@ -499,6 +502,8 @@ def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_th
 
     service_mask = np.load(store.open("block") / "run" / "thresholding" / "mask.npy")
     cli_mask = np.load(tmp_path / "cli_run" / "thresholding" / "mask.npy")
+    # The kept voxels of the packaged perimeter block with its example settings. After a deliberate change of the example
+    # files, its settings or the carving, rerun `usc run` on the example (as above) and take the new count from mask.npy.
     assert int((cli_mask > 0).sum()) == 150_679
     assert np.array_equal(service_mask, cli_mask)
 

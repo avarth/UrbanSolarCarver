@@ -76,6 +76,8 @@ include-package-data = true
 urbansolarcarver = ["ui_static/**/*", "example_projects/**/*"]
 
 [tool.pytest.ini_options]
+# A misspelt marker is an error, and every run lists its 15 slowest tests (see docs/testing.md).
+addopts = "--strict-markers --durations=15"
 markers = [
   "slow: takes seconds (end-to-end scenes, simulations, a daemon process); skip with -m 'not slow'",
   "sweep: exhaustive parameter sweeps and Monte Carlo seeds, also marked slow, run before merging; skip with -m 'not sweep'",

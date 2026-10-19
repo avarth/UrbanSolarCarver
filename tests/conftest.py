@@ -83,6 +83,31 @@ def project_with_inputs(tmp_path):
     return add_project_with_inputs(tmp_path)
 
 
+NOT_SLOW_LIMIT_SECONDS = 1.0
+_not_slow_tests_over_the_limit = []     # (seconds, test id), filled in the process that writes the terminal summary
+
+
+def pytest_runtest_logreport(report):
+    """Note each test outside ``slow`` whose body ran longer than NOT_SLOW_LIMIT_SECONDS.
+
+    With pytest-xdist the reports of the workers reach the controller too, so it notes them all.
+    """
+    if report.when == "call" and "slow" not in report.keywords and report.duration > NOT_SLOW_LIMIT_SECONDS:
+        _not_slow_tests_over_the_limit.append((report.duration, report.nodeid))
+
+
+def pytest_terminal_summary(terminalreporter, config):
+    """List the tests outside ``slow`` that ran over the limit: mark them slow or make them faster.
+
+    Times grow by about half under -n 8, so a test listed only in a parallel run may be fine on its own.
+    """
+    if hasattr(config, "workerinput") or not _not_slow_tests_over_the_limit:
+        return
+    terminalreporter.section(f"tests not marked slow that ran over {NOT_SLOW_LIMIT_SECONDS:g} s")
+    for seconds, nodeid in sorted(_not_slow_tests_over_the_limit, reverse=True):
+        terminalreporter.write_line(f"{seconds:6.2f}s  {nodeid}")
+
+
 def pytest_collection_modifyitems(config, items):
     """Skip the tests marked ``gpu`` when torch sees no CUDA GPU."""
     import torch
