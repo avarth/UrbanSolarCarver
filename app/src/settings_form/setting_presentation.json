@@ -57,9 +57,10 @@
       "step": "settings", "group": "Mode specific", "essential": ["benefit"], "modes": ["benefit"], "widget": "balance_temperature", "slider": { "low": 10, "high": 30, "step": 0.5 }
     },
     "balance_offset": {
-      "label": "Dead band", "unit": "°C",
-      "help": "Half the width of the dead band, on each side of the balance temperature: hours inside it count neither way.",
-      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["benefit"], "slider": { "low": 0, "high": 5, "step": 0.5 }
+      "label": "Balance temperature", "unit": "°C",
+      "help": "The two ends of the dead band. Sun counts in hours colder than the lower end; with harm counted, hours warmer than the upper end count against it. The middle is the balance temperature: about 12 °C for offices, 18 °C for homes.",
+      "step": "settings", "group": "Mode specific", "essential": ["benefit"], "modes": ["benefit"], "widget": "balance_temperature",
+      "slider": { "low": 0, "high": 5, "step": 0.5 }
     },
     "include_harm": {
       "label": "Subtract summer overheating (experimental)", "unit": "on/off",

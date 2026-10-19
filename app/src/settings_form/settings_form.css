@@ -149,8 +149,9 @@
 
 .setting-slider-control { align-self: stretch; flex-wrap: nowrap; }
 
-/* The balance temperature (R2 4.2): two handles on one track, the dead band between them in the accent colour and named above
-   it. The two sliders lie over each other; only their handles take the pointer, so each handle can be dragged where it is. */
+/* The balance temperature (R2 4.2): two handles on one track, the two ends of the dead band, which lies on both sides of the
+   balance temperature (its middle); the band between them is in the accent colour and named above it. The two sliders lie over
+   each other; only their handles take the pointer, so each handle can be dragged where it is. */
 .balance-slider { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); align-self: stretch; }
 
 .balance-track {
@@ -210,7 +211,13 @@
 .balance-handle::-moz-range-track { background: transparent; }
 .balance-handle::-webkit-slider-thumb { margin-top: 0; pointer-events: auto; cursor: pointer; }
 .balance-handle::-moz-range-thumb { pointer-events: auto; cursor: pointer; }
+/* The lower handle comes first in the page; where the two lie on one spot it is lifted above the upper one. */
 .balance-handle-on-top { z-index: 1; }
+/* Without harm counted the upper end does nothing: its handle, its number field and the note beside it are muted. */
+.balance-handle-muted::-webkit-slider-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+.balance-handle-muted::-moz-range-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+.balance-end-muted .setting-label, .balance-end-muted .setting-number, .balance-end-note { color: var(--colour-muted); }
+.balance-end-note { font-size: var(--text-secondary); }
 
 /* Both sliders span the whole track, so the focus mark of tokens.css would ring the whole overlay: each handle carries its own
    instead, the same 2 px accent ring around the handle that has the focus (UX 12). */

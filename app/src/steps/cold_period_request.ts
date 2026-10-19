@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import { getColdPeriod, serviceProblemOf, failureTextOf } from "../api_client/client";
 import { shownValue, type FormState } from "../settings_form/form_state";
+import { withoutFloatingPointNoise } from "../settings_form/widgets/BalanceTemperatureSlider";
 import type { ColdPeriodState } from "../settings_form/analysis_period";
 
 export type { ColdPeriodState } from "../settings_form/analysis_period";
@@ -15,10 +16,13 @@ export type { ColdPeriodState } from "../settings_form/analysis_period";
 export const MODE_WITH_COLD_PERIOD = "benefit";
 const ASK_AFTER_MILLISECONDS = 400;     // a drag of the balance slider asks once, when it rests
 
-/** The base temperature of the cold period: the balance temperature minus the dead band the form shows; null while one is empty. */
+/**
+ * The base temperature of the cold period: the balance temperature minus the dead band the form shows, rounded as the slider rounds
+ * its lower end (16.1 - 2.9 is 13.2, not 13.200000000000001); null while one is empty.
+ */
 export function coldPeriodBaseOf(form: FormState): number | null {
   const balanceTemperature = shownValue(form, "balance_temperature"), deadBand = shownValue(form, "balance_offset");
-  return typeof balanceTemperature === "number" && typeof deadBand === "number" ? balanceTemperature - deadBand : null;
+  return typeof balanceTemperature === "number" && typeof deadBand === "number" ? withoutFloatingPointNoise(balanceTemperature - deadBand) : null;
 }
 
 interface ColdPeriodSource {

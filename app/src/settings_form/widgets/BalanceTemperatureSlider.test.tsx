@@ -13,6 +13,7 @@ const SCHEMA = {
     mode: { default: "benefit", type: "string" },
     balance_temperature: { default: 15.0, type: "number" },
     balance_offset: { default: 2.0, type: "number", minimum: 0 },
+    include_harm: { default: false, type: "boolean" },
   },
 };
 const MODES: ModeInfo[] = [{ name: "benefit", description: "", needs_epw: true, needs_period: true, experimental: false,
@@ -57,7 +58,13 @@ function Balance({ start }: { start: FormState }) {
 }
 
 const press = (element: HTMLInputElement, type: "pointerdown" | "pointerup") => act(() => { element.dispatchEvent(new Event(type, { bubbles: true })); });
-const keyDown = (element: HTMLInputElement, key: string) => act(() => { element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true })); });
+/** Presses *key* on *element* with the focus on it; returns whether the widget kept the browser from stepping *element*. */
+function keyDown(element: HTMLInputElement, key: string): boolean {
+  act(() => element.focus());
+  const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+  act(() => { element.dispatchEvent(event); });
+  return event.defaultPrevented;
+}
 
 test("one track from 10 to 30 °C whose two handles are the ends of the dead band: balance temperature minus and plus the dead band", () => {
   renderBalance(form());
@@ -122,21 +129,49 @@ test("on one spot (a dead band of 0) the direction of the move picks the end, fo
   expect(latest!.userValues).toEqual({ balance_temperature: 14, balance_offset: 1 });
 });
 
-test("on one spot, a run of keys keeps the end its first key picked until the handle loses the focus", () => {
+test("on one spot, a key toward the other end moves the focus to that end's handle, which steps; a key toward its own end steps it", () => {
   rendered = renderForTest(<Balance start={form({ balance_offset: 0 })} />);
-  keyDown(lowerHandle(), "ArrowRight");
-  setValue(lowerHandle(), "15.5");
+  expect(keyDown(lowerHandle(), "ArrowRight")).toBe(true);           // the lower handle, on top, does not step
+  expect(document.activeElement).toBe(upperHandle());
   expect(latest!.userValues).toEqual({ balance_temperature: 15.25, balance_offset: 0.25 });
-  keyDown(lowerHandle(), "ArrowRight");
-  setValue(lowerHandle(), "15.5");                        // the browser steps the focused lower handle from 15: the upper end moves on
-  expect(latest!.userValues).toEqual({ balance_temperature: 15.5, balance_offset: 0.5 });
-  keyDown(lowerHandle(), "ArrowLeft");
-  setValue(lowerHandle(), "14.5");                        // still the upper end: back one step
-  expect(latest!.userValues).toEqual({ balance_temperature: 15.25, balance_offset: 0.25 });
-  act(() => { lowerHandle().dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
-  keyDown(lowerHandle(), "ArrowLeft");
-  setValue(lowerHandle(), "14.5");                        // the lower end now
-  expect(latest!.userValues).toEqual({ balance_temperature: 15, balance_offset: 0.5 });
+  expect(keyDown(upperHandle(), "ArrowRight")).toBe(false);          // off the spot: the browser steps the focused handle
+  rendered.unmount();
+  rendered = renderForTest(<Balance start={form({ balance_offset: 0 })} />);
+  expect(keyDown(lowerHandle(), "ArrowLeft")).toBe(false);           // its own end: the browser steps it
+  expect(document.activeElement).toBe(lowerHandle());
+  setValue(lowerHandle(), "14.5");
+  expect(latest!.userValues).toEqual({ balance_temperature: 14.75, balance_offset: 0.25 });
+});
+
+test("both ends pinned at an end of the track step back from it", () => {
+  rendered = renderForTest(<Balance start={form({ balance_temperature: 35, balance_offset: 0 })} />);    // both at 35, drawn at 30
+  expect(keyDown(upperHandle(), "ArrowLeft")).toBe(true);
+  expect(document.activeElement).toBe(lowerHandle());
+  expect(latest!.userValues).toEqual({ balance_temperature: 32.25, balance_offset: 2.75 });             // 29.5 to 35
+  rendered.unmount();
+  rendered = renderForTest(<Balance start={form({ balance_temperature: 5, balance_offset: 0 })} />);     // both at 5, drawn at 10
+  expect(keyDown(lowerHandle(), "ArrowRight")).toBe(true);
+  expect(document.activeElement).toBe(upperHandle());
+  expect(latest!.userValues).toEqual({ balance_temperature: 7.75, balance_offset: 2.75 });              // 5 to 10.5
+});
+
+test("the lower handle comes first, as on the track and in the number fields, so Tab reaches the ends in their order", () => {
+  renderBalance(form());
+  const handles = [...rendered!.container.querySelectorAll<HTMLInputElement>("input[type='range']")];
+  expect(handles.map((input) => input.getAttribute("aria-label"))).toEqual(["Counts below", "Too warm above"]);
+});
+
+test("without harm counted the upper end does nothing: it is muted, with a note its handle and number field name", () => {
+  renderBalance(form());
+  const note = rendered!.container.querySelector<HTMLElement>(".balance-end-note")!;
+  expect(note.textContent).toBe("(only with harm counted)");
+  for (const input of [upperHandle(), upperNumber()]) expect(input.getAttribute("aria-describedby")).toContain(note.id);
+  expect(upperNumber().closest(".setting-control")!.classList).toContain("balance-end-muted");
+  expect(upperHandle().classList).toContain("balance-handle-muted");
+  rendered!.unmount();
+  renderBalance(form({ include_harm: true }));
+  expect(rendered!.container.querySelector(".balance-end-note")).toBeNull();
+  expect(upperHandle().classList).not.toContain("balance-handle-muted");
 });
 
 test("an invalid balance handle is marked on its own handle, not on the track the two share, and keeps its focus ring", () => {

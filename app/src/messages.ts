@@ -402,6 +402,8 @@ export const messages = {
   // The balance temperature slider: the two ends of the dead band, and the band between them.
   balanceLowerEnd: "Counts below",
   balanceUpperEnd: "Too warm above",
+  // Beside the upper end while include_harm is off: warm hours then count neither way.
+  balanceUpperEndWithoutHarm: "(only with harm counted)",
   deadBandOnTrack: "Dead band",
 
   // The 3D view (8)

@@ -440,9 +440,12 @@ class UserConfig(BaseModel):
     balance_offset: float = Field(
         2.0, ge=0.0,
         description=(
-            "Dead-band (°C) below the balance point for benefit mode; hours "
-            "warmer than balance_temperature - balance_offset are not "
-            "credited. Must be >= 0 (0 = no dead-band)."
+            "Half the width (°C) of the dead band for benefit mode, which lies "
+            "on both sides of balance_temperature: hours colder than "
+            "balance_temperature - balance_offset are credited, and with "
+            "include_harm hours warmer than balance_temperature + "
+            "balance_offset count against the sun; hours inside the band "
+            "count neither way. Must be >= 0 (0 = no dead band)."
         ),
     )
     simulated_weights_path: Optional[str] = Field(
