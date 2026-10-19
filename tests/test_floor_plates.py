@@ -764,8 +764,49 @@ def test_plates_at_corners_that_are_not_square_close_into_watertight_prisms(shap
             for plate in mg.plate_polygons(ij, in_plate, ~in_plate, vs, poly, bay=bay, bay_shapes=shapes):
                 assert all(np.hypot(*(q - p)) >= 1e-6 for p, q in _edges(plate))
                 assert mg.prism_mesh(plate, 0.0, 3.0).is_watertight
+                assert _sharp_vertices(plate, poly) == []
     whole_plate = shapely.union_all(mg.plate_polygons(ij, whole, ~whole, vs, poly, bay=bay, bay_shapes=shapes))
     assert whole_plate.symmetric_difference(poly).area < 1e-6
+
+
+def _sharp_vertices(plate, footprint, below_deg=30.0):
+    """Vertices of *plate* inside the footprint whose angle is under *below_deg*: a wedge or a notch the cuts made.  On the
+    outline a rectangle's side meets a slanted facade at 90 degrees minus the corner's angle, which is the building's."""
+    outline = footprint.boundary
+    sharp = []
+    for ring in [plate.exterior, *plate.interiors]:
+        xy = np.asarray(ring.coords)[:-1]
+        for k in range(len(xy)):
+            u, v = xy[k - 1] - xy[k], xy[(k + 1) % len(xy)] - xy[k]
+            angle = np.degrees(np.arccos(np.clip(u @ v / (np.hypot(*u) * np.hypot(*v)), -1.0, 1.0)))
+            if angle < below_deg and outline.distance(Point(xy[k])) > 1e-3:
+                sharp.append((tuple(np.round(xy[k], 3)), round(float(angle), 1)))
+    return sharp
+
+
+def test_a_cut_between_two_faces_uses_no_line_of_a_facade_that_does_not_touch_their_corner():
+    # The bottom (0) and right (1) facades of the L meet at (60, 0); the inner right facade (x = 15) and the top (y = 60) touch
+    # neither, so no candidate lies along, behind or across them, even where such a line would happen to separate the columns.
+    facades, _ = mg.split_facades([L_SHAPE])
+    bottom = next(k for k, f in enumerate(facades) if np.allclose(f.start, (0, 0)))
+    right = next(k for k, f in enumerate(facades) if np.allclose(f.start, (60, 0)))
+    lines = mg._lines_between_faces(facades, bottom, right, range(len(facades)), lambda k: 7.5)
+    assert lines and np.allclose(lines[0][0], np.array([1.0, 1.0]) / np.sqrt(2.0))          # the bisector first
+    for normal, offset in lines:
+        assert not (abs(abs(normal[0]) - 1.0) < 1e-9 and abs(abs(offset) - 15.0) < 1e-9)   # x = 15
+        assert not (abs(abs(normal[1]) - 1.0) < 1e-9 and abs(abs(offset) - 60.0) < 1e-9)   # y = 60
+        assert not (abs(abs(normal[1]) - 1.0) < 1e-9 and abs(abs(offset) - 52.5) < 1e-9)   # half a depth behind the top
+
+
+def test_a_line_through_the_widest_gap_snaps_to_the_nearest_facade_direction_or_bisector():
+    mine = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    theirs = np.array([[3.2, 1.6], [2.4, 3.1], [3.4, 3.4]])          # the widest gap runs at an angle to every snap direction
+    bisector = np.array([1.0, 1.0]) / np.sqrt(2.0)
+    normal, offset = mg._separating_line(mine, theirs, [], [bisector, np.array([1.0, 0.0]), np.array([0.0, 1.0])])
+    assert np.allclose(normal, bisector)
+    assert (mine @ normal).max() < offset < (theirs @ normal).min()
+    # Where no snapped direction separates them, there is no line: the module is drawn from its columns.
+    assert mg._separating_line(mine, np.array([[2.5, 0.5], [0.5, 2.5]]), [], [np.array([1.0, 0.0]), np.array([0.0, 1.0])]) is None
 
 
 def _wings(length, width, depth):
@@ -836,3 +877,15 @@ def test_a_vertex_a_fraction_of_a_voxel_off_the_line_keeps_a_facade_straight():
     bowed = Polygon([(0, 0), (20, 0.8), (40, 0), (40, 15), (0, 15)])
     facades, _ = mg.split_facades([bowed], straight_tolerance=0.25)
     assert sum(not f.straight for f in facades) == 1
+
+
+def test_a_plate_keeps_no_spike_or_crack_of_zero_width():
+    # Boolean operations between module shapes and column squares can leave a vertex where the outline turns back on itself:
+    # a spike out of the plate or a crack into it, of no width. The plate is the same without them.
+    spiked = Polygon([(0, 0), (6, 0), (6, 3), (9, 3), (6, 3.0000001), (6, 6), (3, 6), (3, 3), (3.0000001, 6), (0, 6)])
+    cleaned = mg._without_spikes(spiked)
+    assert cleaned.is_valid and cleaned.area == pytest.approx(spiked.area, abs=1e-6)
+    assert cleaned.bounds == (0, 0, 6, 6)                                   # the spike to x = 9 is gone
+    assert _sharp_vertices(cleaned, box(-1, -1, 10, 10), below_deg=1.0) == []    # and the crack down to (3, 3)
+    square = box(0, 0, 3, 3)
+    assert mg._without_spikes(square).equals(square)

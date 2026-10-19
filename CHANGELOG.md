@@ -155,11 +155,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
   were drawn from their columns, as staircases on the upper floors (101
   modules in 30 of the 66 District buildings). Such a module is now its
   rectangle cut by a line between its columns and those of the other face:
-  the bisector of the corner, which the nearest-facade rule draws, or a line
-  of a corner square. In the District example modules drawn from columns go
-  from 101 to 24 (9 of them on curved facades), plate edges inside the
-  footprint at an angle to every facade from 187 to 124 m (45 m of them along
-  a corner bisector), and the floor area from 74 002 to 74 004 m².
+  the bisector of the corner, which the nearest-facade rule draws, a line of
+  the two facades' corner squares, or a bisector with a facade that meets one
+  of them; failing those, the line across the widest gap between the
+  columns, turned to a direction of the two facades or their bisector. A cut
+  that leaves an angle under 30 degrees or a piece narrower than a voxel is
+  not used: the module is cut without being grown first, or drawn from its
+  columns. Plates also lose the spikes and cracks of no width that boolean
+  operations left. In the District example modules drawn from columns go
+  from 101 to 48 (9 of them on curved facades), plate edges inside the
+  footprint at an angle to every facade from 187 to 110 m (49 m of them along
+  a corner bisector), plate vertices under 45 degrees away from footprint
+  corners from 30 to 8, and the floor area from 74 002 to 74 021 m².
 
 - **Floors are built from square modules.** Each face of the footprint is
   now cut in depth too, into square modules of `min_plate_dimension`, and each

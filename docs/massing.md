@@ -84,14 +84,17 @@ simulation input (one closed prism per floor and plate).
    (face ends at corners) are within half a voxel of the voxel columns. Where
    a corner is not square, the faces of its two facades meet along the
    bisector of the corner; a module there is its rectangle cut by that line
-   (or by a line of a corner square, or, where the faces meet along a curve,
-   by the line midway between the two faces' columns), so it ends on one
-   straight slanted edge. Modules on curved facades, and the few modules that
-   no single line separates from a neighbouring face, follow their voxel
-   columns, straight to within half a voxel; they stay off the columns of
-   modules not in the plate. Where the shapes of two modules overlap, the
-   overlap belongs to one of them, so plates of different modules never
-   overlap.
+   (or by a line of the two facades' corner squares, or by a bisector with a
+   facade that meets one of them; where the faces meet along a curve, by the
+   line midway between the two faces' columns turned to a direction of the
+   two facades or their bisector), so it ends on one straight slanted edge.
+   A cut that would leave an angle under 30 degrees or a piece narrower than
+   a voxel is not used. Modules on curved facades, and the modules no such
+   line separates from a neighbouring face, follow their voxel columns,
+   straight to within half a voxel; they stay off the columns of modules not
+   in the plate. Where the shapes of two modules overlap, the overlap belongs
+   to one of them, so plates of different modules never overlap. Spikes and
+   cracks of no width that the boolean operations leave are removed.
 
 ## Settings
 
