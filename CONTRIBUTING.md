@@ -19,7 +19,7 @@ Open an issue describing the use case and expected behavior. For new carving mod
 1. Fork the repository and create a branch from `main`.
 2. Install in development mode: `pip install -e .[dev]`
 3. Make your changes and add tests if applicable.
-4. Run the tests as [docs/testing.md](docs/testing.md) describes: `pytest -m "not slow" -n 8` after each change (about 36 s on 8 cores), `pytest -m "not sweep" -n 8` before each commit (about 1 minute) and `pytest -n 8` before opening the PR (about 2 minutes). Tests marked `gpu` are skipped automatically without CUDA. There is no CI: the engine runs on the GPU, which hosted runners do not have, so the tests run locally.
+4. Run the tests as [docs/testing.md](docs/testing.md) describes: `pytest -m "not slow" -n 8` after each change (about 45 s on 8 cores), `pytest -m "not sweep" -n 8` before each commit (about 1.5 minutes) and `pytest -n 8` before opening the PR (about 2 minutes). Tests marked `gpu` are skipped automatically without CUDA. There is no CI: the engine runs on the GPU, which hosted runners do not have, so the tests run locally.
 5. If you changed anything under `grasshopper/components/`, rebuild the `.ghuser` files (`pip install -e .[ghbuild]`, then `python grasshopper/build_ghuser.py`) and commit them with the source change. See [docs/grasshopper.md](docs/grasshopper.md#rebuilding-the-components).
 6. Open a PR with a clear description of the changes.
 

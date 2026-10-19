@@ -284,8 +284,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 - **Tests in parallel and in four tiers** ([Running the tests](docs/testing.md)).
   pytest-xdist joins the `dev` extra; `pytest -m "not slow" -n 8` takes
-  about 36 s (157 s serially before), `pytest -m "not sweep" -n 8` before a
-  commit about 62 s, and the whole suite with `-n 8` about 110 s (about 6
+  about 45 s (157 s serially before), `pytest -m "not sweep" -n 8` before a
+  commit about 80 s, and the whole suite with `-n 8` about 115 s (about 6
   minutes serially). The new `sweep` marker holds the 0.5 m floor-plate
   sweep and the Monte Carlo seeds. `--strict-markers` and `--durations=15`
   are on by default, and a run lists the tests outside `slow` that took
@@ -298,7 +298,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   nine, each packaged example made once per session and copied per test,
   one interpreter for the light-import checks instead of seven, and the
   ProjectWorkspace front-end tests on a fake clock (`npm test` 9 s instead
-  of 16 s), split into a file on saves and runs and one on the 3D view.
+  of 16 s for the same 443 tests), split into a file on saves and runs and one on the 3D view.
 
 ### Changed (installation and clients)
 
