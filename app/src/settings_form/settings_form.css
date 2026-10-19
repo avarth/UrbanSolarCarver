@@ -425,10 +425,7 @@
 
 .setting-tooltip code { font-family: var(--font-family-code); }
 
-/* A line under a valid field, such as the grid under Voxel size (UX 5.4). */
-/* The live region of a change the form made (the sample spacing lowered, R2 4.4): always there, so filling it is announced; while
-   empty it takes back the gap the field's column puts before it. */
-.setting-change-note:empty { margin-top: calc(var(--space-unit) * -1); }
+/* A quiet line under a field, such as the grid and the sample spacing under Voxel size (UX 5.4). */
 
 .setting-note {
   margin: 0;

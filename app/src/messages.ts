@@ -315,12 +315,9 @@ export const messages = {
   gridSizeAtSavedVoxelSize: (voxelSizeText: string, voxelsPerSide: number, totalVoxels: number) =>
     `Grid at the saved voxel size of ${voxelSizeText}: ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
   // Under Voxel size when a voxel size below the sample spacing lowered it (R2 4.4).
-  sampleSpacingLoweredToVoxelSize: (sampleSpacing: number) =>
-    `Sample spacing lowered to ${withUnit(formattedNumber(sampleSpacing), "m")} to match the voxel size.`,
+  // Under Voxel size: the sample spacing the engine uses on the test surfaces, half the voxel size (resolve_grid_step).
+  testSurfacesSampledEvery: (sampleSpacing: number) => `Test surfaces sampled every ${withUnit(formattedNumber(sampleSpacing), "m")}`,
   // Errors of the whole config, said under the settings they name (UX 11); the engine's own words are for the YAML.
-  samplingAboveVoxelSize: (samplingLabel: string, samplingText: string, voxelSizeLabel: string, voxelSizeText: string) =>
-    `${samplingLabel} (${samplingText}) must not be larger than the ${String(voxelSizeLabel).toLowerCase()} (${voxelSizeText}). ` +
-    `Use a larger ${String(voxelSizeLabel).toLowerCase()} or a smaller ${String(samplingLabel).toLowerCase()}.`,
   dayNotInMonth: (dayName: string, day: number, monthName: string, daysInMonth: number) =>
     `${monthName} has ${daysInMonth} days, so the ${String(dayName).toLowerCase()} cannot be ${day}.`,
   periodIncomplete: (modeName: string) => `${modeName} needs the whole analysis period: every day, month and hour.`,

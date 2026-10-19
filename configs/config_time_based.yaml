@@ -38,7 +38,7 @@ voxel_size: 1.0
 
 # --- Defaults you may want to override --------------------------------------
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)
-# grid_step:       1.0    # test-surface sampling spacing in metres
+# grid_step:       0.5    # test-surface sampling spacing in metres; unset = half the voxel size
 # ray_length:      300.0  # max ray distance in metres
 # threshold:       None   # tolerated shading in m²·h: 0 = strict (default), 5 = up to 5 m²·h
 # min_altitude:    5.0    # ignore sun below this elevation (degrees)

@@ -93,26 +93,16 @@
       "help": "Edge of the cubes the volume is divided into. Smaller is finer and slower: halving it makes 8 times as many voxels.",
       "step": "settings", "group": "Detail", "essential": "all", "slider": { "low": 0.1, "high": 5, "step": 0.1 }
     },
-    "grid_step": {
-      "label": "Sample spacing on test surfaces", "unit": "m",
-      "help": "Distance between the points on the test surfaces that rays start from.",
-      "step": "settings", "group": "Detail", "essential": false, "slider": { "low": 0.1, "high": 5, "step": 0.1 }
-    },
     "edge_taper": {
       "label": "Edge strip with less weight", "unit": "m",
-      "help": "Points this close to a test surface's edge count less, so corners do not force extra carving. Weighted modes only.",
-      "step": "settings", "group": "Detail", "essential": false,
-      "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"], "slider": { "low": 0, "high": 5, "step": 0.1 }
+      "help": "Sample points closer than this to the edge of a test surface count less (from 0 at the edge to full at this distance), so a cooling street or courtyard does not clear the mass right beside it. 0 = off.",
+      "step": "settings", "group": "Mode specific", "essential": false,
+      "modes": ["radiative_cooling"], "slider": { "low": 0, "high": 5, "step": 0.1 }
     },
     "ray_length": {
       "label": "Ray length", "unit": "m",
       "help": "How far from the test surfaces obstruction is checked.",
       "step": "settings", "group": "Detail", "essential": false, "slider": { "low": 10, "high": 1000, "step": 10 }
-    },
-    "margin_frac": {
-      "label": "Grid margin", "unit": "fraction",
-      "help": "Empty space added around the maximum volume.",
-      "step": "settings", "group": "Detail", "essential": false, "slider": { "low": 0, "high": 0.2, "step": 0.01 }
     },
     "ray_batch_size": {
       "label": "Rays per batch", "unit": "",

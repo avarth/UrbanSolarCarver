@@ -46,6 +46,9 @@ JOINED_FOLDER = "inputs/joined"
 # Settings the service decides, whatever the browser sends: every file location (the service takes no path from
 # the browser; simulated_weights_path is never set) and the compute device.
 SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir", "device", "simulated_weights_path")
+# Settings the browser does not set, left to the engine's own value: the sample spacing on the test surfaces (half the voxel
+# size). One stored by an earlier version, or sent by an older page, is left out when the settings are read and written.
+SETTINGS_LEFT_TO_THE_ENGINE = ("grid_step",)
 SERVICE_PATHS = {
     "max_volume_path": "inputs/joined/max_volume.ply",
     "test_surface_path": "inputs/joined/test_surfaces.ply",
@@ -390,7 +393,8 @@ class ProjectStore:
         """
         with self.project_lock(name):
             project_folder = self.open(name)
-            browser_values = {key: value for key, value in values.items() if key not in SERVICE_OWNED_SETTINGS}
+            browser_values = {key: value for key, value in values.items()
+                              if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
             service_paths = self._service_paths_for_mode(values.get("mode"))
             config = build_config_from_mode_starting_values(
                 {**browser_values, **service_paths, "device": self._device}, base_folder=project_folder)
@@ -403,9 +407,11 @@ class ProjectStore:
             return ConfigReply(settings=self._without_service_owned(stored_config), grid_plan=grid_plan)
 
     def read_stored_config(self, name: str) -> dict:
-        """The content of config.yaml as stored, service paths and device included (see _parse_config_file)."""
+        """The content of config.yaml as stored, service paths and device included (see _parse_config_file), without the
+        settings left to the engine (SETTINGS_LEFT_TO_THE_ENGINE): the next save writes the file without them."""
         with self.project_lock(name):
-            return self._parse_config_file(self.open(name) / CONFIG_FILE_NAME, name)
+            stored_config = self._parse_config_file(self.open(name) / CONFIG_FILE_NAME, name)
+            return {key: value for key, value in stored_config.items() if key not in SETTINGS_LEFT_TO_THE_ENGINE}
 
     def read_settings(self, name: str) -> dict:
         """The stored settings of a project without the paths and device the service owns."""

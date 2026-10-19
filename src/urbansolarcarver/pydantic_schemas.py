@@ -157,6 +157,19 @@ def resolve_max_slope_deg(mode: str, max_slope_deg: Optional[float]) -> Optional
     return 75.0 if MODES[mode].score_kind == "weighted_sum" else None
 
 
+# An unset grid_step samples the test surfaces at this share of the voxel size.
+GRID_STEP_PER_VOXEL_SIZE_WHEN_UNSET = 0.5
+
+
+def resolve_grid_step(grid_step: Optional[float], voxel_size: float) -> float:
+    """The sample spacing on the test surfaces, in meters: *grid_step* as given, or half the voxel size when it is unset.
+
+    Measured on the district example (Solar usefulness, 1 m voxels), half the voxel size keeps the kept voxels within
+    about 1 % of a 0.25 m reference at about twice the time of a spacing of one voxel (2 %).
+    """
+    return float(grid_step) if grid_step is not None else GRID_STEP_PER_VOXEL_SIZE_WHEN_UNSET * float(voxel_size)
+
+
 # Keys of an analysis_period mapping: Ladybug's AnalysisPeriod.to_dict() keys
 # map onto the six flat period fields; plain start_*/end_* spellings are
 # accepted too. Ladybug's other keys (type, timestep, is_leap_year) are ignored.
@@ -270,7 +283,10 @@ class UserConfig(BaseModel):
 
     # grid & ray parameters
     voxel_size:    float = Field(1.0, ge=0.01, le=100.0, description="Voxel edge length (m), 0.01–100")
-    grid_step:     float = Field(1.0, gt=0, description="Surface sampling spacing (m)")
+    grid_step:     Optional[float] = Field(
+        None, gt=0,
+        description="Surface sampling spacing (m), at most voxel_size. None (default): half the voxel size.",
+    )
     edge_taper:    float = Field(
         0.0, ge=0.0,
         description=(
@@ -654,7 +670,7 @@ class UserConfig(BaseModel):
 
     @model_validator(mode='after')
     def _check_sampling_and_batches(self) -> 'UserConfig':
-        if self.grid_step > self.voxel_size:
+        if self.grid_step is not None and self.grid_step > self.voxel_size:
             raise ValueError(
                 f"grid_step ({self.grid_step:g} m) must be ≤ voxel_size ({self.voxel_size:g} m). "
                 "Increase voxel_size or decrease grid_step."
@@ -696,6 +712,9 @@ class PreprocessingManifest(BaseModel):
     # Absent in the violation-count modes, which have no sky patches.
     patch_weights_path: Optional[str] = None
     sample_point_count: int
+    # The sample spacing on the test surfaces the run used (resolve_grid_step); None in manifests written before
+    # preprocessing recorded it.
+    grid_step: Optional[float] = None
     # The max volume's plan projection in world xy; massing reads it.
     footprint_path: str
     # The max volume's lowest and highest points (world z): massing starts the

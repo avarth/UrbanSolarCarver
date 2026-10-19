@@ -98,3 +98,19 @@ def test_manifest_written_by_preprocessing(tmp_path, tmp_mesh_files):
     assert grid.shape == tuple(m.shape)
     assert scores.size == int(np.prod(m.shape))
     assert m.sample_point_count == len(np.load(tmp_path / "out" / "test_points.npy"))
+    assert m.grid_step == 2.0          # the sample spacing used, as given
+
+
+def test_manifest_records_the_sample_spacing_used_when_unset(tmp_path, tmp_mesh_files):
+    """An unset grid_step samples at half the voxel size, and the manifest says so."""
+    from urbansolarcarver import preprocessing
+    from urbansolarcarver.load_config import user_config
+    from urbansolarcarver.pydantic_schemas import PreprocessingManifest
+    vol_path, srf_path = tmp_mesh_files
+    cfg = user_config(
+        max_volume_path=str(vol_path), test_surface_path=str(srf_path),
+        out_dir=str(tmp_path / "out"), mode="daylight",
+        voxel_size=2.0, ray_length=50.0, device="cpu",
+    )
+    result = preprocessing(cfg, tmp_path / "out")
+    assert PreprocessingManifest.model_validate_json(result.manifest_path.read_text()).grid_step == 1.0

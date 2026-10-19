@@ -85,6 +85,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (browser UI)
 
+- **No Sample spacing field.** The engine samples the test surfaces at half
+  the voxel size (see "Changed (sample spacing)"), and a quiet line under
+  Voxel size says so: "Test surfaces sampled every 0.5 m". The lowering of
+  the sample spacing to a smaller voxel size, and its note, are gone. A
+  project that stored a `grid_step` drops it when it opens (the service
+  leaves it out when it reads and writes `config.yaml`), so the computed
+  spacing applies; its analysis shows as out of date once when the stored
+  spacing was not half its voxel size.
+- **Edge strip with less weight (`edge_taper`) is shown in Night cooling
+  only**, under More mode settings, with the help "Sample points closer than
+  this to the edge of a test surface count less (from 0 at the edge to full
+  at this distance), so a cooling street or courtyard does not clear the
+  mass right beside it. 0 = off." The engine still reads it in every
+  weighted mode; a stored value is kept when a project opens.
+- **Grid margin (`margin_frac`) is hidden for now.** The engine and its
+  default are unchanged.
 - **Balance temperature is drawn as the analysis period's strips are:** a
   strip of 10 to 30 °C with a tick a degree, labelled every 5 °C, the dead
   band filled between the two handles, and over each handle a bubble with its
@@ -143,6 +159,23 @@ versioning follows [Semantic Versioning](https://semver.org/).
   live region kept on the page, either button moves the focus to the
   analysis period's start date, and once the period changes the notice does
   not come back when the period is set back.
+
+### Changed (sample spacing)
+
+- **`grid_step` is unset by default and then samples the test surfaces at
+  half the voxel size** (it was 1.0 m whatever the voxel size). Measured on
+  the District example (Solar usefulness, 1 m voxels): 1 m differs from a
+  0.25 m reference in 2.0 % of the kept voxels (7.1 s analysis), 0.5 m in
+  0.9 % (13.9 s); 0.25 m takes 37 s. An explicit value in YAML, on the
+  command line or in Grasshopper still wins, and must still be at most
+  `voxel_size`. The spacing is resolved in one place
+  (`resolve_grid_step`, used by `PreprocessingSettings`), so a run is
+  compared on the spacing it uses: an explicit 0.5 m with 1 m voxels and an
+  unset one are the same run. The preprocessing manifest records the spacing
+  used (`grid_step`, None in manifests written before), and the run report
+  gives it. Default configs now sample twice as densely in each direction at
+  the default voxel size, so a run takes about twice as long and its result
+  can differ slightly from earlier runs.
 
 ### Changed (massing)
 
@@ -268,9 +301,6 @@ versioning follows [Semantic Versioning](https://semver.org/).
   exceedance. The engine names and settings are unchanged.
 - **The axis gizmo has no background box and the ground has no north
   arrow**; north is shown by the compass overlay and the compass ring.
-- **A sample spacing larger than a new, smaller voxel size is lowered to the
-  voxel size** and the settings say so; it is not raised back when the voxel
-  size grows.
 - **Rays per batch and Detailed statistics** moved to the end of More detail
   settings; the Computer group is gone.
 - **Envelope volume is counted on the kept voxels** the envelope mesh was

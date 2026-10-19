@@ -1,9 +1,8 @@
 // The engine's config errors in the interface's words (UX 11). The engine writes its messages for the YAML and the command
-// line: config names ("grid_step"), and for an error of the whole config (a model validator) no field and Pydantic's
+// line: config names ("voxel_size"), and for an error of the whole config (a model validator) no field and Pydantic's
 // "Value error, " in front. Here such an error goes under every setting it names, so their fields are outlined and their
 // folds open; the known ones are said in the interface's own sentences, and any other has the labels in place of the names.
 import { messages } from "../messages";
-import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { plainModeName } from "../steps/step_summaries";
 import { ANALYSIS_PERIOD_FIELDS, presentedSettingOf, SETTING_PRESENTATIONS, settingView } from "./presentation";
 
@@ -14,10 +13,9 @@ export interface ShownConfigError {
 }
 
 const VALUE_ERROR_PREFIX = /^Value error, /;
-// A config name in an engine message: a lower-case word with underscores ("grid_step"), maybe followed by "=value".
+// A config name in an engine message: a lower-case word with underscores ("voxel_size"), maybe followed by "=value".
 const CONFIG_NAME = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/g;
 const QUOTED_MODE = /\bmode '([a-z_-]+)'/g;
-const SAMPLING_ABOVE_VOXEL_SIZE = /grid_step \(([\d.]+) m\) must be ≤ voxel_size \(([\d.]+) m\)/;
 const DAY_NOT_IN_MONTH = /\b(start|end)_day=(\d+) is invalid for month (\d+) \(max (\d+) days\)/;
 const PERIOD_MISSING = /\bmode '([a-z_-]+)' requires analysis period fields/;
 const WEATHER_FILE_MISSING = /\brequires epw_path\b/;
@@ -46,13 +44,6 @@ function inInterfaceWords(message: string, mode: string, asSentence = true): str
 
 /** The messages the engine writes for the whole config that the interface says in its own sentence. */
 function knownConfigError(message: string, mode: string): ShownConfigError | null {
-  const label = (setting: string) => settingView(setting, mode).label;
-  const sampling = SAMPLING_ABOVE_VOXEL_SIZE.exec(message);
-  if (sampling !== null) {
-    return { settings: ["grid_step", "voxel_size"],
-             message: messages.samplingAboveVoxelSize(label("grid_step"), withUnit(formattedNumber(Number(sampling[1])), "m"),
-                                                      label("voxel_size"), withUnit(formattedNumber(Number(sampling[2])), "m")) };
-  }
   const day = DAY_NOT_IN_MONTH.exec(message);
   if (day !== null) {
     const setting = `${day[1]}_day`;

@@ -52,6 +52,26 @@ def test_threshold_change_after_a_build_marks_envelope_and_massing_out_of_date(b
     assert stage_status(store, name) == ALL_CURRENT
 
 
+def _record_runs_with_grid_step(store, name, grid_step):
+    """Rewrites every stage record as if the runs had used config.yaml with *grid_step* set (an earlier version stored one)."""
+    project_json = store.read_project_json(name)
+    for record in project_json.stage_records.values():
+        record.config["grid_step"] = grid_step
+    store.write_project_json(name, project_json)
+
+
+def test_a_run_with_a_stored_grid_step_is_out_of_date_only_when_its_spacing_was_not_half_the_voxel_size(built_project):
+    """The service drops a stored grid_step, so the engine samples at half the voxel size; a run made with a spacing of half
+    the voxel size stays current, one made with another spacing is out of date once."""
+    store, name, _worker = built_project
+    voxel_size = store.load_project_config(name).voxel_size
+    _record_runs_with_grid_step(store, name, voxel_size / 2)
+    assert stage_status(store, name) == ALL_CURRENT
+    _record_runs_with_grid_step(store, name, voxel_size)
+    assert stage_status(store, name) == {
+        "preprocessing": "out_of_date", "thresholding": "out_of_date", "exporting": "out_of_date", "massing": "out_of_date"}
+
+
 def test_floor_height_change_reruns_massing_only(built_project):
     store, name, worker = built_project
     change_settings(store, name, floor_height=4.0)

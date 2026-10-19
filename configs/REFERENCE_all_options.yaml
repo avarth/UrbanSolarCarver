@@ -44,7 +44,8 @@ north_deg: 0.0             # North direction in degrees clockwise from Y-axis (0
 
 # Voxel grid and sampling
 voxel_size:     1.0    # voxel edge length (m), 0.01-100
-grid_step:      1.0    # spacing between test-surface sample points (m), <= voxel_size
+grid_step:      null   # spacing between test-surface sample points (m); null (default) = half the
+                       # voxel size. An explicit value must be <= voxel_size.
 edge_taper:     0.0    # design constraint (m): test-surface sample points within this distance of
                        # their component's edge count proportionally less (0 at the edge → 1 at
                        # edge_taper), so perimeter/corner points don't force carving of directly

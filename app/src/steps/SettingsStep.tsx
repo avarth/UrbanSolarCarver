@@ -132,20 +132,30 @@ export function SettingsToFix({ step, form, onChange, disabledReason }: Settings
   );
 }
 
+// The engine samples the test surfaces at half the voxel size (pydantic_schemas.py, GRID_STEP_PER_VOXEL_SIZE_WHEN_UNSET); the
+// interface does not set the spacing. SettingsStep.test.tsx checks the engine still says so.
+const SAMPLE_SPACING_PER_VOXEL_SIZE = 0.5;
+
+/** "Test surfaces sampled every 0.5 m", for the voxel size shown; null while it is not a number. */
+function sampleSpacingLineOf(form: FormState): string | null {
+  const voxelSize = shownValue(form, "voxel_size");
+  return typeof voxelSize === "number" ? messages.testSurfacesSampledEvery(voxelSize * SAMPLE_SPACING_PER_VOXEL_SIZE) : null;
+}
+
 /**
- * The grid line under Voxel size, or the over-budget message in its place. A refused save keeps the last grid planned, so the
- * line stays under an error too; while the voxel size shown is not the one planned (its save was refused), it says so. Above
- * the grid line: the sample spacing the form lowered to the voxel size, while it is still the spacing shown (R2 4.4).
+ * The lines under Voxel size: the grid line, or the over-budget message in the place of the error, then the sample spacing the
+ * engine uses. A refused save keeps the last grid planned, so the grid line stays under an error too; while the voxel size shown
+ * is not the one planned (its save was refused), it says so.
  */
 function voxelSizeExtras(form: FormState): SettingFieldExtras {
-  const lowered = form.sampleSpacingLoweredTo;
-  const changeNote = lowered !== null && shownValue(form, "grid_step") === lowered ? messages.sampleSpacingLoweredToVoxelSize(lowered) : null;
+  const sampleSpacingLine = sampleSpacingLineOf(form);
   const plan = form.gridPlan;
-  if (plan === null) return { changeNote };
-  if (!gridIsOverBudget(plan)) return { changeNote, note: gridLineOf(form)! };
+  const gridLine = plan !== null && !gridIsOverBudget(plan) ? gridLineOf(form) : null;
+  const notes = [gridLine, sampleSpacingLine].filter((line) => line !== null);
+  if (plan === null || !gridIsOverBudget(plan)) return { notes };
   const text = messages.gridOverBudget(plan.resolution, plan.total_voxels, plan.budget_voxels,
     smallestVoxelSizeWithinBudget(plan.voxel_size, plan.total_voxels, plan.budget_voxels));
-  return { changeNote, errorContent: <>{text.description} <strong>{text.advice}</strong></> };
+  return { notes, errorContent: <>{text.description} <strong>{text.advice}</strong></> };
 }
 
 /** The words of the notice of a new weather file: what the file means for the period, and the button that applies the offer. */
