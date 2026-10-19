@@ -98,9 +98,34 @@ export type ColdPeriodState =
 /** The hemisphere of the project's weather file: the heating season preset follows it. */
 export type Hemisphere = "northern" | "southern";
 
-/** South below the equator; north on it and above, and without a weather file (the starting values of the modes are northern). */
+/** The latitude of the tropics (degrees): within them the sun stands high all year and neither hemisphere's seasons apply. */
+export const TROPICS_LATITUDE = 23.44;
+
+/**
+ * The hemisphere whose seasons a latitude has: south beyond the Tropic of Capricorn, north beyond the Tropic of Cancer; null within
+ * the tropics and without a latitude.
+ */
+export function seasonsOfLatitude(latitude: number | null): Hemisphere | null {
+  if (latitude === null || Math.abs(latitude) < TROPICS_LATITUDE) return null;
+  return latitude < 0 ? "southern" : "northern";
+}
+
+/**
+ * The hemisphere for the heating season preset: south beyond the Tropic of Capricorn; north elsewhere, within the tropics and without
+ * a weather file (the starting values of the modes are northern).
+ */
 export function hemisphereOfLatitude(latitude: number | null): Hemisphere {
-  return latitude !== null && latitude < 0 ? "southern" : "northern";
+  return seasonsOfLatitude(latitude) ?? "northern";
+}
+
+/** Whether two periods cover the same days of the year, whatever their hours: a whole year covers every day from any start. */
+export function coverTheSameDays(first: PeriodDates, second: PeriodDates): boolean {
+  const daysOf = (dates: PeriodDates) => {
+    const start = dayOfYear(dates.startMonth, dates.startDay);
+    return { start, count: (dayOfYear(dates.endMonth, dates.endDay) - start + DAYS_IN_YEAR) % DAYS_IN_YEAR + 1 };
+  };
+  const a = daysOf(first), b = daysOf(second);
+  return a.count === b.count && (a.count === DAYS_IN_YEAR || a.start === b.start);
 }
 
 const PRESET_DATES: Record<PeriodPreset, PeriodDates> = {

@@ -280,7 +280,8 @@
 .step-not-usable { margin: 0; color: var(--colour-muted); }
 .step-reason { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 .step-error { margin-bottom: calc(var(--space-unit) * 3); }
-/* The notice of a new weather file above the settings groups: what it means for the analysis period, with its two buttons. */
+/* The notice of a new weather file above the settings groups, in a live region kept on the page (empty, it takes no space): what the
+   file means for the analysis period, with its two buttons. */
 .weather-change-notice {
   display: flex;
   flex-direction: column;

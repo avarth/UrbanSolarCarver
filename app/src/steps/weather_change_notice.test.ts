@@ -26,9 +26,19 @@ test("a period-reading mode, the other hemisphere: the period six months on", ()
   expect(weatherChangeSuggestion(toBrisbane(), situation({ mode: "irradiance" }))?.kind).toBe("six_months");
 });
 
-test("the same hemisphere, a file without a latitude, a mode that reads no period, or a period not set: no suggestion", () => {
+test("a period that covers the whole year, the starting value of Solar energy, covers the same days six months on: no suggestion", () => {
+  const wholeYear = period(1, 1, 7, 12, 31, 19);
+  expect(weatherChangeSuggestion(toBrisbane(wholeYear), situation({ mode: "irradiance", period: wholeYear }))).toBeNull();
+});
+
+test("a new file without a location: the suggestion still comes, without a name", () => {
+  expect(weatherChangeSuggestion({ ...toBrisbane(), location: null }, situation())).toEqual(
+    { kind: "six_months", location: null, hemisphere: "southern", suggested: period(6, 21, 10, 6, 21, 14) });
+});
+
+test("the same hemisphere, a file without a latitude or in the tropics, a mode that reads no period, or a period not set: no suggestion", () => {
   expect(weatherChangeSuggestion({ ...toBrisbane(), previousHemisphere: "southern" }, situation())).toBeNull();
-  expect(weatherChangeSuggestion({ ...toBrisbane(), newHemisphere: null }, situation())).toBeNull();
+  expect(weatherChangeSuggestion({ ...toBrisbane(), newHemisphere: null }, situation())).toBeNull();          // seasonsOfLatitude: none
   expect(weatherChangeSuggestion(toBrisbane(), situation({ mode: "daylight", modeReadsPeriod: false, period: null }))).toBeNull();
   expect(weatherChangeSuggestion(toBrisbane(null), situation({ period: null }))).toBeNull();
 });

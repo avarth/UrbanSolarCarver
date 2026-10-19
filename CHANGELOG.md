@@ -102,8 +102,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
   change carry `weather_latitude`, read from the weather file's `LOCATION`
   line.
 - **The heating season preset follows the hemisphere** of the weather file:
-  1 April to 31 October in the south, 1 October to 30 April in the north and
-  without a weather file.
+  1 April to 31 October south of the Tropic of Capricorn, 1 October to 30
+  April elsewhere, within the tropics and without a weather file.
+- The notice of a new weather file reads "The new weather file (Brisbane,
+  AUS) has its cold period from 3 May to 20 Sep; the analysis period is 30
+  Sep to 15 May." or "The new weather file (Brisbane, AUS) is in the southern
+  hemisphere: ...", also for a file without a location. It offers no six
+  month shift for a period that covers the whole year (the same days six
+  months on), nor for a file within the tropics; a file whose latitude cannot
+  be read keeps the hemisphere of the file before it. The notice sits in a
+  live region kept on the page, either button moves the focus to the
+  analysis period's start date, and once the period changes the notice does
+  not come back when the period is set back.
 
 ### Changed (massing)
 

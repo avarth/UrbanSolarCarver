@@ -4,10 +4,13 @@
 // In Solar usefulness the offer is the cold period of the new file (steps/cold_period_request.ts), once the answer for that file
 // is in, where its dates differ from the period's; the hours are kept. In the other modes that read a period it is the period
 // six months on, where the new file is in the other hemisphere from the one before (a project without one counts as northern:
-// the starting values of the modes are northern). The notice is about the period the form showed when the file came: once that
-// period changes, by the notice's button or by hand, it is gone.
+// the starting values of the modes are northern), unless that covers the same days (a whole year). A file within the tropics, or
+// without a latitude, has no hemisphere's seasons: it brings no such offer, and the hemisphere of the file before it still counts.
+// The notice is about the period the form showed when the file came: once that period changes, by the notice's button or by
+// hand, the change is forgotten (periodChangedSince), so setting the period back does not bring the notice back.
 import {
-  datesMatch, periodShiftedBySixMonths, periodWithDates, type ColdPeriodState, type Hemisphere, type Period, type PeriodDates,
+  coverTheSameDays, datesMatch, periodShiftedBySixMonths, periodWithDates, type ColdPeriodState, type Hemisphere, type Period,
+  type PeriodDates,
 } from "../settings_form/analysis_period";
 import { MODE_WITH_COLD_PERIOD } from "./cold_period_request";
 
@@ -17,9 +20,9 @@ export interface WeatherFileChange {
   weatherFileRevision: number;
   /** "<city>, <country>" of the new file; null without a LOCATION line. */
   location: string | null;
-  /** The hemisphere of the weather file the project had last; northern when it had none. */
+  /** The hemisphere of the last weather file the project had with seasons (seasonsOfLatitude); northern when it had none. */
   previousHemisphere: Hemisphere;
-  /** The hemisphere of the new file; null when its LOCATION line has no latitude the service can read. */
+  /** The hemisphere whose seasons the new file has; null within the tropics and when its LOCATION line has no latitude the service reads. */
   newHemisphere: Hemisphere | null;
   /** The analysis period the form showed when the file came; null while one of its parts is not set or the mode reads none. */
   periodBefore: Period | null;
@@ -38,10 +41,16 @@ export interface WeatherChangeSituation {
 
 export type WeatherChangeSuggestion =
   | { kind: "cold_period"; location: string | null; coldDates: PeriodDates; current: Period; suggested: Period }
-  | { kind: "six_months"; location: string; hemisphere: Hemisphere; suggested: Period };
+  | { kind: "six_months"; location: string | null; hemisphere: Hemisphere; suggested: Period };
 
 const samePeriod = (first: Period, second: Period) =>
   (Object.keys(first) as (keyof Period)[]).every((part) => first[part] === second[part]);
+
+/** Whether the period the form shows (null while not set or not read) is no longer the one it showed when the file of *change* came. */
+export function periodChangedSince(change: WeatherFileChange, period: Period | null): boolean {
+  if (period === null || change.periodBefore === null) return period !== change.periodBefore;
+  return !samePeriod(period, change.periodBefore);
+}
 
 /** The period the notice offers after *change*, or null when it shows nothing (yet). */
 export function weatherChangeSuggestion(change: WeatherFileChange | null, situation: WeatherChangeSituation): WeatherChangeSuggestion | null {
@@ -53,6 +62,8 @@ export function weatherChangeSuggestion(change: WeatherFileChange | null, situat
     if (!answerOfNewFile || coldPeriod?.kind !== "found" || datesMatch(period, coldPeriod.dates)) return null;
     return { kind: "cold_period", location: change.location, coldDates: coldPeriod.dates, current: period, suggested: periodWithDates(period, coldPeriod.dates) };
   }
-  if (change.newHemisphere === null || change.location === null || change.newHemisphere === change.previousHemisphere) return null;
-  return { kind: "six_months", location: change.location, hemisphere: change.newHemisphere, suggested: periodShiftedBySixMonths(period) };
+  if (change.newHemisphere === null || change.newHemisphere === change.previousHemisphere) return null;
+  const suggested = periodShiftedBySixMonths(period);
+  if (coverTheSameDays(period, suggested)) return null;
+  return { kind: "six_months", location: change.location, hemisphere: change.newHemisphere, suggested };
 }

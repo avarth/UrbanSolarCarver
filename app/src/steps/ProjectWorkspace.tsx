@@ -9,9 +9,9 @@ import {
   type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
-import { hemisphereOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
+import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import { analysisDiffersFromStored, shownValue, useSettingsForm, type SaveOutcome } from "../settings_form/form_state";
-import { fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
+import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
@@ -30,7 +30,7 @@ import {
   plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName,
 } from "./step_summaries";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "./sun_path_request";
-import { weatherChangeSuggestion, type WeatherFileChange } from "./weather_change_notice";
+import { periodChangedSince, weatherChangeSuggestion, type WeatherFileChange } from "./weather_change_notice";
 
 const NO_SHIFT: Point3 = [0, 0, 0];
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "mode", "settings"];
@@ -120,7 +120,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const weatherFileRevisionNow = useRef(0);
   // The weather file added or replaced last in this session, for the notice in Settings; null before one, and once it is dismissed.
   const [weatherFileChange, setWeatherFileChange] = useState<WeatherFileChange | null>(null);
-  // The hemisphere of the weather file the project had last, kept across a removal: what the period was likely chosen for.
+  // The hemisphere of the last weather file the project had with seasons, kept across a removal and across a file within the tropics
+  // or without a latitude: what the period was likely chosen for.
   const hemisphereOfLastWeatherFile = useRef<Hemisphere>(hemisphereOfLatitude(project.weather_latitude));
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
   // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
@@ -185,9 +186,15 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, onServiceProblem });
   const { coldPeriod, answeredWeatherFileRevision } = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision, onServiceProblem });
   const modeReadsPeriod = modeInfo?.needs_period ?? false;
+  const periodShown = analysisPeriodOf(form, modeReadsPeriod);
   const weatherChangeSuggestionNow = weatherChangeSuggestion(weatherFileChange, {
-    mode: form.mode, modeReadsPeriod, period: analysisPeriodOf(form, modeReadsPeriod), coldPeriod, answeredWeatherFileRevision,
+    mode: form.mode, modeReadsPeriod, period: periodShown, coldPeriod, answeredWeatherFileRevision,
   });
+  // Once the period is not the one the new file came with, the notice has nothing more to say about it, even if the period comes back.
+  const weatherChangeOutlived = weatherFileChange !== null && periodChangedSince(weatherFileChange, periodShown);
+  useEffect(() => {
+    if (weatherChangeOutlived) setWeatherFileChange(null);
+  }, [weatherChangeOutlived]);
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
 
@@ -207,12 +214,12 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const noteNewWeatherFile = (reply: InputFilesReply) => {
     const shownForm = currentForm();
     const readsPeriod = modes.find((candidate) => candidate.name === shownForm.mode)?.needs_period ?? false;
-    const newHemisphere = reply.weather_latitude === null ? null : hemisphereOfLatitude(reply.weather_latitude);
+    const newHemisphere = seasonsOfLatitude(reply.weather_latitude);
     setWeatherFileChange({
       weatherFileRevision: weatherFileRevisionNow.current, location: reply.weather_location, previousHemisphere: hemisphereOfLastWeatherFile.current,
       newHemisphere, periodBefore: analysisPeriodOf(shownForm, readsPeriod),
     });
-    hemisphereOfLastWeatherFile.current = hemisphereOfLatitude(reply.weather_latitude);
+    if (newHemisphere !== null) hemisphereOfLastWeatherFile.current = newHemisphere;
   };
   const afterInputsChanged = (role: InputRole) => {
     refreshStageStatus();
@@ -275,6 +282,12 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
   }, [settingToFocus]);
 
+  // Either button of the notice ends it; the focus, on a button that goes away, moves to the period the notice was about.
+  const endWeatherChangeNotice = () => {
+    setWeatherFileChange(null);
+    setSettingToFocus({ name: fieldSettingOf(ANALYSIS_PERIOD_FIELDS[0]) });
+  };
+
   const runBlocker = runAnalysisBlocker({
     runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length, testSurfaceFiles: files.test_surfaces.length, modeNeedsWeatherFile,
     hasWeatherFile, form, warmUpState,
@@ -317,7 +330,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason}
                             coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
                             weatherChangeNotice={weatherChangeSuggestionNow === null ? null
-                              : { suggestion: weatherChangeSuggestionNow, onDismiss: () => setWeatherFileChange(null) }} />,
+                              : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }} />,
     ...resultSteps.content,
   };
   const summaryOf = (name: StepName) => {

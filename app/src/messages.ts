@@ -374,11 +374,11 @@ export const messages = {
   // The notice of a weather file added or replaced in this session (steps/weather_change_notice.ts), in the Settings step.
   periodDates: (startMonth: number, startDay: number, endMonth: number, endDay: number) => periodDatesInWords(startMonth, startDay, endMonth, endDay),
   weatherChangeColdPeriod: (location: string | null, coldPeriodDatesText: string, periodDatesText: string) =>
-    `The cold period of the new weather file${location === null ? "" : `, ${location},`} is ${coldPeriodDatesText}; ` +
-    `the analysis period reads ${periodDatesText}.`,
+    `The new weather file${location === null ? "" : ` (${location})`} has its cold period from ${coldPeriodDatesText}; ` +
+    `the analysis period is ${periodDatesText}.`,
   useColdPeriodButton: "Use the cold period",
-  weatherChangeOtherHemisphere: (location: string, hemisphere: "northern" | "southern", shiftedPeriodText: string) =>
-    `${location} is in the ${hemisphere} hemisphere: winter there is ${hemisphere === "southern" ? "June to August" : "December to February"}. ` +
+  weatherChangeOtherHemisphere: (location: string | null, hemisphere: "northern" | "southern", shiftedPeriodText: string) =>
+    `The new weather file${location === null ? "" : ` (${location})`} is in the ${hemisphere} hemisphere: winter there is ${hemisphere === "southern" ? "June to August" : "December to February"}. ` +
     `Shift the analysis period by six months, to ${shiftedPeriodText}?`,
   shiftBySixMonthsButton: "Shift by six months",
   keepAnalysisPeriodButton: "Keep",

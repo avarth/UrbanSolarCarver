@@ -181,7 +181,7 @@ function WeatherChangeNotice({ suggestion, onDismiss, form, onChange, disabled }
     onDismiss();
   };
   return (
-    <div className="weather-change-notice" role="status">
+    <div className="weather-change-notice">
       <p>{text}</p>
       <div className="weather-change-notice-buttons">
         <button type="button" className="secondary-button" disabled={disabled} onClick={useSuggestedPeriod}>{useLabel}</button>
@@ -211,9 +211,12 @@ export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null
   return (
     <div className="settings-step">
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
-      {weatherChangeNotice !== null && (
-        <WeatherChangeNotice {...weatherChangeNotice} form={form} onChange={onChange} disabled={disabledReason !== null} />
-      )}
+      {/* A live region on the page from the start, so that screen readers announce the notice that fills it. */}
+      <div className="weather-change-region" role="status">
+        {weatherChangeNotice !== null && (
+          <WeatherChangeNotice {...weatherChangeNotice} form={form} onChange={onChange} disabled={disabledReason !== null} />
+        )}
+      </div>
       {form.stepErrors.map((error) => <p key={error} className="setting-error step-error"><WarningIcon /><span>{error}</span></p>)}
       {settingsForStep("settings", form.mode).map((group) => (
         <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras} />
