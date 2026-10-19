@@ -136,7 +136,8 @@ def write_fake_stage_output(run_folder: Path, stage: str) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     manifest = {"run_id": uuid.uuid4().hex}
     if stage == "preprocessing":
-        manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0)
+        # As the engine records them; stage status reads grid_step only to tell a manifest from before it was recorded.
+        manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0, grid_step=0.5)
     if stage == "massing":      # the fake writes its plates as OBJ whatever the format chosen
         manifest.update(plates_path="plates.json", mesh_path="plates.obj", export_mesh_path="plates.obj",
                         upstream_manifest="../thresholding/manifest.json")

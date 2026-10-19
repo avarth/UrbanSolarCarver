@@ -114,3 +114,11 @@ def test_manifest_records_the_sample_spacing_used_when_unset(tmp_path, tmp_mesh_
     )
     result = preprocessing(cfg, tmp_path / "out")
     assert PreprocessingManifest.model_validate_json(result.manifest_path.read_text()).grid_step == 1.0
+
+
+def test_a_manifest_from_before_preprocessing_recorded_the_sample_spacing_reads_as_none():
+    from urbansolarcarver.pydantic_schemas import PreprocessingManifest
+    old_manifest = {"run_id": "r", "scores_path": "scores.npy", "scores_kind": "weighted_sum", "shape": [2, 2, 2],
+                    "origin": [0.0, 0.0, 0.0], "voxel_size": 1.0, "mode": "daylight", "voxel_grid_path": "voxel_grid.npy",
+                    "sample_point_count": 4, "footprint_path": "footprint.npy"}
+    assert PreprocessingManifest.model_validate(old_manifest).grid_step is None

@@ -242,6 +242,55 @@ def test_a_preprocessing_run_from_before_the_manifest_recorded_the_max_volume_he
     assert choose_stages(store, name, ["massing"]).stages == ["preprocessing", "thresholding", "massing"]
 
 
+def _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name):
+    """Replaces the preprocessing manifest with one as an earlier version wrote it: every field but grid_step, same run_id."""
+    manifest_path = store.open(name) / "run" / "preprocessing" / "manifest.json"
+    run_id = json.loads(manifest_path.read_text(encoding="utf-8"))["run_id"]
+    old_manifest = {"run_id": run_id, "scores_path": "scores.npy", "scores_kind": "weighted_sum", "shape": [12, 12, 12],
+                    "origin": [-6.0, -6.0, -1.0], "voxel_size": 1.0, "mode": "daylight", "voxel_grid_path": "voxel_grid.npy",
+                    "patch_weights_path": "patch_weights.npy", "sample_point_count": 36, "footprint_path": "footprint.npy",
+                    "max_volume_lowest_z": 0.0, "max_volume_highest_z": 10.0}
+    manifest_path.write_text(json.dumps(old_manifest), encoding="utf-8")
+
+
+def _built_at_voxel_size(project_with_inputs, voxel_size):
+    store, name = project_with_inputs
+    change_settings(store, name, voxel_size=voxel_size)
+    worker = make_worker(store)
+    run_and_wait(worker, name, ["exporting", "massing"])
+    assert stage_status(store, name) == ALL_CURRENT
+    return store, name, worker
+
+
+def test_a_run_from_before_the_manifest_recorded_the_sample_spacing_used_the_old_1_m_default(project_with_inputs):
+    """Without grid_step in its config, such a run sampled every 1 m; the next run samples at half the 1 m voxel size, so the
+    analysis and everything built on it are out of date once, and the run after brings them back."""
+    store, name, worker = _built_at_voxel_size(project_with_inputs, 1.0)
+    assert "grid_step" not in store.read_project_json(name).stage_records["preprocessing"].config
+    _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name)
+    assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
+    assert choose_stages(store, name, ["thresholding"]).stages == ["preprocessing", "thresholding"]
+    run_and_wait(worker, name, ["exporting", "massing"])
+    assert stage_status(store, name) == ALL_CURRENT
+
+
+def test_a_run_from_before_the_manifest_recorded_the_sample_spacing_stays_current_when_it_used_the_spacing_the_next_run_uses(
+        project_with_inputs):
+    # At 2 m voxels, half the voxel size is the old 1 m default.
+    store, name, _worker = _built_at_voxel_size(project_with_inputs, 2.0)
+    _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name)
+    assert stage_status(store, name) == ALL_CURRENT
+
+
+def test_a_run_from_before_the_manifest_recorded_the_sample_spacing_with_a_stored_grid_step_compares_that_value(project_with_inputs):
+    store, name, _worker = _built_at_voxel_size(project_with_inputs, 1.0)
+    _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name)
+    _record_runs_with_grid_step(store, name, 0.5)          # half the voxel size: what the next run uses
+    assert stage_status(store, name) == ALL_CURRENT
+    _record_runs_with_grid_step(store, name, 1.0)
+    assert stage_status(store, name)["preprocessing"] == "out_of_date"
+
+
 def test_forgetting_stages_removes_only_their_records(built_project):
     store, name, _worker = built_project
     forget_stages(store, name, ["exporting", "massing"])

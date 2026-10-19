@@ -92,7 +92,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
   project that stored a `grid_step` drops it when it opens (the service
   leaves it out when it reads and writes `config.yaml`), so the computed
   spacing applies; its analysis shows as out of date once when the stored
-  spacing was not half its voxel size.
+  spacing was not half its voxel size. An analysis whose preprocessing
+  manifest does not record the spacing, made without a stored `grid_step`,
+  used the old 1 m default and is compared as such, so it is out of date
+  once unless its voxel size is 2 m.
 - **Edge strip with less weight (`edge_taper`) is shown in Night cooling
   only**, under More mode settings, with the help "Sample points closer than
   this to the edge of a test surface count less (from 0 at the edge to full

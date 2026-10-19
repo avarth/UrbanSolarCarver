@@ -14,7 +14,7 @@ from pathlib import Path
 
 from ..errors import ConfigError
 from ..mode_registry import MODES
-from ..pydantic_schemas import UserConfig
+from ..pydantic_schemas import UserConfig, resolve_grid_step
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 from .api_models import StageRecord, StageState
 from .projects import INPUTS_FOLDER, JOINED_FOLDER, MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
@@ -29,6 +29,10 @@ MAX_VOLUME_HEIGHT_FIELDS = ("max_volume_lowest_z", "max_volume_highest_z")
 # A massing manifest without this field is from before massing wrote its plates in the chosen format: its only mesh
 # is plates.obj, so it is out of date for any other format.
 MASSING_EXPORT_MESH_FIELD = "export_mesh_path"
+# A preprocessing manifest without this field is from before preprocessing recorded its sample spacing, when an unset grid_step
+# sampled every GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE meters; now it samples at half the voxel size.
+SAMPLE_SPACING_FIELD = "grid_step"
+GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE = 1.0
 
 
 @dataclass(frozen=True)
@@ -72,6 +76,8 @@ def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
             status[stage] = "out_of_date"
         elif stage == "preprocessing" and any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
             status[stage] = "out_of_date"
+        elif stage == "preprocessing" and _sampled_at_another_spacing_before_it_was_recorded(record, manifest, current_config):
+            status[stage] = "out_of_date"
         elif stage == "massing" and manifest.get(MASSING_EXPORT_MESH_FIELD) is None and current_config.final_mesh_format != "obj":
             status[stage] = "out_of_date"
         elif stage in UPSTREAM_STAGE and not _reads_current_upstream(
@@ -89,6 +95,19 @@ def _settings_changed(store: ProjectStore, name: str, stage: str, record: StageR
     except ConfigError:     # e.g. an engine update since the run removed or newly validates a setting
         return True
     return stage in stages_to_rerun(recorded_config, current_config, [stage])
+
+
+def _sampled_at_another_spacing_before_it_was_recorded(record: StageRecord, manifest: dict, current_config: UserConfig) -> bool:
+    """Whether a preprocessing run whose manifest does not record its sample spacing used another spacing than the next run will.
+
+    Such a run sampled at the grid_step of its config, or at the old default of 1 m without one; the settings comparison cannot
+    tell, as it reads an unset grid_step as half the voxel size. A manifest that records its spacing is left to that comparison.
+    """
+    if manifest.get(SAMPLE_SPACING_FIELD) is not None:
+        return False
+    stored_spacing = record.config.get("grid_step")
+    spacing_used = GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE if stored_spacing is None else float(stored_spacing)
+    return spacing_used != resolve_grid_step(current_config.grid_step, current_config.voxel_size)
 
 
 def _reads_current_upstream(upstream_state: StageState, upstream_record: StageRecord | None, manifest: dict) -> bool:
