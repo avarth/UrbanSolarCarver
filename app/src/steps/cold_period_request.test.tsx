@@ -16,12 +16,14 @@ const formOf = (settings: Record<string, unknown>): FormState =>
 
 let rendered: RenderedOverlay | null = null;
 let state: ColdPeriodState | null = null;
+let answeredRevision: number | null = null;
 let requests: string[] = [];
 const FOUND = { status: "found", period: { start_month: 9, start_day: 30, end_month: 5, end_day: 15 } };
 let reply: unknown = FOUND;
 
 function ColdPeriodOf({ form, hasWeatherFile = true, weatherFileRevision = 0 }: { form: FormState; hasWeatherFile?: boolean; weatherFileRevision?: number }) {
-  state = useColdPeriod({ token: "t", project: "p", form, hasWeatherFile, weatherFileRevision, onServiceProblem: () => {} });
+  ({ coldPeriod: state, answeredWeatherFileRevision: answeredRevision } =
+    useColdPeriod({ token: "t", project: "p", form, hasWeatherFile, weatherFileRevision, onServiceProblem: () => {} }));
   return null;
 }
 
@@ -52,6 +54,12 @@ test("the cold period is asked for with the balance temperature minus the dead b
   await waitForTheRequest();
   expect(requests).toEqual(["/api/projects/p/cold-period?base_temperature=14.5"]);
   expect(state).toEqual({ kind: "found", dates: { startMonth: 9, startDay: 30, endMonth: 5, endDay: 15 }, baseTemperature: 14.5 });
+});
+
+test("the base is rounded as the slider rounds its values: 16.1 - 2.9 asks for 13.2, not 13.200000000000001", async () => {
+  rendered = renderForTest(<ColdPeriodOf form={formOf({ balance_temperature: 16.1, balance_offset: 2.9 })} />);
+  await waitForTheRequest();
+  expect(requests).toEqual(["/api/projects/p/cold-period?base_temperature=13.2"]);
 });
 
 test("the defaults give 13 °C, and a change of the balance asks again once it rests", async () => {
@@ -107,6 +115,20 @@ test("a replaced weather file is asked about again at the same base", async () =
   rendered.rerender(<ColdPeriodOf form={formOf({})} weatherFileRevision={1} />);
   await waitForTheRequest();
   expect(requests).toHaveLength(2);
+});
+
+test("the answer says which weather file it is of; while the replaced file is asked about, none is", async () => {
+  rendered = renderForTest(<ColdPeriodOf form={formOf({})} />);
+  expect(answeredRevision).toBeNull();
+  await waitForTheRequest();
+  expect(answeredRevision).toBe(0);
+  reply = { status: "none", period: null };
+  rendered.rerender(<ColdPeriodOf form={formOf({})} weatherFileRevision={1} />);
+  expect(answeredRevision).toBeNull();                           // the first file's answer is no answer for the second
+  expect(state).toEqual({ kind: "finding" });
+  await waitForTheRequest();
+  expect(answeredRevision).toBe(1);
+  expect(state).toEqual({ kind: "none", baseTemperature: 13 });
 });
 
 test("a mode without a balance temperature has no cold period", async () => {

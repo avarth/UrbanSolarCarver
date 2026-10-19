@@ -124,26 +124,53 @@ test("a finished envelope stage asks for the run summary once: the envelope's fi
   expect(service.requests).toContain("GET /run/files/exporting/export.obj");
 });
 
-test("while a format change rebuilds the envelope, its old file waits: the run removes it, so a download would find none", async () => {
+const chooseMeshFormat = async (format: string) => {
+  await act(async () => container().querySelector<HTMLInputElement>(`[data-setting="final_mesh_format"] input[value="${format}"]`)!.click());
+  await waitForTheSave();
+  await settle();
+};
+const downloadButton = (label: string) => buttonIn(container().querySelector(".download-list")!, label);
+
+test("a format change rebuilds both parts that exist; while it runs their old files wait: the run removes them, so a download would find none", async () => {
   const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
   service = new FakeService(built, CARVING);
   service.summary = { carving: CARVING, envelope: ENVELOPE, massing: MASSING };
   await openWorkspace(service, project(built, { final_mesh_format: "ply" }));
   openStep("Export");
-  const download = (label: string) => buttonIn(container().querySelector(".download-list")!, label);
-  expect(download("Carved envelope (PLY)").disabled).toBe(false);
-  await act(async () => container().querySelector<HTMLInputElement>('[data-setting="final_mesh_format"] input[value="obj"]')!.click());
-  await waitForTheSave();
-  await settle();
-  expect(service.runsStarted).toEqual([["exporting"]]);
+  expect(downloadButton("Carved envelope (PLY)").disabled).toBe(false);
+  await chooseMeshFormat("obj");
+  expect(service.runsStarted).toEqual([["exporting", "massing"]]);
   const run = FakeWebSocket.opened[0];
   run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
   await settle();
-  expect(download("Carved envelope (PLY)").disabled).toBe(true);
-  expect(reasonOf(download("Carved envelope (PLY)"))).toBe("A run is in progress");
-  expect(download("Building massing (OBJ)").disabled).toBe(false);          // the run leaves the massing as it is
-  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: MASSING };
-  run.send({ type: "run_finished", stages: ["exporting"], files: [] });
+  for (const label of ["Carved envelope (PLY)", "Building massing (PLY)"]) {
+    expect(downloadButton(label).disabled).toBe(true);
+    expect(reasonOf(downloadButton(label))).toBe("A run is in progress");
+  }
+  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: { ...MASSING, export_mesh_file: "plates.obj" } };
+  run.send({ type: "run_finished", stages: ["exporting", "massing"], files: [] });
   await settle();
-  expect(download("Carved envelope (OBJ)").disabled).toBe(false);
+  expect(downloadButton("Carved envelope (OBJ)").disabled).toBe(false);
+  expect(downloadButton("Building massing (OBJ)").disabled).toBe(false);
+  expect(container().querySelector(".download-list .download-note")).toBeNull();     // every file is in the format chosen
+});
+
+test("a format change with only the envelope built rebuilds the envelope", async () => {
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "missing" };
+  service = new FakeService(built, CARVING);
+  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: null };
+  await openWorkspace(service, project(built, { final_mesh_format: "ply" }));
+  openStep("Export");
+  await chooseMeshFormat("stl");
+  expect(service.runsStarted).toEqual([["exporting"]]);
+});
+
+test("a format change with only the massing built rebuilds the massing", async () => {
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "missing", massing: "current" };
+  service = new FakeService(built, CARVING);
+  service.summary = { carving: CARVING, envelope: null, massing: MASSING };
+  await openWorkspace(service, project(built, { final_mesh_format: "ply" }));
+  openStep("Export");
+  await chooseMeshFormat("glb");
+  expect(service.runsStarted).toEqual([["massing"]]);
 });

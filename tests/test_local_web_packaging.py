@@ -161,8 +161,8 @@ def test_the_automatic_values_the_form_reads_are_in_the_engine_descriptions():
 
 def test_each_slider_lies_within_the_engine_limits():
     """The slider is the range people normally use: inside what the engine accepts, low below high, a whole number of steps
-    from one end to the other. balance_offset's entry gives the step of the balance slider's left handle; its range is unused,
-    as that handle runs on balance_temperature's track."""
+    from one end to the other. balance_offset's slider is there for the test above only: both handles of the balance slider run on
+    balance_temperature's track."""
     for name, entry in presented_settings().items():
         if "slider" not in entry:
             continue

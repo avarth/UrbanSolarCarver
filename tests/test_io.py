@@ -53,3 +53,40 @@ def test_open_surface_keeps_its_side(tmp_path):
     path = tmp_path / "quad.ply"
     save_mesh(quad, str(path))
     np.testing.assert_allclose(load_mesh(str(path)).face_normals[:, 2], 1.0)
+
+
+def _georeferenced_box():
+    box = trimesh.creation.box(extents=(30.0, 12.0, 20.0))
+    box.apply_translation((500000.37, 4200000.61, 10.0))     # float32 spacing: 0.03 m at x, 0.5 m at y
+    return box
+
+
+def test_glb_keeps_georeferenced_coordinates_by_placing_the_offset_in_the_node(tmp_path):
+    box = _georeferenced_box()
+    path = tmp_path / "box.glb"
+    save_mesh(box, str(path))
+    loaded = trimesh.load(str(path), force="mesh", process=False)
+    assert np.abs(np.sort(loaded.vertices, axis=0) - np.sort(box.vertices, axis=0)).max() < 1e-4
+    scene = trimesh.load(str(path))
+    transform, geometry = scene.graph[scene.graph.nodes_geometry[0]]
+    assert np.abs(transform[:2, 3]).max() > 1e5                            # the offset, a double in the JSON
+    assert np.abs(scene.geometry[geometry].vertices).max() < 100.0        # float32 vertices near the origin
+
+
+@pytest.mark.parametrize("name", ["box.stl", "box.glb", "box.ply"])
+def test_only_stl_warns_that_georeferenced_coordinates_are_rounded_to_float32(tmp_path, name):
+    import warnings
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        save_mesh(_georeferenced_box(), str(tmp_path / name))
+    rounded = [str(w.message) for w in caught if "float32" in str(w.message)]
+    assert len(rounded) == (1 if name.endswith(".stl") else 0)
+    assert all(name in message for message in rounded)
+
+
+def test_stl_near_the_origin_does_not_warn(tmp_path):
+    import warnings
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        save_mesh(trimesh.creation.box(extents=(30.0, 12.0, 20.0)), str(tmp_path / "box.stl"))
+    assert not [w for w in caught if "float32" in str(w.message)]

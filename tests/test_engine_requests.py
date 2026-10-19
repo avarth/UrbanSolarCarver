@@ -193,6 +193,7 @@ def test_a_run_reply_carries_the_produced_paths(tmp_path, tmp_mesh_files):
     assert Path(reply["export_path"]).is_file()
     assert reply["plates_path"].endswith("plates.json")
     assert Path(reply["mesh_path"]).name == "plates.obj"
+    assert Path(reply["export_mesh_path"]).name == "plates.ply"        # final_mesh_format's default
 
 
 def test_a_stage_reply_carries_the_issues_of_that_stage(tmp_path, tmp_mesh_files):
@@ -215,10 +216,11 @@ def test_massing_runs_after_thresholding_by_stage_commands(tmp_path, tmp_mesh_fi
         thr = answer_engine_message({"cmd": "thresholding", "config": str(cfg_path),
                                      "from": pre["manifest"]}, session)
         reply = answer_engine_message({"cmd": "massing", "config": str(cfg_path),
-                                       "from": thr["manifest"]}, session)
+                                       "from": thr["manifest"], "overrides": ["final_mesh_format=stl"]}, session)
     assert reply["status"] == "ok", reply
     assert (tmp_path / "out" / "massing" / "plates.json").is_file()
     assert reply["plates_path"].endswith("plates.json")
+    assert Path(reply["export_mesh_path"]).name == "plates.stl" and Path(reply["export_mesh_path"]).is_file()
 
 
 def test_the_voxel_grid_cache_survives_between_requests(tmp_path, tmp_mesh_files):

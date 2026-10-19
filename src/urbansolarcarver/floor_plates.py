@@ -20,6 +20,7 @@ from shapely.geometry import LineString, Polygon
 from shapely.geometry.polygon import orient
 
 CORNER_ANGLE_DEG = 30.0  # turns sharper than this split facades
+MIN_CUT_ANGLE_DEG = 30.0  # a module cut at a slanted end keeps no angle sharper than this (see bay_polygons)
 _TIE_SHIFT = np.array([1.1e-6, 2.3e-6])  # m; see assign_faces
 
 
@@ -97,22 +98,23 @@ def footprint_from_columns(columns, voxel_size) -> list:
     return [orient(p, 1.0) for p in parts if isinstance(p, Polygon) and p.area > 0.0]
 
 
-def _facade(part, xy, closed) -> Facade:
+def _facade(part, xy, closed, straight_tolerance=1e-6) -> Facade:
     """A facade through the points *xy*; straight when every point lies within
-    a micrometre of the line from the first to the last (stray collinear
-    vertices from mesh edges do not make it curved)."""
+    *straight_tolerance* of the line from the first to the last (stray
+    vertices from mesh sections, off the line by less than the voxel grid
+    can resolve, do not make it curved)."""
     start, end = xy[0], xy[-1]
     chord = end - start
     norm = float(np.hypot(*chord))
     direction = chord / norm if norm > 0.0 else np.array([1.0, 0.0])
     off_line = np.abs((xy[:, 0] - start[0]) * direction[1] - (xy[:, 1] - start[1]) * direction[0])
-    straight = (not closed) and norm > 0.0 and bool(off_line.max() <= 1e-6)
+    straight = (not closed) and norm > 0.0 and bool(off_line.max() <= straight_tolerance)
     line = LineString([start, end] if straight else xy)
     return Facade(part=part, line=line, length=float(line.length), straight=straight,
                   direction=direction, start=start, end=end, closed=closed)
 
 
-def _ring_facades(coords, part, corner_angle_deg):
+def _ring_facades(coords, part, corner_angle_deg, straight_tolerance):
     """Facades of one ring, and for each the convexity of the corner at its end."""
     pts = np.asarray(coords, dtype=np.float64)[:-1]          # drop the closing point
     edge = np.roll(pts, -1, axis=0) - pts                     # edge k: pts[k] -> pts[k+1]
@@ -127,19 +129,22 @@ def _ring_facades(coords, part, corner_angle_deg):
     facades, convex = [], []
     for a, b in zip(corners, np.roll(corners, -1)):
         idx = np.arange(a, b + 1) if b > a else np.r_[np.arange(a, n), np.arange(0, b + 1)]
-        facades.append(_facade(part, pts[idx], closed=False))
+        facades.append(_facade(part, pts[idx], closed=False, straight_tolerance=straight_tolerance))
         # Rings are oriented with the solid on the left (exterior counter-
         # clockwise, holes clockwise), so a left turn is a convex corner.
         convex.append(bool(turn[b] > 0.0))
     return facades, convex
 
 
-def split_facades(polygons, corner_angle_deg=CORNER_ANGLE_DEG):
+def split_facades(polygons, corner_angle_deg=CORNER_ANGLE_DEG, straight_tolerance=1e-6):
     """Split every ring of every footprint polygon into facades at its corners.
 
     A corner is a vertex where the outline turns by more than
     *corner_angle_deg*; smaller turns (curved or faceted facades) continue
-    the facade.  A ring without corners is one closed facade.
+    the facade.  A ring without corners is one closed facade.  A facade
+    whose vertices all lie within *straight_tolerance* of the line from its
+    first to its last is straight (the massing stage passes 1 cm, more for
+    coordinates far from the origin, at most half a voxel).
 
     Returns
     -------
@@ -149,7 +154,7 @@ def split_facades(polygons, corner_angle_deg=CORNER_ANGLE_DEG):
     for part, polygon in enumerate(polygons):
         polygon = orient(polygon, 1.0)
         for ring in [polygon.exterior, *polygon.interiors]:
-            ring_facades, convex = _ring_facades(ring.coords, part, corner_angle_deg)
+            ring_facades, convex = _ring_facades(ring.coords, part, corner_angle_deg, straight_tolerance)
             first = len(facades)
             facades.extend(ring_facades)
             count = len(ring_facades)
@@ -200,13 +205,14 @@ def _half_depth(facade, polygon, voxel_size):
     x0, y0, x1, y1 = polygon.bounds
     reach = float(np.hypot(x1 - x0, y1 - y0)) + 1.0
     thickness = []
+    step_inside = 1e-6
     for p, d in zip(at, inward):
-        ray = LineString([p + d * 1e-6, p + d * reach])
+        ray = LineString([p + d * step_inside, p + d * reach])
         inside = ray.intersection(polygon)
         pieces = [g for g in getattr(inside, "geoms", [inside]) if g.length > 0.0]
         first = [g for g in pieces if shapely.distance(g, shapely.Point(p)) < 1e-4]
         if first:
-            thickness.append(first[0].length)
+            thickness.append(first[0].length + step_inside)   # the ray starts that far inside
     return 0.5 * float(np.median(thickness)) if thickness else 0.0
 
 
@@ -476,6 +482,97 @@ def _rectangle(origin, along, inward, u0, u1, d0, d1):
     return Polygon([origin + u * along + d * inward for u, d in corners])
 
 
+def _inward(facade):
+    return np.array([-facade.direction[1], facade.direction[0]])    # solid on the left
+
+
+def _bisector(facade, other):
+    """The line of points as far behind straight *facade* as behind straight *other* (the ridge the nearest-facade
+    rule draws between their faces), as (unit normal, offset) of ``normal @ p == offset``; None when they are
+    parallel and face the same way."""
+    towards = _inward(facade) - _inward(other)
+    norm = float(np.hypot(*towards))
+    if norm <= 1e-9:
+        return None
+    return towards / norm, (_inward(facade) @ facade.start - _inward(other) @ other.start) / norm
+
+
+def _neighbours(facades, k, part_facades):
+    """The facades among *part_facades* that meet facade *k* at one of its ends."""
+    f = facades[k]
+    return [j for j in part_facades if j != k
+            and (np.allclose(facades[j].end, f.start, atol=1e-9) or np.allclose(facades[j].start, f.end, atol=1e-9))]
+
+
+def _lines_between_faces(facades, mine, theirs, part_facades, half_depth):
+    """Lines along which the face of facade *mine* (straight) can meet the face of facade *theirs*, as (unit normal,
+    offset) of ``normal @ p == offset``, in the order they are tried: the bisector of the two facades; the lines of
+    their corner squares (``assign_faces``: for each of the two that is straight, the line *half_depth* of it behind
+    it and the lines across it at its two ends); then the bisectors of each with the facades that meet it
+    (*part_facades*, indices into *facades*, are the facades of their part).  A facade that touches neither gives no
+    line: one that happens to separate the columns would cut a wedge where the faces do not meet."""
+    pair = [k for k in (mine, theirs) if facades[k].straight]
+    lines = [_bisector(facades[mine], facades[theirs])] if len(pair) == 2 else []
+    for k in pair:
+        f = facades[k]
+        lines += [(_inward(f), _inward(f) @ f.start + half_depth(k)),
+                  (f.direction, f.direction @ f.start), (f.direction, f.direction @ f.end)]
+    lines += [_bisector(facades[k], facades[j]) for k in pair for j in _neighbours(facades, k, part_facades)
+              if j not in (mine, theirs) and facades[j].straight]
+    return [line for line in lines if line is not None]
+
+
+def _separates(mine, theirs, normal, offset):
+    return (mine @ normal - offset).max() <= 1e-9 and (theirs @ normal - offset).min() >= -1e-9
+
+
+def _separating_line(mine, theirs, candidate_lines, snap_normals=()):
+    """(unit normal, offset) of a line with the points *mine* on its side ``normal @ p <= offset`` and the points
+    *theirs* on the other, or None.
+
+    The first of *candidate_lines* that separates them; otherwise the line midway across the widest gap between their
+    convex hulls, turned to the nearest of *snap_normals* (the directions of the two facades, their normals and their
+    bisector) and placed midway across the gap the columns leave in that direction, when that still separates them.
+    A line at any other angle would cut a wedge into the module, so there is none: it is drawn from its columns."""
+    for normal, offset in candidate_lines:
+        for sign in (1.0, -1.0):
+            if _separates(mine, theirs, sign * normal, sign * offset):
+                return sign * normal, sign * offset
+    hull_mine = shapely.MultiPoint(mine).convex_hull
+    hull_theirs = shapely.MultiPoint(theirs).convex_hull
+    if not len(snap_normals) or hull_mine.distance(hull_theirs) <= 1e-9:
+        return None
+    a, z = shapely.get_coordinates(shapely.shortest_line(hull_mine, hull_theirs))
+    widest = (z - a) / np.hypot(*(z - a))
+    snapped = max(snap_normals, key=lambda normal: abs(normal @ widest))
+    normal = snapped if snapped @ widest > 0.0 else -snapped
+    low, high = (mine @ normal).max(), (theirs @ normal).min()
+    return (normal, float(0.5 * (low + high))) if high > low + 1e-9 else None
+
+
+def _convex_cut(polygon, lines):
+    """The part of the convex *polygon* on the side ``normal @ p <= offset`` of every line (normal, offset) in
+    *lines*, or None when nothing is left.
+
+    Cut edge by edge (each edge keeps its start when on that side and gains the point where it crosses the line),
+    with vertices closer than a nanometre merged, so that two lines crossing at a vertex leave no spike."""
+    points = np.asarray(polygon.exterior.coords)[:-1]
+    for normal, offset in lines:
+        side = points @ normal - offset
+        kept = []
+        for k in range(len(points)):
+            p, q, side_p, side_q = points[k - 1], points[k], side[k - 1], side[k]
+            if (side_p < 0.0 < side_q) or (side_q < 0.0 < side_p):
+                kept.append(p + (q - p) * side_p / (side_p - side_q))
+            if side_q <= 0.0:
+                kept.append(q)
+        kept = [p for k, p in enumerate(kept) if np.hypot(*(p - kept[k - 1])) > 1e-9] if len(kept) > 1 else kept
+        if len(kept) < 3:
+            return None
+        points = np.array(kept)
+    return Polygon(points)
+
+
 def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, voxel_size):
     """The outline of each bay on a straight facade, as a rectangle in the
     facade's frame (local xy); None for the others.
@@ -494,9 +591,19 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
       that clipping to the footprint gives the outline itself;
     * any other side stays at the edge of the columns' squares.
 
-    A bay whose rectangle holds column centres of another bay (a slanted
-    end where a corner is not square) and a bay on a curved facade get
-    None; ``plate_polygons`` draws those from their columns.
+    A rectangle that holds column centres of another bay (a slanted end
+    where a corner is not square) is first grown, on each side that is not a
+    cut line and has columns beyond it, by a module up to the next cut line,
+    then cut by a line between its columns and those of every other bay
+    inside it: one of ``_lines_between_faces`` (for two straight facades
+    first the bisector of their corner, which the nearest-facade rule
+    draws), else the line across the widest gap between the columns turned
+    to a direction of the two facades or their bisector
+    (``_separating_line``).  Where no line separates them, or the cut leaves
+    a piece narrower than a voxel or an angle under MIN_CUT_ANGLE_DEG away
+    from the footprint's corners, the rectangle is cut without being grown;
+    where that fails too, and for a bay on a curved facade, the bay gets
+    None: ``plate_polygons`` draws those from their columns.
 
     *xy* are voxel column centres, one per grid square.  Every test looks at
     columns within two modules of the bay, so each bay reads only the columns
@@ -505,6 +612,21 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
     xy = np.asarray(xy, dtype=np.float64)
     vs, w = float(voxel_size), float(bay_width)
     part = part_of_points(shapely.points(xy), polygons)
+    # Where assign_faces saw each column (columns exactly on a ridge moved off it), for the lines between faces.  Only
+    # columns whose centre lies inside the footprint count there: the others, along facades not aligned with the grid,
+    # were assigned from a point of the outline and lie where clipping to the footprint removes their squares anyway.
+    seen_at = xy + _TIE_SHIFT
+    in_footprint = shapely.contains_xy(shapely.union_all(polygons), seen_at[:, 0], seen_at[:, 1])
+    facades_of_part = {}
+    for k, f in enumerate(facades):
+        facades_of_part.setdefault(f.part, []).append(k)
+    half_depths = {}
+
+    def half_depth(f_index):
+        if f_index not in half_depths:
+            half_depths[f_index] = _half_depth(facades[f_index], polygons[facades[f_index].part], vs)
+        return half_depths[f_index]
+
     shapes = [None] * len(bay_face)
     columns_of_bay = np.split(np.argsort(bay, kind="stable"),
                               np.cumsum(np.bincount(bay, minlength=len(bay_face)))[:-1])
@@ -520,6 +642,56 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
         hi = np.floor(corners_xy.max(axis=0) / vs).astype(np.int64) - first_cell + 2
         window = column_at_cell[lo[0]:max(hi[0], 0), lo[1]:max(hi[1], 0)].ravel()
         return window[window >= 0]
+
+    def snap_normals_of(f_index, other):
+        """The directions a line between the faces of two facades may take: along or across either, or their bisector."""
+        straight = [facades[k] for k in (f_index, other) if facades[k].straight]
+        normals = [direction for f in straight for direction in (f.direction, _inward(f))]
+        bisector = _bisector(facades[f_index], facades[other]) if len(straight) == 2 else None
+        return normals + ([bisector[0]] if bisector is not None else [])
+
+    def well_shaped(shape, lines, part_index):
+        """Whether *shape*, cut by *lines*, has within its part neither a piece narrower than a voxel nor, on a cut line
+        and away from the part's own vertices, an angle sharper than MIN_CUT_ANGLE_DEG: a wedge or a sliver the cut made."""
+        polygon = polygons[part_index]
+        corners = shapely.MultiPoint(np.vstack([np.asarray(ring.coords) for ring in [polygon.exterior, *polygon.interiors]]))
+        for piece in shapely.get_parts(shape.intersection(polygon)):
+            if not isinstance(piece, Polygon) or piece.area <= 1e-6:
+                continue
+            if piece.buffer(-0.5 * vs, join_style="mitre").is_empty:
+                return False
+            for ring in [piece.exterior, *piece.interiors]:
+                points = np.asarray(ring.coords)[:-1]
+                for k, point in enumerate(points):
+                    u, v = points[k - 1] - point, points[(k + 1) % len(points)] - point
+                    cosine = u @ v / max(np.hypot(*u) * np.hypot(*v), 1e-18)
+                    on_a_cut = any(abs(point @ normal - offset) < 1e-6 for normal, offset in lines)
+                    if (on_a_cut and cosine > np.cos(np.radians(MIN_CUT_ANGLE_DEG))
+                            and corners.distance(shapely.Point(point)) > 1e-3):
+                        return False
+        return True
+
+    def cut_between_bays(pieces, b, f_index):
+        """The union of the convex *pieces* cut by a line between bay *b*'s columns and those of each other bay with
+        a column centre inside it; None when no line separates the two or the cut is not ``well_shaped``."""
+        shape = shapely.union_all(pieces)
+        x0, y0, x1, y1 = shape.bounds
+        near = columns_near(np.array([[x0, y0], [x1, y1]]))
+        near = near[bay[near] != b]
+        inside = near[shapely.contains_xy(shape, xy[near, 0], xy[near, 1]) & in_footprint[near]]
+        mine = columns_of_bay[b]
+        mine = seen_at[mine[in_footprint[mine]]] if in_footprint[mine].any() else seen_at[mine]
+        lines = []
+        for other in np.unique(bay[inside]):
+            theirs = seen_at[inside[bay[inside] == other]]
+            candidates = _lines_between_faces(facades, f_index, bay_face[other], facades_of_part[facades[f_index].part],
+                                              half_depth)
+            lines.append(_separating_line(mine, theirs, candidates, snap_normals_of(f_index, bay_face[other])))
+            if lines[-1] is None:
+                return None
+        cut = [piece for piece in (_convex_cut(piece, lines) for piece in pieces) if piece is not None]
+        shape = shapely.union_all(cut) if cut else None
+        return shape if shape is not None and well_shaped(shape, lines, facades[f_index].part) else None
 
     for f_index in np.unique(bay_face):
         facade = facades[f_index]
@@ -556,18 +728,18 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
             near = near[bay[near] != b]
             others = near[part[near] == facade.part]
             u_o, d_o = u_all[others], d_all[others]
-            if ((u_o > u_lo + 1e-9) & (u_o < u_hi - 1e-9) & (d_o > d_lo + 1e-9) & (d_o < d_hi - 1e-9)).any():
-                continue
+            slanted_end = ((u_o > u_lo + 1e-9) & (u_o < u_hi - 1e-9)
+                           & (d_o > d_lo + 1e-9) & (d_o < d_hi - 1e-9)).any()
             in_u = (u_o >= u_lo - 1e-9) & (u_o <= u_hi + 1e-9)
             in_d = (d_o >= d_lo - 1e-9) & (d_o <= d_hi + 1e-9)
             others_on_face = faces.face[others] == f_index
             face_near = near[faces.face[near] == f_index]
             k_face, d_face = np.searchsorted(cuts, u_all[face_near] + 1e-9, side="right"), d_all[face_near]
             at_depth = (d_face >= d_lo - 1e-9) & (d_face <= d_hi + 1e-9)    # the face's columns beside this module
-            u0 = (cuts[k_lo - 1] if ((k_face == k_lo - 1) & at_depth).any()
-                  else side(u_lo, -1.0, in_d & (u_o < u_lo) & (u_o >= u_lo - gap)))
-            u1 = (cuts[k_hi] if ((k_face == k_hi + 1) & at_depth).any()
-                  else side(u_hi, 1.0, in_d & (u_o > u_hi) & (u_o <= u_hi + gap)))
+            u0_on_cut, u1_on_cut = ((k_face == k_lo - 1) & at_depth).any(), ((k_face == k_hi + 1) & at_depth).any()
+            before, after = in_d & (u_o < u_lo) & (u_o >= u_lo - gap), in_d & (u_o > u_hi) & (u_o <= u_hi + gap)
+            u0 = cuts[k_lo - 1] if u0_on_cut else side(u_lo, -1.0, before)
+            u1 = cuts[k_hi] if u1_on_cut else side(u_hi, 1.0, after)
             in_front = in_u & (d_o < d_lo) & (d_o >= d_lo - gap)
             behind = in_u & (d_o > d_hi) & (d_o <= d_hi + gap)
             module_in_front = (in_front & others_on_face).any()        # cut in depth: modules of the same row
@@ -576,14 +748,36 @@ def bay_polygons(xy, faces: Faces, bay, bay_face, facades, polygons, bay_width, 
             d0 = m_lo * w if module_in_front else side(d_lo, -1.0, in_front)
             d1 = (m_lo + 1) * w if module_behind else side(d_hi, 1.0, behind)
             across = np.unique(faces.face[others[behind]])
-            if (not module_behind and len(across) == 1 and facades[across[0]].straight
-                    and facades[across[0]].direction @ along < -1.0 + 1e-9):   # parallel, opposite
+            on_ridge = (not module_behind and len(across) == 1 and facades[across[0]].straight
+                        and facades[across[0]].direction @ along < -1.0 + 1e-9)   # parallel, opposite
+            if on_ridge:
                 d1 = 0.5 * ((facades[across[0]].start - on_facade) @ inward)
-            pieces = [_rectangle(on_facade, along, inward, u0, u1, d0, d1)]
-            a, z = max(u0, u_start), min(u1, u_end)
-            if z > a and d0 > -vs and not module_in_front:
-                pieces.append(_rectangle(on_facade, along, inward, a, z, -vs, d1))
-            shapes[b] = shapely.union_all(pieces)
+
+            def module(u0, u1, d0, d1):
+                """The rectangle, and where the facade runs one reaching a voxel in front of it."""
+                pieces = [_rectangle(on_facade, along, inward, u0, u1, d0, d1)]
+                a, z = max(u0, u_start), min(u1, u_end)
+                if z > a and d0 > -vs and not module_in_front:
+                    pieces.append(_rectangle(on_facade, along, inward, a, z, -vs, d1))
+                return pieces
+
+            rectangles = module(u0, u1, d0, d1)
+            shapes[b] = shapely.union_all(rectangles)
+            if slanted_end:
+                # Each side that is not a cut line and has columns beyond it moves out by a module, up to the next
+                # cut line, so that the line between the faces, not the edge of the columns, ends the module.
+                m_hi = np.floor(max(d_hi, 0.0) / w + 1e-9)
+                if not u0_on_cut and before.any():
+                    u0 = max(u0 - w, cuts[k_lo - 1] if k_lo > 0 else -np.inf)
+                if not u1_on_cut and after.any():
+                    u1 = min(u1 + w, cuts[k_hi] if k_hi < len(cuts) else np.inf)
+                if not module_in_front and m_lo > 0 and in_front.any():
+                    d0 = max(d0 - w, m_lo * w)
+                if not module_behind and not on_ridge and behind.any():
+                    d1 = min(d1 + w, (m_hi + 1) * w)
+                # A cut that leaves a wedge or a sliver falls back to the cut of the rectangle not grown, then to None.
+                grown = cut_between_bays(module(u0, u1, d0, d1), b, f_index)
+                shapes[b] = grown if grown is not None else cut_between_bays(rectangles, b, f_index)
     return _without_overlaps(shapes)
 
 
@@ -795,8 +989,8 @@ def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint, min_dimen
 
     With *bay_shapes* (from ``bay_polygons``, *bay* giving each column's
     bay) the plate is the union of its bays' rectangles, so cuts lie on the
-    cut lines and ridges on the ridges; bays without a rectangle (curved
-    facades, slanted ends) are drawn from their columns as below.  Without
+    cut lines and ridges on the ridges; bays without a shape (curved
+    facades, slanted ends no line separates) are drawn from their columns as below.  Without
     them the whole plate is drawn from its columns: their squares grown by
     one and a half voxels, minus the squares of the *removed* columns,
     simplified to half a voxel, so cuts are straight to within half a voxel.
@@ -818,9 +1012,11 @@ def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint, min_dimen
         if by_columns.any():
             pieces.append(_from_columns(cells_ij, by_columns, removed, vs))
         # Gaps narrower than a voxel closed by an outward then inward offset.  GEOS's inward mitre offset can drop
-        # whole parts of what it offsets, so the pieces themselves are kept as well.
+        # whole parts of what it offsets, so the pieces themselves are kept as well; at a sharp corner it can leave a
+        # self-intersection, which a zero offset resolves.
         pieces = shapely.union_all(pieces)
-        shape = shapely.union_all([pieces, pieces.buffer(vs / 2, join_style="mitre").buffer(-vs / 2, join_style="mitre")])
+        closed = pieces.buffer(vs / 2, join_style="mitre").buffer(-vs / 2, join_style="mitre")
+        shape = shapely.union_all([pieces, closed if closed.is_valid else closed.buffer(0)])
         removed_near = removed & _near(cells_ij, in_plate, 2)
         if removed_near.any():
             # Outside its rectangles the plate (pieces drawn from columns, gaps
@@ -840,10 +1036,37 @@ def plate_polygons(cells_ij, in_plate, removed, voxel_size, footprint, min_dimen
         # Simplified after clipping: a rectangle side that ends on the facade
         # line would otherwise leave a vertex a rounding error away.
         shape = shape.intersection(footprint).simplify(1e-6)
-    parts = [p for p in getattr(shape, "geoms", [shape]) if isinstance(p, Polygon) and p.area > vs * vs]
+    parts = [_without_spikes(p) for p in getattr(shape, "geoms", [shape]) if isinstance(p, Polygon) and p.area > vs * vs]
     if min_dimension > 0.0:
         parts = [p for p in parts if not p.buffer(-0.5 * min_dimension + 1e-3).is_empty]
     return [orient(p, 1.0) for p in parts]
+
+
+def _without_spikes(polygon, max_angle_deg=0.5):
+    """*polygon* without the spikes and cracks of no width that boolean operations leave: a vertex where the outline
+    turns back on itself (an angle under *max_angle_deg*) is dropped, and so is a vertex a nanometre from the one
+    before it.  *polygon* itself when the result would not be valid."""
+    limit = np.cos(np.radians(max_angle_deg))
+
+    def ring_without_spikes(coords):
+        points = [np.asarray(p, dtype=np.float64) for p in np.asarray(coords)[:-1]]
+        k = 0
+        while k < len(points) and len(points) > 3:
+            u, v = points[k - 1] - points[k], points[(k + 1) % len(points)] - points[k]
+            length_u, length_v = np.hypot(*u), np.hypot(*v)
+            if length_u < 1e-9 or length_v < 1e-9 or u @ v > limit * length_u * length_v:
+                del points[k]
+                k = max(k - 1, 0)            # the vertex before may now turn back too
+            else:
+                k += 1
+        return points
+
+    exterior = ring_without_spikes(polygon.exterior.coords)
+    holes = [ring for ring in (ring_without_spikes(r.coords) for r in polygon.interiors) if len(ring) >= 3]
+    if len(exterior) < 3:
+        return polygon
+    cleaned = Polygon(exterior, holes)
+    return cleaned if cleaned.is_valid and not cleaned.is_empty else polygon
 
 
 def prism_mesh(polygon, zb, zt):

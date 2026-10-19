@@ -24,7 +24,7 @@ from urbansolarcarver.local_web_service.example_catalog import read_examples
 from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunWorker
 from urbansolarcarver.local_web_service.stage_records import UPSTREAM_STAGE
-from urbansolarcarver.pydantic_schemas import ExportingManifest, PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
+from urbansolarcarver.pydantic_schemas import ExportingManifest, MassingManifest, PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
 from urbansolarcarver.run_context import report_issue, report_progress, run_context, stage_context
 from urbansolarcarver.stage_settings import PIPELINE_STAGES, stages_needed_for
 
@@ -137,6 +137,9 @@ def write_fake_stage_output(run_folder: Path, stage: str) -> None:
     manifest = {"run_id": uuid.uuid4().hex}
     if stage == "preprocessing":
         manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0)
+    if stage == "massing":      # the fake writes its plates as OBJ whatever the format chosen
+        manifest.update(plates_path="plates.json", mesh_path="plates.obj", export_mesh_path="plates.obj",
+                        upstream_manifest="../thresholding/manifest.json")
     if stage in UPSTREAM_STAGE:
         manifest["upstream_run_id"] = json.loads((run_folder / UPSTREAM_STAGE[stage] / "manifest.json").read_text())["run_id"]
     (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -269,6 +272,9 @@ def write_fake_finished_run(tmp_path, obstruction_fraction_carved=None):
     (run / "massing" / "plates.json").write_text(
         json.dumps({"plates": [], "floor_area_m2_per_floor": [120.0, 80.0], "total_floor_area_m2": 200.0}), encoding="utf-8")
     write_diagnostic(run / "massing", {"floors": 3, "floors_built": 2, "envelope_volume_m3": 4321.5})
+    (run / "massing" / "manifest.json").write_text(schema_to_json(MassingManifest(
+        run_id="mas-run", plates_path="plates.json", mesh_path="plates.obj", export_mesh_path="plates.stl",
+        upstream_manifest="../thresholding/manifest.json", upstream_run_id="thr-run")), encoding="utf-8")
     return run
 
 

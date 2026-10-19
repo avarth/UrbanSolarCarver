@@ -41,7 +41,7 @@ export const CARVING = {
   carve_above_extra_voxels_removed: 0, slope_limit_extra_voxels_removed: 0,
 };
 export const ENVELOPE = { mesh_file: "export.ply", envelope_volume_m3: 4150 };
-export const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
+export const MASSING = { export_mesh_file: "plates.ply", floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
 export const NOTHING_RUN: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" };
 export const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, preprocessing: "current", thresholding: "current" };
 
@@ -75,6 +75,10 @@ export class FakeService {
   sunPath: SunPath | null = null;
   /** While set, an upload of an input file gets its reply only once this promise resolves. */
   uploadsAnswerWhen: Promise<void> | null = null;
+  /** The location and latitude the reply to a weather file upload gives. */
+  uploadedWeather = { location: "Golden, CO, USA", latitude: 39.74 };
+  /** The reply of GET cold-period. */
+  coldPeriodReply: unknown = { status: "none", period: null };
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -106,9 +110,12 @@ export class FakeService {
     if (path === "/run/summary") return json(this.summary);
     if (method === "POST" && path.startsWith("/inputs/")) {
       await this.uploadsAnswerWhen;
-      return json({ role: path.replace("/inputs/", ""), files: [{ name: "more.obj", triangle_count: 1 }], joined_bounds: [[0, 0, 0], [1, 1, 0]],
-                    weather_location: "Golden, CO, USA" });
+      const role = path.replace("/inputs/", "");
+      const files = role === "weather" ? [{ name: "weather.epw", triangle_count: 0 }] : [{ name: "more.obj", triangle_count: 1 }];
+      return json({ role, files, joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: this.uploadedWeather.location,
+                    weather_latitude: this.uploadedWeather.latitude });
     }
+    if (path.startsWith("/cold-period")) return json(this.coldPeriodReply);
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
     if (path === "/run/files/exporting/export.obj" && this.summary.envelope?.mesh_file === "export.obj") return new Response(TRIANGLE_OBJ);
     if (path === "/run/files/massing/plates.obj" && this.massingOnDisk) return new Response(TRIANGLE_OBJ);
@@ -125,7 +132,7 @@ export function project(stages: Record<PipelineStage, StageState>, settings: Rec
     name: "p", created: "2026-10-17T09:00:00", modified: "2026-10-17T09:00:00", settings: { mode: "time-based", ...settings },
     inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: [{ name: "surfaces.obj", triangle_count: 1 }],
               weather: [{ name: "weather.epw", triangle_count: 0 }] },
-    joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", stage_status: { stages }, grid_plan: null,
+    joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", weather_latitude: 39.74, stage_status: { stages }, grid_plan: null,
   };
 }
 
@@ -150,6 +157,12 @@ export function endWorkspaceTest() {
   window.localStorage.clear();
 }
 
+/** Unmounts the open workspace, so a test can open another (endWorkspaceTest unmounts the last one). */
+export function unmountWorkspace() {
+  rendered?.unmount();
+  rendered = null;
+}
+
 export const settle = () => act(async () => {
   for (let tick = 0; tick < 5; tick++) await vi.advanceTimersByTimeAsync(0);
 });
@@ -158,11 +171,12 @@ export const waitForTheSave = () => act(async () => { await vi.advanceTimersByTi
 export async function openWorkspace(
   service: FakeService, opened: ProjectDetail,
   steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady"> = {},
+  { schema = SCHEMA, modes = MODES }: { schema?: typeof SCHEMA; modes?: ModeInfo[] } = {},
 ) {
   vi.stubGlobal("fetch", vi.fn(service.answer));
   function Page() {
     const runs = useRunLoop("token", () => {});
-    return <ProjectWorkspace token="token" project={opened} schema={SCHEMA} modes={MODES} warmUpState="ready" runs={runs}
+    return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} warmUpState="ready" runs={runs}
                              onServiceProblem={() => {}} onShowProjects={() => {}} {...steps} />;
   }
   rendered = renderForTest(<Page />);

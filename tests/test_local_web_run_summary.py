@@ -63,11 +63,24 @@ def test_summary_envelope_without_massing_and_massing_without_envelope(tmp_path)
     assert summary.envelope is not None and summary.massing is None
 
 
-def test_summary_massing_needs_both_of_its_files(tmp_path):
+def test_summary_massing_needs_its_files_and_its_manifest(tmp_path):
     run = write_fake_finished_run(tmp_path)
     (run / "massing" / "plates.json").unlink()
     summary = build_run_summary(run)
     assert summary.massing is None and summary.carving is not None
+    run = write_fake_finished_run(tmp_path / "without_manifest")
+    (run / "massing" / "manifest.json").unlink()
+    assert build_run_summary(run).massing is None
+
+
+def test_summary_massing_names_the_mesh_file_in_the_chosen_format_its_manifest_names(tmp_path):
+    run = write_fake_finished_run(tmp_path)
+    assert build_run_summary(run).massing.export_mesh_file == "plates.stl"
+    manifest_path = run / "massing" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["export_mesh_path"]                # a massing run from before massing wrote the chosen format
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    assert build_run_summary(run).massing.export_mesh_file == "plates.obj"
 
 
 def test_sky_dome_has_145_patches_or_none(tmp_path):

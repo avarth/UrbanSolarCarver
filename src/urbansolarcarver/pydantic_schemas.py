@@ -225,7 +225,7 @@ class UserConfig(BaseModel):
     out_dir: str = Field(..., description="Output directory for carved meshes and diagnostics")
     final_mesh_format: str = Field(
         "ply",
-        description="Extension for final mesh. One of {'ply','obj','stl','glb'}",
+        description="Extension for the envelope mesh and the massing plates (massing writes plates.obj as well). One of {'ply','obj','stl','glb'}",
         pattern=r"^(ply|obj|stl|glb)$",
     )
 
@@ -440,9 +440,12 @@ class UserConfig(BaseModel):
     balance_offset: float = Field(
         2.0, ge=0.0,
         description=(
-            "Dead-band (°C) below the balance point for benefit mode; hours "
-            "warmer than balance_temperature - balance_offset are not "
-            "credited. Must be >= 0 (0 = no dead-band)."
+            "Half the width (°C) of the dead band for benefit mode, which lies "
+            "on both sides of balance_temperature: hours colder than "
+            "balance_temperature - balance_offset are credited, and with "
+            "include_harm hours warmer than balance_temperature + "
+            "balance_offset count against the sun; hours inside the band "
+            "count neither way. Must be >= 0 (0 = no dead band)."
         ),
     )
     simulated_weights_path: Optional[str] = Field(
@@ -732,6 +735,11 @@ class MassingManifest(BaseModel):
 
     run_id: str
     plates_path: str
+    # The plates as OBJ with one named part per plate, written in every run.
     mesh_path: str
+    # The plates in final_mesh_format; the same file as mesh_path for OBJ.
+    # None in manifests written before massing wrote that format (their only
+    # mesh is mesh_path).
+    export_mesh_path: Optional[str] = None
     upstream_manifest: str
     upstream_run_id: str

@@ -26,6 +26,9 @@ ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every resul
 # Preprocessing manifest fields that massing reads; a manifest without them is from before preprocessing recorded
 # them, and massing of that run would start and end its floors up to a voxel outside the maximum volume.
 MAX_VOLUME_HEIGHT_FIELDS = ("max_volume_lowest_z", "max_volume_highest_z")
+# A massing manifest without this field is from before massing wrote its plates in the chosen format: its only mesh
+# is plates.obj, so it is out of date for any other format.
+MASSING_EXPORT_MESH_FIELD = "export_mesh_path"
 
 
 @dataclass(frozen=True)
@@ -68,6 +71,8 @@ def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
         elif _settings_changed(store, name, stage, record, current_config):
             status[stage] = "out_of_date"
         elif stage == "preprocessing" and any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
+            status[stage] = "out_of_date"
+        elif stage == "massing" and manifest.get(MASSING_EXPORT_MESH_FIELD) is None and current_config.final_mesh_format != "obj":
             status[stage] = "out_of_date"
         elif stage in UPSTREAM_STAGE and not _reads_current_upstream(
                 status[UPSTREAM_STAGE[stage]], project_json.stage_records.get(UPSTREAM_STAGE[stage]), manifest):

@@ -118,11 +118,34 @@ def test_a_broken_manifest_chain_gives_no_envelope_voxel_size(built_project):
     assert envelope_voxel_size(store, name) is None
 
 
-def test_mesh_format_change_reruns_exporting_only(built_project):
+def test_mesh_format_change_marks_the_envelope_and_the_massing_out_of_date_and_each_build_reruns_its_own(built_project):
+    """Both write a mesh in the chosen format; the analysis and the carving do not read it."""
     store, name, worker = built_project
     change_settings(store, name, final_mesh_format="obj")
+    assert stage_status(store, name) == {**ALL_CURRENT, "exporting": "out_of_date", "massing": "out_of_date"}
     assert run_and_wait(worker, name, ["exporting"]).stages == ["exporting"]
+    assert stage_status(store, name) == {**ALL_CURRENT, "massing": "out_of_date"}
+    assert run_and_wait(worker, name, ["massing"]).stages == ["massing"]
     assert stage_status(store, name) == ALL_CURRENT
+
+
+def remove_the_export_mesh_from_the_massing_manifest(store, name):
+    """A massing manifest as massing wrote it before it wrote the chosen format: plates.obj only."""
+    manifest_path = store.open(name) / "run" / "massing" / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    del manifest["export_mesh_path"]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_a_massing_run_from_before_massing_wrote_the_chosen_format_is_out_of_date_for_a_format_other_than_obj(built_project):
+    store, name, worker = built_project
+    remove_the_export_mesh_from_the_massing_manifest(store, name)
+    assert stage_status(store, name) == {**ALL_CURRENT, "massing": "out_of_date"}
+    assert choose_stages(store, name, ["exporting", "massing"]).stages == ["massing"]
+    change_settings(store, name, final_mesh_format="obj")
+    run_and_wait(worker, name, ["exporting", "massing"])
+    remove_the_export_mesh_from_the_massing_manifest(store, name)
+    assert stage_status(store, name) == ALL_CURRENT                 # its OBJ is the format chosen
 
 
 def test_upload_after_a_run_starts_again_at_preprocessing(built_project):

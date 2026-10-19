@@ -123,7 +123,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `max_slope_deg` | 75 (weighted modes), off otherwise | Steepest rise (degrees) allowed between neighbouring columns after carve_above; taller columns are cut into ramps, which removes cliffs and spires. `90` = off. The extra score it removes is reported, not counted in `carve_fraction` |
 | `apply_smoothing` | false | SDF smoothing + marching cubes instead of cubic mesh |
 | `min_voxels` | 300 | Remove connected voxel clusters smaller than this |
-| `final_mesh_format` | `"ply"` | Exported mesh format: `ply`, `obj`, `stl`, or `glb` |
+| `final_mesh_format` | `"ply"` | Mesh format of the envelope and the massing plates: `ply`, `obj`, `stl`, or `glb` (massing writes `plates.obj` as well) |
 | `device` | `"auto"` | `"auto"`, `"cpu"`, or `"cuda"` |
 | `diagnostics` | false | Add detailed score statistics (median, std, percentiles) to the diagnostics JSON. Basic statistics and timings are always written |
 | `diagnostic_plots` | false | Write plot images (score histograms, sky-patch weight plots, threshold histogram) |
@@ -192,7 +192,7 @@ outputs/
   exporting/
     export.ply (or .obj/.stl/.glb), manifest.json, diagnostics/
   massing/
-    plates.json, plates.obj, manifest.json, diagnostics/
+    plates.json, plates.obj (and plates.ply/.stl/.glb), manifest.json, diagnostics/
   run_report.md
 ```
 

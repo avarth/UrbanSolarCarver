@@ -25,7 +25,8 @@ _log = logging.getLogger(__name__)
 
 STAGE_CHAIN_MESSAGE = "Results are out of date; run again from the start."
 EXPORTED_MESH_PATTERN = "export.*"      # the exporting stage writes one mesh, named for its format
-RESULT_FILES = ("massing/plates.json", "massing/plates.obj", "run_report.md")
+MASSING_RESULT_PATTERN = "plates.*"     # plates.json, plates.obj, and the plates in the chosen format when it is not OBJ
+RESULT_FILES = ("run_report.md",)
 
 
 class RunConflict(ProjectError):
@@ -265,5 +266,6 @@ def _run_failed_event(error_type: str, message: str, field_errors: list[dict] | 
 
 def _result_files(run_folder: Path) -> list[str]:
     """The result files that exist, as paths relative to the run folder: the exported mesh, the plates and the report."""
-    candidates = [*sorted((run_folder / "exporting").glob(EXPORTED_MESH_PATTERN)), *(run_folder / path for path in RESULT_FILES)]
+    candidates = [*sorted((run_folder / "exporting").glob(EXPORTED_MESH_PATTERN)), *sorted((run_folder / "massing").glob(MASSING_RESULT_PATTERN)),
+                  *(run_folder / path for path in RESULT_FILES)]
     return [path.relative_to(run_folder).as_posix() for path in candidates if path.is_file()]

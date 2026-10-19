@@ -4,10 +4,10 @@ import { useId, useState, type ReactNode } from "react";
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { plainModeName } from "../steps/step_summaries";
-import type { ColdPeriodState } from "./analysis_period";
+import type { ColdPeriodState, Hemisphere } from "./analysis_period";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
-  ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, fromDisplayValue, settingsOfField, settingView, shownSliderOf, thresholdIsShadowToleratedIn,
+  ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, fromDisplayValue, settingsOfField, shownSliderOf, thresholdIsShadowToleratedIn,
   toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
 } from "./presentation";
 import { SettingTooltip } from "./SettingTooltip";
@@ -31,6 +31,8 @@ export interface SettingFieldExtras {
   errorContent?: ReactNode;
   /** The cold period of the weather file, for the period control's preset in Solar usefulness; null or absent in the other modes. */
   coldPeriod?: ColdPeriodState | null;
+  /** The hemisphere of the weather file, for the period control's heating season preset; northern when absent. */
+  hemisphere?: Hemisphere;
 }
 
 export interface SettingFieldProps {
@@ -169,7 +171,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   switch (view.widget) {
     case "analysis_period":
       controlElement = (
-        <AnalysisPeriod {...control} onChange={onChange} coldPeriod={extras?.coldPeriod ?? null}
+        <AnalysisPeriod {...control} onChange={onChange} coldPeriod={extras?.coldPeriod ?? null} hemisphere={extras?.hemisphere}
                         values={Object.fromEntries(ANALYSIS_PERIOD_FIELDS.map((name) => [name, shownValue(form, name)])) as Record<AnalysisPeriodField, number | null>} />
       );
       break;
@@ -190,16 +192,12 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       break;
     case "balance_temperature": {
       const [, deadBandName] = BALANCE_TEMPERATURE_FIELDS;
-      const deadBandView = settingView(deadBandName, form.mode);
       const deadBand = shownValue(form, deadBandName);
       controlElement = (
         <BalanceTemperatureSlider {...control} balanceTemperature={typeof shown === "number" ? shown : null}
-                                  deadBand={typeof deadBand === "number" ? deadBand : null} track={view.slider!} deadBandStep={deadBandView.slider!.step}
-                                  settingsWithError={BALANCE_TEMPERATURE_FIELDS.filter((name) => form.fieldErrors[name] !== undefined)}
-                                  balanceTemperatureRange={rangeOf(property)} deadBandRange={rangeOf(form.schemaProperties[deadBandName])} unit={unit}
-                                  deadBandLabel={deadBandView.label} onChange={onChange}
-                                  deadBandInfo={<SettingTooltip settingLabel={deadBandView.label} help={deadBandView.help} configName={deadBandName}
-                                                                defaultText={defaultTextOf(deadBandView, form, isShadowTolerated)} />} />
+                                  deadBand={typeof deadBand === "number" ? deadBand : null} harmCounted={shownValue(form, "include_harm") === true}
+                                  track={view.slider!} unit={unit} onChange={onChange}
+                                  invalid={control.invalid || BALANCE_TEMPERATURE_FIELDS.some((name) => form.fieldErrors[name] !== undefined)} />
       );
       break;
     }

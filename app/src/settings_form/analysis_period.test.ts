@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import {
-  changedPeriodSettings, dateHandleValueAfterKey, dayOfYear, dayOfYearAt, daysInMonth, hourAt, hourHandleValueAfterKey, monthDayOf,
-  periodFromSettings, periodInWords, periodWithDayTyped, periodWithHandleAt, periodWithMonthChosen, presetPeriod, presetMatches,
+  changedPeriodSettings, dateHandleValueAfterKey, dayOfYear, dayOfYearAt, daysInMonth, hemisphereOfLatitude, hourAt, hourHandleValueAfterKey,
+  monthDayOf, periodFromSettings, periodInWords, periodShiftedBySixMonths, periodWithDayTyped, periodWithHandleAt, periodWithMonthChosen, presetPeriod, presetMatches, seasonsOfLatitude, coverTheSameDays,
   runsEveryNightOfTheYear, withOvernightHoursOnOneDateAsOneNight, dateRangeSegments, hourRangeSegments, type Period,
 } from "./analysis_period";
 
@@ -65,6 +65,56 @@ test("a preset of one date with hours across midnight gives one night, and still
   expect(presetMatches("winter_solstice", period(12, 21, 10, 12, 21, 14))).toBe(true);
   expect(presetMatches("winter_solstice", period(12, 21, 10, 12, 22, 14))).toBe(false);
   expect(presetMatches("heating_season", period(10, 1, 0, 4, 30, 23))).toBe(true);
+});
+
+test("the heating season preset follows the hemisphere: October to April in the north, April to October in the south", () => {
+  const current = period(3, 5, 9, 3, 9, 17);
+  expect(presetPeriod("heating_season", current, "northern")).toEqual(period(10, 1, 9, 4, 30, 17));
+  expect(presetPeriod("heating_season", current, "southern")).toEqual(period(4, 1, 9, 10, 31, 17));
+  expect(presetPeriod("winter_solstice", current, "southern")).toEqual(period(12, 21, 9, 12, 21, 17));     // the other presets name dates
+  expect(presetMatches("heating_season", period(4, 1, 0, 10, 31, 23), "southern")).toBe(true);
+  expect(presetMatches("heating_season", period(4, 1, 0, 10, 31, 23), "northern")).toBe(false);
+  expect(presetMatches("heating_season", period(10, 1, 0, 4, 30, 23))).toBe(true);                       // northern without a hemisphere
+});
+
+test("the hemisphere of a latitude: south beyond the Tropic of Capricorn, north elsewhere, in the tropics and without a weather file", () => {
+  expect(hemisphereOfLatitude(-27.38)).toBe("southern");
+  expect(hemisphereOfLatitude(-23.44)).toBe("southern");
+  expect(hemisphereOfLatitude(-12.46)).toBe("northern");             // Darwin: in the tropics, the northern heating season preset
+  expect(hemisphereOfLatitude(0)).toBe("northern");
+  expect(hemisphereOfLatitude(39.74)).toBe("northern");
+  expect(hemisphereOfLatitude(null)).toBe("northern");
+});
+
+test("the seasons of a latitude: a hemisphere beyond the tropics, none within them or without a latitude", () => {
+  expect(seasonsOfLatitude(-27.38)).toBe("southern");
+  expect(seasonsOfLatitude(39.74)).toBe("northern");
+  expect(seasonsOfLatitude(23.44)).toBe("northern");
+  expect(seasonsOfLatitude(-12.46)).toBeNull();
+  expect(seasonsOfLatitude(1.35)).toBeNull();
+  expect(seasonsOfLatitude(null)).toBeNull();
+});
+
+test("whether two periods cover the same days of the year: a whole year shifted by six months still covers every day", () => {
+  expect(coverTheSameDays(period(1, 1, 0, 12, 31, 23), periodShiftedBySixMonths(period(1, 1, 0, 12, 31, 23)))).toBe(true);
+  expect(coverTheSameDays(period(1, 1, 0, 12, 31, 23), period(3, 5, 0, 3, 4, 23))).toBe(true);          // every day, from 5 Mar
+  expect(coverTheSameDays(period(12, 21, 10, 12, 21, 14), period(6, 21, 10, 6, 21, 14))).toBe(false);
+  expect(coverTheSameDays(period(10, 1, 0, 4, 30, 23), period(10, 1, 9, 4, 30, 17))).toBe(true);         // the hours do not count
+  expect(coverTheSameDays(period(10, 1, 0, 4, 30, 23), period(4, 1, 0, 10, 31, 23))).toBe(false);
+});
+
+test("six months on: the month plus six, wrapping, the day held to the month, the last day of a month staying the last day", () => {
+  expect(periodShiftedBySixMonths(period(12, 21, 10, 12, 21, 14))).toEqual(period(6, 21, 10, 6, 21, 14));
+  expect(periodShiftedBySixMonths(period(10, 1, 0, 4, 30, 23))).toEqual(period(4, 1, 0, 10, 31, 23));      // 30 Apr is April's last day
+  expect(periodShiftedBySixMonths(period(4, 1, 0, 10, 31, 23))).toEqual(period(10, 1, 0, 4, 30, 23));      // and back
+  expect(periodShiftedBySixMonths(period(8, 31, 9, 8, 29, 17))).toEqual(period(2, 28, 9, 2, 28, 17));      // held to February
+  expect(periodShiftedBySixMonths(period(2, 28, 9, 2, 28, 17))).toEqual(period(8, 31, 9, 8, 31, 17));      // February's last day
+  expect(periodShiftedBySixMonths(period(7, 15, 8, 9, 30, 18))).toEqual(period(1, 15, 8, 3, 31, 18));
+});
+
+test("six months on goes through the one-night rule: two dates that become one, with hours across midnight, stay one night", () => {
+  expect(periodShiftedBySixMonths(period(8, 29, 22, 8, 30, 2))).toEqual(period(2, 28, 22, 3, 1, 2));
+  expect(periodShiftedBySixMonths(period(12, 21, 22, 12, 22, 2))).toEqual(period(6, 21, 22, 6, 22, 2));
 });
 
 test("a handle moved to a day or an hour; the start may pass the end, across the new year or midnight", () => {

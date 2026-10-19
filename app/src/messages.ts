@@ -15,6 +15,13 @@ const SKY_PATCH_WEIGHT_OF_MODE: Record<string, string> = {
   radiative_cooling: "night sky cooling",
 };
 
+/** The dates of a period: "21 Dec", "21 to 22 Dec" (one month written once), "1 Oct to 30 Apr", "22 Dec to 21 Dec". */
+function periodDatesInWords(startMonth: number, startDay: number, endMonth: number, endDay: number): string {
+  const endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
+  if (startMonth === endMonth && startDay === endDay) return endDate;
+  return startMonth === endMonth && startDay < endDay ? `${startDay} to ${endDate}` : `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDate}`;
+}
+
 /** "12-21" (month and day) as "21 Dec". */
 export function dayAndMonth(monthDay: string): string {
   const [month, day] = monthDay.split("-").map(Number);
@@ -111,10 +118,7 @@ export const messages = {
     const hours = `${startHour} to ${endHour}\u00a0h`;
     const oneDate = startMonth === endMonth && startDay === endDay;
     if (oneDate && startHour > endHour) return `Every day, ${hours}`;
-    const endDate = `${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}`;
-    const dates = oneDate ? endDate : startMonth === endMonth && startDay < endDay ? `${startDay} to ${endDate}`
-      : `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDate}`;
-    return `${dates}, ${hours}`;
+    return `${periodDatesInWords(startMonth, startDay, endMonth, endDay)}, ${hours}`;
   },
   voxelsOfSize: (voxelSizeText: string) => `${voxelSizeText} voxels`,
   settingsSummary: (periodText: string, voxelsText: string) => `${periodText}; ${voxelsText}`,
@@ -284,7 +288,10 @@ export const messages = {
   // Beside the envelope file when the format chosen since was stored without a build (Carving was locked).
   envelopeBuiltInOtherFormat: (builtFormatName: string, chosenFormatName: string) =>
     `Built as ${builtFormatName}; the next envelope build writes ${chosenFormatName}.`,
-  massingObjDownload: "Building massing (OBJ)",
+  massingMeshDownload: (formatName: string) => `Building massing (${formatName})`,
+  // Beside the massing file when the format chosen since was stored without a build (Carving was locked).
+  massingBuiltInOtherFormat: (builtFormatName: string, chosenFormatName: string) =>
+    `Built as ${builtFormatName}; the next massing build writes ${chosenFormatName}.`,
   massingJsonDownload: "Building massing data (JSON)",
   settingsDownload: "Settings (config.yaml)",
   projectZipDownload: "Whole project (zip)",
@@ -362,6 +369,20 @@ export const messages = {
   coldPeriodFailed: (reason: string) => `The cold period cannot be found. ${reason}`,
   temperatureText: (degrees: number) => `${Number(degrees.toFixed(1))} °C`,
   periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
+  // The heating season preset where the weather file is in the southern hemisphere.
+  southernHeatingSeasonPresetName: "Heating season, April to October",
+  // The notice of a weather file added or replaced in this session (steps/weather_change_notice.ts), in the Settings step.
+  periodDates: (startMonth: number, startDay: number, endMonth: number, endDay: number) => periodDatesInWords(startMonth, startDay, endMonth, endDay),
+  weatherChangeColdPeriod: (location: string | null, coldPeriodDatesText: string, periodDatesText: string) =>
+    `The new weather file${location === null ? "" : ` (${location})`} has its cold period from ${coldPeriodDatesText}; ` +
+    `the analysis period is ${periodDatesText}.`,
+  useColdPeriodButton: "Use the cold period",
+  weatherChangeOtherHemisphere: (location: string | null, hemisphere: "northern" | "southern", shiftedPeriodText: string) =>
+    `The new weather file${location === null ? "" : ` (${location})`} is in the ${hemisphere} hemisphere: winter there is ${hemisphere === "southern" ? "June to August" : "December to February"}. ` +
+    `Shift the analysis period by six months, to ${shiftedPeriodText}?`,
+  shiftBySixMonthsButton: "Shift by six months",
+  keepAnalysisPeriodButton: "Keep",
+  keepAnalysisPeriodName: "Keep the analysis period",
   periodWordsButton: (periodWords: string) => `${periodWords}: type exact dates and hours`,
   periodNotSet: "Not set yet",
   // The typed hour fields, named apart from the hour handles of the strip.
@@ -378,9 +399,11 @@ export const messages = {
   carveAmountNotUsed: (ruleName: string) =>
     `Carve amount is not used with the carving rule ${ruleName}. Choose Carve amount under More carving settings to use it.`,
   scoreCutoffValue: "Score cutoff value",
-  // The balance temperature slider (R2 4.2): its two handles, and the band between them.
-  balanceTemperatureHandle: "Balance temperature",
-  deadBandLowerEndHandle: "Lower end of the dead band",
+  // The balance temperature slider: the two ends of the dead band, and the band between them.
+  balanceLowerEnd: "Counts below",
+  balanceUpperEnd: "Too warm above",
+  // Beside the upper end while include_harm is off: warm hours then count neither way.
+  balanceUpperEndWithoutHarm: "(only with harm counted)",
   deadBandOnTrack: "Dead band",
 
   // The 3D view (8)

@@ -591,17 +591,33 @@ class ProjectStore:
             return ColdPeriodReply(status="none")
         return ColdPeriodReply(status="found", period=ColdPeriodDates(**asdict(period)))
 
-    def weather_location(self, name: str) -> str | None:
-        """'<city>, <country>' from the LOCATION line of the weather file; None without a usable file."""
+    def _weather_location_fields(self, name: str) -> list[str] | None:
+        """The comma-separated fields of the weather file's LOCATION line; None without a file or that line."""
         weather_path = self.weather_file_path(name)
         if weather_path is None:
             return None
         with weather_path.open(encoding="utf-8", errors="replace") as weather_file:
             location_fields = weather_file.readline().strip().split(",")
-        if location_fields[0].upper() != "LOCATION" or len(location_fields) < 4:
+        return location_fields if location_fields[0].upper() == "LOCATION" else None
+
+    def weather_location(self, name: str) -> str | None:
+        """'<city>, <country>' from the LOCATION line of the weather file; None without a usable file."""
+        location_fields = self._weather_location_fields(name)
+        if location_fields is None or len(location_fields) < 4:
             return None
         city, country = (" ".join(location_fields[index].split()) for index in (1, 3))
         return f"{city}, {country}"
+
+    def weather_latitude(self, name: str) -> float | None:
+        """Degrees north (negative south) from field 6 of the LOCATION line; None without a usable file or number."""
+        location_fields = self._weather_location_fields(name)
+        if location_fields is None or len(location_fields) < 7:
+            return None
+        try:
+            latitude = float(location_fields[6])
+        except ValueError:
+            return None
+        return latitude if -90.0 <= latitude <= 90.0 else None
 
     @staticmethod
     def _check_role(role: str) -> None:
@@ -625,6 +641,7 @@ class ProjectStore:
             files=self._file_infos(project_json, role),
             joined_bounds=self.joined_bounds(name),
             weather_location=self.weather_location(name),
+            weather_latitude=self.weather_latitude(name),
         )
 
     @staticmethod

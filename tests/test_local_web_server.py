@@ -389,6 +389,7 @@ def test_example_project_joins_two_test_surface_files(client):
     assert [file["name"] for file in detail["inputs"]["test_surfaces"]] == ["neighbor_roofs.ply", "neighbor_windows.ply"]
     assert [file["name"] for file in detail["inputs"]["weather"]] == ["weather.epw"]
     assert detail["settings"]["mode"] == "irradiance" and detail["joined_bounds"] is not None and detail["weather_location"]
+    assert isinstance(detail["weather_latitude"], float)
     triangle_counts = [file["triangle_count"] for file in detail["inputs"]["test_surfaces"]]
     assert all(triangle_counts) and client.get("/api/projects/nb/inputs/test_surfaces").json() == detail["inputs"]["test_surfaces"]
     assert [row["name"] for row in client.get("/api/projects").json()] == ["nb"]
@@ -542,7 +543,7 @@ def test_sky_dome_of_a_weighted_run(client_with_inputs, tmp_path):
 
 
 def test_sun_path_is_empty_without_weather(client):
-    create_project(client, "p", "time-based")
+    assert create_project(client, "p", "time-based")["weather_latitude"] is None
     assert client.get("/api/projects/p/sun-path").json() == {"days": []}
     create_project(client, "q", "daylight")
     assert client.get("/api/projects/q/sun-path").json() == {"days": []}
@@ -553,6 +554,8 @@ def test_sun_path_follows_the_uploaded_weather_file(client):
     create_project(client, "p", "time-based")
     uploaded = upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).json()
     assert uploaded["weather_location"] is not None
+    assert uploaded["weather_latitude"] == 39.74
+    assert client.get("/api/projects/p").json()["weather_latitude"] == 39.74
     sun_path = client.get("/api/projects/p/sun-path").json()
     assert [day["date"] for day in sun_path["days"]] == ["12-21"]
     assert [marker["hour"] for marker in sun_path["days"][0]["markers"]] == [10, 12, 14]

@@ -54,6 +54,7 @@ class InputFilesReply(BaseModel):
     files: list[InputFileInfo]  # sorted by name
     joined_bounds: list[list[float]] | None   # [[xmin, ymin, zmin], [xmax, ymax, zmax]] of the joined max volume, whatever the role
     weather_location: str | None              # "<city>, <country>" from the weather file, None without one
+    weather_latitude: float | None            # degrees north, negative in the southern hemisphere; None without a usable weather file
 
 
 class ProjectSummary(BaseModel):
@@ -128,7 +129,8 @@ class EnvelopeSummary(BaseModel):
 
 
 class MassingSummary(BaseModel):
-    """The numbers massing reports for the run summary of the envelope and massing screen."""
+    """The numbers massing reports for the run summary of the envelope and massing screen, and its mesh file for Export."""
+    export_mesh_file: str               # the plates in the run's massing folder, in the format they were built in
     floor_area_m2_per_storey: list[float]
     total_floor_area_m2: float
     storeys_built: int
@@ -259,6 +261,7 @@ class ProjectDetail(BaseModel):
     inputs: dict[str, list[InputFileInfo]]      # role -> files, for every role
     joined_bounds: list[list[float]] | None     # as in InputFilesReply
     weather_location: str | None
+    weather_latitude: float | None              # as in InputFilesReply
     stage_status: StageStatusReply
     grid_plan: GridPlanReply | None             # of the stored settings, as a save would plan it; None without a max volume
 

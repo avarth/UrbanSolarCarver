@@ -95,14 +95,52 @@ def save_mesh(mesh: trimesh.Trimesh, path: str) -> str:
 
     The format follows the file extension.  PLY is written with float64
     vertices when float32 spacing at the largest coordinate exceeds 1 mm
-    (as with georeferenced coordinates); otherwise trimesh's exporter is used.
+    (as with georeferenced coordinates), and GLB with its offset in the node
+    (``save_glb``); otherwise trimesh's exporter is used.  STL can only hold
+    float32 vertices, so a float32_coordinates issue is reported when that
+    rounds them by more than 1 mm.
     """
     _ensure_dir(path)
-    if str(path).lower().endswith(".ply") and float32_resolution(mesh.vertices) > 1e-3:
+    extension = str(path).lower().rsplit(".", 1)[-1]
+    if extension == "ply" and float32_resolution(mesh.vertices) > 1e-3:
         _export_ply_double(mesh, path)
+    elif extension == "glb" and len(mesh.vertices):
+        save_glb([(None, mesh)], path)
     else:
+        if extension == "stl":
+            _report_float32_rounding(path, mesh.vertices)
         mesh.export(path)
     return os.path.abspath(path)
+
+
+def save_glb(named_meshes, path: str) -> None:
+    """Write the (name, mesh) pairs as one GLB scene, one node each (a name of None lets trimesh name it).
+
+    glTF stores vertices as float32, which rounds georeferenced coordinates by up to half a metre; every mesh is
+    therefore moved by the same whole-metre offset near the scene's lowest corner, and each node's translation, a
+    double in the file's JSON, moves it back, so readers place the vertices exactly.
+    """
+    import trimesh.transformations as tf
+    _ensure_dir(path)
+    offset = np.floor(np.min([mesh.vertices.min(axis=0) for _name, mesh in named_meshes], axis=0))
+    scene = trimesh.Scene()
+    for name, mesh in named_meshes:
+        near_origin = mesh.copy()
+        near_origin.apply_translation(-offset)
+        scene.add_geometry(near_origin, geom_name=name, transform=tf.translation_matrix(offset))
+    scene.export(str(path), file_type="glb")
+
+
+def _report_float32_rounding(path: str, vertices) -> None:
+    """Report a float32_coordinates issue when writing *vertices* as float32 to *path* rounds them by more than 1 mm."""
+    res = float32_resolution(vertices)
+    if res > 1e-3:
+        report_issue(
+            "float32_coordinates",
+            f"{os.path.basename(path)}: STL stores float32 vertices, so coordinates reaching "
+            f"{float(np.abs(vertices).max()):,.0f} m are rounded to ~{res:.2g} m. Choose PLY, OBJ or GLB "
+            f"to keep them, or move the model near the origin.",
+        )
 
 
 def validate_inputs(settings: PreprocessingSettings):

@@ -13,14 +13,15 @@
 // changes stop.
 //
 // In Solar usefulness a fifth preset, "Cold period from the weather file", sets the dates of the weather file's cold period
-// (steps/cold_period_request.ts), with the line under the presets saying what it found, or why it cannot be used yet.
+// (steps/cold_period_request.ts), with the line under the presets saying what it found, or why it cannot be used yet. The heating
+// season preset follows the hemisphere of the weather file: October to April in the north, April to October in the south.
 import { useEffect, useId, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../../messages";
 import {
   changedPeriodSettings, dateHandleValueAfterKey, dateRangeSegments, dayOfYearAt, daysInMonth, DAYS_IN_YEAR, handlePositionOf, handleValueOf,
   datesMatch, hourAt, hourHandleValueAfterKey, hourRangeSegments, HOURS_IN_DAY, monthDayOf, PERIOD_PRESETS, periodFromSettings, periodInWords,
   periodWithDates, periodWithDayTyped, periodWithHandleAt, periodWithMonthChosen, presetMatches, presetPeriod, withOvernightHoursOnOneDateAsOneNight,
-  type AnalysisPeriodField, type ColdPeriodState, type Period, type PeriodEnd, type PeriodHandle, type RangeSegment,
+  type AnalysisPeriodField, type ColdPeriodState, type Hemisphere, type Period, type PeriodPreset, type PeriodEnd, type PeriodHandle, type RangeSegment,
 } from "../analysis_period";
 import { ANALYSIS_PERIOD_FIELDS } from "../presentation";
 import { NumberInput, type ControlProps } from "./NumberInput";
@@ -32,6 +33,13 @@ interface AnalysisPeriodProps extends ControlProps {
   onChange: (values: Partial<Record<AnalysisPeriodField, number | null>>) => void;
   /** The cold period of the weather file, for its preset; null in the modes without one. */
   coldPeriod?: ColdPeriodState | null;
+  /** The hemisphere of the weather file, for the heating season preset; northern without a weather file. */
+  hemisphere?: Hemisphere;
+}
+
+/** The name of a preset's button: the heating season names its months, which follow the hemisphere. */
+function presetNameIn(preset: PeriodPreset, hemisphere: Hemisphere): string {
+  return preset === "heating_season" && hemisphere === "southern" ? messages.southernHeatingSeasonPresetName : messages.periodPresetNames[preset];
 }
 
 /** The line under the presets about the cold period: what it found, or why its preset cannot be used yet. */
@@ -62,7 +70,8 @@ function spokenValueOf(period: Period, handle: PeriodHandle): string {
   return messages.periodDateSpoken(month, day);
 }
 
-export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, describedBy, disabled, onRefusedInput, coldPeriod = null }: AnalysisPeriodProps) {
+export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, describedBy, disabled, onRefusedInput, coldPeriod = null,
+                                 hemisphere = "northern" }: AnalysisPeriodProps) {
   const stored = periodFromSettings(values);
   const current = stored ?? WHOLE_YEAR_EVERY_HOUR;
   // The period of a drag, as dragged (the end date of one night is applied to what is shown and sent, not kept), else null.
@@ -109,9 +118,9 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
                    cells={Array.from({ length: HOURS_IN_DAY }, (_, hour) => ({ label: hour % 6 === 0 ? String(hour) : "", length: 1 }))} />
       <div role="group" aria-label={messages.periodPresets} className="period-presets">
         {PERIOD_PRESETS.map((preset) => (
-          <button key={preset} type="button" className="period-preset" disabled={disabled} aria-pressed={stored !== null && presetMatches(preset, current)}
-                  onClick={() => send(presetPeriod(preset, current))}>
-            {messages.periodPresetNames[preset]}
+          <button key={preset} type="button" className="period-preset" disabled={disabled} aria-pressed={stored !== null && presetMatches(preset, current, hemisphere)}
+                  onClick={() => send(presetPeriod(preset, current, hemisphere))}>
+            {presetNameIn(preset, hemisphere)}
           </button>
         ))}
         {coldPeriod !== null && (
