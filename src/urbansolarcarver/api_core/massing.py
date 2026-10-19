@@ -204,7 +204,8 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
     cells_ij = np.argwhere(columns)
     xy = (cells_ij + 0.5) * vs
     polygons, footprint_source = _footprint(_read_footprint(chain.pre), origin, columns, vs)
-    facades, corners = mg.split_facades(polygons)
+    # Vertices of a mesh section off a facade's line by less than half a voxel are below what the carving resolves.
+    facades, corners = mg.split_facades(polygons, straight_tolerance=0.5 * vs)
     # A facade shorter than two bays (a chamfer, a small step) would get a
     # face of at most one bay; its columns go to the neighbouring facades.
     faces = mg.assign_faces(xy, facades, corners, polygons, vs,

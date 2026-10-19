@@ -736,3 +736,20 @@ def test_sweep_of_angles_and_shapes(vs):
             for every in (2, 3):
                 a, b = _plates_of_two_complementary_module_sets(poly, vs, every)
                 _assert_disjoint_and_covering(poly, a, b, vs)
+
+
+def test_a_vertex_a_fraction_of_a_voxel_off_the_line_keeps_a_facade_straight():
+    # Footprints from mesh sections carry vertices a fraction of a millimetre off a straight facade; within half a voxel
+    # the facade stays straight, so its modules are rectangles. A bend the grid can resolve keeps it curved.
+    block = Polygon([(0, 0), (20, 0.0003), (40, 0), (40, 15), (0, 15)])
+    facades, _ = mg.split_facades([block], straight_tolerance=0.25)
+    assert len(facades) == 4 and all(f.straight for f in facades)
+    ij, xy = _cells(block, 0.5)
+    facades, corners = mg.split_facades([block], straight_tolerance=0.25)
+    faces = mg.assign_faces(xy, facades, corners, [block], 0.5)
+    bay, bay_face = mg.cut_bays(faces, facades, [block], 3.0, 0.5)
+    shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [block], 3.0, 0.5)
+    assert all(shape is not None for shape in shapes)
+    bowed = Polygon([(0, 0), (20, 0.8), (40, 0), (40, 15), (0, 15)])
+    facades, _ = mg.split_facades([bowed], straight_tolerance=0.25)
+    assert sum(not f.straight for f in facades) == 1

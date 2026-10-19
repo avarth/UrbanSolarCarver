@@ -17,7 +17,10 @@ simulation input (one closed prism per floor and plate).
    nothing. If preprocessing could not compute a footprint, massing uses the
    outline of the occupied voxel columns and warns. The footprint outline is split into facades
    wherever it turns by more than 30 degrees. Curved or faceted outlines with smaller
-   turns stay one facade.
+   turns stay one facade. A facade whose vertices all lie within half a voxel
+   of the line from its first to its last vertex is straight: footprints cut
+   from meshes carry vertices a fraction of a millimetre off a straight wall,
+   which the carving cannot resolve.
 2. **Faces.** Every footprint column belongs to its nearest facade. Facades
    shorter than two modules (`2 * min_plate_dimension`: chamfers, small steps)
    get no face of their own; their neighbours meet at one corner across

@@ -85,6 +85,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (massing)
 
+- **Facades within half a voxel of straight are straight.** Footprints cut
+  from meshes (the District example) carry vertices a fraction of a
+  millimetre off a straight wall, which made most facades "curved", so their
+  modules were drawn from voxel columns as staircases on the upper floors. A
+  facade now counts as straight when its vertices lie within half a voxel of
+  its chord: in the District example, curved facades go from 60 to 2 and
+  modules drawn from columns from 520 to 99, with the floor area unchanged
+  (74 022 to 74 002 m²).
+
 - **Floors are built from square modules.** Each face of the footprint is
   now cut in depth too, into square modules of `min_plate_dimension`, and each
   module is built on a floor on its own. Before, a bay ran from the facade to

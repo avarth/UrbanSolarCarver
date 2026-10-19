@@ -97,22 +97,23 @@ def footprint_from_columns(columns, voxel_size) -> list:
     return [orient(p, 1.0) for p in parts if isinstance(p, Polygon) and p.area > 0.0]
 
 
-def _facade(part, xy, closed) -> Facade:
+def _facade(part, xy, closed, straight_tolerance=1e-6) -> Facade:
     """A facade through the points *xy*; straight when every point lies within
-    a micrometre of the line from the first to the last (stray collinear
-    vertices from mesh edges do not make it curved)."""
+    *straight_tolerance* of the line from the first to the last (stray
+    vertices from mesh sections, off the line by less than the voxel grid
+    can resolve, do not make it curved)."""
     start, end = xy[0], xy[-1]
     chord = end - start
     norm = float(np.hypot(*chord))
     direction = chord / norm if norm > 0.0 else np.array([1.0, 0.0])
     off_line = np.abs((xy[:, 0] - start[0]) * direction[1] - (xy[:, 1] - start[1]) * direction[0])
-    straight = (not closed) and norm > 0.0 and bool(off_line.max() <= 1e-6)
+    straight = (not closed) and norm > 0.0 and bool(off_line.max() <= straight_tolerance)
     line = LineString([start, end] if straight else xy)
     return Facade(part=part, line=line, length=float(line.length), straight=straight,
                   direction=direction, start=start, end=end, closed=closed)
 
 
-def _ring_facades(coords, part, corner_angle_deg):
+def _ring_facades(coords, part, corner_angle_deg, straight_tolerance):
     """Facades of one ring, and for each the convexity of the corner at its end."""
     pts = np.asarray(coords, dtype=np.float64)[:-1]          # drop the closing point
     edge = np.roll(pts, -1, axis=0) - pts                     # edge k: pts[k] -> pts[k+1]
@@ -127,19 +128,21 @@ def _ring_facades(coords, part, corner_angle_deg):
     facades, convex = [], []
     for a, b in zip(corners, np.roll(corners, -1)):
         idx = np.arange(a, b + 1) if b > a else np.r_[np.arange(a, n), np.arange(0, b + 1)]
-        facades.append(_facade(part, pts[idx], closed=False))
+        facades.append(_facade(part, pts[idx], closed=False, straight_tolerance=straight_tolerance))
         # Rings are oriented with the solid on the left (exterior counter-
         # clockwise, holes clockwise), so a left turn is a convex corner.
         convex.append(bool(turn[b] > 0.0))
     return facades, convex
 
 
-def split_facades(polygons, corner_angle_deg=CORNER_ANGLE_DEG):
+def split_facades(polygons, corner_angle_deg=CORNER_ANGLE_DEG, straight_tolerance=1e-6):
     """Split every ring of every footprint polygon into facades at its corners.
 
     A corner is a vertex where the outline turns by more than
     *corner_angle_deg*; smaller turns (curved or faceted facades) continue
-    the facade.  A ring without corners is one closed facade.
+    the facade.  A ring without corners is one closed facade.  A facade
+    whose vertices all lie within *straight_tolerance* of the line from its
+    first to its last is straight (the massing stage passes half a voxel).
 
     Returns
     -------
@@ -149,7 +152,7 @@ def split_facades(polygons, corner_angle_deg=CORNER_ANGLE_DEG):
     for part, polygon in enumerate(polygons):
         polygon = orient(polygon, 1.0)
         for ring in [polygon.exterior, *polygon.interiors]:
-            ring_facades, convex = _ring_facades(ring.coords, part, corner_angle_deg)
+            ring_facades, convex = _ring_facades(ring.coords, part, corner_angle_deg, straight_tolerance)
             first = len(facades)
             facades.extend(ring_facades)
             count = len(ring_facades)
