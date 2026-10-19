@@ -180,9 +180,9 @@ def _sunrise_and_sunset_minutes_of_year(config: UserConfig, month: int, day: int
 
     Sunset can fall after midnight, on the next calendar day, which the minute of the year keeps.
     """
-    from ladybug.epw import EPW
     from ladybug.sunpath import Sunpath
-    sunrise_and_sunset = Sunpath.from_location(EPW(config.epw_path).location).calculate_sunrise_sunset(month, day)
+    from ..weather_file import read_weather_file
+    sunrise_and_sunset = Sunpath.from_location(read_weather_file(config.epw_path).location).calculate_sunrise_sunset(month, day)
     sunrise, sunset = sunrise_and_sunset["sunrise"], sunrise_and_sunset["sunset"]
     if sunrise is None or sunset is None:
         return None

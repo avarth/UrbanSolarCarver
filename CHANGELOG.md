@@ -270,6 +270,33 @@ versioning follows [Semantic Versioning](https://semver.org/).
   means.
 - **Mode tooltips** no longer stay open and swallow clicks.
 
+### Changed (weather files)
+
+- **One cached EPW reader.** The new `weather_file.read_weather_file`
+  parses an EPW file once per path, modification time and size (a file
+  replaced on disk is read again) and returns a `ParsedWeatherFile`. The
+  sun vectors, the irradiance and benefit sky weights, the cold period, the
+  simulated weights and the service's sun path read through it; before,
+  each parsed the file again (0.2 s each), several times in one run. It
+  hands out copies (a new Location, a new numpy array of the dry-bulb
+  temperatures, a new Wea of the solar irradiance), because Ladybug's
+  objects are mutable and one caller's change would otherwise reach every
+  later caller; a copy costs under a millisecond and keeps the Ladybug
+  types callers pass on to Ladybug. Results are bit for bit unchanged. The
+  check of an uploaded weather file in the service still parses it
+  directly: it reads a temporary file that is renamed right after, so a
+  cache entry for it would never be read. `sun._load_epw` is removed.
+  `pytest -n 8` now loads the hourly data of a weather file 75 times
+  instead of 150 (each worker has its own cache; most of the rest are
+  service tests, where each project has its own copy of the file, and 12
+  are the reader's own tests). Measured on the same
+  machine, main then this change: `-m "not sweep" -n 8` 75 s and 66 s,
+  `-n 8` 103 s and 100 s, serially 318 s and 308 s; `-m "not slow" -n 8`
+  stays at about 45 s. In the service, Run analysis after a change of
+  `north_deg` on the `new_building` example went from 2.7-2.8 s to
+  2.4-2.65 s on CUDA (one parse less); `multiple_buildings` (about 6 s)
+  and the time-based example did not change measurably.
+
 ### Fixed (sky matrices)
 
 - **Each sky matrix is computed in a temporary folder of its own.**

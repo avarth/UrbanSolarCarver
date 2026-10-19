@@ -39,6 +39,7 @@ from typing import List, Sequence
 import math
 from urbansolarcarver.session import session_cache
 from urbansolarcarver.run_context import report_issue
+from urbansolarcarver.weather_file import read_weather_file
 
 # Ladybug objects are imported on first use, so importing this module does
 # not require Ladybug, and are then kept for reuse.
@@ -320,9 +321,9 @@ def _scaled_cumulative_matrix(epw_path: str, hourly_weights, lb_north: float,
     from ladybug.wea import Wea
 
     w = np.asarray(hourly_weights, dtype=np.float64)
-    wea = Wea.from_epw_file(str(epw_path))
-    dni = wea.direct_normal_irradiance.duplicate()
-    dhi = wea.diffuse_horizontal_irradiance.duplicate()
+    wea = read_weather_file(epw_path).solar_irradiance_wea()
+    dni = wea.direct_normal_irradiance
+    dhi = wea.diffuse_horizontal_irradiance
     dni.values = [float(v) * float(s) for v, s in zip(dni.values, w)]
     dhi.values = [float(v) * float(s) for v, s in zip(dhi.values, w)]
     SkyMatrix = _load_sky_matrix()
@@ -548,8 +549,11 @@ def compute_EPW_based_weights(
         # kWh/m² values it returns, so we do not multiply by Ωᵢ here
         # (unlike daylight mode, which builds weights from raw CIE
         # luminance and must apply solid angles explicitly).
-        sky = SkyMatrix.from_epw(
-            epw_path,
+        wea = read_weather_file(epw_path).solar_irradiance_wea()
+        sky = SkyMatrix.from_components(
+            wea.location,
+            wea.direct_normal_irradiance,
+            wea.diffuse_horizontal_irradiance,
             hoys=hoys,
             north=lb_north,
             high_density=False,
@@ -558,7 +562,7 @@ def compute_EPW_based_weights(
         return torch.from_numpy(weights).to(device)
 
     if key == 'benefit':
-        from ladybug.epw import EPW
+        weather = read_weather_file(epw_path)
 
         if simulated_weights is not None:
             # Hourly weights from the zone model (simulated_weights_path
@@ -616,8 +620,7 @@ def compute_EPW_based_weights(
         # a carving force cannot express the value of shade without
         # producing physically meaningless "shade volumes".  Evaluate it as
         # a separate irradiance analysis over hot hours instead.
-        weather = EPW(epw_path)
-        dry_bulb = weather.dry_bulb_temperature.values  # hourly °C, len 8760
+        dry_bulb = weather.dry_bulb_temperature()  # hourly °C, len 8760
         t_cutoff = float(balance_temperature) - float(balance_offset)
         cold_hoys = [
             h for h in hoys_list
@@ -637,12 +640,18 @@ def compute_EPW_based_weights(
             return torch.zeros(P, device=device)
 
         SkyMatrix = _load_sky_matrix()
+        wea = weather.solar_irradiance_wea()
 
         def _cumulative_patch_matrix(sel_hoys):
             # Ladybug's SkyMatrix already includes solid angles in the
             # kWh/m² values, no Ωᵢ multiply needed (same as irradiance).
-            sky = SkyMatrix.from_epw(
-                epw_path, hoys=sel_hoys, north=lb_north, high_density=False,
+            # from_components filters copies of the collections by hour,
+            # so one Wea serves the cold and the hot hours.
+            sky = SkyMatrix.from_components(
+                wea.location,
+                wea.direct_normal_irradiance,
+                wea.diffuse_horizontal_irradiance,
+                hoys=sel_hoys, north=lb_north, high_density=False,
             )
             return _summed_patch_irradiance(sky, P, np.float32)
 

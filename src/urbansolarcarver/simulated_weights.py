@@ -43,6 +43,7 @@ from typing import Sequence, Tuple
 import numpy as np
 
 from .archetype_defaults import ARCHETYPE_DEFAULTS
+from .weather_file import read_weather_file
 
 log = logging.getLogger(__name__)
 
@@ -379,8 +380,7 @@ def transmitted_solar_from_epw(
 
     Returns an (8760,) array of the summed gain over all windows [W].
     """
-    from ladybug.wea import Wea
-    wea = Wea.from_epw_file(str(epw_path))
+    wea = read_weather_file(epw_path).solar_irradiance_wea()
     total = np.zeros(HOURS)
     for i, (azimuth, area, g) in enumerate(windows):
         irr, *_ = wea.directional_irradiance(0, float(azimuth))
@@ -721,9 +721,7 @@ def generate_simulated_weights(
                                hot_months)
     params = ZoneParams.from_archetype(**arch)
 
-    from ladybug.epw import EPW  # lazy
-    epw = EPW(str(epw_path))
-    t_out = np.asarray(epw.dry_bulb_temperature.values, dtype=np.float64)
+    t_out = read_weather_file(epw_path).dry_bulb_temperature()
     phi_sol = transmitted_solar_from_epw(epw_path, windows,
                                          hourly_factors=shading)
     if shading is not None:

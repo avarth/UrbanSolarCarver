@@ -22,7 +22,8 @@ from dataclasses import dataclass
 from typing import Sequence
 
 import numpy as np
-from ladybug.epw import EPW
+
+from .weather_file import read_weather_file
 
 DAYS_IN_YEAR = 365
 HOURS_IN_DAY = 24
@@ -116,7 +117,7 @@ def month_and_day(day_index: int) -> tuple[int, int]:
 
 def cold_period_from_weather_file(epw_path: str, base_temperature: float) -> ColdPeriod | None:
     """The cold period of the site of *epw_path* for *base_temperature* (°C); None when no day is cold enough."""
-    span = cold_day_span(daily_mean_temperatures(EPW(epw_path).dry_bulb_temperature.values), base_temperature)
+    span = cold_day_span(daily_mean_temperatures(read_weather_file(epw_path).dry_bulb_temperature()), base_temperature)
     if span is None:
         return None
     (start_month, start_day), (end_month, end_day) = month_and_day(span[0]), month_and_day(span[1])
