@@ -78,5 +78,6 @@ urbansolarcarver = ["ui_static/**/*", "example_projects/**/*"]
 [tool.pytest.ini_options]
 markers = [
   "slow: takes seconds (end-to-end scenes, simulations, a daemon process); skip with -m 'not slow'",
+  "sweep: exhaustive parameter sweeps and Monte Carlo seeds, also marked slow, run before merging; skip with -m 'not sweep'",
   "gpu: needs a CUDA GPU; skipped automatically when torch sees none (see tests/conftest.py)",
 ]

@@ -416,7 +416,8 @@ def _sorted_rows(points_by_panel):
     return points[np.lexsort(points.T[::-1])]
 
 
-@pytest.mark.parametrize("example_name", ["basic_perimeter_block", "new_building", "multiple_buildings"])
+@pytest.mark.parametrize("example_name", ["basic_perimeter_block", "new_building",
+                                          pytest.param("multiple_buildings", marks=pytest.mark.slow)])
 def test_the_joined_test_surfaces_of_an_example_sample_as_its_uploaded_files(tmp_path, example_name):
     """The engine finds in the joined test surface file the panels and sample points of the uploaded files.
 
@@ -451,6 +452,7 @@ def test_a_project_without_test_surfaces_has_no_joined_test_surface_file_to_rebu
     assert store.read_project_json("p").inputs_revision == inputs_revision
 
 
+@pytest.mark.slow
 def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(tmp_path):
     store = ProjectStore(tmp_path)
     _create_example_project(store, "p", "multiple_buildings")
