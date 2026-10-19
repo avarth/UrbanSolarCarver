@@ -95,7 +95,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
   end is muted, with the note "(only with harm counted)". The lower handle
   comes first for Tab; on one spot an arrow key toward the other end moves
   the focus to that end's handle, which the browser steps, so both ends
-  pinned at 10 or 30 °C step back. The cold period is asked for at the lower
+  pinned at 10 or 30 °C step back; Home and End pick the lower and the upper
+  end the same way. The cold period is asked for at the lower
   end rounded as the slider rounds it (13.2, not 13.200000000000001).
 - **A new weather file asks about the analysis period.** Adding or replacing
   the weather file shows one notice in Settings with **Keep** beside the

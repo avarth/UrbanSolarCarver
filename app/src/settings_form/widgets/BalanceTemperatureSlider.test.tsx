@@ -143,6 +143,19 @@ test("on one spot, a key toward the other end moves the focus to that end's hand
   expect(latest!.userValues).toEqual({ balance_temperature: 14.75, balance_offset: 0.25 });
 });
 
+test("on one spot, Home and End pick the end by their direction too: Home the lower end, End the upper one", () => {
+  rendered = renderForTest(<Balance start={form({ balance_offset: 0 })} />);           // both ends at 15
+  expect(keyDown(upperHandle(), "Home")).toBe(true);
+  expect(document.activeElement).toBe(lowerHandle());
+  expect(latest!.userValues).toEqual({ balance_temperature: 12.5, balance_offset: 2.5 });             // 10 to 15
+  rendered.unmount();
+  rendered = renderForTest(<Balance start={form({ balance_offset: 0 })} />);
+  expect(keyDown(lowerHandle(), "End")).toBe(true);
+  expect(document.activeElement).toBe(upperHandle());
+  expect(latest!.userValues).toEqual({ balance_temperature: 22.5, balance_offset: 7.5 });             // 15 to 30
+  expect(keyDown(upperHandle(), "Home")).toBe(false);                                                  // off the spot: the browser's
+});
+
 test("both ends pinned at an end of the track step back from it", () => {
   rendered = renderForTest(<Balance start={form({ balance_temperature: 35, balance_offset: 0 })} />);    // both at 35, drawn at 30
   expect(keyDown(upperHandle(), "ArrowLeft")).toBe(true);

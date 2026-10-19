@@ -78,7 +78,11 @@ def test_massing_writes_the_plates_in_the_chosen_format_besides_the_obj(tmp_path
     # Georeferenced with fractional coordinates: float32 rounds y near 4 200 000 m to 0.5 m.
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.37, 4200000.61)))
     _set_mask(thr, lambda occ: occ)
-    res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
+    if mesh_format == "stl":
+        with pytest.warns(UserWarning, match="plates.stl: STL stores float32 vertices"):
+            res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
+    else:
+        res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
     assert res.mesh_path.name == "plates.obj" and res.mesh_path.is_file()      # the 3D view reads the named parts of the OBJ
     assert res.export_mesh_path == tmp_path / "m" / f"plates.{mesh_format}"
     manifest = MassingManifest.model_validate_json((tmp_path / "m" / "manifest.json").read_text())

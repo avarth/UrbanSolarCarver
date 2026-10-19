@@ -8,7 +8,7 @@
 // Each handle moves its own end and cannot pass the other. Where the two lie on one spot (a dead band of 0, or both pinned at an
 // end of the track), the direction of the move picks the handle: to the left the lower end, to the right the upper end. A drag
 // keeps the handle its first move picked, to the pointer. A key toward the other end moves the focus to that end's handle and the
-// browser steps it (stepUp, stepDown); the keys after it go to that handle. Both ends are number fields too, which take any
+// browser steps it (stepUp, stepDown; Home and End take it to the track's end); the keys after it go to that handle. Both ends are number fields too, which take any
 // temperature: a value off the track pins its handle at the track's end, and the handle says the value itself. A typed end past
 // the other one closes the band there.
 import { useId, useRef, type CSSProperties, type KeyboardEvent } from "react";
@@ -42,8 +42,11 @@ export function balanceSettingsOf(lower: number, upper: number): Record<BalanceT
 
 type End = "lower" | "upper";
 
-// The keys that step a range input, and the end each moves toward: up and right the upper end, down and left the lower end.
-const END_OF_STEP_KEY: Record<string, End> = { ArrowRight: "upper", ArrowUp: "upper", PageUp: "upper", ArrowLeft: "lower", ArrowDown: "lower", PageDown: "lower" };
+// The keys that move a range input, and the end each moves toward: up, right and End the upper end, down, left and Home the
+// lower end.
+const END_OF_KEY: Record<string, End> = {
+  ArrowRight: "upper", ArrowUp: "upper", PageUp: "upper", End: "upper", ArrowLeft: "lower", ArrowDown: "lower", PageDown: "lower", Home: "lower",
+};
 
 export function BalanceTemperatureSlider({ balanceTemperature, deadBand, harmCounted, track, invalid, unit, onChange, inputId, labelId, describedBy,
                                            disabled, onRefusedInput }: BalanceTemperatureSliderProps) {
@@ -73,13 +76,15 @@ export function BalanceTemperatureSlider({ balanceTemperature, deadBand, harmCou
   };
   const handleInputs = useRef<Partial<Record<End, HTMLInputElement | null>>>({});
   const onKeyDown = (own: End, event: KeyboardEvent<HTMLInputElement>) => {
-    const end = END_OF_STEP_KEY[event.key];
-    if (!onOneSpot || end === undefined || end === own) return;    // the browser steps the focused handle
+    const end = END_OF_KEY[event.key];
+    if (!onOneSpot || end === undefined || end === own) return;    // the browser moves the focused handle
     const other = handleInputs.current[end];
     if (!other) return;
     event.preventDefault();
     other.focus();
-    if (end === "upper") other.stepUp(); else other.stepDown();
+    if (event.key === "Home" || event.key === "End") other.value = String(end === "upper" ? track.high : track.low);
+    else if (end === "upper") other.stepUp();
+    else other.stepDown();
     setEnd(end, sliderValue(other.value, track));
   };
   const handleProps = (own: End) => ({
