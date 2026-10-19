@@ -416,18 +416,37 @@ def _sorted_rows(points_by_panel):
     return points[np.lexsort(points.T[::-1])]
 
 
+@pytest.fixture(scope="module")
+def example_project_to_read(tmp_path_factory):
+    """A function giving, for an example name, the example and the sampled panels of the joined test surface file of a
+    project made from it.
+
+    Each example is made into a project and sampled once per module (the district example takes seconds); only tests
+    that read the project without changing it use this.
+    """
+    store = ProjectStore(tmp_path_factory.mktemp("examples_to_read"))
+    made = {}
+
+    def example_and_joined_panels(example_name):
+        if example_name not in made:
+            example = _create_example_project(store, example_name, example_name)
+            joined_panels = _sampled_panels([store.open(example_name) / SERVICE_PATHS["test_surface_path"]])
+            made[example_name] = (example, joined_panels)
+        return made[example_name]
+
+    return example_and_joined_panels
+
+
 @pytest.mark.parametrize("example_name", ["basic_perimeter_block", "new_building",
                                           pytest.param("multiple_buildings", marks=pytest.mark.slow)])
-def test_the_joined_test_surfaces_of_an_example_sample_as_its_uploaded_files(tmp_path, example_name):
+def test_the_joined_test_surfaces_of_an_example_sample_as_its_uploaded_files(example_project_to_read, example_name):
     """The engine finds in the joined test surface file the panels and sample points of the uploaded files.
 
     The example files keep panels that share corners apart only through their per-vertex normals: load_mesh merges
     coincident vertices whose normals are equal, so a joined file without normals fuses neighbouring panels.
     """
-    store = ProjectStore(tmp_path)
-    example = _create_example_project(store, "p", example_name)
+    example, joined_panels = example_project_to_read(example_name)
     uploaded_panels = _sampled_panels(EXAMPLE_PROJECTS_FOLDER / example.name / name for name in example.test_surfaces)
-    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
     assert len(joined_panels) == len(uploaded_panels)
     np.testing.assert_allclose(_sorted_rows(joined_panels), _sorted_rows(uploaded_panels), atol=1e-4)
 
@@ -453,18 +472,14 @@ def test_a_project_without_test_surfaces_has_no_joined_test_surface_file_to_rebu
 
 
 @pytest.mark.slow
-def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(tmp_path):
-    store = ProjectStore(tmp_path)
-    _create_example_project(store, "p", "multiple_buildings")
-    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
+def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(example_project_to_read):
+    _example, joined_panels = example_project_to_read("multiple_buildings")
     assert (len(joined_panels), sum(len(points) for points in joined_panels)) == (423, 138_641)
 
 
-def test_the_joined_test_surfaces_keep_the_courtyard_facades_of_the_perimeter_block(tmp_path):
+def test_the_joined_test_surfaces_keep_the_courtyard_facades_of_the_perimeter_block(example_project_to_read):
     """The four courtyard walls stand on the rectangle x -1294.74..-1208.33, y -45.98..6.09, 20 m inside the block's edges."""
-    store = ProjectStore(tmp_path)
-    _create_example_project(store, "p", "basic_perimeter_block")
-    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
+    _example, joined_panels = example_project_to_read("basic_perimeter_block")
     courtyard_panels = [points for points in joined_panels
                         if (-1295.0 <= points[:, 0]).all() and (points[:, 0] <= -1208.0).all()
                         and (-46.5 <= points[:, 1]).all() and (points[:, 1] <= 6.5).all()]
