@@ -177,7 +177,6 @@
 }
 
 /* Room under the handles for a note. */
-.scale-strip[data-has-note="true"] { margin-bottom: calc(var(--scale-strip-handle-overhang) + 20px); }
 .scale-strip[data-invalid="true"] { border-color: var(--colour-error); box-shadow: 0 0 0 1px var(--colour-error); }
 .scale-strip[data-disabled="true"] { cursor: default; }
 
@@ -224,8 +223,6 @@
   cursor: grab;
 }
 
-/* Without harm counted the upper end of the balance temperature does nothing: its handle, its bubble and its note are muted. */
-.scale-strip-handle[data-muted="true"] { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
 .scale-strip-handle[aria-invalid="true"] { box-shadow: 0 0 0 1px var(--colour-error); }
 .scale-strip-handle[aria-disabled="true"] { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); cursor: default; }
 
@@ -266,20 +263,7 @@
   transform: rotate(45deg);
 }
 
-.scale-strip-bubble[data-muted="true"] { border-color: var(--colour-muted); color: var(--colour-muted); }
-.scale-strip-bubble[data-muted="true"]::after { border-color: var(--colour-muted); }
 
-/* A note under a handle, kept on the strip: at the strip's left end it starts there, at its right end it ends there. */
-.scale-strip-note {
-  position: absolute;
-  top: calc(100% + var(--scale-strip-handle-overhang) + 2px);
-  left: calc(var(--handle-position) * 100%);
-  transform: translateX(calc(var(--handle-position) * -100%));
-  color: var(--colour-muted);
-  font-size: var(--text-secondary);
-  white-space: nowrap;
-  pointer-events: none;
-}
 
 .period-presets { display: flex; flex-wrap: wrap; gap: var(--space-unit); }
 

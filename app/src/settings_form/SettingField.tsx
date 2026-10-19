@@ -192,7 +192,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       const deadBand = shownValue(form, deadBandName);
       controlElement = (
         <BalanceTemperatureSlider {...control} balanceTemperature={typeof shown === "number" ? shown : null}
-                                  deadBand={typeof deadBand === "number" ? deadBand : null} harmCounted={shownValue(form, "include_harm") === true}
+                                  deadBand={typeof deadBand === "number" ? deadBand : null}
                                   track={view.slider!} unit={unit} onChange={onChange}
                                   invalid={control.invalid || BALANCE_TEMPERATURE_FIELDS.some((name) => form.fieldErrors[name] !== undefined)} />
       );

@@ -1,8 +1,8 @@
 // The balance temperature of Solar usefulness: one strip from 10 to 30 °C, drawn as the strips of the analysis period are
 // (ScaleStrip), with two handles that set the two ends of the dead band, as the engine reads them, and the band between them
 // filled. Each handle shows its exact value in a bubble over it ("14.5 °C"). Hours colder than the lower end count (sun then saves
-// heating); hours warmer than the upper end are the warm hours that count against the sun when harm is counted (include_harm), so
-// without it the upper end is muted, with a note under it that also describes its handle. The engine's settings are the middle
+// heating); hours warmer than the upper end are the warm hours that count against the sun when harm is counted (include_harm; the
+// setting's help says so). The engine's settings are the middle
 // and half the width: balance_temperature = (lower + upper) / 2, balance_offset = (upper - lower) / 2, so the lower end is
 // balance_temperature - balance_offset and the upper end balance_temperature + balance_offset.
 //
@@ -22,8 +22,6 @@ export type BalanceTemperatureField = (typeof BALANCE_TEMPERATURE_FIELDS)[number
 interface BalanceTemperatureSliderProps extends ControlProps {
   balanceTemperature: number | null;
   deadBand: number | null;
-  /** Whether warm hours count against the sun (include_harm): only then does the upper end do anything. */
-  harmCounted: boolean;
   /** The strip, in °C, and the step of both handles. */
   track: SliderRange;
   /** Whether the last save of either setting was refused: both ends show it, as each end is made of both settings. */
@@ -77,7 +75,7 @@ function temperatureCells(track: SliderRange): ScaleStripCell[] {
   });
 }
 
-export function BalanceTemperatureSlider({ balanceTemperature, deadBand, harmCounted, track, invalid, unit, onChange, inputId, labelId, describedBy,
+export function BalanceTemperatureSlider({ balanceTemperature, deadBand, track, invalid, unit, onChange, inputId, labelId, describedBy,
                                            disabled }: BalanceTemperatureSliderProps) {
   const balance = balanceTemperature ?? track.low, halfWidth = deadBand ?? 0;
   const lower = withoutFloatingPointNoise(balance - halfWidth), upper = withoutFloatingPointNoise(balance + halfWidth);
@@ -99,7 +97,6 @@ export function BalanceTemperatureSlider({ balanceTemperature, deadBand, harmCou
     return moved;
   };
 
-  const upperMuted = !harmCounted;
   return (
     <div role="group" aria-labelledby={labelId} className="balance-slider">
       {/* The lower end first, as on the strip, so Tab reaches the ends in their order. */}
@@ -108,8 +105,7 @@ export function BalanceTemperatureSlider({ balanceTemperature, deadBand, harmCou
           { name: "lower", id: inputId, position: fractionOf(lowerOnTrack), accessibleName: messages.balanceLowerEnd, valueNow: lowerOnTrack,
             spokenValue: spokenValue(lower, unit), bubbleText: spokenValue(lower, unit) },
           { name: "upper", position: fractionOf(upperOnTrack), accessibleName: messages.balanceUpperEnd, valueNow: upperOnTrack,
-            spokenValue: spokenValue(upper, unit), bubbleText: spokenValue(upper, unit), muted: upperMuted,
-            note: upperMuted ? messages.balanceUpperEndWithoutHarm : undefined },
+            spokenValue: spokenValue(upper, unit), bubbleText: spokenValue(upper, unit) },
         ]}
         segments={[{ start: fractionOf(lowerOnTrack), end: fractionOf(upperOnTrack) }]} cells={temperatureCells(track)}
         valueAt={(fraction) => temperatureAt(fraction, track)} valueRange={[track.low, track.high]} invalid={invalid} describedBy={describedBy}

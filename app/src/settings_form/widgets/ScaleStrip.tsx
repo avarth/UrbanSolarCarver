@@ -7,7 +7,7 @@
 // handle by its direction: to the left the start, to the right the end. The caller holds the values: it is told each move of a
 // drag and its end, and each key, and says which handle a key moved; that handle takes the focus. Keys and drags are ignored
 // while the strip is disabled, and keys while a drag is under way.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import type { RangeSegment } from "../analysis_period";
 
 /** One handle of a strip, as the caller describes it. */
@@ -24,10 +24,6 @@ export interface ScaleStripHandle<HandleName extends string> {
   bubbleText: string;
   /** The id of the handle, where the field's label names it (a link to the setting focuses it). */
   id?: string;
-  /** Drawn in the muted colour: the handle does nothing now (the upper end of the balance temperature without harm counted). */
-  muted?: boolean;
-  /** A note under the handle, which also describes it. */
-  note?: string;
 }
 
 /** A cell of the scale: its label (empty for an unlabelled tick) and its length, relative to the other cells. */
@@ -107,8 +103,6 @@ export function ScaleStrip<HandleName extends string>({ handles, segments, cells
   const handleElements = useRef<Partial<Record<HandleName, HTMLDivElement | null>>>({});
   const bubbleElements = useRef<(HTMLSpanElement | null)[]>([]);
   const stripDrag = useRef<StripDrag<HandleName> | null>(null);
-  const noteIdPrefix = useId();
-  const noteIdOf = (index: number) => `${noteIdPrefix}-note-${index}`;
 
   // The widths the bubbles are placed by, measured after each change of their text and each resize of the strip.
   const [measured, setMeasured] = useState({ stripWidth: 0, bubbleWidths: [0, 0] as [number, number] });
@@ -179,10 +173,8 @@ export function ScaleStrip<HandleName extends string>({ handles, segments, cells
     if (moved !== handle) handleElements.current[moved]?.focus();
   };
 
-  const hasNote = handles.some((handle) => handle.note !== undefined);
   return (
     <div ref={stripElement} className="scale-strip" data-invalid={invalid ? "true" : undefined} data-disabled={disabled ? "true" : undefined}
-         data-has-note={hasNote ? "true" : undefined}
          onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={endDrag} onPointerCancel={endDrag} onLostPointerCapture={endDrag}>
       {segments.map((segment) => (
         <span key={segment.start} className="scale-strip-range" aria-hidden="true"
@@ -195,22 +187,17 @@ export function ScaleStrip<HandleName extends string>({ handles, segments, cells
       </span>
       {handles.map((handle, index) => {
         const positionStyle = { "--handle-position": handle.position } as CSSProperties;
-        const describedWith = [describedBy, handle.note === undefined ? undefined : noteIdOf(index)].filter((id) => id !== undefined).join(" ");
         return [
           <div key={handle.name} ref={(element) => { handleElements.current[handle.name] = element; }} id={handle.id} role="slider"
-               tabIndex={disabled ? -1 : 0} className="scale-strip-handle" style={positionStyle} data-muted={handle.muted ? "true" : undefined}
-               aria-label={handle.accessibleName} aria-orientation="horizontal" aria-valuemin={valueRange[0]} aria-valuemax={valueRange[1]}
-               aria-valuenow={handle.valueNow} aria-valuetext={handle.spokenValue} aria-invalid={invalid} aria-describedby={describedWith || undefined}
+               tabIndex={disabled ? -1 : 0} className="scale-strip-handle" style={positionStyle} aria-label={handle.accessibleName} aria-orientation="horizontal" aria-valuemin={valueRange[0]} aria-valuemax={valueRange[1]}
+               aria-valuenow={handle.valueNow} aria-valuetext={handle.spokenValue} aria-invalid={invalid} aria-describedby={describedBy}
                aria-disabled={disabled ? true : undefined} onKeyDown={(event) => onHandleKeyDown(handle.name, event)} />,
           // Seen, not read: the handle says its value itself.
           <span key={`${handle.name}-bubble`} ref={(element) => { bubbleElements.current[index] = element; }} className="scale-strip-bubble"
-                aria-hidden="true" data-muted={handle.muted ? "true" : undefined}
+                aria-hidden="true"
                 style={{ ...positionStyle, "--bubble-shift": `${bubbleShifts[index]}px` } as CSSProperties}>
             {handle.bubbleText}
           </span>,
-          handle.note !== undefined && (
-            <span key={`${handle.name}-note`} id={noteIdOf(index)} className="scale-strip-note" style={positionStyle}>{handle.note}</span>
-          ),
         ];
       })}
     </div>

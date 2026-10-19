@@ -112,9 +112,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   above") are gone; the handles keep those names for a screen reader. A value
   off the strip (a hand-edited config) pins its handle at the strip's end and
   its bubble says the value. Arrows move an end by 0.5 °C, Page Up and Page
-  Down by 2 °C, Home and End to the strip's ends. Without harm counted the
-  note "(only with harm counted)" sits under the muted upper handle and
-  describes it. The two strips share one drawing (`ScaleStrip.tsx`).
+  Down by 2 °C, Home and End to the strip's ends. The two strips share one drawing (`ScaleStrip.tsx`).
 - **The cold period line under the presets is now the tooltip** of the
   "Cold period from the weather file" preset, shown on hover and keyboard
   focus as the mode tiles' tooltips are, closed with Escape, and never taking
@@ -133,8 +131,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   width as `balance_offset`. The earlier slider drew the band only below the
   balance temperature, although the engine reads it on both sides (cold hours
   below `balance_temperature - balance_offset`, warm hours above
-  `balance_temperature + balance_offset`). Without harm counted the upper
-  end is muted, with the note "(only with harm counted)". The lower handle
+  `balance_temperature + balance_offset`). The lower handle
   comes first for Tab; on one spot an arrow key toward the other end moves
   the focus to that end's handle, which steps, so both ends
   pinned at 10 or 30 °C step back; Home and End pick the lower and the upper

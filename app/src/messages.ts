@@ -398,8 +398,6 @@ export const messages = {
   // The balance temperature strip: the names of its two handles, the two ends of the dead band.
   balanceLowerEnd: "Counts below",
   balanceUpperEnd: "Too warm above",
-  // Under the upper end while include_harm is off: warm hours then count neither way.
-  balanceUpperEndWithoutHarm: "(only with harm counted)",
 
   // The 3D view (8)
   layerNames: {

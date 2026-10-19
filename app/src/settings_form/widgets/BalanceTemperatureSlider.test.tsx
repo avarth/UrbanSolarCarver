@@ -220,16 +220,12 @@ test("the lower handle comes first, as on the strip, so Tab reaches the ends in 
   expect(handles.map((end) => end.getAttribute("aria-label"))).toEqual(["Counts below", "Too warm above"]);
 });
 
-test("without harm counted the upper end does nothing: its handle and bubble are muted, with a note under it that describes it", () => {
-  renderBalance();
-  const note = rendered!.container.querySelector<HTMLElement>(".scale-strip-note")!;
-  expect(note.textContent).toBe("(only with harm counted)");
-  expect(upperHandle().getAttribute("aria-describedby")).toContain(note.id);
-  expect(lowerHandle().getAttribute("aria-describedby") ?? "").not.toContain(note.id);
-  expect(upperHandle().dataset.muted).toBe("true");
-  expect(rendered!.container.querySelectorAll(".scale-strip-bubble")[1].getAttribute("data-muted")).toBe("true");
-  rendered!.unmount();
-  renderBalance(form({ include_harm: true }));
-  expect(rendered!.container.querySelector(".scale-strip-note")).toBeNull();
-  expect(upperHandle().dataset.muted).toBeUndefined();
+test("the upper end looks and reads like the lower one whether or not harm is counted: no note, nothing muted", () => {
+  for (const settings of [{}, { include_harm: true }]) {
+    renderBalance(form(settings));
+    expect(rendered!.container.textContent).not.toContain("harm");
+    expect(upperHandle().getAttribute("aria-describedby")).toBe(lowerHandle().getAttribute("aria-describedby"));
+    rendered!.unmount();
+  }
+  rendered = null;
 });
