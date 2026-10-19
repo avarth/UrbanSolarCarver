@@ -129,6 +129,27 @@ def test_georeferenced_outlines_land_on_the_footprint(tmp_path):
     assert np.allclose(outline.max(0), [500015.0, 4200006.0], atol=0.01)
 
 
+def test_the_straight_tolerance_follows_the_precision_of_the_footprint_coordinates():
+    from shapely.geometry import box
+    from urbansolarcarver.api_core.massing import _straight_tolerance
+    footprint = [box(0.0, 0.0, 30.0, 12.0)]
+    assert _straight_tolerance(footprint, (0.0, 0.0, 0.0), 1.0) == 0.01        # micrometre noise, not a real bend
+    # float32 rounds coordinates near 500 000 m to 6 cm: four steps of it, at most half a voxel
+    assert _straight_tolerance(footprint, (500000.0, 0.0, 0.0), 1.0) == pytest.approx(4 * 500030.0 * 2.0 ** -23)
+    assert _straight_tolerance(footprint, (500000.0, 4200000.0, 0.0), 1.0) == 0.5
+
+
+def test_a_six_degree_bend_in_a_facade_near_the_origin_stays_a_bend():
+    from shapely.geometry import Polygon
+    from urbansolarcarver import floor_plates as mg
+    from urbansolarcarver.api_core.massing import _straight_tolerance
+    turn = np.radians(6.0)
+    bent = Polygon([(0, 0), (20, 0), (20, 15), (12.3, 15),
+                    (12.3 - 7.7 * np.cos(turn), 15 - 7.7 * np.sin(turn)), (0, 15 - 7.7 * np.sin(turn))])
+    facades, _ = mg.split_facades([bent], straight_tolerance=_straight_tolerance([bent], (0.0, 0.0, 0.0), 1.0))
+    assert sum(not f.straight for f in facades) == 1     # 0.4 m off its chord over 15.4 m: below half a voxel, but real
+
+
 def test_raised_part_warns_and_follows_stacking(tmp_path):
     low = _box([12, 12, 20], center_xy=(-10.0, 0.0))
     high = _box([12, 12, 20], center_xy=(10.0, 0.0), z0=2.0)

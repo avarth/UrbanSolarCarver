@@ -17,10 +17,12 @@ simulation input (one closed prism per floor and plate).
    nothing. If preprocessing could not compute a footprint, massing uses the
    outline of the occupied voxel columns and warns. The footprint outline is split into facades
    wherever it turns by more than 30 degrees. Curved or faceted outlines with smaller
-   turns stay one facade. A facade whose vertices all lie within half a voxel
-   of the line from its first to its last vertex is straight: footprints cut
-   from meshes carry vertices a fraction of a millimetre off a straight wall,
-   which the carving cannot resolve.
+   turns stay one facade. A facade whose vertices all lie within 1 cm of the
+   line from its first to its last vertex is straight: footprints cut from
+   meshes carry vertices micrometres off a straight wall. Far from the origin,
+   where a mesh stored in float32 rounds its coordinates by more, the
+   tolerance is four of those float32 steps, and it is never more than half a
+   voxel. A real bend, a few degrees over a few metres, stays a bend.
 2. **Faces.** Every footprint column belongs to its nearest facade. Facades
    shorter than two modules (`2 * min_plate_dimension`: chamfers, small steps)
    get no face of their own; their neighbours meet at one corner across
@@ -79,12 +81,17 @@ simulation input (one closed prism per floor and plate).
    on the cut lines (along the facade and in depth), the back of the last
    module lies on the midline where the facade faces a parallel one, and the
    facade edges are the footprint's own. Other edges
-   (face ends at corners) are within half a voxel of the voxel columns. Modules
-   on curved facades, and modules with a slanted end where a corner is not
-   square, follow their voxel columns, straight to within half a voxel; they
-   stay off the columns of modules not in the plate. Where the rectangles of
-   two modules overlap at a slanted end, the overlap belongs to one of them,
-   so plates of different modules never overlap.
+   (face ends at corners) are within half a voxel of the voxel columns. Where
+   a corner is not square, the faces of its two facades meet along the
+   bisector of the corner; a module there is its rectangle cut by that line
+   (or by a line of a corner square, or, where the faces meet along a curve,
+   by the line midway between the two faces' columns), so it ends on one
+   straight slanted edge. Modules on curved facades, and the few modules that
+   no single line separates from a neighbouring face, follow their voxel
+   columns, straight to within half a voxel; they stay off the columns of
+   modules not in the plate. Where the shapes of two modules overlap, the
+   overlap belongs to one of them, so plates of different modules never
+   overlap.
 
 ## Settings
 

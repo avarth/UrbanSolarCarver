@@ -122,14 +122,29 @@ versioning follows [Semantic Versioning](https://semver.org/).
   whose massing was built before this change in a format other than OBJ shows
   its massing out of date.
 
-- **Facades within half a voxel of straight are straight.** Footprints cut
-  from meshes (the District example) carry vertices a fraction of a
-  millimetre off a straight wall, which made most facades "curved", so their
+- **Facades whose vertices lie within 1 cm of their chord are straight.**
+  Footprints cut from meshes (the District example) carry vertices a few
+  micrometres off a straight wall, which made most facades "curved", so their
   modules were drawn from voxel columns as staircases on the upper floors. A
-  facade now counts as straight when its vertices lie within half a voxel of
-  its chord: in the District example, curved facades go from 60 to 2 and
-  modules drawn from columns from 520 to 99, with the floor area unchanged
+  facade now counts as straight when its vertices lie within 1 cm of its
+  chord, or within four float32 steps of the footprint's world coordinates
+  when the mesh lies far from the origin, and never more than half a voxel; a
+  real bend (6 degrees, 0.39 m over 7.7 m in the District example) stays a
+  bend. In the District example, curved facades go from 60 to 3 and modules
+  drawn from columns from 520 to 101, with the floor area nearly unchanged
   (74 022 to 74 002 m²).
+
+- **Modules at corners that are not square end on one straight line.** Where
+  two facades meet at a corner that is not square, the modules at the ends of
+  their faces held voxel columns of the other face inside their rectangle and
+  were drawn from their columns, as staircases on the upper floors (101
+  modules in 30 of the 66 District buildings). Such a module is now its
+  rectangle cut by a line between its columns and those of the other face:
+  the bisector of the corner, which the nearest-facade rule draws, or a line
+  of a corner square. In the District example modules drawn from columns go
+  from 101 to 24 (9 of them on curved facades), plate edges inside the
+  footprint at an angle to every facade from 187 to 124 m (45 m of them along
+  a corner bisector), and the floor area from 74 002 to 74 004 m².
 
 - **Floors are built from square modules.** Each face of the footprint is
   now cut in depth too, into square modules of `min_plate_dimension`, and each
@@ -172,6 +187,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - Plates of different modules no longer overlap where modules at a slanted
   end are drawn from their voxel columns, and where two module rectangles
   overlap the overlap belongs to one of them instead of to neither.
+- Closing gaps narrower than a voxel no longer fails on a plate with a sharp
+  corner, where GEOS's mitre offsets left a self-intersection.
 - A plate no longer loses whole modules when GEOS's inward mitre offset, used
   to close gaps narrower than a voxel, drops part of the shape (up to 240 m²
   of a parallelogram in a test sweep).

@@ -677,12 +677,95 @@ def _assert_disjoint_and_covering(polygon, a, b, vs):
 @pytest.mark.parametrize("every", [2, 3])
 def test_plates_of_neighbouring_modules_at_slanted_ends_neither_overlap_nor_leave_a_module_out(shear, angle, offset,
                                                                                                 every):
-    """A parallelogram's slanted ends have modules drawn from their columns.  Two plates made of complementary sets of
-    modules (every other module, every third) do not overlap, and together they cover the footprint up to slivers."""
+    """A parallelogram's slanted ends have modules cut by the bisector of the corner.  Two plates made of complementary
+    sets of modules (every other module, every third) do not overlap, and together they cover the footprint up to
+    slivers."""
     from shapely import affinity
     poly = affinity.translate(affinity.rotate(_parallelogram(shear), angle, origin=(0, 0)), *offset)
     a, b = _plates_of_two_complementary_module_sets(poly, 0.5, every)
     _assert_disjoint_and_covering(poly, a, b, 0.5)
+
+
+TRAPEZOID = Polygon([(0, 0), (60, 0), (50, 14), (8, 14)])     # acute corners of 54 and 60 degrees at its base
+
+
+def _directions_modules_may_be_cut_along(facades):
+    """Directions (degrees, modulo 180) of every straight facade, of its normal and of the bisector of every two of
+    them (the ridge the nearest-facade rule draws between their faces)."""
+    straight = [f for f in facades if f.straight]
+    normals = [np.array([-f.direction[1], f.direction[0]]) for f in straight]
+    lines = [f.direction for f in straight] + normals
+    for a in normals:
+        for b in normals:
+            if np.hypot(*(a - b)) > 1e-9:
+                lines.append(np.array([-(a - b)[1], (a - b)[0]]))
+    return np.degrees(np.arctan2([v[1] for v in lines], [v[0] for v in lines])) % 180.0
+
+
+def _edges(polygon, shortest=0.0):
+    """(start, end) of every edge of *polygon*'s rings at least *shortest* long."""
+    for ring in [polygon.exterior, *polygon.interiors]:
+        xy = np.asarray(ring.coords)
+        for p, q in zip(xy[:-1], xy[1:]):
+            if np.hypot(*(q - p)) >= shortest:
+                yield p, q
+
+
+def _footprint_with_corners_that_are_not_square(shape, angle):
+    from shapely import affinity
+    base = _parallelogram(20) if shape == "parallelogram" else TRAPEZOID
+    return affinity.translate(affinity.rotate(base, angle, origin=(0, 0)), 20.13, 3.37)
+
+
+@pytest.mark.parametrize("angle", [0, 20])
+@pytest.mark.parametrize("shape", ["parallelogram", "trapezoid"])
+def test_modules_at_corners_that_are_not_square_end_on_one_straight_slanted_edge(shape, angle):
+    """At a corner that is not square the faces of its two facades meet along the bisector of the corner.  A module
+    there is its rectangle cut by that line: every module has a shape, the shapes do not overlap, together they cover
+    the footprint up to a voxel row along the outline, and every edge runs along a facade, across one or along a
+    bisector (no staircase of voxel columns)."""
+    poly = _footprint_with_corners_that_are_not_square(shape, angle)
+    vs = 0.5
+    ij, xy = _surface_cells(poly, vs)
+    facades, _, _, _, shapes = _modules(poly, ij, xy, vs)
+    assert all(shape is not None for shape in shapes)
+    modules = np.array([shape.intersection(poly) for shape in shapes], dtype=object)
+    first, second = shapely.STRtree(modules).query(modules, predicate="intersects")
+    pairs = first < second
+    assert shapely.area(shapely.intersection(modules[first[pairs]], modules[second[pairs]])).sum() < 1e-6
+    uncovered = poly.difference(shapely.union_all(modules))
+    assert uncovered.area <= poly.length * vs
+    assert uncovered.buffer(-0.5 * vs).is_empty
+    allowed = _directions_modules_may_be_cut_along(facades)
+    for module in modules:
+        for p, q in _edges(module, shortest=1e-3):
+            direction = np.degrees(np.arctan2(q[1] - p[1], q[0] - p[0])) % 180.0
+            off = np.abs(allowed - direction)
+            assert np.minimum(off, 180.0 - off).min() < 0.01, (p, q)
+
+
+@pytest.mark.parametrize("angle", [0, 20])
+@pytest.mark.parametrize("shape", ["parallelogram", "trapezoid"])
+def test_plates_at_corners_that_are_not_square_close_into_watertight_prisms(shape, angle):
+    poly = _footprint_with_corners_that_are_not_square(shape, angle)
+    vs = 0.5
+    ij, xy = _surface_cells(poly, vs)
+    _, faces, bay, _, shapes = _modules(poly, ij, xy, vs)
+    from scipy.ndimage import label
+    whole = np.ones(len(xy), bool)
+    front_row = np.isin(bay, np.unique(bay[faces.d < 3.0]))
+    grid_ij = ij - ij.min(axis=0)
+    for built in (whole, bay % 2 == 0, bay % 3 == 0, front_row):
+        grid = np.zeros(grid_ij.max(axis=0) + 1, bool)
+        grid[grid_ij[built, 0], grid_ij[built, 1]] = True
+        plate_of_column = np.where(built, label(grid)[0][grid_ij[:, 0], grid_ij[:, 1]], 0)   # as build_floors
+        for k in range(1, plate_of_column.max() + 1):
+            in_plate = plate_of_column == k
+            for plate in mg.plate_polygons(ij, in_plate, ~in_plate, vs, poly, bay=bay, bay_shapes=shapes):
+                assert all(np.hypot(*(q - p)) >= 1e-6 for p, q in _edges(plate))
+                assert mg.prism_mesh(plate, 0.0, 3.0).is_watertight
+    whole_plate = shapely.union_all(mg.plate_polygons(ij, whole, ~whole, vs, poly, bay=bay, bay_shapes=shapes))
+    assert whole_plate.symmetric_difference(poly).area < 1e-6
 
 
 def _wings(length, width, depth):

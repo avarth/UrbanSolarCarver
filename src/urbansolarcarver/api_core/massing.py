@@ -23,7 +23,7 @@ from shapely.errors import GEOSException
 
 from .. import floor_plates as mg
 from ..errors import StageChainError
-from ..io import save_mesh
+from ..io import float32_resolution, save_mesh
 from ..load_config import user_config
 from ..pydantic_schemas import MassingManifest
 from ..run_context import Issue, RunContext, report_issue, stage_context
@@ -140,6 +140,15 @@ def _footprint(world_polygons, origin, columns, voxel_size):
     return polygons, "mesh"
 
 
+def _straight_tolerance(polygons, origin, voxel_size):
+    """How far (m) the vertices of a facade may lie off the line from its first to its last vertex for it to count as
+    straight: 1 cm, or four float32 steps at the footprint's world coordinates when that is more (a mesh stored in
+    float32 far from the origin rounds them by that much), and at most half a voxel, below what the carving
+    resolves.  A real bend, such as 6 degrees over a few metres, stays a bend near the origin."""
+    world = shapely.get_coordinates(polygons) + np.asarray(origin, dtype=np.float64)[:2]
+    return min(0.5 * voxel_size, max(0.01, 4.0 * float32_resolution(world)))
+
+
 def _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin_z, voxel_size):
     part = mg.part_of_points(shapely.points(xy), polygons)
     lowest = occ.argmax(axis=2)[cells_ij[:, 0], cells_ij[:, 1]]
@@ -243,8 +252,7 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
     cells_ij = np.argwhere(columns)
     xy = (cells_ij + 0.5) * vs
     polygons, footprint_source = _footprint(_read_footprint(chain.pre), origin, columns, vs)
-    # Vertices of a mesh section off a facade's line by less than half a voxel are below what the carving resolves.
-    facades, corners = mg.split_facades(polygons, straight_tolerance=0.5 * vs)
+    facades, corners = mg.split_facades(polygons, straight_tolerance=_straight_tolerance(polygons, origin, vs))
     # A facade shorter than two bays (a chamfer, a small step) would get a
     # face of at most one bay; its columns go to the neighbouring facades.
     faces = mg.assign_faces(xy, facades, corners, polygons, vs,
