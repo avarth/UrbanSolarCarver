@@ -5,6 +5,25 @@ import numpy as np
 from pathlib import Path
 
 
+@pytest.fixture(scope="session", autouse=True)
+def ladybug_weather_folder_of_this_test_process(tmp_path_factory):
+    """Give this test process its own Ladybug weather folder.
+
+    ladybug_radiance's SkyMatrix writes its Wea file to
+    ``<default_epw_folder>/sky_matrices/<city>.wea`` and then runs gendaymtx
+    on it. Every process on the machine shares that path by default, so two
+    test processes (pytest -n 8, or another checkout testing at the same
+    time) computing different sky matrices for the same city overwrite each
+    other's input and get wrong weights. Each pytest-xdist worker has its own
+    tmp_path_factory folder.
+    """
+    from ladybug.config import folders
+    shared_folder = folders.default_epw_folder
+    folders.default_epw_folder = str(tmp_path_factory.mktemp("ladybug_weather"))
+    yield
+    folders.default_epw_folder = shared_folder
+
+
 @pytest.fixture
 def tiny_cube_mesh():
     """A minimal watertight cube mesh (8 vertices, 12 faces) for smoke tests."""
