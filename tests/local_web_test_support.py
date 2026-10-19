@@ -12,6 +12,7 @@ import sys
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,7 @@ import pytest
 import trimesh
 
 from urbansolarcarver.io import load_mesh, save_mesh
+from urbansolarcarver.local_web_service.example_catalog import read_examples
 from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunWorker
 from urbansolarcarver.local_web_service.stage_records import UPSTREAM_STAGE
@@ -76,6 +78,33 @@ def add_project_with_inputs(tmp_path: Path) -> tuple[ProjectStore, str]:
     store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
     store.add_input("p", "test_surfaces", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
     return store, "p"
+
+
+class ExampleProjectTemplates:
+    """Each packaged example made into a project once, then copied for every test that needs a project made from it.
+
+    The template is made by ``ProjectStore.create_example_project``, as the route POST /projects/{name}/examples/{example}
+    makes it (the files are read by the route's own helper). Making one joins its test surfaces (0.3-0.8 s); a copy takes
+    about 0.01 s. A copy gets new file times and project.json gets its name and creation time, as a project just made.
+    Tests of making an example project still call create_example_project or the route.
+    """
+
+    def __init__(self, templates_folder: Path):
+        self._templates = ProjectStore(templates_folder)
+
+    def copy_example_project(self, store: ProjectStore, project_name: str, example_name: str):
+        """The project *project_name* in *store*, made from the example *example_name*; returns the example."""
+        from urbansolarcarver.local_web_service.server import _example_input_files
+        example = next(candidate for candidate in read_examples() if candidate.name == example_name)
+        template_folder = self._templates.projects_folder / example_name
+        if not template_folder.is_dir():
+            self._templates.create_example_project(example_name, example, _example_input_files(example))
+        project_folder = store.projects_folder / project_name
+        shutil.copytree(template_folder, project_folder, copy_function=shutil.copy)     # shutil.copy gives new file times
+        template_json = self._templates.read_project_json(example_name)
+        created = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        store.write_project_json(project_name, template_json.model_copy(update={"name": project_name, "created": created}))
+        return example
 
 
 def change_settings(store: ProjectStore, name: str, **changes) -> None:

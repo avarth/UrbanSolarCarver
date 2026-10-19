@@ -107,6 +107,13 @@ def example_epw_path():
     return Path(epw)
 
 
+@pytest.fixture(scope="session")
+def example_project_templates(tmp_path_factory):
+    """For the local web service tests: copy_example_project(store, name, example) makes a project from a packaged example."""
+    from local_web_test_support import ExampleProjectTemplates
+    return ExampleProjectTemplates(tmp_path_factory.mktemp("example_project_templates"))
+
+
 @pytest.fixture
 def project_with_inputs(tmp_path):
     """For the local web service tests: a daylight project with a max volume and a test surface; the store and its name."""
