@@ -129,6 +129,7 @@ class RunReply(BaseModel):
     export_path: Optional[str] = None
     plates_path: Optional[str] = None
     mesh_path: Optional[str] = None
+    export_mesh_path: Optional[str] = None     # the plates in final_mesh_format (mesh_path itself for OBJ)
 
 
 class StageReply(BaseModel):
@@ -139,6 +140,7 @@ class StageReply(BaseModel):
     export_path: Optional[str] = None
     plates_path: Optional[str] = None
     mesh_path: Optional[str] = None
+    export_mesh_path: Optional[str] = None     # the plates in final_mesh_format (mesh_path itself for OBJ)
 
 
 class SimulateWeightsReply(BaseModel):
@@ -259,6 +261,7 @@ def _run(request: RunRequest, config: user_config, context: RunContext) -> RunRe
         export_path=str(result.exporting.export_path) if result.exporting else None,
         plates_path=str(result.massing.plates_path) if result.massing else None,
         mesh_path=str(result.massing.mesh_path) if result.massing else None,
+        export_mesh_path=str(result.massing.export_mesh_path) if result.massing else None,
     )
 
 
@@ -280,7 +283,8 @@ def _run_stage(request: StageRequest, config: user_config, context: RunContext) 
     if request.cmd == "massing":
         result = api.massing(request.upstream_output, config, out_dir)
         return StageReply(manifest=str(result.out_dir / "manifest.json"), plates_path=str(result.plates_path),
-                          mesh_path=str(result.mesh_path), issues=_issue_replies(context))
+                          mesh_path=str(result.mesh_path), export_mesh_path=str(result.export_mesh_path),
+                          issues=_issue_replies(context))
     result = api.exporting(request.upstream_output, config, out_dir)
     return StageReply(export_path=str(result.export_path), issues=_issue_replies(context))
 

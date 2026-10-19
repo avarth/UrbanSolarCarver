@@ -677,12 +677,136 @@ def _assert_disjoint_and_covering(polygon, a, b, vs):
 @pytest.mark.parametrize("every", [2, 3])
 def test_plates_of_neighbouring_modules_at_slanted_ends_neither_overlap_nor_leave_a_module_out(shear, angle, offset,
                                                                                                 every):
-    """A parallelogram's slanted ends have modules drawn from their columns.  Two plates made of complementary sets of
-    modules (every other module, every third) do not overlap, and together they cover the footprint up to slivers."""
+    """A parallelogram's slanted ends have modules cut by the bisector of the corner.  Two plates made of complementary
+    sets of modules (every other module, every third) do not overlap, and together they cover the footprint up to
+    slivers."""
     from shapely import affinity
     poly = affinity.translate(affinity.rotate(_parallelogram(shear), angle, origin=(0, 0)), *offset)
     a, b = _plates_of_two_complementary_module_sets(poly, 0.5, every)
     _assert_disjoint_and_covering(poly, a, b, 0.5)
+
+
+TRAPEZOID = Polygon([(0, 0), (60, 0), (50, 14), (8, 14)])     # acute corners of 54 and 60 degrees at its base
+
+
+def _directions_modules_may_be_cut_along(facades):
+    """Directions (degrees, modulo 180) of every straight facade, of its normal and of the bisector of every two of
+    them (the ridge the nearest-facade rule draws between their faces)."""
+    straight = [f for f in facades if f.straight]
+    normals = [np.array([-f.direction[1], f.direction[0]]) for f in straight]
+    lines = [f.direction for f in straight] + normals
+    for a in normals:
+        for b in normals:
+            if np.hypot(*(a - b)) > 1e-9:
+                lines.append(np.array([-(a - b)[1], (a - b)[0]]))
+    return np.degrees(np.arctan2([v[1] for v in lines], [v[0] for v in lines])) % 180.0
+
+
+def _edges(polygon, shortest=0.0):
+    """(start, end) of every edge of *polygon*'s rings at least *shortest* long."""
+    for ring in [polygon.exterior, *polygon.interiors]:
+        xy = np.asarray(ring.coords)
+        for p, q in zip(xy[:-1], xy[1:]):
+            if np.hypot(*(q - p)) >= shortest:
+                yield p, q
+
+
+def _footprint_with_corners_that_are_not_square(shape, angle):
+    from shapely import affinity
+    base = _parallelogram(20) if shape == "parallelogram" else TRAPEZOID
+    return affinity.translate(affinity.rotate(base, angle, origin=(0, 0)), 20.13, 3.37)
+
+
+@pytest.mark.parametrize("angle", [0, 20])
+@pytest.mark.parametrize("shape", ["parallelogram", "trapezoid"])
+def test_modules_at_corners_that_are_not_square_end_on_one_straight_slanted_edge(shape, angle):
+    """At a corner that is not square the faces of its two facades meet along the bisector of the corner.  A module
+    there is its rectangle cut by that line: every module has a shape, the shapes do not overlap, together they cover
+    the footprint up to a voxel row along the outline, and every edge runs along a facade, across one or along a
+    bisector (no staircase of voxel columns)."""
+    poly = _footprint_with_corners_that_are_not_square(shape, angle)
+    vs = 0.5
+    ij, xy = _surface_cells(poly, vs)
+    facades, _, _, _, shapes = _modules(poly, ij, xy, vs)
+    assert all(shape is not None for shape in shapes)
+    modules = np.array([shape.intersection(poly) for shape in shapes], dtype=object)
+    first, second = shapely.STRtree(modules).query(modules, predicate="intersects")
+    pairs = first < second
+    assert shapely.area(shapely.intersection(modules[first[pairs]], modules[second[pairs]])).sum() < 1e-6
+    uncovered = poly.difference(shapely.union_all(modules))
+    assert uncovered.area <= poly.length * vs
+    assert uncovered.buffer(-0.5 * vs).is_empty
+    allowed = _directions_modules_may_be_cut_along(facades)
+    for module in modules:
+        for p, q in _edges(module, shortest=1e-3):
+            direction = np.degrees(np.arctan2(q[1] - p[1], q[0] - p[0])) % 180.0
+            off = np.abs(allowed - direction)
+            assert np.minimum(off, 180.0 - off).min() < 0.01, (p, q)
+
+
+@pytest.mark.parametrize("angle", [0, 20])
+@pytest.mark.parametrize("shape", ["parallelogram", "trapezoid"])
+def test_plates_at_corners_that_are_not_square_close_into_watertight_prisms(shape, angle):
+    poly = _footprint_with_corners_that_are_not_square(shape, angle)
+    vs = 0.5
+    ij, xy = _surface_cells(poly, vs)
+    _, faces, bay, _, shapes = _modules(poly, ij, xy, vs)
+    from scipy.ndimage import label
+    whole = np.ones(len(xy), bool)
+    front_row = np.isin(bay, np.unique(bay[faces.d < 3.0]))
+    grid_ij = ij - ij.min(axis=0)
+    for built in (whole, bay % 2 == 0, bay % 3 == 0, front_row):
+        grid = np.zeros(grid_ij.max(axis=0) + 1, bool)
+        grid[grid_ij[built, 0], grid_ij[built, 1]] = True
+        plate_of_column = np.where(built, label(grid)[0][grid_ij[:, 0], grid_ij[:, 1]], 0)   # as build_floors
+        for k in range(1, plate_of_column.max() + 1):
+            in_plate = plate_of_column == k
+            for plate in mg.plate_polygons(ij, in_plate, ~in_plate, vs, poly, bay=bay, bay_shapes=shapes):
+                assert all(np.hypot(*(q - p)) >= 1e-6 for p, q in _edges(plate))
+                assert mg.prism_mesh(plate, 0.0, 3.0).is_watertight
+                assert _sharp_vertices(plate, poly) == []
+    whole_plate = shapely.union_all(mg.plate_polygons(ij, whole, ~whole, vs, poly, bay=bay, bay_shapes=shapes))
+    assert whole_plate.symmetric_difference(poly).area < 1e-6
+
+
+def _sharp_vertices(plate, footprint, below_deg=30.0):
+    """Vertices of *plate* inside the footprint whose angle is under *below_deg*: a wedge or a notch the cuts made.  On the
+    outline a rectangle's side meets a slanted facade at 90 degrees minus the corner's angle, which is the building's."""
+    outline = footprint.boundary
+    sharp = []
+    for ring in [plate.exterior, *plate.interiors]:
+        xy = np.asarray(ring.coords)[:-1]
+        for k in range(len(xy)):
+            u, v = xy[k - 1] - xy[k], xy[(k + 1) % len(xy)] - xy[k]
+            angle = np.degrees(np.arccos(np.clip(u @ v / (np.hypot(*u) * np.hypot(*v)), -1.0, 1.0)))
+            if angle < below_deg and outline.distance(Point(xy[k])) > 1e-3:
+                sharp.append((tuple(np.round(xy[k], 3)), round(float(angle), 1)))
+    return sharp
+
+
+def test_a_cut_between_two_faces_uses_no_line_of_a_facade_that_does_not_touch_their_corner():
+    # The bottom (0) and right (1) facades of the L meet at (60, 0); the inner right facade (x = 15) and the top (y = 60) touch
+    # neither, so no candidate lies along, behind or across them, even where such a line would happen to separate the columns.
+    facades, _ = mg.split_facades([L_SHAPE])
+    bottom = next(k for k, f in enumerate(facades) if np.allclose(f.start, (0, 0)))
+    right = next(k for k, f in enumerate(facades) if np.allclose(f.start, (60, 0)))
+    lines = mg._lines_between_faces(facades, bottom, right, range(len(facades)), lambda k: 7.5)
+    assert lines and np.allclose(lines[0][0], np.array([1.0, 1.0]) / np.sqrt(2.0))          # the bisector first
+    for normal, offset in lines:
+        assert not (abs(abs(normal[0]) - 1.0) < 1e-9 and abs(abs(offset) - 15.0) < 1e-9)   # x = 15
+        assert not (abs(abs(normal[1]) - 1.0) < 1e-9 and abs(abs(offset) - 60.0) < 1e-9)   # y = 60
+        assert not (abs(abs(normal[1]) - 1.0) < 1e-9 and abs(abs(offset) - 52.5) < 1e-9)   # half a depth behind the top
+
+
+def test_a_line_through_the_widest_gap_snaps_to_the_nearest_facade_direction_or_bisector():
+    mine = np.array([[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
+    theirs = np.array([[3.2, 1.6], [2.4, 3.1], [3.4, 3.4]])          # the widest gap runs at an angle to every snap direction
+    bisector = np.array([1.0, 1.0]) / np.sqrt(2.0)
+    normal, offset = mg._separating_line(mine, theirs, [], [bisector, np.array([1.0, 0.0]), np.array([0.0, 1.0])])
+    assert np.allclose(normal, bisector)
+    assert (mine @ normal).max() < offset < (theirs @ normal).min()
+    # Where no snapped direction separates them, there is no line: the module is drawn from its columns.
+    assert mg._separating_line(mine, np.array([[2.5, 0.5], [0.5, 2.5]]), [], [np.array([1.0, 0.0]), np.array([0.0, 1.0])]) is None
 
 
 def _wings(length, width, depth):
@@ -736,3 +860,32 @@ def test_sweep_of_angles_and_shapes(vs):
             for every in (2, 3):
                 a, b = _plates_of_two_complementary_module_sets(poly, vs, every)
                 _assert_disjoint_and_covering(poly, a, b, vs)
+
+
+def test_a_vertex_a_fraction_of_a_voxel_off_the_line_keeps_a_facade_straight():
+    # Footprints from mesh sections carry vertices a fraction of a millimetre off a straight facade; within half a voxel
+    # the facade stays straight, so its modules are rectangles. A bend the grid can resolve keeps it curved.
+    block = Polygon([(0, 0), (20, 0.0003), (40, 0), (40, 15), (0, 15)])
+    facades, _ = mg.split_facades([block], straight_tolerance=0.25)
+    assert len(facades) == 4 and all(f.straight for f in facades)
+    ij, xy = _cells(block, 0.5)
+    facades, corners = mg.split_facades([block], straight_tolerance=0.25)
+    faces = mg.assign_faces(xy, facades, corners, [block], 0.5)
+    bay, bay_face = mg.cut_bays(faces, facades, [block], 3.0, 0.5)
+    shapes = mg.bay_polygons(xy, faces, bay, bay_face, facades, [block], 3.0, 0.5)
+    assert all(shape is not None for shape in shapes)
+    bowed = Polygon([(0, 0), (20, 0.8), (40, 0), (40, 15), (0, 15)])
+    facades, _ = mg.split_facades([bowed], straight_tolerance=0.25)
+    assert sum(not f.straight for f in facades) == 1
+
+
+def test_a_plate_keeps_no_spike_or_crack_of_zero_width():
+    # Boolean operations between module shapes and column squares can leave a vertex where the outline turns back on itself:
+    # a spike out of the plate or a crack into it, of no width. The plate is the same without them.
+    spiked = Polygon([(0, 0), (6, 0), (6, 3), (9, 3), (6, 3.0000001), (6, 6), (3, 6), (3, 3), (3.0000001, 6), (0, 6)])
+    cleaned = mg._without_spikes(spiked)
+    assert cleaned.is_valid and cleaned.area == pytest.approx(spiked.area, abs=1e-6)
+    assert cleaned.bounds == (0, 0, 6, 6)                                   # the spike to x = 9 is gone
+    assert _sharp_vertices(cleaned, box(-1, -1, 10, 10), below_deg=1.0) == []    # and the crack down to (3, 3)
+    square = box(0, 0, 3, 3)
+    assert mg._without_spikes(square).equals(square)

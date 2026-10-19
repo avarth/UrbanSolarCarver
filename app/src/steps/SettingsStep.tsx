@@ -1,15 +1,20 @@
 // The Settings step (UX 5.4, 11): the settings the analysis reads in their groups, the grid under Voxel size, the grid-over-budget
 // message in place of the engine's, and messages that name no single setting. The step's Run analysis button sits pinned at the
-// bottom of the panel (RunAnalysisButton), disabled with the first reason that blocks the run, its run's progress under it.
+// bottom of the panel (RunAnalysisButton), disabled with the first reason that blocks the run, its run's progress under it. Above
+// the groups, after a weather file is added or replaced in this session, the notice of the period it may call for
+// (weather_change_notice.ts).
 import { useId, type ReactNode } from "react";
 import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from "../api_client/client";
 import { messages } from "../messages";
-import type { ColdPeriodState } from "../settings_form/analysis_period";
+import {
+  changedPeriodSettings, periodInWords, type AnalysisPeriodField, type ColdPeriodState, type Hemisphere,
+} from "../settings_form/analysis_period";
 import { shownValue, type FormState, type SaveOutcome } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS, settingsForStep, settingView, type StepName as FormStepName } from "../settings_form/presentation";
 import { fieldErrorOf, gridLineOf, SettingField, WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
+import type { WeatherChangeSuggestion } from "./weather_change_notice";
 import "./steps.css";
 
 export interface RunAnalysisConditions {
@@ -143,6 +148,51 @@ function voxelSizeExtras(form: FormState): SettingFieldExtras {
   return { changeNote, errorContent: <>{text.description} <strong>{text.advice}</strong></> };
 }
 
+/** The words of the notice of a new weather file: what the file means for the period, and the button that applies the offer. */
+function weatherChangeTextOf(suggestion: WeatherChangeSuggestion): { text: string; useLabel: string } {
+  if (suggestion.kind === "six_months") {
+    return { text: messages.weatherChangeOtherHemisphere(suggestion.location, suggestion.hemisphere, periodInWords(suggestion.suggested)),
+             useLabel: messages.shiftBySixMonthsButton };
+  }
+  const { coldDates, current } = suggestion;
+  const coldDatesText = messages.periodDates(coldDates.startMonth, coldDates.startDay, coldDates.endMonth, coldDates.endDay);
+  const currentDatesText = messages.periodDates(current.startMonth, current.startDay, current.endMonth, current.endDay);
+  return { text: messages.weatherChangeColdPeriod(suggestion.location, coldDatesText, currentDatesText), useLabel: messages.useColdPeriodButton };
+}
+
+/** The notice of a weather file added or replaced in this session, with the period it offers; either button ends it. */
+export interface WeatherChangeNoticeContent {
+  suggestion: WeatherChangeSuggestion;
+  onDismiss: () => void;
+}
+
+interface WeatherChangeNoticeProps extends WeatherChangeNoticeContent {
+  form: FormState;
+  onChange: (values: Record<string, unknown>) => void;
+  disabled: boolean;
+}
+
+/** The offer applies as a change in the period control does: the changed period settings, through the form's saver. */
+function WeatherChangeNotice({ suggestion, onDismiss, form, onChange, disabled }: WeatherChangeNoticeProps) {
+  const { text, useLabel } = weatherChangeTextOf(suggestion);
+  const useSuggestedPeriod = () => {
+    const values = Object.fromEntries(ANALYSIS_PERIOD_FIELDS.map((name) => [name, shownValue(form, name)])) as Record<AnalysisPeriodField, number | null>;
+    onChange(changedPeriodSettings(values, suggestion.suggested));
+    onDismiss();
+  };
+  return (
+    <div className="weather-change-notice">
+      <p>{text}</p>
+      <div className="weather-change-notice-buttons">
+        <button type="button" className="secondary-button" disabled={disabled} onClick={useSuggestedPeriod}>{useLabel}</button>
+        <button type="button" className="secondary-button" disabled={disabled} aria-label={messages.keepAnalysisPeriodName} onClick={onDismiss}>
+          {messages.keepAnalysisPeriodButton}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 interface SettingsStepProps {
   form: FormState;
   onChange: (values: Record<string, unknown>) => void;
@@ -150,13 +200,23 @@ interface SettingsStepProps {
   disabledReason: string | null;
   /** The cold period of the weather file, for the period's preset; null in the modes without one. */
   coldPeriod?: ColdPeriodState | null;
+  /** The hemisphere of the weather file, for the period's heating season preset; northern without one. */
+  hemisphere?: Hemisphere;
+  /** The notice of a weather file added or replaced in this session; null when there is none to show. */
+  weatherChangeNotice?: WeatherChangeNoticeContent | null;
 }
 
-export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null }: SettingsStepProps) {
-  const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod } };
+export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern", weatherChangeNotice = null }: SettingsStepProps) {
+  const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
   return (
     <div className="settings-step">
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
+      {/* A live region on the page from the start, so that screen readers announce the notice that fills it. */}
+      <div className="weather-change-region" role="status">
+        {weatherChangeNotice !== null && (
+          <WeatherChangeNotice {...weatherChangeNotice} form={form} onChange={onChange} disabled={disabledReason !== null} />
+        )}
+      </div>
       {form.stepErrors.map((error) => <p key={error} className="setting-error step-error"><WarningIcon /><span>{error}</span></p>)}
       {settingsForStep("settings", form.mode).map((group) => (
         <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras} />

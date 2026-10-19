@@ -261,12 +261,14 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       else setDownloadProblem(failureTextOf(error));
     });
   };
-  // A format change rebuilds the envelope, which reads the carving: while Carving is locked the format is stored and the envelope
-  // keeps its out-of-date mark, as the build buttons wait (M10).
+  // A format change rebuilds the parts that exist (the envelope, the massing or both), so every file is in the new format at once.
+  // They read the carving: while Carving is locked the format is stored and the parts keep their out-of-date marks, as the build
+  // buttons wait (M10).
   const formatRunReason = analysisOutOfDate ? messages.buildWaitsForAnalysis : null;
   const changeMeshFormat = async (format: string) => {
     const outcome = await changeAndSave({ final_mesh_format: format });
-    if ((outcome === "saved" || outcome === "none") && stages.exporting !== "missing" && !carvingLocked.current) void startRun(ENVELOPE_STAGES, "export_format");
+    const partsBuilt = BUILD_STAGES.filter((stage) => stages[stage] !== "missing");
+    if ((outcome === "saved" || outcome === "none") && partsBuilt.length > 0 && !carvingLocked.current) void startRun(partsBuilt, "export_format");
   };
 
   // A part's results show once its stage is recorded, or done in the run under way (as isStageDimmed counts it): a run that wrote
@@ -302,7 +304,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       <ExportStep form={form} disabledReason={runs.activeRun !== null ? messages.runInProgress : null} formatRunReason={formatRunReason}
                   onFormatChange={(format) => void changeMeshFormat(format)}
                   downloads={exportDownloads({ project, meshFormat, envelopeFile: results.summary?.envelope?.mesh_file ?? null, envelope: stages.exporting,
-                                               massing: stages.massing, stagesBeingRebuilt: stagesStillToFinish })}
+                                               massingFile: results.summary?.massing?.export_mesh_file ?? null, massing: stages.massing,
+                                               stagesBeingRebuilt: stagesStillToFinish })}
                   onDownload={download} formatFeedback={feedback("export_format")} downloadProblem={downloadProblem} />
     ),
   };

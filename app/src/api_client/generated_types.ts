@@ -677,12 +677,16 @@ export interface components {
             joined_bounds: number[][] | null;
             /** Weather Location */
             weather_location: string | null;
+            /** Weather Latitude */
+            weather_latitude: number | null;
         };
         /**
          * MassingSummary
-         * @description The numbers massing reports for the run summary of the envelope and massing screen.
+         * @description The numbers massing reports for the run summary of the envelope and massing screen, and its mesh file for Export.
          */
         MassingSummary: {
+            /** Export Mesh File */
+            export_mesh_file: string;
             /** Floor Area M2 Per Storey */
             floor_area_m2_per_storey: number[];
             /** Total Floor Area M2 */
@@ -752,6 +756,8 @@ export interface components {
             joined_bounds: number[][] | null;
             /** Weather Location */
             weather_location: string | null;
+            /** Weather Latitude */
+            weather_latitude: number | null;
             stage_status: components["schemas"]["StageStatusReply"];
             grid_plan: components["schemas"]["GridPlanReply"] | null;
         };

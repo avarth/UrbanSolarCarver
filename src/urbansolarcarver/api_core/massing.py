@@ -4,7 +4,9 @@ Reads the thresholding manifest, builds floor plates that follow the
 maximum volume's footprint, which preprocessing saved as ``footprint.json``
 (``urbansolarcarver.floor_plates``), and writes them
 as ``plates.json`` (outlines in world coordinates) and ``plates.obj`` (one
-closed prism per plate), with a manifest, diagnostics and the run report.
+closed prism per plate), and as ``plates.<format>`` too when
+``final_mesh_format`` is not OBJ, with a manifest, diagnostics and the run
+report.
 """
 from __future__ import annotations
 
@@ -21,6 +23,7 @@ from shapely.errors import GEOSException
 
 from .. import floor_plates as mg
 from ..errors import StageChainError
+from ..io import float32_resolution, save_glb, save_mesh
 from ..load_config import user_config
 from ..pydantic_schemas import MassingManifest
 from ..run_context import Issue, RunContext, report_issue, stage_context
@@ -29,8 +32,13 @@ from ._reporting import write_run_report
 from ._stage_io import begin_stage, commit_manifest, new_run_id, stored_path
 from ._util import ThresholdedGrid, _resolve_cfg, ensure_diag, load_thresholded_grid, write_json
 
-# Everything massing writes into its folder, besides manifest.json.
-_MASSING_OUTPUTS = ("plates.json", "plates.obj", "diagnostics/diagnostic.json")
+# Everything massing writes into its folder, besides manifest.json; every
+# mesh format is listed so that a change of final_mesh_format leaves no
+# plates of the earlier format behind.
+_MASSING_OUTPUTS = (
+    "plates.json", "plates.obj", "plates.ply", "plates.stl", "plates.glb",
+    "diagnostics/diagnostic.json",
+)
 
 # Share of occupied voxel columns allowed to lie more than one voxel outside
 # the mesh footprint before the footprint is taken as not matching the voxel
@@ -40,10 +48,15 @@ FOOTPRINT_MISMATCH_SHARE = 0.05
 
 @dataclass(frozen=True)
 class MassingResult:
-    """Immutable record returned by :func:`massing`; path-like to ``plates.json``."""
+    """Immutable record returned by :func:`massing`; path-like to ``plates.json``.
+
+    ``mesh_path`` is ``plates.obj``; ``export_mesh_path`` is the plates in
+    ``final_mesh_format`` (``mesh_path`` itself for OBJ).
+    """
     out_dir: Path
     plates_path: Path
     mesh_path: Path
+    export_mesh_path: Path
     floor_areas: List[float]
     total_floor_area: float
     n_plates: int
@@ -72,6 +85,32 @@ def _read_footprint(pre):
             f"Footprint file {path} is damaged ({type(exc).__name__}: {exc}). "
             f"Re-run preprocessing."
         ) from exc
+
+
+def _write_plates_mesh(named_prisms, path: Path, mesh_format: str) -> None:
+    """Write the plates to *path* in *mesh_format*.
+
+    OBJ and GLB keep one part per plate, named as in *named_prisms*; PLY and
+    STL have no named parts, so the plates are one mesh.  No plates give an
+    empty file of the format.  ``save_mesh`` and ``save_glb`` keep
+    georeferenced coordinates in PLY and GLB and report their rounding in
+    STL.
+    """
+    import trimesh
+    if not named_prisms:
+        if mesh_format == "obj":
+            path.write_text("", encoding="utf-8")
+        else:
+            save_mesh(trimesh.Trimesh(), str(path))
+    elif mesh_format == "glb":
+        save_glb(named_prisms, str(path))
+    elif mesh_format == "obj":
+        scene = trimesh.Scene()
+        for name, prism in named_prisms:
+            scene.add_geometry(prism, geom_name=name)
+        scene.export(str(path), file_type=mesh_format)
+    else:
+        save_mesh(trimesh.util.concatenate([prism for _name, prism in named_prisms]), str(path))
 
 
 def _footprint(world_polygons, origin, columns, voxel_size):
@@ -103,6 +142,15 @@ def _footprint(world_polygons, origin, columns, voxel_size):
         )
         return mg.footprint_from_columns(columns, voxel_size), "voxels"
     return polygons, "mesh"
+
+
+def _straight_tolerance(polygons, origin, voxel_size):
+    """How far (m) the vertices of a facade may lie off the line from its first to its last vertex for it to count as
+    straight: 1 cm, or four float32 steps at the footprint's world coordinates when that is more (a mesh stored in
+    float32 far from the origin rounds them by that much), and at most half a voxel, below what the carving
+    resolves.  A real bend, such as 6 degrees over a few metres, stays a bend near the origin."""
+    world = shapely.get_coordinates(polygons) + np.asarray(origin, dtype=np.float64)[:2]
+    return min(0.5 * voxel_size, max(0.01, 4.0 * float32_resolution(world)))
 
 
 def _warn_raised_parts(polygons, cells_ij, xy, occ, z0, origin_z, voxel_size):
@@ -156,7 +204,11 @@ def massing(threshold_manifest, cfg: Union[user_config, str, Path],
         world coordinates, floor area, bay count and outside share; plus
         floor areas per floor and in total.
     ``plates.obj``
-        One closed mesh per plate, named ``floor_<n>_plate_<m>``.
+        One closed mesh per plate, named ``floor_<n>_plate_<m>``; written
+        whatever the format chosen.
+    ``plates.<format>``
+        The same plates in ``final_mesh_format`` when it is not OBJ: one mesh
+        for PLY and STL, one named part per plate for GLB.
     ``manifest.json``, ``diagnostics/diagnostic.json``, ``run_report.md``
         The report goes to the parent folder when *out_dir* is named
         ``massing``, otherwise into *out_dir*; it keeps an Export section
@@ -204,7 +256,7 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
     cells_ij = np.argwhere(columns)
     xy = (cells_ij + 0.5) * vs
     polygons, footprint_source = _footprint(_read_footprint(chain.pre), origin, columns, vs)
-    facades, corners = mg.split_facades(polygons)
+    facades, corners = mg.split_facades(polygons, straight_tolerance=_straight_tolerance(polygons, origin, vs))
     # A facade shorter than two bays (a chamfer, a small step) would get a
     # face of at most one bay; its columns go to the neighbouring facades.
     faces = mg.assign_faces(xy, facades, corners, polygons, vs,
@@ -263,17 +315,14 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
         floor_areas.append(area_this_floor)
     total = float(sum(floor_areas))
 
-    # The mesh first: plates.json, which clients read for the results, then
-    # appears only once the mesh beside it was written.
+    # The meshes first: plates.json, which clients read for the results, then
+    # appears only once the meshes beside it were written.
     mesh_path = out_path / "plates.obj"
-    if meshes:
-        import trimesh
-        scene = trimesh.Scene()
-        for name, prism in meshes:
-            scene.add_geometry(prism, geom_name=name)
-        scene.export(str(mesh_path), file_type="obj")
-    else:
-        mesh_path.write_text("", encoding="utf-8")
+    _write_plates_mesh(meshes, mesh_path, "obj")
+    export_mesh_path = out_path / f"plates.{settings.final_mesh_format}"
+    if export_mesh_path != mesh_path:
+        _write_plates_mesh(meshes, export_mesh_path, settings.final_mesh_format)
+    if not meshes:
         report_issue(
             "no_plates_fit",
             "massing: no floor plates fit the envelope with these settings",
@@ -302,9 +351,10 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
     commit_manifest(out_path, MassingManifest(
         run_id=new_run_id(), plates_path=stored_path(plates_path, out_path),
         mesh_path=stored_path(mesh_path, out_path),
+        export_mesh_path=stored_path(export_mesh_path, out_path),
         upstream_manifest=stored_path(chain.thr.manifest_path, out_path),
         upstream_run_id=thr_run_id))
 
     return MassingResult(out_dir=out_path, plates_path=plates_path, mesh_path=mesh_path,
-                         floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates),
+                         export_mesh_path=export_mesh_path, floor_areas=floor_areas, total_floor_area=total, n_plates=len(plates),
                          issues=context.issues_of("massing"))

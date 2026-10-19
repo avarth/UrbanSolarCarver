@@ -83,7 +83,91 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ring. The compass ring, the sun path and the sky dome are sized to
   everything loaded, not to the maximum volume alone.
 
+### Changed (browser UI)
+
+- **Balance temperature is a range.** Its two handles are the two ends of
+  the dead band, "Counts below" and "Too warm above", each moved or typed on
+  its own; the app sends the middle as `balance_temperature` and half the
+  width as `balance_offset`. The earlier slider drew the band only below the
+  balance temperature, although the engine reads it on both sides (cold hours
+  below `balance_temperature - balance_offset`, warm hours above
+  `balance_temperature + balance_offset`). Without harm counted the upper
+  end is muted, with the note "(only with harm counted)". The lower handle
+  comes first for Tab; on one spot an arrow key toward the other end moves
+  the focus to that end's handle, which the browser steps, so both ends
+  pinned at 10 or 30 °C step back; Home and End pick the lower and the upper
+  end the same way. The cold period is asked for at the lower
+  end rounded as the slider rounds it (13.2, not 13.200000000000001).
+- **A new weather file asks about the analysis period.** Adding or replacing
+  the weather file shows one notice in Settings with **Keep** beside the
+  offer: in Solar usefulness the cold period of the new file, when its dates
+  differ from the period's (the hours kept); in Solar time-based and Solar
+  energy, when the new file is in the other hemisphere, the same dates six
+  months on (30 Apr gives 31 Oct). Before, a new weather file left the period
+  as it was without a word. The project detail and the reply to an input file
+  change carry `weather_latitude`, read from the weather file's `LOCATION`
+  line.
+- **The heating season preset follows the hemisphere** of the weather file:
+  1 April to 31 October south of the Tropic of Capricorn, 1 October to 30
+  April elsewhere, within the tropics and without a weather file.
+- The notice of a new weather file reads "The new weather file (Brisbane,
+  AUS) has its cold period from 3 May to 20 Sep; the analysis period is 30
+  Sep to 15 May." or "The new weather file (Brisbane, AUS) is in the southern
+  hemisphere: ...", also for a file without a location. It offers no six
+  month shift for a period that covers the whole year (the same days six
+  months on), nor for a file within the tropics; a file whose latitude cannot
+  be read keeps the hemisphere of the file before it. The notice sits in a
+  live region kept on the page, either button moves the focus to the
+  analysis period's start date, and once the period changes the notice does
+  not come back when the period is set back.
+
 ### Changed (massing)
+
+- **The building massing is written in the mesh format chosen.**
+  `final_mesh_format` now applies to massing too: besides `plates.obj`, which
+  it keeps writing in every run, massing writes `plates.ply`, `plates.stl` or
+  `plates.glb` with the same plates (one mesh in PLY and STL, one named part
+  per plate in GLB). Before, the massing was OBJ whatever the format, and the
+  Export step of the browser interface offered only the OBJ. The massing
+  manifest names the file as `export_mesh_path` (manifests without it still
+  read), a format change marks massing out of date as well as the envelope,
+  and a format change in the Export step rebuilds the parts that exist (the
+  envelope, the massing or both). Export offers the massing file that was
+  built under its own format, with a note when a format chosen while Carving
+  was locked has not been built yet. A project
+  whose massing was built before this change in a format other than OBJ shows
+  its massing out of date.
+
+- **Facades whose vertices lie within 1 cm of their chord are straight.**
+  Footprints cut from meshes (the District example) carry vertices a few
+  micrometres off a straight wall, which made most facades "curved", so their
+  modules were drawn from voxel columns as staircases on the upper floors. A
+  facade now counts as straight when its vertices lie within 1 cm of its
+  chord, or within four float32 steps of the footprint's world coordinates
+  when the mesh lies far from the origin, and never more than half a voxel; a
+  real bend (6 degrees, 0.39 m over 7.7 m in the District example) stays a
+  bend. In the District example, curved facades go from 60 to 3 and modules
+  drawn from columns from 520 to 101, with the floor area nearly unchanged
+  (74 022 to 74 002 m²).
+
+- **Modules at corners that are not square end on one straight line.** Where
+  two facades meet at a corner that is not square, the modules at the ends of
+  their faces held voxel columns of the other face inside their rectangle and
+  were drawn from their columns, as staircases on the upper floors (101
+  modules in 30 of the 66 District buildings). Such a module is now its
+  rectangle cut by a line between its columns and those of the other face:
+  the bisector of the corner, which the nearest-facade rule draws, a line of
+  the two facades' corner squares, or a bisector with a facade that meets one
+  of them; failing those, the line across the widest gap between the
+  columns, turned to a direction of the two facades or their bisector. A cut
+  that leaves an angle under 30 degrees or a piece narrower than a voxel is
+  not used: the module is cut without being grown first, or drawn from its
+  columns. Plates also lose the spikes and cracks of no width that boolean
+  operations left. In the District example modules drawn from columns go
+  from 101 to 48 (9 of them on curved facades), plate edges inside the
+  footprint at an angle to every facade from 187 to 110 m (49 m of them along
+  a corner bisector), plate vertices under 45 degrees away from footprint
+  corners from 30 to 8, and the floor area from 74 002 to 74 021 m².
 
 - **Floors are built from square modules.** Each face of the footprint is
   now cut in depth too, into square modules of `min_plate_dimension`, and each
@@ -126,6 +210,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - Plates of different modules no longer overlap where modules at a slanted
   end are drawn from their voxel columns, and where two module rectangles
   overlap the overlap belongs to one of them instead of to neither.
+- Closing gaps narrower than a voxel no longer fails on a plate with a sharp
+  corner, where GEOS's mitre offsets left a self-intersection.
+- Georeferenced coordinates are kept in GLB files (the envelope and the
+  massing): the vertices, which glTF stores as float32, are written near the
+  origin and each node's translation, a double, carries the whole-metre
+  offset. Before, coordinates near 4 200 000 m were rounded by up to 0.25 m.
+  STL can only hold float32, so writing one far from the origin now reports a
+  `float32_coordinates` issue. The engine's massing replies name the plates
+  in `final_mesh_format` as `export_mesh_path`, next to `mesh_path`.
 - A plate no longer loses whole modules when GEOS's inward mitre offset, used
   to close gaps narrower than a voxel, drops part of the shape (up to 240 m²
   of a parallelogram in a test sweep).

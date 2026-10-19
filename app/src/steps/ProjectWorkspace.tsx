@@ -9,8 +9,9 @@ import {
   type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { listedWithAnd, messages } from "../messages";
+import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import { analysisDiffersFromStored, shownValue, useSettingsForm, type SaveOutcome } from "../settings_form/form_state";
-import { fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
+import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
@@ -29,6 +30,7 @@ import {
   plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName,
 } from "./step_summaries";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "./sun_path_request";
+import { periodChangedSince, weatherChangeSuggestion, type WeatherFileChange } from "./weather_change_notice";
 
 const NO_SHIFT: Point3 = [0, 0, 0];
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "mode", "settings"];
@@ -111,9 +113,16 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   });
   const [joinedBounds, setJoinedBounds] = useState<Bounds3 | null>(project.joined_bounds as Bounds3 | null);
   const [weatherLocation, setWeatherLocation] = useState(project.weather_location);
+  const [weatherLatitude, setWeatherLatitude] = useState(project.weather_latitude);
   const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0 });
   // Goes up whenever the weather file is added, replaced or removed: the service keeps one name for it, so its file list may not change.
   const [weatherFileRevision, setWeatherFileRevision] = useState(0);
+  const weatherFileRevisionNow = useRef(0);
+  // The weather file added or replaced last in this session, for the notice in Settings; null before one, and once it is dismissed.
+  const [weatherFileChange, setWeatherFileChange] = useState<WeatherFileChange | null>(null);
+  // The hemisphere of the last weather file the project had with seasons, kept across a removal and across a file within the tropics
+  // or without a latitude: what the period was likely chosen for.
+  const hemisphereOfLastWeatherFile = useRef<Hemisphere>(hemisphereOfLatitude(project.weather_latitude));
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
   // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
   const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
@@ -175,7 +184,17 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
   const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, onServiceProblem });
-  const coldPeriod = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision, onServiceProblem });
+  const { coldPeriod, answeredWeatherFileRevision } = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision, onServiceProblem });
+  const modeReadsPeriod = modeInfo?.needs_period ?? false;
+  const periodShown = analysisPeriodOf(form, modeReadsPeriod);
+  const weatherChangeSuggestionNow = weatherChangeSuggestion(weatherFileChange, {
+    mode: form.mode, modeReadsPeriod, period: periodShown, coldPeriod, answeredWeatherFileRevision,
+  });
+  // Once the period is not the one the new file came with, the notice has nothing more to say about it, even if the period comes back.
+  const weatherChangeOutlived = weatherFileChange !== null && periodChangedSince(weatherFileChange, periodShown);
+  useEffect(() => {
+    if (weatherChangeOutlived) setWeatherFileChange(null);
+  }, [weatherChangeOutlived]);
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
 
@@ -183,8 +202,24 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     setFiles((current) => ({ ...current, [reply.role]: reply.files }));
     setJoinedBounds(reply.joined_bounds as Bounds3 | null);
     setWeatherLocation(reply.weather_location);
-    if (reply.role === "weather") setWeatherFileRevision((revision) => revision + 1);
-    else setInputRevisions((current) => ({ ...current, [reply.role]: current[reply.role as MeshRole] + 1 }));
+    setWeatherLatitude(reply.weather_latitude);
+    if (reply.role === "weather") {
+      weatherFileRevisionNow.current += 1;
+      setWeatherFileRevision(weatherFileRevisionNow.current);
+    } else {
+      setInputRevisions((current) => ({ ...current, [reply.role]: current[reply.role as MeshRole] + 1 }));
+    }
+  };
+  // A weather file added or replaced: the notice in Settings is about it and the period the form shows now (a later one replaces it).
+  const noteNewWeatherFile = (reply: InputFilesReply) => {
+    const shownForm = currentForm();
+    const readsPeriod = modes.find((candidate) => candidate.name === shownForm.mode)?.needs_period ?? false;
+    const newHemisphere = seasonsOfLatitude(reply.weather_latitude);
+    setWeatherFileChange({
+      weatherFileRevision: weatherFileRevisionNow.current, location: reply.weather_location, previousHemisphere: hemisphereOfLastWeatherFile.current,
+      newHemisphere, periodBefore: analysisPeriodOf(shownForm, readsPeriod),
+    });
+    if (newHemisphere !== null) hemisphereOfLastWeatherFile.current = newHemisphere;
   };
   const afterInputsChanged = (role: InputRole) => {
     refreshStageStatus();
@@ -196,7 +231,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     const problems: string[] = [];
     for (const file of chosenFiles) {
       try {
-        applyFilesReply(await addInput(token, project.name, role, file));
+        const reply = await addInput(token, project.name, role, file);
+        applyFilesReply(reply);
+        if (role === "weather") noteNewWeatherFile(reply);
       } catch (error) {
         if (serviceProblemOf(error) !== "other") {
           onServiceProblem(error);
@@ -212,6 +249,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const removeFileAndApply: RemoveInputFile = async (role, fileName) => {
     try {
       applyFilesReply(await removeInput(token, project.name, role, fileName));
+      if (role === "weather") setWeatherFileChange(null);         // the notice was about the file removed
       afterInputsChanged(role);
       return null;
     } catch (error) {
@@ -243,6 +281,12 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     const labelled = field?.dataset.inputId === undefined ? null : document.getElementById(field.dataset.inputId);
     (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
   }, [settingToFocus]);
+
+  // Either button of the notice ends it; the focus, on a button that goes away, moves to the period the notice was about.
+  const endWeatherChangeNotice = () => {
+    setWeatherFileChange(null);
+    setSettingToFocus({ name: fieldSettingOf(ANALYSIS_PERIOD_FIELDS[0]) });
+  };
 
   const runBlocker = runAnalysisBlocker({
     runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length, testSurfaceFiles: files.test_surfaces.length, modeNeedsWeatherFile,
@@ -284,7 +328,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                 weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} />
     ),
     settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason}
-                            coldPeriod={coldPeriod} />,
+                            coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
+                            weatherChangeNotice={weatherChangeSuggestionNow === null ? null
+                              : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }} />,
     ...resultSteps.content,
   };
   const summaryOf = (name: StepName) => {

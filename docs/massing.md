@@ -17,7 +17,12 @@ simulation input (one closed prism per floor and plate).
    nothing. If preprocessing could not compute a footprint, massing uses the
    outline of the occupied voxel columns and warns. The footprint outline is split into facades
    wherever it turns by more than 30 degrees. Curved or faceted outlines with smaller
-   turns stay one facade.
+   turns stay one facade. A facade whose vertices all lie within 1 cm of the
+   line from its first to its last vertex is straight: footprints cut from
+   meshes carry vertices micrometres off a straight wall. Far from the origin,
+   where a mesh stored in float32 rounds its coordinates by more, the
+   tolerance is four of those float32 steps, and it is never more than half a
+   voxel. A real bend, a few degrees over a few metres, stays a bend.
 2. **Faces.** Every footprint column belongs to its nearest facade. Facades
    shorter than two modules (`2 * min_plate_dimension`: chamfers, small steps)
    get no face of their own; their neighbours meet at one corner across
@@ -76,12 +81,20 @@ simulation input (one closed prism per floor and plate).
    on the cut lines (along the facade and in depth), the back of the last
    module lies on the midline where the facade faces a parallel one, and the
    facade edges are the footprint's own. Other edges
-   (face ends at corners) are within half a voxel of the voxel columns. Modules
-   on curved facades, and modules with a slanted end where a corner is not
-   square, follow their voxel columns, straight to within half a voxel; they
-   stay off the columns of modules not in the plate. Where the rectangles of
-   two modules overlap at a slanted end, the overlap belongs to one of them,
-   so plates of different modules never overlap.
+   (face ends at corners) are within half a voxel of the voxel columns. Where
+   a corner is not square, the faces of its two facades meet along the
+   bisector of the corner; a module there is its rectangle cut by that line
+   (or by a line of the two facades' corner squares, or by a bisector with a
+   facade that meets one of them; where the faces meet along a curve, by the
+   line midway between the two faces' columns turned to a direction of the
+   two facades or their bisector), so it ends on one straight slanted edge.
+   A cut that would leave an angle under 30 degrees or a piece narrower than
+   a voxel is not used. Modules on curved facades, and the modules no such
+   line separates from a neighbouring face, follow their voxel columns,
+   straight to within half a voxel; they stay off the columns of modules not
+   in the plate. Where the shapes of two modules overlap, the overlap belongs
+   to one of them, so plates of different modules never overlap. Spikes and
+   cracks of no width that the boolean operations leave are removed.
 
 ## Settings
 
@@ -104,7 +117,18 @@ In `<out_dir>/massing/`:
 - `plates.json`: one entry per plate (floor, z bottom and top, outline and
   holes in world coordinates, area, number of modules (`bays`), share of its volume outside
   the envelope), plus the floor area per floor and in total;
-- `plates.obj`: one closed mesh per plate, named `floor_<n>_plate_<m>`;
+- `plates.obj`: one closed mesh per plate, named `floor_<n>_plate_<m>`,
+  written whatever `final_mesh_format` says (the browser interface draws it and
+  reads its parts by name);
+- `plates.ply`, `plates.stl` or `plates.glb` when `final_mesh_format` is one of
+  them: the same plates, as one mesh in PLY and STL (formats without named
+  parts) and with one named part per plate in GLB. The manifest names this
+  file as `export_mesh_path` (`plates.obj` itself for OBJ). A change of
+  `final_mesh_format` reruns massing as well as exporting. Far from the
+  origin (georeferenced models) PLY keeps the coordinates in double
+  precision and GLB places the offset in each node, while STL can only hold
+  float32 and the run reports a `float32_coordinates` issue when that rounds
+  them by more than 1 mm;
 - `manifest.json` and `diagnostics/diagnostic.json` (floors built, plates,
   floor areas, share of the carved envelope inside plates, volume placed outside
   the envelope through the tolerance, footprint source).

@@ -40,3 +40,17 @@ test("dates and lists for the 3D view", () => {
   expect(listedWithAnd(["10", "12", "14"])).toBe("10, 12 and 14");
   expect(listedWithAnd(["21 Dec"])).toBe("21 Dec");
 });
+
+test("the notice of a new weather file names its location when the file has one", () => {
+  expect(messages.weatherChangeColdPeriod("Brisbane, AUS", messages.periodDates(5, 3, 9, 20), messages.periodDates(9, 30, 5, 15)))
+    .toBe("The new weather file (Brisbane, AUS) has its cold period from 3 May to 20 Sep; the analysis period is 30 Sep to 15 May.");
+  expect(messages.weatherChangeColdPeriod(null, messages.periodDates(5, 3, 9, 20), messages.periodDates(9, 30, 5, 15)))
+    .toBe("The new weather file has its cold period from 3 May to 20 Sep; the analysis period is 30 Sep to 15 May.");
+  expect(messages.weatherChangeOtherHemisphere("Brisbane, AUS", "southern", "21 Jun, 10 to 14 h")).toBe(
+    "The new weather file (Brisbane, AUS) is in the southern hemisphere: winter there is June to August. " +
+    "Shift the analysis period by six months, to 21 Jun, 10 to 14 h?");
+  expect(messages.weatherChangeOtherHemisphere(null, "northern", "21 Dec, 10 to 14 h")).toBe(
+    "The new weather file is in the northern hemisphere: winter there is December to February. " +
+    "Shift the analysis period by six months, to 21 Dec, 10 to 14 h?");
+  expect(messages.periodDates(12, 21, 12, 22)).toBe("21 to 22 Dec");
+});

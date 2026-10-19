@@ -1,4 +1,4 @@
-// The mesh file format of the carved envelope (UX 5.7): one of the four formats the engine writes, as a row of radio buttons.
+// The mesh file format of the carved envelope and the building massing (UX 5.7): one of the four formats the engine writes, as a row of radio buttons.
 import { useId } from "react";
 import { messages } from "../../messages";
 import type { ControlProps } from "./NumberInput";

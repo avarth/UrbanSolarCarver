@@ -263,6 +263,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                 name=summary.name, created=summary.created, modified=summary.modified, example=summary.example, settings=store.read_settings(name),
                 inputs={role: store.input_files(name, role) for role in (*MESH_ROLES, WEATHER_ROLE)},
                 joined_bounds=store.joined_bounds(name), weather_location=store.weather_location(name),
+                weather_latitude=store.weather_latitude(name),
                 stage_status=StageStatusReply(stages=stage_status(store, name)), grid_plan=store.stored_grid_plan(name))
 
     def run_folder_of(name: str) -> Path:

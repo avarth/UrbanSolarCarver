@@ -8,13 +8,15 @@ from urbansolarcarver.stage_settings import (
 )
 
 
-def test_every_config_field_belongs_to_exactly_one_settings_model():
+def test_every_config_field_belongs_to_exactly_one_settings_model_but_the_mesh_format():
     models = (PreprocessingSettings, ThresholdingSettings, ExportingSettings, MassingSettings, RunOptions)
     owners = {}
     for model in models:
         for name in model.model_fields:
             owners.setdefault(name, []).append(model.__name__)
     assert set(owners) == set(UserConfig.model_fields)
+    # Exporting and massing both write a mesh in the chosen format.
+    assert owners.pop("final_mesh_format") == ["ExportingSettings", "MassingSettings"]
     assert all(len(v) == 1 for v in owners.values())
 
 
@@ -36,6 +38,13 @@ def test_a_massing_setting_reruns_massing_only(tmp_path):
     a = daylight_cube_config(tmp_path)
     assert stages_to_rerun(a, daylight_cube_config(tmp_path, plate_tolerance=0.3),
                            {"exporting", "massing"}) == ["massing"]
+
+
+def test_a_mesh_format_change_reruns_exporting_and_massing_only(tmp_path):
+    a = daylight_cube_config(tmp_path)
+    b = daylight_cube_config(tmp_path, final_mesh_format="glb")
+    assert stages_to_rerun(a, b, {"exporting", "massing"}) == ["exporting", "massing"]
+    assert stages_to_rerun(a, b, {"massing"}) == ["massing"]
 
 
 def test_a_threshold_change_reruns_thresholding_and_the_produced_leaves(tmp_path):

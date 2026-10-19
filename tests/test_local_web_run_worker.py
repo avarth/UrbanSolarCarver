@@ -141,6 +141,14 @@ def test_a_finished_run_lists_the_result_files_that_exist(project_with_inputs):
         "exporting/export.ply", "massing/plates.json", "massing/plates.obj", "run_report.md"]}
 
 
+def test_the_result_files_include_the_plates_in_the_chosen_format(tmp_path):
+    massing_folder = tmp_path / "massing"
+    massing_folder.mkdir()
+    for file_name in ("plates.json", "plates.obj", "plates.glb"):
+        (massing_folder / file_name).write_text("", encoding="utf-8")
+    assert run_worker_module._result_files(tmp_path) == ["massing/plates.glb", "massing/plates.json", "massing/plates.obj"]
+
+
 class CountingSession:
     """A session that counts its releases; ``instances`` collects every one created."""
 

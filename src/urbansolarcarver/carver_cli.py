@@ -481,7 +481,7 @@ def cmd_exporting(
     _echo_issues(context.issues)
 
 
-@app.command("massing", help="Stage 4: floor plates from the carved envelope -> plates.json, plates.obj")
+@app.command("massing", help="Stage 4: floor plates from the carved envelope -> plates.json, plates.obj (and plates.<format>)")
 def cmd_massing(
     from_manifest: Optional[Path] = Option(None, "-f", "--from", help="Path to thresholding manifest.json (auto-detected if omitted)"),
     config: Path = Option(..., "-c", "--config", exists=True, readable=True, help="YAML config path"),
@@ -494,8 +494,9 @@ def cmd_massing(
 
     Reads the thresholding manifest (``-f``) and writes ``plates.json``
     (outlines in world coordinates) and ``plates.obj`` (one closed prism per
-    plate).  Settings: ground_floor_height, floor_height,
-    min_plate_dimension, plate_tolerance, plate_stacking.
+    plate), and the same plates as ``plates.<format>`` when final_mesh_format
+    is not obj.  Settings: ground_floor_height, floor_height,
+    min_plate_dimension, plate_tolerance, plate_stacking, final_mesh_format.
     """
     context = RunContext()
     with run_context(context):

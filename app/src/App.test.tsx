@@ -145,7 +145,7 @@ function json(body: unknown, status = 200): Response {
 function projectDetail(name: string, modified = "2026-10-17T09:00:00", example: string | null = null): ProjectDetail {
   return {
     name, created: "2026-10-17T09:00:00", modified, example, settings: { mode: "time-based" },
-    inputs: { max_volume: [], test_surfaces: [], weather: [] }, joined_bounds: null, weather_location: null,
+    inputs: { max_volume: [], test_surfaces: [], weather: [] }, joined_bounds: null, weather_location: null, weather_latitude: null,
     stage_status: { stages: { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" } }, grid_plan: null,
   };
 }

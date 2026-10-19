@@ -53,13 +53,14 @@
     },
     "balance_temperature": {
       "label": "Balance temperature", "unit": "°C",
-      "help": "Sun counts only in hours colder than this, minus the dead band. About 12 °C for offices, 18 °C for homes.",
+      "help": "The two ends of the dead band. Sun counts in hours colder than the lower end; with harm counted, hours warmer than the upper end count against it. The middle is the balance temperature: about 12 °C for offices, 18 °C for homes.",
       "step": "settings", "group": "Mode specific", "essential": ["benefit"], "modes": ["benefit"], "widget": "balance_temperature", "slider": { "low": 10, "high": 30, "step": 0.5 }
     },
     "balance_offset": {
-      "label": "Dead band", "unit": "°C",
-      "help": "Hours within this many degrees below the balance temperature do not count either.",
-      "step": "settings", "group": "Mode specific", "essential": false, "modes": ["benefit"], "slider": { "low": 0, "high": 5, "step": 0.5 }
+      "label": "Balance temperature", "unit": "°C",
+      "help": "The two ends of the dead band. Sun counts in hours colder than the lower end; with harm counted, hours warmer than the upper end count against it. The middle is the balance temperature: about 12 °C for offices, 18 °C for homes.",
+      "step": "settings", "group": "Mode specific", "essential": ["benefit"], "modes": ["benefit"], "widget": "balance_temperature",
+      "slider": { "low": 0, "high": 5, "step": 0.5 }
     },
     "include_harm": {
       "label": "Subtract summer overheating (experimental)", "unit": "on/off",
@@ -208,7 +209,7 @@
     },
     "final_mesh_format": {
       "label": "Mesh file format", "unit": "choice",
-      "help": "The file type of the carved envelope.",
+      "help": "The file type of the carved envelope and the building massing.",
       "step": "export", "group": "Export", "essential": "all", "widget": "mesh_format"
     }
   }

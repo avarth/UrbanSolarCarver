@@ -21,9 +21,9 @@
 
 Without `config`, the config is built in memory from the starting values of the mode named in the overrides (`mode` is required) with the overrides on top; no file is written.
 
-The reply holds `stage_folders` (stage name to folder, only for the stages that ran in this call), `manifest` (the manifest of the last of them), `issues`, and `export_path` (exporting), `plates_path` and `mesh_path` (massing) for the stages that produced them.
+The reply holds `stage_folders` (stage name to folder, only for the stages that ran in this call), `manifest` (the manifest of the last of them), `issues`, and `export_path` (exporting), `plates_path`, `mesh_path` (the OBJ) and `export_mesh_path` (the plates in `final_mesh_format`) (massing) for the stages that produced them.
 
-**`preprocessing`, `thresholding`, `exporting`, `massing`** run one stage. They need `config`; every stage but preprocessing also needs `from`, the upstream stage's folder or manifest. `out_dir` defaults to `<config out_dir>/<stage>`. The reply has `issues` and `manifest`, `export_path` (exporting) or `plates_path` and `mesh_path` (massing).
+**`preprocessing`, `thresholding`, `exporting`, `massing`** run one stage. They need `config`; every stage but preprocessing also needs `from`, the upstream stage's folder or manifest. `out_dir` defaults to `<config out_dir>/<stage>`. The reply has `issues` and `manifest`, `export_path` (exporting) or `plates_path`, `mesh_path` and `export_mesh_path` (massing).
 
 **`run_pipeline`** runs preprocessing, thresholding and exporting into `out_dir` (default: the config's `out_dir`); Grasshopper definitions saved before `run` existed still send it. **`simulate_weights`** writes a simulated-weights file (`epw`, `archetype`, `out`, optional `internal_gains_w_m2` and `eps`) and replies with `artifact` and `preview`. **`ping`** replies with the process id (`pid`).
 

@@ -72,6 +72,65 @@ def test_full_envelope_gives_every_floor_the_footprint(tmp_path):
     assert len(bodies) == 6 and all(b.is_watertight for b in bodies)
 
 
+@pytest.mark.parametrize("mesh_format", ["ply", "stl", "glb"])
+def test_massing_writes_the_plates_in_the_chosen_format_besides_the_obj(tmp_path, mesh_format):
+    from urbansolarcarver.pydantic_schemas import MassingManifest
+    # Georeferenced with fractional coordinates: float32 rounds y near 4 200 000 m to 0.5 m.
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.37, 4200000.61)))
+    _set_mask(thr, lambda occ: occ)
+    if mesh_format == "stl":
+        with pytest.warns(UserWarning, match="plates.stl: STL stores float32 vertices"):
+            res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
+    else:
+        res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
+    assert res.mesh_path.name == "plates.obj" and res.mesh_path.is_file()      # the 3D view reads the named parts of the OBJ
+    assert res.export_mesh_path == tmp_path / "m" / f"plates.{mesh_format}"
+    manifest = MassingManifest.model_validate_json((tmp_path / "m" / "manifest.json").read_text())
+    assert (manifest.mesh_path, manifest.export_mesh_path) == ("plates.obj", f"plates.{mesh_format}")
+    plates_in_obj = trimesh.load(res.mesh_path, force="mesh", process=False)
+    plates_in_export = trimesh.load(res.export_mesh_path, force="mesh", process=False)
+    assert len(plates_in_export.faces) == len(plates_in_obj.faces)
+    outlines = np.concatenate([plate["outline"] for plate in json.loads(res.plates_path.read_text())["plates"]])
+    rounded = [issue for issue in res.issues if issue.code == "float32_coordinates"]
+    if mesh_format == "stl":                                                         # float32 only: said so
+        assert len(rounded) == 1 and "plates.stl" in rounded[0].message
+    else:                                                                            # world coordinates kept
+        assert not rounded
+        assert np.allclose(plates_in_export.bounds[:, :2], [outlines.min(0), outlines.max(0)], atol=1e-3)
+    if mesh_format == "glb":                                                         # a scene: one named part per plate
+        assert sorted(trimesh.load(res.export_mesh_path).geometry) == [f"floor_{n}_plate_0" for n in range(6)]
+
+
+def test_massing_in_obj_writes_one_mesh_file_named_twice_in_the_manifest(tmp_path):
+    from urbansolarcarver.pydantic_schemas import MassingManifest
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
+    _set_mask(thr, lambda occ: occ)
+    _massing(cfg, thr, tmp_path / "m", final_mesh_format="ply")
+    res = _massing(cfg, thr, tmp_path / "m", final_mesh_format="obj")
+    assert res.export_mesh_path == res.mesh_path
+    manifest = MassingManifest.model_validate_json((tmp_path / "m" / "manifest.json").read_text())
+    assert manifest.export_mesh_path == manifest.mesh_path == "plates.obj"
+    assert sorted(path.name for path in (tmp_path / "m").glob("plates.*")) == ["plates.json", "plates.obj"]   # the PLY is gone
+
+
+@pytest.mark.parametrize("mesh_format", ["ply", "stl", "glb"])
+def test_nothing_buildable_gives_an_empty_mesh_in_the_chosen_format(tmp_path, mesh_format):
+    cfg, thr = _run_upstream(tmp_path, _box([30, 2, 20]))
+    _set_mask(thr, lambda occ: occ)
+    with pytest.warns(UserWarning, match="no floor plates"):
+        res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
+    assert res.n_plates == 0 and res.mesh_path.is_file()
+    assert len(trimesh.load(res.export_mesh_path, force="mesh").faces) == 0
+
+
+def test_a_massing_manifest_from_before_the_export_mesh_reads_without_it():
+    from urbansolarcarver.pydantic_schemas import MassingManifest
+    manifest = MassingManifest.model_validate({
+        "run_id": "r", "plates_path": "plates.json", "mesh_path": "plates.obj",
+        "upstream_manifest": "../thresholding/manifest.json", "upstream_run_id": "t"})
+    assert manifest.export_mesh_path is None
+
+
 def test_georeferenced_outlines_land_on_the_footprint(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.0, 4200000.0)))
     _set_mask(thr, lambda occ: occ)
@@ -79,6 +138,27 @@ def test_georeferenced_outlines_land_on_the_footprint(tmp_path):
     outline = np.array(json.loads(res.plates_path.read_text())["plates"][0]["outline"])
     assert np.allclose(outline.min(0), [499985.0, 4199994.0], atol=0.01)
     assert np.allclose(outline.max(0), [500015.0, 4200006.0], atol=0.01)
+
+
+def test_the_straight_tolerance_follows_the_precision_of_the_footprint_coordinates():
+    from shapely.geometry import box
+    from urbansolarcarver.api_core.massing import _straight_tolerance
+    footprint = [box(0.0, 0.0, 30.0, 12.0)]
+    assert _straight_tolerance(footprint, (0.0, 0.0, 0.0), 1.0) == 0.01        # micrometre noise, not a real bend
+    # float32 rounds coordinates near 500 000 m to 6 cm: four steps of it, at most half a voxel
+    assert _straight_tolerance(footprint, (500000.0, 0.0, 0.0), 1.0) == pytest.approx(4 * 500030.0 * 2.0 ** -23)
+    assert _straight_tolerance(footprint, (500000.0, 4200000.0, 0.0), 1.0) == 0.5
+
+
+def test_a_six_degree_bend_in_a_facade_near_the_origin_stays_a_bend():
+    from shapely.geometry import Polygon
+    from urbansolarcarver import floor_plates as mg
+    from urbansolarcarver.api_core.massing import _straight_tolerance
+    turn = np.radians(6.0)
+    bent = Polygon([(0, 0), (20, 0), (20, 15), (12.3, 15),
+                    (12.3 - 7.7 * np.cos(turn), 15 - 7.7 * np.sin(turn)), (0, 15 - 7.7 * np.sin(turn))])
+    facades, _ = mg.split_facades([bent], straight_tolerance=_straight_tolerance([bent], (0.0, 0.0, 0.0), 1.0))
+    assert sum(not f.straight for f in facades) == 1     # 0.4 m off its chord over 15.4 m: below half a voxel, but real
 
 
 def test_raised_part_warns_and_follows_stacking(tmp_path):

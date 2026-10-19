@@ -108,7 +108,7 @@ Reconstructs a triangle mesh from the binary mask, either as cubic voxel faces o
 
 ## Massing
 
-Builds stacked floor plates that follow the footprint from the carving mask (see [Floor-plate massing](../massing.md)). Writes `plates.json`, `plates.obj`, `manifest.json` and diagnostics, and adds a Massing section to the run report. Returns a `MassingResult` with the paths, the floor areas per floor and in total, and the number of plates. The geometry is in `urbansolarcarver.floor_plates`.
+Builds stacked floor plates that follow the footprint from the carving mask (see [Floor-plate massing](../massing.md)). Writes `plates.json`, `plates.obj`, the same plates as `plates.<format>` when `final_mesh_format` is not `obj`, `manifest.json` and diagnostics, and adds a Massing section to the run report. Returns a `MassingResult` with the paths, the floor areas per floor and in total, and the number of plates. The geometry is in `urbansolarcarver.floor_plates`.
 
 ::: urbansolarcarver.api_core.massing
     options:

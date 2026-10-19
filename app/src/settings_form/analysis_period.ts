@@ -95,12 +95,51 @@ export type ColdPeriodState =
   | { kind: "none"; baseTemperature: number }
   | { kind: "failed"; reason: string };
 
+/** The hemisphere of the project's weather file: the heating season preset follows it. */
+export type Hemisphere = "northern" | "southern";
+
+/** The latitude of the tropics (degrees): within them the sun stands high all year and neither hemisphere's seasons apply. */
+export const TROPICS_LATITUDE = 23.44;
+
+/**
+ * The hemisphere whose seasons a latitude has: south beyond the Tropic of Capricorn, north beyond the Tropic of Cancer; null within
+ * the tropics and without a latitude.
+ */
+export function seasonsOfLatitude(latitude: number | null): Hemisphere | null {
+  if (latitude === null || Math.abs(latitude) < TROPICS_LATITUDE) return null;
+  return latitude < 0 ? "southern" : "northern";
+}
+
+/**
+ * The hemisphere for the heating season preset: south beyond the Tropic of Capricorn; north elsewhere, within the tropics and without
+ * a weather file (the starting values of the modes are northern).
+ */
+export function hemisphereOfLatitude(latitude: number | null): Hemisphere {
+  return seasonsOfLatitude(latitude) ?? "northern";
+}
+
+/** Whether two periods cover the same days of the year, whatever their hours: a whole year covers every day from any start. */
+export function coverTheSameDays(first: PeriodDates, second: PeriodDates): boolean {
+  const daysOf = (dates: PeriodDates) => {
+    const start = dayOfYear(dates.startMonth, dates.startDay);
+    return { start, count: (dayOfYear(dates.endMonth, dates.endDay) - start + DAYS_IN_YEAR) % DAYS_IN_YEAR + 1 };
+  };
+  const a = daysOf(first), b = daysOf(second);
+  return a.count === b.count && (a.count === DAYS_IN_YEAR || a.start === b.start);
+}
+
 const PRESET_DATES: Record<PeriodPreset, PeriodDates> = {
   winter_solstice: { startMonth: 12, startDay: 21, endMonth: 12, endDay: 21 },
   summer_solstice: { startMonth: 6, startDay: 21, endMonth: 6, endDay: 21 },
   heating_season: { startMonth: 10, startDay: 1, endMonth: 4, endDay: 30 },
   whole_year: { startMonth: 1, startDay: 1, endMonth: 12, endDay: 31 },
 };
+const SOUTHERN_HEATING_SEASON: PeriodDates = { startMonth: 4, startDay: 1, endMonth: 10, endDay: 31 };
+
+/** The dates a preset sets: the heating season is April to October in the southern hemisphere, the other presets name their dates. */
+function presetDatesIn(preset: PeriodPreset, hemisphere: Hemisphere): PeriodDates {
+  return preset === "heating_season" && hemisphere === "southern" ? SOUTHERN_HEATING_SEASON : PRESET_DATES[preset];
+}
 
 /** The period of *dates* with the hours of *current*; one night where those hours cross midnight on its one date. */
 export function periodWithDates(current: Period, dates: PeriodDates): Period {
@@ -114,14 +153,30 @@ export function datesMatch(current: Period, dates: PeriodDates): boolean {
     && given.endMonth === current.endMonth && given.endDay === current.endDay;
 }
 
-/** The period a preset gives: its dates, the hours of *current*. */
-export function presetPeriod(preset: PeriodPreset, current: Period): Period {
-  return periodWithDates(current, PRESET_DATES[preset]);
+/** The period a preset gives: its dates in *hemisphere*, the hours of *current*. */
+export function presetPeriod(preset: PeriodPreset, current: Period, hemisphere: Hemisphere = "northern"): Period {
+  return periodWithDates(current, presetDatesIn(preset, hemisphere));
 }
 
-/** Whether the dates of *current* are the ones the preset gives it: the preset shows as chosen. */
-export function presetMatches(preset: PeriodPreset, current: Period): boolean {
-  return datesMatch(current, PRESET_DATES[preset]);
+/** Whether the dates of *current* are the ones the preset gives it in *hemisphere*: the preset shows as chosen. */
+export function presetMatches(preset: PeriodPreset, current: Period, hemisphere: Hemisphere = "northern"): boolean {
+  return datesMatch(current, presetDatesIn(preset, hemisphere));
+}
+
+/** The same day six months on: the month plus six (wrapping), the day held to that month, the last day of a month its last day. */
+function dateSixMonthsOn(month: number, day: number): { month: number; day: number } {
+  const shiftedMonth = (month + 5) % 12 + 1;
+  const isLastDayOfMonth = day === daysInMonth(month);
+  return { month: shiftedMonth, day: isLastDayOfMonth ? daysInMonth(shiftedMonth) : Math.min(day, daysInMonth(shiftedMonth)) };
+}
+
+/**
+ * The period six months on, with its hours, for a weather file in the other hemisphere: 21 Dec gives 21 Jun, 1 Oct to 30 Apr
+ * gives 1 Apr to 31 Oct. Two dates that become one (29 and 30 Aug both give 28 Feb) with hours across midnight are one night.
+ */
+export function periodShiftedBySixMonths(period: Period): Period {
+  const start = dateSixMonthsOn(period.startMonth, period.startDay), end = dateSixMonthsOn(period.endMonth, period.endDay);
+  return withOvernightHoursOnOneDateAsOneNight({ ...period, startMonth: start.month, startDay: start.day, endMonth: end.month, endDay: end.day });
 }
 
 /** The value a handle shows: a day of the year for a date handle, an hour for an hour handle. */

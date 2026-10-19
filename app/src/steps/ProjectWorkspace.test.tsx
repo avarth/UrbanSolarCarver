@@ -45,7 +45,7 @@ const CARVING = {
   carve_above_extra_voxels_removed: 0, slope_limit_extra_voxels_removed: 0,
 };
 const ENVELOPE = { mesh_file: "export.ply", envelope_volume_m3: 4150 };
-const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
+const MASSING = { export_mesh_file: "plates.ply", floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
 const NOTHING_RUN: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" };
 const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, preprocessing: "current", thresholding: "current" };
 
@@ -79,6 +79,10 @@ class FakeService {
   sunPath: SunPath | null = null;
   /** While set, an upload of an input file gets its reply only once this promise resolves. */
   uploadsAnswerWhen: Promise<void> | null = null;
+  /** The location and latitude the reply to a weather file upload gives. */
+  uploadedWeather = { location: "Golden, CO, USA", latitude: 39.74 };
+  /** The reply of GET cold-period. */
+  coldPeriodReply: unknown = { status: "none", period: null };
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -110,9 +114,12 @@ class FakeService {
     if (path === "/run/summary") return json(this.summary);
     if (method === "POST" && path.startsWith("/inputs/")) {
       await this.uploadsAnswerWhen;
-      return json({ role: path.replace("/inputs/", ""), files: [{ name: "more.obj", triangle_count: 1 }], joined_bounds: [[0, 0, 0], [1, 1, 0]],
-                    weather_location: "Golden, CO, USA" });
+      const role = path.replace("/inputs/", "");
+      const files = role === "weather" ? [{ name: "weather.epw", triangle_count: 0 }] : [{ name: "more.obj", triangle_count: 1 }];
+      return json({ role, files, joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: this.uploadedWeather.location,
+                    weather_latitude: this.uploadedWeather.latitude });
     }
+    if (path.startsWith("/cold-period")) return json(this.coldPeriodReply);
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
     if (path === "/run/files/exporting/export.obj" && this.summary.envelope?.mesh_file === "export.obj") return new Response(TRIANGLE_OBJ);
     if (path === "/run/files/massing/plates.obj" && this.massingOnDisk) return new Response(TRIANGLE_OBJ);
@@ -129,7 +136,7 @@ function project(stages: Record<PipelineStage, StageState>, settings: Record<str
     name: "p", created: "2026-10-17T09:00:00", modified: "2026-10-17T09:00:00", settings: { mode: "time-based", ...settings },
     inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: [{ name: "surfaces.obj", triangle_count: 1 }],
               weather: [{ name: "weather.epw", triangle_count: 0 }] },
-    joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", stage_status: { stages }, grid_plan: null,
+    joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", weather_latitude: 39.74, stage_status: { stages }, grid_plan: null,
   };
 }
 
@@ -156,11 +163,12 @@ const settle = () => act(async () => {
 const waitForTheSave = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, SAVE_DELAY_MILLISECONDS + 50)); });
 
 async function openWorkspace(opened: ProjectDetail,
-                             steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady"> = {}) {
+                             steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady"> = {},
+                             { schema = SCHEMA, modes = MODES }: { schema?: typeof SCHEMA; modes?: ModeInfo[] } = {}) {
   vi.stubGlobal("fetch", vi.fn(service.answer));
   function Page() {
     const runs = useRunLoop("token", () => {});
-    return <ProjectWorkspace token="token" project={opened} schema={SCHEMA} modes={MODES} warmUpState="ready" runs={runs}
+    return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} warmUpState="ready" runs={runs}
                              onServiceProblem={() => {}} onShowProjects={() => {}} {...steps} />;
   }
   rendered = renderForTest(<Page />);
@@ -642,26 +650,239 @@ test("a finished envelope stage asks for the run summary once: the envelope's fi
   expect(service.requests).toContain("GET /run/files/exporting/export.obj");
 });
 
-test("while a format change rebuilds the envelope, its old file waits: the run removes it, so a download would find none", async () => {
+const chooseMeshFormat = async (format: string) => {
+  await act(async () => container().querySelector<HTMLInputElement>(`[data-setting="final_mesh_format"] input[value="${format}"]`)!.click());
+  await waitForTheSave();
+  await settle();
+};
+const downloadButton = (label: string) => buttonIn(container().querySelector(".download-list")!, label);
+
+test("a format change rebuilds both parts that exist; while it runs their old files wait: the run removes them, so a download would find none", async () => {
   const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
   service = new FakeService(built, CARVING);
   service.summary = { carving: CARVING, envelope: ENVELOPE, massing: MASSING };
   await openWorkspace(project(built, { final_mesh_format: "ply" }));
   openStep("Export");
-  const download = (label: string) => buttonIn(container().querySelector(".download-list")!, label);
-  expect(download("Carved envelope (PLY)").disabled).toBe(false);
-  await act(async () => container().querySelector<HTMLInputElement>('[data-setting="final_mesh_format"] input[value="obj"]')!.click());
-  await waitForTheSave();
-  await settle();
-  expect(service.runsStarted).toEqual([["exporting"]]);
+  expect(downloadButton("Carved envelope (PLY)").disabled).toBe(false);
+  await chooseMeshFormat("obj");
+  expect(service.runsStarted).toEqual([["exporting", "massing"]]);
   const run = FakeWebSocket.opened[0];
   run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
   await settle();
-  expect(download("Carved envelope (PLY)").disabled).toBe(true);
-  expect(reasonOf(download("Carved envelope (PLY)"))).toBe("A run is in progress");
-  expect(download("Building massing (OBJ)").disabled).toBe(false);          // the run leaves the massing as it is
-  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: MASSING };
-  run.send({ type: "run_finished", stages: ["exporting"], files: [] });
+  for (const label of ["Carved envelope (PLY)", "Building massing (PLY)"]) {
+    expect(downloadButton(label).disabled).toBe(true);
+    expect(reasonOf(downloadButton(label))).toBe("A run is in progress");
+  }
+  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: { ...MASSING, export_mesh_file: "plates.obj" } };
+  run.send({ type: "run_finished", stages: ["exporting", "massing"], files: [] });
   await settle();
-  expect(download("Carved envelope (OBJ)").disabled).toBe(false);
+  expect(downloadButton("Carved envelope (OBJ)").disabled).toBe(false);
+  expect(downloadButton("Building massing (OBJ)").disabled).toBe(false);
+  expect(container().querySelector(".download-list .download-note")).toBeNull();     // every file is in the format chosen
+});
+
+test("a format change with only the envelope built rebuilds the envelope", async () => {
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "missing" };
+  service = new FakeService(built, CARVING);
+  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: null };
+  await openWorkspace(project(built, { final_mesh_format: "ply" }));
+  openStep("Export");
+  await chooseMeshFormat("stl");
+  expect(service.runsStarted).toEqual([["exporting"]]);
+});
+
+test("a format change with only the massing built rebuilds the massing", async () => {
+  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "missing", massing: "current" };
+  service = new FakeService(built, CARVING);
+  service.summary = { carving: CARVING, envelope: null, massing: MASSING };
+  await openWorkspace(project(built, { final_mesh_format: "ply" }));
+  openStep("Export");
+  await chooseMeshFormat("glb");
+  expect(service.runsStarted).toEqual([["massing"]]);
+});
+
+// The notice of a new weather file (weather_change_notice.ts) in the Settings step.
+const BENEFIT_SCHEMA = {
+  properties: { ...SCHEMA.properties, balance_temperature: { default: 15, type: "number" }, balance_offset: { default: 2, minimum: 0, type: "number" } },
+};
+const COLD_SEASON = { start_month: 9, start_day: 30, start_hour: 0, end_month: 5, end_day: 15, end_hour: 23 };
+const MODES_WITH_BENEFIT: ModeInfo[] = [...MODES, { name: "benefit", description: "", needs_epw: true, needs_period: true, experimental: false,
+                                                     score_kind: "weighted_sum", weight_unit: "", starting_values: COLD_SEASON }];
+const BRISBANE = { location: "Brisbane, AUS", latitude: -27.38 };
+const GOLDEN = { location: "Golden, CO, USA", latitude: 39.74 };
+
+async function addWeatherFile() {
+  if (!stepRow("Inputs").classList.contains("step-open")) openStep("Inputs");
+  const weatherPicker = container().querySelector<HTMLInputElement>('input[type="file"][accept=".epw"]')!;
+  Object.defineProperty(weatherPicker, "files", { value: [new File(["LOCATION"], "weather.epw")], configurable: true });
+  act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+  openStep("Settings");
+}
+
+/** Past the wait before the cold period is asked for, and its reply. */
+const waitForTheColdPeriod = async () => {
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+  await settle();
+};
+
+const weatherNotice = () => container().querySelector<HTMLElement>(".weather-change-notice");
+const noticeText = () => weatherNotice()!.querySelector("p")!.textContent;
+const noticeRegion = () => container().querySelector<HTMLElement>(".weather-change-region");
+const startDateHandle = () => container().querySelector<HTMLElement>('.period-control [role="slider"][aria-label="Start date"]');
+const BRISBANE_SHIFT = "The new weather file (Brisbane, AUS) is in the southern hemisphere: winter there is June to August. " +
+  "Shift the analysis period by six months, to 21 Jun, 10 to 14 h?";
+
+test("a project opened with a weather file in the other hemisphere shows no notice: only a weather file added in this session does", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace({ ...project(NOTHING_RUN), weather_location: BRISBANE.location, weather_latitude: BRISBANE.latitude });
+  openStep("Settings");
+  expect(weatherNotice()).toBeNull();
+});
+
+test("a weather file in the other hemisphere: the notice offers the period six months on, which goes through the saver", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN));
+  await addWeatherFile();
+  expect(noticeText()).toBe(BRISBANE_SHIFT);
+  expect(buttonIn(weatherNotice()!, "Keep").getAttribute("aria-label")).toBe("Keep the analysis period");
+  act(() => buttonIn(weatherNotice()!, "Shift by six months").click());
+  expect(weatherNotice()).toBeNull();
+  expect(document.activeElement).toBe(startDateHandle());           // the focus goes to the period the button changed
+  await waitForTheSave();
+  await settle();
+  expect(service.savedValues).toEqual([{ mode: "time-based", start_month: 6, end_month: 6 }]);      // the settings changed, as the period control sends
+});
+
+test("a first weather file counts as after a northern one; the heating season preset follows the hemisphere of the file", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace({ ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
+  openStep("Settings");
+  expect(buttonIn(container(), "Heating season, October to April")).toBeDefined();
+  await addWeatherFile();
+  expect(noticeText()).toContain("(Brisbane, AUS) is in the southern hemisphere");
+  expect(buttonIn(container(), "Heating season, October to April")).toBeUndefined();
+  expect(buttonIn(container(), "Heating season, April to October")).toBeDefined();
+});
+
+test("Keep dismisses the notice and saves nothing; a later weather file brings a notice again", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN));
+  await addWeatherFile();
+  act(() => buttonIn(weatherNotice()!, "Keep").click());
+  expect(weatherNotice()).toBeNull();
+  expect(document.activeElement).toBe(startDateHandle());
+  await waitForTheSave();
+  expect(service.savedValues).toEqual([]);
+  service.uploadedWeather = GOLDEN;                 // back north, the period still northern: the notice asks about the change again
+  await addWeatherFile();
+  expect(noticeText()).toBe("The new weather file (Golden, CO, USA) is in the northern hemisphere: winter there is December to February. " +
+    "Shift the analysis period by six months, to 21 Jun, 10 to 14 h?");
+});
+
+test("a weather file in the same hemisphere, or in a mode that reads no period, brings no notice", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(project(NOTHING_RUN));
+  await addWeatherFile();                           // Golden after Golden
+  expect(weatherNotice()).toBeNull();
+  rendered!.unmount();
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN, { mode: "daylight" }));
+  await addWeatherFile();
+  expect(weatherNotice()).toBeNull();
+});
+
+test("while a run is in progress the notice's buttons are disabled, as the settings are", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN));
+  await addWeatherFile();
+  await pressRunAnalysis();
+  for (const name of ["Shift by six months", "Keep"]) expect(buttonIn(weatherNotice()!, name).disabled).toBe(true);
+});
+
+test("Solar usefulness: the notice waits for the cold period of the new file and offers it, keeping the hours", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
+  await waitForTheColdPeriod();                     // of the file the project opened with: none
+  service.coldPeriodReply = { status: "found", period: { start_month: 5, start_day: 3, end_month: 9, end_day: 20 } };
+  await addWeatherFile();
+  expect(weatherNotice()).toBeNull();               // waiting for the new file's answer
+  await waitForTheColdPeriod();
+  expect(noticeText()).toBe("The new weather file (Brisbane, AUS) has its cold period from 3 May to 20 Sep; the analysis period is 30 Sep to 15 May.");
+  act(() => buttonIn(weatherNotice()!, "Use the cold period").click());
+  expect(weatherNotice()).toBeNull();
+  await waitForTheSave();
+  await settle();
+  expect(service.savedValues).toEqual([{ mode: "benefit", start_month: 5, start_day: 3, end_month: 9, end_day: 20 }]);           // the hours kept
+});
+
+test("Solar usefulness: no cold period in the new file, or the one the period already has, brings no notice", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
+  await addWeatherFile();                           // the service finds no cold period
+  await waitForTheColdPeriod();
+  expect(weatherNotice()).toBeNull();
+  service.coldPeriodReply = { status: "found", period: { start_month: 9, start_day: 30, end_month: 5, end_day: 15 } };
+  await addWeatherFile();
+  await waitForTheColdPeriod();
+  expect(weatherNotice()).toBeNull();
+});
+
+test("the notice is a live region kept on the page, empty until a notice fills it, so screen readers announce what comes", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN));
+  openStep("Settings");
+  expect(noticeRegion()!.getAttribute("role")).toBe("status");
+  expect(noticeRegion()!.textContent).toBe("");
+  await addWeatherFile();                                           // through the Inputs step, back to Settings
+  const region = noticeRegion()!;
+  expect(region.textContent).toContain(BRISBANE_SHIFT);
+  act(() => buttonIn(weatherNotice()!, "Keep").click());
+  expect(noticeRegion()).toBe(region);
+  expect(region.textContent).toBe("");
+});
+
+test("a new weather file without a latitude keeps the hemisphere of the one before it", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN));
+  await addWeatherFile();
+  act(() => buttonIn(weatherNotice()!, "Keep").click());          // the period stays northern, the file southern
+  service.uploadedWeather = { location: null, latitude: null } as unknown as typeof BRISBANE;
+  await addWeatherFile();
+  expect(weatherNotice()).toBeNull();                               // nothing to say about a file without a latitude
+  service.uploadedWeather = GOLDEN;
+  await addWeatherFile();                                           // north after the southern file: the notice asks
+  expect(noticeText()).toContain("(Golden, CO, USA) is in the northern hemisphere");
+});
+
+test("a weather file in the tropics brings no notice and keeps the northern heating season preset", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = { location: "Darwin, AUS", latitude: -12.46 };
+  await openWorkspace(project(NOTHING_RUN));
+  await addWeatherFile();
+  expect(weatherNotice()).toBeNull();
+  expect(buttonIn(container(), "Heating season, October to April")).toBeDefined();
+});
+
+test("once the period is changed by hand the notice is gone, also when the period is set back", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  service.uploadedWeather = BRISBANE;
+  await openWorkspace(project(NOTHING_RUN));
+  await addWeatherFile();
+  expect(noticeText()).toBe(BRISBANE_SHIFT);
+  act(() => buttonIn(container(), "21 June").click());
+  expect(weatherNotice()).toBeNull();
+  act(() => buttonIn(container(), "21 December").click());          // the period the file came with, again
+  await waitForTheSave();
+  await settle();
+  expect(weatherNotice()).toBeNull();
 });
