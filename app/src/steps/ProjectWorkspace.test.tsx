@@ -137,6 +137,8 @@ let rendered: RenderedOverlay | null = null;
 let service: FakeService;
 
 beforeEach(() => {
+  // settle and waitForTheSave move the fake clock instead of waiting in real time.
+  vi.useFakeTimers();
   FakeWebSocket.opened = [];
   vi.stubGlobal("WebSocket", FakeWebSocket);
   pretendTheBrowserHasWebGl();
@@ -147,13 +149,14 @@ afterEach(() => {
   rendered = null;
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  vi.useRealTimers();
   window.localStorage.clear();
 });
 
 const settle = () => act(async () => {
-  for (let tick = 0; tick < 5; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
+  for (let tick = 0; tick < 5; tick++) await vi.advanceTimersByTimeAsync(0);
 });
-const waitForTheSave = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, SAVE_DELAY_MILLISECONDS + 50)); });
+const waitForTheSave = () => act(async () => { await vi.advanceTimersByTimeAsync(SAVE_DELAY_MILLISECONDS + 50); });
 
 async function openWorkspace(opened: ProjectDetail,
                              steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady"> = {}) {
