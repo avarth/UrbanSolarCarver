@@ -24,44 +24,6 @@ def ladybug_weather_folder_of_this_test_process(tmp_path_factory):
     folders.default_epw_folder = shared_folder
 
 
-@pytest.fixture(scope="session", autouse=True)
-def each_weather_file_parsed_once_per_test_process():
-    """Parse each EPW file content once per test process instead of at every ``EPW(...)`` read.
-
-    The bundled Golden file was parsed about 250 times in a full run (0.23 s each). Ladybug's ``EPW._import_data`` is
-    wrapped: the first full read of a given file content parses it and keeps it pickled; every later read of the same
-    content unpickles a copy of its own (about 0.02 s), so a test that changes its EPW object or the data collections
-    in it cannot change what another test reads. Header-only reads, files without the .epw extension and files that
-    cannot be read go to Ladybug's parser as before, and a file that fails to parse is not kept.
-    """
-    import hashlib
-    import pickle
-    from ladybug.epw import EPW
-
-    parse_epw_file = EPW._import_data
-    parsed_epw_by_content = {}
-
-    def import_data_from_a_parsed_copy(epw, import_header_only=False):
-        if import_header_only or not epw.file_path.lower().endswith("epw"):
-            return parse_epw_file(epw, import_header_only)
-        try:
-            content_key = hashlib.sha1(Path(epw.file_path).read_bytes()).digest()
-        except OSError:
-            return parse_epw_file(epw, import_header_only)
-        if content_key not in parsed_epw_by_content:
-            parsed = EPW(epw.file_path)
-            parse_epw_file(parsed)
-            parsed_epw_by_content[content_key] = pickle.dumps(parsed, pickle.HIGHEST_PROTOCOL)
-        own_copy = pickle.loads(parsed_epw_by_content[content_key])
-        for slot in EPW.__slots__:
-            if slot != "_file_path" and hasattr(own_copy, slot):
-                setattr(epw, slot, getattr(own_copy, slot))
-
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(EPW, "_import_data", import_data_from_a_parsed_copy)
-        yield
-
-
 @pytest.fixture
 def tiny_cube_mesh():
     """A minimal watertight cube mesh (8 vertices, 12 faces) for smoke tests."""
