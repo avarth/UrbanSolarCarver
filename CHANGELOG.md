@@ -72,8 +72,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (the balance temperature and, below it, the dead band).
 - **The analysis period is one control**: a year strip and an hour strip with
   two handles each, presets that set the dates and keep the hours (21
-  December, 21 June, Heating season, Whole year), the period in words that
-  opens typed fields, and keyboard steps. When the hours cross midnight on a
+  December, 21 June, Heating season, Whole year), the value of each handle
+  in a bubble over it, and keyboard steps. When the hours cross midnight on a
   single date, the end date moves to the next day.
 - **Envelope and massing is two parts built on their own**: Build envelope
   with the envelope settings and the envelope volume, and Build massing with
@@ -85,16 +85,39 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (browser UI)
 
+- **Balance temperature is drawn as the analysis period's strips are:** a
+  strip of 10 to 30 °C with a tick a degree, labelled every 5 °C, the dead
+  band filled between the two handles, and over each handle a bubble with its
+  exact value ("14.5 °C"), always shown and kept apart from the other. The
+  "Dead band" label and the two number fields ("Counts below", "Too warm
+  above") are gone; the handles keep those names for a screen reader. A value
+  off the strip (a hand-edited config) pins its handle at the strip's end and
+  its bubble says the value. Arrows move an end by 0.5 °C, Page Up and Page
+  Down by 2 °C, Home and End to the strip's ends. Without harm counted the
+  note "(only with harm counted)" sits under the muted upper handle and
+  describes it. The two strips share one drawing (`ScaleStrip.tsx`).
+- **The cold period line under the presets is now the tooltip** of the
+  "Cold period from the weather file" preset, shown on hover and keyboard
+  focus as the mode tiles' tooltips are, closed with Escape, and never taking
+  a click. It is still the button's description for a screen reader, and so
+  are the reasons the preset cannot be used yet.
+- **The period in words and its typed fields are removed** (day, month and
+  hour of each end). Each handle of the analysis period shows its value in a
+  bubble ("21 Dec", "10 h") instead. A period not set yet says so under the
+  strips, and a period stored as one date with hours across midnight has a
+  note there: "Every day, 22 to 2 h: the hours cross midnight on one date,
+  which the engine runs on every day of the year. The next change makes it
+  one night." The step summary still reads "Every day, 22 to 2 h".
 - **Balance temperature is a range.** Its two handles are the two ends of
-  the dead band, "Counts below" and "Too warm above", each moved or typed on
-  its own; the app sends the middle as `balance_temperature` and half the
+  the dead band, "Counts below" and "Too warm above", each moved on its own;
+  the app sends the middle as `balance_temperature` and half the
   width as `balance_offset`. The earlier slider drew the band only below the
   balance temperature, although the engine reads it on both sides (cold hours
   below `balance_temperature - balance_offset`, warm hours above
   `balance_temperature + balance_offset`). Without harm counted the upper
   end is muted, with the note "(only with harm counted)". The lower handle
   comes first for Tab; on one spot an arrow key toward the other end moves
-  the focus to that end's handle, which the browser steps, so both ends
+  the focus to that end's handle, which steps, so both ends
   pinned at 10 or 30 °C step back; Home and End pick the lower and the upper
   end the same way. The cold period is asked for at the lower
   end rounded as the slider rounds it (13.2, not 13.200000000000001).
