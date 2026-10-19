@@ -72,8 +72,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
   (the balance temperature and, below it, the dead band).
 - **The analysis period is one control**: a year strip and an hour strip with
   two handles each, presets that set the dates and keep the hours (21
-  December, 21 June, Heating season, Whole year), the period in words that
-  opens typed fields, and keyboard steps. When the hours cross midnight on a
+  December, 21 June, Heating season, Whole year), the value of each handle
+  in a bubble over it, and keyboard steps. When the hours cross midnight on a
   single date, the end date moves to the next day.
 - **Envelope and massing is two parts built on their own**: Build envelope
   with the envelope settings and the envelope volume, and Build massing with
@@ -85,16 +85,58 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (browser UI)
 
+- **No Sample spacing field.** The engine samples the test surfaces at half
+  the voxel size (see "Changed (sample spacing)"), and a quiet line under
+  Voxel size says so: "Test surfaces sampled every 0.5 m". The lowering of
+  the sample spacing to a smaller voxel size, and its note, are gone. A
+  project that stored a `grid_step` drops it when it opens (the service
+  leaves it out when it reads and writes `config.yaml`), so the computed
+  spacing applies; its analysis shows as out of date once when the stored
+  spacing was not half its voxel size. An analysis whose preprocessing
+  manifest does not record the spacing, made without a stored `grid_step`,
+  used the old 1 m default and is compared as such, so it is out of date
+  once unless its voxel size is 2 m.
+- **Edge strip with less weight (`edge_taper`) is shown in Night cooling
+  only**, under More mode settings, with the help "Sample points closer than
+  this to the edge of a test surface count less (from 0 at the edge to full
+  at this distance), so a cooling street or courtyard does not clear the
+  mass right beside it. 0 = off." The engine still reads it in every
+  weighted mode; a stored value is kept when a project opens.
+- **Grid margin (`margin_frac`) is hidden for now.** The engine and its
+  default are unchanged.
+- **Balance temperature is drawn as the analysis period's strips are:** a
+  strip of 10 to 30 °C with a tick a degree, labelled every 5 °C, the dead
+  band filled between the two handles, and over each handle a bubble with its
+  exact value ("14.5 °C"), always shown and kept apart from the other. The
+  "Dead band" label and the two number fields ("Counts below", "Too warm
+  above") are gone; the handles keep those names for a screen reader. A value
+  off the strip (a hand-edited config) pins its handle at the strip's end and
+  its bubble says the value. Arrows move an end by 0.5 °C, Page Up and Page
+  Down by 2 °C, Home and End to the strip's ends. Without harm counted the
+  note "(only with harm counted)" sits under the muted upper handle and
+  describes it. The two strips share one drawing (`ScaleStrip.tsx`).
+- **The cold period line under the presets is now the tooltip** of the
+  "Cold period from the weather file" preset, shown on hover and keyboard
+  focus as the mode tiles' tooltips are, closed with Escape, and never taking
+  a click. It is still the button's description for a screen reader, and so
+  are the reasons the preset cannot be used yet.
+- **The period in words and its typed fields are removed** (day, month and
+  hour of each end). Each handle of the analysis period shows its value in a
+  bubble ("21 Dec", "10 h") instead. A period not set yet says so under the
+  strips, and a period stored as one date with hours across midnight has a
+  note there: "Every day, 22 to 2 h: the hours cross midnight on one date,
+  which the engine runs on every day of the year. The next change makes it
+  one night." The step summary still reads "Every day, 22 to 2 h".
 - **Balance temperature is a range.** Its two handles are the two ends of
-  the dead band, "Counts below" and "Too warm above", each moved or typed on
-  its own; the app sends the middle as `balance_temperature` and half the
+  the dead band, "Counts below" and "Too warm above", each moved on its own;
+  the app sends the middle as `balance_temperature` and half the
   width as `balance_offset`. The earlier slider drew the band only below the
   balance temperature, although the engine reads it on both sides (cold hours
   below `balance_temperature - balance_offset`, warm hours above
   `balance_temperature + balance_offset`). Without harm counted the upper
   end is muted, with the note "(only with harm counted)". The lower handle
   comes first for Tab; on one spot an arrow key toward the other end moves
-  the focus to that end's handle, which the browser steps, so both ends
+  the focus to that end's handle, which steps, so both ends
   pinned at 10 or 30 °C step back; Home and End pick the lower and the upper
   end the same way. The cold period is asked for at the lower
   end rounded as the slider rounds it (13.2, not 13.200000000000001).
@@ -120,6 +162,23 @@ versioning follows [Semantic Versioning](https://semver.org/).
   live region kept on the page, either button moves the focus to the
   analysis period's start date, and once the period changes the notice does
   not come back when the period is set back.
+
+### Changed (sample spacing)
+
+- **`grid_step` is unset by default and then samples the test surfaces at
+  half the voxel size** (it was 1.0 m whatever the voxel size). Measured on
+  the District example (Solar usefulness, 1 m voxels): 1 m differs from a
+  0.25 m reference in 2.0 % of the kept voxels (7.1 s analysis), 0.5 m in
+  0.9 % (13.9 s); 0.25 m takes 37 s. An explicit value in YAML, on the
+  command line or in Grasshopper still wins, and must still be at most
+  `voxel_size`. The spacing is resolved in one place
+  (`resolve_grid_step`, used by `PreprocessingSettings`), so a run is
+  compared on the spacing it uses: an explicit 0.5 m with 1 m voxels and an
+  unset one are the same run. The preprocessing manifest records the spacing
+  used (`grid_step`, None in manifests written before), and the run report
+  gives it. Default configs now sample twice as densely in each direction at
+  the default voxel size, so a run takes about twice as long and its result
+  can differ slightly from earlier runs.
 
 ### Changed (massing)
 
@@ -245,9 +304,6 @@ versioning follows [Semantic Versioning](https://semver.org/).
   exceedance. The engine names and settings are unchanged.
 - **The axis gizmo has no background box and the ground has no north
   arrow**; north is shown by the compass overlay and the compass ring.
-- **A sample spacing larger than a new, smaller voxel size is lowered to the
-  voxel size** and the settings say so; it is not raised back when the voxel
-  size grows.
 - **Rays per batch and Detailed statistics** moved to the end of More detail
   settings; the Computer group is gone.
 - **Envelope volume is counted on the kept voxels** the envelope mesh was

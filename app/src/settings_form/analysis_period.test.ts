@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import {
   changedPeriodSettings, dateHandleValueAfterKey, dayOfYear, dayOfYearAt, daysInMonth, hemisphereOfLatitude, hourAt, hourHandleValueAfterKey,
-  monthDayOf, periodFromSettings, periodInWords, periodShiftedBySixMonths, periodWithDayTyped, periodWithHandleAt, periodWithMonthChosen, presetPeriod, presetMatches, seasonsOfLatitude, coverTheSameDays,
+  monthDayOf, periodFromSettings, periodInWords, periodShiftedBySixMonths, periodWithHandleAt, presetPeriod, presetMatches, seasonsOfLatitude, coverTheSameDays,
   runsEveryNightOfTheYear, withOvernightHoursOnOneDateAsOneNight, dateRangeSegments, hourRangeSegments, type Period,
 } from "./analysis_period";
 
@@ -164,13 +164,6 @@ test("keys on an hour handle: arrows one hour, Page Up and Page Down six hours, 
   expect(hourHandleValueAfterKey(10, "Home")).toBe(0);
   expect(hourHandleValueAfterKey(10, "End")).toBe(23);
   expect(hourHandleValueAfterKey(10, "Enter")).toBeNull();
-});
-
-test("31 February cannot be produced: a month change holds the day to the month's length", () => {
-  expect(periodWithMonthChosen(period(1, 31, 10, 3, 31, 14), "start", 2)).toEqual(period(2, 28, 10, 3, 31, 14));
-  expect(periodWithMonthChosen(period(1, 1, 10, 3, 31, 14), "end", 4)).toEqual(period(1, 1, 10, 4, 30, 14));
-  expect(periodWithDayTyped(period(2, 1, 10, 3, 1, 14), "start", 28)).toEqual(period(2, 28, 10, 3, 1, 14));
-  expect(periodWithDayTyped(period(2, 1, 10, 3, 1, 14), "start", 31)).toEqual(period(2, 28, 10, 3, 1, 14));
 });
 
 test("the stored settings as a period, and the settings a new period changes", () => {

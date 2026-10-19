@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, type ModeInfo } from "../api_client/client";
@@ -61,8 +62,8 @@ test("Run analysis says what blocks it, in order: a run, the inputs, the weather
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET) })))
     .toBe("Fix the voxel size to run the analysis.");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "end_day", message: "no such day" }]) }))).toBe("Fix the analysis period to run the analysis.");
-  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, grid_step must be <= voxel_size" }]) })))
-    .toBe("Fix the sample spacing on test surfaces to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, ray_length must be longer than voxel_size" }]) })))
+    .toBe("Fix the ray length to run the analysis.");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, the settings do not fit together" }]) })))
     .toBe("Fix the settings above to run the analysis.");
   expect(runAnalysisBlocker(conditions({ warmUpState: "running" }))).toBe("Waiting for the GPU to be ready");
@@ -87,7 +88,8 @@ test("a grid over the budget: the voxel count, the budget and the size to use, i
   expect(error.querySelector("svg")).not.toBeNull();
   const voxelSize = [...rendered.container.querySelectorAll(".setting-field")].find((field) => field.textContent!.startsWith("Voxel size"))!;
   expect(voxelSize.querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
-  expect(rendered.container.querySelector(".setting-note")).toBeNull();
+  // No grid line: only the sample spacing line stays.
+  expect([...rendered.container.querySelectorAll(".setting-note")].map((note) => note.textContent)).toEqual(["Test surfaces sampled every 0.5 m"]);
 });
 
 test("a message that names no setting is shown for the step; during a run the fields are disabled with the reason", () => {
@@ -137,14 +139,14 @@ test("Run analysis starts the run only after the waiting change was saved, or wh
 
 test("an error of the whole config outlines the settings it names, opens their fold, and leaves the grid line under Voxel size", () => {
   const fieldOf = (label: string) => [...rendered!.container.querySelectorAll(".setting-field")].find((field) => field.textContent!.startsWith(label))!;
-  const crossFieldError = { field: null, message: "Value error, grid_step (1 m) must be ≤ voxel_size (1 m). Increase voxel_size or decrease grid_step." };
+  const crossFieldError = { field: null, message: "Value error, ray_length (1 m) must be longer than voxel_size (1 m)" };
   // A refusal of the stored voxel size (another setting changed): the grid line is the one of that voxel size.
   rendered = renderForTest(<SettingsStep form={rejected([crossFieldError])} onChange={() => {}} disabledReason={null} />);
   expect(rendered.container.querySelector(".step-error")).toBeNull();
   expect(fieldOf("Voxel size").querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
-  expect(fieldOf("Voxel size").querySelector(".setting-error")!.textContent).toContain("must not be larger than the voxel size");
+  expect(fieldOf("Voxel size").querySelector(".setting-error")!.textContent).toContain("must be longer than voxel size");
   expect(fieldOf("Voxel size").querySelector(".setting-note")!.textContent).toBe("62 voxels per side, 238 328 in total");
-  expect(fieldOf("Sample spacing on test surfaces").querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+  expect(fieldOf("Ray length").querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
   // A refused voxel size: the line says it is the grid of the voxel size last saved.
   const refusedVoxelSize = formReducer(formReducer(form(), { type: "values_changed", values: { voxel_size: 0.5 } }),
     { type: "save_rejected", reply: { field_errors: [crossFieldError], grid_plan: null } });
@@ -178,19 +180,11 @@ test("a setting to fix in another step is named with that step under the run but
     .toBe("Fix the steepest step between columns in Carving to run the analysis.");
 });
 
-// The engine's sample spacing: 1 m by default, never automatic (R2 4.4).
-function formWithSampleSpacing(): FormState {
-  return initialFormState({ schema: { properties: { ...SCHEMA.properties, grid_step: { default: 1.0, type: "number", exclusiveMinimum: 0 } } },
-                            modes: MODES, settings: { mode: "time-based" }, gridPlan: PLAN_WITHIN_BUDGET });
-}
-
 /** The Settings step over the form the app holds, every change going to it as the app's onChange does. */
 function SettingsStepWithItsForm({ start }: { start: FormState }) {
   const [state, dispatch] = useReducer(formReducer, start);
-  latestForm = state;
   return <SettingsStep form={state} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={null} />;
 }
-let latestForm: FormState | null = null;
 
 function typeInto(field: HTMLInputElement, text: string): void {
   act(() => {
@@ -200,38 +194,27 @@ function typeInto(field: HTMLInputElement, text: string): void {
 }
 
 const fieldNamed = (setting: string) => rendered!.container.querySelector<HTMLElement>(`[data-setting="${setting}"]`)!;
+const notesUnder = (setting: string) => [...fieldNamed(setting).querySelectorAll(".setting-note")].map((note) => note.textContent);
 
-test("a voxel size below the sample spacing lowers it to the voxel size, said under Voxel size above the grid line", () => {
-  rendered = renderForTest(<SettingsStepWithItsForm start={formWithSampleSpacing()} />);
-  typeInto(fieldNamed("voxel_size").querySelector<HTMLInputElement>("input[type='range']")!, "0.5");
-  expect(latestForm!.userValues).toEqual({ voxel_size: 0.5, grid_step: 0.5 });
-  const notes = [...fieldNamed("voxel_size").querySelectorAll(".setting-note")].map((note) => note.textContent);
-  expect(notes[0]).toBe("Sample spacing lowered to 0.5\u00a0m to match the voxel size.");
-  expect(fieldNamed("voxel_size").querySelector("[role='status']")!.textContent).toBe(notes[0]);
-  expect(notes).toHaveLength(2);                // the grid line stays under it
+test("under Voxel size a quiet line gives the sample spacing the engine uses, half the voxel size; there is no field for it", () => {
+  rendered = renderForTest(<SettingsStepWithItsForm start={form()} />);
+  expect(notesUnder("voxel_size")).toEqual(["62 voxels per side, 238\u202f328 in total", "Test surfaces sampled every 0.5\u00a0m"]);
+  typeInto(fieldNamed("voxel_size").querySelector<HTMLInputElement>("input[type='number']")!, "0.25");
+  expect(notesUnder("voxel_size")[1]).toBe("Test surfaces sampled every 0.125\u00a0m");
+  expect(rendered.container.querySelector('[data-setting="grid_step"]')).toBeNull();
+  expect(fieldNamed("voxel_size").querySelector("[role='status']")).toBeNull();      // nothing is lowered any more, so nothing to announce
 });
 
-test("the status region of the sample spacing note is there before the note, so the note is announced when it comes", () => {
-  rendered = renderForTest(<SettingsStepWithItsForm start={formWithSampleSpacing()} />);
-  const status = fieldNamed("voxel_size").querySelector("[role='status']")!;
-  expect(status.textContent).toBe("");
-  typeInto(fieldNamed("voxel_size").querySelector<HTMLInputElement>("input[type='number']")!, "0.5");
-  expect(fieldNamed("voxel_size").querySelector("[role='status']")).toBe(status);
-  expect(status.textContent).toBe("Sample spacing lowered to 0.5 m to match the voxel size.");
+test("the line keeps its place under an over-budget voxel size, and before the grid is planned", () => {
+  rendered = renderForTest(<SettingsStep form={form(PLAN_OVER_BUDGET)} onChange={() => {}} disabledReason={null} />);
+  expect(notesUnder("voxel_size")).toEqual(["Test surfaces sampled every 0.5\u00a0m"]);
+  rendered.rerender(<SettingsStep form={initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "time-based" }, gridPlan: null })}
+                                  onChange={() => {}} disabledReason={null} />);
+  expect(notesUnder("voxel_size")).toEqual(["Test surfaces sampled every 0.5\u00a0m"]);
 });
 
-test("a sample spacing typed above the voxel size is not changed: the engine's error shows on it and opens its fold", () => {
-  const typed = formReducer(formWithSampleSpacing(), { type: "values_changed", values: { grid_step: 2 } });
-  expect(typed.userValues).toEqual({ grid_step: 2 });
-  rendered = renderForTest(<SettingsStep form={typed} onChange={() => {}} disabledReason={null} />);
-  const detailFold = () => [...rendered!.container.querySelectorAll<HTMLButtonElement>("button.setting-fold")]
-    .find((button) => button.textContent === "More detail settings")!;
-  expect(detailFold().getAttribute("aria-expanded")).toBe("false");
-  const refused = formReducer(typed, { type: "save_rejected", reply: { field_errors: [{ field: null,
-    message: "Value error, grid_step (2 m) must be ≤ voxel_size (1 m). Increase voxel_size or decrease grid_step." }], grid_plan: null } });
-  rendered.rerender(<SettingsStep form={refused} onChange={() => {}} disabledReason={null} />);
-  expect(detailFold().getAttribute("aria-expanded")).toBe("true");          // opened by the error, not by the user
-  expect(fieldNamed("grid_step").querySelector(".setting-error")!.textContent).toContain("must not be larger than the voxel size");
-  expect(fieldNamed("grid_step").querySelector<HTMLInputElement>("input[type='number']")!.value).toBe("2");
-  expect(refused.userValues.grid_step).toBe(2);
+test("the sample spacing the line gives is the engine's rule for an unset grid_step", () => {
+  const schemas = readFileSync("../src/urbansolarcarver/pydantic_schemas.py", "utf8");
+  expect(schemas).toContain("GRID_STEP_PER_VOXEL_SIZE_WHEN_UNSET = 0.5");
+  expect(schemas).toContain("None (default): half the voxel size.");
 });

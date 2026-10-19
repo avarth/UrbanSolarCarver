@@ -7,7 +7,6 @@ import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
 const SCHEMAS = readFileSync("../src/urbansolarcarver/pydantic_schemas.py", "utf8").replaceAll("\r\n", "\n");
 
 test("the engine still writes the messages the form says in its own words", () => {
-  expect(SCHEMAS).toContain('f"grid_step ({self.grid_step:g} m) must be ≤ voxel_size ({self.voxel_size:g} m). "');
   expect(SCHEMAS).toContain('f"{prefix}_day={day} is invalid for month {month} "\n                        f"(max {max_day} days)"');
   expect(SCHEMAS).toContain('f"mode \'{self.mode}\' requires analysis period fields: {\', \'.join(missing)}"');
   expect(SCHEMAS).toContain('raise ValueError(f"mode \'{self.mode}\' requires epw_path")');
@@ -16,11 +15,6 @@ test("the engine still writes the messages the form says in its own words", () =
 test("each of those messages, as the engine renders it, gets the interface's sentence", () => {
   // As Pydantic reports a model validator: no field, "Value error, " in front.
   const shown = (message: string, mode = "time-based") => shownConfigErrorOf(null, `Value error, ${message}`, mode);
-  expect(shown("grid_step (1 m) must be ≤ voxel_size (0.5 m). Increase voxel_size or decrease grid_step.")).toEqual({
-    settings: ["grid_step", "voxel_size"],
-    message: "Sample spacing on test surfaces (1 m) must not be larger than the voxel size (0.5 m). " +
-      "Use a larger voxel size or a smaller sample spacing on test surfaces.",
-  });
   expect(shown("end_day=31 is invalid for month 4 (max 30 days)"))
     .toEqual({ settings: ["end_day"], message: "April has 30 days, so the end day cannot be 31." });
   expect(shown("mode 'benefit' requires analysis period fields: start_day", "benefit"))

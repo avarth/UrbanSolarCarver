@@ -52,8 +52,7 @@
 .setting-label { font-size: var(--text-body); }
 
 .setting-control,
-.setting-choice-row,
-.setting-period-row {
+.setting-choice-row {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -110,8 +109,7 @@
 .setting-range::-webkit-slider-runnable-track { height: var(--slider-track); border-radius: 2px; background: var(--colour-line); }
 .setting-range::-moz-range-track { height: var(--slider-track); border-radius: 2px; background: var(--colour-line); }
 
-.setting-range::-webkit-slider-thumb,
-.balance-handle::-webkit-slider-thumb {
+.setting-range::-webkit-slider-thumb {
   width: var(--slider-handle);
   height: var(--slider-handle);
   margin-top: calc((var(--slider-track) - var(--slider-handle)) / 2);
@@ -122,8 +120,7 @@
   appearance: none;
 }
 
-.setting-range::-moz-range-thumb,
-.balance-handle::-moz-range-thumb {
+.setting-range::-moz-range-thumb {
   box-sizing: border-box;
   width: var(--slider-handle);
   height: var(--slider-handle);
@@ -140,119 +137,37 @@
 .setting-range[aria-invalid="true"]::-webkit-slider-runnable-track { box-shadow: 0 0 0 1px var(--colour-error); }
 .setting-range[aria-invalid="true"]::-moz-range-track { box-shadow: 0 0 0 1px var(--colour-error); }
 
-.setting-range:disabled,
-.balance-handle:disabled { cursor: default; }
-.setting-range:disabled::-webkit-slider-thumb,
-.balance-handle:disabled::-webkit-slider-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
-.setting-range:disabled::-moz-range-thumb,
-.balance-handle:disabled::-moz-range-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+.setting-range:disabled { cursor: default; }
+.setting-range:disabled::-webkit-slider-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+.setting-range:disabled::-moz-range-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
 
 .setting-slider-control { align-self: stretch; flex-wrap: nowrap; }
 
-/* The balance temperature (R2 4.2): two handles on one track, the two ends of the dead band, which lies on both sides of the
-   balance temperature (its middle); the band between them is in the accent colour and named above it. The two sliders lie over
-   each other; only their handles take the pointer, so each handle can be dragged where it is. */
-.balance-slider { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); align-self: stretch; }
+/* The balance temperature (R2 4.2): a strip of 10 to 30 °C (a scale strip, below) whose two handles are the two ends of the dead
+   band, which lies on both sides of the balance temperature (its middle). */
+.balance-slider { display: flex; flex-direction: column; align-self: stretch; }
 
-.balance-track {
-  --slider-handle: 16px;
-  --slider-track: 4px;
-  position: relative;
-  height: calc(var(--slider-handle) + 20px);
-}
-
-.balance-track::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: calc((var(--slider-handle) - var(--slider-track)) / 2);
-  height: var(--slider-track);
-  border-radius: 2px;
-  background: var(--colour-line);
-}
-
-/* From the centre of the left handle to the centre of the right one: a handle's centre runs from half a handle in from the
-   left end to half a handle in from the right one. */
-.balance-dead-band {
-  position: absolute;
-  bottom: calc((var(--slider-handle) - var(--slider-track)) / 2);
-  left: calc(var(--slider-handle) / 2 + (100% - var(--slider-handle)) * var(--dead-band-start));
-  width: calc((100% - var(--slider-handle)) * (var(--dead-band-end) - var(--dead-band-start)));
-  height: var(--slider-track);
-  background: var(--colour-accent);
-}
-
-/* Over the middle of the band, kept on the track: at its left end the label starts there, at its right end it ends there. */
-.balance-dead-band-label {
-  --dead-band-middle: calc((var(--dead-band-start) + var(--dead-band-end)) / 2);
-  position: absolute;
-  bottom: var(--slider-handle);
-  left: calc(var(--slider-handle) / 2 + (100% - var(--slider-handle)) * var(--dead-band-middle));
-  transform: translateX(calc(var(--dead-band-middle) * -100%));
-  font-size: var(--text-secondary);
-  color: var(--colour-muted);
-  white-space: nowrap;
-}
-
-.balance-handle {
-  position: absolute;
-  left: 0;
-  bottom: 0;
-  width: 100%;
-  height: var(--slider-handle);
-  margin: 0;
-  background: transparent;
-  appearance: none;
-  pointer-events: none;
-}
-
-.balance-handle::-webkit-slider-runnable-track { height: var(--slider-handle); background: transparent; }
-.balance-handle::-moz-range-track { background: transparent; }
-.balance-handle::-webkit-slider-thumb { margin-top: 0; pointer-events: auto; cursor: pointer; }
-.balance-handle::-moz-range-thumb { pointer-events: auto; cursor: pointer; }
-/* The lower handle comes first in the page; where the two lie on one spot it is lifted above the upper one. */
-.balance-handle-on-top { z-index: 1; }
-/* Without harm counted the upper end does nothing: its handle, its number field and the note beside it are muted. */
-.balance-handle-muted::-webkit-slider-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
-.balance-handle-muted::-moz-range-thumb { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
-.balance-end-muted .setting-label, .balance-end-muted .setting-number, .balance-end-note { color: var(--colour-muted); }
-.balance-end-note { font-size: var(--text-secondary); }
-
-/* Both sliders span the whole track, so the focus mark of tokens.css would ring the whole overlay: each handle carries its own
-   instead, the same 2 px accent ring around the handle that has the focus (UX 12). */
-.balance-handle:focus-visible { outline: none; }
-.balance-handle:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--colour-accent), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent); }
-.balance-handle:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 1px var(--colour-accent), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent); }
-
-/* The track is the two handles' one, so a refused setting marks its own handle: a 2 px ring in the error colour, inside the focus
-   ring when the handle has the focus. */
-.balance-handle[aria-invalid="true"]::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--colour-error); }
-.balance-handle[aria-invalid="true"]::-moz-range-thumb { box-shadow: 0 0 0 2px var(--colour-error); }
-.balance-handle[aria-invalid="true"]:focus-visible::-webkit-slider-thumb {
-  box-shadow: 0 0 0 2px var(--colour-error), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent);
-}
-.balance-handle[aria-invalid="true"]:focus-visible::-moz-range-thumb {
-  box-shadow: 0 0 0 2px var(--colour-error), 0 0 0 3px var(--colour-panel), 0 0 0 5px var(--colour-accent);
-}
-
-.balance-numbers { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2) calc(var(--space-unit) * 6); }
-.balance-numbers .setting-control { flex-wrap: nowrap; }
-
-/* The analysis period (R2 4.3): a year strip and an hour strip, each with its range in the soft accent colour, underlined in the
-   accent colour, and two handles; presets; the period in words, which opens the typed fields. A wrapped range (across the new year
-   or midnight) is two pieces, one at each end of its strip. */
+/* The analysis period (R2 4.3): a year strip and an hour strip (scale strips, below), the presets, and a note under the strips
+   for a period not set yet or one the engine runs on every day. */
 .period-control { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2); align-self: stretch; }
 
-.period-strip {
-  --period-handle-width: 10px;
-  --period-strip-height: 26px;
+/* A scale strip (ScaleStrip.tsx), which the analysis period and the balance temperature share: a scale of cells, the range between
+   the two handles in the soft accent colour, underlined in the accent colour, and over each handle a bubble with its value. A
+   wrapped range (across the new year or midnight) is two pieces, one at each end of its strip. */
+.scale-strip {
+  --scale-strip-handle-width: 10px;
+  --scale-strip-height: 26px;
+  --scale-strip-handle-overhang: calc(var(--space-unit) * 1.5);
+  --scale-strip-bubble-height: 20px;
+  --scale-strip-bubble-tail: 5px;
   position: relative;
   box-sizing: border-box;
   align-self: stretch;
-  height: var(--period-strip-height);
-  /* Half a handle in from each side, so a handle at an end of the strip stays inside the panel. */
-  margin: calc(var(--space-unit) * 1.5) calc(var(--period-handle-width) / 2);
+  height: var(--scale-strip-height);
+  /* Room over the handles for the bubbles; half a handle in from each side, so a handle at an end of the strip stays inside the
+     panel. */
+  margin: calc(var(--scale-strip-handle-overhang) + var(--scale-strip-bubble-tail) + var(--scale-strip-bubble-height) + 2px)
+          calc(var(--scale-strip-handle-width) / 2) var(--scale-strip-handle-overhang);
   border: 1px solid var(--colour-line);
   border-radius: var(--radius-small);
   background: var(--colour-panel);
@@ -261,10 +176,12 @@
   user-select: none;
 }
 
-.period-strip[data-invalid="true"] { border-color: var(--colour-error); box-shadow: 0 0 0 1px var(--colour-error); }
-.period-strip[data-disabled="true"] { cursor: default; }
+/* Room under the handles for a note. */
+.scale-strip[data-has-note="true"] { margin-bottom: calc(var(--scale-strip-handle-overhang) + 20px); }
+.scale-strip[data-invalid="true"] { border-color: var(--colour-error); box-shadow: 0 0 0 1px var(--colour-error); }
+.scale-strip[data-disabled="true"] { cursor: default; }
 
-.period-range {
+.scale-strip-range {
   position: absolute;
   top: 0;
   bottom: 0;
@@ -275,31 +192,31 @@
   box-shadow: inset 0 -3px 0 var(--colour-accent);
 }
 
-.period-strip-cells { position: absolute; inset: 0; display: flex; }
+.scale-strip-cells { position: absolute; inset: 0; display: flex; }
 
 /* A label may run on over the next cells (12 h over 13 h, which has none); the handles lie above it. */
-.period-strip-cell {
+.scale-strip-cell {
   flex: 1 1 0;
   min-width: 0;
   padding-left: 2px;
   border-left: 1px solid var(--colour-line);
   color: var(--colour-muted);
   font-size: var(--text-secondary);
-  line-height: calc(var(--period-strip-height) - 2px);
+  line-height: calc(var(--scale-strip-height) - 2px);
   white-space: nowrap;
 }
 
-.period-strip-cell:first-child { border-left: 0; }
+.scale-strip-cell:first-child { border-left: 0; }
 
-.period-handle {
+.scale-strip-handle {
   position: absolute;
   z-index: 1;
-  top: calc(var(--space-unit) * -1.5);
-  bottom: calc(var(--space-unit) * -1.5);
+  top: calc(var(--scale-strip-handle-overhang) * -1);
+  bottom: calc(var(--scale-strip-handle-overhang) * -1);
   left: calc(var(--handle-position) * 100%);
   box-sizing: border-box;
-  width: var(--period-handle-width);
-  margin-left: calc(var(--period-handle-width) / -2);
+  width: var(--scale-strip-handle-width);
+  margin-left: calc(var(--scale-strip-handle-width) / -2);
   border: 2px solid var(--colour-panel);
   border-radius: var(--radius-small);
   background: var(--colour-accent);
@@ -307,8 +224,62 @@
   cursor: grab;
 }
 
-.period-handle[aria-invalid="true"] { box-shadow: 0 0 0 1px var(--colour-error); }
-.period-handle[aria-disabled="true"] { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); cursor: default; }
+/* Without harm counted the upper end of the balance temperature does nothing: its handle, its bubble and its note are muted. */
+.scale-strip-handle[data-muted="true"] { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); }
+.scale-strip-handle[aria-invalid="true"] { box-shadow: 0 0 0 1px var(--colour-error); }
+.scale-strip-handle[aria-disabled="true"] { background: var(--colour-muted); box-shadow: 0 0 0 1px var(--colour-muted); cursor: default; }
+
+/* The value over a handle, always shown, moved sideways by --bubble-shift (ScaleStrip.tsx) so the two bubbles never overlap; it
+   lets the pointer through to the strip. */
+.scale-strip-bubble {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + var(--scale-strip-handle-overhang) + var(--scale-strip-bubble-tail));
+  left: calc(var(--handle-position) * 100%);
+  box-sizing: border-box;
+  height: var(--scale-strip-bubble-height);
+  padding: 0 calc(var(--space-unit) * 1.5);
+  border: 1px solid var(--colour-accent);
+  border-radius: var(--radius-small);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  font-size: var(--text-secondary);
+  line-height: calc(var(--scale-strip-bubble-height) - 2px);
+  white-space: nowrap;
+  transform: translateX(calc(-50% + var(--bubble-shift, 0px)));
+  pointer-events: none;
+}
+
+/* The bubble's tail, pointing down at its handle: a small square turned on its corner, held between the bubble's corners when the
+   bubble is moved aside. */
+.scale-strip-bubble::after {
+  content: "";
+  position: absolute;
+  top: calc(100% - 4px);
+  left: clamp(4px, calc(50% - var(--bubble-shift, 0px)), calc(100% - 4px));
+  width: 7px;
+  height: 7px;
+  margin-left: -4px;
+  border-right: 1px solid var(--colour-accent);
+  border-bottom: 1px solid var(--colour-accent);
+  background: var(--colour-panel);
+  transform: rotate(45deg);
+}
+
+.scale-strip-bubble[data-muted="true"] { border-color: var(--colour-muted); color: var(--colour-muted); }
+.scale-strip-bubble[data-muted="true"]::after { border-color: var(--colour-muted); }
+
+/* A note under a handle, kept on the strip: at the strip's left end it starts there, at its right end it ends there. */
+.scale-strip-note {
+  position: absolute;
+  top: calc(100% + var(--scale-strip-handle-overhang) + 2px);
+  left: calc(var(--handle-position) * 100%);
+  transform: translateX(calc(var(--handle-position) * -100%));
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+}
 
 .period-presets { display: flex; flex-wrap: wrap; gap: var(--space-unit); }
 
@@ -326,22 +297,10 @@
 .period-preset[aria-pressed="true"] { border-color: var(--colour-accent); background: var(--colour-accent-soft); color: var(--colour-accent); font-weight: 600; }
 .period-preset:disabled, .period-preset[aria-disabled="true"] { color: var(--colour-muted); cursor: default; }
 
-/* The period in words reads as a link: it opens the typed fields. */
-.period-words {
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--colour-accent);
-  font: inherit;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-
-.period-words:disabled { color: var(--colour-muted); text-decoration: none; cursor: default; }
-
-.setting-period { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
-.setting-period-end { width: 36px; color: var(--colour-muted); }
+/* The cold period preset and its tooltip, which lets the pointer through, as the mode tiles' tooltips do, so it never takes a
+   click. */
+.period-preset-anchor { display: inline-flex; }
+.period-preset-tooltip { pointer-events: none; }
 
 .setting-angles { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
 /* Two directions per row, in the engine's order: N and NE, E and SE, S and SW, W and NW. */
@@ -466,10 +425,7 @@
 
 .setting-tooltip code { font-family: var(--font-family-code); }
 
-/* A line under a valid field, such as the grid under Voxel size (UX 5.4). */
-/* The live region of a change the form made (the sample spacing lowered, R2 4.4): always there, so filling it is announced; while
-   empty it takes back the gap the field's column puts before it. */
-.setting-change-note:empty { margin-top: calc(var(--space-unit) * -1); }
+/* A quiet line under a field, such as the grid and the sample spacing under Voxel size (UX 5.4). */
 
 .setting-note {
   margin: 0;

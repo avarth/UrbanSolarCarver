@@ -108,7 +108,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 |-----------|---------|-------------|
 | `mode` | `"time-based"` | Carving mode (see [Modes](../modes.md)) |
 | `voxel_size` | 1.0 | Voxel edge length in meters (0.01-100) |
-| `grid_step` | 1.0 | Surface sampling spacing in meters (must be <= voxel_size) |
+| `grid_step` | `null` | Surface sampling spacing in meters; `null` = half the voxel size. An explicit value must be <= voxel_size |
 | `ray_length` | 300.0 | Maximum ray cast distance in meters |
 | `threshold` | mode default | `carve_fraction` for weighted modes, `0` for `time-based`, unset for `tilted_plane`. See [Thresholding strategies](#thresholding-strategies) below |
 | `carve_fraction` | 0.7 | Solar protection slider: 0.7 = aggressive (remove 70% of the obstruction weight, including what `carve_above` removes), 0.3 = conservative |
@@ -144,7 +144,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `dew_point_celsius` | `radiative_cooling` | Night-time dew point (°C, default 14) |
 | `bliss_k` | `radiative_cooling` | Bliss angular-attenuation constant (default 1.8) |
 | `min_sky_elevation_deg` | `radiative_cooling` | Ignore sky patches below this elevation in degrees (default 0 = full hemisphere) |
-| `edge_taper` | weighted modes | Sample points closer than this (m) to their surface's edge count proportionally less (default 0 = off) |
+| `edge_taper` | weighted modes | Sample points closer than this (m) to their surface's edge count proportionally less (default 0 = off), so a cooling street or courtyard does not clear the mass right beside it. The browser UI shows it in Night cooling (`radiative_cooling`) only |
 
 ## Thresholding strategies
 

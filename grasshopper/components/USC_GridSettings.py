@@ -6,7 +6,7 @@ voxel_size : float, optional
     Voxel edge length in meters. Smaller = finer but slower. Default: 1.0
 grid_step : float, optional
     Surface sampling spacing in meters; must not exceed voxel_size.
-    Default: 1.0
+    Default: half the voxel size
 margin_frac : float, optional
     Padding on each side of the grid, as a fraction of the longest side
     of the max volume's bounding box. Default: 0.01
@@ -24,8 +24,8 @@ try:
     ii = ghenv.Component.Params.Input
     oo = ghenv.Component.Params.Output
     for i, (n, d) in enumerate([
-        ("voxel_size", "Edge length of each voxel cube in meters. Smaller values = finer resolution but slower computation. Start with 2.0 for testing, use 1.0 or 0.5 for final results. Typical range: 0.5 to 5.0 m. grid_step must not exceed voxel_size, so lower grid_step too when going below 1.0."),
-        ("grid_step", "Spacing between sample points on the test surfaces, in meters. Rays are cast from each point, so this controls how densely rays are cast. Must be less than or equal to voxel_size (the config rejects a larger value). Typical: 1.0 m."),
+        ("voxel_size", "Edge length of each voxel cube in meters. Smaller values = finer resolution but slower computation. Start with 2.0 for testing, use 1.0 or 0.5 for final results. Typical range: 0.5 to 5.0 m. Leave grid_step unset and it follows the voxel size (half of it)."),
+        ("grid_step", "Spacing between sample points on the test surfaces, in meters. Rays are cast from each point, so this controls how densely rays are cast. Leave it unset for half the voxel size. A value you set must be less than or equal to voxel_size (the config rejects a larger value)."),
         ("margin_frac", "Empty padding added on each side of the voxel grid, as a fraction of the longest side of the max volume's bounding box. Default 0.01 (1%). Increase to 0.05 if you see clipping at boundaries."),
     ]):
         if i < len(ii):

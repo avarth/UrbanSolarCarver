@@ -408,7 +408,7 @@ def _sampled_panels(test_surface_paths):
     """The sample points of every panel the engine samples, over the given test surface files as the engine reads them.
 
     A panel is a connected component of the mesh load_mesh returns, sampled by the engine's surface sampling with the
-    default grid_step of 1 m; a component the sampling skips (degenerate, non-planar) gives no points and is left out.
+    grid_step of 1 m; a component the sampling skips (degenerate, non-planar) gives no points and is left out.
     """
     points_by_panel = []
     with run_context(RunContext()):     # the skipped components of the example data are recorded, not warned about
@@ -484,7 +484,7 @@ def test_a_project_without_test_surfaces_has_no_joined_test_surface_file_to_rebu
 @pytest.mark.slow
 def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(example_project_to_read):
     _example, joined_panels = example_project_to_read("multiple_buildings")
-    # Counts of the packaged district files at the default 1 m grid_step. After a deliberate change of those files or of
+    # Counts of the packaged district files at a grid_step of 1 m. After a deliberate change of those files or of
     # the surface sampling, check that every facade is still there and take the new counts from len(joined_panels) and
     # the summed sample points.
     assert (len(joined_panels), sum(len(points) for points in joined_panels)) == (423, 138_641)
@@ -501,7 +501,8 @@ def test_the_joined_test_surfaces_keep_the_courtyard_facades_of_the_perimeter_bl
 
 @pytest.mark.slow
 def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_the_example_files(tmp_path, example_project_templates):
-    """The service's run of the example project keeps the voxels the CLI keeps from the packaged files (150,679 of them)."""
+    """The service's run of the example project keeps the voxels the CLI keeps from the packaged files (150,569 of them at the
+    default sample spacing, half the voxel size)."""
     from typer.testing import CliRunner
     from urbansolarcarver.carver_cli import app
     from urbansolarcarver.local_web_service.run_worker import RunWorker
@@ -527,7 +528,7 @@ def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_th
     cli_mask = np.load(tmp_path / "cli_run" / "thresholding" / "mask.npy")
     # The kept voxels of the packaged perimeter block with its example settings. After a deliberate change of the example
     # files, its settings or the carving, rerun `usc run` on the example (as above) and take the new count from mask.npy.
-    assert int((cli_mask > 0).sum()) == 150_679
+    assert int((cli_mask > 0).sum()) == 150_569
     assert np.array_equal(service_mask, cli_mask)
 
 
@@ -539,6 +540,20 @@ def test_config_yaml_round_trips_through_load_config(tmp_path):
     assert Path(loaded.max_volume_path) == (tmp_path / "p/inputs/joined/max_volume.ply").resolve()
     assert "max_volume_path" not in reply.settings and reply.settings["mode"] == "daylight"
     assert store.read_settings("p") == reply.settings
+
+
+def test_a_stored_grid_step_is_dropped_so_the_engine_samples_at_half_the_voxel_size(tmp_path):
+    """The browser no longer sets the sample spacing: one stored by an earlier version (or sent by an older page) is left
+    out when the settings are read and when they are written, so the engine's half the voxel size applies."""
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    config_path = tmp_path / "p" / "config.yaml"
+    stored = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config_path.write_text(yaml.safe_dump({**stored, "voxel_size": 2.0, "grid_step": 1.0}), encoding="utf-8")
+    assert "grid_step" not in store.read_settings("p") and "grid_step" not in store.read_stored_config("p")
+    assert store.load_project_config("p").grid_step is None
+    reply = store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 2.0, "grid_step": 0.5})
+    assert "grid_step" not in reply.settings
+    assert "grid_step" not in yaml.safe_load(config_path.read_text(encoding="utf-8"))
 
 
 def test_config_from_settings_builds_the_config_of_a_settings_dict(tmp_path):

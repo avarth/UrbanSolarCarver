@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict
 
 from .mode_registry import MODES
 from .pydantic_schemas import (
-    _MODE_SPECIFIC_FIELDS, ThresholdSpec, UserConfig, resolve_max_slope_deg, resolve_threshold,
+    _MODE_SPECIFIC_FIELDS, ThresholdSpec, UserConfig, resolve_grid_step, resolve_max_slope_deg, resolve_threshold,
 )
 
 PIPELINE_STAGES = ("preprocessing", "thresholding", "exporting", "massing")
@@ -124,6 +124,14 @@ class PreprocessingSettings(_StageSettings):
     simulated_weights_path: Optional[str]
     include_harm: bool
     tilted_plane_angle_deg: Optional[Union[float, List[float]]]
+
+    @classmethod
+    def from_config(cls, config: UserConfig):
+        """The settings of *config*, with the sample spacing resolved (an unset grid_step is half the voxel size), so the
+        spacing a run uses is the one compared and the one every reader gets."""
+        values = {name: getattr(config, name) for name in cls.model_fields}
+        values["grid_step"] = resolve_grid_step(config.grid_step, config.voxel_size)
+        return cls(**values)
 
     def effective_values(self) -> dict:
         """Every field except the mode-specific ones this mode does not read."""

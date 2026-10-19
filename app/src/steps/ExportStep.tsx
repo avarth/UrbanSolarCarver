@@ -120,7 +120,7 @@ export function ExportStep({ form, downloads, disabledReason, formatRunReason, o
     <div className="export-step">
       {disabledReason !== null && <p id={reasonId} className="step-reason">{disabledReason}</p>}
       <SettingField view={settingView("final_mesh_format", form.mode)} form={form} disabled={disabledReason !== null}
-                    extras={formatRunReason === null ? undefined : { note: formatRunReason }}
+                    extras={formatRunReason === null ? undefined : { notes: [formatRunReason] }}
                     onChange={(values) => onFormatChange(String(values.final_mesh_format))} />
       {formatFeedback}
       <ul className="download-list">

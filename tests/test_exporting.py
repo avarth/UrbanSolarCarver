@@ -11,7 +11,7 @@ import trimesh
 _UTM_OFFSET = np.array([500_000.37, 4_200_000.81, 50.0])
 
 
-def _run_to_thresholding(tmp_path, offset):
+def _run_to_thresholding(tmp_path, offset, grid_step=1.0):
     from urbansolarcarver import preprocessing, thresholding
     from urbansolarcarver.io import save_mesh
     from urbansolarcarver.load_config import user_config
@@ -28,7 +28,7 @@ def _run_to_thresholding(tmp_path, offset):
     cfg = user_config(
         max_volume_path=str(vol_path), test_surface_path=str(srf_path),
         out_dir=str(tmp_path / "run"), mode="daylight",
-        voxel_size=1.0, grid_step=1.0, ray_length=50.0,
+        voxel_size=1.0, grid_step=grid_step, ray_length=50.0,
         min_voxels=1, min_face_count=1, device="cpu",
     )
     pre = preprocessing(cfg, tmp_path / "run" / "preprocessing")
@@ -67,3 +67,10 @@ def test_diagnostics_and_report(tmp_path):
     assert diag["voxels_removed_by_cleanup"] >= 0
     # The run report goes into the run folder when out_dir is <run>/exporting.
     assert (tmp_path / "run" / "run_report.md").is_file()
+
+
+def test_the_report_gives_the_sample_spacing_used_for_an_unset_grid_step(tmp_path):
+    from urbansolarcarver import exporting
+    cfg, thr = _run_to_thresholding(tmp_path, np.zeros(3), grid_step=None)       # half the 1 m voxel size
+    exporting(thr, cfg, tmp_path / "run" / "exporting")
+    assert "| Grid step | 0.5 m |" in (tmp_path / "run" / "run_report.md").read_text(encoding="utf-8")

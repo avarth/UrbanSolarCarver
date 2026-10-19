@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import {
-  fieldSettingOf, fromDisplayValue, presentedSettingOf, settingIsReadBy, settingsForStep, settingsOfField, settingView, shownSliderOf, toDisplayValue,
+  fieldSettingOf, fromDisplayValue, presentedSettingOf, settingIsShownIn, settingsForStep, settingsOfField, settingView, shownSliderOf, toDisplayValue,
 } from "./presentation";
 
 const names = (views: { name: string }[]) => views.map((view) => view.name);
@@ -19,8 +19,9 @@ test("the Settings step groups, their folds and their fold labels", () => {
   const [when, detail] = groups;
   expect(names(when.folded)).toEqual(["sun_steps_per_hour", "min_altitude"]);
   expect(when.foldLabel).toBe("More sun settings");
-  // R2 4.5: the computer's settings come last in the detail fold; the edge strip is for weighted modes.
-  expect(names(detail.folded)).toEqual(["grid_step", "ray_length", "margin_frac", "ray_batch_size", "diagnostics"]);
+  // R2 4.5: the computer's settings come last in the detail fold. The sample spacing is the engine's (half the voxel size),
+  // the grid margin is hidden for now, and the edge strip is shown in Night cooling only.
+  expect(names(detail.folded)).toEqual(["ray_length", "ray_batch_size", "diagnostics"]);
   expect(detail.foldLabel).toBe("More detail settings");
   const benefitModeGroup = settingsForStep("settings", "benefit")[1];
   expect(benefitModeGroup.title).toBe("Mode specific");
@@ -28,7 +29,17 @@ test("the Settings step groups, their folds and their fold labels", () => {
   expect(names(benefitModeGroup.folded)).toEqual(["include_harm"]);
   expect(benefitModeGroup.foldLabel).toBe("More mode settings");
   const irradianceDetail = settingsForStep("settings", "irradiance").find((group) => group.title === "Detail")!;
-  expect(names(irradianceDetail.folded)).toEqual(["grid_step", "edge_taper", "ray_length", "margin_frac", "ray_batch_size", "diagnostics"]);
+  expect(names(irradianceDetail.folded)).toEqual(["ray_length", "ray_batch_size", "diagnostics"]);
+  // Night cooling: the edge strip is a setting of its own, in its fold, so a cooling street or courtyard does not clear the mass
+  // right beside it.
+  const coolingModeGroup = settingsForStep("settings", "radiative_cooling").find((group) => group.title === "Mode specific")!;
+  expect(names(coolingModeGroup.folded)).toEqual(["min_sky_elevation_deg", "bliss_k", "edge_taper"]);
+  expect(coolingModeGroup.folded.at(-1)!.help).toBe("Sample points closer than this to the edge of a test surface count less (from 0 at "
+    + "the edge to full at this distance), so a cooling street or courtyard does not clear the mass right beside it. 0 = off.");
+  for (const mode of ["time-based", "irradiance", "benefit", "daylight", "tilted_plane"]) expect(settingIsShownIn("edge_taper", mode), mode).toBe(false);
+  for (const hidden of ["grid_step", "margin_frac"]) {
+    expect(settingsForStep("settings", "radiative_cooling").flatMap((group) => [...names(group.essential), ...names(group.folded)])).not.toContain(hidden);
+  }
 });
 
 test("settings drawn as one field are found by the name of their first setting", () => {
@@ -88,11 +99,11 @@ test("percent settings convert both ways", () => {
   expect(fromDisplayValue("carve_fraction", null)).toBeNull();
 });
 
-test("which modes read a setting", () => {
-  expect(settingIsReadBy("voxel_size", "daylight")).toBe(true);
-  expect(settingIsReadBy("start_day", "daylight")).toBe(false);
-  expect(settingIsReadBy("carve_fraction", "time-based")).toBe(false);
-  expect(settingIsReadBy("threshold", "tilted_plane")).toBe(false);
+test("which modes show a setting", () => {
+  expect(settingIsShownIn("voxel_size", "daylight")).toBe(true);
+  expect(settingIsShownIn("start_day", "daylight")).toBe(false);
+  expect(settingIsShownIn("carve_fraction", "time-based")).toBe(false);
+  expect(settingIsShownIn("threshold", "tilted_plane")).toBe(false);
 });
 
 test("a field the engine names finds its setting by the name or the part before a dot, never by a name every object has", () => {

@@ -4,7 +4,6 @@ import { ApiError, type ConfigErrorReply, type ConfigReply, type ModeInfo } from
 import { renderForTest } from "../viewer_overlays/render_for_test";
 import {
   analysisDiffersFromStored, createConfigSaver, defaultValue, formReducer, initialFormState, shownValue, useSettingsForm, valuesToSend, type FormAction,
-  type FormState,
 } from "./form_state";
 
 const SCHEMA = {
@@ -92,10 +91,10 @@ test("a 422 puts each field error under its field, and an error of the whole con
   state = formReducer(state, {
     type: "save_rejected",
     reply: { field_errors: [{ field: "voxel_size", message: "Input should be greater than or equal to 0.01" },
-                            { field: null, message: "grid_step must not exceed voxel_size" }], grid_plan: null },
+                            { field: null, message: "ray_length must be longer than voxel_size" }], grid_plan: null },
   });
-  expect(state.fieldErrors).toEqual({ voxel_size: "Input should be greater than or equal to 0.01 Sample spacing on test surfaces must not exceed voxel size",
-                                      grid_step: "Sample spacing on test surfaces must not exceed voxel size" });
+  expect(state.fieldErrors).toEqual({ voxel_size: "Input should be greater than or equal to 0.01 Ray length must be longer than voxel size",
+                                      ray_length: "Ray length must be longer than voxel size" });
   expect(state.stepErrors).toEqual([]);
   expect(state.pendingSave).toBe(false);
   state = formReducer(state, { type: "save_succeeded", reply: { settings: {}, grid_plan: null } });
@@ -339,11 +338,9 @@ test("an error of the whole config is put, in the interface's words, under each 
   let state = storedProjectState({ mode: "time-based" });
   state = formReducer(state, { type: "save_succeeded", reply: { settings: { mode: "time-based" }, grid_plan: GRID_PLAN } });
   state = formReducer(state, { type: "values_changed", values: { voxel_size: 0.5 } });
-  state = reject(state, [{ field: null,
-    message: "Value error, grid_step (1 m) must be ≤ voxel_size (0.5 m). Increase voxel_size or decrease grid_step." }]);
-  const sampling = "Sample spacing on test surfaces (1 m) must not be larger than the voxel size (0.5 m). " +
-    "Use a larger voxel size or a smaller sample spacing on test surfaces.";
-  expect(state.fieldErrors).toEqual({ grid_step: sampling, voxel_size: sampling });
+  state = reject(state, [{ field: null, message: "Value error, ray_length (5 m) must be longer than voxel_size (0.5 m)" }]);
+  const tooShort = "Ray length (5 m) must be longer than voxel size (0.5 m)";
+  expect(state.fieldErrors).toEqual({ ray_length: tooShort, voxel_size: tooShort });
   expect(state.stepErrors).toEqual([]);
   expect(state.gridPlan).toEqual(GRID_PLAN);
 
@@ -393,7 +390,7 @@ test("a value carried to the new mode that its save refuses goes back to the def
   state = formReducer(state, { type: "save_succeeded", reply: { settings: { mode: "daylight", voxel_size: 0.5, north_deg: 20 }, grid_plan: null } });
   state = formReducer(state, { type: "mode_chosen", mode: "time-based" });
   const changeCount = state.changeCount;
-  state = reject(state, [{ field: null, message: "Value error, grid_step (1 m) must be ≤ voxel_size (0.5 m). Increase voxel_size or decrease grid_step." }]);
+  state = reject(state, [{ field: "voxel_size", message: "Input should be greater than or equal to 1" }]);
   expect(valuesToSend(state)).toEqual({ mode: "time-based", north_deg: 20 });
   expect(state.fieldErrors).toEqual({});
   expect(state.valuesResetByModeChange).toEqual({ settings: ["voxel_size"], mode: "time-based" });
@@ -448,60 +445,7 @@ test("a stored setting the engine ignores in the mode is not sent again; one the
   expect(analysisDiffersFromStored(state)).toBe(false);
 });
 
-// The engine's sample spacing: 1 m by default, never automatic (R2 4.4).
-const SCHEMA_WITH_SAMPLE_SPACING = { properties: { ...SCHEMA.properties, grid_step: { default: 1.0 } } };
-
-function formWithSampleSpacing(settings: Record<string, unknown>): FormState {
-  return initialFormState({ schema: SCHEMA_WITH_SAMPLE_SPACING, modes: MODES, settings, gridPlan: null });
-}
-
-const changed = (state: FormState, values: Record<string, unknown>) => formReducer(state, { type: "values_changed", values });
-const saved = (state: FormState) => formReducer(state, { type: "save_succeeded", reply: { settings: { ...state.userValues, mode: state.mode }, grid_plan: null } });
-
-test("a voxel size below the sample spacing lowers the sample spacing to it, in the same save, and the form says so", async () => {
-  vi.useFakeTimers();
-  const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ settings: {}, grid_plan: GRID_PLAN })));
-  vi.stubGlobal("fetch", fetchMock);
-  const form = renderedForm("first", { mode: "daylight" }, SCHEMA_WITH_SAMPLE_SPACING);
-  act(() => form.current().dispatch({ type: "values_changed", values: { voxel_size: 0.5 } }));
-  expect(form.current().form.sampleSpacingLoweredTo).toBe(0.5);
-  await act(() => vi.advanceTimersByTimeAsync(400));
-  expect(fetchMock).toHaveBeenCalledOnce();
-  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ values: { voxel_size: 0.5, grid_step: 0.5, mode: "daylight" } });
-  form.unmount();
-  vi.unstubAllGlobals();
-});
-
-test("the sample spacing follows the voxel size the save sends, not a value passed on the way; once saved, a larger voxel size leaves it", () => {
-  let state = formWithSampleSpacing({ mode: "daylight" });
-  // Typing 0.25 passes 0.2 on the way: the sample spacing ends at 0.25, as if 0.2 had never been typed.
-  state = changed(state, { voxel_size: 0.2 });
-  expect(state.userValues).toEqual({ voxel_size: 0.2, grid_step: 0.2 });
-  state = changed(state, { voxel_size: 0.25 });
-  expect(state.userValues).toEqual({ voxel_size: 0.25, grid_step: 0.25 });
-  expect(state.sampleSpacingLoweredTo).toBe(0.25);
-  // Dragged back above the spacing the user had before the save: that spacing is back, unset as it was, and the note goes.
-  state = changed(state, { voxel_size: 1.5 });
-  expect(state.userValues).toEqual({ voxel_size: 1.5 });
-  expect(state.sampleSpacingLoweredTo).toBeNull();
-  // Saved, the lowered spacing is the user's: raising the voxel size later does not raise it back.
-  state = saved(changed(state, { voxel_size: 0.5 }));
-  state = changed(state, { voxel_size: 2 });
-  expect(state.userValues).toEqual({ voxel_size: 2, grid_step: 0.5 });
-  expect(state.sampleSpacingLoweredTo).toBeNull();
-  // A voxel size at or above the sample spacing leaves it.
-  state = changed(state, { voxel_size: 0.5 });
-  expect(state.userValues).toEqual({ voxel_size: 0.5, grid_step: 0.5 });
-  expect(state.sampleSpacingLoweredTo).toBeNull();
-});
-
-test("a sample spacing the user types is theirs: above the voxel size it is not changed, and the note goes", () => {
-  let state = changed(formWithSampleSpacing({ mode: "daylight" }), { voxel_size: 0.5 });
-  expect(state.sampleSpacingLoweredTo).toBe(0.5);
-  state = changed(state, { grid_step: 2 });
-  expect(state.userValues).toEqual({ voxel_size: 0.5, grid_step: 2 });
-  expect(state.sampleSpacingLoweredTo).toBeNull();
-  // Not lowered by the next voxel size either while the user's own value waits to be saved: only a voxel size below it does.
-  state = changed(state, { voxel_size: 3 });
-  expect(state.userValues).toEqual({ voxel_size: 3, grid_step: 2 });
+test("a voxel size change sends the voxel size alone: the engine's sample spacing follows it (half the voxel size)", () => {
+  const state = formReducer(storedProjectState({ mode: "daylight" }), { type: "values_changed", values: { voxel_size: 0.5 } });
+  expect(valuesToSend(state)).toEqual({ mode: "daylight", voxel_size: 0.5 });
 });

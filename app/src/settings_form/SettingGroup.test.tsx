@@ -125,17 +125,12 @@ test("the analysis period is one widget that changes the six period settings", (
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "start_month")} form={formFor("time-based")} onChange={onChange} />);
   expect(rendered.container.textContent).toContain("Analysis period");
-  // The period in words opens the exact fields (R2 4.3); a typed day is sent when its field is left.
-  click(rendered.container.querySelector(".period-words")!);
-  const startDay = rendered.container.querySelector<HTMLInputElement>("input[aria-label='Start day']")!;
-  expect(startDay.value).toBe("21");
-  typeInto(startDay, "5");
-  act(() => startDay.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
-  expect(onChange).toHaveBeenLastCalledWith({ start_day: 5 });
-  const endMonth = rendered.container.querySelector<HTMLSelectElement>("select[aria-label='End month']")!;
-  expect(endMonth.value).toBe("12");
-  typeInto(endMonth, "3");
-  expect(onChange).toHaveBeenLastCalledWith({ end_month: 3 });
+  // A date handle moves the start date (R2 4.3); a preset sets both dates.
+  const startDate = rendered.container.querySelector<HTMLElement>("[role='slider'][aria-label='Start date']")!;
+  act(() => { startDate.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true })); });
+  expect(onChange).toHaveBeenLastCalledWith({ start_day: 20 });
+  click([...rendered.container.querySelectorAll(".period-preset")].find((button) => button.textContent === "Whole year")!);
+  expect(onChange).toHaveBeenLastCalledWith({ start_month: 1, start_day: 1, end_day: 31 });      // the end month is December already
 });
 
 test("the plane angle takes one value or one per compass direction", () => {
@@ -233,12 +228,8 @@ test("an invalid field is marked without the outline, which stays the focus mark
     expect(rule).not.toMatch(/outline(-offset)?\s*:/);
     expect(rule).toMatch(/box-shadow:[^;]*var\(--colour-error\)/);
   }
-  // Nothing in the form replaces the focus outline of tokens.css, but the balance handles: their sliders span the whole track, so
-  // each handle carries the ring itself, 2 px in the accent colour.
-  const withoutBalanceHandles = formCss.replace(/\.balance-handle:focus-visible\s*{\s*outline: none;\s*}/, "");
-  expect(withoutBalanceHandles).not.toMatch(/outline\s*:/);
-  expect(formCss).toMatch(/\.balance-handle:focus-visible::-webkit-slider-thumb\s*{[^}]*0 0 0 5px var\(--colour-accent\)/);
-  expect(formCss).toMatch(/\.balance-handle:focus-visible::-moz-range-thumb\s*{[^}]*0 0 0 5px var\(--colour-accent\)/);
+  // Nothing in the form replaces the focus outline of tokens.css, the handles of the strips included.
+  expect(formCss).not.toMatch(/outline\s*:/);
 });
 
 test("the tooltip stays open while the pointer moves from the i onto it, over a strip across the gap", () => {
@@ -380,19 +371,6 @@ test("the message of a refused number goes when the value changes from elsewhere
   act(() => field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
   expect(rendered.container.querySelector(".setting-error")).not.toBeNull();
   rendered.rerender(<SettingField view={view} form={formReducer(schemaForm, { type: "values_changed", values: { max_slope_deg: 30 } })} onChange={() => {}} />);
-  expect(rendered.container.querySelector(".setting-error")).toBeNull();
-});
-
-test("each input of the analysis period keeps its own refusal: a valid hour does not hide a refused day", () => {
-  const form = formFor("time-based");
-  rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "start_month")} form={form} onChange={() => {}} />);
-  click(rendered.container.querySelector(".period-words")!);
-  const [startDay, startHour] = [...rendered.container.querySelectorAll<HTMLInputElement>("input[type='number']")];
-  typeKeys(startDay, "32");
-  expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 31.");
-  typeKeys(startHour, "9");
-  expect(rendered.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 31.");
-  typeKeys(startDay, "3");
   expect(rendered.container.querySelector(".setting-error")).toBeNull();
 });
 

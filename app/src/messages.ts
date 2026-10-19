@@ -111,9 +111,9 @@ export const messages = {
   maxVolumeMissing: "Maximum volume missing",
   testSurfacesMissing: "Test surfaces missing",
   maxVolumeAndTestSurfacesMissing: "Maximum volume and test surfaces missing",
-  // The analysis period in words (R2 4.3), in the step summary, under the period's strips and in its tooltip: "21 Dec, 10 to
-  // 14 h", "21 to 22 Dec, 22 to 2 h" (one month written once), "1 Oct to 30 Apr, 0 to 23 h", "22 Dec to 21 Dec, 10 to 14 h"
-  // (across the new year within one month). One date with hours across midnight is what the engine runs: every night of the year.
+  // The analysis period in words (R2 4.3), in the step summary and in the period's tooltip: "21 Dec, 10 to 14 h", "21 to 22 Dec,
+  // 22 to 2 h" (one month written once), "1 Oct to 30 Apr, 0 to 23 h", "22 Dec to 21 Dec, 10 to 14 h" (across the new year within
+  // one month). One date with hours across midnight is what the engine runs: every night of the year.
   periodSummary: (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => {
     const hours = `${startHour} to ${endHour}\u00a0h`;
     const oneDate = startMonth === endMonth && startDay === endDay;
@@ -315,12 +315,9 @@ export const messages = {
   gridSizeAtSavedVoxelSize: (voxelSizeText: string, voxelsPerSide: number, totalVoxels: number) =>
     `Grid at the saved voxel size of ${voxelSizeText}: ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total`,
   // Under Voxel size when a voxel size below the sample spacing lowered it (R2 4.4).
-  sampleSpacingLoweredToVoxelSize: (sampleSpacing: number) =>
-    `Sample spacing lowered to ${withUnit(formattedNumber(sampleSpacing), "m")} to match the voxel size.`,
+  // Under Voxel size: the sample spacing the engine uses on the test surfaces, half the voxel size (resolve_grid_step).
+  testSurfacesSampledEvery: (sampleSpacing: number) => `Test surfaces sampled every ${withUnit(formattedNumber(sampleSpacing), "m")}`,
   // Errors of the whole config, said under the settings they name (UX 11); the engine's own words are for the YAML.
-  samplingAboveVoxelSize: (samplingLabel: string, samplingText: string, voxelSizeLabel: string, voxelSizeText: string) =>
-    `${samplingLabel} (${samplingText}) must not be larger than the ${String(voxelSizeLabel).toLowerCase()} (${voxelSizeText}). ` +
-    `Use a larger ${String(voxelSizeLabel).toLowerCase()} or a smaller ${String(samplingLabel).toLowerCase()}.`,
   dayNotInMonth: (dayName: string, day: number, monthName: string, daysInMonth: number) =>
     `${monthName} has ${daysInMonth} days, so the ${String(dayName).toLowerCase()} cannot be ${day}.`,
   periodIncomplete: (modeName: string) => `${modeName} needs the whole analysis period: every day, month and hour.`,
@@ -343,19 +340,18 @@ export const messages = {
   switchedOn: "on",
   switchedOff: "off",
   monthNames: MONTH_NAMES,
-  periodFrom: "From",
-  periodTo: "To",
+  // The six period settings by name, for the engine's messages about them (engine_errors.ts).
   periodFieldNames: {
     start_day: "Start day", start_month: "Start month", start_hour: "Start hour",
     end_day: "End day", end_month: "End month", end_hour: "End hour",
   },
-  hourUnit: "h",
-  // The analysis period control (R2 4.3): the month marks of the year strip, its four handles and what they say to a screen
-  // reader, the presets, and the words under the strips, which open the typed fields.
+  // The analysis period control (R2 4.3): the month marks of the year strip, its four handles, what they say to a screen reader
+  // and what their bubbles show ("21 Dec", "10 h"), the presets, and the notes under the strips.
   monthInitials: MONTH_ABBREVIATIONS.map((abbreviation) => abbreviation[0]),
   periodHandleNames: { start_date: "Start date", end_date: "End date", start_hour: "Start hour", end_hour: "End hour" },
   periodDateSpoken: (month: number, day: number) => `${day} ${MONTH_NAMES[month - 1]}`,
   periodHourSpoken: (hour: number) => `${hour}\u00a0h`,
+  periodDateOnBubble: (month: number, day: number) => `${day} ${MONTH_ABBREVIATIONS[month - 1]}`,
   periodPresets: "Presets",
   // The cold period of the weather file (round 2, section 8), a preset of Solar usefulness: the longest run of days whose
   // month-around mean temperature is below the balance temperature minus the dead band.
@@ -383,10 +379,10 @@ export const messages = {
   shiftBySixMonthsButton: "Shift by six months",
   keepAnalysisPeriodButton: "Keep",
   keepAnalysisPeriodName: "Keep the analysis period",
-  periodWordsButton: (periodWords: string) => `${periodWords}: type exact dates and hours`,
   periodNotSet: "Not set yet",
-  // The typed hour fields, named apart from the hour handles of the strip.
-  periodTypedHourNames: { start_hour: "Start hour, typed", end_hour: "End hour, typed" },
+  // Under the strips, for a period stored as one date with hours across midnight: "Every day, 22 to 2 h: ...".
+  periodRunsEveryDay: (periodWords: string) =>
+    `${periodWords}: the hours cross midnight on one date, which the engine runs on every day of the year. The next change makes it one night.`,
   oneAngle: "One angle",
   oneAnglePerDirection: "One per direction",
   compassDirections: ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
@@ -399,12 +395,11 @@ export const messages = {
   carveAmountNotUsed: (ruleName: string) =>
     `Carve amount is not used with the carving rule ${ruleName}. Choose Carve amount under More carving settings to use it.`,
   scoreCutoffValue: "Score cutoff value",
-  // The balance temperature slider: the two ends of the dead band, and the band between them.
+  // The balance temperature strip: the names of its two handles, the two ends of the dead band.
   balanceLowerEnd: "Counts below",
   balanceUpperEnd: "Too warm above",
-  // Beside the upper end while include_harm is off: warm hours then count neither way.
+  // Under the upper end while include_harm is off: warm hours then count neither way.
   balanceUpperEndWithoutHarm: "(only with harm counted)",
-  deadBandOnTrack: "Dead band",
 
   // The 3D view (8)
   layerNames: {

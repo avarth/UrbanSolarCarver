@@ -17,7 +17,7 @@ export interface SliderRange {
   step: number;
 }
 
-/** One entry of setting_presentation.json. *modes* absent: every mode reads the setting. */
+/** One entry of setting_presentation.json. *modes*: the modes whose form shows the setting; absent, every mode's. */
 export interface SettingPresentation {
   label: string;
   unit: string;
@@ -79,7 +79,7 @@ const UNITS_NAMING_THE_CONTROL = new Set(["on/off", "choice", "dates, hours"]);
 // A range given in the unit column: shown beside the value, but not a unit of a value ("default 2", not "default 2 0 to 6").
 const RANGES_IN_THE_UNIT_COLUMN = new Set(["0 to 6"]);
 
-export function settingIsReadBy(name: string, mode: string): boolean {
+export function settingIsShownIn(name: string, mode: string): boolean {
   const modes = SETTING_PRESENTATIONS[name]?.modes;
   return modes === undefined || modes.includes(mode);
 }
@@ -131,7 +131,7 @@ function foldLabelOf(title: string, essential: SettingView[]): string {
 /** The groups of *step* in *mode*, in the file's order, each with its essential and folded settings; empty groups are left out. */
 export function settingsForStep(step: StepName, mode: string): SettingGroupView[] {
   const shownNames = Object.keys(SETTING_PRESENTATIONS).filter((name) =>
-    SETTING_PRESENTATIONS[name].step === step && settingIsReadBy(name, mode) && fieldSettingOf(name) === name);
+    SETTING_PRESENTATIONS[name].step === step && settingIsShownIn(name, mode) && fieldSettingOf(name) === name);
   return PRESENTATION.steps[step].flatMap((title) => {
     const names = shownNames.filter((name) => SETTING_PRESENTATIONS[name].group === title);
     const essential = names.filter((name) => isEssentialIn(SETTING_PRESENTATIONS[name], mode)).map((name) => settingView(name, mode));

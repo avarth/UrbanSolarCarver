@@ -70,6 +70,16 @@ class TestGridStepValidation:
         with pytest.raises(ValidationError, match="grid_step"):
             _make_config(voxel_size=1.0, grid_step=2.0)
 
+    def test_grid_step_unset_by_default_is_half_the_voxel_size(self):
+        from urbansolarcarver.pydantic_schemas import resolve_grid_step
+        cfg = _make_config(voxel_size=0.5, grid_step=None)
+        assert cfg.grid_step is None
+        assert resolve_grid_step(cfg.grid_step, cfg.voxel_size) == 0.25
+        assert resolve_grid_step(0.3, 1.0) == 0.3
+        from urbansolarcarver.pydantic_schemas import UserConfig
+        assert UserConfig.model_fields["grid_step"].default is None
+        assert "None (default): half the voxel size" in UserConfig.model_fields["grid_step"].description
+
 
 class TestResolutionCap:
     def test_resolution_exceeds_cap(self):

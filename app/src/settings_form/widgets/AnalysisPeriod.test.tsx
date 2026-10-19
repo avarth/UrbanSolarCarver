@@ -1,7 +1,7 @@
 import { act, useReducer } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { ModeInfo } from "../../api_client/client";
-import { click, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../../viewer_overlays/render_for_test";
 import type { ColdPeriodState, Hemisphere } from "../analysis_period";
 import { formReducer, initialFormState, shownValue, type FormState } from "../form_state";
 import { settingsForStep } from "../presentation";
@@ -56,11 +56,13 @@ function renderPeriod(start: FormState = form(), disabled = false, coldPeriod: C
   }
 }
 
-const strips = () => [...rendered!.container.querySelectorAll<HTMLElement>(".period-strip")];
+const strips = () => [...rendered!.container.querySelectorAll<HTMLElement>(".scale-strip")];
 const handle = (name: string) => rendered!.container.querySelector<HTMLElement>(`[role='slider'][aria-label='${name}']`)!;
-const words = () => rendered!.container.querySelector<HTMLButtonElement>(".period-words")!;
+/** The values over the handles: the start and end date, then the start and end hour. */
+const bubbles = () => [...rendered!.container.querySelectorAll(".scale-strip-bubble")].map((bubble) => bubble.textContent);
+const note = () => rendered!.container.querySelector(".period-control > .setting-note")?.textContent ?? null;
 const periodValues = () => Object.fromEntries(Object.keys(WINTER_DAY).map((name) => [name, shownValue(latest!, name)]));
-const rangePiecesIn = (strip: HTMLElement) => strip.querySelectorAll(".period-range").length;
+const rangePiecesIn = (strip: HTMLElement) => strip.querySelectorAll(".scale-strip-range").length;
 
 function pointer(strip: HTMLElement, type: "pointerdown" | "pointermove" | "pointerup", clientX: number) {
   act(() => { strip.dispatchEvent(new PointerEvent(type, { bubbles: true, clientX, pointerId: 1, button: 0 })); });
@@ -74,28 +76,20 @@ function drag(strip: HTMLElement, fromX: number, ...throughX: number[]) {
 }
 
 const keyDown = (element: HTMLElement, key: string) => act(() => { element.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true })); });
-
-/** Sets *text* as the value the way the browser does when the user types, so React's change handler runs. */
-function typeInto(field: HTMLInputElement | HTMLSelectElement, text: string) {
-  act(() => {
-    const prototype = field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(field, text);
-    field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
-  });
-}
-const leave = (field: HTMLElement) => act(() => { field.dispatchEvent(new FocusEvent("focusout", { bubbles: true })); });
-const typedField = (name: string) => rendered!.container.querySelector<HTMLInputElement>(`input[type='number'][aria-label='${name}']`)!;
-const typedMonth = (name: string) => rendered!.container.querySelector<HTMLSelectElement>(`select[aria-label='${name}']`)!;
 const presetButton = (text: string) => [...rendered!.container.querySelectorAll<HTMLButtonElement>(".period-preset")].find((button) => button.textContent === text)!;
 
-test("a year strip and an hour strip with two handles each, named apart, saying their values in words; the period in words under them", () => {
+test("a year strip and an hour strip with two handles each, named apart, saying their values, which the bubbles over them show", () => {
   renderPeriod();
   expect(strips()).toHaveLength(2);
-  expect(strips()[0].textContent).toBe("JFMAMJJASOND");
+  expect(strips().map((strip) => strip.querySelector(".scale-strip-cells")!.textContent)).toEqual(["JFMAMJJASOND", "061218"]);
   const spoken = ["Start date", "End date", "Start hour", "End hour"].map((name) => handle(name).getAttribute("aria-valuetext"));
   expect(spoken).toEqual(["21 December", "21 December", `10${NBSP}h`, `14${NBSP}h`]);
   for (const name of ["Start date", "End date", "Start hour", "End hour"]) expect(handle(name).tabIndex).toBe(0);
-  expect(words().textContent).toBe(`21 Dec, 10 to 14${NBSP}h`);
+  expect(bubbles()).toEqual(["21 Dec", "21 Dec", `10${NBSP}h`, `14${NBSP}h`]);
+  // No period in words to open typed fields, and no note under a period that is set.
+  expect(rendered!.container.querySelector(".period-words")).toBeNull();
+  expect(rendered!.container.querySelectorAll("input, select")).toHaveLength(0);
+  expect(note()).toBeNull();
   // A link to the setting focuses the start date: the field names it as the input its label targets.
   const field = rendered!.container.querySelector<HTMLElement>("[data-setting='start_month']")!;
   expect(field.dataset.inputId).toBe(handle("Start date").id);
@@ -112,28 +106,28 @@ test("dragged across the new year: the engine receives the start after the end, 
   drag(yearStrip, 355, 200, 119.5);
   expect(changes).toHaveLength(2);
   expect(periodValues()).toEqual({ ...WINTER_DAY, start_month: 10, start_day: 1, end_month: 4, end_day: 30 });
-  expect(words().textContent).toBe(`1 Oct to 30 Apr, 10 to 14${NBSP}h`);
+  expect(bubbles().slice(0, 2)).toEqual(["1 Oct", "30 Apr"]);
   expect(rangePiecesIn(yearStrip)).toBe(2);
 });
 
-test("dragged across midnight on one date: the end date becomes the next day in the same change, and the words say so (Review Focus 4)", () => {
+test("dragged across midnight on one date: the end date becomes the next day in the same change, and its bubble says so (Review Focus 4)", () => {
   renderPeriod();
   const [, hourStrip] = strips();
   pointer(hourStrip, "pointerdown", 100);           // the start hour, 10 h
   pointer(hourStrip, "pointermove", 225);           // 22 h
-  expect(words().textContent).toBe(`21 to 22 Dec, 22 to 14${NBSP}h`);
+  expect(bubbles()).toEqual(["21 Dec", "22 Dec", `22${NBSP}h`, `14${NBSP}h`]);
   expect(changes).toEqual([]);                      // nothing is sent until the release
   pointer(hourStrip, "pointerup", 225);
   expect(changes).toEqual([{ start_hour: 22, end_day: 22 }]);
   drag(hourStrip, 150, 60, 25);                     // the end hour, drawn at the end of 14 h, to 2 h
   expect(periodValues()).toEqual({ ...WINTER_DAY, start_hour: 22, end_day: 22, end_hour: 2 });
-  expect(words().textContent).toBe(`21 to 22 Dec, 22 to 2${NBSP}h`);
+  expect(bubbles()).toEqual(["21 Dec", "22 Dec", `22${NBSP}h`, `2${NBSP}h`]);
   expect(rangePiecesIn(hourStrip)).toBe(2);
   // Hours that stop crossing midnight leave the dates as they are.
   drag(hourStrip, 225, 125);
   expect(periodValues()).toEqual({ ...WINTER_DAY, start_hour: 12, end_day: 22, end_hour: 2 });
   drag(hourStrip, 30, 145);
-  expect(words().textContent).toBe(`21 to 22 Dec, 12 to 14${NBSP}h`);
+  expect(periodValues()).toEqual({ ...WINTER_DAY, start_hour: 12, end_day: 22, end_hour: 14 });
 });
 
 test("a drag that crosses the end hour and comes back before the release does not move the end date", () => {
@@ -164,7 +158,7 @@ test("a date handle moved past the other by key gives a period across the new ye
   keyDown(handle("Start date"), "ArrowRight");
   expect(periodValues()).toMatchObject({ start_month: 12, start_day: 22, end_month: 12, end_day: 21 });
   expect(rangePiecesIn(strips()[0])).toBe(2);
-  expect(words().textContent).toBe(`22 Dec to 21 Dec, 10 to 14${NBSP}h`);
+  expect(bubbles().slice(0, 2)).toEqual(["22 Dec", "21 Dec"]);
 });
 
 test("arrows move an hour handle an hour, Page Up and Page Down six hours; past the end hour on one date the end date moves to the next day", () => {
@@ -175,7 +169,7 @@ test("arrows move an hour handle an hour, Page Up and Page Down six hours; past 
   expect(periodValues()).toMatchObject({ start_hour: 4 });
   keyDown(handle("Start hour"), "End");
   expect(periodValues()).toEqual({ ...WINTER_DAY, start_hour: 23, end_day: 22, end_hour: 15 });
-  expect(words().textContent).toBe(`21 to 22 Dec, 23 to 15${NBSP}h`);
+  expect(bubbles()).toEqual(["21 Dec", "22 Dec", `23${NBSP}h`, `15${NBSP}h`]);
   keyDown(handle("End hour"), "Home");
   expect(periodValues()).toMatchObject({ end_hour: 0, end_day: 22 });
 });
@@ -184,14 +178,14 @@ test("on 31 December, hours across midnight end on 1 January", () => {
   renderPeriod(form({ ...WINTER_DAY, start_day: 31, end_day: 31 }));
   keyDown(handle("Start hour"), "End");
   expect(periodValues()).toEqual({ start_month: 12, start_day: 31, start_hour: 23, end_month: 1, end_day: 1, end_hour: 14 });
-  expect(words().textContent).toBe(`31 Dec to 1 Jan, 23 to 14${NBSP}h`);
+  expect(bubbles().slice(0, 2)).toEqual(["31 Dec", "1 Jan"]);
 });
 
 test("one hour on one date stays as it is", () => {
   renderPeriod();
   for (let step = 0; step < 4; step++) keyDown(handle("End hour"), "ArrowLeft");
   expect(periodValues()).toEqual({ ...WINTER_DAY, end_hour: 10 });
-  expect(words().textContent).toBe(`21 Dec, 10 to 10${NBSP}h`);
+  expect(bubbles()).toEqual(["21 Dec", "21 Dec", `10${NBSP}h`, `10${NBSP}h`]);
 });
 
 test("the presets set the dates and keep the hours; the one the dates match shows as chosen", () => {
@@ -204,7 +198,7 @@ test("the presets set the dates and keep the hours; the one the dates match show
   click(presetButton("Whole year"));
   expect(periodValues()).toEqual({ start_month: 1, start_day: 1, start_hour: 7, end_month: 12, end_day: 31, end_hour: 19 });
   click(presetButton("21 June"));
-  expect(words().textContent).toBe(`21 Jun, 7 to 19${NBSP}h`);
+  expect(bubbles()).toEqual(["21 Jun", "21 Jun", `7${NBSP}h`, `19${NBSP}h`]);
 });
 
 test("with a weather file in the southern hemisphere the heating season preset is April to October", () => {
@@ -225,55 +219,11 @@ test("a preset of one date while the hours cross midnight gives one night", () =
   expect(presetButton("21 December").getAttribute("aria-pressed")).toBe("true");
 });
 
-test("typed across the new year and across midnight: the words open the exact fields; a typed number is sent when its field is left (Review Focus 4)", () => {
-  renderPeriod();
-  expect(words().getAttribute("aria-expanded")).toBe("false");
-  click(words());
-  expect(words().getAttribute("aria-expanded")).toBe("true");
-  typeInto(typedMonth("Start month"), "10");
-  typeInto(typedField("Start day"), "1");
-  leave(typedField("Start day"));
-  typeInto(typedMonth("End month"), "4");
-  typeInto(typedField("End day"), "30");
-  leave(typedField("End day"));
-  // The end hour on its way to 2 passes nothing on until the field is left.
-  typeInto(typedField("Start hour, typed"), "2");
-  typeInto(typedField("Start hour, typed"), "22");
-  leave(typedField("Start hour, typed"));
-  typeInto(typedField("End hour, typed"), "2");
-  leave(typedField("End hour, typed"));
-  expect(periodValues()).toEqual({ start_month: 10, start_day: 1, start_hour: 22, end_month: 4, end_day: 30, end_hour: 2 });
-  expect(words().textContent).toBe(`1 Oct to 30 Apr, 22 to 2${NBSP}h`);
-});
-
-test("typed hours across midnight on one date: the end date moves to the next day; a value on the way does not move it", () => {
-  renderPeriod();
-  click(words());
-  // On the way from 14 to 18, the end hour reads 1 (before 10): nothing is sent until the field is left.
-  typeInto(typedField("End hour, typed"), "1");
-  typeInto(typedField("End hour, typed"), "18");
-  leave(typedField("End hour, typed"));
-  expect(changes).toEqual([{ end_hour: 18 }]);
-  typeInto(typedField("Start hour, typed"), "22");
-  act(() => { typedField("Start hour, typed").dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true })); });
-  expect(periodValues()).toEqual({ ...WINTER_DAY, start_hour: 22, end_day: 22, end_hour: 18 });
-  expect(typedField("End day").value).toBe("22");
-});
-
-test("31 February cannot be produced: a month change holds the day to its length, and a typed day past it is refused", () => {
-  renderPeriod(form({ ...WINTER_DAY, start_month: 1, start_day: 31 }));
-  click(words());
-  typeInto(typedMonth("Start month"), "2");
-  expect(periodValues()).toMatchObject({ start_month: 2, start_day: 28 });
-  typeInto(typedField("Start day"), "31");
-  leave(typedField("Start day"));
-  expect(rendered!.container.querySelector(".setting-error")!.textContent).toBe("Use 1 to 28.");
-  expect(periodValues()).toMatchObject({ start_month: 2, start_day: 28 });
-  // Page Up from 31 January lands on 28 February.
-  rendered!.unmount();
+test("Page Up from 31 January lands on 28 February: no key gives 31 February", () => {
   renderPeriod(form({ ...WINTER_DAY, start_month: 1, start_day: 31 }));
   keyDown(handle("Start date"), "PageUp");
   expect(periodValues()).toMatchObject({ start_month: 2, start_day: 28 });
+  expect(bubbles()[0]).toBe("28 Feb");
 });
 
 test("an error of the period marks its handles and strips, and is said under the control", () => {
@@ -293,14 +243,13 @@ test("disabled (the carving lock): no key, drag or preset changes the period", (
   keyDown(handle("Start date"), "ArrowLeft");
   drag(strips()[1], 100, 225);
   expect(presetButton("Whole year").disabled).toBe(true);
-  expect(words().disabled).toBe(true);
   expect(changes).toEqual([]);
 });
 
-test("a period not set yet says so; a first change sends all six settings", () => {
+test("a period not set yet says so under the strips; a first change sends all six settings", () => {
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={periodView()} form={form({}, [{ ...MODES[0], starting_values: {} }])} onChange={onChange} />);
-  expect(words().textContent).toBe("Not set yet");
+  expect(note()).toBe("Not set yet");
   expect([...rendered.container.querySelectorAll(".period-preset")].map((button) => button.getAttribute("aria-pressed"))).toEqual(["false", "false", "false", "false"]);
   click(presetButton("21 December"));
   expect(onChange).toHaveBeenLastCalledWith({ start_month: 12, start_day: 21, start_hour: 0, end_month: 12, end_day: 21, end_hour: 23 });
@@ -308,8 +257,9 @@ test("a period not set yet says so; a first change sends all six settings", () =
 
 test("a period stored as one date with hours across midnight is shown as the engine runs it, every night, and not written until changed", () => {
   renderPeriod(form({ start_month: 12, start_day: 21, start_hour: 22, end_month: 12, end_day: 21, end_hour: 2 }));
-  expect(words().textContent).toBe(`Every day, 22 to 2${NBSP}h`);
-  const yearRange = strips()[0].querySelector<HTMLElement>(".period-range")!;
+  expect(note()).toBe(`Every day, 22 to 2${NBSP}h: the hours cross midnight on one date, which the engine runs on every day of the year. ` +
+                      "The next change makes it one night.");
+  const yearRange = strips()[0].querySelector<HTMLElement>(".scale-strip-range")!;
   expect(rangePiecesIn(strips()[0])).toBe(1);
   expect([yearRange.style.getPropertyValue("--range-start"), yearRange.style.getPropertyValue("--range-end")]).toEqual(["0", "1"]);
   expect([...rendered!.container.querySelectorAll(".period-preset")].map((button) => button.getAttribute("aria-pressed"))).toEqual(["false", "false", "false", "false"]);
@@ -317,29 +267,11 @@ test("a period stored as one date with hours across midnight is shown as the eng
   // The next change applies the rule: one night.
   keyDown(handle("End hour"), "ArrowRight");
   expect(changes).toEqual([{ end_day: 22, end_hour: 3 }]);
-  expect(words().textContent).toBe(`21 to 22 Dec, 22 to 3${NBSP}h`);
+  expect(bubbles()).toEqual(["21 Dec", "22 Dec", `22${NBSP}h`, `3${NBSP}h`]);
+  expect(note()).toBeNull();
 });
 
-test("the typed hour fields are named apart from the hour handles", () => {
-  renderPeriod();
-  click(words());
-  const names = [...rendered!.container.querySelectorAll("[aria-label]")].map((element) => element.getAttribute("aria-label"));
-  expect(names.filter((name) => name!.startsWith("Start hour"))).toEqual(["Start hour", "Start hour, typed"]);
-  expect(names.filter((name) => name!.startsWith("End hour"))).toEqual(["End hour", "End hour, typed"]);
-});
-
-test("a typed value is sent when the typed fields close without the field being left", () => {
-  renderPeriod();
-  click(words());
-  typeInto(typedField("End hour, typed"), "18");
-  expect(changes).toEqual([]);
-  click(words());
-  expect(rendered!.container.querySelector(".setting-period")).toBeNull();
-  expect(changes).toEqual([{ end_hour: 18 }]);
-  expect(words().textContent).toBe(`21 Dec, 10 to 18${NBSP}h`);
-});
-
-test("the tooltip writes the default period in the same words as the control", () => {
+test("the tooltip writes the default period in the same words as the step summary", () => {
   renderPeriod();
   click(rendered!.container.querySelector<HTMLButtonElement>("button.setting-info")!);
   expect(rendered!.container.querySelector("[role='tooltip']")!.textContent).toContain(`default 21 Dec, 10 to 14${NBSP}h`);
@@ -356,7 +288,7 @@ test("the cold period preset sets the dates the weather file gives, keeps the ho
   click(presetButton(COLD_PERIOD));
   expect(periodValues()).toEqual({ start_month: 9, start_day: 30, start_hour: 10, end_month: 5, end_day: 15, end_hour: 14 });
   expect(presetButton(COLD_PERIOD).getAttribute("aria-pressed")).toBe("true");
-  expect(words().textContent).toBe(`30 Sep to 15 May, 10 to 14${NBSP}h`);
+  expect(bubbles().slice(0, 2)).toEqual(["30 Sep", "15 May"]);
 });
 
 test("the cold period preset waits for the weather file, or says no day is cold enough, and sets nothing", () => {
@@ -370,6 +302,73 @@ test("the cold period preset waits for the weather file, or says no day is cold 
   expect(coldLine()).toBe(`No month-long stretch of the weather file has a mean below 9.5${NBSP}°C (balance temperature minus dead band).`);
   click(presetButton(COLD_PERIOD));
   expect(changes).toEqual([]);
+});
+
+const FOUND: ColdPeriodState = { kind: "found", dates: { startMonth: 9, startDay: 21, endMonth: 5, endDay: 25 }, baseTemperature: 14.5 };
+const FOUND_TEXT = `Cold period of the weather file, where the mean of the month around each day is below 14.5${NBSP}°C: 21 Sep to 25 May.`;
+const coldTooltip = () => rendered!.container.querySelector<HTMLElement>(".period-preset-tooltip");
+
+// The pointer moves onto *target* from *from* (React's mouse enter and leave are read from mouseover and mouseout).
+function movePointer(from: Element, target: Element) {
+  act(() => {
+    from.dispatchEvent(new MouseEvent("mouseout", { bubbles: true, relatedTarget: target }));
+    target.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, relatedTarget: from }));
+  });
+}
+
+test("the cold period line is no longer always shown: it is the preset's tooltip on hover, and its description for a screen reader", () => {
+  const outside = document.createElement("button");
+  document.body.appendChild(outside);
+  renderPeriod(form(), false, FOUND);
+  expect(coldTooltip()).toBeNull();
+  expect(rendered!.container.querySelector("p.setting-note")).toBeNull();
+  expect(coldLine()).toBe(FOUND_TEXT);
+  movePointer(outside, presetButton(COLD_PERIOD));
+  expect(coldTooltip()!.textContent).toBe(FOUND_TEXT);
+  expect(coldTooltip()!.getAttribute("role")).toBe("tooltip");
+  expect(coldTooltip()!.getAttribute("aria-hidden")).toBe("true");          // seen, not read: the description reads it
+  movePointer(presetButton(COLD_PERIOD), outside);
+  expect(coldTooltip()).toBeNull();
+  outside.remove();
+});
+
+test("the keyboard focus on the cold period preset shows its tooltip, Escape closes it; the focus of a pointer press does not", () => {
+  renderPeriod(form(), false, FOUND);
+  act(() => {
+    presetButton(COLD_PERIOD).dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+    presetButton(COLD_PERIOD).focus();
+  });
+  expect(coldTooltip()).toBeNull();
+  click(presetButton(COLD_PERIOD));
+  expect(periodValues()).toMatchObject({ start_month: 9, start_day: 21, end_month: 5, end_day: 25 });
+  act(() => presetButton(COLD_PERIOD).blur());
+  act(() => presetButton(COLD_PERIOD).focus());
+  expect(coldTooltip()!.textContent).toBe(FOUND_TEXT);
+  keyDown(presetButton(COLD_PERIOD), "Escape");
+  expect(coldTooltip()).toBeNull();
+});
+
+test("the reasons the cold period preset cannot be used yet are in its tooltip too", () => {
+  for (const [state, text] of [
+    [{ kind: "needs_weather_file" }, "Add a weather file to find its cold period."],
+    [{ kind: "finding" }, "Finding the cold period of the weather file."],
+    [{ kind: "failed", reason: "The weather file cannot be read." }, "The cold period cannot be found. The weather file cannot be read."],
+  ] as const) {
+    renderPeriod(form(), false, state);
+    act(() => presetButton(COLD_PERIOD).focus());
+    expect(coldTooltip()!.textContent).toBe(text);
+    expect(coldLine()).toBe(text);
+    rendered!.unmount();
+  }
+  rendered = null;
+});
+
+test("the cold period tooltip lets the pointer through, so it never takes a click meant for what lies under it", () => {
+  const removeStyles = [addStyleSheetForTest("src/settings_form/settings_form.css")];
+  renderPeriod(form(), false, FOUND);
+  act(() => presetButton(COLD_PERIOD).focus());
+  expect(getComputedStyle(coldTooltip()!).pointerEvents).toBe("none");
+  removeStyles.forEach((remove) => remove());
 });
 
 test("a mode without a cold period has no such preset", () => {

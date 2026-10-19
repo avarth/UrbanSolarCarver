@@ -21,13 +21,10 @@ import { ThresholdRule, type ThresholdSpec } from "./widgets/ThresholdRule";
 import { TiltedPlaneAngles } from "./widgets/TiltedPlaneAngles";
 import "./settings_form.css";
 
-/** What a step adds under one of its fields: a note, under its error too (the grid under Voxel size), a change the form made
- *  for the user, said above the note in a status region that is there while the field may need it (null: none now; the sample
- *  spacing lowered to the voxel size, R2 4.4), and the error in the step's own words in place of the engine's message (the grid
- *  over the budget). */
+/** What a step adds under one of its fields: quiet lines, under its error too (the grid and the sample spacing under Voxel
+ *  size), and the error in the step's own words in place of the engine's message (the grid over the budget). */
 export interface SettingFieldExtras {
-  note?: ReactNode;
-  changeNote?: string | null;
+  notes?: ReactNode[];
   errorContent?: ReactNode;
   /** The cold period of the weather file, for the period control's preset in Solar usefulness; null or absent in the other modes. */
   coldPeriod?: ColdPeriodState | null;
@@ -249,10 +246,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       </div>
       {controlElement}
       {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{refusedInput ?? extras?.errorContent ?? error}</span></p>}
-      {extras?.changeNote !== undefined && (
-        <div className="setting-change-note" role="status">{extras.changeNote !== null && <p className="setting-note">{extras.changeNote}</p>}</div>
-      )}
-      {extras?.note !== undefined && <p className="setting-note">{extras.note}</p>}
+      {extras?.notes?.map((note, index) => <p key={index} className="setting-note">{note}</p>)}
     </div>
   );
 }

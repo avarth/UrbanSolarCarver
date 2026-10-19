@@ -181,3 +181,19 @@ def test_no_module_but_stage_settings_reads_the_private_stage_table():
 def test_requested_smoothing_radius_is_the_radius_before_clipping(kind, voxel_size, smoothing, expected):
     from urbansolarcarver.stage_settings import requested_smoothing_radius_m
     assert requested_smoothing_radius_m(kind, voxel_size, smoothing) == pytest.approx(expected)
+
+
+def test_an_unset_grid_step_samples_at_half_the_voxel_size(tmp_path):
+    unset = daylight_cube_config(tmp_path, grid_step=None, voxel_size=2.0)
+    assert unset.grid_step is None
+    assert PreprocessingSettings.from_config(unset).grid_step == 1.0
+    explicit = daylight_cube_config(tmp_path, grid_step=0.5, voxel_size=2.0)
+    assert PreprocessingSettings.from_config(explicit).grid_step == 0.5
+
+
+def test_the_effective_grid_step_decides_a_rerun(tmp_path):
+    unset = daylight_cube_config(tmp_path, grid_step=None)                   # voxel_size 1: samples every 0.5 m
+    assert stages_to_rerun(daylight_cube_config(tmp_path, grid_step=0.5), unset, {"preprocessing"}) == []
+    assert stages_to_rerun(daylight_cube_config(tmp_path, grid_step=1.0), unset, {"preprocessing"}) == ["preprocessing"]
+    # A voxel size change moves the unset spacing with it, and reruns preprocessing anyway.
+    assert stages_to_rerun(unset, daylight_cube_config(tmp_path, grid_step=None, voxel_size=2.0), {"preprocessing"}) == ["preprocessing"]

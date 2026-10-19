@@ -389,6 +389,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         mode=mode,
         patch_weights_path=stored_path(pw_path, out_path) if pw_path else None,
         sample_point_count=int(pts.shape[0]),
+        grid_step=float(settings.grid_step),
         footprint_path=stored_path(footprint_path, out_path),
         max_volume_lowest_z=float(frame[2]),
         max_volume_highest_z=max_volume_highest_z,
