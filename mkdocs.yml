@@ -38,6 +38,7 @@ nav:
   - Simulated Weights: simulated-weights.md
   - Grasshopper Plugin: grasshopper.md
   - Project Map: project-map.md
+  - Running the Tests: testing.md
   - API Reference:
     - api/index.md
     - Pipeline: api/pipeline.md

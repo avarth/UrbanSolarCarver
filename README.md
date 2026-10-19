@@ -71,6 +71,8 @@ python setup_env.py
 
 Auto-detects your GPU and installs the correct PyTorch + CUDA wheels. Use `--cpu` for CPU-only mode. The browser UI is installed with it; `--no-ui` leaves it out.
 
+Tests: `python -m pytest -m "not slow" -n 8` runs the everyday set in under a minute; [docs/testing.md](docs/testing.md) gives the runs for commits and merges.
+
 ### Grasshopper (Rhino 3D)
 
 1. Complete the Python installation above.
