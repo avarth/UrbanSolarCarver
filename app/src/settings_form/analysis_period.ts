@@ -20,9 +20,6 @@ export interface Period {
   endHour: number;
 }
 
-/** One end of the period, for the typed fields: its date and hour. */
-export type PeriodEnd = "start" | "end";
-
 /** The four handles of the control: two on the year strip, two on the hour strip. */
 export type PeriodHandle = "start_date" | "end_date" | "start_hour" | "end_hour";
 
@@ -241,18 +238,6 @@ export function hourHandleValueAfterKey(hour: number, key: string): number | nul
     case "End": return LAST_HOUR;
     default: return null;
   }
-}
-
-/** *period* with the month of one end chosen; the day is held to that month's length, so no path gives 31 February. */
-export function periodWithMonthChosen(period: Period, end: PeriodEnd, month: number): Period {
-  return end === "start" ? { ...period, startMonth: month, startDay: Math.min(period.startDay, daysInMonth(month)) }
-    : { ...period, endMonth: month, endDay: Math.min(period.endDay, daysInMonth(month)) };
-}
-
-/** *period* with the day of one end typed, held to the month's length. */
-export function periodWithDayTyped(period: Period, end: PeriodEnd, day: number): Period {
-  return end === "start" ? { ...period, startDay: holdTo(day, 1, daysInMonth(period.startMonth)) }
-    : { ...period, endDay: holdTo(day, 1, daysInMonth(period.endMonth)) };
 }
 
 const FIELD_OF: Record<AnalysisPeriodField, keyof Period> = {
