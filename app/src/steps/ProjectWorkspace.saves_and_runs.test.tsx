@@ -1,230 +1,30 @@
-// The open project as a whole, against a fake service: the settings form, the run loop, the stage status, the results and the
-// layers of the 3D view together, as the unit tests of each cannot show them.
-import { act, type ComponentProps } from "react";
+// The open project as a whole, against a fake service: settings saves, the run loop, the stage status and the locks and
+// build buttons that follow from them, as the unit tests of each cannot show them together.
+import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
-import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
-import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
-import * as THREE from "three";
-import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { ProjectWorkspace, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
-import { useRunLoop } from "./run_state";
+import { FakeViewerScene } from "../viewer/fake_scene_for_test";
+import type { ModeInfo } from "../api_client/client";
+import type { OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "./step_summaries";
+import {
+  CARVED, CARVING, ENVELOPE, FakeService, MASSING, MODES, NOTHING_RUN, SCHEMA, TRIANGLE_OBJ, buildPart, buttonIn, container,
+  dimmedCarvingLayers, endWorkspaceTest, openStep, openWorkspace, pressRunAnalysis, project, reasonOf, settle,
+  startWorkspaceTest, stepRow, thresholdField, thresholdOf, type, typeAndLeave, unmountWorkspace, voxelSizeField,
+  waitForTheSave,
+} from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene,
 }));
 
-const SCHEMA = {
-  properties: {
-    mode: { default: "time-based", type: "string" },
-    voxel_size: { default: 1.0, type: "number" },
-    north_deg: { default: 0.0, type: "number" },
-    start_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    start_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    start_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_month: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    end_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
-    threshold: { anyOf: [{ $ref: "#/$defs/ThresholdSpec" }, { type: "null" }], default: null },
-    carve_above: { default: true, type: "boolean" },
-    carve_above_min_consecutive: { default: 1, type: "integer" },
-    max_slope_deg: { anyOf: [{ type: "number" }, { type: "null" }], default: null },
-  },
-};
-const MODES: ModeInfo[] = [
-  { name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false, score_kind: "violation_count", weight_unit: "m²·h",
-    starting_values: { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 } },
-  { name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum", weight_unit: "",
-    starting_values: {} },
-];
-const TRIANGLE_OBJ = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
-const CARVING = {
-  threshold_value: 1.5, voxels_occupied: 1000, voxels_kept: 610, voxels_removed: 390, retention_pct: 61, obstruction_fraction_carved: null,
-  carve_above_extra_voxels_removed: 0, slope_limit_extra_voxels_removed: 0,
-};
-const ENVELOPE = { mesh_file: "export.ply", envelope_volume_m3: 4150 };
-const MASSING = { export_mesh_file: "plates.ply", floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
-const NOTHING_RUN: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" };
-const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, preprocessing: "current", thresholding: "current" };
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-}
-
-/**
- * The local service as the open project "p" uses it: it stores the settings, answers the stage status, starts runs (whose
- * events the test sends) and serves the run summary and the input meshes; everything else is not there (404).
- */
-class FakeService {
-  readonly requests: string[] = [];
-  readonly savedValues: Record<string, unknown>[] = [];
-  readonly runsStarted: string[][] = [];
-  stages: Record<PipelineStage, StageState>;
-  summary: { carving: typeof CARVING | null; envelope: { mesh_file: string; envelope_volume_m3: number } | null; massing: typeof MASSING | null };
-  /** The status every save is refused with (409: a run of the project the page does not know of); null: saves are stored. */
-  refuseSavesWith: number | null = null;
-  /** While set, a request to start a run gets its reply only once this promise resolves. */
-  runStartsWaitFor: Promise<void> | null = null;
-  /** Every stage asked for is current already (a run the page did not follow made them so). */
-  everythingUpToDate = false;
-  /** The field errors a save of these values is refused with (422), or null when it is stored. */
-  configErrorsOf: (values: Record<string, unknown>) => { field: string | null; message: string }[] | null = () => null;
-  /** The massing's plates.obj is on disk (a run wrote it), whether or not its stage is recorded. */
-  massingOnDisk = false;
-  /** The contents of input files by path (for example "/inputs/test_surfaces/surfaces.obj"); one triangle for any other. */
-  inputFileContents: Record<string, string> = {};
-  /** The reply of GET sun-path; null: not there (404). */
-  sunPath: SunPath | null = null;
-  /** While set, an upload of an input file gets its reply only once this promise resolves. */
-  uploadsAnswerWhen: Promise<void> | null = null;
-  /** The location and latitude the reply to a weather file upload gives. */
-  uploadedWeather = { location: "Golden, CO, USA", latitude: 39.74 };
-  /** The reply of GET cold-period. */
-  coldPeriodReply: unknown = { status: "none", period: null };
-
-  constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
-    this.stages = stages;
-    this.summary = { carving, envelope: null, massing: null };
-  }
-
-  answer = async (address: string, init?: RequestInit): Promise<Response> => {
-    const method = init?.method ?? "GET";
-    const path = address.replace("/api/projects/p", "");
-    this.requests.push(`${method} ${path}`);
-    if (method === "PUT" && path === "/config") {
-      if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
-      const { values } = JSON.parse(String(init!.body)) as { values: Record<string, unknown> };
-      const fieldErrors = this.configErrorsOf(values);
-      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null }, 422);
-      this.savedValues.push(values);
-      return json({ settings: values, grid_plan: null });
-    }
-    if (path === "/stage-status") return json({ stages: this.stages });
-    if (method === "POST" && path === "/runs") {
-      await this.runStartsWaitFor;
-      const { produce } = JSON.parse(String(init!.body)) as { produce: string[] };
-      if (this.everythingUpToDate) return json({ status: "up_to_date", run_id: null, stages: [] });
-      this.runsStarted.push(produce);
-      const stages = this.stages.preprocessing === "current" ? produce : ["preprocessing", ...produce];    // the analysis when it is out of date
-      return json({ status: "started", run_id: `r${this.runsStarted.length}`, stages });
-    }
-    if (path === "/sun-path" && this.sunPath !== null) return json(this.sunPath);
-    if (path === "/run/summary") return json(this.summary);
-    if (method === "POST" && path.startsWith("/inputs/")) {
-      await this.uploadsAnswerWhen;
-      const role = path.replace("/inputs/", "");
-      const files = role === "weather" ? [{ name: "weather.epw", triangle_count: 0 }] : [{ name: "more.obj", triangle_count: 1 }];
-      return json({ role, files, joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: this.uploadedWeather.location,
-                    weather_latitude: this.uploadedWeather.latitude });
-    }
-    if (path.startsWith("/cold-period")) return json(this.coldPeriodReply);
-    if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
-    if (path === "/run/files/exporting/export.obj" && this.summary.envelope?.mesh_file === "export.obj") return new Response(TRIANGLE_OBJ);
-    if (path === "/run/files/massing/plates.obj" && this.massingOnDisk) return new Response(TRIANGLE_OBJ);
-    return json({ detail: "Not found" }, 404);
-  };
-
-  count(request: string): number {
-    return this.requests.filter((made) => made === request).length;
-  }
-}
-
-function project(stages: Record<PipelineStage, StageState>, settings: Record<string, unknown> = {}): ProjectDetail {
-  return {
-    name: "p", created: "2026-10-17T09:00:00", modified: "2026-10-17T09:00:00", settings: { mode: "time-based", ...settings },
-    inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: [{ name: "surfaces.obj", triangle_count: 1 }],
-              weather: [{ name: "weather.epw", triangle_count: 0 }] },
-    joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", weather_latitude: 39.74, stage_status: { stages }, grid_plan: null,
-  };
-}
-
-let rendered: RenderedOverlay | null = null;
 let service: FakeService;
-
-beforeEach(() => {
-  FakeWebSocket.opened = [];
-  vi.stubGlobal("WebSocket", FakeWebSocket);
-  pretendTheBrowserHasWebGl();
-});
-
-afterEach(() => {
-  rendered?.unmount();
-  rendered = null;
-  vi.unstubAllGlobals();
-  vi.restoreAllMocks();
-  window.localStorage.clear();
-});
-
-const settle = () => act(async () => {
-  for (let tick = 0; tick < 5; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
-});
-const waitForTheSave = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, SAVE_DELAY_MILLISECONDS + 50)); });
-
-async function openWorkspace(opened: ProjectDetail,
-                             steps: Pick<ComponentProps<typeof ProjectWorkspace>, "startSteps" | "onStepsChange" | "onSettingsSaverReady"> = {},
-                             { schema = SCHEMA, modes = MODES }: { schema?: typeof SCHEMA; modes?: ModeInfo[] } = {}) {
-  vi.stubGlobal("fetch", vi.fn(service.answer));
-  function Page() {
-    const runs = useRunLoop("token", () => {});
-    return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} warmUpState="ready" runs={runs}
-                             onServiceProblem={() => {}} onShowProjects={() => {}} {...steps} />;
-  }
-  rendered = renderForTest(<Page />);
-  await settle();
-}
-
-const container = () => rendered!.container;
-const dimmedLayers = () => [...FakeViewerScene.latest!.dimmed].sort();
-/** The dimmed layers among the carving's (the envelope and the massing follow their own stages, never built here). */
-const dimmedCarvingLayers = () => dimmedLayers().filter((layer) => ["kept_voxels", "carved_voxels", "sky_dome"].includes(layer));
-
-function stepRow(title: string): HTMLElement {
-  return [...container().querySelectorAll<HTMLElement>(".step")].find((row) => row.querySelector(".step-title")!.textContent === title)!;
-}
-
-function openStep(title: string) {
-  act(() => stepRow(title).querySelector<HTMLButtonElement>(".step-header")!.click());
-}
-
-function type(input: HTMLInputElement, text: string) {
-  act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-  });
-}
-
-function typeAndLeave(input: HTMLInputElement, text: string) {
-  type(input, text);
-  act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
-}
-
-async function pressRunAnalysis() {
-  const button = [...container().querySelectorAll<HTMLButtonElement>(".step-pinned-action button")].find((candidate) => candidate.textContent === "Run analysis")!;
-  await act(async () => button.click());
-  await settle();
-}
-
-/** The part of the Envelope and massing step whose heading is *title*. */
-function buildPart(title: string): HTMLElement {
-  return [...container().querySelectorAll<HTMLElement>(".build-part")].find((part) => part.querySelector(".setting-group-title")!.textContent === title)!;
-}
-
-function buttonIn(root: Element, text: string): HTMLButtonElement {
-  return [...root.querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === text)!;
-}
-
-/** Why a disabled button is disabled: the text its aria-describedby names. */
-const reasonOf = (button: HTMLButtonElement) => document.getElementById(button.getAttribute("aria-describedby")!)!.textContent;
-
-const voxelSizeField = () => container().querySelector<HTMLInputElement>('[data-setting="voxel_size"] input[type="number"]')!;
-const thresholdField = () => container().querySelector<HTMLInputElement>(".threshold-control input[type=number]")!;
-const thresholdOf = (values: Record<string, unknown>) => (values.threshold as { value: number }).value;
+beforeEach(startWorkspaceTest);
+afterEach(endWorkspaceTest);
 
 test("a settings change saves; Run analysis starts a run; its events finish it; the stage status and the summary are fetched; the carving undims", async () => {
   service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   expect(service.count("GET /run/summary")).toBe(0);           // nothing has run: no results to fetch
   openStep("Settings");
 
@@ -260,7 +60,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
 test("a save the service refuses keeps Run analysis from starting a run, and says why", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.refuseSavesWith = 409;
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   openStep("Settings");
 
   type(voxelSizeField(), "2");
@@ -280,7 +80,7 @@ test("a save the service refuses keeps Run analysis from starting a run, and say
 test("a page opened during a run it does not follow: Run analysis answered with up to date brings the carving the service holds", async () => {
   service = new FakeService(CARVED, CARVING);                  // the run has ended since
   service.everythingUpToDate = true;
-  await openWorkspace(project(NOTHING_RUN));                   // opened while the run had removed the stage records
+  await openWorkspace(service, project(NOTHING_RUN));                   // opened while the run had removed the stage records
   openStep("Settings");
   expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("Not run yet");
 
@@ -296,7 +96,7 @@ test("a page opened during a run it does not follow: Run analysis answered with 
 
 test("threshold values given during a carving run: one more run follows with the last of them, and the carving stays dimmed until it ends", async () => {
   service = new FakeService(CARVED, CARVING);
-  await openWorkspace(project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   expect(service.count("GET /run/summary")).toBe(1);           // the carving the project opened with
   openStep("Carving");
   expect(dimmedCarvingLayers()).toEqual([]);
@@ -340,7 +140,7 @@ test("a refused mode change locks Carving: the old mode's carving is not shown a
   // Daylight is refused for a carving setting until the user sets it, as a stored config.yaml or a run could leave it.
   service.configErrorsOf = (values) => (values.mode === "daylight" && values.max_slope_deg === undefined
     ? [{ field: "max_slope_deg", message: "Input should be greater than 0" }] : null);
-  await openWorkspace(project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Mode");
   act(() => [...container().querySelectorAll<HTMLElement>('[role="radio"]')][4].click());      // Daylight
   // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Solar time-based.
@@ -370,18 +170,9 @@ test("a refused mode change locks Carving: the old mode's carving is not shown a
   expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
 });
 
-test("the sun path, the sky dome and the compass ring are sized to the maximum volume and the test surfaces together", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  // The maximum volume is the triangle from 0 to 1 m; the test surface lies apart from it, from 9 to 10 m along x
-  service.inputFileContents["/inputs/test_surfaces/surfaces.obj"] = "v 9 0 0\nv 10 0 0\nv 9 1 0\nf 1 2 3\n";
-  await openWorkspace(project(NOTHING_RUN));
-  // The scene runs from 0 to 10 m along x and 0 to 1 m along y: centred at (5, 0.5) on the ground, 1.5 x 10 m wide
-  expect(FakeViewerScene.latest!.sceneHemisphere).toEqual({ centre: [5, 0.5, 0], radius: 15 });
-});
-
 test("a failed run's link to a setting opens its step and focuses the input its label names: a slider's number field", async () => {
   service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   openStep("Settings");
   await pressRunAnalysis();
   FakeWebSocket.opened[0].send({ type: "run_failed", error_type: "ConfigError", message: "invalid", field_errors: [{ field: "voxel_size", message: "too small" }] });
@@ -396,7 +187,7 @@ test("Build massing sends only massing and Build envelope only exporting; each l
   const stagesAfterAnalysis: Record<PipelineStage, StageState> = { ...CARVED, exporting: "out_of_date", massing: "out_of_date" };
   service = new FakeService(stagesAfterAnalysis, CARVING);
   service.summary = { carving: CARVING, envelope: ENVELOPE, massing: MASSING };
-  await openWorkspace(project(stagesAfterAnalysis));
+  await openWorkspace(service, project(stagesAfterAnalysis));
   openStep("Envelope and massing");
   const envelopeOutOfDate = () => buildPart("Envelope").querySelector(".envelope-results-out-of-date") !== null;
   const massingOutOfDate = () => buildPart("Building massing").querySelector(".envelope-results-out-of-date") !== null;
@@ -439,7 +230,7 @@ test("Build massing sends only massing and Build envelope only exporting; each l
 test("while Carving is locked, Build envelope, Build massing and Carving's Build envelope and massing are disabled and say why (M10)", async () => {
   const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
   service = new FakeService(built, CARVING);
-  await openWorkspace(project(built));
+  await openWorkspace(service, project(built));
   openStep("Envelope and massing");
   expect(buttonIn(buildPart("Envelope"), "Build envelope").disabled).toBe(false);
 
@@ -471,7 +262,7 @@ test("while Carving is locked, Build envelope, Build massing and Carving's Build
 test("while Carving is locked, a mesh format change is stored but builds nothing, and Export says why (M10)", async () => {
   const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
   service = new FakeService(built, CARVING);
-  await openWorkspace(project(built, { final_mesh_format: "ply" }));
+  await openWorkspace(service, project(built, { final_mesh_format: "ply" }));
   const lockReason = "Settings changed since the analysis. Run the analysis again before building.";
   const formatField = () => container().querySelector('[data-setting="final_mesh_format"]')!;
   openStep("Export");
@@ -492,7 +283,7 @@ test("while Carving is locked, a mesh format change is stored but builds nothing
 
 test("Carving's Build envelope and massing opens the step, builds both parts, shows its run at the top of the step and blocks both buttons", async () => {
   service = new FakeService(CARVED, CARVING);
-  await openWorkspace(project(CARVED));
+  await openWorkspace(service, project(CARVED));
   openStep("Carving");
   await act(async () => buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing").click());
   await settle();
@@ -522,38 +313,10 @@ test("Carving's Build envelope and massing opens the step, builds both parts, sh
   expect(stepRow("Envelope and massing").querySelector(".step-summary")!.textContent).toBe("Not built yet");
 });
 
-test("the 3D view and Export use the envelope file that was built, not a format stored since without a build", async () => {
-  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "out_of_date", massing: "missing" };
-  service = new FakeService(built, CARVING);
-  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: null };          // export.ply on disk
-  await openWorkspace(project(built, { final_mesh_format: "obj" }));                  // OBJ stored while Carving was locked
-  const envelopeRequests = service.requests.filter((request) => request.includes("/run/files/exporting/"));
-  expect(envelopeRequests).toEqual(["GET /run/files/exporting/export.ply"]);
-  openStep("Export");
-  const envelopeDownload = container().querySelector(".download-list li")!;
-  expect(envelopeDownload.textContent).toBe("Carved envelope (PLY)Out of dateBuilt as PLY; the next envelope build writes OBJ.");
-});
-
-test("the 3D view draws no envelope while its stage is not recorded: a run that wrote it and then failed", async () => {
-  service = new FakeService(CARVED, CARVING);
-  await openWorkspace(project(CARVED));
-  openStep("Envelope and massing");
-  await act(async () => buttonIn(buildPart("Envelope"), "Build envelope").click());
-  await settle();
-  const run = FakeWebSocket.opened[0];
-  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
-  await settle();
-  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };      // written, not recorded
-  run.send({ type: "run_failed", error_type: "RuntimeError", message: "exporting failed", field_errors: [] });
-  await settle();
-  expect(service.requests).toContain("GET /run/files/exporting/export.obj");
-  expect(FakeViewerScene.latest!.layersWithObjects()).not.toContain("envelope");
-});
-
 test("a workspace made again for a renamed project opens with the steps it had open, and says when they change", async () => {
   service = new FakeService(CARVED, CARVING);
   const stepsReported = vi.fn();
-  await openWorkspace(project(CARVED), { startSteps: { open: "carving", view: "carving" }, onStepsChange: stepsReported });
+  await openWorkspace(service, project(CARVED), { startSteps: { open: "carving", view: "carving" }, onStepsChange: stepsReported });
   expect(stepRow("Carving").classList.contains("step-open")).toBe(true);
   expect(stepRow("Inputs").classList.contains("step-open")).toBe(false);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
@@ -562,28 +325,12 @@ test("a workspace made again for a renamed project opens with the steps it had o
   expect(stepsReported).toHaveBeenLastCalledWith({ open: "export", view: "export" });
 });
 
-test("the 3D view draws no building massing while its stage is not recorded: a run that wrote it and then failed", async () => {
-  service = new FakeService(CARVED, CARVING);
-  await openWorkspace(project(CARVED));
-  openStep("Envelope and massing");
-  await act(async () => buttonIn(buildPart("Building massing"), "Build massing").click());
-  await settle();
-  const run = FakeWebSocket.opened[0];
-  run.send({ type: "stage_progress", stage: "massing", done: 0, total: 1 });
-  await settle();
-  service.massingOnDisk = true;         // written, not recorded
-  run.send({ type: "run_failed", error_type: "RuntimeError", message: "massing failed", field_errors: [] });
-  await settle();
-  expect(service.requests).toContain("GET /run/files/massing/plates.obj");
-  expect(FakeViewerScene.latest!.layersWithObjects()).not.toContain("building_massing");
-});
-
 test("the saver of the open project waits for an upload in flight, so a rename, reset or delete comes after it", async () => {
   service = new FakeService(CARVED, CARVING);
   let answerUpload: () => void = () => {};
   service.uploadsAnswerWhen = new Promise((resolve) => { answerUpload = resolve; });
   let saver: OpenProjectSettingsSaver | null = null;
-  await openWorkspace(project(CARVED), { onSettingsSaverReady: (ready) => { saver = ready; } });
+  await openWorkspace(service, project(CARVED), { onSettingsSaverReady: (ready) => { saver = ready; } });
   const maximumVolumePicker = container().querySelector<HTMLInputElement>('input[type="file"]')!;
   Object.defineProperty(maximumVolumePicker, "files", { value: [new File([TRIANGLE_OBJ], "more.obj")], configurable: true });
   act(() => maximumVolumePicker.dispatchEvent(new Event("change", { bubbles: true })));
@@ -596,109 +343,6 @@ test("the saver of the open project waits for an upload in flight, so a rename, 
   await act(async () => answerUpload());
   await settle();
   expect(uploadsEnded).toBe(true);
-});
-
-test("a North not saved yet turns the drawn sun path with the compass ring, so the two agree until the new path comes", async () => {
-  service = new FakeService(NOTHING_RUN, null);
-  service.sunPath = { days: [{ date: "12-21", day_path: [[0, 1, 0], [0, 0, 1]], period_path: [], markers: [] }] };
-  await openWorkspace(project(NOTHING_RUN));
-  const towardFirstSun = () => {
-    let dayPath: THREE.Line | null = null;
-    FakeViewerScene.latest!.layers.get("sun_path")!.traverse((object) => { if (object instanceof THREE.Line) dayPath ??= object; });
-    const first = new THREE.Vector3().fromBufferAttribute(dayPath!.geometry.getAttribute("position") as THREE.BufferAttribute, 0);
-    return first.sub(new THREE.Vector3(...FakeViewerScene.latest!.sceneHemisphere!.centre)).normalize();
-  };
-  expect(towardFirstSun().y).toBeCloseTo(1);
-  openStep("Settings");
-  type(container().querySelector<HTMLInputElement>('[data-setting="north_deg"] input[type="number"]')!, "90");
-  expect(service.savedValues).toEqual([]);
-  expect(towardFirstSun().x).toBeCloseTo(1);
-  expect(towardFirstSun().y).toBeCloseTo(0);
-});
-
-test("on a first build of both parts the 3D view draws the envelope once its stage is done, before the massing ends", async () => {
-  service = new FakeService(CARVED, CARVING);
-  await openWorkspace(project(CARVED));
-  openStep("Carving");
-  await act(async () => buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing").click());
-  await settle();
-  const run = FakeWebSocket.opened[0];
-  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
-  await settle();
-  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
-  run.send({ type: "stage_progress", stage: "massing", done: 0, total: 1 });
-  await settle();
-  expect(FakeViewerScene.latest!.layersWithObjects()).toContain("envelope");
-  expect(buildPart("Envelope").querySelector(".envelope-results")).not.toBeNull();
-});
-
-test("a finished envelope stage asks for the run summary once: the envelope's file name comes from the same reply", async () => {
-  service = new FakeService(CARVED, CARVING);
-  await openWorkspace(project(CARVED));
-  openStep("Envelope and massing");
-  await act(async () => buttonIn(buildPart("Envelope"), "Build envelope").click());
-  await settle();
-  const run = FakeWebSocket.opened[0];
-  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
-  await settle();
-  const summariesBefore = service.count("GET /run/summary");
-  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
-  service.stages = { ...CARVED, exporting: "current" };
-  run.send({ type: "run_finished", stages: ["exporting"], files: [] });
-  await settle();
-  expect(service.count("GET /run/summary")).toBe(summariesBefore + 1);
-  expect(service.requests).toContain("GET /run/files/exporting/export.obj");
-});
-
-const chooseMeshFormat = async (format: string) => {
-  await act(async () => container().querySelector<HTMLInputElement>(`[data-setting="final_mesh_format"] input[value="${format}"]`)!.click());
-  await waitForTheSave();
-  await settle();
-};
-const downloadButton = (label: string) => buttonIn(container().querySelector(".download-list")!, label);
-
-test("a format change rebuilds both parts that exist; while it runs their old files wait: the run removes them, so a download would find none", async () => {
-  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
-  service = new FakeService(built, CARVING);
-  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: MASSING };
-  await openWorkspace(project(built, { final_mesh_format: "ply" }));
-  openStep("Export");
-  expect(downloadButton("Carved envelope (PLY)").disabled).toBe(false);
-  await chooseMeshFormat("obj");
-  expect(service.runsStarted).toEqual([["exporting", "massing"]]);
-  const run = FakeWebSocket.opened[0];
-  run.send({ type: "stage_progress", stage: "exporting", done: 0, total: 1 });
-  await settle();
-  for (const label of ["Carved envelope (PLY)", "Building massing (PLY)"]) {
-    expect(downloadButton(label).disabled).toBe(true);
-    expect(reasonOf(downloadButton(label))).toBe("A run is in progress");
-  }
-  service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: { ...MASSING, export_mesh_file: "plates.obj" } };
-  run.send({ type: "run_finished", stages: ["exporting", "massing"], files: [] });
-  await settle();
-  expect(downloadButton("Carved envelope (OBJ)").disabled).toBe(false);
-  expect(downloadButton("Building massing (OBJ)").disabled).toBe(false);
-  expect(container().querySelector(".download-list .download-note")).toBeNull();     // every file is in the format chosen
-});
-
-test("a format change with only the envelope built rebuilds the envelope", async () => {
-  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "missing" };
-  service = new FakeService(built, CARVING);
-  service.summary = { carving: CARVING, envelope: ENVELOPE, massing: null };
-  await openWorkspace(project(built, { final_mesh_format: "ply" }));
-  openStep("Export");
-  await chooseMeshFormat("stl");
-  expect(service.runsStarted).toEqual([["exporting"]]);
-});
-
-test("a format change with only the massing built rebuilds the massing", async () => {
-  const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "missing", massing: "current" };
-  service = new FakeService(built, CARVING);
-  service.summary = { carving: CARVING, envelope: null, massing: MASSING };
-  await openWorkspace(project(built, { final_mesh_format: "ply" }));
-  openStep("Export");
-  await chooseMeshFormat("glb");
-  expect(service.runsStarted).toEqual([["massing"]]);
 });
 
 // The notice of a new weather file (weather_change_notice.ts) in the Settings step.
@@ -722,7 +366,7 @@ async function addWeatherFile() {
 
 /** Past the wait before the cold period is asked for, and its reply. */
 const waitForTheColdPeriod = async () => {
-  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 450)); });
+  await act(async () => { await vi.advanceTimersByTimeAsync(450); });
   await settle();
 };
 
@@ -735,7 +379,7 @@ const BRISBANE_SHIFT = "The new weather file (Brisbane, AUS) is in the southern 
 
 test("a project opened with a weather file in the other hemisphere shows no notice: only a weather file added in this session does", async () => {
   service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace({ ...project(NOTHING_RUN), weather_location: BRISBANE.location, weather_latitude: BRISBANE.latitude });
+  await openWorkspace(service, { ...project(NOTHING_RUN), weather_location: BRISBANE.location, weather_latitude: BRISBANE.latitude });
   openStep("Settings");
   expect(weatherNotice()).toBeNull();
 });
@@ -743,7 +387,7 @@ test("a project opened with a weather file in the other hemisphere shows no noti
 test("a weather file in the other hemisphere: the notice offers the period six months on, which goes through the saver", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   await addWeatherFile();
   expect(noticeText()).toBe(BRISBANE_SHIFT);
   expect(buttonIn(weatherNotice()!, "Keep").getAttribute("aria-label")).toBe("Keep the analysis period");
@@ -758,7 +402,7 @@ test("a weather file in the other hemisphere: the notice offers the period six m
 test("a first weather file counts as after a northern one; the heating season preset follows the hemisphere of the file", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace({ ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
+  await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
   openStep("Settings");
   expect(buttonIn(container(), "Heating season, October to April")).toBeDefined();
   await addWeatherFile();
@@ -770,7 +414,7 @@ test("a first weather file counts as after a northern one; the heating season pr
 test("Keep dismisses the notice and saves nothing; a later weather file brings a notice again", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   await addWeatherFile();
   act(() => buttonIn(weatherNotice()!, "Keep").click());
   expect(weatherNotice()).toBeNull();
@@ -785,13 +429,13 @@ test("Keep dismisses the notice and saves nothing; a later weather file brings a
 
 test("a weather file in the same hemisphere, or in a mode that reads no period, brings no notice", async () => {
   service = new FakeService(NOTHING_RUN, null);
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   await addWeatherFile();                           // Golden after Golden
   expect(weatherNotice()).toBeNull();
-  rendered!.unmount();
+  unmountWorkspace();
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN, { mode: "daylight" }));
+  await openWorkspace(service, project(NOTHING_RUN, { mode: "daylight" }));
   await addWeatherFile();
   expect(weatherNotice()).toBeNull();
 });
@@ -799,7 +443,7 @@ test("a weather file in the same hemisphere, or in a mode that reads no period, 
 test("while a run is in progress the notice's buttons are disabled, as the settings are", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   await addWeatherFile();
   await pressRunAnalysis();
   for (const name of ["Shift by six months", "Keep"]) expect(buttonIn(weatherNotice()!, name).disabled).toBe(true);
@@ -808,7 +452,7 @@ test("while a run is in progress the notice's buttons are disabled, as the setti
 test("Solar usefulness: the notice waits for the cold period of the new file and offers it, keeping the hours", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
+  await openWorkspace(service, project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
   await waitForTheColdPeriod();                     // of the file the project opened with: none
   service.coldPeriodReply = { status: "found", period: { start_month: 5, start_day: 3, end_month: 9, end_day: 20 } };
   await addWeatherFile();
@@ -825,7 +469,7 @@ test("Solar usefulness: the notice waits for the cold period of the new file and
 test("Solar usefulness: no cold period in the new file, or the one the period already has, brings no notice", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
+  await openWorkspace(service, project(NOTHING_RUN, { mode: "benefit" }), {}, { schema: BENEFIT_SCHEMA, modes: MODES_WITH_BENEFIT });
   await addWeatherFile();                           // the service finds no cold period
   await waitForTheColdPeriod();
   expect(weatherNotice()).toBeNull();
@@ -838,7 +482,7 @@ test("Solar usefulness: no cold period in the new file, or the one the period al
 test("the notice is a live region kept on the page, empty until a notice fills it, so screen readers announce what comes", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   openStep("Settings");
   expect(noticeRegion()!.getAttribute("role")).toBe("status");
   expect(noticeRegion()!.textContent).toBe("");
@@ -853,7 +497,7 @@ test("the notice is a live region kept on the page, empty until a notice fills i
 test("a new weather file without a latitude keeps the hemisphere of the one before it", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   await addWeatherFile();
   act(() => buttonIn(weatherNotice()!, "Keep").click());          // the period stays northern, the file southern
   service.uploadedWeather = { location: null, latitude: null } as unknown as typeof BRISBANE;
@@ -867,7 +511,7 @@ test("a new weather file without a latitude keeps the hemisphere of the one befo
 test("a weather file in the tropics brings no notice and keeps the northern heating season preset", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = { location: "Darwin, AUS", latitude: -12.46 };
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   await addWeatherFile();
   expect(weatherNotice()).toBeNull();
   expect(buttonIn(container(), "Heating season, October to April")).toBeDefined();
@@ -876,7 +520,7 @@ test("a weather file in the tropics brings no notice and keeps the northern heat
 test("once the period is changed by hand the notice is gone, also when the period is set back", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
-  await openWorkspace(project(NOTHING_RUN));
+  await openWorkspace(service, project(NOTHING_RUN));
   await addWeatherFile();
   expect(noticeText()).toBe(BRISBANE_SHIFT);
   act(() => buttonIn(container(), "21 June").click());

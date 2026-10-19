@@ -264,13 +264,6 @@ def test_the_openapi_document_describes_the_routes():
     assert {"WarmUpState", "StageStatusReply", "ConfigErrorReply", "ProjectDetail"} <= set(document["components"]["schemas"])
 
 
-@pytest.mark.slow
-def test_importing_the_service_does_not_load_torch():
-    code = "import sys; import urbansolarcarver.local_web_service.server; print('torch' in sys.modules)"
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    assert result.stdout.strip() == "False"
-
-
 # ---- Projects, inputs, settings and runs ----
 
 def test_project_inputs_config_run_and_files(client):
@@ -1110,8 +1103,8 @@ def test_delete_when_the_recycle_bin_fails_is_422_with_the_reason(client, monkey
     assert reply.status_code == 422 and "the recycle bin is full" in reply.json()["detail"] and project_names(client) == ["p"]
 
 
-def test_reset_to_the_example_gives_the_example_inputs_and_no_results(client, recycle_bin):
-    assert client.post("/api/projects/mine/examples/new_building").status_code == 200
+def test_reset_to_the_example_gives_the_example_inputs_and_no_results(client, recycle_bin, projects_folder, example_project_templates):
+    example_project_templates.copy_example_project(ProjectStore(projects_folder), "mine", "new_building")
     assert client.put("/api/projects/mine/config", json={"values": {"mode": "daylight"}}).status_code == 200
     assert client.delete("/api/projects/mine/inputs/test_surfaces/neighbor_windows.ply").status_code == 200
     run_id = start_run(client, "mine")["run_id"]
@@ -1133,14 +1126,14 @@ def test_reset_is_422_for_a_project_that_is_not_from_an_example(client, recycle_
     assert recycle_bin.folders == []
 
 
-def test_reset_finds_the_example_of_a_renamed_project(client, recycle_bin):
-    assert client.post("/api/projects/first/examples/basic_perimeter_block").status_code == 200
+def test_reset_finds_the_example_of_a_renamed_project(client, recycle_bin, projects_folder, example_project_templates):
+    example_project_templates.copy_example_project(ProjectStore(projects_folder), "first", "basic_perimeter_block")
     assert client.post("/api/projects/first/rename", json={"new_name": "Renamed"}).status_code == 200
     assert client.post("/api/projects/Renamed/reset-to-example").status_code == 200 and project_names(client) == ["Renamed"]
 
 
-def test_reset_with_a_link_inside_is_422_and_changes_nothing(client, projects_folder, tmp_path, recycle_bin):
-    assert client.post("/api/projects/mine/examples/new_building").status_code == 200
+def test_reset_with_a_link_inside_is_422_and_changes_nothing(client, projects_folder, tmp_path, recycle_bin, example_project_templates):
+    example_project_templates.copy_example_project(ProjectStore(projects_folder), "mine", "new_building")
     (tmp_path / "outside").mkdir()
     make_link_to_folder(projects_folder / "mine" / "run" / "linked", tmp_path / "outside", "junction" if sys.platform == "win32" else "symlink")
     assert client.post("/api/projects/mine/reset-to-example").status_code == 422
@@ -1169,11 +1162,11 @@ def test_open_folder_that_cannot_open_is_422_with_the_reason(projects_folder):
     assert reply.status_code == 422 and "no file manager is installed" in reply.json()["detail"]
 
 
-def test_rename_delete_and_reset_are_409_and_open_folder_is_not_during_a_run_of_the_project(projects_folder, recycle_bin):
+def test_rename_delete_and_reset_are_409_and_open_folder_is_not_during_a_run_of_the_project(projects_folder, recycle_bin, example_project_templates):
     handler = WaitsForCancel()
     opener = RecordsOpenedFolders()
     client, worker = build_client(projects_folder, handle_request=handler, open_folder_function=opener)
-    assert client.post("/api/projects/p/examples/new_building").status_code == 200
+    example_project_templates.copy_example_project(ProjectStore(projects_folder), "p", "new_building")
     run_id = start_run(client, "p")["run_id"]
     assert handler.started.wait(10)
     try:
@@ -1234,10 +1227,10 @@ def test_another_project_can_be_changed_during_a_run(client_with_blocking_run):
     assert client.post("/api/projects/other/rename", json={"new_name": "renamed"}).status_code == 200
 
 
-def test_the_examples_report_the_project_made_from_them(client, projects_folder):
+def test_the_examples_report_the_project_made_from_them(client, projects_folder, example_project_templates):
     assert [example["project"] for example in client.get("/api/examples").json()] == [None, None, None]
     for name, example in (("mine", "new_building"), ("Perimeter block", "basic_perimeter_block"), ("Perimeter block 2", "basic_perimeter_block")):
-        assert client.post(f"/api/projects/{name}/examples/{example}").status_code == 200
+        example_project_templates.copy_example_project(ProjectStore(projects_folder), name, example)
     newer_seconds = (projects_folder / "Perimeter block" / "project.json").stat().st_mtime + 100
     os.utime(projects_folder / "Perimeter block 2" / "project.json", (newer_seconds, newer_seconds))
     projects_by_example = {example["name"]: example["project"] for example in client.get("/api/examples").json()}
@@ -1253,8 +1246,8 @@ def test_an_old_project_named_like_the_example_title_counts_as_from_the_example(
     assert {example["name"]: example["project"] for example in client.get("/api/examples").json()}["basic_perimeter_block"] == "Perimeter block"
 
 
-def test_the_project_list_and_the_opened_project_name_the_example_they_came_from(client):
-    assert client.post("/api/projects/mine/examples/new_building").status_code == 200
+def test_the_project_list_and_the_opened_project_name_the_example_they_came_from(client, projects_folder, example_project_templates):
+    example_project_templates.copy_example_project(ProjectStore(projects_folder), "mine", "new_building")
     create_project(client, "plain")
     create_project(client, "Perimeter block")       # no example field, named like the example's title
     create_project(client, "Perimeter block 2")

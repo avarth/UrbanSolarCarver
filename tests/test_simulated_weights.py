@@ -206,24 +206,41 @@ class TestAttribution:
 # End-to-end generator (EPW + archetype YAML → artifact)
 # ---------------------------------------------------------------------------
 
+def _example_archetype_without_gains():
+    """configs/archetype_example.yaml without its internal_gains_w_m2 key."""
+    import yaml
+    arch_path = (Path(__file__).parent.parent / "configs"
+                 / "archetype_example.yaml")
+    arch = yaml.safe_load(arch_path.read_text(encoding="utf-8"))
+    arch.pop("internal_gains_w_m2")
+    return arch
+
+
+OFFICE_LIKE_DAY = [2.0] * 8 + [10.0] * 12 + [2.0] * 4
+
+
+@pytest.fixture(scope="module")
+def example_archetype_run_with_daily_profile(tmp_path_factory):
+    """One generator run of the example archetype with a 24-value occupancy
+    profile, shared by the end-to-end and the profile checks (each run is a
+    full-year 5R1C simulation of several seconds)."""
+    from _epw import resolve_epw
+    from urbansolarcarver.simulated_weights import generate_simulated_weights
+
+    epw = resolve_epw()
+    if not epw:
+        pytest.skip("No EPW available")
+    out = generate_simulated_weights(
+        epw, _example_archetype_without_gains(),
+        tmp_path_factory.mktemp("example_archetype") / "u.json",
+        internal_gains_w_m2=OFFICE_LIKE_DAY)
+    return epw, read_simulated_weights(out)
+
+
+@pytest.mark.slow
 class TestGenerateSimulatedWeights:
-    @pytest.mark.slow
-    def test_example_archetype_end_to_end(self, tmp_path):
-        import yaml
-        from _epw import resolve_epw
-        from urbansolarcarver.simulated_weights import generate_simulated_weights
-
-        epw = resolve_epw()
-        if not epw:
-            pytest.skip("No EPW available")
-        arch_path = (Path(__file__).parent.parent / "configs"
-                     / "archetype_example.yaml")
-        arch = yaml.safe_load(arch_path.read_text(encoding="utf-8"))
-        internal = arch.pop("internal_gains_w_m2")
-
-        out = generate_simulated_weights(epw, arch, tmp_path / "u.json",
-                              internal_gains_w_m2=internal)
-        benefit, harm, meta = read_simulated_weights(out)
+    def test_example_archetype_end_to_end(self, example_archetype_run_with_daily_profile):
+        _epw, (benefit, harm, meta) = example_archetype_run_with_daily_profile
         assert meta["method"] == "iso13790-5r1c-perturbation"
         assert meta["archetype"]["mass_class"] == "medium"
         jan = slice(0, 31 * 24)
@@ -231,36 +248,25 @@ class TestGenerateSimulatedWeights:
         assert benefit[jan].mean() > benefit[jul].mean()
         assert harm[jul].mean() > harm[jan].mean()
 
-    def test_missing_windows_raises(self, tmp_path):
-        from urbansolarcarver.simulated_weights import generate_simulated_weights
-        with pytest.raises(ValueError, match="windows"):
-            generate_simulated_weights("dummy.epw", {"floor_area": 10.0},
-                            tmp_path / "u.json")
-
-    @pytest.mark.slow
-    def test_daily_occupancy_profile(self, tmp_path):
+    def test_daily_occupancy_profile(self, tmp_path, example_archetype_run_with_daily_profile):
         """A 24-value profile is tiled over the year and recorded in meta;
-        wrong lengths are rejected."""
-        import yaml
-        from _epw import resolve_epw
+        wrong lengths are rejected (before the simulation starts)."""
         from urbansolarcarver.simulated_weights import generate_simulated_weights
 
-        epw = resolve_epw()
-        if not epw:
-            pytest.skip("No EPW available")
-        arch_path = (Path(__file__).parent.parent / "configs"
-                     / "archetype_example.yaml")
-        arch = yaml.safe_load(arch_path.read_text(encoding="utf-8"))
-        arch.pop("internal_gains_w_m2")
-        profile = [2.0] * 8 + [10.0] * 12 + [2.0] * 4  # office-like day
-        out = generate_simulated_weights(epw, arch, tmp_path / "u.json",
-                              internal_gains_w_m2=profile)
-        _b, _h, meta = read_simulated_weights(out)
-        assert meta["archetype"]["internal_gains_w_m2"] == profile
+        epw, (_b, _h, meta) = example_archetype_run_with_daily_profile
+        assert meta["archetype"]["internal_gains_w_m2"] == OFFICE_LIKE_DAY
 
         with pytest.raises(ValueError, match="24-value"):
-            generate_simulated_weights(epw, arch, tmp_path / "u2.json",
-                            internal_gains_w_m2=[1.0, 2.0, 3.0])
+            generate_simulated_weights(epw, _example_archetype_without_gains(),
+                                       tmp_path / "u2.json",
+                                       internal_gains_w_m2=[1.0, 2.0, 3.0])
+
+
+def test_missing_windows_raises(tmp_path):
+    from urbansolarcarver.simulated_weights import generate_simulated_weights
+    with pytest.raises(ValueError, match="windows"):
+        generate_simulated_weights("dummy.epw", {"floor_area": 10.0},
+                        tmp_path / "u.json")
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +360,24 @@ class TestExpandShoebox:
             expand_shoebox({**self.BASE, "wwr": {}})
 
 
+@pytest.fixture(scope="module")
+def shoebox_run_with_gains_key_inside_the_archetype(tmp_path_factory):
+    """One unshaded generator run of the TestExpandShoebox archetype with
+    internal_gains_w_m2 = 7.5 given inside it. It serves the gains-key check
+    and is the unshaded side of the hot-season shading check."""
+    from _epw import resolve_epw
+    from urbansolarcarver.simulated_weights import generate_simulated_weights
+
+    epw = resolve_epw()
+    if not epw:
+        pytest.skip("no EPW available")
+    arch = dict(TestExpandShoebox.BASE)
+    arch["internal_gains_w_m2"] = 7.5
+    out = generate_simulated_weights(
+        epw, dict(arch), tmp_path_factory.mktemp("shoebox") / "w.json")
+    return epw, arch, read_simulated_weights(out)
+
+
 class TestGainsFromArchetype:
     """generate_simulated_weights reads internal gains from the archetype."""
 
@@ -362,17 +386,8 @@ class TestGainsFromArchetype:
         return resolve_epw() or None
 
     @pytest.mark.slow
-    def test_gains_key_inside_archetype(self, tmp_path):
-        epw = self._epw()
-        if epw is None:
-            pytest.skip("no EPW available")
-        from urbansolarcarver.simulated_weights import (
-            generate_simulated_weights, read_simulated_weights,
-        )
-        arch = dict(TestExpandShoebox.BASE)
-        arch["internal_gains_w_m2"] = 7.5
-        out = generate_simulated_weights(epw, arch, tmp_path / "w.json")
-        _b, _h, meta = read_simulated_weights(out)
+    def test_gains_key_inside_archetype(self, shoebox_run_with_gains_key_inside_the_archetype):
+        _epw, _arch, (_b, _h, meta) = shoebox_run_with_gains_key_inside_the_archetype
         assert meta["archetype"]["internal_gains_w_m2"] == pytest.approx(7.5)
 
     def test_both_gains_keys_raise(self, tmp_path):
@@ -430,18 +445,12 @@ class TestShadingCoefficients:
             _shading_factors(windows, None, None, [7])
 
     @pytest.mark.slow
-    def test_hot_only_leaves_cold_season_untouched(self, tmp_path):
-        from tests._epw import resolve_epw
-        epw = resolve_epw()
-        if not epw:
-            pytest.skip("no EPW available")
+    def test_hot_only_leaves_cold_season_untouched(self, tmp_path, shoebox_run_with_gains_key_inside_the_archetype):
         from urbansolarcarver.simulated_weights import (
             generate_simulated_weights, read_simulated_weights,
         )
-        arch = dict(TestExpandShoebox.BASE)
-        plain = read_simulated_weights(
-            generate_simulated_weights(epw, dict(arch), tmp_path / "p.json"))
-        arch.update(shading_hot=0.3, hot_months=[7, 8])
+        epw, arch, plain = shoebox_run_with_gains_key_inside_the_archetype
+        arch = dict(arch, shading_hot=0.3, hot_months=[7, 8])
         shaded = read_simulated_weights(
             generate_simulated_weights(epw, arch, tmp_path / "s.json"))
         b_plain, h_plain = plain[0].reshape(365, 24), plain[1].reshape(365, 24)
@@ -453,25 +462,21 @@ class TestShadingCoefficients:
         # provenance recorded
         assert shaded[2]["archetype"]["hot_months"] == [7, 8]
 
-    @pytest.mark.slow
-    def test_scalar_equals_uniform_mapping(self, tmp_path):
-        from tests._epw import resolve_epw
-        epw = resolve_epw()
-        if not epw:
-            pytest.skip("no EPW available")
-        from urbansolarcarver.simulated_weights import (
-            generate_simulated_weights, read_simulated_weights,
-        )
-        arch = dict(TestExpandShoebox.BASE)
-        arch["shading_permanent"] = 0.8
-        a = read_simulated_weights(generate_simulated_weights(
-            epw, dict(arch), tmp_path / "a.json"))
-        arch["shading_permanent"] = {
-            "north": 0.8, "east": 0.8, "south": 0.8, "west": 0.8}
-        b = read_simulated_weights(generate_simulated_weights(
-            epw, arch, tmp_path / "b.json"))
-        np.testing.assert_allclose(a[0], b[0], atol=1e-6)
-        np.testing.assert_allclose(a[1], b[1], atol=1e-6)
+    def test_scalar_equals_uniform_mapping(self):
+        """A scalar shading_permanent gives the same hourly factors as the
+        same value given for each facade. generate_simulated_weights reads
+        shading_permanent only through _shading_factors (and copies it into
+        meta), so equal factors mean equal weights, without running two
+        full-year simulations."""
+        from urbansolarcarver.simulated_weights import _shading_factors, expand_shoebox
+        windows = expand_shoebox(dict(TestExpandShoebox.BASE))["windows"]
+        scalar = _shading_factors(windows, 0.8, None, None)
+        mapping = _shading_factors(
+            windows, {"north": 0.8, "east": 0.8, "south": 0.8, "west": 0.8}, None, None)
+        assert len(scalar) == len(mapping) == len(windows)
+        for scalar_series, mapping_series in zip(scalar, mapping):
+            np.testing.assert_array_equal(scalar_series, mapping_series)
+            np.testing.assert_array_equal(scalar_series, np.full(HOURS, 0.8))
 
 
 def test_shoebox_extras_without_dimensions_are_rejected():

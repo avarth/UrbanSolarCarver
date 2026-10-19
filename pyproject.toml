@@ -49,7 +49,7 @@ Repository = "https://github.com/avarth/UrbanSolarCarver"
 Issues = "https://github.com/avarth/UrbanSolarCarver/issues"
 
 [project.optional-dependencies]
-dev = ["pytest>=7.0", "mapbox-earcut", "httpx>=0.27"]
+dev = ["pytest>=7.0", "pytest-xdist>=3.5", "mapbox-earcut", "httpx>=0.27"]
 # Local browser UI (usc ui)
 ui = ["fastapi>=0.110", "uvicorn>=0.29", "python-multipart>=0.0.9", "websockets>=12", "send2trash>=1.8"]
 # Rebuild the Grasshopper .ghuser files (grasshopper/build_ghuser.py)
@@ -76,7 +76,10 @@ include-package-data = true
 urbansolarcarver = ["ui_static/**/*", "example_projects/**/*"]
 
 [tool.pytest.ini_options]
+# A misspelt marker is an error, and every run lists its 15 slowest tests (see docs/testing.md).
+addopts = "--strict-markers --durations=15"
 markers = [
   "slow: takes seconds (end-to-end scenes, simulations, a daemon process); skip with -m 'not slow'",
+  "sweep: exhaustive parameter sweeps and Monte Carlo seeds, also marked slow, run before merging; skip with -m 'not sweep'",
   "gpu: needs a CUDA GPU; skipped automatically when torch sees none (see tests/conftest.py)",
 ]

@@ -404,19 +404,6 @@ def test_joined_file_follows_sorted_file_names_whatever_the_upload_order(tmp_pat
     assert _block_centres_x(joined_path) == [0, 100, 200]
 
 
-def _create_example_project(store, project_name, example_name):
-    """A project made as POST /projects/{name}/examples/{example} makes it: the example's mode and input files."""
-    example = next(candidate for candidate in read_examples() if candidate.name == example_name)
-    example_folder = EXAMPLE_PROJECTS_FOLDER / example.name
-    store.create(project_name, example.mode)
-    for role, file_names in (("max_volume", example.max_volume), ("test_surfaces", example.test_surfaces)):
-        for file_name in file_names:
-            store.add_input(project_name, role, file_name, (example_folder / file_name).read_bytes())
-    store.add_input(project_name, "weather", EXAMPLE_WEATHER_FILE_NAME,
-                    (EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME).read_bytes())
-    return example
-
-
 def _sampled_panels(test_surface_paths):
     """The sample points of every panel the engine samples, over the given test surface files as the engine reads them.
 
@@ -439,24 +426,44 @@ def _sorted_rows(points_by_panel):
     return points[np.lexsort(points.T[::-1])]
 
 
-@pytest.mark.parametrize("example_name", ["basic_perimeter_block", "new_building", "multiple_buildings"])
-def test_the_joined_test_surfaces_of_an_example_sample_as_its_uploaded_files(tmp_path, example_name):
+@pytest.fixture(scope="module")
+def example_project_to_read(tmp_path_factory, example_project_templates):
+    """A function giving, for an example name, the example and the sampled panels of the joined test surface file of a
+    project made from it.
+
+    Each example is made into a project and sampled once per module (the district example takes seconds); only tests
+    that read the project without changing it use this.
+    """
+    store = ProjectStore(tmp_path_factory.mktemp("examples_to_read"))
+    made = {}
+
+    def example_and_joined_panels(example_name):
+        if example_name not in made:
+            example = example_project_templates.copy_example_project(store, example_name, example_name)
+            joined_panels = _sampled_panels([store.open(example_name) / SERVICE_PATHS["test_surface_path"]])
+            made[example_name] = (example, joined_panels)
+        return made[example_name]
+
+    return example_and_joined_panels
+
+
+@pytest.mark.parametrize("example_name", ["basic_perimeter_block", "new_building",
+                                          pytest.param("multiple_buildings", marks=pytest.mark.slow)])
+def test_the_joined_test_surfaces_of_an_example_sample_as_its_uploaded_files(example_project_to_read, example_name):
     """The engine finds in the joined test surface file the panels and sample points of the uploaded files.
 
     The example files keep panels that share corners apart only through their per-vertex normals: load_mesh merges
     coincident vertices whose normals are equal, so a joined file without normals fuses neighbouring panels.
     """
-    store = ProjectStore(tmp_path)
-    example = _create_example_project(store, "p", example_name)
+    example, joined_panels = example_project_to_read(example_name)
     uploaded_panels = _sampled_panels(EXAMPLE_PROJECTS_FOLDER / example.name / name for name in example.test_surfaces)
-    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
     assert len(joined_panels) == len(uploaded_panels)
     np.testing.assert_allclose(_sorted_rows(joined_panels), _sorted_rows(uploaded_panels), atol=1e-4)
 
 
-def test_a_joined_test_surface_file_written_without_normals_is_rebuilt_once_and_raises_the_inputs_revision(tmp_path):
+def test_a_joined_test_surface_file_written_without_normals_is_rebuilt_once_and_raises_the_inputs_revision(tmp_path, example_project_templates):
     store = ProjectStore(tmp_path)
-    _create_example_project(store, "p", "basic_perimeter_block")
+    example_project_templates.copy_example_project(store, "p", "basic_perimeter_block")
     joined_path = write_joined_test_surfaces_without_normals(store, "p")
     assert len(_sampled_panels([joined_path])) == 4             # the courtyard walls welded into one ring
     inputs_revision = store.read_project_json("p").inputs_revision
@@ -474,18 +481,18 @@ def test_a_project_without_test_surfaces_has_no_joined_test_surface_file_to_rebu
     assert store.read_project_json("p").inputs_revision == inputs_revision
 
 
-def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(tmp_path):
-    store = ProjectStore(tmp_path)
-    _create_example_project(store, "p", "multiple_buildings")
-    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
+@pytest.mark.slow
+def test_the_joined_test_surfaces_keep_every_facade_of_the_district_example(example_project_to_read):
+    _example, joined_panels = example_project_to_read("multiple_buildings")
+    # Counts of the packaged district files at the default 1 m grid_step. After a deliberate change of those files or of
+    # the surface sampling, check that every facade is still there and take the new counts from len(joined_panels) and
+    # the summed sample points.
     assert (len(joined_panels), sum(len(points) for points in joined_panels)) == (423, 138_641)
 
 
-def test_the_joined_test_surfaces_keep_the_courtyard_facades_of_the_perimeter_block(tmp_path):
+def test_the_joined_test_surfaces_keep_the_courtyard_facades_of_the_perimeter_block(example_project_to_read):
     """The four courtyard walls stand on the rectangle x -1294.74..-1208.33, y -45.98..6.09, 20 m inside the block's edges."""
-    store = ProjectStore(tmp_path)
-    _create_example_project(store, "p", "basic_perimeter_block")
-    joined_panels = _sampled_panels([tmp_path / "p" / SERVICE_PATHS["test_surface_path"]])
+    _example, joined_panels = example_project_to_read("basic_perimeter_block")
     courtyard_panels = [points for points in joined_panels
                         if (-1295.0 <= points[:, 0]).all() and (points[:, 0] <= -1208.0).all()
                         and (-46.5 <= points[:, 1]).all() and (points[:, 1] <= 6.5).all()]
@@ -493,14 +500,14 @@ def test_the_joined_test_surfaces_keep_the_courtyard_facades_of_the_perimeter_bl
 
 
 @pytest.mark.slow
-def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_the_example_files(tmp_path):
+def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_the_example_files(tmp_path, example_project_templates):
     """The service's run of the example project keeps the voxels the CLI keeps from the packaged files (150,679 of them)."""
     from typer.testing import CliRunner
     from urbansolarcarver.carver_cli import app
     from urbansolarcarver.local_web_service.run_worker import RunWorker
 
     store = ProjectStore(tmp_path / "projects")
-    example = _create_example_project(store, "block", "basic_perimeter_block")
+    example = example_project_templates.copy_example_project(store, "block", "basic_perimeter_block")
     worker = RunWorker(store, "auto")
     events = wait_until_finished(worker, worker.start("block", ["thresholding"]).run_id, deadline_seconds=600)
     assert events[-1]["type"] == "run_finished", events[-1]
@@ -518,6 +525,8 @@ def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_th
 
     service_mask = np.load(store.open("block") / "run" / "thresholding" / "mask.npy")
     cli_mask = np.load(tmp_path / "cli_run" / "thresholding" / "mask.npy")
+    # The kept voxels of the packaged perimeter block with its example settings. After a deliberate change of the example
+    # files, its settings or the carving, rerun `usc run` on the example (as above) and take the new count from mask.npy.
     assert int((cli_mask > 0).sum()) == 150_679
     assert np.array_equal(service_mask, cli_mask)
 
@@ -852,9 +861,9 @@ def test_a_recycle_bin_that_fails_leaves_the_project_and_says_why(tmp_path, monk
     assert [row.name for row in store.list()] == ["a"]
 
 
-def test_reset_gives_a_fresh_copy_of_the_example_under_the_same_name(tmp_path, recycle_bin):
+def test_reset_gives_a_fresh_copy_of_the_example_under_the_same_name(tmp_path, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path)
-    example = create_example_project(store, "My copy")
+    example = example_project_templates.copy_example_project(store, "My copy", "new_building")
     store.write_config_from_values("My copy", {"mode": "daylight"})
     store.remove_input("My copy", "test_surfaces", "neighbor_roofs.ply")
     (tmp_path / "My copy" / "run" / "old_result.txt").write_text("old", encoding="utf-8")
@@ -867,23 +876,23 @@ def test_reset_gives_a_fresh_copy_of_the_example_under_the_same_name(tmp_path, r
     assert list((tmp_path / "My copy" / "run").iterdir()) == [] and store.read_project_json("My copy").example == "new_building"
 
 
-def test_reset_refuses_a_project_that_did_not_come_from_the_example(tmp_path, recycle_bin):
+def test_reset_refuses_a_project_that_did_not_come_from_the_example(tmp_path, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path)
     store.create("plain", "time-based")
     example = example_by_name("new_building")
     with pytest.raises(ProjectError) as err:
         store.reset_project_to_example("plain", example, _example_input_files(example))
     assert err.value.status_code == 422 and recycle_bin.folders == []
-    create_example_project(store, "other", "basic_perimeter_block")
+    example_project_templates.copy_example_project(store, "other", "basic_perimeter_block")
     with pytest.raises(ProjectError):       # recorded as from another example
         store.reset_project_to_example("other", example, _example_input_files(example))
     assert recycle_bin.folders == []
 
 
-def test_reset_counts_a_project_without_the_example_field_as_from_the_example_when_its_name_is_the_title(tmp_path, recycle_bin):
+def test_reset_counts_a_project_without_the_example_field_as_from_the_example_when_its_name_is_the_title(tmp_path, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path)
     example = example_by_name("new_building")
-    create_example_project(store, example.title)
+    example_project_templates.copy_example_project(store, example.title, "new_building")
     project_json = store.read_project_json(example.title)
     project_json.example = None     # a project made before the field existed
     store.write_project_json(example.title, project_json)
@@ -891,9 +900,9 @@ def test_reset_counts_a_project_without_the_example_field_as_from_the_example_wh
     assert store.read_project_json(example.title).example == "new_building" and len(recycle_bin.folders) == 1
 
 
-def test_reset_checks_the_guardrails_before_it_moves_anything(tmp_path, recycle_bin):
+def test_reset_checks_the_guardrails_before_it_moves_anything(tmp_path, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path / "projects")
-    example = create_example_project(store, "p")
+    example = example_project_templates.copy_example_project(store, "p", "new_building")
     (tmp_path / "outside").mkdir()
     make_link_to_folder(tmp_path / "projects" / "p" / "run" / "linked", tmp_path / "outside", link_kind_of_this_platform())
     with pytest.raises(ProjectRemovalRefused):
@@ -901,19 +910,19 @@ def test_reset_checks_the_guardrails_before_it_moves_anything(tmp_path, recycle_
     assert recycle_bin.folders == [] and [file.name for file in store.input_files("p", "max_volume")] == ["max_volume.ply"]
 
 
-def test_reset_with_a_recycle_bin_that_fails_changes_nothing(tmp_path, monkeypatch):
+def test_reset_with_a_recycle_bin_that_fails_changes_nothing(tmp_path, monkeypatch, example_project_templates):
     monkeypatch.setattr(send2trash, "send2trash", FakeRecycleBin(error=OSError("no bin")))
     store = ProjectStore(tmp_path)
-    example = create_example_project(store, "p")
+    example = example_project_templates.copy_example_project(store, "p", "new_building")
     (tmp_path / "p" / "run" / "result.txt").write_text("keep", encoding="utf-8")
     with pytest.raises(ProjectRemovalRefused):
         store.reset_project_to_example("p", example, _example_input_files(example))
     assert (tmp_path / "p" / "run" / "result.txt").is_file()
 
 
-def test_reset_that_cannot_recreate_the_project_says_the_old_content_is_in_the_recycle_bin(tmp_path, recycle_bin):
+def test_reset_that_cannot_recreate_the_project_says_the_old_content_is_in_the_recycle_bin(tmp_path, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path)
-    example = create_example_project(store, "p")
+    example = example_project_templates.copy_example_project(store, "p", "new_building")
     with pytest.raises(ProjectError) as err:
         store.reset_project_to_example("p", example, [("max_volume", "max_volume.ply", b"not a mesh")])
     assert err.value.status_code == 500 and "old content" in str(err.value) and "recycle bin" in str(err.value)
@@ -935,9 +944,9 @@ def test_a_project_made_from_an_example_records_the_example(tmp_path):
     assert store.read_project_json("p").example == "new_building" and store.read_project_json("q").example is None
 
 
-def test_project_of_example_finds_a_renamed_project_by_the_recorded_example(tmp_path):
+def test_project_of_example_finds_a_renamed_project_by_the_recorded_example(tmp_path, example_project_templates):
     store = ProjectStore(tmp_path)
-    create_example_project(store, "first")
+    example_project_templates.copy_example_project(store, "first", "new_building")
     store.rename_project("first", "Renamed")
     assert store.project_of_example("new_building", "New building among neighbors") == "Renamed"
     assert store.project_of_example("basic_perimeter_block", "Perimeter block") is None
@@ -971,11 +980,11 @@ def test_project_of_example_counts_a_project_without_the_field_only_when_its_nam
     assert exact.project_of_example("basic_perimeter_block", "Perimeter block") == "Perimeter block"
 
 
-def test_project_of_example_prefers_the_most_recently_modified_project(tmp_path):
+def test_project_of_example_prefers_the_most_recently_modified_project(tmp_path, example_project_templates):
     store = ProjectStore(tmp_path)
-    create_example_project(store, "older")
-    create_example_project(store, "newer")
-    create_example_project(store, "newest", "basic_perimeter_block")
+    example_project_templates.copy_example_project(store, "older", "new_building")
+    example_project_templates.copy_example_project(store, "newer", "new_building")
+    example_project_templates.copy_example_project(store, "newest", "basic_perimeter_block")
     for name, seconds in (("older", 1_700_000_000), ("newer", 1_800_000_000), ("newest", 1_900_000_000)):
         for file_name in ("project.json", "config.yaml"):
             os.utime(tmp_path / name / file_name, (seconds, seconds))
@@ -1089,9 +1098,9 @@ def test_the_real_volume_of_the_test_folder_is_asked_about_and_has_a_root_and_a_
     assert str(tmp_path.resolve()).lower().startswith(volume_root.lower()) and project_removal._windows_drive_type(volume_root) in range(7)
 
 
-def test_delete_and_reset_leave_a_project_on_a_removable_volume_in_place(tmp_path, monkeypatch, recycle_bin):
+def test_delete_and_reset_leave_a_project_on_a_removable_volume_in_place(tmp_path, monkeypatch, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path)
-    example = create_example_project(store, "p")
+    example = example_project_templates.copy_example_project(store, "p", "new_building")
     pretend_to_be_on_windows_volume(monkeypatch, "E:\\", 2)
     with pytest.raises(ProjectRemovalRefused):
         store.delete_project("p")
@@ -1100,9 +1109,9 @@ def test_delete_and_reset_leave_a_project_on_a_removable_volume_in_place(tmp_pat
     assert recycle_bin.folders == [] and (tmp_path / "p" / "project.json").is_file()
 
 
-def test_reset_refuses_a_project_json_that_names_another_project_before_it_moves_anything(tmp_path, recycle_bin):
+def test_reset_refuses_a_project_json_that_names_another_project_before_it_moves_anything(tmp_path, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path)
-    example = create_example_project(store, "a")
+    example = example_project_templates.copy_example_project(store, "a", "new_building")
     store.create("b", "time-based")
     project_json = store.read_project_json("a")
     project_json.name = "b"     # a hand edit
@@ -1115,16 +1124,16 @@ def test_reset_refuses_a_project_json_that_names_another_project_before_it_moves
 
 
 @pytest.mark.skipif(os.name != "nt", reason="folder names ignore letter case on Windows only")
-def test_reset_works_when_the_name_in_the_address_differs_from_the_stored_name_in_letter_case_only(tmp_path, recycle_bin):
+def test_reset_works_when_the_name_in_the_address_differs_from_the_stored_name_in_letter_case_only(tmp_path, recycle_bin, example_project_templates):
     store = ProjectStore(tmp_path)
-    example = create_example_project(store, "Mine")
+    example = example_project_templates.copy_example_project(store, "Mine", "new_building")
     store.reset_project_to_example("mine", example, _example_input_files(example))
     assert [row.name for row in store.list()] == ["Mine"] and len(recycle_bin.folders) == 1
 
 
-def test_a_project_summary_names_its_example_with_the_backfill_rule(tmp_path):
+def test_a_project_summary_names_its_example_with_the_backfill_rule(tmp_path, example_project_templates):
     store = ProjectStore(tmp_path)
-    create_example_project(store, "made here", "basic_perimeter_block")
+    example_project_templates.copy_example_project(store, "made here", "basic_perimeter_block")
     store.create("plain", "time-based")
     store.create("Perimeter block", "time-based")       # no example field, named like the example's title
     store.create("Perimeter block 2", "time-based")     # a numbered copy stays an ordinary project
@@ -1133,10 +1142,10 @@ def test_a_project_summary_names_its_example_with_the_backfill_rule(tmp_path):
     assert store.summary("made here").example == "basic_perimeter_block"
 
 
-def test_the_examples_are_matched_to_projects_in_one_pass_over_the_projects(tmp_path, monkeypatch):
+def test_the_examples_are_matched_to_projects_in_one_pass_over_the_projects(tmp_path, monkeypatch, example_project_templates):
     store = ProjectStore(tmp_path)
-    create_example_project(store, "a", "new_building")
-    create_example_project(store, "b", "basic_perimeter_block")
+    example_project_templates.copy_example_project(store, "a", "new_building")
+    example_project_templates.copy_example_project(store, "b", "basic_perimeter_block")
     listings = []
     real_list = store.list
     monkeypatch.setattr(store, "list", lambda: listings.append(1) or real_list())

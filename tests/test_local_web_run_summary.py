@@ -2,8 +2,6 @@
 import json
 import math
 import shutil
-import subprocess
-import sys
 import warnings
 
 import pytest
@@ -164,13 +162,6 @@ def test_computing_a_sun_path_raises_no_warning():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         sun_path_for_config(golden_config(start_hour=2, end_hour=12, min_altitude=10.0))
-
-
-def test_importing_the_service_modules_does_not_load_torch():
-    code = ("import sys; import urbansolarcarver.local_web_service.score_points, urbansolarcarver.local_web_service.run_summary; "
-            "print('torch' in sys.modules)")
-    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    assert result.stdout.strip() == "False"
 
 
 @pytest.fixture

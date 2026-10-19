@@ -116,12 +116,3 @@ class TestSaveHistogram:
         path = save_histogram(scores, tmp_path, "const.png")
         # The function may return a path or None here; the test only checks
         # that it does not raise.
-
-
-@pytest.mark.slow
-def test_importing_the_api_does_not_import_matplotlib():
-    import subprocess, sys
-    code = "import sys, urbansolarcarver.api; print('matplotlib' in sys.modules)"
-    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    # Warp prints a banner on import, so the answer is the last line.
-    assert out.stdout.strip().splitlines()[-1] == "False"

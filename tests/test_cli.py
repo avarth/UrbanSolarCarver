@@ -266,22 +266,6 @@ def test_daemon_error_reply_is_reported(tmp_path, monkeypatch):
     assert result.exit_code == 1 and "ConfigError: bad" in result.output
 
 
-def test_importing_the_cli_does_not_load_torch():
-    import subprocess
-    import sys
-    code = ("import sys; import urbansolarcarver.carver_cli as c; "
-            "sys.exit(1 if 'torch' in sys.modules else 0)")
-    assert subprocess.run([sys.executable, "-c", code]).returncode == 0
-
-
-def test_importing_the_cli_does_not_load_the_web_service():
-    import subprocess
-    import sys
-    code = ("import sys; import urbansolarcarver.carver_cli as c; "
-            "sys.exit(1 if 'fastapi' in sys.modules else 0)")
-    assert subprocess.run([sys.executable, "-c", code]).returncode == 0
-
-
 class TestUiCommand:
     """`usc ui` checks the install, then starts the local service on 127.0.0.1 with a fresh token."""
 

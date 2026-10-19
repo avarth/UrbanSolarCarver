@@ -522,6 +522,7 @@ def test_plates_on_rotated_footprints_have_no_zero_length_edges_and_close_into_w
             assert mg.prism_mesh(plate, 0.0, 3.0).is_watertight
 
 
+@pytest.mark.slow
 @pytest.mark.parametrize("angle", [17, 45])
 def test_strips_one_module_deep_keep_their_floors_at_any_angle(angle):
     """A 100 x 92 m courtyard block, wings 4.5 m deep kept up to 33 m, the courtyard only up to 14 m.
@@ -815,7 +816,8 @@ def _wings(length, width, depth):
     return top
 
 
-@pytest.mark.parametrize("length", [100, 101, 102])
+@pytest.mark.parametrize("length", [pytest.param(100, marks=pytest.mark.slow), 101,
+                                    pytest.param(102, marks=pytest.mark.slow)])
 def test_the_end_wings_of_a_courtyard_block_keep_a_row_of_modules_whatever_its_length(length):
     """A courtyard block whose wings, 3.5 m deep, reach 33 m and whose courtyard is carved to 14 m.  Rows of modules
     are laid from both ends of the block, so each 92 m end wing keeps its first row (3 m) on the upper floors, whatever
@@ -844,7 +846,7 @@ def test_a_module_over_the_tolerance_leaves_a_hole_even_when_built_modules_enclo
 
 
 @pytest.mark.slow
-@pytest.mark.parametrize("vs", [0.5, 1.0])
+@pytest.mark.parametrize("vs", [pytest.param(0.5, marks=pytest.mark.sweep), 1.0])
 def test_sweep_of_angles_and_shapes(vs):
     """The conditions above over more angles, shears and both voxel sizes."""
     from shapely import affinity
