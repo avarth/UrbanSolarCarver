@@ -302,7 +302,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       <ExportStep form={form} disabledReason={runs.activeRun !== null ? messages.runInProgress : null} formatRunReason={formatRunReason}
                   onFormatChange={(format) => void changeMeshFormat(format)}
                   downloads={exportDownloads({ project, meshFormat, envelopeFile: results.summary?.envelope?.mesh_file ?? null, envelope: stages.exporting,
-                                               massing: stages.massing, stagesBeingRebuilt: stagesStillToFinish })}
+                                               massingFile: results.summary?.massing?.export_mesh_file ?? null, massing: stages.massing,
+                                               stagesBeingRebuilt: stagesStillToFinish })}
                   onDownload={download} formatFeedback={feedback("export_format")} downloadProblem={downloadProblem} />
     ),
   };

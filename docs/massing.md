@@ -107,7 +107,14 @@ In `<out_dir>/massing/`:
 - `plates.json`: one entry per plate (floor, z bottom and top, outline and
   holes in world coordinates, area, number of modules (`bays`), share of its volume outside
   the envelope), plus the floor area per floor and in total;
-- `plates.obj`: one closed mesh per plate, named `floor_<n>_plate_<m>`;
+- `plates.obj`: one closed mesh per plate, named `floor_<n>_plate_<m>`,
+  written whatever `final_mesh_format` says (the browser interface draws it and
+  reads its parts by name);
+- `plates.ply`, `plates.stl` or `plates.glb` when `final_mesh_format` is one of
+  them: the same plates, as one mesh in PLY and STL (formats without named
+  parts) and with one named part per plate in GLB. The manifest names this
+  file as `export_mesh_path` (`plates.obj` itself for OBJ). A change of
+  `final_mesh_format` reruns massing as well as exporting;
 - `manifest.json` and `diagnostics/diagnostic.json` (floors built, plates,
   floor areas, share of the carved envelope inside plates, volume placed outside
   the envelope through the tolerance, footprint source).

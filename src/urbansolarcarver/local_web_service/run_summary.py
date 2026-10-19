@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from ..mode_registry import canonical_mode_name
-from ..pydantic_schemas import ExportingManifest, PreprocessingManifest, UserConfig
+from ..pydantic_schemas import ExportingManifest, MassingManifest, PreprocessingManifest, UserConfig
 from ..stage_settings import stage_folder
 from .api_models import CarvingSummary, EnvelopeSummary, MassingSummary, RunSummary, SkyDome, SunMarker, SunPath, SunPathDay
 from .score_points import read_stage_manifest, resolve_stored_path
@@ -73,12 +73,16 @@ def _envelope_summary(run_folder: Path, voxel_size: float | None) -> EnvelopeSum
 
 
 def _massing_summary(run_folder: Path) -> MassingSummary | None:
+    """The floor areas massing wrote and its mesh in the chosen format, named by its manifest (plates.obj for a manifest from
+    before massing wrote that format)."""
+    manifest = read_stage_manifest(run_folder, "massing", MassingManifest)
     massing_folder = stage_folder(run_folder, "massing")
     plates = _read_json(massing_folder / PLATES_FILE_NAME)
     diagnostic = _read_json(massing_folder / DIAGNOSTIC_PATH)
-    if plates is None or diagnostic is None:
+    if manifest is None or plates is None or diagnostic is None:
         return None
     return MassingSummary(
+        export_mesh_file=Path(manifest[0].export_mesh_path or manifest[0].mesh_path).name,
         floor_area_m2_per_storey=plates["floor_area_m2_per_floor"],
         total_floor_area_m2=plates["total_floor_area_m2"],
         storeys_built=diagnostic["floors_built"],

@@ -208,7 +208,7 @@
     },
     "final_mesh_format": {
       "label": "Mesh file format", "unit": "choice",
-      "help": "The file type of the carved envelope.",
+      "help": "The file type of the carved envelope and the building massing.",
       "step": "export", "group": "Export", "essential": "all", "widget": "mesh_format"
     }
   }

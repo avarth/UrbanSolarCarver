@@ -45,7 +45,7 @@ const CARVING = {
   carve_above_extra_voxels_removed: 0, slope_limit_extra_voxels_removed: 0,
 };
 const ENVELOPE = { mesh_file: "export.ply", envelope_volume_m3: 4150 };
-const MASSING = { floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
+const MASSING = { export_mesh_file: "plates.ply", floor_area_m2_per_storey: [500, 380], total_floor_area_m2: 880, storeys_built: 2 };
 const NOTHING_RUN: Record<PipelineStage, StageState> = { preprocessing: "missing", thresholding: "missing", exporting: "missing", massing: "missing" };
 const CARVED: Record<PipelineStage, StageState> = { ...NOTHING_RUN, preprocessing: "current", thresholding: "current" };
 
@@ -659,7 +659,7 @@ test("while a format change rebuilds the envelope, its old file waits: the run r
   await settle();
   expect(download("Carved envelope (PLY)").disabled).toBe(true);
   expect(reasonOf(download("Carved envelope (PLY)"))).toBe("A run is in progress");
-  expect(download("Building massing (OBJ)").disabled).toBe(false);          // the run leaves the massing as it is
+  expect(download("Building massing (PLY)").disabled).toBe(false);          // the run leaves the massing as it is
   service.summary = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: MASSING };
   run.send({ type: "run_finished", stages: ["exporting"], files: [] });
   await settle();

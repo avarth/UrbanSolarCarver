@@ -95,6 +95,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (massing)
 
+- **The building massing is written in the mesh format chosen.**
+  `final_mesh_format` now applies to massing too: besides `plates.obj`, which
+  it keeps writing in every run, massing writes `plates.ply`, `plates.stl` or
+  `plates.glb` with the same plates (one mesh in PLY and STL, one named part
+  per plate in GLB). Before, the massing was OBJ whatever the format, and the
+  Export step of the browser interface offered only the OBJ. The massing
+  manifest names the file as `export_mesh_path` (manifests without it still
+  read), a format change marks massing out of date as well as the envelope,
+  and Export offers the massing file that was built under its own format,
+  with a note when the format chosen since has not been built yet. A project
+  whose massing was built before this change in a format other than OBJ shows
+  its massing out of date.
+
 - **Facades within half a voxel of straight are straight.** Footprints cut
   from meshes (the District example) carry vertices a fraction of a
   millimetre off a straight wall, which made most facades "curved", so their

@@ -225,7 +225,7 @@ class UserConfig(BaseModel):
     out_dir: str = Field(..., description="Output directory for carved meshes and diagnostics")
     final_mesh_format: str = Field(
         "ply",
-        description="Extension for final mesh. One of {'ply','obj','stl','glb'}",
+        description="Extension for the envelope mesh and the massing plates (massing writes plates.obj as well). One of {'ply','obj','stl','glb'}",
         pattern=r"^(ply|obj|stl|glb)$",
     )
 
@@ -732,6 +732,11 @@ class MassingManifest(BaseModel):
 
     run_id: str
     plates_path: str
+    # The plates as OBJ with one named part per plate, written in every run.
     mesh_path: str
+    # The plates in final_mesh_format; the same file as mesh_path for OBJ.
+    # None in manifests written before massing wrote that format (their only
+    # mesh is mesh_path).
+    export_mesh_path: Optional[str] = None
     upstream_manifest: str
     upstream_run_id: str

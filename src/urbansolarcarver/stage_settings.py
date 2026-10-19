@@ -169,6 +169,9 @@ class ExportingSettings(_StageSettings):
 
 
 class MassingSettings(_StageSettings):
+    # Also an exporting setting: massing writes its plates in this format
+    # besides the OBJ, so a change of it reruns both.
+    final_mesh_format: str
     ground_floor_height: float
     floor_height: float
     min_plate_dimension: float

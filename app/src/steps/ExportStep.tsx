@@ -1,7 +1,8 @@
-// The Export step (UX 5.7): the mesh file format of the carved envelope, whose change reruns the envelope mesh only, and the
-// downloads: the envelope file that was built (named by the run summary; a format chosen while Carving was locked is stored and
-// written by the next envelope build, which the download says), the building massing (OBJ) and its data (JSON), the settings
-// (config.yaml) and the whole project as a zip. Each file of a stage is offered once the stage exists (R2 5: the envelope and the
+// The Export step (UX 5.7): the mesh file format of the carved envelope and the building massing, whose change reruns the
+// envelope mesh only (the massing is marked out of date and written in the format by its next build), and the downloads: the
+// envelope file that was built (named by the run summary; a format chosen while Carving was locked is stored and written by the
+// next envelope build, which the download says), the building massing file that was built, named and noted the same way, and its
+// data (JSON), the settings (config.yaml) and the whole project as a zip. Each file of a stage is offered once the stage exists (R2 5: the envelope and the
 // massing are built on their own); one built from settings that changed since is labelled out of date and can still be
 // downloaded. The files are fetched with the token and handed to the browser to save (a plain link cannot send the token header).
 // A part's files wait while a run of the project rebuilds it: its stage removes them when it begins.
@@ -25,12 +26,18 @@ export interface ExportDownload {
   waitsForRun?: boolean;
 }
 
+/** The plates as OBJ with one named part per plate, which massing writes in every run; the 3D view draws it. */
 export const MASSING_OBJ_PATH = "massing/plates.obj";
 export const MASSING_JSON_PATH = "massing/plates.json";
 
 /** The path in the run folder of the envelope mesh exporting wrote, from its file name (EnvelopeSummary.mesh_file). */
 export function exportedMeshPath(meshFile: string): string {
   return `exporting/${meshFile}`;
+}
+
+/** The path in the run folder of the massing mesh in the format it was built in, from its file name (MassingSummary.export_mesh_file). */
+export function exportedMassingPath(massingFile: string): string {
+  return `massing/${massingFile}`;
 }
 
 /** The mesh format of a file, from its extension: "export.ply" is "ply". */
@@ -46,6 +53,8 @@ interface DownloadListState {
   meshFormat: string;
   /** The envelope mesh on disk (EnvelopeSummary.mesh_file); null until the run summary names it. */
   envelopeFile: string | null;
+  /** The massing mesh on disk in the format it was built in (MassingSummary.export_mesh_file); null until the run summary names it. */
+  massingFile: string | null;
   /** The stage status of exporting and of massing. */
   envelope: StageState;
   massing: StageState;
@@ -54,10 +63,10 @@ interface DownloadListState {
 }
 
 /**
- * The files of the Export step, in the order of UX 5.7, the envelope's and the massing's once their stage exists. The envelope is
- * the file that was built, under its own format: a format chosen since without a build has no file yet.
+ * The files of the Export step, in the order of UX 5.7, the envelope's and the massing's once their stage exists. The envelope and
+ * the massing mesh are the files that were built, under their own format: a format chosen since without a build has no file yet.
  */
-export function exportDownloads({ project, meshFormat, envelopeFile, envelope, massing, stagesBeingRebuilt = [] }: DownloadListState): ExportDownload[] {
+export function exportDownloads({ project, meshFormat, envelopeFile, massingFile, envelope, massing, stagesBeingRebuilt = [] }: DownloadListState): ExportDownload[] {
   const envelopeFiles: ExportDownload[] = [];
   if (envelope !== "missing" && envelopeFile !== null) {
     const builtFormat = meshFormatOf(envelopeFile);
@@ -69,12 +78,20 @@ export function exportDownloads({ project, meshFormat, envelopeFile, envelope, m
     });
   }
   const massingOutOfDate = massing === "out_of_date", massingWaitsForRun = stagesBeingRebuilt.includes("massing");
-  const massingFiles: ExportDownload[] = massing === "missing" ? [] : [
-    { label: messages.massingObjDownload, address: runFileUrl(project, MASSING_OBJ_PATH), fileName: `${project} massing.obj`, outOfDate: massingOutOfDate,
-      waitsForRun: massingWaitsForRun },
-    { label: messages.massingJsonDownload, address: runFileUrl(project, MASSING_JSON_PATH), fileName: `${project} massing.json`, outOfDate: massingOutOfDate,
-      waitsForRun: massingWaitsForRun },
-  ];
+  const massingFiles: ExportDownload[] = [];
+  if (massing !== "missing" && massingFile !== null) {
+    const builtFormat = meshFormatOf(massingFile);
+    massingFiles.push({
+      label: messages.massingMeshDownload(meshFormatName(builtFormat)), address: runFileUrl(project, exportedMassingPath(massingFile)),
+      fileName: `${project} massing.${builtFormat}`, outOfDate: massingOutOfDate,
+      note: builtFormat === meshFormat ? undefined : messages.massingBuiltInOtherFormat(meshFormatName(builtFormat), meshFormatName(meshFormat)),
+      waitsForRun: massingWaitsForRun,
+    });
+  }
+  if (massing !== "missing") {
+    massingFiles.push({ label: messages.massingJsonDownload, address: runFileUrl(project, MASSING_JSON_PATH), fileName: `${project} massing.json`,
+                        outOfDate: massingOutOfDate, waitsForRun: massingWaitsForRun });
+  }
   return [
     ...envelopeFiles,
     ...massingFiles,

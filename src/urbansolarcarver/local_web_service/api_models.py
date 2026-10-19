@@ -128,7 +128,8 @@ class EnvelopeSummary(BaseModel):
 
 
 class MassingSummary(BaseModel):
-    """The numbers massing reports for the run summary of the envelope and massing screen."""
+    """The numbers massing reports for the run summary of the envelope and massing screen, and its mesh file for Export."""
+    export_mesh_file: str               # the plates in the run's massing folder, in the format they were built in
     floor_area_m2_per_storey: list[float]
     total_floor_area_m2: float
     storeys_built: int

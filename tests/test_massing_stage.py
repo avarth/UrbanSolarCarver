@@ -72,6 +72,54 @@ def test_full_envelope_gives_every_floor_the_footprint(tmp_path):
     assert len(bodies) == 6 and all(b.is_watertight for b in bodies)
 
 
+@pytest.mark.parametrize("mesh_format", ["ply", "stl", "glb"])
+def test_massing_writes_the_plates_in_the_chosen_format_besides_the_obj(tmp_path, mesh_format):
+    from urbansolarcarver.pydantic_schemas import MassingManifest
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.0, 4200000.0)))
+    _set_mask(thr, lambda occ: occ)
+    res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
+    assert res.mesh_path.name == "plates.obj" and res.mesh_path.is_file()      # the 3D view reads the named parts of the OBJ
+    assert res.export_mesh_path == tmp_path / "m" / f"plates.{mesh_format}"
+    manifest = MassingManifest.model_validate_json((tmp_path / "m" / "manifest.json").read_text())
+    assert (manifest.mesh_path, manifest.export_mesh_path) == ("plates.obj", f"plates.{mesh_format}")
+    plates_in_obj = trimesh.load(res.mesh_path, force="mesh", process=False)
+    plates_in_export = trimesh.load(res.export_mesh_path, force="mesh", process=False)
+    assert len(plates_in_export.faces) == len(plates_in_obj.faces)
+    assert np.allclose(plates_in_export.bounds, plates_in_obj.bounds, atol=0.01)     # georeferenced, in world coordinates
+    if mesh_format == "glb":                                                         # a scene: one named part per plate
+        assert sorted(trimesh.load(res.export_mesh_path).geometry) == [f"floor_{n}_plate_0" for n in range(6)]
+
+
+def test_massing_in_obj_writes_one_mesh_file_named_twice_in_the_manifest(tmp_path):
+    from urbansolarcarver.pydantic_schemas import MassingManifest
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
+    _set_mask(thr, lambda occ: occ)
+    _massing(cfg, thr, tmp_path / "m", final_mesh_format="ply")
+    res = _massing(cfg, thr, tmp_path / "m", final_mesh_format="obj")
+    assert res.export_mesh_path == res.mesh_path
+    manifest = MassingManifest.model_validate_json((tmp_path / "m" / "manifest.json").read_text())
+    assert manifest.export_mesh_path == manifest.mesh_path == "plates.obj"
+    assert sorted(path.name for path in (tmp_path / "m").glob("plates.*")) == ["plates.json", "plates.obj"]   # the PLY is gone
+
+
+@pytest.mark.parametrize("mesh_format", ["ply", "stl", "glb"])
+def test_nothing_buildable_gives_an_empty_mesh_in_the_chosen_format(tmp_path, mesh_format):
+    cfg, thr = _run_upstream(tmp_path, _box([30, 2, 20]))
+    _set_mask(thr, lambda occ: occ)
+    with pytest.warns(UserWarning, match="no floor plates"):
+        res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
+    assert res.n_plates == 0 and res.mesh_path.is_file()
+    assert len(trimesh.load(res.export_mesh_path, force="mesh").faces) == 0
+
+
+def test_a_massing_manifest_from_before_the_export_mesh_reads_without_it():
+    from urbansolarcarver.pydantic_schemas import MassingManifest
+    manifest = MassingManifest.model_validate({
+        "run_id": "r", "plates_path": "plates.json", "mesh_path": "plates.obj",
+        "upstream_manifest": "../thresholding/manifest.json", "upstream_run_id": "t"})
+    assert manifest.export_mesh_path is None
+
+
 def test_georeferenced_outlines_land_on_the_footprint(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.0, 4200000.0)))
     _set_mask(thr, lambda occ: occ)
