@@ -75,7 +75,8 @@ def test_full_envelope_gives_every_floor_the_footprint(tmp_path):
 @pytest.mark.parametrize("mesh_format", ["ply", "stl", "glb"])
 def test_massing_writes_the_plates_in_the_chosen_format_besides_the_obj(tmp_path, mesh_format):
     from urbansolarcarver.pydantic_schemas import MassingManifest
-    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.0, 4200000.0)))
+    # Georeferenced with fractional coordinates: float32 rounds y near 4 200 000 m to 0.5 m.
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20], center_xy=(500000.37, 4200000.61)))
     _set_mask(thr, lambda occ: occ)
     res = _massing(cfg, thr, tmp_path / "m", final_mesh_format=mesh_format)
     assert res.mesh_path.name == "plates.obj" and res.mesh_path.is_file()      # the 3D view reads the named parts of the OBJ
@@ -85,7 +86,13 @@ def test_massing_writes_the_plates_in_the_chosen_format_besides_the_obj(tmp_path
     plates_in_obj = trimesh.load(res.mesh_path, force="mesh", process=False)
     plates_in_export = trimesh.load(res.export_mesh_path, force="mesh", process=False)
     assert len(plates_in_export.faces) == len(plates_in_obj.faces)
-    assert np.allclose(plates_in_export.bounds, plates_in_obj.bounds, atol=0.01)     # georeferenced, in world coordinates
+    outlines = np.concatenate([plate["outline"] for plate in json.loads(res.plates_path.read_text())["plates"]])
+    rounded = [issue for issue in res.issues if issue.code == "float32_coordinates"]
+    if mesh_format == "stl":                                                         # float32 only: said so
+        assert len(rounded) == 1 and "plates.stl" in rounded[0].message
+    else:                                                                            # world coordinates kept
+        assert not rounded
+        assert np.allclose(plates_in_export.bounds[:, :2], [outlines.min(0), outlines.max(0)], atol=1e-3)
     if mesh_format == "glb":                                                         # a scene: one named part per plate
         assert sorted(trimesh.load(res.export_mesh_path).geometry) == [f"floor_{n}_plate_0" for n in range(6)]
 

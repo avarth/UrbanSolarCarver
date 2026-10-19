@@ -23,7 +23,7 @@ from shapely.errors import GEOSException
 
 from .. import floor_plates as mg
 from ..errors import StageChainError
-from ..io import float32_resolution, save_mesh
+from ..io import float32_resolution, save_glb, save_mesh
 from ..load_config import user_config
 from ..pydantic_schemas import MassingManifest
 from ..run_context import Issue, RunContext, report_issue, stage_context
@@ -92,7 +92,9 @@ def _write_plates_mesh(named_prisms, path: Path, mesh_format: str) -> None:
 
     OBJ and GLB keep one part per plate, named as in *named_prisms*; PLY and
     STL have no named parts, so the plates are one mesh.  No plates give an
-    empty file of the format.
+    empty file of the format.  ``save_mesh`` and ``save_glb`` keep
+    georeferenced coordinates in PLY and GLB and report their rounding in
+    STL.
     """
     import trimesh
     if not named_prisms:
@@ -100,7 +102,9 @@ def _write_plates_mesh(named_prisms, path: Path, mesh_format: str) -> None:
             path.write_text("", encoding="utf-8")
         else:
             save_mesh(trimesh.Trimesh(), str(path))
-    elif mesh_format in ("obj", "glb"):
+    elif mesh_format == "glb":
+        save_glb(named_prisms, str(path))
+    elif mesh_format == "obj":
         scene = trimesh.Scene()
         for name, prism in named_prisms:
             scene.add_geometry(prism, geom_name=name)

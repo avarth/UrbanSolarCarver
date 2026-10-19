@@ -189,6 +189,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   overlap the overlap belongs to one of them instead of to neither.
 - Closing gaps narrower than a voxel no longer fails on a plate with a sharp
   corner, where GEOS's mitre offsets left a self-intersection.
+- Georeferenced coordinates are kept in GLB files (the envelope and the
+  massing): the vertices, which glTF stores as float32, are written near the
+  origin and each node's translation, a double, carries the whole-metre
+  offset. Before, coordinates near 4 200 000 m were rounded by up to 0.25 m.
+  STL can only hold float32, so writing one far from the origin now reports a
+  `float32_coordinates` issue. The engine's massing replies name the plates
+  in `final_mesh_format` as `export_mesh_path`, next to `mesh_path`.
 - A plate no longer loses whole modules when GEOS's inward mitre offset, used
   to close gaps narrower than a voxel, drops part of the shape (up to 240 m²
   of a parallelogram in a test sweep).

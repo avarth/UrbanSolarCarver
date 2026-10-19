@@ -121,7 +121,11 @@ In `<out_dir>/massing/`:
   them: the same plates, as one mesh in PLY and STL (formats without named
   parts) and with one named part per plate in GLB. The manifest names this
   file as `export_mesh_path` (`plates.obj` itself for OBJ). A change of
-  `final_mesh_format` reruns massing as well as exporting;
+  `final_mesh_format` reruns massing as well as exporting. Far from the
+  origin (georeferenced models) PLY keeps the coordinates in double
+  precision and GLB places the offset in each node, while STL can only hold
+  float32 and the run reports a `float32_coordinates` issue when that rounds
+  them by more than 1 mm;
 - `manifest.json` and `diagnostics/diagnostic.json` (floors built, plates,
   floor areas, share of the carved envelope inside plates, volume placed outside
   the envelope through the tolerance, footprint source).
