@@ -78,7 +78,7 @@ A project opens as a list of six steps on the left, with the 3D view on the righ
     - **Building massing**: its settings (ground floor and upper floor heights, grid module, permitted volume exceedance, whether floors rest on the floors below), **Build massing**, and its results: the gross floor area, the number of storeys and a table with the bottom, top and floor area of each storey.
 
     Each part has its own out-of-date mark, "Out of date for the current settings". The step's summary says what exists, for example "Envelope built, massing not built". A link at the bottom opens the run report. The *grid module* is the square module the storeys are built from and the narrowest piece of floor allowed. The *permitted volume exceedance* is the share of a module on a storey that may lie outside the carved envelope; the massing never leaves the maximum volume. [Floor-plate massing](massing.md) describes the method.
-6. **Export.** The mesh format of the carved envelope and the downloads: the carved envelope, the building massing (OBJ), the building massing data (JSON), the settings (`config.yaml`) and the whole project as a zip. Each file is offered once it exists. The envelope is the file that was built, in the format it was built in. A change of format rebuilds the envelope mesh only; while Carving is locked (see below), the format is stored without a build, Export says so, and the next envelope build writes the chosen format.
+6. **Export.** The mesh format of the carved envelope and the building massing, and the downloads: the carved envelope, the building massing, the building massing data (JSON), the settings (`config.yaml`) and the whole project as a zip. Each file is offered once it exists. The envelope and the massing are the files that were built, in the format they were built in. A change of format rebuilds the parts that exist (the envelope, the massing or both); while Carving is locked (see below), the format is stored without a build, Export says so, and the next build of each part writes the chosen format.
 
 ## Entering values
 
@@ -106,7 +106,7 @@ Between the two you change the threshold. Moving the slider (or typing a value) 
 
 The interface keeps track of what each result was built from. When you change a setting or an input after a result exists, that result stays visible, dimmed and labelled out of date, and the step that needs a run says so. Running again replaces it. A run only starts the stages whose results are missing or out of date.
 
-While the mode or the analysis settings in the form differ from the stored ones, Carving is locked, because a build would have to run the analysis first. The two builds then wait with a message to run the analysis again, and a mesh format change is stored and written by the next envelope build.
+While the mode or the analysis settings in the form differ from the stored ones, Carving is locked, because a build would have to run the analysis first. The two builds then wait with a message to run the analysis again, and a mesh format change is stored and written by the next build of each part.
 
 ## The 3D view
 

@@ -285,7 +285,7 @@ export const messages = {
   envelopeBuiltInOtherFormat: (builtFormatName: string, chosenFormatName: string) =>
     `Built as ${builtFormatName}; the next envelope build writes ${chosenFormatName}.`,
   massingMeshDownload: (formatName: string) => `Building massing (${formatName})`,
-  // Beside the massing file when the format chosen since was not built yet (a format change rebuilds the envelope only).
+  // Beside the massing file when the format chosen since was stored without a build (Carving was locked).
   massingBuiltInOtherFormat: (builtFormatName: string, chosenFormatName: string) =>
     `Built as ${builtFormatName}; the next massing build writes ${chosenFormatName}.`,
   massingJsonDownload: "Building massing data (JSON)",

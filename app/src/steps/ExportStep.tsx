@@ -1,8 +1,7 @@
-// The Export step (UX 5.7): the mesh file format of the carved envelope and the building massing, whose change reruns the
-// envelope mesh only (the massing is marked out of date and written in the format by its next build), and the downloads: the
-// envelope file that was built (named by the run summary; a format chosen while Carving was locked is stored and written by the
-// next envelope build, which the download says), the building massing file that was built, named and noted the same way, and its
-// data (JSON), the settings (config.yaml) and the whole project as a zip. Each file of a stage is offered once the stage exists (R2 5: the envelope and the
+// The Export step (UX 5.7): the mesh file format of the carved envelope and the building massing, whose change rebuilds the parts
+// that exist, and the downloads: the envelope file that was built (named by the run summary; a format chosen while Carving was
+// locked is stored and written by the next envelope build, which the download says), the building massing file that was built,
+// named and noted the same way, and its data (JSON), the settings (config.yaml) and the whole project as a zip. Each file of a stage is offered once the stage exists (R2 5: the envelope and the
 // massing are built on their own); one built from settings that changed since is labelled out of date and can still be
 // downloaded. The files are fetched with the token and handed to the browser to save (a plain link cannot send the token header).
 // A part's files wait while a run of the project rebuilds it: its stage removes them when it begins.

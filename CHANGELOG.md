@@ -103,8 +103,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
   Export step of the browser interface offered only the OBJ. The massing
   manifest names the file as `export_mesh_path` (manifests without it still
   read), a format change marks massing out of date as well as the envelope,
-  and Export offers the massing file that was built under its own format,
-  with a note when the format chosen since has not been built yet. A project
+  and a format change in the Export step rebuilds the parts that exist (the
+  envelope, the massing or both). Export offers the massing file that was
+  built under its own format, with a note when a format chosen while Carving
+  was locked has not been built yet. A project
   whose massing was built before this change in a format other than OBJ shows
   its massing out of date.
 
