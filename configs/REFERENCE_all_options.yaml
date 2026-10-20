@@ -51,7 +51,8 @@ edge_taper:     0.0    # design constraint (m): test-surface sample points withi
                        # edge_taper), so perimeter/corner points don't force carving of directly
                        # adjacent volume. 0 = off. Weighted sky-patch modes only; requires planar
                        # test surfaces (already enforced by sampling).
-ray_length:     300.0  # max ray cast distance (m)
+ray_length:     3000.0 # max ray cast distance (m); rays stop at the grid's edge, so a longer
+                       # length costs nothing
 min_altitude:   5.0    # time-based only: ignore sun positions below this altitude (deg)
 margin_frac:    0.01   # empty margin around the mesh, as a fraction of its largest side
 ray_batch_size: 0  # 0 = auto-tune based on GPU VRAM

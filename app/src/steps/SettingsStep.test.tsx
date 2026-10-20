@@ -62,8 +62,8 @@ test("Run analysis says what blocks it, in order: a run, the inputs, the weather
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET) })))
     .toBe("Fix the voxel size to run the analysis.");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "end_day", message: "no such day" }]) }))).toBe("Fix the analysis period to run the analysis.");
-  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, ray_length must be longer than voxel_size" }]) })))
-    .toBe("Fix the ray length to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, ray_batch_size must be larger than voxel_size" }]) })))
+    .toBe("Fix the rays per batch to run the analysis.");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, the settings do not fit together" }]) })))
     .toBe("Fix the settings above to run the analysis.");
   expect(runAnalysisBlocker(conditions({ warmUpState: "running" }))).toBe("Waiting for the GPU to be ready");
@@ -139,14 +139,14 @@ test("Run analysis starts the run only after the waiting change was saved, or wh
 
 test("an error of the whole config outlines the settings it names, opens their fold, and leaves the grid line under Voxel size", () => {
   const fieldOf = (label: string) => [...rendered!.container.querySelectorAll(".setting-field")].find((field) => field.textContent!.startsWith(label))!;
-  const crossFieldError = { field: null, message: "Value error, ray_length (1 m) must be longer than voxel_size (1 m)" };
+  const crossFieldError = { field: null, message: "Value error, ray_batch_size (1) must be larger than voxel_size (1 m)" };
   // A refusal of the stored voxel size (another setting changed): the grid line is the one of that voxel size.
   rendered = renderForTest(<SettingsStep form={rejected([crossFieldError])} onChange={() => {}} disabledReason={null} />);
   expect(rendered.container.querySelector(".step-error")).toBeNull();
   expect(fieldOf("Voxel size").querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
-  expect(fieldOf("Voxel size").querySelector(".setting-error")!.textContent).toContain("must be longer than voxel size");
+  expect(fieldOf("Voxel size").querySelector(".setting-error")!.textContent).toContain("must be larger than voxel size");
   expect(fieldOf("Voxel size").querySelector(".setting-note")!.textContent).toBe("62 voxels per side, 238 328 in total");
-  expect(fieldOf("Ray length").querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
+  expect(fieldOf("Rays per batch").querySelector("input")!.getAttribute("aria-invalid")).toBe("true");
   // A refused voxel size: the line says it is the grid of the voxel size last saved.
   const refusedVoxelSize = formReducer(formReducer(form(), { type: "values_changed", values: { voxel_size: 0.5 } }),
     { type: "save_rejected", reply: { field_errors: [crossFieldError], grid_plan: null } });

@@ -30,6 +30,9 @@ from pathlib import Path
 import numpy as np
 from scipy.ndimage import binary_dilation
 
+# The engine's default ray_length (user_config), for configs that leave it unset.
+DEFAULT_RAY_LENGTH = 3000.0
+
 
 @dataclass
 class Run:
@@ -97,7 +100,7 @@ def follow_own_skin(values: np.ndarray, own_skin) -> np.ndarray:
     return out.reshape(values.shape)
 
 
-def march(run: Run, origins, normals, dirs, weights=None, ray_length=300.0,
+def march(run: Run, origins, normals, dirs, weights=None, ray_length=DEFAULT_RAY_LENGTH,
           substeps: int = 10, chunk: int = 4096):
     """Trace rays and return per-voxel hit counts (or weight sums), and the
     own-skin pairs ``(skin_flat, behind_flat)`` for :func:`follow_own_skin`.
@@ -229,7 +232,7 @@ def time_based_shading(run: Run, epw: str, minutes: int = 5) -> np.ndarray:
     suns = sun_directions(epw, period, c.get("north_deg", 0.0), c.get("min_altitude", 5.0), minutes)
     o, n, d, _, _ = pairs(run.points, run.normals, suns)
     area = float(c.get("grid_step", 1.0)) ** 2
-    hits, own_skin = march(run, o, n, d, ray_length=c.get("ray_length", 300.0))
+    hits, own_skin = march(run, o, n, d, ray_length=c.get("ray_length", DEFAULT_RAY_LENGTH))
     return follow_own_skin(hits, own_skin) * (area * minutes / 60.0)
 
 
@@ -273,7 +276,7 @@ def tilted_corner_rays(run: Run):
     a_min = float(np.min(np.atleast_1d(spec)))
     extent = run.shape[0] * run.vs
     top = run.origin[2] + run.shape[2] * run.vs
-    reach = np.full(len(i), min(c.get("ray_length", 300.0) * math.cos(math.radians(a_min)),
+    reach = np.full(len(i), min(c.get("ray_length", DEFAULT_RAY_LENGTH) * math.cos(math.radians(a_min)),
                                 math.sqrt(2.0) * extent))
     if math.tan(math.radians(a_min)) > 1e-6:
         reach = np.minimum(reach, (top - p[i, 2]) / math.tan(math.radians(a_min)))
@@ -297,7 +300,7 @@ def tilted_hits(run: Run) -> np.ndarray:
     c = run.cfg
     d = tilted_directions(run.normals, c["tilted_plane_angle_deg"], c.get("north_deg", 0.0))
     o, n, d = (np.concatenate(a) for a in zip((run.points, run.normals, d), tilted_corner_rays(run)))
-    hits, own_skin = march(run, o, n, d, ray_length=c.get("ray_length", 300.0))
+    hits, own_skin = march(run, o, n, d, ray_length=c.get("ray_length", DEFAULT_RAY_LENGTH))
     return column_above(follow_own_skin(column_above(hits > 0), own_skin))
 
 
@@ -308,7 +311,7 @@ def sky_scores(run: Run, substeps: int = 10) -> np.ndarray:
     pw = np.load(run.pre / "patch_weights.npy").astype(float)
     o, n, d, _, di = pairs(run.points, run.normals, dirs)
     scores, own_skin = march(run, o, n, d, weights=pw[di],
-                             ray_length=run.cfg.get("ray_length", 300.0), substeps=substeps)
+                             ray_length=run.cfg.get("ray_length", DEFAULT_RAY_LENGTH), substeps=substeps)
     return follow_own_skin(scores, own_skin)
 
 

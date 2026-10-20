@@ -91,10 +91,10 @@ test("a 422 puts each field error under its field, and an error of the whole con
   state = formReducer(state, {
     type: "save_rejected",
     reply: { field_errors: [{ field: "voxel_size", message: "Input should be greater than or equal to 0.01" },
-                            { field: null, message: "ray_length must be longer than voxel_size" }], grid_plan: null },
+                            { field: null, message: "ray_batch_size must be larger than voxel_size" }], grid_plan: null },
   });
-  expect(state.fieldErrors).toEqual({ voxel_size: "Input should be greater than or equal to 0.01 Ray length must be longer than voxel size",
-                                      ray_length: "Ray length must be longer than voxel size" });
+  expect(state.fieldErrors).toEqual({ voxel_size: "Input should be greater than or equal to 0.01 Rays per batch must be larger than voxel size",
+                                      ray_batch_size: "Rays per batch must be larger than voxel size" });
   expect(state.stepErrors).toEqual([]);
   expect(state.pendingSave).toBe(false);
   state = formReducer(state, { type: "save_succeeded", reply: { settings: {}, grid_plan: null } });
@@ -338,9 +338,9 @@ test("an error of the whole config is put, in the interface's words, under each 
   let state = storedProjectState({ mode: "time-based" });
   state = formReducer(state, { type: "save_succeeded", reply: { settings: { mode: "time-based" }, grid_plan: GRID_PLAN } });
   state = formReducer(state, { type: "values_changed", values: { voxel_size: 0.5 } });
-  state = reject(state, [{ field: null, message: "Value error, ray_length (5 m) must be longer than voxel_size (0.5 m)" }]);
-  const tooShort = "Ray length (5 m) must be longer than voxel size (0.5 m)";
-  expect(state.fieldErrors).toEqual({ ray_length: tooShort, voxel_size: tooShort });
+  state = reject(state, [{ field: null, message: "Value error, ray_batch_size (5) must be larger than voxel_size (0.5 m)" }]);
+  const tooShort = "Rays per batch (5) must be larger than voxel size (0.5 m)";
+  expect(state.fieldErrors).toEqual({ ray_batch_size: tooShort, voxel_size: tooShort });
   expect(state.stepErrors).toEqual([]);
   expect(state.gridPlan).toEqual(GRID_PLAN);
 

@@ -21,7 +21,7 @@ test("the Settings step groups, their folds and their fold labels", () => {
   expect(when.foldLabel).toBe("More sun settings");
   // R2 4.5: the computer's settings come last in the detail fold. The sample spacing is the engine's (half the voxel size),
   // the grid margin is hidden for now, and the edge strip is shown in Night cooling only.
-  expect(names(detail.folded)).toEqual(["ray_length", "ray_batch_size", "diagnostics"]);
+  expect(names(detail.folded)).toEqual(["ray_batch_size", "diagnostics"]);
   expect(detail.foldLabel).toBe("More detail settings");
   const benefitModeGroup = settingsForStep("settings", "benefit")[1];
   expect(benefitModeGroup.title).toBe("Mode specific");
@@ -29,7 +29,7 @@ test("the Settings step groups, their folds and their fold labels", () => {
   expect(names(benefitModeGroup.folded)).toEqual(["include_harm"]);
   expect(benefitModeGroup.foldLabel).toBe("More mode settings");
   const irradianceDetail = settingsForStep("settings", "irradiance").find((group) => group.title === "Detail")!;
-  expect(names(irradianceDetail.folded)).toEqual(["ray_length", "ray_batch_size", "diagnostics"]);
+  expect(names(irradianceDetail.folded)).toEqual(["ray_batch_size", "diagnostics"]);
   // Night cooling: the edge strip is a setting of its own, in its fold, so a cooling street or courtyard does not clear the mass
   // right beside it.
   const coolingModeGroup = settingsForStep("settings", "radiative_cooling").find((group) => group.title === "Mode specific")!;

@@ -109,7 +109,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `mode` | `"time-based"` | Carving mode (see [Modes](../modes.md)) |
 | `voxel_size` | 1.0 | Voxel edge length in meters (0.01-100) |
 | `grid_step` | `null` | Surface sampling spacing in meters; `null` = half the voxel size. An explicit value must be <= voxel_size |
-| `ray_length` | 300.0 | Maximum ray cast distance in meters |
+| `ray_length` | 3000.0 | Maximum ray cast distance in meters. A ray stops where it leaves the voxel grid, so a length beyond the grid costs nothing |
 | `threshold` | mode default | `carve_fraction` for weighted modes, `0` for `time-based`, unset for `tilted_plane`. See [Thresholding strategies](#thresholding-strategies) below |
 | `carve_fraction` | 0.7 | Solar protection slider: 0.7 = aggressive (remove 70% of the obstruction weight, including what `carve_above` removes), 0.3 = conservative |
 | `score_smoothing` | `null` | Gaussian blur radius (m) on the scores before thresholding; `null` = 1.1 x voxel_size, 0 = off. Weighted modes only |

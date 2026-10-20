@@ -25,7 +25,7 @@ voxel_size: 1.0
 # --- Defaults you may want to override --------------------------------------
 # voxel_size:      1.0    # voxel edge in metres (0.5 = 8x more voxels)
 # grid_step:       0.5    # test-surface sampling spacing in metres; unset = half the voxel size
-# ray_length:      300.0  # max ray distance in metres
+# ray_length:      3000.0 # max ray distance in metres
 # apply_smoothing: false  # true = SDF smooth + marching cubes
 # device:          'auto' # 'auto', 'cpu', or 'cuda'
 # See REFERENCE_all_options.yaml for the complete parameter list.

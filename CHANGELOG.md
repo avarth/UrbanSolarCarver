@@ -160,6 +160,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
   analysis period's start date, and once the period changes the notice does
   not come back when the period is set back.
 
+### Changed (ray length)
+
+- **`ray_length` defaults to 3000 m** (it was 300 m). The ray march clips
+  each ray to the voxel grid's box, so a length beyond the grid costs
+  nothing: on the District example (1 m voxels) the analysis took 12.4 s at
+  3000 m against 12.6 s at 300 m in Daylight, and 13.9 s against 13.8 s in
+  Solar energy, with the same scores to float rounding. Before, a grid
+  wider than about 170 m (space diagonal over 300 m) could cut long rays
+  short.
+  The browser UI no longer shows the setting; a value stored in a project's
+  `config.yaml` is kept and still applies.
+
 ### Changed (sample spacing)
 
 - **`grid_step` is unset by default and then samples the test surfaces at

@@ -103,9 +103,10 @@ STEP_STAGES = {"settings": {*PreprocessingSettings.model_fields, *RunOptions.mod
                "envelope_and_massing": {*ExportingSettings.model_fields, *MassingSettings.model_fields} - {"final_mesh_format"},
                "export": {"final_mesh_format"}}
 # Set by the service, chosen in the Mode step, replaced by the in-app charts, or left for milestone 2: never in the form. The
-# sample spacing is the engine's (half the voxel size, which the service leaves to it), and the grid margin is hidden for now.
+# sample spacing is the engine's (half the voxel size, which the service leaves to it), the grid margin is hidden for now, and the
+# ray length is the engine's (rays stop at the edge of the grid, so its 3000 m default costs nothing).
 NOT_IN_THE_FORM = {"max_volume_path", "test_surface_path", "epw_path", "out_dir", "device", "mode", "diagnostic_plots",
-                   "simulated_weights_path", "grid_step", "margin_frac"}
+                   "simulated_weights_path", "grid_step", "margin_frac", "ray_length"}
 
 
 def presented_settings() -> dict:

@@ -314,7 +314,14 @@ class UserConfig(BaseModel):
             "threshold) does not depend on it."
         ),
     )
-    ray_length:    float = Field(300.0, gt=0,description="Max ray cast distance (m)")
+    ray_length:    float = Field(
+        3000.0, gt=0,
+        description=(
+            "Max ray cast distance (m). A ray stops where it leaves the voxel grid, "
+            "so a length beyond the grid costs nothing; the default reaches across "
+            "any grid the voxel budget allows at 1 m voxels."
+        ),
+    )
     min_altitude:  float = Field(5.0, ge=0, le=90, description="Minimum sun altitude (°)")
     margin_frac:   float = Field(0.01, ge=0, le=1.0, description="Grid padding on each side, as a fraction of the max volume's largest bounding-box side")
     ray_batch_size: int   = Field(0, ge=0, description="Rays per batch. 0 = auto: sized from free GPU memory, 300000 on CPU")
