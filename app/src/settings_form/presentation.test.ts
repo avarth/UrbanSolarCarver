@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import {
-  fieldSettingOf, fromDisplayValue, presentedSettingOf, settingIsShownIn, settingsForStep, settingsOfField, settingView, shownSliderOf, toDisplayValue,
+  fieldSettingOf, fromDisplayValue, presentedSettingOf, SETTING_PRESENTATIONS, settingIsShownIn, settingsForStep, settingsOfField, settingView,
+  shownSliderOf, toDisplayValue,
 } from "./presentation";
 
 const names = (views: { name: string }[]) => views.map((view) => view.name);
@@ -112,4 +113,22 @@ test("a field the engine names finds its setting by the name or the part before 
   expect(presentedSettingOf("mode")).toBeNull();
   expect(presentedSettingOf("constructor")).toBeNull();
   expect(presentedSettingOf("toString.value")).toBeNull();
+});
+
+test("every setting shows a unit beside its value but the Bliss constant, a number without one", () => {
+  const withoutUnit = Object.entries(SETTING_PRESENTATIONS).filter(([, presentation]) => presentation.unit === "").map(([name]) => name);
+  expect(withoutUnit).toEqual(["bliss_k"]);
+  expect(settingView("smooth_iters", "daylight").unit).toBe("passes");
+  expect(settingView("ray_batch_size", "daylight").unit).toBe("rays");
+  expect(settingView("min_voxels", "daylight").unit).toBe("m³");
+});
+
+test("Drop pieces smaller than is shown in m³ at the voxel size the form shows, and stored as whole voxels, at least one", () => {
+  expect(toDisplayValue("min_voxels", 300, 0.5)).toBe(37.5);
+  expect(toDisplayValue("min_voxels", 300, 0.3)).toBe(8.1);           // not 8.100000000000001
+  expect(fromDisplayValue("min_voxels", 37.5, 0.5)).toBe(300);
+  expect(fromDisplayValue("min_voxels", 40, 0.5)).toBe(320);
+  expect(fromDisplayValue("min_voxels", 0.01, 1)).toBe(1);
+  expect(toDisplayValue("min_voxels", null, 0.5)).toBeNull();
+  expect(toDisplayValue("carve_fraction", 0.3)).toBe(30);            // the percent display needs no voxel size
 });

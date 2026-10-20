@@ -1,6 +1,6 @@
 // Where each setting appears and how it reads (UX 5.4 to 5.7 and 7), from setting_presentation.json: the steps and their
-// groups, the essential settings shown at once and the ones folded under "More <group> settings", the percent display, and the
-// slider of each ranged setting (R2 4.1).
+// groups, the essential settings shown at once and the ones folded under "More <group> settings", the displays in other units than
+// the engine's (a share in percent, a count of voxels in m³), and the slider of each ranged setting (R2 4.1).
 import { messages } from "../messages";
 import presentationFile from "./setting_presentation.json";
 
@@ -17,6 +17,12 @@ export interface SliderRange {
   step: number;
 }
 
+/**
+ * How the form shows a value the engine stores in another unit: "percent", a share stored as 0 to 1, as 0 to 100; "voxel_volume",
+ * a count of voxels, as their volume in m³ at the voxel size the form shows.
+ */
+export type DisplayConversion = "percent" | "voxel_volume";
+
 /** One entry of setting_presentation.json. *modes*: the modes whose form shows the setting; absent, every mode's. */
 export interface SettingPresentation {
   label: string;
@@ -26,7 +32,7 @@ export interface SettingPresentation {
   group: string;
   essential: "all" | string[] | false;
   modes?: string[];
-  display?: "percent";
+  display?: DisplayConversion;
   widget?: WidgetName;
   slider?: SliderRange;
   label_for_modes?: Record<string, string>;
@@ -41,7 +47,7 @@ export interface SettingView {
   unit: string;
   help: string;
   widget?: WidgetName;
-  display?: "percent";
+  display?: DisplayConversion;
   slider?: SliderRange;
 }
 
@@ -76,8 +82,6 @@ export function settingsOfField(name: string): readonly string[] {
 
 // Units that name the kind of control rather than a unit of the value; the control itself shows them.
 const UNITS_NAMING_THE_CONTROL = new Set(["on/off", "choice", "dates, hours"]);
-// A range given in the unit column: shown beside the value, but not a unit of a value ("default 2", not "default 2 0 to 6").
-const RANGES_IN_THE_UNIT_COLUMN = new Set(["0 to 6"]);
 
 export function settingIsShownIn(name: string, mode: string): boolean {
   const modes = SETTING_PRESENTATIONS[name]?.modes;
@@ -106,10 +110,6 @@ export function unitBesideValue(view: SettingView): string {
   return UNITS_NAMING_THE_CONTROL.has(view.unit) ? "" : view.unit;
 }
 
-/** The unit written after a value of the setting, as its default in the tooltip: neither a control kind nor a range. */
-export function unitOfValue(view: SettingView): string {
-  return RANGES_IN_THE_UNIT_COLUMN.has(view.unit) ? "" : unitBesideValue(view);
-}
 
 /**
  * The setting the form shows for a field the engine names: the name itself, or the name before a dot ("threshold.value",
@@ -144,18 +144,30 @@ export function settingsForStep(step: StepName, mode: string): SettingGroupView[
 // 0.3 * 100 is 30.000000000000004 in floating point; twelve significant digits drop that noise and keep every real digit.
 const withoutFloatingPointNoise = (value: number) => Number(value.toPrecision(12));
 
-function isShownAsPercent(name: string): boolean {
-  return SETTING_PRESENTATIONS[name]?.display === "percent";
+/** The volume of one voxel in m³ at *voxelSize* (the form's value of voxel_size), or null when it is not a size. */
+function voxelVolume(voxelSize: unknown): number | null {
+  return typeof voxelSize === "number" && voxelSize > 0 ? voxelSize ** 3 : null;
 }
 
-/** The value as the form shows it: a percent setting stored as 0 to 1 is shown as 0 to 100. */
-export function toDisplayValue(name: string, value: unknown): unknown {
-  return isShownAsPercent(name) && typeof value === "number" ? withoutFloatingPointNoise(value * 100) : value;
+/**
+ * The value as the form shows it: a share stored as 0 to 1 as 0 to 100, a count of voxels as their volume in m³ at *voxelSize*
+ * (the voxel size the form shows).
+ */
+export function toDisplayValue(name: string, value: unknown, voxelSize: unknown = null): unknown {
+  if (typeof value !== "number") return value;
+  const display = SETTING_PRESENTATIONS[name]?.display;
+  if (display === "percent") return withoutFloatingPointNoise(value * 100);
+  const volume = display === "voxel_volume" ? voxelVolume(voxelSize) : null;
+  return volume === null ? value : withoutFloatingPointNoise(value * volume);
 }
 
-/** The value as the engine stores it, from the one the form shows. */
-export function fromDisplayValue(name: string, shown: unknown): unknown {
-  return isShownAsPercent(name) && typeof shown === "number" ? withoutFloatingPointNoise(shown / 100) : shown;
+/** The value as the engine stores it, from the one the form shows: a volume becomes a whole number of voxels, at least one. */
+export function fromDisplayValue(name: string, shown: unknown, voxelSize: unknown = null): unknown {
+  if (typeof shown !== "number") return shown;
+  const display = SETTING_PRESENTATIONS[name]?.display;
+  if (display === "percent") return withoutFloatingPointNoise(shown / 100);
+  const volume = display === "voxel_volume" ? voxelVolume(voxelSize) : null;
+  return volume === null ? shown : Math.max(1, Math.round(shown / volume));
 }
 
 /** The slider of *view* in the units the form shows (0 to 100 for a share stored as 0 to 1); undefined for a setting without one. */

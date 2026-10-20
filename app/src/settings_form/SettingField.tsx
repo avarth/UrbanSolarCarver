@@ -8,7 +8,7 @@ import type { ColdPeriodState, Hemisphere } from "./analysis_period";
 import { defaultValue, shownValue, type FormState, type SchemaProperty } from "./form_state";
 import {
   ANALYSIS_PERIOD_FIELDS, BALANCE_TEMPERATURE_FIELDS, fromDisplayValue, settingsOfField, shownSliderOf, thresholdIsShadowToleratedIn,
-  toDisplayValue, unitBesideValue, unitOfValue, type SettingView,
+  toDisplayValue, unitBesideValue, type SettingView,
 } from "./presentation";
 import { SettingTooltip } from "./SettingTooltip";
 import { AnalysisPeriod, type AnalysisPeriodField } from "./widgets/AnalysisPeriod";
@@ -85,7 +85,7 @@ export function emptyMeaningOf(view: SettingView, form: Pick<FormState, "mode" |
   if (view.name !== "max_slope_deg") return null;
   if (form.scoreKindByMode[form.mode] !== "weighted_sum") return messages.emptyMeansInMode(messages.switchedOff, plainModeName(form.mode));
   const degrees = AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION.exec(form.schemaProperties.max_slope_deg?.description ?? "")?.[1];
-  return degrees === undefined ? null : messages.emptyMeansInMode(withUnit(formattedNumber(Number(degrees)), unitOfValue(view)), plainModeName(form.mode));
+  return degrees === undefined ? null : messages.emptyMeansInMode(withUnit(formattedNumber(Number(degrees)), unitBesideValue(view)), plainModeName(form.mode));
 }
 
 // The value that switches the slope limit off, and the engine's automatic score smoothing as a multiple of the voxel size, as the
@@ -105,7 +105,7 @@ export function automaticValueOf(view: SettingView, form: FormState): AutomaticV
     const found = pattern.exec(description)?.[1];
     return found === undefined ? null : Number(found);
   };
-  const said = (value: number | null, text?: string) => (value === null ? null : { value, text: text ?? spokenValue(value, unitOfValue(view)) });
+  const said = (value: number | null, text?: string) => (value === null ? null : { value, text: text ?? spokenValue(value, unitBesideValue(view)) });
   if (view.name === "max_slope_deg") {
     return form.scoreKindByMode[form.mode] === "weighted_sum" ? said(numberIn(AUTOMATIC_SLOPE_LIMIT_IN_DESCRIPTION))
       : said(numberIn(SLOPE_LIMIT_OFF_IN_DESCRIPTION), messages.switchedOff);
@@ -119,20 +119,20 @@ export function automaticValueOf(view: SettingView, form: FormState): AutomaticV
 
 /** The default as the tooltip writes it ("1.0 m", "on", "21 Dec, 10 to 14 h", "automatic"). */
 export function defaultTextOf(view: SettingView, form: FormState, isShadowTolerated: boolean): string {
-  const unit = unitOfValue(view);
+  const unit = unitBesideValue(view);
   if (view.widget === "analysis_period") {
     const period = ANALYSIS_PERIOD_FIELDS.map((name) => defaultValue(form, name));
     return period.every((value) => typeof value === "number") ? messages.periodSummary(...(period as [number, number, number, number, number, number]))
       : messages.automatic;
   }
-  const value = toDisplayValue(view.name, defaultValue(form, view.name));
+  const value = toDisplayValue(view.name, defaultValue(form, view.name), shownValue(form, "voxel_size"));
   if (view.widget === "threshold" && value === null) return isShadowTolerated ? withUnit("0", unit) : messages.carvingRuleChoices.carve_fraction;
   if (value === null) return messages.automatic;
   if (typeof value === "boolean") return value ? messages.switchedOn : messages.switchedOff;
   if (typeof value === "string") return CHOICE_NAMES[view.name]?.[value] ?? value;
   if (Array.isArray(value)) return withUnit(value.join(", "), unit);
   // A decimal setting reads like the engine's own default (1.0, not 1); a whole-number one stays whole.
-  const isDecimalSetting = typesOf(form.schemaProperties[view.name]).includes("number") && view.display !== "percent";
+  const isDecimalSetting = typesOf(form.schemaProperties[view.name]).includes("number") && view.display === undefined;
   return withUnit(typeof value === "number" && isDecimalSetting && Number.isInteger(value) ? value.toFixed(1) : String(value), unit);
 }
 
@@ -158,8 +158,9 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
   const types = typesOf(property);
   const unit = unitBesideValue(view);
   const isShadowTolerated = thresholdIsShadowToleratedIn(form.mode);
-  const shown = toDisplayValue(view.name, shownValue(form, view.name));
-  const changeTo = (value: unknown) => onChange({ [view.name]: fromDisplayValue(view.name, value) });
+  const voxelSize = shownValue(form, "voxel_size");
+  const shown = toDisplayValue(view.name, shownValue(form, view.name), voxelSize);
+  const changeTo = (value: unknown) => onChange({ [view.name]: fromDisplayValue(view.name, value, voxelSize) });
   // Controls made of several inputs are labelled as a group; the others are the target of their label.
   const isGroupOfInputs = view.widget === "analysis_period" || view.widget === "tilted_plane_angles" || view.widget === "mesh_format"
     || view.widget === "balance_temperature";
@@ -225,7 +226,8 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
                        automatic={value === null ? automaticValueOf(view, form) : null} onValue={changeTo} />
         ) : (
           <div className="setting-control">
-            <NumberInput id={inputId} value={value} mayBeEmpty={mayBeEmpty} wholeNumbers={types.includes("integer")} invalid={control.invalid}
+            <NumberInput id={inputId} value={value} mayBeEmpty={mayBeEmpty} wholeNumbers={types.includes("integer") && view.display === undefined}
+                         invalid={control.invalid}
                          describedBy={control.describedBy} disabled={disabled} {...engineRange} onValue={changeTo} onRefused={setRefusedInput}
                          placeholder={placeholder} />
             {unit && <span className="setting-unit">{unit}</span>}

@@ -31,6 +31,7 @@ const SCHEMA = {
     end_day: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
     end_hour: { anyOf: [{ type: "integer" }, { type: "null" }], default: null },
     smooth_iters: { default: 2, minimum: 0, maximum: 6, type: "integer" },
+    min_voxels: { default: 300, exclusiveMinimum: 0, type: "integer" },
     ground_floor_height: { default: 5.0, type: "number" },
     floor_height: { default: 3.0, type: "number" },
     min_plate_dimension: { default: 3.0, type: "number" },
@@ -58,8 +59,8 @@ afterEach(() => {
   rendered = null;
 });
 
-function formFor(mode: string): FormState {
-  return initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode }, gridPlan: GRID_PLAN });
+function formFor(mode: string, settings: Record<string, unknown> = {}): FormState {
+  return initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode, ...settings }, gridPlan: GRID_PLAN });
 }
 
 function viewOf(step: Parameters<typeof settingsForStep>[0], mode: string, name: string) {
@@ -256,12 +257,35 @@ test("a tooltip opened by a click closes when the pointer presses elsewhere", ()
   expect(rendered.container.querySelector("[role='tooltip']")).toBeNull();
 });
 
-test("a range given as the unit is shown beside the value but not after the default", () => {
+test("a count shows what it counts beside the value and after the default: Smoothing passes, Rays per batch", () => {
   rendered = renderForTest(<SettingField view={viewOf("envelope_and_massing", "daylight", "smooth_iters")} form={formFor("daylight")} onChange={() => {}} />);
-  expect(rendered.container.querySelector(".setting-unit")!.textContent).toBe("0 to 6");
+  expect(rendered.container.querySelector(".setting-unit")!.textContent).toBe("passes");
   click(rendered.container.querySelector("button.setting-info")!);
-  expect(rendered.container.querySelector("[role='tooltip']")!.textContent).toContain("Config name: smooth_iters, default 2");
-  expect(rendered.container.querySelector("[role='tooltip']")!.textContent).not.toContain("default 2 0 to 6");
+  expect(rendered.container.querySelector("[role='tooltip']")!.textContent).toContain("Config name: smooth_iters, default 2\u00a0passes");
+  rendered.unmount();
+  rendered = renderForTest(<SettingField view={viewOf("settings", "daylight", "ray_batch_size")} form={formFor("daylight")} onChange={() => {}} />);
+  expect(rendered.container.querySelector(".setting-unit")!.textContent).toBe("rays");
+});
+
+test("Drop pieces smaller than is shown and typed in m³ at the voxel size the form shows, and stored in voxels", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<SettingField view={viewOf("envelope_and_massing", "daylight", "min_voxels")} form={formFor("daylight", { voxel_size: 0.5 })}
+                                         onChange={onChange} />);
+  const field = rendered.container.querySelector<HTMLInputElement>("input[type=number]")!;
+  expect(field.value).toBe("37.5");                                        // 300 voxels of 0.125 m³
+  expect(rendered.container.querySelector(".setting-unit")!.textContent).toBe("m³");
+  typeInto(field, "40.2");                                                 // a decimal is taken: it is a volume
+  expect(onChange).toHaveBeenLastCalledWith({ min_voxels: 322 });
+  click(rendered.container.querySelector("button.setting-info")!);
+  expect(rendered.container.querySelector("[role='tooltip']")!.textContent).toContain("default 37.5\u00a0m³");
+});
+
+test("Sun positions per hour says per hour in each choice", () => {
+  rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "sun_steps_per_hour")} form={formFor("time-based")} onChange={() => {}} />);
+  const options = [...rendered.container.querySelectorAll("option")].map((option) => option.textContent);
+  expect(options.slice(0, 2)).toEqual(["1 per hour", "2 per hour (every 30 minutes)"]);
+  expect(options).toContain("12 per hour (every 5 minutes)");
+  expect(options.at(-1)).toBe("60 per hour (every minute)");
 });
 
 test("a number outside the engine's range is refused in the field, with a message, and never reaches the form", () => {

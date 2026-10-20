@@ -85,6 +85,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (browser UI)
 
+- **Units beside every setting.** Rays per batch now says "rays",
+  Smoothing passes "passes" (the range 0 to 6 moved to its help), and the
+  choices of Sun positions per hour read "12 per hour (every 5 minutes)".
+  **Drop pieces smaller than** is shown and typed in m³: the form converts
+  the engine's `min_voxels` (a count of voxels, unchanged) with the voxel
+  size it shows, and a typed volume back to whole voxels, at least one. The
+  Bliss constant is a number without a unit and shows none.
 - **Carving: the rule at the top, a cutoff line to drag, scores in units.**
   In the weighted modes the carving rule (Carve amount, Automatic split,
   Score cutoff) is a three-way choice at the top of the step, with the

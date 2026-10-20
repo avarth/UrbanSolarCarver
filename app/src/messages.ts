@@ -409,7 +409,7 @@ export const messages = {
   compassDirections: ["N", "NE", "E", "SE", "S", "SW", "W", "NW"],
   angleTowards: (direction: string) => `Plane angle for test surfaces facing ${direction}`,
   sunStepsOption: (stepsPerHour: number) =>
-    stepsPerHour === 1 ? "1 (every hour)" : stepsPerHour === 60 ? "60 (every minute)" : `${stepsPerHour} (every ${60 / stepsPerHour} minutes)`,
+    stepsPerHour === 1 ? "1 per hour" : stepsPerHour === 60 ? "60 per hour (every minute)" : `${stepsPerHour} per hour (every ${60 / stepsPerHour} minutes)`,
   meshFormatNames: { ply: "PLY", obj: "OBJ", stl: "STL", glb: "GLB" },
   floorStackingChoices: { supported: "Supported", free: "Free" },
   carvingRuleChoices: { carve_fraction: "Carve amount", headtail: "Automatic split", cutoff: "Score cutoff" },

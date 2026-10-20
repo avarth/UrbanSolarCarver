@@ -100,7 +100,7 @@
       "modes": ["radiative_cooling"], "slider": { "low": 0, "high": 5, "step": 0.1 }
     },
     "ray_batch_size": {
-      "label": "Rays per batch", "unit": "",
+      "label": "Rays per batch", "unit": "rays",
       "help": "0 sizes batches from free GPU memory. Lower it if the computer runs out of memory.",
       "step": "settings", "group": "Detail", "essential": false
     },
@@ -153,14 +153,14 @@
       "step": "envelope_and_massing", "group": "Envelope", "essential": "all"
     },
     "smooth_iters": {
-      "label": "Smoothing passes", "unit": "0 to 6",
-      "help": "How many polishing passes the smoothed surface gets.",
+      "label": "Smoothing passes", "unit": "passes",
+      "help": "How many polishing passes the smoothed surface gets, 0 to 6.",
       "step": "envelope_and_massing", "group": "Envelope", "essential": false
     },
     "min_voxels": {
-      "label": "Drop pieces smaller than", "unit": "voxels",
-      "help": "Loose clusters smaller than this are removed before meshing.",
-      "step": "envelope_and_massing", "group": "Envelope", "essential": false
+      "label": "Drop pieces smaller than", "unit": "m³",
+      "help": "Loose pieces of the kept volume smaller than this are removed before meshing. The engine counts it in voxels: the volume shown is that count at the voxel size in Settings, and follows it when the voxel size changes.",
+      "step": "envelope_and_massing", "group": "Envelope", "essential": false, "display": "voxel_volume"
     },
     "min_face_count": {
       "label": "Drop mesh fragments under", "unit": "faces",
