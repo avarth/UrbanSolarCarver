@@ -26,7 +26,7 @@ with warnings.catch_warnings():     # newer Starlette versions announce that Tes
 
 from local_web_test_support import (
     GOLDEN_EPW, FakeRecycleBin, WaitsForCancel, box_bytes, has_vertex_normals, make_link_to_folder, make_worker, write_fake_finished_run_with_envelope,
-    write_fake_run, write_joined_test_surfaces_without_normals,
+    write_envelope_as_exported, write_fake_run, write_joined_test_surfaces_without_normals,
 )
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
@@ -1380,3 +1380,23 @@ def test_default_warm_up_prepares_the_cpu_or_names_why_it_cannot():
     assert state.state in ("cpu", "failed") and state.device_name is None
     assert (state.problem is None) == (state.state == "cpu")
     assert (state.cuda_available is None) == (state.state == "failed")
+
+
+# ---- Carve further ----
+
+def test_carve_further_makes_the_envelope_the_max_volume_and_resets_the_settings(client_after_fake_run, projects_folder):
+    write_envelope_as_exported(projects_folder / "p")
+    reply = client_after_fake_run.post("/api/projects/p/carve-further", headers=AUTH)
+    assert reply.status_code == 200
+    detail = reply.json()
+    assert [file["name"] for file in detail["inputs"]["max_volume"]] == ["carved_envelope_1.ply"]
+    assert detail["carving_chain"][0]["mode"] == "daylight" and detail["settings"]["mode"] == "time-based"
+
+
+def test_carve_further_during_a_run_is_refused(client_with_blocking_run):
+    client, _ = client_with_blocking_run
+    assert client.post("/api/projects/p/carve-further", headers=AUTH).status_code == 409
+
+
+def test_carve_further_without_an_envelope_is_refused(client_with_inputs):
+    assert client_with_inputs.post("/api/projects/p/carve-further", headers=AUTH).status_code == 409

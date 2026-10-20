@@ -163,6 +163,19 @@ def write_fake_stage_output(run_folder: Path, stage: str) -> None:
         (run_folder / "run_report.md").write_text("report", encoding="utf-8")
 
 
+def write_envelope_as_exported(project_folder: Path, extents=(8, 8, 6)) -> trimesh.Trimesh:
+    """Put a real envelope mesh where the fake exporting stage left its placeholder, named by the manifest as the engine does."""
+    exporting_folder = project_folder / "run" / "exporting"
+    envelope = trimesh.creation.box(extents=extents)
+    envelope.apply_translation([0, 0, extents[2] / 2])
+    envelope.export(exporting_folder / "export.ply")
+    manifest = json.loads((exporting_folder / "manifest.json").read_text(encoding="utf-8"))
+    # as the engine writes them; the run_id stays, so the stage stays current
+    manifest.update(mesh_path="export.ply", upstream_manifest="../thresholding/manifest.json")
+    (exporting_folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return envelope
+
+
 def stages_the_engine_runs(request) -> list[str]:
     path = stages_needed_for(request.produce)
     return path[path.index(request.start_from):]

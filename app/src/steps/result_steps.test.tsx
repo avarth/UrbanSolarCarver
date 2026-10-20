@@ -142,7 +142,7 @@ test("threshold moves during a carving run: one more run with the last value, an
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
       refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
     return <>{latest.content.carving}</>;
   }
@@ -204,7 +204,7 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
       refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
     return <>{latest.content.carving}</>;
   }
@@ -264,7 +264,7 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
       stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
-      openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
     return <>{latest.content.carving}</>;
   }
@@ -312,7 +312,7 @@ test("Run analysis answered with up to date asks for the stage status again and 
     const steps = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
       stages, refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
     return <>{steps.content.carving}</>;
   }
@@ -354,7 +354,7 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
     const steps = useResultSteps({
       token: "token", project: "p", form, currentForm: () => formNow, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false,
       stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
     return <>{steps.content.carving}</>;
   }

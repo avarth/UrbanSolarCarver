@@ -37,6 +37,7 @@ from .api_models import (
     ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
 )
+from .carve_further import carve_further
 from .example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
 from .folder_picker import FolderPickerUnavailable
 from .gpu_warm_up import GpuWarmUp
@@ -264,7 +265,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                 inputs={role: store.input_files(name, role) for role in (*MESH_ROLES, WEATHER_ROLE)},
                 joined_bounds=store.joined_bounds(name), weather_location=store.weather_location(name),
                 weather_latitude=store.weather_latitude(name),
-                stage_status=StageStatusReply(stages=stage_status(store, name)), grid_plan=store.stored_grid_plan(name))
+                stage_status=StageStatusReply(stages=stage_status(store, name)), grid_plan=store.stored_grid_plan(name),
+                carving_chain=store.read_project_json(name).carving_chain)
 
     def run_folder_of(name: str) -> Path:
         return folder_in_use.store.open(name) / RUN_FOLDER
@@ -424,6 +426,15 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with store.project_lock(name):
             refuse_while_running(name)
             return store.remove_input(name, role, file_name)
+
+    @router.post("/projects/{name}/carve-further", responses=_ERROR_RESPONSES)
+    def carve_project_further(name: str) -> ProjectDetail:
+        """Make the exported envelope the maximum volume and return the settings to a new project's (carve_further.py)."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            refuse_while_running(name)
+            carve_further(store, name)
+            return project_detail(store, name)
 
     @router.put("/projects/{name}/config", responses={409: _ERROR_RESPONSES[409], 422: {"model": ConfigErrorReply}})
     def save_config(name: str, request: ConfigValuesRequest) -> ConfigReply:

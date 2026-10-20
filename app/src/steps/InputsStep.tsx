@@ -35,6 +35,8 @@ interface InputBoxProps {
   weatherNeeded?: boolean;
   /** The files of the box that the 3D view cannot draw, one text each naming the file. */
   drawingProblems?: string[];
+  /** A line under the files: for the maximum volume, how carving further made it (CarveFurther.tsx). */
+  note?: string | null;
 }
 
 const TITLES: Record<InputRole, string> = {
@@ -55,7 +57,7 @@ function RemoveIcon() {
 const NO_PROBLEMS: string[] = [];
 
 export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
-                           drawingProblems = NO_PROBLEMS }: InputBoxProps) {
+                           drawingProblems = NO_PROBLEMS, note = null }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -132,6 +134,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
           ))}
         </ul>
       )}
+      {filled && note !== null && <p className="input-box-hint">{note}</p>}
       {disabledReason !== null && <p className="input-box-reason">{disabledReason}</p>}
       {[...problems, ...drawingProblems].map((problem) => <p key={problem} className="input-box-problem"><WarningIcon />{problem}</p>)}
     </section>
@@ -156,15 +159,19 @@ interface InputsStepProps {
   disabledReason: string | null;
   /** Per mesh role, the files the 3D view cannot draw (one text each naming the file). */
   drawingProblems?: Partial<Record<InputRole, string[]>>;
+  /** How carving further made the maximum volume; null for one the user added. */
+  maxVolumeNote?: string | null;
 }
 
-export function InputsStep({ files, weatherLocation, weatherHint, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {} }: InputsStepProps) {
+export function InputsStep({ files, weatherLocation, weatherHint, inputsBounds, onAddFiles, onRemoveFile, disabledReason, drawingProblems = {},
+                             maxVolumeNote = null }: InputsStepProps) {
   const warning = inputsBounds === null ? null : sizeWarning(inputsBounds);
   return (
     <div className="inputs-step">
       {INPUT_ROLES.map((role) => (
         <InputBox key={role} role={role} files={files[role]} weatherLocation={weatherLocation} weatherHint={weatherHint}
-                  onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]} />
+                  onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]}
+                  note={role === "max_volume" ? maxVolumeNote : null} />
       ))}
       {inputsBounds !== null && (
         <div className="inputs-size">

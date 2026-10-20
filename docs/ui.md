@@ -80,6 +80,18 @@ A project opens as a list of six steps on the left, with the 3D view on the righ
     Each part has its own out-of-date mark, "Out of date for the current settings". The step's summary says what exists, for example "Envelope built, massing not built". A link at the bottom opens the run report. The *grid module* is the square module the storeys are built from and the narrowest piece of floor allowed. The *permitted volume exceedance* is the share of a module on a storey that may lie outside the carved envelope; the massing never leaves the maximum volume. [Floor-plate massing](massing.md) describes the method.
 6. **Export.** The mesh format of the carved envelope and the building massing, and the downloads: the carved envelope, the building massing, the building massing data (JSON), the settings (`config.yaml`) and the whole project as a zip. Each file is offered once it exists. The envelope and the massing are the files that were built, in the format they were built in. A change of format rebuilds the parts that exist (the envelope, the massing or both); while Carving is locked (see below), the format is stored without a build, Export says so, and the next build of each part writes the chosen format.
 
+## Carving further with another criterion
+
+The Export step's **Carve further with another criterion** makes the built envelope the project's maximum volume, so a second criterion carves what the first one kept. The result keeps only what every criterion in the chain keeps (the intersection of their envelopes). Each step voxelizes the envelope again on the new run's grid, so surfaces can move by up to about half a voxel per step. The order matters for settings that are a share of the current volume, such as `carve_fraction`.
+
+The button asks once before it acts, and works only when the envelope is up to date with the settings. Then:
+
+- the envelope becomes the only maximum volume file, `carved_envelope_1` (then `_2`, and so on), in the format it was exported in;
+- the files it replaces move to `inputs/earlier_max_volumes/<step>/` in the project folder, so the maximum volume you started from is never lost;
+- `project.json` records each step in `carving_chain`: the mode and settings the envelope was carved with, when, and which files it replaced; the Inputs step shows the chain under the maximum volume ("Carved by Daylight, then Solar time-based");
+- the settings return to those of a new project, and the Mode step opens to choose the next criterion (when the default voxel size would make the grid too large, the voxel size the envelope was built with stays);
+- the test surfaces and the weather file stay; every result is out of date and the next run starts from the analysis.
+
 ## Entering values
 
 A number with a range is entered with a slider and a number field side by side. The number field takes any value the engine accepts; the slider covers the range people normally use (for example 0.1 to 5 m for the voxel size). The balance temperature and the analysis period are strips with two handles instead, each handle with its exact value in a bubble over it, always shown; where the two handles are close, their bubbles move apart so they never overlap.
