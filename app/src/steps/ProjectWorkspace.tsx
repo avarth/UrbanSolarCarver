@@ -20,6 +20,7 @@ import { useColdPeriod } from "./cold_period_request";
 import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ModeStep } from "./ModeStep";
+import { carvedByNote } from "./CarveFurther";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import type { RunLoop } from "./run_state";
 import {
@@ -65,6 +66,8 @@ interface ProjectWorkspaceProps {
   startSteps?: WorkspaceSteps;
   /** Told the open step and the step the view shows whenever either changes. */
   onStepsChange?: (steps: WorkspaceSteps) => void;
+  /** Makes the built envelope the maximum volume and reopens the project (CarveFurther.tsx); resolves with the reason it was refused, or null. */
+  onCarveFurther: () => Promise<string | null>;
 }
 
 /** The step open in the panel (null when all are closed) and the step whose layers the 3D view shows: the last one opened. */
@@ -296,6 +299,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const resultSteps = useResultSteps({
     token, project: project.name, form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
+    onCarveFurther: props.onCarveFurther,
   });
 
   const viewState: ProjectViewState = {
@@ -320,7 +324,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
       <InputsStep files={files} weatherLocation={weatherLocation} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
-                  onRemoveFile={removeFile} disabledReason={inputsDisabledReason}
+                  onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, test_surfaces: testSurfacesMesh.drawingProblems }} />
     ),
     mode: (

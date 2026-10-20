@@ -323,6 +323,18 @@ export const messages = {
   projectZipDownload: "Whole project (zip)",
   outOfDateFile: "Out of date",
 
+  // Carve further (Export step): the envelope becomes the project's maximum volume, to be carved by another criterion.
+  carveFurtherTitle: "Carve further",
+  carveFurtherButton: "Carve further with another criterion",
+  carveFurtherNote: "Makes this envelope the maximum volume of the project and returns the settings to their defaults, so you can choose " +
+    "the next criterion. The current maximum volume is kept in the project folder.",
+  carveFurtherQuestion: "Replace the maximum volume with this envelope and return the settings to their defaults?",
+  carveFurtherConfirm: "Replace and reset",
+  carveFurtherNeedsCurrentEnvelope: "Build the envelope with the current settings first.",
+  // Under the maximum volume file once the project has carved further: the plain mode names in the order they carved it, joined by ", then ".
+  carvedBy: (modesInOrder: string) => `Carved by ${modesInOrder}. The earlier maximum volumes are kept in the ` +
+    "project folder, in inputs/earlier_max_volumes.",
+
   // Settings form (5.4 to 5.7, 7). The labels, units and help texts of the settings are in settings_form/setting_presentation.json.
   moreSettingsOfGroup: {
     "When": "More sun settings",

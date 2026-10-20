@@ -724,6 +724,13 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .download-list li { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); }
 .download-note { color: var(--colour-muted); font-size: var(--text-secondary); }
 
+/* Carve further (CarveFurther.tsx): set apart from the downloads, as the parts of the build step are. */
+.carve-further { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2);
+                 padding-top: calc(var(--space-unit) * 3); border-top: 1px solid var(--colour-line); }
+.carve-further-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
+.carve-further-question { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); }
+.carve-further-question p { flex-basis: 100%; margin: 0; }
+
 .out-of-date-tag {
   padding: 0 var(--space-unit);
   border: 1px solid var(--colour-muted);

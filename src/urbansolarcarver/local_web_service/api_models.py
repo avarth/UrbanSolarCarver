@@ -17,6 +17,20 @@ class StageRecord(BaseModel):
     manifest_run_id: str        # run_id of the manifest the stage wrote
 
 
+class CarvingChainStep(BaseModel):
+    """One "carve further": the exported envelope of a run became the project's maximum volume.
+
+    The files it replaced are kept in inputs/earlier_max_volumes/<step>/, so the chain can be traced back to the
+    maximum volume the user uploaded.
+    """
+    step: int                           # 1 for the first carve further, then 2, ...
+    mode: str                           # the mode the envelope was carved with
+    settings: dict                      # the settings the envelope was carved with, without the paths and device the service owns
+    carved_on: str                      # ISO 8601, UTC: when the envelope became the maximum volume
+    earlier_max_volume_files: list[str] # the maximum volume files it replaced, now in inputs/earlier_max_volumes/<step>/
+    max_volume_file: str                # the envelope's file name among the maximum volume files
+
+
 class ProjectJson(BaseModel):
     """The content of a project's project.json."""
     name: str
@@ -25,6 +39,7 @@ class ProjectJson(BaseModel):
     input_files: dict[str, dict[str, int]] = Field(default_factory=dict)  # role -> file name -> triangle count
     stage_records: dict[str, StageRecord] = Field(default_factory=dict)   # stage name -> record
     example: str | None = None  # the example the project was made from (examples.json name); None for other projects and older ones
+    carving_chain: list["CarvingChainStep"] = Field(default_factory=list)  # each "carve further", oldest first
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -231,10 +246,14 @@ class ExampleInfo(BaseModel):
     project: str | None = None  # the existing project made from this example (the most recently modified), None when there is none
 
 
+# The mode of a new project, and the mode a project's settings return to when it carves further.
+NEW_PROJECT_MODE = "time-based"
+
+
 class CreateProjectRequest(BaseModel):
     """The body of a request to create a project."""
     name: str
-    mode: str = "time-based"
+    mode: str = NEW_PROJECT_MODE
 
 
 class RenameProjectRequest(BaseModel):
@@ -265,6 +284,7 @@ class ProjectDetail(BaseModel):
     weather_latitude: float | None              # as in InputFilesReply
     stage_status: StageStatusReply
     grid_plan: GridPlanReply | None             # of the stored settings, as a save would plan it; None without a max volume
+    carving_chain: list[CarvingChainStep] = Field(default_factory=list)   # as in ProjectJson
 
 
 class CancelRunReply(BaseModel):

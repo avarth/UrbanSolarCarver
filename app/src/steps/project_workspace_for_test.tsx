@@ -177,7 +177,7 @@ export async function openWorkspace(
   function Page() {
     const runs = useRunLoop("token", () => {});
     return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} warmUpState="ready" runs={runs}
-                             onServiceProblem={() => {}} onShowProjects={() => {}} {...steps} />;
+                             onServiceProblem={() => {}} onShowProjects={() => {}} onCarveFurther={async () => null} {...steps} />;
   }
   rendered = renderForTest(<Page />);
   await settle();

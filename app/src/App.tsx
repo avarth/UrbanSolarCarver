@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, failureTextOf, getExamples, getHealth, getModes, getProject, getProjectsFolder,
-  getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, renameProject, resetProjectToExample, serviceProblemOf,
+  carveFurther, getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, renameProject, resetProjectToExample, serviceProblemOf,
   type ExampleInfo, type HealthReply, type ModeInfo, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
 import { messages, type MessagePart } from "./messages";
@@ -227,6 +227,22 @@ export function App() {
     return saver.flush();
   };
 
+  /**
+   * Carve further (CarveFurther.tsx): the open project's envelope becomes its maximum volume and its settings return to a new
+   * project's, so its waiting settings save is dropped; the project opens again at the Mode step to choose the next criterion.
+   */
+  const carveOpenProjectFurther = async (): Promise<string | null> => {
+    if (openProject === null) return null;
+    const name = openProject.name;
+    await settleOpenProject(name);
+    return reasonIfRefused(() => carveFurther(accessToken, name), (carved) => {
+      openProjectSettings.current?.cancel();
+      setOpenProject(carved);
+      setWorkspaceStartSteps({ open: "mode", view: "inputs" });
+      setOpenProjectResets((resets) => resets + 1);
+    });
+  };
+
   const projectActions: ProjectActions = {
     openFolder: (name) => reasonIfRefused(() => openProjectFolder(accessToken, name), () => {}),
     rename: async (name, newName) => {
@@ -312,7 +328,8 @@ export function App() {
         <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes}
                           warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
                           onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
-                          startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }} />
+                          startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}
+                          onCarveFurther={carveOpenProjectFurther} />
       )}
     </div>
   );

@@ -28,7 +28,7 @@ from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from .api_models import ColdPeriodDates, ColdPeriodReply, ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from .api_models import CarvingChainStep, ColdPeriodDates, ColdPeriodReply, ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
 from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, move_to_recycle_bin
@@ -43,6 +43,7 @@ WEATHER_EXTENSION = ".epw"
 WEATHER_FILE_NAME = "weather.epw"
 INPUTS_FOLDER = "inputs"
 JOINED_FOLDER = "inputs/joined"
+EARLIER_MAX_VOLUMES_FOLDER = "inputs/earlier_max_volumes"   # the max volume files each "carve further" replaced, by step
 # Settings the service decides, whatever the browser sends: every file location (the service takes no path from
 # the browser; simulated_weights_path is never set) and the compute device.
 SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir", "device", "simulated_weights_path")
@@ -529,6 +530,45 @@ class ProjectStore:
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
             return self._reply(name, role, project_json)
+
+    def replace_max_volume_with_envelope(self, name: str, envelope_path: Path, mode: str, settings: dict) -> CarvingChainStep:
+        """Make the envelope at *envelope_path* the project's only maximum volume file, keeping the files it replaces.
+
+        The replaced files move to inputs/earlier_max_volumes/<step>/ and the step is added to project.json's
+        carving_chain with the *mode* and *settings* the envelope was carved with. The envelope is stored as
+        carved_envelope_<step> with its own extension. ProjectError 422 when the envelope cannot be read; nothing
+        changes then.
+        """
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
+            project_folder = self.open(name)
+            step = len(project_json.carving_chain) + 1
+            envelope_file_name = f"carved_envelope_{step}{envelope_path.suffix.lower()}"
+            try:
+                envelope = load_mesh(str(envelope_path))
+            except InputError as error:
+                raise ProjectError(f"The exported envelope cannot be read: {str(error).removeprefix('load_mesh: ')}", status_code=422) from error
+            joined_temporary_path = self._write_joined_temporary_file(project_folder, "max_volume", [envelope])
+            try:
+                earlier_folder = project_folder / EARLIER_MAX_VOLUMES_FOLDER / str(step)
+                earlier_folder.mkdir(parents=True, exist_ok=True)
+                replaced_files = sorted(project_json.input_files.get("max_volume", {}))
+                for file_name in replaced_files:
+                    os.replace(self._stored_file_path(project_folder, "max_volume", file_name), earlier_folder / file_name)
+                shutil.copyfile(envelope_path, self._stored_file_path(project_folder, "max_volume", envelope_file_name))
+                self._replace_joined_file(project_folder, "max_volume", joined_temporary_path)
+            finally:
+                if joined_temporary_path is not None:
+                    joined_temporary_path.unlink(missing_ok=True)
+            chain_step = CarvingChainStep(
+                step=step, mode=mode, settings=self._without_service_owned(settings),
+                carved_on=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                earlier_max_volume_files=replaced_files, max_volume_file=envelope_file_name)
+            project_json.input_files["max_volume"] = {envelope_file_name: len(envelope.faces)}
+            project_json.carving_chain.append(chain_step)
+            project_json.inputs_revision += 1
+            self.write_project_json(name, project_json)
+            return chain_step
 
     def rebuild_joined_test_surfaces_without_normals(self, name: str) -> bool:
         """Rebuild the joined test surface file when it has no vertex normals and raise inputs_revision; whether it did.
