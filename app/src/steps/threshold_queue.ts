@@ -2,16 +2,16 @@
 // cancelling a one-stage carving run saves nothing: the run in progress is left to end, values that arrive meanwhile replace
 // each other, and exactly one more run follows with the last of them.
 
-export interface ThresholdUpdateQueue {
+export interface ThresholdUpdateQueue<Value> {
   /** Applies *value* and runs the carving now, or after the run in progress when there is one. */
-  submit: (value: number) => void;
+  submit: (value: Value) => void;
   /** A run is in progress or a value waits for one. */
   busy: () => boolean;
 }
 
 /** One submitted value; each submission is its own object, so two submissions of one value stay apart. */
-interface Submission {
-  value: number;
+interface Submission<Value> {
+  value: Value;
 }
 
 /**
@@ -23,17 +23,17 @@ interface Submission {
  * *onLastValueEndedWithoutRun* is called when the last value submitted ended without a run: no newer run follows any more,
  * so the run before it is not superseded now, and the results the service holds are the ones to show.
  */
-export function createThresholdUpdateQueue(applyAndRun: (value: number, isSuperseded: () => boolean) => Promise<boolean>,
-                                           onLastValueEndedWithoutRun: () => void): ThresholdUpdateQueue {
-  let applying: Submission | null = null;
-  let waiting: Submission | null = null;
+export function createThresholdUpdateQueue<Value = number>(applyAndRun: (value: Value, isSuperseded: () => boolean) => Promise<boolean>,
+                                                          onLastValueEndedWithoutRun: () => void): ThresholdUpdateQueue<Value> {
+  let applying: Submission<Value> | null = null;
+  let waiting: Submission<Value> | null = null;
 
-  const newerValueToCome = (submission: Submission) => {
+  const newerValueToCome = (submission: Submission<Value>) => {
     const newest = waiting ?? applying;
     return newest !== null && newest !== submission;
   };
 
-  const run = async (submission: Submission): Promise<void> => {
+  const run = async (submission: Submission<Value>): Promise<void> => {
     applying = submission;
     let runStarted = false;
     try {

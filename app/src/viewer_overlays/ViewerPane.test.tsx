@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { ModeInfo, SkyDome } from "../api_client/client";
+import type { SkyDome } from "../api_client/client";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
@@ -30,45 +30,42 @@ function viewWithSkyDome(mode: string): ViewerPaneProps {
   };
 }
 
-test("the sky dome legend names the weights of the mode in plain words, relative, before the score points have loaded", () => {
+test("the sky dome legend names the weights of the mode in plain words, with their unit, before the score points have loaded", () => {
   rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);
   expect(FakeViewerScene.latest!.layersWithObjects()).toEqual(["sky_dome"]);
-  const title = rendered.container.querySelector(".viewer-legend h3")!.textContent;
-  expect(title).toBe("Sky patch weight, overcast sky light (relative)");
-  for (const mode of ["irradiance", "benefit", "radiative_cooling"]) {
-    rendered.rerender(<ViewerPane {...viewWithSkyDome(mode)} />);
-    const modeTitle = rendered.container.querySelector(".viewer-legend h3")!.textContent!;
-    expect(modeTitle).toMatch(/^Sky patch weight, [a-z ]+ \(relative\)$/);
-    expect(modeTitle).not.toMatch(/kWh|dimensionless|fraction|CIE/);
-  }
+  const legendTitle = () => rendered!.container.querySelector(".viewer-legend h3")!.textContent;
+  expect(legendTitle()).toBe("Share of the overcast sky in each patch");
+  const titles = Object.fromEntries(["irradiance", "benefit", "radiative_cooling"].map((mode) => {
+    rendered!.rerender(<ViewerPane {...viewWithSkyDome(mode)} />);
+    return [mode, legendTitle()];
+  }));
+  expect(titles).toEqual({ irradiance: "Solar energy from each sky patch, kWh/m²", benefit: "Useful solar heat from each sky patch, kWh/m²",
+                           radiative_cooling: "Share of the night sky cooling in each patch" });
+  for (const title of Object.values(titles)) expect(title).not.toMatch(/relative|dimensionless|CIE/);
 });
 
 test("the sky dome legend of a mode without sky weights (the form left the analysed mode) has no unit and no dangling comma", () => {
   rendered = renderForTest(<ViewerPane {...viewWithSkyDome("time-based")} />);
-  expect(rendered.container.querySelector(".viewer-legend h3")!.textContent).toBe("Sky patch weight (relative)");
+  expect(rendered.container.querySelector(".viewer-legend h3")!.textContent).toBe("Sky patch weight");
 });
 
-const weightedMode = (name: string, weightUnit: string): ModeInfo =>
-  ({ name, description: "", needs_epw: name !== "daylight", needs_period: name !== "daylight", experimental: false, score_kind: "weighted_sum",
-     weight_unit: weightUnit, score_unit: "", starting_values: {} });
-const MODES = [weightedMode("irradiance", "kWh/m²"), weightedMode("daylight", "CIE overcast sky obstruction score (dimensionless)")];
-
-/** Score points of a daylight analysis without a carving: their header names the weights the analysis used. */
+/** Score points of a daylight analysis without a carving: their header names the mode of the analysis. */
 const DAYLIGHT_SCORE_POINTS: ScorePoints = {
-  header: { origin: [0, 0, 0], shape: [1, 1, 1], voxel_size: 1, scores_kind: "weighted_sum", weight_unit: "CIE overcast sky obstruction score (dimensionless)", score_unit: "CIE overcast sky obstruction score (dimensionless)",
+  header: { origin: [0, 0, 0], shape: [1, 1, 1], voxel_size: 1, mode: "daylight", scores_kind: "weighted_sum",
+            weight_unit: "share of the CIE overcast sky (sums to 1)", score_unit: "m²",
             score_min: 0, score_max: 1, occupied_count: 1, point_count: 1, thinning_step: 1, has_mask: false, has_compared_scores: false },
   indices: Uint32Array.from([0]), scores: Float32Array.from([0.5]), kept: null, comparedScores: null,
 };
 
 test("the sky dome keeps the words of the mode it was analysed in after the mode changes, or says no mode when that is not known", () => {
   const legendTitle = () => rendered!.container.querySelector(".viewer-legend h3")!.textContent;
-  const analysedInDaylight = { ...viewWithSkyDome("irradiance"), modes: MODES, analysisCurrent: false };
+  const analysedInDaylight = { ...viewWithSkyDome("irradiance"), analysisCurrent: false };
   rendered = renderForTest(<ViewerPane {...analysedInDaylight} results={{ ...NO_VIEWER_RESULTS, skyDome: SKY_DOME, scorePoints: DAYLIGHT_SCORE_POINTS }} />);
-  expect(legendTitle()).toBe("Sky patch weight, overcast sky light (relative)");       // Solar energy chosen since: the dome is daylight's
-  rendered.rerender(<ViewerPane {...analysedInDaylight} />);                             // the score points are not there
-  expect(legendTitle()).toBe("Sky patch weight (relative)");
-  rendered.rerender(<ViewerPane {...analysedInDaylight} analysisCurrent />);             // the analysis is of the mode the form shows
-  expect(legendTitle()).toBe("Sky patch weight, solar energy (relative)");
+  expect(legendTitle()).toBe("Share of the overcast sky in each patch");       // Solar energy chosen since: the dome is daylight's
+  rendered.rerender(<ViewerPane {...analysedInDaylight} />);                     // the score points are not there
+  expect(legendTitle()).toBe("Sky patch weight");
+  rendered.rerender(<ViewerPane {...analysedInDaylight} analysisCurrent />);     // the analysis is of the mode the form shows
+  expect(legendTitle()).toBe("Solar energy from each sky patch, kWh/m²");
 });
 
 test("an error of the scene that is not a missing WebGL is logged, and the view does not claim WebGL is missing", () => {

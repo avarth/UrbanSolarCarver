@@ -5,7 +5,7 @@
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
-import type { ModeInfo, RunSummary, SkyDome } from "../api_client/client";
+import type { RunSummary, SkyDome } from "../api_client/client";
 import { messages } from "../messages";
 import { keptScoreRange } from "../viewer/colour_scales";
 import {
@@ -20,7 +20,7 @@ import { sunPathLegend, sunPathObjects, type SunPathWithNorth } from "../viewer/
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
-import { keptVoxelsLegendTitle, keptVoxelsLegendUnit, Legend, type LegendContent } from "./Legend";
+import { Legend, type LegendContent } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
 import { rememberedGroundAid, rememberedViewportTheme, ViewToolbar } from "./ViewToolbar";
 import "./overlays.css";
@@ -67,8 +67,6 @@ export interface ViewerPaneProps {
   overlayContent?: ReactNode;
   /** The mode the form shows. */
   mode?: string | null;
-  /** The modes of the engine, for the mode an analysis on screen was made in. */
-  modes?: readonly ModeInfo[];
   /** The analysis (preprocessing) is current: it was made in the mode the form shows. */
   analysisCurrent?: boolean;
 }
@@ -78,20 +76,14 @@ const NO_SHIFT: Point3 = [0, 0, 0];
 const NO_LAYERS: readonly LayerName[] = [];
 const EMPTY_OUTLINE: VolumeOutline = { segments: new Float32Array(0), outwardNormals: new Float32Array(0) };
 const RESULT_LAYERS: readonly LayerName[] = ["kept_voxels", "carved_voxels", "sky_dome", "envelope", "building_massing"];
-const NO_MODES: readonly ModeInfo[] = [];
 const WEBGL_CONTEXT = "webgl2";     // what three.js's WebGLRenderer asks the canvas for
 
 /**
- * The mode the sky dome on screen was analysed in, for its legend: the weighted mode whose weight unit the score points of
- * that analysis name (each weighted mode has its own); without them, the form's mode while the analysis is current; else
- * null (no mode named), since the form's mode may not be the one the dome on screen was made in.
+ * The mode the sky dome on screen was analysed in, for its legend: the one its score points name; without them, the form's mode
+ * while the analysis is current; else null (no mode named), since the form's mode may not be the one the dome on screen was made in.
  */
-export function analysedSkyDomeMode(modes: readonly ModeInfo[], scorePointsWeightUnit: string | null, formMode: string | null,
-                                    analysisCurrent: boolean): string | null {
-  const analysed = scorePointsWeightUnit === null ? []
-    : modes.filter((mode) => mode.score_kind === "weighted_sum" && mode.weight_unit === scorePointsWeightUnit);
-  if (analysed.length === 1) return analysed[0].name;
-  return analysisCurrent ? formMode : null;
+export function analysedSkyDomeMode(scorePointsMode: string | null, formMode: string | null, analysisCurrent: boolean): string | null {
+  return scorePointsMode ?? (analysisCurrent ? formMode : null);
 }
 
 /** Whether the browser gives a canvas a WebGL context; the test context is freed again at once. */
@@ -109,7 +101,7 @@ function storeyCountOf(massing: THREE.BufferGeometry): number {
 
 export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVolumeAppearance, shownByDefault, northDegrees, framingRequest,
                              centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
-                             missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null, modes = NO_MODES,
+                             missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
                              analysisCurrent = false }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
@@ -214,12 +206,11 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   const legend: LegendContent = {
     sunPath: shown("sun_path") && sunPath ? sunPathLegend(sunPath.path) : undefined,
     keptVoxels: shown("kept_voxels") && scorePoints && carving
-      ? { title: keptVoxelsLegendTitle(scorePoints.header.scores_kind, scorePoints.header.score_unit), cutoff: carving.threshold_value,
-          unit: keptVoxelsLegendUnit(scorePoints.header.scores_kind, scorePoints.header.score_unit),
-          thinningStep: scorePoints.header.thinning_step }
+      ? { title: messages.scoreOfModeWithUnit(scorePoints.header.mode, scorePoints.header.score_unit), cutoff: carving.threshold_value,
+          unit: scorePoints.header.score_unit || undefined, thinningStep: scorePoints.header.thinning_step }
       : undefined,
     skyDome: shown("sky_dome") && skyDome
-      ? { title: messages.skyDomeLegend(analysedSkyDomeMode(modes, scorePoints?.header.weight_unit ?? null, mode, analysisCurrent)),
+      ? { title: messages.skyDomeLegend(analysedSkyDomeMode(scorePoints?.header.mode ?? null, mode, analysisCurrent)),
           lowestWeight: Math.min(...skyDome.weights),
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,

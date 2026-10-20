@@ -591,6 +591,23 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .histogram-cutoff { stroke: var(--colour-ink); stroke-width: 1.25; stroke-dasharray: 4 3; }
 .histogram-cutoff-label rect { fill: var(--colour-ink); }
 .histogram-cutoff-label text { fill: var(--colour-panel); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* A cutoff not run yet: the line and its label in accent, so it reads apart from the carving the tiles describe. */
+.score-histogram-preview .histogram-cutoff { stroke: var(--colour-accent); }
+.score-histogram-preview .histogram-cutoff-label rect { fill: var(--colour-accent); }
+
+/* The cutoff line's handle: a strip over the line, the full height of the chart, dragged sideways or moved with its keys. */
+.histogram-cutoff-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  transform: translateX(-50%);
+  border-radius: var(--radius-small);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.histogram-cutoff-handle:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 0; }
+.histogram-cutoff-handle[aria-disabled="true"] { cursor: default; }
 
 .score-histogram-readout {
   position: absolute;
@@ -617,6 +634,23 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .histogram-swatch-kept { background: var(--colour-accent); }
 .histogram-swatch-carved { background: var(--colour-carved); }
 .score-histogram-note { color: var(--colour-muted); }
+.score-histogram-preview-note { color: var(--colour-accent); }
+
+/* The carving rule of the weighted modes, at the top of the step: three choices side by side. */
+.carving-rule-options { display: flex; flex-wrap: wrap; border: 1px solid var(--colour-line); border-radius: var(--radius-small); overflow: hidden; width: fit-content; }
+.carving-rule-options label {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px calc(var(--space-unit) * 3);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  cursor: pointer;
+}
+.carving-rule-options label + label { border-left: 1px solid var(--colour-line); }
+.carving-rule-options input { position: absolute; opacity: 0; pointer-events: none; }
+.carving-rule-options label:has(input:checked) { background: var(--colour-accent-soft); color: var(--colour-accent); font-weight: 600; }
+.carving-rule-options label:has(input:focus-visible) { outline: 2px solid var(--colour-accent); outline-offset: -2px; }
+.carving-rule-options label:has(input:disabled) { color: var(--colour-muted); cursor: default; }
 
 /* Envelope and massing (UX 5.6) -------------------------------------------------------------------------------------------- */
 

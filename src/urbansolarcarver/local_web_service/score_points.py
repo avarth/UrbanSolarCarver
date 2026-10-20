@@ -13,7 +13,7 @@ thinned to a point budget, in the layout below (all numbers little-endian):
 * ``float32`` the value the cutoff was compared with at each point, present when
   ``has_compared_scores``.
 
-Header keys: ``origin``, ``shape``, ``voxel_size``, ``scores_kind``, ``weight_unit``, ``score_unit``,
+Header keys: ``origin``, ``shape``, ``voxel_size``, ``mode`` (of the analysis), ``scores_kind``, ``weight_unit``, ``score_unit``,
 ``score_min`` and ``score_max`` (of the finite scores of all occupied voxels, not only the points;
 null when there are none), ``occupied_count``, ``point_count``, ``thinning_step``, ``has_mask``,
 ``has_compared_scores``.
@@ -85,6 +85,7 @@ def build_score_points(run_folder: Path, cap: int = SCORE_POINTS_CAP) -> bytes |
         "origin": list(preprocessing_manifest.origin),
         "shape": list(preprocessing_manifest.shape),
         "voxel_size": preprocessing_manifest.voxel_size,
+        "mode": preprocessing_manifest.mode,
         "scores_kind": preprocessing_manifest.scores_kind,
         "weight_unit": MODES[preprocessing_manifest.mode].weight_unit,
         "score_unit": MODES[preprocessing_manifest.mode].score_unit,

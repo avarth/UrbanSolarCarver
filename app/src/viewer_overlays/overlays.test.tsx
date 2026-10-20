@@ -5,7 +5,7 @@ import { pretendTheBrowserHasNoWebGl } from "../viewer/fake_scene_for_test";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu } from "./LayersMenu";
-import { Legend, keptVoxelsLegendTitle, keptVoxelsLegendUnit } from "./Legend";
+import { Legend } from "./Legend";
 import { ScaleBar } from "./ScaleBar";
 import { ViewerPane, type ViewerPaneProps } from "./ViewerPane";
 import { ViewToolbar, rememberedGroundAid, rememberedViewportTheme } from "./ViewToolbar";
@@ -21,29 +21,31 @@ afterEach(() => {
 });
 
 test("the legend shows the kept voxel range, its note and the thinning", () => {
-  rendered = renderForTest(<Legend theme="light" content={{ keptVoxels: { title: keptVoxelsLegendTitle("violation_count", "m²·h (shaded test surface x duration)"), cutoff: 1.5, thinningStep: 3 } }} />);
+  rendered = renderForTest(<Legend theme="light" content={{ keptVoxels: { title: messages.scoreOfModeWithUnit("time-based", "m²·h"), cutoff: 1.5, unit: "m²·h", thinningStep: 3 } }} />);
   const text = rendered.container.textContent;
-  expect(text).toContain("Shading caused, m²·h");
-  expect(text).toContain("Kept voxels. Carved voxels score above 1.5.");
+  expect(text).toContain("Shade a voxel casts, m²·h");
+  expect(text).toContain("Kept voxels. Carved voxels score above 1.5\u00a0m²·h.");
   expect(text).toContain("Showing 1 of every 3 voxels");
 });
 
 test("a kept range of a single value reads 'All kept voxels' with the unit and draws no colour ramp", () => {
-  const title = keptVoxelsLegendTitle("violation_count", "m²·h (shaded test surface x duration)");
-  rendered = renderForTest(<Legend theme="light" content={{ keptVoxels: { title, cutoff: 0, unit: keptVoxelsLegendUnit("violation_count", "m²·h (shaded test surface x duration)"), thinningStep: 1 } }} />);
+  const title = messages.scoreOfModeWithUnit("time-based", "m²·h");
+  rendered = renderForTest(<Legend theme="light" content={{ keptVoxels: { title, cutoff: 0, unit: "m²·h", thinningStep: 1 } }} />);
   const text = rendered.container.textContent;
-  expect(text).toContain("All kept voxels: 0 m²·h");
+  expect(text).toContain("All kept voxels: 0\u00a0m²·h");
   expect(text).not.toContain("0 to 0");
   expect(rendered.container.querySelector(".viewer-legend-ramp")).toBeNull();
-  expect(text).toContain("Kept voxels. Carved voxels score above 0.");
+  expect(text).toContain("Kept voxels. Carved voxels score above 0\u00a0m²·h.");
 });
 
-test("a kept range of a single value in a weighted mode has no unit after the value", () => {
-  rendered = renderForTest(<Legend theme="light" content={{ keptVoxels: { title: keptVoxelsLegendTitle("weighted_sum", "kWh/m²"), cutoff: 0, unit: keptVoxelsLegendUnit("weighted_sum", "kWh/m²"), thinningStep: 1 } }} />);
-  expect(rendered.container.querySelector(".viewer-legend-single-value")!.textContent).toBe("All kept voxels: 0");
-  expect(keptVoxelsLegendUnit("weighted_sum", "kWh/m²")).toBeUndefined();
-  expect(keptVoxelsLegendUnit("violation_count", "m²·h (shaded test surface x duration)")).toBe("m²·h");
-  expect(keptVoxelsLegendUnit("violation_count", "kWh")).toBe("kWh");
+test("the kept voxels of a weighted mode are named by what they block, in the unit of the scores", () => {
+  rendered = renderForTest(<Legend theme="light" content={{ keptVoxels: { title: messages.scoreOfModeWithUnit("irradiance", "kWh"), cutoff: 0, unit: "kWh", thinningStep: 1 } }} />);
+  expect(rendered.container.querySelector(".viewer-legend h3")!.textContent).toBe("Solar energy a voxel blocks, kWh");
+  expect(rendered.container.querySelector(".viewer-legend-single-value")!.textContent).toBe("All kept voxels: 0\u00a0kWh");
+  expect(messages.scoreOfModeWithUnit("daylight", "m²")).toBe("Overcast sky a voxel hides, m²");
+  expect(messages.scoreOfModeWithUnit("radiative_cooling", "m²")).toBe("Night sky cooling a voxel hides, m²");
+  expect(messages.scoreOfModeWithUnit("benefit", "kWh")).toBe("Useful solar heat a voxel blocks, kWh");
+  expect(messages.scoreOfModeWithUnit(null, "")).toBe("Score of a voxel");
 });
 
 test("a kept range from 0 to a positive cutoff keeps the colour ramp", () => {
@@ -52,8 +54,7 @@ test("a kept range from 0 to a positive cutoff keeps the colour ramp", () => {
   expect(rendered.container.textContent).not.toContain("All kept voxels");
 });
 
-test("the legend titles of the weighted modes and the building massing swatches", () => {
-  expect(keptVoxelsLegendTitle("weighted_sum", "kWh/m²")).toBe("Obstruction score (relative)");
+test("the sun path and the building massing swatches", () => {
   rendered = renderForTest(<Legend theme="dark" content={{ sunPath: "Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h", buildingMassing: { storeyCount: 3 } }} />);
   const text = rendered.container.textContent;
   expect(text).toContain("Sun path, 21 Dec; sun at 10, 12 and 14\u00a0h");

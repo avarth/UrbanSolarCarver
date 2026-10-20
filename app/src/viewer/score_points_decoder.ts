@@ -7,6 +7,7 @@ export interface ScorePointsHeader {
   origin: Point3;                 // world coordinates of the grid's minimum corner
   shape: [number, number, number];
   voxel_size: number;
+  mode: string;                   // the mode of the analysis the scores come from
   scores_kind: "weighted_sum" | "violation_count";
   weight_unit: string;            // of the sky patch weights
   score_unit: string;             // of the scores and of a score cutoff: "kWh", "m²", "m²·h"

@@ -29,6 +29,7 @@ def test_arrays_match_the_header_and_the_occupied_voxels(tmp_path):
     assert len(indices) == len(scores) == len(kept) == 18 and (np.diff(indices) > 0).all()
     assert header["shape"] == [4, 3, 2] and header["origin"] == [10.0, 20.0, 30.0] and header["voxel_size"] == 2.0
     assert header["scores_kind"] == "violation_count" and header["score_unit"] == "m²·h"
+    assert header["mode"] == "time-based"
     assert (header["score_min"], header["score_max"]) == (0.0, 17.0)
     assert (scores == indices).all()                          # the fake scores are the flat indices
     assert (kept == (indices % 2 == 0)).all()

@@ -1,31 +1,42 @@
-// The Carving step (UX 5.5, 11): the threshold control of the mode (Shadow tolerated in m²·h with its slider for Solar
-// time-based, Carve amount in % for the weighted modes, the angle rule's message), the other carving settings folded under it,
-// the histogram, the numbers of the last carving, and the "Update when I change the threshold" switch, remembered per project.
-// With the switch on, letting go of the slider or leaving the number field reruns the carving, as does a change of another
-// carving setting (a switch or a choice at once, a number field when the user leaves it, a slider when it is let go); off, Update
-// carving does.
+// The Carving step (UX 5.5, 11): in the weighted modes the carving rule at the top (Carve amount, Automatic split, Score cutoff),
+// then the control of the rule (Shadow tolerated in m²·h for Solar time-based, Carve amount in %, Score cutoff in the unit of the
+// scores, a line for Automatic split; the angle rule's message), the "Update when I change the threshold" switch, remembered per
+// project, the histogram with its cutoff line, the numbers of the last carving, and the other carving settings folded last.
+// With the switch on, letting go of the slider, of the line on the histogram or leaving the number field reruns the carving, as
+// does a change of another carving setting (a switch or a choice at once, a number field when the user leaves it, a slider when it
+// is let go); off, Update carving does.
+// The line on the histogram can be dragged in every rule: it previews the share of the volume a cutoff keeps, worked out from the
+// score points, and sets the carve amount that cutoff stands for (Carve amount), or the cutoff itself (Shadow tolerated, Score
+// cutoff; Automatic split turns into Score cutoff, which the step says).
 // When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with Run
 // analysis in the step.
-import { useEffect, useId, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent,
+         type ReactNode } from "react";
 import type { RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import { shownValue, type FormState } from "../settings_form/form_state";
-import { fromDisplayValue, settingsForStep, thresholdIsShadowToleratedIn, toDisplayValue, type SettingView } from "../settings_form/presentation";
+import { fromDisplayValue, settingsForStep, settingView, thresholdIsShadowToleratedIn, toDisplayValue, type SettingView } from "../settings_form/presentation";
 import { defaultTextOf, fieldErrorOf, WarningIcon } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { SettingTooltip } from "../settings_form/SettingTooltip";
 import { NumberInput } from "../settings_form/widgets/NumberInput";
 import type { ThresholdSpec } from "../settings_form/widgets/ThresholdRule";
 import type { ScorePoints } from "../viewer/score_points_decoder";
-import { formatNumber, formattedNumber } from "./format_numbers";
+import { carveAmountAt, cutoffForCarveAmount, cutoffStep, keptShareAt, rankScorePoints, roundedToStep, type RankedScorePoints } from "./cutoff_preview";
+import { formatNumber, formattedNumber, withUnit } from "./format_numbers";
 import { ScoreHistogram } from "./ScoreHistogram";
 import "./steps.css";
 
 type CarvingSummary = NonNullable<RunSummary["carving"]>;
+type CarvingRule = ThresholdSpec["method"];
 
 const AUTO_UPDATE_STORAGE_PREFIX = "usc.autoUpdate.";
-const SLIDER_STEPS = 100;
 const CARVING_GROUP = "How much to carve";
+const CARVING_RULES: readonly CarvingRule[] = ["carve_fraction", "headtail", "cutoff"];
+// The settings that decide the cutoff: the rule (and its value) and the carve amount.
+const THRESHOLD_SETTINGS = ["threshold", "carve_fraction"] as const;
+// A carve amount set from the line on the histogram is rounded to a tenth of a percent.
+const CARVE_AMOUNT_STEP = 0.001;
 // Keys that move a range input; letting go of one is letting go of the slider.
 const SLIDER_KEYS = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
 
@@ -74,7 +85,25 @@ export function thresholdControlOf(mode: string): SettingView | null {
   return settingsForStep("carving", mode).find((group) => group.title === CARVING_GROUP)?.essential[0] ?? null;
 }
 
-/** The number the threshold control shows: the cutoff in m²·h (0 when unset, as the engine applies it), or the carve amount in %. */
+/** The carving rule the form holds in a weighted mode: Carve amount while the threshold is unset, as the engine applies it. */
+export function carvingRuleOf(form: FormState): CarvingRule {
+  return (shownValue(form, "threshold") as ThresholdSpec | null)?.method ?? "carve_fraction";
+}
+
+/**
+ * The control of the carving rule: Shadow tolerated (Solar time-based), Carve amount, or Score cutoff in the unit of the scores;
+ * null for Automatic split, which has no setting, and for the angle rule.
+ */
+export function ruleControlOf(form: FormState, scoreUnit: string): SettingView | null {
+  const control = thresholdControlOf(form.mode);
+  if (control === null || control.name === "threshold") return control;
+  const rule = carvingRuleOf(form);
+  if (rule === "carve_fraction") return control;
+  if (rule === "headtail") return null;
+  return { ...settingView("threshold", form.mode), label: messages.scoreCutoffLabel, unit: scoreUnit, help: messages.scoreCutoffHelp };
+}
+
+/** The number the threshold control shows: the cutoff (0 when unset, as the engine applies it), or the carve amount in %. */
 export function thresholdControlNumber(form: FormState, view: SettingView): number {
   const value = shownValue(form, view.name);
   if (view.name === "threshold") {
@@ -91,18 +120,32 @@ export function thresholdControlValues(view: SettingView, shownNumber: number): 
 }
 
 /**
- * Why Carve amount is disabled: the carving rule chosen in the fold (Automatic split, Score cutoff) sets the cutoff without it.
- * Null when the control is not Carve amount or the rule is Carve amount.
+ * The cutoff the form's threshold settings set: Shadow tolerated or Score cutoff as given, and for Carve amount the cut that
+ * amount makes among the score points. Null for Automatic split, which only the run finds.
  */
-export function carveAmountUnusedReason(form: FormState, view: SettingView): string | null {
-  if (view.name !== "carve_fraction") return null;
-  const method = (shownValue(form, "threshold") as ThresholdSpec | null)?.method ?? "carve_fraction";
-  return method === "carve_fraction" ? null : messages.carveAmountNotUsed(messages.carvingRuleChoices[method]);
+export function cutoffTheFormSets(form: FormState, isWeightedMode: boolean, ranked: RankedScorePoints): number | null {
+  const spec = shownValue(form, "threshold") as ThresholdSpec | null;
+  if (!isWeightedMode || spec?.method === "cutoff") return typeof spec?.value === "number" ? spec.value : 0;
+  if (spec?.method === "headtail") return null;
+  const carveAmount = shownValue(form, "carve_fraction");
+  return typeof carveAmount === "number" ? cutoffForCarveAmount(ranked, carveAmount) : null;
 }
 
-/** A slider step a hundredth of the range or less, rounded down to a power of ten. */
-function sliderStep(highest: number): number {
-  return highest > 0 ? 10 ** Math.floor(Math.log10(highest / SLIDER_STEPS)) : 1;
+/**
+ * The settings a cutoff let go on the histogram sets: the carve amount it stands for under Carve amount (to a tenth of a
+ * percent), else the cutoff itself (rounded as the slider rounds it), which takes Automatic split to Score cutoff.
+ */
+export function settingsForCutoff(form: FormState, isWeightedMode: boolean, ranked: RankedScorePoints, cutoff: number,
+                                  highestScore: number): Record<string, unknown> {
+  if (isWeightedMode && carvingRuleOf(form) === "carve_fraction") {
+    return { carve_fraction: roundedToStep(carveAmountAt(ranked, cutoff), CARVE_AMOUNT_STEP) };
+  }
+  return { threshold: { method: "cutoff", value: roundedToStep(cutoff, cutoffStep(highestScore)) } };
+}
+
+/** The threshold settings of *values* as one text, to tell whether two sets of settings carve the same. */
+function thresholdSettingsKey(values: Record<string, unknown>): string {
+  return JSON.stringify(THRESHOLD_SETTINGS.map((name) => values[name] ?? null));
 }
 
 interface ThresholdControlProps {
@@ -111,10 +154,12 @@ interface ThresholdControlProps {
   highestScore: number | null;
   autoUpdate: boolean;
   disabled: boolean;
-  /** The element that says why the control is disabled, when it is not a run (Carve amount under another carving rule). */
-  reasonId?: string;
   /** The analysis is out of date: the control is disabled unless it holds an error, which stays open to be fixed. */
   lockedUnlessError?: boolean;
+  /** The number the line on the histogram stands for while it is dragged, shown in place of the control's own. */
+  previewNumber?: number | null;
+  /** The number moved or typed and not handed on yet (auto-update on), or null: the line on the histogram follows it. */
+  onHeldNumberChange?: (heldNumber: number | null) => void;
   onChangeValue: (shownNumber: number) => void;
   onCommit: (shownNumber: number) => void;
 }
@@ -125,8 +170,8 @@ interface ThresholdControlProps {
  * form only when its run is next (it may wait behind a run in progress), so going back to the stored number is handed on too
  * while an earlier one is still on its way: it replaces the waiting one, and the run uses the number the user is at.
  */
-function ThresholdControl({ view, form, highestScore, autoUpdate, disabled: disabledOtherwise, reasonId, lockedUnlessError = false, onChangeValue,
-                            onCommit }: ThresholdControlProps) {
+function ThresholdControl({ view, form, highestScore, autoUpdate, disabled: disabledOtherwise, lockedUnlessError = false, previewNumber = null,
+                            onHeldNumberChange, onChangeValue, onCommit }: ThresholdControlProps) {
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;
@@ -138,13 +183,15 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled: disa
     if (heldNumber === stored) setHeldNumber(null);
     lastNumberHandedOn.current = stored;
   }, [stored]);
+  useEffect(() => onHeldNumberChange?.(heldNumber), [heldNumber]);
+  useEffect(() => () => onHeldNumberChange?.(null), []);
   // A number refused in the field (above 100 % for Carve amount, below 0) is said under it and never handed on.
   const [refusedInput, setRefusedInput] = useState<string | null>(null);
   const error = refusedInput ?? fieldErrorOf(form, view);
   const disabled = disabledOtherwise || (lockedUnlessError && fieldErrorOf(form, view) === undefined);
-  const isShadowTolerated = view.name === "threshold";
-  const shownNumber = heldNumber ?? stored;
-  const highest = isShadowTolerated ? Math.max(highestScore ?? 0, stored) : 100;
+  const isCutoff = view.name === "threshold";
+  const shownNumber = previewNumber ?? heldNumber ?? stored;
+  const highest = isCutoff ? Math.max(highestScore ?? 0, stored) : 100;
   const change = (value: number) => (autoUpdate ? setHeldNumber(value) : onChangeValue(value));
   const commit = () => {
     if (heldNumber === null) return;
@@ -156,32 +203,62 @@ function ThresholdControl({ view, form, highestScore, autoUpdate, disabled: disa
     }
     if (heldNumber === stored) setHeldNumber(null);
   };
-  const describedBy = [error === undefined ? null : errorId, reasonId ?? null].filter((id) => id !== null).join(" ") || undefined;
+  const describedBy = error === undefined ? undefined : errorId;
   return (
     <div className="setting-field threshold-control" data-setting={view.name} data-input-id={inputId}>
       <div className="setting-label-row">
         <label id={labelId} htmlFor={inputId} className="setting-label">{view.label}</label>
-        <SettingTooltip settingLabel={view.label} help={view.help} configName={view.name} defaultText={defaultTextOf(view, form, isShadowTolerated)} />
+        <SettingTooltip settingLabel={view.label} help={view.help} configName={view.name}
+                        defaultText={defaultTextOf(view, form, thresholdIsShadowToleratedIn(form.mode))} />
       </div>
       <div className="setting-control">
-        <input type="range" className="setting-range" min={0} max={highest} step={isShadowTolerated ? sliderStep(highest) : 1} value={Math.min(shownNumber, highest)}
+        <input type="range" className="setting-range" min={0} max={highest} step={isCutoff ? cutoffStep(highest) : 1} value={Math.min(shownNumber, highest)}
                aria-labelledby={labelId} aria-describedby={describedBy} disabled={disabled}
                onChange={(event) => change(Number(event.target.value))} onPointerUp={commit}
                onKeyUp={(event) => { if (SLIDER_KEYS.has(event.key)) commit(); }} />
         <span className="threshold-number" onBlur={commit} onKeyDown={(event) => { if (event.key === "Enter") commit(); }}>
           <NumberInput id={inputId} className="setting-number setting-number-short" value={shownNumber} mayBeEmpty={false} minimum={0}
-                       maximum={isShadowTolerated ? undefined : 100} invalid={error !== undefined} describedBy={describedBy} disabled={disabled}
+                       maximum={isCutoff ? undefined : 100} invalid={error !== undefined} describedBy={describedBy} disabled={disabled}
                        onValue={(typed) => change(typed!)} onRefused={setRefusedInput} />
         </span>
         <span className="setting-unit">{view.unit}</span>
       </div>
-      {isShadowTolerated && (
+      {isCutoff && (
         <div className="threshold-slider-ends" aria-hidden="true">
           <span>{messages.sliderLowestEnd}</span>
-          <span>{messages.sliderHighestScore(formattedNumber(highest))}</span>
+          <span>{messages.sliderHighestScore(withUnit(formattedNumber(highest), view.unit))}</span>
         </div>
       )}
       {error !== undefined && <p id={errorId} className="setting-error"><WarningIcon /><span>{error}</span></p>}
+    </div>
+  );
+}
+
+interface CarvingRuleChoiceProps {
+  mode: string;
+  rule: CarvingRule;
+  disabled: boolean;
+  onChoose: (rule: CarvingRule) => void;
+}
+
+/** The carving rule of a weighted mode (UX 5.5): Carve amount, Automatic split or Score cutoff, side by side at the top. */
+function CarvingRuleChoice({ mode, rule, disabled, onChoose }: CarvingRuleChoiceProps) {
+  const labelId = useId();
+  const view = settingView("threshold", mode);
+  return (
+    <div className="setting-field carving-rule-choice" data-setting="threshold">
+      <div className="setting-label-row">
+        <span id={labelId} className="setting-label">{view.label}</span>
+        <SettingTooltip settingLabel={view.label} help={view.help} configName="threshold" defaultText={messages.carvingRuleChoices.carve_fraction} />
+      </div>
+      <div role="radiogroup" aria-labelledby={labelId} className="carving-rule-options">
+        {CARVING_RULES.map((choice) => (
+          <label key={choice}>
+            <input type="radio" name={labelId} value={choice} checked={rule === choice} disabled={disabled} onChange={() => onChoose(choice)} />
+            {messages.carvingRuleChoices[choice]}
+          </label>
+        ))}
+      </div>
     </div>
   );
 }
@@ -244,8 +321,8 @@ export interface CarvingStepProps {
   /** Why a run cannot start (another run, inputs, settings, the warm-up); null when it can. */
   runBlocker: string | null;
   onChange: (values: Record<string, unknown>) => void;
-  /** The threshold to apply and run, with auto-update on, as the control shows it (m²·h, or % for Carve amount). */
-  onThresholdCommit: (shownNumber: number) => void;
+  /** The threshold settings to apply and run, with auto-update on: the rule, its cutoff, or the carve amount. */
+  onThresholdCommit: (values: Record<string, unknown>) => void;
   /** A carving setting was changed with auto-update on and the user is done with it: the carving reruns with it. */
   onCarvingSettingCommit: () => void;
   onUpdateCarving: () => void;
@@ -257,16 +334,34 @@ export interface CarvingStepProps {
   analysisFeedback: ReactNode;
 }
 
+/** A cutoff let go on the histogram: drawn until the carving it starts comes back, while the form holds the settings before it or those it set. */
+interface ReleasedCutoff {
+  cutoff: number;
+  settingsKeys: string[];
+}
+
 export function CarvingStep(props: CarvingStepProps) {
-  const { form, summary, scorePoints, analysisOutOfDate, autoUpdate, runBlocker } = props;
+  const { form, summary, scorePoints, analysisOutOfDate, autoUpdate, runBlocker, isWeightedMode } = props;
   const reasonId = useId();
   const updateReasonId = useId();
-  const carveAmountReasonId = useId();
   const settingChangedSinceCommit = useRef(false);
+  const [draggedCutoff, setDraggedCutoff] = useState<number | null>(null);
+  const [heldControlNumber, setHeldControlNumber] = useState<number | null>(null);
+  const [released, setReleased] = useState<ReleasedCutoff | null>(null);
+  const [switchedFromAutomaticSplit, setSwitchedFromAutomaticSplit] = useState(false);
+  useEffect(() => setReleased(null), [summary]);
+  const comparedScores = scorePoints?.comparedScores ?? null;
+  const kept = scorePoints?.kept ?? null;
+  const ranked = useMemo(() => (scorePoints !== null && comparedScores !== null ? rankScorePoints(comparedScores, scorePoints.scores) : null),
+                         [scorePoints]);
+  const scoreUnit = scorePoints?.header.score_unit ?? "";
+  const highestScore = scorePoints?.header.score_max ?? null;
   const thresholdView = thresholdControlOf(form.mode);
-  const isShadowTolerated = thresholdIsShadowToleratedIn(form.mode);
+  const rule = carvingRuleOf(form);
+  const ruleControl = ruleControlOf(form, scoreUnit);
   const groups = settingsForStep("carving", form.mode).map((group) => ({
-    ...group, essential: [], foldLabel: messages.moreSettingsOfGroup[group.title as keyof typeof messages.moreSettingsOfGroup] ?? group.foldLabel,
+    ...group, essential: [], folded: group.folded.filter((view) => view.name !== "threshold"),
+    foldLabel: messages.moreSettingsOfGroup[group.title as keyof typeof messages.moreSettingsOfGroup] ?? group.foldLabel,
   }));
   const thresholdDisabled = props.thresholdDisabledReason !== null;
   // While the analysis is out of date the carving settings wait for Run analysis, except one with an error, which stays open to
@@ -275,6 +370,7 @@ export function CarvingStep(props: CarvingStepProps) {
   const fieldsWithErrorEditable = analysisOutOfDate && props.settingsDisabledReason === null;
   // The angle rule has no threshold, so nothing updates on its own there: Update carving runs it.
   const autoUpdating = autoUpdate && thresholdView !== null;
+  const applyThreshold = (values: Record<string, unknown>) => (autoUpdating ? props.onThresholdCommit(values) : props.onChange(values));
   // Every change goes to the form at once; with auto-update on the run follows when the user is done with the field, so typing
   // "45" saves and runs 45, not 4 (a run disables the settings and would take the focus away mid-number).
   const changeCarvingSetting = (values: Record<string, unknown>) => {
@@ -299,11 +395,55 @@ export function CarvingStep(props: CarvingStepProps) {
   const commitSliderOnRelease = (event: PointerEvent) => { if (isSlider(event.target)) commitCarvingSetting(); };
   const commitSliderAfterKey = (event: KeyboardEvent) => { if (SLIDER_KEYS.has(event.key) && isSlider(event.target)) commitCarvingSetting(); };
   const disabledReason = analysisOutOfDate ? null : (props.thresholdDisabledReason ?? props.settingsDisabledReason);
-  const carveAmountReason = thresholdView === null ? null : carveAmountUnusedReason(form, thresholdView);
   const updateBlocker = analysisOutOfDate ? null : runBlocker;
   const resultsClassName = props.carvingDimmed || analysisOutOfDate ? "carving-content carving-content-dimmed" : "carving-content";
-  const comparedScores = scorePoints?.comparedScores ?? null;
-  const kept = scorePoints?.kept ?? null;
+  const thresholdLocked = thresholdDisabled || analysisOutOfDate;
+
+  // The cutoff on the histogram: dragged, moved on the slider or typed and not handed on yet, let go and on its way to a run, set
+  // in the form since the carving shown (dimmed, or a change not stored yet), or the last carving's. Any but the last is a preview.
+  const heldCutoff = heldControlNumber === null || ranked === null || ruleControl === null ? null
+    : ruleControl.name === "carve_fraction" ? cutoffForCarveAmount(ranked, heldControlNumber / 100) : heldControlNumber;
+  const settingsKey = thresholdSettingsKey(form.userValues);
+  const formDiffersFromCarving = props.carvingDimmed || settingsKey !== thresholdSettingsKey(form.stored.values);
+  const releasedCutoff = released !== null && released.settingsKeys.includes(settingsKey) ? released.cutoff : null;
+  const formCutoff = formDiffersFromCarving && ranked !== null ? cutoffTheFormSets(form, isWeightedMode, ranked) : null;
+  const shownCutoff = summary === null ? null : draggedCutoff ?? heldCutoff ?? releasedCutoff ?? formCutoff ?? summary.threshold_value;
+  const cutoffIsPreview = summary !== null && shownCutoff !== summary.threshold_value;
+  const cutoffText = (cutoff: number) => withUnit(formattedNumber(cutoff), scoreUnit);
+  const keptText = (cutoff: number) => formatNumber(keptShareAt(ranked!, cutoff) * 100, messages.units.percent);
+  const carveAmountText = (amount: number) => formatNumber(amount * 100, messages.units.percent);
+  const underCarveAmount = isWeightedMode && rule === "carve_fraction";
+  const formCarveAmount = shownValue(form, "carve_fraction");
+  let previewNote: string | null = null;
+  if (cutoffIsPreview && ranked !== null && shownCutoff !== null) {
+    const amount = draggedCutoff !== null ? carveAmountAt(ranked, draggedCutoff) : heldControlNumber !== null ? heldControlNumber / 100
+      : typeof formCarveAmount === "number" ? formCarveAmount : null;
+    previewNote = underCarveAmount && amount !== null ? messages.cutoffPreviewWithCarveAmount(carveAmountText(amount), cutoffText(shownCutoff), keptText(shownCutoff))
+      : messages.cutoffPreview(cutoffText(shownCutoff), keptText(shownCutoff));
+  }
+  // While the line is dragged, the control of the rule shows the number it stands for.
+  const previewNumber = draggedCutoff === null || ranked === null || ruleControl === null ? null
+    : ruleControl.name === "carve_fraction" ? roundedToStep(carveAmountAt(ranked, draggedCutoff) * 100, CARVE_AMOUNT_STEP * 100)
+    : roundedToStep(draggedCutoff, cutoffStep(highestScore ?? 0));
+  const releaseCutoff = (cutoff: number) => {
+    setDraggedCutoff(null);
+    if (ranked === null) return;
+    const values = settingsForCutoff(form, isWeightedMode, ranked, cutoff, highestScore ?? 0);
+    const settingsKeyAfter = thresholdSettingsKey({ ...form.userValues, ...values });
+    if (settingsKeyAfter === settingsKey) return;          // let go where it started: nothing to run
+    setReleased({ cutoff, settingsKeys: [settingsKey, settingsKeyAfter] });
+    if (isWeightedMode && rule === "headtail") setSwitchedFromAutomaticSplit(true);
+    applyThreshold(values);
+  };
+  // Choosing a rule keeps the cut where it is: Score cutoff starts from the cutoff on the histogram, not 0.
+  const chooseRule = (next: CarvingRule) => {
+    setSwitchedFromAutomaticSplit(false);
+    if (next === "carve_fraction") applyThreshold({ threshold: null });
+    else if (next === "headtail") applyThreshold({ threshold: { method: "headtail" } });
+    else applyThreshold({ threshold: { method: "cutoff", value: roundedToStep(shownCutoff ?? 0, cutoffStep(highestScore ?? 0)) } });
+  };
+  const automaticSplitLine = summary !== null && !formDiffersFromCarving ? messages.automaticSplitCut(cutoffText(summary.threshold_value))
+    : messages.automaticSplitBeforeCarving;
   return (
     <div className="carving-step">
       {analysisOutOfDate && (
@@ -318,30 +458,26 @@ export function CarvingStep(props: CarvingStepProps) {
       )}
       {props.analysisFeedback}
       {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
-      {carveAmountReason !== null && <p id={carveAmountReasonId} className="step-reason">{carveAmountReason}</p>}
       {/* Only the results of the carving are dimmed (UX 5.5, 6.3); the controls are disabled instead, so their labels, the reasons
           and the messages of settings to fix keep their contrast next to what they explain (UX 12). */}
       <div className="carving-content">
         {thresholdView === null ? <p className="step-reason">{messages.angleRuleHasNoThreshold}</p> : (
-          <ThresholdControl view={thresholdView} form={form} highestScore={scorePoints?.header.score_max ?? null} autoUpdate={autoUpdating}
-                            disabled={thresholdDisabled || carveAmountReason !== null} lockedUnlessError={analysisOutOfDate}
-                            reasonId={carveAmountReason !== null ? carveAmountReasonId : undefined}
-                            onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(thresholdView, shownNumber))}
-                            onCommit={props.onThresholdCommit} />
-        )}
-        <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}
-             onPointerUp={commitSliderOnRelease} onKeyUp={commitSliderAfterKey}>
-          {groups.map((group) => (
-            <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled}
-                          fieldsWithErrorEditable={fieldsWithErrorEditable} />
-          ))}
-        </div>
-        {thresholdView !== null && (
-          <label className="switch-row">
-            <input type="checkbox" role="switch" className="setting-switch" checked={autoUpdate} disabled={analysisOutOfDate}
-                   onChange={(event) => props.onAutoUpdateChange(event.target.checked)} />
-            {messages.updateWhenThresholdChanges}
-          </label>
+          <>
+            {isWeightedMode && <CarvingRuleChoice mode={form.mode} rule={rule} disabled={thresholdLocked} onChoose={chooseRule} />}
+            {switchedFromAutomaticSplit && rule === "cutoff" && <p className="step-reason">{messages.ruleSwitchedToScoreCutoff}</p>}
+            {ruleControl === null ? <p className="step-reason">{automaticSplitLine}</p> : (
+              <ThresholdControl key={ruleControl.name} view={ruleControl} form={form} highestScore={highestScore} autoUpdate={autoUpdating}
+                                disabled={thresholdDisabled} lockedUnlessError={analysisOutOfDate} previewNumber={previewNumber}
+                                onHeldNumberChange={setHeldControlNumber}
+                                onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(ruleControl, shownNumber))}
+                                onCommit={(shownNumber) => props.onThresholdCommit(thresholdControlValues(ruleControl, shownNumber))} />
+            )}
+            <label className="switch-row">
+              <input type="checkbox" role="switch" className="setting-switch" checked={autoUpdate} disabled={analysisOutOfDate}
+                     onChange={(event) => props.onAutoUpdateChange(event.target.checked)} />
+              {messages.updateWhenThresholdChanges}
+            </label>
+          </>
         )}
       </div>
       {!autoUpdating && (
@@ -356,14 +492,25 @@ export function CarvingStep(props: CarvingStepProps) {
       {props.carvingFeedback}
       {summary !== null && (
         <div className={resultsClassName}>
-          {thresholdView !== null && comparedScores !== null && kept !== null && (
-            <ScoreHistogram comparedScores={comparedScores} kept={kept} cutoff={summary.threshold_value} isShadowTolerated={isShadowTolerated}
-                            slopeLimitVoxelsRemoved={summary.slope_limit_extra_voxels_removed} />
+          {thresholdView !== null && comparedScores !== null && kept !== null && shownCutoff !== null && (
+            <ScoreHistogram comparedScores={comparedScores} kept={kept} cutoff={shownCutoff} carvingCutoff={summary.threshold_value}
+                            cutoffIsPreview={cutoffIsPreview} unit={scoreUnit}
+                            axisTitle={messages.scoreOfModeWithUnit(scorePoints?.header.mode ?? form.mode, scoreUnit)}
+                            slopeLimitVoxelsRemoved={summary.slope_limit_extra_voxels_removed} previewNote={previewNote}
+                            cutoffValueText={(cutoff) => messages.cutoffHandleValue(cutoffText(cutoff), keptText(cutoff))}
+                            cutoffDisabled={thresholdLocked || ranked === null} onCutoffMove={setDraggedCutoff} onCutoffRelease={releaseCutoff} />
           )}
-          <CarvingNumbers summary={summary} voxelSize={scorePoints?.header.voxel_size ?? null} isWeighted={props.isWeightedMode}
+          <CarvingNumbers summary={summary} voxelSize={scorePoints?.header.voxel_size ?? null} isWeighted={isWeightedMode}
                           lastAnalysisSeconds={props.lastAnalysisSeconds} />
         </div>
       )}
+      <div className="carving-settings" onChange={commitChoice} onBlur={commitNumberOnLeave} onKeyDown={commitNumberOnEnter}
+           onPointerUp={commitSliderOnRelease} onKeyUp={commitSliderAfterKey}>
+        {groups.map((group) => (
+          <SettingGroup key={group.title} group={group} form={form} onChange={changeCarvingSetting} disabled={settingsDisabled}
+                        fieldsWithErrorEditable={fieldsWithErrorEditable} />
+        ))}
+      </div>
     </div>
   );
 }

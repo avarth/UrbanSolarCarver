@@ -6,13 +6,23 @@ import { formattedNumber, groupedDigits, withUnit } from "./steps/format_numbers
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-// What the sky patch weights of each weighted mode measure, for the sky dome legend (UX 8.2). The weights are read relative to
-// each other, as the scores of the weighted modes are ("Obstruction score (relative)"), so no unit of the engine is shown.
+// What the sky patch weights of each weighted mode measure, for the sky dome legend (UX 8.2), with their unit: the energy from a
+// patch per square metre facing it (Solar energy, Solar usefulness), or the patch's share of its sky (Daylight, Night cooling).
 const SKY_PATCH_WEIGHT_OF_MODE: Record<string, string> = {
-  irradiance: "solar energy",
-  benefit: "solar heat in hours that need heating",
-  daylight: "overcast sky light",
-  radiative_cooling: "night sky cooling",
+  irradiance: "Solar energy from each sky patch, kWh/m²",
+  benefit: "Useful solar heat from each sky patch, kWh/m²",
+  daylight: "Share of the overcast sky in each patch",
+  radiative_cooling: "Share of the night sky cooling in each patch",
+};
+
+// What the score of a voxel measures in each mode, for the histogram axis and the kept voxels legend (UX 5.5, 8.1). The unit is
+// the engine's (mode_registry score_unit, in the score points): m²·h, kWh, or m² of fully hidden sky.
+const SCORE_OF_MODE: Record<string, string> = {
+  "time-based": "Shade a voxel casts",
+  irradiance: "Solar energy a voxel blocks",
+  benefit: "Useful solar heat a voxel blocks",
+  daylight: "Overcast sky a voxel hides",
+  radiative_cooling: "Night sky cooling a voxel hides",
 };
 
 /** The dates of a period: "21 Dec", "21 to 22 Dec" (one month written once), "1 Oct to 30 Apr", "22 Dec to 21 Dec". */
@@ -251,14 +261,25 @@ export const messages = {
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",
   linearScale: "Linear",
-  histogramAxisShadowTolerated: "Shadow tolerated at which a voxel is carved, m²·h",
-  histogramAxisRelative: "Score compared with the cutoff (relative)",
+  // The histogram axis and the kept voxels legend: "Solar energy a voxel blocks, kWh".
+  scoreOfModeWithUnit: (mode: string | null, unit: string) => {
+    const score = mode !== null && Object.hasOwn(SCORE_OF_MODE, mode) ? SCORE_OF_MODE[mode] : "Score of a voxel";
+    return unit ? `${score}, ${unit}` : score;
+  },
   histogramKept: "Kept",
   histogramCarved: "Carved",
   histogramBinRange: (lowerText: string, upperText: string, unit: string) => `${lowerText} to ${upperText}${unit ? ` ${unit}` : ""}`,
   histogramBinCounts: (kept: number, carved: number) => `${groupedDigits(kept)} kept, ${groupedDigits(carved)} carved`,
   histogramDescription: (voxelCount: number, cutoffText: string) =>
     `Histogram of the scores of ${groupedDigits(voxelCount)} voxels, cutoff at ${cutoffText}. Use the arrow keys to read each bar.`,
+  // The handle of the cutoff line on the histogram (a slider for the keyboard), and what it says of its value.
+  cutoffHandle: "Cutoff",
+  cutoffHandleValue: (cutoffText: string, keptText: string) => `${cutoffText}, keeps about ${keptText} of the volume`,
+  // Under the histogram while the line shows a cutoff not run yet: dragged, or set in the form since the carving shown.
+  cutoffPreview: (cutoffText: string, keptText: string) =>
+    `Preview: a cut at ${cutoffText} keeps about ${keptText} of the volume, before the slope limit.`,
+  cutoffPreviewWithCarveAmount: (carveAmountText: string, cutoffText: string, keptText: string) =>
+    `Preview: carve amount ${carveAmountText}, a cut at ${cutoffText}, keeps about ${keptText} of the volume, before the slope limit.`,
   slopeLimitNote: (count: number) => `The slope limit removed ${groupedDigits(count)} voxels below the cutoff.`,
   volumeKept: "Volume kept",
   volumeCarved: "Volume carved",
@@ -391,10 +412,16 @@ export const messages = {
     stepsPerHour === 1 ? "1 (every hour)" : stepsPerHour === 60 ? "60 (every minute)" : `${stepsPerHour} (every ${60 / stepsPerHour} minutes)`,
   meshFormatNames: { ply: "PLY", obj: "OBJ", stl: "STL", glb: "GLB" },
   floorStackingChoices: { supported: "Supported", free: "Free" },
-  carvingRuleChoices: { carve_fraction: "Carve amount (recommended)", headtail: "Automatic split", cutoff: "Score cutoff" },
-  carveAmountNotUsed: (ruleName: string) =>
-    `Carve amount is not used with the carving rule ${ruleName}. Choose Carve amount under More carving settings to use it.`,
+  carvingRuleChoices: { carve_fraction: "Carve amount", headtail: "Automatic split", cutoff: "Score cutoff" },
   scoreCutoffValue: "Score cutoff value",
+  // The control of the Score cutoff rule in the Carving step, with the unit of the mode's scores beside it.
+  scoreCutoffLabel: "Score cutoff",
+  scoreCutoffHelp: "Voxels that score more than this are carved. Drag the line on the histogram, or type a value.",
+  // Under the carving rule Automatic split, which has no setting: the cut of the last carving.
+  automaticSplitCut: (cutoffText: string) =>
+    `Cut at ${cutoffText}, found from the spread of the scores. Drag the line on the histogram to set a cutoff of your own.`,
+  automaticSplitBeforeCarving: "The cut is found from the spread of the scores when the carving runs.",
+  ruleSwitchedToScoreCutoff: "Dragging the line switched the carving rule from Automatic split to Score cutoff.",
   // The balance temperature strip: the names of its two handles, the two ends of the dead band.
   balanceLowerEnd: "Counts below",
   balanceUpperEnd: "Too warm above",
@@ -436,15 +463,12 @@ export const messages = {
   lightViewport: "Light viewport",
   // The ground aid button names the aid it switches to: off, ground grid and compass ring follow each other in a cycle
   groundAidSwitchTo: { grid: "Show the ground grid", compass_ring: "Show the compass ring", off: "Hide the compass ring" },
-  keptVoxelsShadingCaused: "Shading caused, m²·h",
-  keptVoxelsObstructionScore: "Obstruction score (relative)",
-  keptVoxelsScoreIn: (unit: string) => `Score, ${unit}`,
   keptVoxelsNote: (cutoff: string) => `Kept voxels. Carved voxels score above ${cutoff}.`,
   keptVoxelsSingleValue: (valueWithUnit: string) => `All kept voxels: ${valueWithUnit}`,
   thinnedVoxels: (step: number) => `Showing 1 of every ${groupedDigits(step)} voxels`,
   sunPathLegend: (days: string, hours: string) => `Sun path, ${days}; sun at ${hours}\u00a0h`,
-  skyDomeLegend: (mode: string | null) => mode !== null && Object.hasOwn(SKY_PATCH_WEIGHT_OF_MODE, mode)
-    ? `Sky patch weight, ${SKY_PATCH_WEIGHT_OF_MODE[mode]} (relative)` : "Sky patch weight (relative)",
+  skyDomeLegend: (mode: string | null) => (mode !== null && Object.hasOwn(SKY_PATCH_WEIGHT_OF_MODE, mode)
+    ? SKY_PATCH_WEIGHT_OF_MODE[mode] : "Sky patch weight"),
   buildingMassingLegend: "Building massing, by storey",
   legend: "Legend",
 };

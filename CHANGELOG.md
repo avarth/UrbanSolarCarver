@@ -85,6 +85,29 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (browser UI)
 
+- **Carving: the rule at the top, a cutoff line to drag, scores in units.**
+  In the weighted modes the carving rule (Carve amount, Automatic split,
+  Score cutoff) is a three-way choice at the top of the step, with the
+  control of the rule under it and the histogram after that in every rule;
+  the rule is no longer folded under a disabled Carve amount slider, and the
+  other carving settings are folded after the histogram. Score cutoff has a
+  slider and field in the unit of the scores, from the cutoff on the
+  histogram when it is chosen (it started at 0, which carved everything).
+  The cutoff line on the histogram can be dragged, or moved with the keys of
+  its handle (a slider for screen readers), in every rule: while it moves, a
+  line under the histogram previews the share of the volume the cut keeps,
+  worked out in the browser from the voxel scores it already has (before the
+  slope limit), and under Carve amount the amount it stands for. Letting go
+  sets the carve amount, or the cutoff (Score cutoff, Shadow tolerated), or
+  switches Automatic split to Score cutoff at that value, which the step
+  says; it runs at once with "Update when I change the threshold", else on
+  Update carving, and the line stays there as a preview (in the accent
+  colour) until then. Moving the slider or typing a value moves the line
+  too. The histogram axis, the slider ends, the 3D legend of the kept voxels
+  and the sky dome legend give the units ("Solar energy a voxel blocks,
+  kWh", "Overcast sky a voxel hides, m²", "Shade a voxel casts, m²·h",
+  "Solar energy from each sky patch, kWh/m²") in place of "(relative)". The
+  score points of the service name the mode of the analysis.
 - **No Sample spacing field.** The engine samples the test surfaces at half
   the voxel size (see "Changed (sample spacing)"), and a quiet line under
   Voxel size says so: "Test surfaces sampled every 0.5 m". The lowering of

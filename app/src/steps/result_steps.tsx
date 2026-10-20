@@ -10,7 +10,7 @@ import { analysisDiffersFromStored, shownValue, type FormState, type FormAction,
 import type { Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
-import { CarvingStep, thresholdControlNumber, thresholdControlOf, thresholdControlValues, useAutoUpdate } from "./CarvingStep";
+import { CarvingStep, thresholdControlOf, useAutoUpdate } from "./CarvingStep";
 import { EnvelopeAndMassingStep } from "./EnvelopeAndMassingStep";
 import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
 import { RunProgress } from "./RunProgress";
@@ -217,11 +217,10 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value next. A run whose value
   // the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the carving stays dimmed
   // until the next value's run, or, when none follows, until the results the service holds have been fetched.
-  const thresholdQueue = useMemo(() => createThresholdUpdateQueue(async (shownNumber, isSuperseded) => {
-    const view = thresholdControlOf(form.mode);
-    if (view === null || carvingLocked.current) return false;
+  const thresholdQueue = useMemo(() => createThresholdUpdateQueue<Record<string, unknown>>(async (thresholdValues, isSuperseded) => {
+    if (thresholdControlOf(form.mode) === null || carvingLocked.current) return false;
     const revisionBefore = context.currentForm().storedAnalysisRevision;
-    const outcome = await changeAndSave(thresholdControlValues(view, shownNumber));
+    const outcome = await changeAndSave(thresholdValues);
     if (outcome !== "saved" && outcome !== "none") return false;
     // The save stored a mode or an analysis setting a refused save had left in the form: the carving waits for Run analysis.
     if (analysisChangedBy(revisionBefore) || carvingLocked.current) return false;
@@ -284,8 +283,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                    autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
                    thresholdDisabledReason={otherRunActive ? messages.runInProgress : null} settingsDisabledReason={settingsDisabledReason}
                    runBlocker={runBlocker} onChange={changeSettings}
-                   onThresholdCommit={(shownNumber) => thresholdQueue.submit(shownNumber)}
-                   onCarvingSettingCommit={() => { if (thresholdView !== null) thresholdQueue.submit(thresholdControlNumber(form, thresholdView)); }}
+                   onThresholdCommit={(thresholdValues) => thresholdQueue.submit(thresholdValues)}
+                   onCarvingSettingCommit={() => { if (thresholdView !== null) thresholdQueue.submit({}); }}
                    onUpdateCarving={() => void updateCarvingAfterSaving()}
                    onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")}
                    lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")}

@@ -395,7 +395,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                     hemisphere={sceneSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
-                    centreContent={emptyViewContent} localOrigin={origin} mode={form.mode} modes={modes}
+                    centreContent={emptyViewContent} localOrigin={origin} mode={form.mode}
                     analysisCurrent={shownStages.preprocessing === "current"} {...resultSteps.viewer} />
       </section>
     </div>

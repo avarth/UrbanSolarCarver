@@ -2,7 +2,6 @@
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { cividis, colourToken, keptScoreRange, storeyColour, sunRamp } from "../viewer/colour_scales";
-import type { ScorePointsHeader } from "../viewer/score_points_decoder";
 import type { ViewportTheme } from "../viewer/scene";
 import "./overlays.css";
 
@@ -19,21 +18,6 @@ interface LegendProps {
 }
 
 const RAMP_STOPS = 11;
-
-/** The score unit of the kept voxels: "Shading caused, m²·h" for Solar time-based, "Obstruction score (relative)" for weighted modes. */
-export function keptVoxelsLegendTitle(scoresKind: ScorePointsHeader["scores_kind"], weightUnit: string): string {
-  if (scoresKind === "weighted_sum") return messages.keptVoxelsObstructionScore;
-  return weightUnit.startsWith("m²·h") ? messages.keptVoxelsShadingCaused : messages.keptVoxelsScoreIn(weightUnit);
-}
-
-/**
- * The unit written after a kept score: "m²·h" for Solar time-based, none for the relative obstruction score, else the unit of the
- * weights.
- */
-export function keptVoxelsLegendUnit(scoresKind: ScorePointsHeader["scores_kind"], weightUnit: string): string | undefined {
-  if (scoresKind === "weighted_sum") return undefined;
-  return weightUnit.startsWith(messages.units.shadeHours) ? messages.units.shadeHours : weightUnit;
-}
 
 function relativeLuminance(hex: string): number {
   const channels = [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255)
@@ -83,7 +67,7 @@ export function Legend({ content, theme }: LegendProps) {
         <section>
           <h3>{keptVoxels.title}</h3>
           <KeptVoxelsRange cutoff={keptVoxels.cutoff} unit={keptVoxels.unit} />
-          <p className="viewer-muted">{messages.keptVoxelsNote(formattedNumber(keptVoxels.cutoff))}</p>
+          <p className="viewer-muted">{messages.keptVoxelsNote(withUnit(formattedNumber(keptVoxels.cutoff), keptVoxels.unit))}</p>
           {keptVoxels.thinningStep > 1 && <p className="viewer-muted">{messages.thinnedVoxels(keptVoxels.thinningStep)}</p>}
         </section>
       )}
