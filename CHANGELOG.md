@@ -92,6 +92,15 @@ versioning follows [Semantic Versioning](https://semver.org/).
   the engine's `min_voxels` (a count of voxels, unchanged) with the voxel
   size it shows, and a typed volume back to whole voxels, at least one. The
   Bliss constant is a number without a unit and shows none.
+- **Carving rule: Manual or Automatic.** The weighted modes choose between
+  Manual (the Carve amount slider) and Automatic (head/tail breaks); Score
+  cutoff is no longer a rule of its own, as the line on the histogram sets
+  the cut directly. Letting go of the line sets Manual's carve amount, and
+  under Automatic switches to Manual. A cutoff a config holds (from the
+  command line or the version before) shows as Manual, at the carve amount
+  it stands for, until it is changed. The engine still takes a cutoff.
+- **Carved voxels start hidden** in the Carving step; the Layers menu shows
+  them.
 - **Carving: the rule at the top, a cutoff line to drag, scores in units.**
   In the weighted modes the carving rule (Carve amount, Automatic split,
   Score cutoff) is a three-way choice at the top of the step, with the

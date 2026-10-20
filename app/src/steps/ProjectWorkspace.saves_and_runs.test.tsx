@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { ModeInfo } from "../api_client/client";
-import type { OpenProjectSettingsSaver } from "./ProjectWorkspace";
+import { LAYERS_SHOWN_IN_STEP, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "./step_summaries";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, MODES, NOTHING_RUN, SCHEMA, TRIANGLE_OBJ, buildPart, buttonIn, container,
@@ -323,6 +323,11 @@ test("a workspace made again for a renamed project opens with the steps it had o
   expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(false);        // the view shows the carving's layers, not the inputs' ones
   openStep("Export");
   expect(stepsReported).toHaveBeenLastCalledWith({ open: "export", view: "export" });
+});
+
+test("the Carving step shows the kept voxels and starts with the carved ones hidden", () => {
+  expect(LAYERS_SHOWN_IN_STEP.carving).toContain("kept_voxels");
+  expect(LAYERS_SHOWN_IN_STEP.carving).not.toContain("carved_voxels");
 });
 
 test("the saver of the open project waits for an upload in flight, so a rename, reset or delete comes after it", async () => {

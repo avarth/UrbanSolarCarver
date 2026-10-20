@@ -111,7 +111,7 @@
     },
     "threshold": {
       "label": "Carving rule", "unit": "choice",
-      "help": "Carve amount, the rule to start with: carve a share of the total score. Automatic split: the cut is found from the spread of the scores. Score cutoff: voxels that score more than a value you set are carved. The line on the histogram can be dragged in each of them.",
+      "help": "Manual, the rule to start with: you set the carve amount, a share of the total score, with the slider or by dragging the line on the histogram. Automatic: the cut is found from the spread of the scores; dragging the line switches to Manual.",
       "label_for_modes": { "time-based": "Shadow tolerated" },
       "unit_for_modes": { "time-based": "m²·h" },
       "help_for_modes": {

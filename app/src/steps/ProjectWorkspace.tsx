@@ -34,12 +34,13 @@ import { periodChangedSince, weatherChangeSuggestion, type WeatherFileChange } f
 
 const NO_SHIFT: Point3 = [0, 0, 0];
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "mode", "settings"];
-// The layers each step shows by default (UX 8.2); the later steps add their result layers.
-const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
+// The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
+// they cover the kept ones; the Layers menu shows them.
+export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   inputs: ["max_volume", "test_surfaces"],
   mode: ["max_volume", "test_surfaces"],
   settings: ["max_volume", "test_surfaces", "sun_path"],
-  carving: ["test_surfaces", "sun_path", "kept_voxels", "carved_voxels", "sky_dome"],
+  carving: ["test_surfaces", "sun_path", "kept_voxels", "sky_dome"],
   envelope_and_massing: ["envelope", "building_massing"],
   export: ["envelope", "building_massing"],
 };

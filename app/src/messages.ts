@@ -412,16 +412,12 @@ export const messages = {
     stepsPerHour === 1 ? "1 per hour" : stepsPerHour === 60 ? "60 per hour (every minute)" : `${stepsPerHour} per hour (every ${60 / stepsPerHour} minutes)`,
   meshFormatNames: { ply: "PLY", obj: "OBJ", stl: "STL", glb: "GLB" },
   floorStackingChoices: { supported: "Supported", free: "Free" },
-  carvingRuleChoices: { carve_fraction: "Carve amount", headtail: "Automatic split", cutoff: "Score cutoff" },
-  scoreCutoffValue: "Score cutoff value",
-  // The control of the Score cutoff rule in the Carving step, with the unit of the mode's scores beside it.
-  scoreCutoffLabel: "Score cutoff",
-  scoreCutoffHelp: "Voxels that score more than this are carved. Drag the line on the histogram, or type a value.",
-  // Under the carving rule Automatic split, which has no setting: the cut of the last carving.
-  automaticSplitCut: (cutoffText: string) =>
-    `Cut at ${cutoffText}, found from the spread of the scores. Drag the line on the histogram to set a cutoff of your own.`,
-  automaticSplitBeforeCarving: "The cut is found from the spread of the scores when the carving runs.",
-  ruleSwitchedToScoreCutoff: "Dragging the line switched the carving rule from Automatic split to Score cutoff.",
+  carvingRuleChoices: { carve_fraction: "Manual", headtail: "Automatic" },
+  // Under the carving rule Automatic, which has no setting: the cut of the last carving.
+  automaticCut: (cutoffText: string) =>
+    `Cut at ${cutoffText}, found from the spread of the scores. Dragging the line on the histogram switches to Manual.`,
+  automaticBeforeCarving: "The cut is found from the spread of the scores when the carving runs.",
+  ruleSwitchedToManual: "Dragging the line switched the carving rule from Automatic to Manual.",
   // The balance temperature strip: the names of its two handles, the two ends of the dead band.
   balanceLowerEnd: "Counts below",
   balanceUpperEnd: "Too warm above",

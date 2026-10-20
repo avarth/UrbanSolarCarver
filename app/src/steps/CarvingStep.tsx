@@ -1,13 +1,14 @@
-// The Carving step (UX 5.5, 11): in the weighted modes the carving rule at the top (Carve amount, Automatic split, Score cutoff),
-// then the control of the rule (Shadow tolerated in m²·h for Solar time-based, Carve amount in %, Score cutoff in the unit of the
-// scores, a line for Automatic split; the angle rule's message), the "Update when I change the threshold" switch, remembered per
-// project, the histogram with its cutoff line, the numbers of the last carving, and the other carving settings folded last.
+// The Carving step (UX 5.5, 11): in the weighted modes the carving rule at the top (Manual or Automatic), then the control of the
+// rule (Shadow tolerated in m²·h for Solar time-based, Carve amount in % under Manual, a line for Automatic; the angle rule's
+// message), the "Update when I change the threshold" switch, remembered per project, the histogram with its cutoff line, the
+// numbers of the last carving, and the other carving settings folded last.
 // With the switch on, letting go of the slider, of the line on the histogram or leaving the number field reruns the carving, as
 // does a change of another carving setting (a switch or a choice at once, a number field when the user leaves it, a slider when it
 // is let go); off, Update carving does.
 // The line on the histogram can be dragged in every rule: it previews the share of the volume a cutoff keeps, worked out from the
-// score points, and sets the carve amount that cutoff stands for (Carve amount), or the cutoff itself (Shadow tolerated, Score
-// cutoff; Automatic split turns into Score cutoff, which the step says).
+// score points, and sets the carve amount that cutoff stands for (Manual; Automatic turns into Manual, which the step says), or
+// the cutoff itself (Shadow tolerated). A cutoff a weighted mode's config holds (from the command line or an earlier version) is
+// shown as Manual, at the carve amount it stands for.
 // When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with Run
 // analysis in the step.
 import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent,
@@ -28,11 +29,12 @@ import { ScoreHistogram } from "./ScoreHistogram";
 import "./steps.css";
 
 type CarvingSummary = NonNullable<RunSummary["carving"]>;
-type CarvingRule = ThresholdSpec["method"];
+/** The carving rule of a weighted mode: Manual (a carve amount) or Automatic (head/tail breaks). */
+type CarvingRule = "carve_fraction" | "headtail";
 
 const AUTO_UPDATE_STORAGE_PREFIX = "usc.autoUpdate.";
 const CARVING_GROUP = "How much to carve";
-const CARVING_RULES: readonly CarvingRule[] = ["carve_fraction", "headtail", "cutoff"];
+const CARVING_RULES: readonly CarvingRule[] = ["carve_fraction", "headtail"];
 // The settings that decide the cutoff: the rule (and its value) and the carve amount.
 const THRESHOLD_SETTINGS = ["threshold", "carve_fraction"] as const;
 // A carve amount set from the line on the histogram is rounded to a tenth of a percent.
@@ -85,55 +87,71 @@ export function thresholdControlOf(mode: string): SettingView | null {
   return settingsForStep("carving", mode).find((group) => group.title === CARVING_GROUP)?.essential[0] ?? null;
 }
 
-/** The carving rule the form holds in a weighted mode: Carve amount while the threshold is unset, as the engine applies it. */
+/**
+ * The carving rule the form holds in a weighted mode: Automatic for head/tail breaks, else Manual, which is also how a cutoff the
+ * config holds is shown.
+ */
 export function carvingRuleOf(form: FormState): CarvingRule {
-  return (shownValue(form, "threshold") as ThresholdSpec | null)?.method ?? "carve_fraction";
+  return (shownValue(form, "threshold") as ThresholdSpec | null)?.method === "headtail" ? "headtail" : "carve_fraction";
 }
 
 /**
- * The control of the carving rule: Shadow tolerated (Solar time-based), Carve amount, or Score cutoff in the unit of the scores;
- * null for Automatic split, which has no setting, and for the angle rule.
+ * The control of the carving rule: Shadow tolerated (Solar time-based) or Carve amount (Manual); null for Automatic, which has no
+ * setting, and for the angle rule.
  */
-export function ruleControlOf(form: FormState, scoreUnit: string): SettingView | null {
+export function ruleControlOf(form: FormState): SettingView | null {
   const control = thresholdControlOf(form.mode);
   if (control === null || control.name === "threshold") return control;
-  const rule = carvingRuleOf(form);
-  if (rule === "carve_fraction") return control;
-  if (rule === "headtail") return null;
-  return { ...settingView("threshold", form.mode), label: messages.scoreCutoffLabel, unit: scoreUnit, help: messages.scoreCutoffHelp };
-}
-
-/** The number the threshold control shows: the cutoff (0 when unset, as the engine applies it), or the carve amount in %. */
-export function thresholdControlNumber(form: FormState, view: SettingView): number {
-  const value = shownValue(form, view.name);
-  if (view.name === "threshold") {
-    const spec = value as ThresholdSpec | null;
-    return spec?.method === "cutoff" && typeof spec.value === "number" ? spec.value : 0;
-  }
-  const shown = toDisplayValue(view.name, value);
-  return typeof shown === "number" ? shown : 0;
-}
-
-/** The settings a number of the threshold control stands for. */
-export function thresholdControlValues(view: SettingView, shownNumber: number): Record<string, unknown> {
-  return view.name === "threshold" ? { threshold: { method: "cutoff", value: shownNumber } } : { [view.name]: fromDisplayValue(view.name, shownNumber) };
-}
-
-/**
- * The cutoff the form's threshold settings set: Shadow tolerated or Score cutoff as given, and for Carve amount the cut that
- * amount makes among the score points. Null for Automatic split, which only the run finds.
- */
-export function cutoffTheFormSets(form: FormState, isWeightedMode: boolean, ranked: RankedScorePoints): number | null {
-  const spec = shownValue(form, "threshold") as ThresholdSpec | null;
-  if (!isWeightedMode || spec?.method === "cutoff") return typeof spec?.value === "number" ? spec.value : 0;
-  if (spec?.method === "headtail") return null;
-  const carveAmount = shownValue(form, "carve_fraction");
-  return typeof carveAmount === "number" ? cutoffForCarveAmount(ranked, carveAmount) : null;
+  return carvingRuleOf(form) === "headtail" ? null : control;
 }
 
 /** The carve amount a cutoff stands for among the score points, to a tenth of a percent. */
 function carveAmountSetting(ranked: RankedScorePoints, cutoff: number): number {
   return roundedToStep(carveAmountAt(ranked, cutoff), CARVE_AMOUNT_STEP);
+}
+
+/**
+ * The carve amount (0 to 1) Manual stands at: the carve_fraction setting, a carve amount the threshold itself gives, or for a
+ * cutoff the config holds the amount it carves among the score points (null without them).
+ */
+export function manualCarveAmountOf(form: FormState, ranked: RankedScorePoints | null): number | null {
+  const spec = shownValue(form, "threshold") as ThresholdSpec | null;
+  if (spec?.method === "cutoff") return ranked === null || typeof spec.value !== "number" ? null : carveAmountSetting(ranked, spec.value);
+  if (spec?.method === "carve_fraction" && typeof spec.value === "number") return spec.value;
+  const carveAmount = shownValue(form, "carve_fraction");
+  return typeof carveAmount === "number" ? carveAmount : null;
+}
+
+/** The settings of Manual at a carve amount (0 to 1): the threshold unset, so the engine carves that amount. */
+function manualSettings(carveAmount: unknown): Record<string, unknown> {
+  return { threshold: null, carve_fraction: carveAmount };
+}
+
+/** The number the threshold control shows: the cutoff (0 when unset, as the engine applies it), or the Manual carve amount in %. */
+export function thresholdControlNumber(form: FormState, view: SettingView, ranked: RankedScorePoints | null): number {
+  if (view.name === "threshold") {
+    const spec = shownValue(form, "threshold") as ThresholdSpec | null;
+    return spec?.method === "cutoff" && typeof spec.value === "number" ? spec.value : 0;
+  }
+  const shown = toDisplayValue(view.name, manualCarveAmountOf(form, ranked));
+  return typeof shown === "number" ? shown : 0;
+}
+
+/** The settings a number of the threshold control stands for: the cutoff (Shadow tolerated), or Manual at that carve amount. */
+export function thresholdControlValues(view: SettingView, shownNumber: number): Record<string, unknown> {
+  return view.name === "threshold" ? { threshold: { method: "cutoff", value: shownNumber } } : manualSettings(fromDisplayValue(view.name, shownNumber));
+}
+
+/**
+ * The cutoff the form's threshold settings set: Shadow tolerated, or a cutoff the config holds, as given, and for Manual the cut
+ * its carve amount makes among the score points. Null for Automatic, which only the run finds.
+ */
+export function cutoffTheFormSets(form: FormState, isWeightedMode: boolean, ranked: RankedScorePoints): number | null {
+  const spec = shownValue(form, "threshold") as ThresholdSpec | null;
+  if (!isWeightedMode || spec?.method === "cutoff") return typeof spec?.value === "number" ? spec.value : 0;
+  if (spec?.method === "headtail") return null;
+  const carveAmount = manualCarveAmountOf(form, ranked);
+  return carveAmount === null ? null : cutoffForCarveAmount(ranked, carveAmount);
 }
 
 /**
@@ -145,13 +163,11 @@ function cutoffSettings(cutoff: number, highestScore: number): Record<string, un
 }
 
 /**
- * The settings a cutoff let go on the histogram sets: the carve amount it stands for under Carve amount, else the cutoff itself,
- * which takes Automatic split to Score cutoff.
+ * The settings a cutoff let go on the histogram sets: in a weighted mode Manual at the carve amount it stands for (which takes
+ * Automatic to Manual), in Solar time-based the cutoff itself.
  */
-export function settingsForCutoff(form: FormState, isWeightedMode: boolean, ranked: RankedScorePoints, cutoff: number,
-                                  highestScore: number): Record<string, unknown> {
-  if (isWeightedMode && carvingRuleOf(form) === "carve_fraction") return { carve_fraction: carveAmountSetting(ranked, cutoff) };
-  return cutoffSettings(cutoff, highestScore);
+export function settingsForCutoff(isWeightedMode: boolean, ranked: RankedScorePoints, cutoff: number, highestScore: number): Record<string, unknown> {
+  return isWeightedMode ? manualSettings(carveAmountSetting(ranked, cutoff)) : cutoffSettings(cutoff, highestScore);
 }
 
 /** The threshold settings of *values* as one text, to tell whether two sets of settings carve the same. */
@@ -162,6 +178,8 @@ function thresholdSettingsKey(values: Record<string, unknown>): string {
 interface ThresholdControlProps {
   view: SettingView;
   form: FormState;
+  /** The number the form's settings stand for (thresholdControlNumber). */
+  storedNumber: number;
   highestScore: number | null;
   autoUpdate: boolean;
   disabled: boolean;
@@ -181,12 +199,11 @@ interface ThresholdControlProps {
  * form only when its run is next (it may wait behind a run in progress), so going back to the stored number is handed on too
  * while an earlier one is still on its way: it replaces the waiting one, and the run uses the number the user is at.
  */
-function ThresholdControl({ view, form, highestScore, autoUpdate, disabled: disabledOtherwise, lockedUnlessError = false, previewNumber = null,
+function ThresholdControl({ view, form, storedNumber: stored, highestScore, autoUpdate, disabled: disabledOtherwise, lockedUnlessError = false, previewNumber = null,
                             onHeldNumberChange, onChangeValue, onCommit }: ThresholdControlProps) {
   const inputId = useId();
   const labelId = `${inputId}-label`;
   const errorId = `${inputId}-error`;
-  const stored = thresholdControlNumber(form, view);
   const [heldNumber, setHeldNumber] = useState<number | null>(null);
   // The number last handed on to run, or the stored number once the form holds a number, however it got there.
   const lastNumberHandedOn = useRef(stored);
@@ -252,7 +269,7 @@ interface CarvingRuleChoiceProps {
   onChoose: (rule: CarvingRule) => void;
 }
 
-/** The carving rule of a weighted mode (UX 5.5): Carve amount, Automatic split or Score cutoff, side by side at the top. */
+/** The carving rule of a weighted mode (UX 5.5): Manual or Automatic, side by side at the top. */
 function CarvingRuleChoice({ mode, rule, disabled, onChoose }: CarvingRuleChoiceProps) {
   const labelId = useId();
   const view = settingView("threshold", mode);
@@ -359,19 +376,19 @@ export function CarvingStep(props: CarvingStepProps) {
   const [draggedCutoff, setDraggedCutoff] = useState<number | null>(null);
   const [heldControlNumber, setHeldControlNumber] = useState<number | null>(null);
   const [released, setReleased] = useState<ReleasedCutoff | null>(null);
-  const [switchedFromAutomaticSplit, setSwitchedFromAutomaticSplit] = useState(false);
+  const [switchedFromAutomatic, setSwitchedFromAutomatic] = useState(false);
   useEffect(() => setReleased(null), [summary]);
   const comparedScores = scorePoints?.comparedScores ?? null;
   const kept = scorePoints?.kept ?? null;
   const ranked = useMemo(() => (scorePoints !== null && comparedScores !== null ? rankScorePoints(comparedScores, scorePoints.scores) : null),
                          [scorePoints]);
   const scoreUnit = scorePoints?.header.score_unit ?? "";
-  // The end of the Score cutoff slider: the highest score the cutoff is compared with, above which a cutoff carves nothing more;
+  // The end of the Shadow tolerated slider: the highest score the cutoff is compared with, above which a cutoff carves nothing more;
   // the highest raw score until a carving has run on this analysis.
   const highestScore = scorePoints?.header.compared_score_max ?? scorePoints?.header.score_max ?? null;
   const thresholdView = thresholdControlOf(form.mode);
   const rule = carvingRuleOf(form);
-  const ruleControl = ruleControlOf(form, scoreUnit);
+  const ruleControl = ruleControlOf(form);
   const groups = settingsForStep("carving", form.mode).map((group) => ({
     ...group, essential: [], folded: group.folded.filter((view) => view.name !== "threshold"),
     foldLabel: messages.moreSettingsOfGroup[group.title as keyof typeof messages.moreSettingsOfGroup] ?? group.foldLabel,
@@ -425,13 +442,13 @@ export function CarvingStep(props: CarvingStepProps) {
   const cutoffText = (cutoff: number) => withUnit(formattedNumber(cutoff), scoreUnit);
   const keptText = (cutoff: number) => formatNumber(keptShareAt(ranked!, cutoff) * 100, messages.units.percent);
   const carveAmountText = (amount: number) => formatNumber(amount * 100, messages.units.percent);
-  const underCarveAmount = isWeightedMode && rule === "carve_fraction";
-  const formCarveAmount = shownValue(form, "carve_fraction");
+  const formCarveAmount = manualCarveAmountOf(form, ranked);
   let previewNote: string | null = null;
   if (cutoffIsPreview && ranked !== null && shownCutoff !== null) {
     const amount = draggedCutoff !== null ? carveAmountAt(ranked, draggedCutoff) : heldControlNumber !== null ? heldControlNumber / 100
-      : typeof formCarveAmount === "number" ? formCarveAmount : null;
-    previewNote = underCarveAmount && amount !== null ? messages.cutoffPreviewWithCarveAmount(carveAmountText(amount), cutoffText(shownCutoff), keptText(shownCutoff))
+      : formCarveAmount;
+    // In the weighted modes a cut stands for a carve amount, also under Automatic, which letting go of the line turns into Manual.
+    previewNote = isWeightedMode && amount !== null ? messages.cutoffPreviewWithCarveAmount(carveAmountText(amount), cutoffText(shownCutoff), keptText(shownCutoff))
       : messages.cutoffPreview(cutoffText(shownCutoff), keptText(shownCutoff));
   }
   // While the line is dragged, the control of the rule shows the number it stands for.
@@ -441,25 +458,22 @@ export function CarvingStep(props: CarvingStepProps) {
   const releaseCutoff = (cutoff: number) => {
     setDraggedCutoff(null);
     if (ranked === null) return;
-    const values = settingsForCutoff(form, isWeightedMode, ranked, cutoff, highestScore ?? 0);
+    const values = settingsForCutoff(isWeightedMode, ranked, cutoff, highestScore ?? 0);
     const settingsKeyAfter = thresholdSettingsKey({ ...form.userValues, ...values });
     if (settingsKeyAfter === settingsKey) return;          // let go where it started: nothing to run
     setReleased({ cutoff, settingsKeys: [settingsKey, settingsKeyAfter] });
-    if (isWeightedMode && rule === "headtail") setSwitchedFromAutomaticSplit(true);
+    if (isWeightedMode && rule === "headtail") setSwitchedFromAutomatic(true);
     applyThreshold(values);
   };
-  // Choosing a rule keeps the cut where it is: Score cutoff starts from the cutoff on the histogram, not 0, and Carve amount from
-  // the amount that cutoff carves (the mode's own amount without a cut to start from). Automatic split reads no carve amount.
+  // Choosing Manual keeps the cut where it is: it starts from the amount the cutoff on the histogram carves (the mode's own amount
+  // without a cut to start from). Automatic reads no carve amount.
   const chooseRule = (next: CarvingRule) => {
-    setSwitchedFromAutomaticSplit(false);
-    if (next === "carve_fraction") {
-      applyThreshold(ranked === null || shownCutoff === null ? { threshold: null }
-        : { threshold: null, carve_fraction: carveAmountSetting(ranked, shownCutoff) });
-    } else if (next === "headtail") applyThreshold({ threshold: { method: "headtail" }, carve_fraction: null });
-    else applyThreshold(cutoffSettings(shownCutoff ?? 0, highestScore ?? 0));
+    setSwitchedFromAutomatic(false);
+    if (next === "headtail") applyThreshold({ threshold: { method: "headtail" }, carve_fraction: null });
+    else applyThreshold(ranked === null || shownCutoff === null ? { threshold: null } : settingsForCutoff(true, ranked, shownCutoff, 0));
   };
-  const automaticSplitLine = summary !== null && !formDiffersFromCarving ? messages.automaticSplitCut(cutoffText(summary.threshold_value))
-    : messages.automaticSplitBeforeCarving;
+  const automaticLine = summary !== null && !formDiffersFromCarving ? messages.automaticCut(cutoffText(summary.threshold_value))
+    : messages.automaticBeforeCarving;
   return (
     <div className="carving-step">
       {analysisOutOfDate && (
@@ -480,9 +494,10 @@ export function CarvingStep(props: CarvingStepProps) {
         {thresholdView === null ? <p className="step-reason">{messages.angleRuleHasNoThreshold}</p> : (
           <>
             {isWeightedMode && <CarvingRuleChoice mode={form.mode} rule={rule} disabled={thresholdLocked} onChoose={chooseRule} />}
-            {switchedFromAutomaticSplit && rule === "cutoff" && <p className="step-reason">{messages.ruleSwitchedToScoreCutoff}</p>}
-            {ruleControl === null ? <p className="step-reason">{automaticSplitLine}</p> : (
-              <ThresholdControl key={ruleControl.name} view={ruleControl} form={form} highestScore={highestScore} autoUpdate={autoUpdating}
+            {switchedFromAutomatic && rule === "carve_fraction" && <p className="step-reason">{messages.ruleSwitchedToManual}</p>}
+            {ruleControl === null ? <p className="step-reason">{automaticLine}</p> : (
+              <ThresholdControl key={ruleControl.name} view={ruleControl} form={form} storedNumber={thresholdControlNumber(form, ruleControl, ranked)}
+                                highestScore={highestScore} autoUpdate={autoUpdating}
                                 disabled={thresholdDisabled} lockedUnlessError={analysisOutOfDate} previewNumber={previewNumber}
                                 onHeldNumberChange={setHeldControlNumber}
                                 onChangeValue={(shownNumber) => props.onChange(thresholdControlValues(ruleControl, shownNumber))}
