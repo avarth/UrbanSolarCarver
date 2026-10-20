@@ -5,7 +5,7 @@ import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
   return {
-    header: { origin: [0, 0, 0], shape: [2, 2, 3], voxel_size: 1, mode: "time-based", scores_kind: "violation_count", weight_unit: "m²·h", score_unit: "m²·h", score_min: 0, score_max: 9,
+    header: { origin: [0, 0, 0], shape: [2, 2, 3], voxel_size: 1, mode: "time-based", scores_kind: "violation_count", weight_unit: "m²·h", score_unit: "m²·h", score_min: 0, score_max: 9, compared_score_max: 9,
               occupied_count: indices.length, point_count: indices.length, thinning_step: 1, has_mask: kept !== null, has_compared_scores: false },
     indices: Uint32Array.from(indices), scores: Float32Array.from(scores), kept: kept && Uint8Array.from(kept), comparedScores: null,
   };

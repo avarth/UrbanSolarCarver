@@ -51,6 +51,22 @@ def test_given_values_win_over_starting_values(tmp_path):
     assert config.tilted_plane_angle_deg == 30.0
 
 
+@pytest.mark.parametrize("threshold", ["headtail", {"method": "cutoff", "value": 2.0}, 2.0])
+def test_a_starting_carve_fraction_is_left_out_under_a_rule_that_does_not_read_it(tmp_path, recwarn, threshold):
+    config = build_config_from_mode_starting_values({
+        "mode": "radiative_cooling", "max_volume_path": "v.ply", "test_surface_path": "s.ply",
+        "out_dir": str(tmp_path), "threshold": threshold})
+    assert "carve_fraction" not in config.model_fields_set
+    assert not [warning for warning in recwarn if "carve_fraction" in str(warning.message)]
+
+
+@pytest.mark.parametrize("threshold", [None, "carve_fraction", {"method": "carve_fraction"}])
+def test_a_starting_carve_fraction_applies_under_the_carve_fraction_rule(tmp_path, threshold):
+    values = {"mode": "radiative_cooling", "max_volume_path": "v.ply", "test_surface_path": "s.ply", "out_dir": str(tmp_path)}
+    config = build_config_from_mode_starting_values(values if threshold is None else {**values, "threshold": threshold})
+    assert config.resolved_threshold().value == 0.35
+
+
 def test_an_analysis_period_value_wins_over_the_starting_period(tmp_path):
     config = build_config_from_mode_starting_values({
         "mode": "time-based", "epw_path": "w.epw", "out_dir": str(tmp_path),

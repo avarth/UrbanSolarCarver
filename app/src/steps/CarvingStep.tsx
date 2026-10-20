@@ -131,16 +131,27 @@ export function cutoffTheFormSets(form: FormState, isWeightedMode: boolean, rank
   return typeof carveAmount === "number" ? cutoffForCarveAmount(ranked, carveAmount) : null;
 }
 
+/** The carve amount a cutoff stands for among the score points, to a tenth of a percent. */
+function carveAmountSetting(ranked: RankedScorePoints, cutoff: number): number {
+  return roundedToStep(carveAmountAt(ranked, cutoff), CARVE_AMOUNT_STEP);
+}
+
 /**
- * The settings a cutoff let go on the histogram sets: the carve amount it stands for under Carve amount (to a tenth of a
- * percent), else the cutoff itself (rounded as the slider rounds it), which takes Automatic split to Score cutoff.
+ * The settings of a cutoff: the cutoff rounded as the slider rounds it. A cutoff reads no carve amount, so the carve amount is
+ * unset, as the engine warns about a carve_fraction that its rule does not read.
+ */
+function cutoffSettings(cutoff: number, highestScore: number): Record<string, unknown> {
+  return { threshold: { method: "cutoff", value: roundedToStep(cutoff, cutoffStep(highestScore)) }, carve_fraction: null };
+}
+
+/**
+ * The settings a cutoff let go on the histogram sets: the carve amount it stands for under Carve amount, else the cutoff itself,
+ * which takes Automatic split to Score cutoff.
  */
 export function settingsForCutoff(form: FormState, isWeightedMode: boolean, ranked: RankedScorePoints, cutoff: number,
                                   highestScore: number): Record<string, unknown> {
-  if (isWeightedMode && carvingRuleOf(form) === "carve_fraction") {
-    return { carve_fraction: roundedToStep(carveAmountAt(ranked, cutoff), CARVE_AMOUNT_STEP) };
-  }
-  return { threshold: { method: "cutoff", value: roundedToStep(cutoff, cutoffStep(highestScore)) } };
+  if (isWeightedMode && carvingRuleOf(form) === "carve_fraction") return { carve_fraction: carveAmountSetting(ranked, cutoff) };
+  return cutoffSettings(cutoff, highestScore);
 }
 
 /** The threshold settings of *values* as one text, to tell whether two sets of settings carve the same. */
@@ -355,7 +366,9 @@ export function CarvingStep(props: CarvingStepProps) {
   const ranked = useMemo(() => (scorePoints !== null && comparedScores !== null ? rankScorePoints(comparedScores, scorePoints.scores) : null),
                          [scorePoints]);
   const scoreUnit = scorePoints?.header.score_unit ?? "";
-  const highestScore = scorePoints?.header.score_max ?? null;
+  // The end of the Score cutoff slider: the highest score the cutoff is compared with, above which a cutoff carves nothing more;
+  // the highest raw score until a carving has run on this analysis.
+  const highestScore = scorePoints?.header.compared_score_max ?? scorePoints?.header.score_max ?? null;
   const thresholdView = thresholdControlOf(form.mode);
   const rule = carvingRuleOf(form);
   const ruleControl = ruleControlOf(form, scoreUnit);
@@ -435,12 +448,15 @@ export function CarvingStep(props: CarvingStepProps) {
     if (isWeightedMode && rule === "headtail") setSwitchedFromAutomaticSplit(true);
     applyThreshold(values);
   };
-  // Choosing a rule keeps the cut where it is: Score cutoff starts from the cutoff on the histogram, not 0.
+  // Choosing a rule keeps the cut where it is: Score cutoff starts from the cutoff on the histogram, not 0, and Carve amount from
+  // the amount that cutoff carves (the mode's own amount without a cut to start from). Automatic split reads no carve amount.
   const chooseRule = (next: CarvingRule) => {
     setSwitchedFromAutomaticSplit(false);
-    if (next === "carve_fraction") applyThreshold({ threshold: null });
-    else if (next === "headtail") applyThreshold({ threshold: { method: "headtail" } });
-    else applyThreshold({ threshold: { method: "cutoff", value: roundedToStep(shownCutoff ?? 0, cutoffStep(highestScore ?? 0)) } });
+    if (next === "carve_fraction") {
+      applyThreshold(ranked === null || shownCutoff === null ? { threshold: null }
+        : { threshold: null, carve_fraction: carveAmountSetting(ranked, shownCutoff) });
+    } else if (next === "headtail") applyThreshold({ threshold: { method: "headtail" }, carve_fraction: null });
+    else applyThreshold(cutoffSettings(shownCutoff ?? 0, highestScore ?? 0));
   };
   const automaticSplitLine = summary !== null && !formDiffersFromCarving ? messages.automaticSplitCut(cutoffText(summary.threshold_value))
     : messages.automaticSplitBeforeCarving;

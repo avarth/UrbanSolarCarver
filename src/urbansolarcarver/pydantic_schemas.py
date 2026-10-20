@@ -109,6 +109,24 @@ def _normalize_threshold(v):
     return v
 
 
+def threshold_reads_carve_fraction(threshold) -> bool:
+    """Whether a ``threshold``, in any spelling the config accepts, takes its value from ``carve_fraction``.
+
+    It does when unset (in a weighted mode) or when it names the carve_fraction
+    method without a value. A spelling the schema refuses reads nothing here;
+    validation reports it.
+    """
+    try:
+        spec = _normalize_threshold(threshold)
+    except ValueError:
+        return False
+    if spec is None:
+        return True
+    if isinstance(spec, ThresholdSpec):
+        return spec.method == "carve_fraction" and spec.value is None
+    return isinstance(spec, dict) and spec.get("method") == "carve_fraction" and spec.get("value") is None
+
+
 def resolve_threshold(mode: str, threshold: Optional[ThresholdSpec],
                       carve_fraction: float) -> ThresholdSpec:
     """The complete thresholding strategy for *mode*.
@@ -580,8 +598,7 @@ class UserConfig(BaseModel):
         warning.
         """
         spec = self.resolved_threshold()  # raises for a method the mode cannot use
-        reads_carve_fraction = self.threshold is None or (
-            self.threshold.method == "carve_fraction" and self.threshold.value is None)
+        reads_carve_fraction = threshold_reads_carve_fraction(self.threshold)
         if (spec.method == "carve_fraction" and not reads_carve_fraction
                 and "carve_fraction" in self.model_fields_set
                 and spec.value != self.carve_fraction):

@@ -53,7 +53,7 @@ test("the sky dome legend of a mode without sky weights (the form left the analy
 const DAYLIGHT_SCORE_POINTS: ScorePoints = {
   header: { origin: [0, 0, 0], shape: [1, 1, 1], voxel_size: 1, mode: "daylight", scores_kind: "weighted_sum",
             weight_unit: "share of the CIE overcast sky (sums to 1)", score_unit: "m²",
-            score_min: 0, score_max: 1, occupied_count: 1, point_count: 1, thinning_step: 1, has_mask: false, has_compared_scores: false },
+            score_min: 0, score_max: 1, compared_score_max: null, occupied_count: 1, point_count: 1, thinning_step: 1, has_mask: false, has_compared_scores: false },
   indices: Uint32Array.from([0]), scores: Float32Array.from([0.5]), kept: null, comparedScores: null,
 };
 

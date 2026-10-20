@@ -66,10 +66,23 @@ def test_compared_scores_follow_the_same_indices(tmp_path):
     assert header["has_compared_scores"] is True and np.allclose(compared, scores + 100)
 
 
+def test_the_highest_compared_score_is_that_of_all_occupied_voxels_not_only_the_points(tmp_path):
+    run = write_fake_run(tmp_path, with_compared_scores=True)   # compared = raw scores + 100
+    header, _, _, _, compared = decode(build_score_points(run, cap=5))
+    assert header["compared_score_max"] == header["score_max"] + 100 == 117.0
+    assert compared.max() < 117.0                               # the thinned points miss the highest voxel
+
+
+def test_without_compared_scores_there_is_no_highest_compared_score(tmp_path):
+    header = decode(build_score_points(write_fake_run(tmp_path)))[0]
+    assert header["has_compared_scores"] is False and header["compared_score_max"] is None
+
+
 def test_a_thresholding_run_that_was_built_on_an_earlier_preprocessing_run_is_left_out(tmp_path):
     run = write_fake_run(tmp_path, with_compared_scores=True, thresholding_upstream_run_id="an-earlier-run")
     header, _, _, kept, compared = decode(build_score_points(run))
     assert header["has_mask"] is False and header["has_compared_scores"] is False and kept is None and compared is None
+    assert header["compared_score_max"] is None
 
 
 def test_a_grid_without_occupied_voxels_gives_no_points(tmp_path):

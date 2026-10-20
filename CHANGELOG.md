@@ -99,7 +99,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
   the rule is no longer folded under a disabled Carve amount slider, and the
   other carving settings are folded after the histogram. Score cutoff has a
   slider and field in the unit of the scores, from the cutoff on the
-  histogram when it is chosen (it started at 0, which carved everything).
+  histogram when it is chosen (it started at 0, which carved everything);
+  the slider ends at the highest score the cutoff is compared with (after
+  "Remove everything above a cut"), past which a cutoff carves nothing more,
+  and the score points of the service give it as `compared_score_max`.
+  Carve amount, when chosen, starts from the amount the cut on the
+  histogram carves. Automatic split and Score cutoff unset `carve_fraction`,
+  which they do not read, so a run no longer warns "carve_fraction=... is
+  unused".
   The cutoff line on the histogram can be dragged, or moved with the keys of
   its handle (a slider for screen readers), in every rule: while it moves, a
   line under the histogram previews the share of the volume the cut keeps,
@@ -219,6 +226,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
   preprocessing run of a weighted mode without `score_unit` as out of date,
   so its next run rescores it; time-based and angle rule runs stay current.
   `GET /api/modes` and the score points header give `score_unit`.
+
+### Fixed (carving rule)
+
+- A config built from a mode's starting values
+  (`build_config_from_mode_starting_values`: the browser UI, the engine
+  requests) leaves out the starting `carve_fraction` of `radiative_cooling`
+  when its `threshold` does not read it (`headtail`, a cutoff), so that
+  config no longer warns about an unused `carve_fraction` it never set.
+  `pydantic_schemas.threshold_reads_carve_fraction` tells, for a threshold
+  in any spelling, whether it takes its value from `carve_fraction`.
 
 ### Changed (ray length)
 

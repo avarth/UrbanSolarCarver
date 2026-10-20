@@ -15,7 +15,8 @@ thinned to a point budget, in the layout below (all numbers little-endian):
 
 Header keys: ``origin``, ``shape``, ``voxel_size``, ``mode`` (of the analysis), ``scores_kind``, ``weight_unit``, ``score_unit``,
 ``score_min`` and ``score_max`` (of the finite scores of all occupied voxels, not only the points;
-null when there are none), ``occupied_count``, ``point_count``, ``thinning_step``, ``has_mask``,
+null when there are none), ``compared_score_max`` (the same for the compared scores: the highest cutoff that still carves;
+null without compared scores), ``occupied_count``, ``point_count``, ``thinning_step``, ``has_mask``,
 ``has_compared_scores``.
 """
 from __future__ import annotations
@@ -81,6 +82,8 @@ def build_score_points(run_folder: Path, cap: int = SCORE_POINTS_CAP) -> bytes |
     finite_occupied_scores = occupied_scores[np.isfinite(occupied_scores)]     # the engine warns about NaN scores, so they occur
 
     kept_mask, compared_scores = _thresholding_arrays(run_folder, preprocessing_manifest.run_id)
+    finite_occupied_compared = (None if compared_scores is None
+                                else compared_scores[occupied_indices][np.isfinite(compared_scores[occupied_indices])])
     header = {
         "origin": list(preprocessing_manifest.origin),
         "shape": list(preprocessing_manifest.shape),
@@ -91,6 +94,8 @@ def build_score_points(run_folder: Path, cap: int = SCORE_POINTS_CAP) -> bytes |
         "score_unit": MODES[preprocessing_manifest.mode].score_unit,
         "score_min": float(finite_occupied_scores.min()) if len(finite_occupied_scores) else None,
         "score_max": float(finite_occupied_scores.max()) if len(finite_occupied_scores) else None,
+        "compared_score_max": (float(finite_occupied_compared.max())
+                               if finite_occupied_compared is not None and len(finite_occupied_compared) else None),
         "occupied_count": occupied_count,
         "point_count": len(point_indices),
         "thinning_step": thinning_step,

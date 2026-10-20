@@ -19,7 +19,7 @@ from .errors import ConfigError, ConfigFieldError
 from .errors import UrbanSolarCarverWarning  # noqa: F401 (re-exported)
 from .mode_registry import MODES, canonical_mode_name
 from .pydantic_schemas import UserConfig as user_config
-from .pydantic_schemas import expand_analysis_period
+from .pydantic_schemas import expand_analysis_period, threshold_reads_carve_fraction
 
 # Config fields holding file or folder paths. Relative values in a YAML file
 # are resolved against the YAML's own folder, so a config means the same
@@ -180,7 +180,12 @@ def build_config_from_mode_starting_values(
     mode_name = canonical_mode_name(given["mode"])
     if mode_name not in MODES:
         return build_config(given, base_folder)  # the schema reports the unknown mode
-    return build_config({**MODES[mode_name].starting_values, **given, "mode": mode_name}, base_folder)
+    starting_values = dict(MODES[mode_name].starting_values)
+    # A starting carve_fraction serves the carve_fraction rule only: under another rule it would be a setting
+    # the rule does not read, which the schema warns about.
+    if not threshold_reads_carve_fraction(given.get("threshold")):
+        starting_values.pop("carve_fraction", None)
+    return build_config({**starting_values, **given, "mode": mode_name}, base_folder)
 
 
 def load_config(

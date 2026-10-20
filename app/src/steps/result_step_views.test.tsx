@@ -43,7 +43,7 @@ const CARVING: NonNullable<RunSummary["carving"]> = {
 };
 
 const SCORE_POINTS: ScorePoints = {
-  header: { origin: [0, 0, 0], shape: [2, 2, 2], voxel_size: 2, mode: "time-based", scores_kind: "violation_count", weight_unit: "m²·h", score_unit: "m²·h", score_min: 0, score_max: 9.6,
+  header: { origin: [0, 0, 0], shape: [2, 2, 2], voxel_size: 2, mode: "time-based", scores_kind: "violation_count", weight_unit: "m²·h", score_unit: "m²·h", score_min: 0, score_max: 9.6, compared_score_max: 9.6,
             occupied_count: 4, point_count: 4, thinning_step: 1, has_mask: true, has_compared_scores: true },
   indices: Uint32Array.from([0, 1, 2, 3]),
   scores: Float32Array.from([0, 1, 5, 9.6]),
@@ -531,19 +531,32 @@ test("a weighted mode: the carving rule at the top, the control of the rule unde
   rendered = renderForTest(<CarvingStep {...weightedCarvingProps({ threshold: { method: "cutoff", value: 4 } })} />);
   expect(rendered.container.querySelector(".threshold-control .setting-unit")!.textContent).toBe("m²");
   expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("09.6 m², the highest score");
+  rendered.unmount();
+  // The slider ends at the highest score the cutoff is compared with (after Remove everything above a cut), where a higher
+  // cutoff would carve nothing more; the raw score of a voxel may be higher.
+  const comparedLower: ScorePoints = { ...DAYLIGHT_POINTS, header: { ...DAYLIGHT_POINTS.header, compared_score_max: 7.5 },
+                                       comparedScores: Float32Array.from([0, 1, 5, 7.5]) };
+  rendered = renderForTest(<CarvingStep {...weightedCarvingProps({ threshold: { method: "cutoff", value: 4 } }, { scorePoints: comparedLower })} />);
+  expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("07.5 m², the highest score");
+  rendered.unmount();
+  // Without compared scores (no carving on this analysis yet) it ends at the highest raw score.
+  const withoutCompared: ScorePoints = { ...DAYLIGHT_POINTS, header: { ...DAYLIGHT_POINTS.header, compared_score_max: null } };
+  rendered = renderForTest(<CarvingStep {...weightedCarvingProps({ threshold: { method: "cutoff", value: 4 } }, { scorePoints: withoutCompared })} />);
+  expect(rendered.container.querySelector(".threshold-slider-ends")!.textContent).toBe("09.6 m², the highest score");
 });
 
-test("choosing Score cutoff starts from the cutoff on the histogram, not 0; the other rules set the threshold they name", () => {
+test("choosing a rule keeps the cut on the histogram: Score cutoff and Carve amount start from it; the rules without a carve amount unset it", () => {
   const onThresholdCommit = vi.fn(), onChange = vi.fn();
   rendered = renderForTest(<CarvingStep {...weightedCarvingProps({}, { onThresholdCommit })} />);
   click(ruleChoices(rendered.container)[2]);
-  expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 1.5 } });
+  expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 1.5 }, carve_fraction: null });
   rendered.unmount();
   rendered = renderForTest(<CarvingStep {...weightedCarvingProps({ threshold: { method: "cutoff", value: 4 } }, { autoUpdate: false, onChange })} />);
   click(ruleChoices(rendered.container)[1]);
-  expect(onChange).toHaveBeenLastCalledWith({ threshold: { method: "headtail" } });
+  expect(onChange).toHaveBeenLastCalledWith({ threshold: { method: "headtail" }, carve_fraction: null });
+  // The cut at 1.5 carves the points scoring 5 and 9.6: 14.6 of 15.6, a carve amount of 93.6 %.
   click(ruleChoices(rendered.container)[0]);
-  expect(onChange).toHaveBeenLastCalledWith({ threshold: null });
+  expect(onChange).toHaveBeenLastCalledWith({ threshold: null, carve_fraction: 0.936 });
 });
 
 test("under Carve amount, moving the cutoff line previews what it keeps, shows the amount it stands for, and sets that amount when let go", () => {
@@ -574,14 +587,14 @@ test("under Score cutoff and in Solar time-based the line sets the cutoff; under
   expect(rendered.container.querySelector(".score-histogram-preview-note")!.textContent)
     .toBe("Preview: a cut at 2.46 m² keeps about 50 % of the volume, before the slope limit.");
   releaseHandleKey(rendered.container, "PageUp");
-  expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 2.46 } });
+  expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 2.46 }, carve_fraction: null });
   rendered.unmount();
 
   const props = weightedCarvingProps({ threshold: { method: "headtail" } }, { onThresholdCommit });
   rendered = renderForTest(<CarvingStep {...props} />);
   pressHandleKey(rendered.container, "End");
   releaseHandleKey(rendered.container, "End");
-  expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 9.6 } });
+  expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 9.6 }, carve_fraction: null });
   rendered.rerender(<CarvingStep {...props} form={formFor("daylight", { threshold: { method: "cutoff", value: 9.6 } })} />);
   expect(rendered.container.textContent).toContain("Dragging the line switched the carving rule from Automatic split to Score cutoff.");
   rendered.unmount();
@@ -589,7 +602,7 @@ test("under Score cutoff and in Solar time-based the line sets the cutoff; under
   rendered = renderForTest(<CarvingStep {...carvingProps({ onThresholdCommit })} />);         // Solar time-based, cut at 1.5 m²·h
   pressHandleKey(rendered.container, "ArrowRight");
   releaseHandleKey(rendered.container, "ArrowRight");
-  expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 1.6 } });
+  expect(onThresholdCommit).toHaveBeenLastCalledWith({ threshold: { method: "cutoff", value: 1.6 }, carve_fraction: null });
   expect(rendered.container.querySelector(".score-histogram-axis-title")!.textContent).toBe("Shade a voxel casts, m²·h");
 });
 
@@ -607,7 +620,7 @@ test("the line follows the pointer while it is dragged and is set when the point
   expect(rendered.container.querySelector(".histogram-cutoff-label")!.textContent).toBe("4.8");
   expect(onThresholdCommit).not.toHaveBeenCalled();
   pointer("pointerup", 171);
-  expect(onThresholdCommit).toHaveBeenCalledExactlyOnceWith({ threshold: { method: "cutoff", value: 4.8 } });
+  expect(onThresholdCommit).toHaveBeenCalledExactlyOnceWith({ threshold: { method: "cutoff", value: 4.8 }, carve_fraction: null });
 });
 
 test("with auto-update off, a cutoff let go changes the form and stays on the histogram as a preview until Update carving runs it", () => {

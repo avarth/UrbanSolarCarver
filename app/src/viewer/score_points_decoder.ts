@@ -13,6 +13,7 @@ export interface ScorePointsHeader {
   score_unit: string;             // of the scores and of a score cutoff: "kWh", "m²", "m²·h"
   score_min: number | null;       // of all occupied voxels, not only the points sent
   score_max: number | null;
+  compared_score_max: number | null;   // of the compared scores of all occupied voxels: the highest cutoff that still carves
   occupied_count: number;
   point_count: number;
   thinning_step: number;          // 1 when every occupied voxel is sent
