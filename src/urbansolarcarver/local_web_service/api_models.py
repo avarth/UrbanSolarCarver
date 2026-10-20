@@ -207,7 +207,8 @@ class ModeInfo(BaseModel):
     needs_period: bool
     experimental: bool
     score_kind: Literal["weighted_sum", "violation_count"]
-    weight_unit: str
+    weight_unit: str            # of the sky-patch weights
+    score_unit: str             # of a voxel's score and of a score cutoff: "kWh", "m²", "m²·h"
     starting_values: dict       # the settings a new project of this mode starts with
 
 

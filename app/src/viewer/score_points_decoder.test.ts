@@ -23,7 +23,7 @@ function packScorePoints(header: ScorePointsHeader, indices: number[], scores: n
 
 function header(overrides: Partial<ScorePointsHeader> = {}): ScorePointsHeader {
   return {
-    origin: [100, 200, 0], shape: [4, 3, 2], voxel_size: 0.5, scores_kind: "violation_count", weight_unit: "m²·h (shaded test surface x duration)",
+    origin: [100, 200, 0], shape: [4, 3, 2], voxel_size: 0.5, scores_kind: "violation_count", weight_unit: "none (sun positions, no sky patches)", score_unit: "m²·h",
     score_min: 0, score_max: 3, occupied_count: 3, point_count: 3, thinning_step: 1, has_mask: true, has_compared_scores: true, ...overrides,
   };
 }

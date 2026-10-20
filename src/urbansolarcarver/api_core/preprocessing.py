@@ -111,7 +111,10 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms,
     Returns
     -------
     raw_scores : np.ndarray, float32, shape (X*Y*Z,)
-        Flat scores in the grid's C order. time-based scores are in m²·h.
+        Flat scores in the grid's C order, in ``MODES[mode].score_unit``:
+        time-based in m²·h, the weighted modes in patch-weight units times
+        m² (kWh for irradiance and benefit, m² of fully hidden sky for
+        daylight and radiative_cooling).
     scores_kind : {"violation_count", "weighted_sum"}
     patch_weights : np.ndarray | torch.Tensor | None
         Per-sky-patch weights (weighted modes only).
@@ -160,7 +163,14 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms,
         voxel_grid, origin, extent, resolution, pts, norms, settings, hoys,
         point_weights=point_weights, ray_batch_size=options.ray_batch_size,
     )
-    return carve_out.raw_voxel_scores, spec.score_kind, carve_out.patch_weights
+    # Each blocked ray adds its patch weight (times its point's edge_taper
+    # weight) per m² of protected surface; a sample point stands for
+    # ~grid_step² of it, as in time-based above. The score is then the
+    # weighted quantity the voxel blocks (kWh, or m² of fully hidden sky),
+    # which does not change with the sample spacing.
+    sample_area = float(settings.grid_step) ** 2
+    raw_scores = np.asarray(carve_out.raw_voxel_scores, dtype=np.float32) * np.float32(sample_area)
+    return raw_scores, spec.score_kind, carve_out.patch_weights
 
 
 def preprocessing(
@@ -195,7 +205,10 @@ def preprocessing(
        * sky-patch modes (``irradiance``, ``benefit``, ``daylight``,
          ``radiative_cooling``): rays go toward the sky patches, each
          patch carrying a mode-specific weight; a voxel's score is the sum
-         of the weights of the rays it blocks.
+         of the weights of the rays it blocks times the area each sample
+         point stands for (grid_step²): the solar energy it blocks in kWh
+         (irradiance, benefit), or the sky it hides in m² of fully hidden
+         sky (daylight, radiative_cooling; their weights sum to 1).
 
     Parameters
     ----------
@@ -244,8 +257,8 @@ def preprocessing(
     ``manifest.json``
         Machine-readable manifest (``PreprocessingManifest``) recording a
         random ``run_id`` (new on every run), grid shape, world origin, voxel
-        size, mode, score kind, and file paths relative to the manifest's
-        folder.  Written last, so a failed run leaves no manifest.
+        size, mode, score kind and score unit, and file paths relative to the
+        manifest's folder.  Written last, so a failed run leaves no manifest.
     ``diagnostics/``
         ``diagnostic.json`` (summary statistics and wall/CPU timings),
         ``config_snapshot.json``, and, with ``cfg.diagnostic_plots``, the
@@ -390,6 +403,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         patch_weights_path=stored_path(pw_path, out_path) if pw_path else None,
         sample_point_count=int(pts.shape[0]),
         grid_step=float(settings.grid_step),
+        score_unit=MODES[mode].score_unit,
         footprint_path=stored_path(footprint_path, out_path),
         max_volume_lowest_z=float(frame[2]),
         max_volume_highest_z=max_volume_highest_z,
@@ -441,7 +455,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         }
     summary["device"] = device_info
     _mark("build_summary")
-    weight_unit = MODES[mode].weight_unit if mode in MODES else "Score"
+    weight_unit, score_unit = MODES[mode].weight_unit, MODES[mode].score_unit
     # Plots are drawn by the writer after this point, so the timings below
     # cover the computation; the step label is kept for readers of the report.
     _mark("diagnostic_plots_done")
@@ -455,7 +469,7 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
     }
     write_preprocessing_diagnostics(
         summary, diag_dir, settings, options,
-        PreprocessingPlotInputs(raw_scores=rs, patch_weights=pw_np, weight_unit=weight_unit),
+        PreprocessingPlotInputs(raw_scores=rs, patch_weights=pw_np, weight_unit=weight_unit, score_unit=score_unit),
     )
     # Manifest last (see begin_stage at the start).
     commit_manifest(out_path, pm)

@@ -405,8 +405,9 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         # score smoothing when it is applied.
         "occupied_score_stats": score_statistics(nn, detailed=options.diagnostics),
     }
-    # Performance reporting, with the score unit from the mode registry
-    weight_unit = MODES[pre_manifest.mode].weight_unit
+    # Performance reporting, with the units from the mode registry
+    weight_unit, score_unit = MODES[pre_manifest.mode].weight_unit, MODES[pre_manifest.mode].score_unit
+    summary["score_unit"] = score_unit
     # Load patch weights if available
     pw_path = pre_manifest.patch_weights_path
     n_samples = pre_manifest.sample_point_count
@@ -440,7 +441,7 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         summary, diag_dir,
         ThresholdingPlotInputs(
             occupied_scores=nn, threshold_value=float(thr_val),
-            method=threshold_method, weight_unit=weight_unit),
+            method=threshold_method, score_unit=score_unit),
         options.diagnostic_plots,
     )
 

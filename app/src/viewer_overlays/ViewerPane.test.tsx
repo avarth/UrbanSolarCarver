@@ -50,12 +50,12 @@ test("the sky dome legend of a mode without sky weights (the form left the analy
 
 const weightedMode = (name: string, weightUnit: string): ModeInfo =>
   ({ name, description: "", needs_epw: name !== "daylight", needs_period: name !== "daylight", experimental: false, score_kind: "weighted_sum",
-     weight_unit: weightUnit, starting_values: {} });
+     weight_unit: weightUnit, score_unit: "", starting_values: {} });
 const MODES = [weightedMode("irradiance", "kWh/m²"), weightedMode("daylight", "CIE overcast sky obstruction score (dimensionless)")];
 
 /** Score points of a daylight analysis without a carving: their header names the weights the analysis used. */
 const DAYLIGHT_SCORE_POINTS: ScorePoints = {
-  header: { origin: [0, 0, 0], shape: [1, 1, 1], voxel_size: 1, scores_kind: "weighted_sum", weight_unit: "CIE overcast sky obstruction score (dimensionless)",
+  header: { origin: [0, 0, 0], shape: [1, 1, 1], voxel_size: 1, scores_kind: "weighted_sum", weight_unit: "CIE overcast sky obstruction score (dimensionless)", score_unit: "CIE overcast sky obstruction score (dimensionless)",
             score_min: 0, score_max: 1, occupied_count: 1, point_count: 1, thinning_step: 1, has_mask: false, has_compared_scores: false },
   indices: Uint32Array.from([0]), scores: Float32Array.from([0.5]), kept: null, comparedScores: null,
 };

@@ -18,7 +18,7 @@ const SCHEMA = {
 
 function modeInfo(name: string, startingValues: Record<string, unknown>): ModeInfo {
   return { name, description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum",
-           weight_unit: "", starting_values: startingValues };
+           weight_unit: "", score_unit: "", starting_values: startingValues };
 }
 
 const period = (startMonth: number, startDay: number, startHour: number, endMonth: number, endDay: number, endHour: number) => ({

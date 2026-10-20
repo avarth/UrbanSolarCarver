@@ -726,6 +726,8 @@ export interface components {
             score_kind: "weighted_sum" | "violation_count";
             /** Weight Unit */
             weight_unit: string;
+            /** Score Unit */
+            score_unit: string;
             /** Starting Values */
             starting_values: {
                 [key: string]: unknown;

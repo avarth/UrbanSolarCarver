@@ -420,9 +420,11 @@ class UserConfig(BaseModel):
             "score mass (value from the carve_fraction parameter unless given). "
             "'headtail': automatic split biased toward removing only the worst "
             "obstructors. Both are for weighted modes only. "
-            "A bare number (≥ 0): raw-score cutoff; carve voxels scoring above it "
-            "(inspect the score histogram first); for time-based this is the "
-            "tolerated shading in m²·h (shaded test-surface area x duration). "
+            "A bare number (≥ 0): score cutoff; carve voxels scoring above it "
+            "(inspect the score histogram first). It is in the mode's score unit: "
+            "for time-based the tolerated shading in m²·h (shaded test-surface area "
+            "x duration), for irradiance and benefit the kWh a voxel may block, for "
+            "daylight and radiative_cooling the m² of fully hidden sky. "
             "Unset: mode default (carve_fraction for weighted modes, 0 for "
             "violation-count modes). The field keeps what was written (None or a "
             "ThresholdSpec); UserConfig.resolved_threshold() gives the strategy "
@@ -722,6 +724,9 @@ class PreprocessingManifest(BaseModel):
     # The sample spacing on the test surfaces the run used (resolve_grid_step); None in manifests written before
     # preprocessing recorded it.
     grid_step: Optional[float] = None
+    # The unit of the scores (mode_registry score_unit: "kWh", "m²", "m²·h"); None in manifests written before preprocessing
+    # recorded it, when the weighted modes' scores were sums of patch weights without the area of the sample points.
+    score_unit: Optional[str] = None
     # The max volume's plan projection in world xy; massing reads it.
     footprint_path: str
     # The max volume's lowest and highest points (world z): massing starts the

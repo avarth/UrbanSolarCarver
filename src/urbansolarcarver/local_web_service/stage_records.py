@@ -33,6 +33,9 @@ MASSING_EXPORT_MESH_FIELD = "export_mesh_path"
 # sampled every GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE meters; now it samples at half the voxel size.
 SAMPLE_SPACING_FIELD = "grid_step"
 GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE = 1.0
+# A preprocessing manifest without this field is from before preprocessing recorded the unit of its scores, when the weighted
+# modes summed patch weights without the area each sample point stands for: a score cutoff on those scores means another thing.
+SCORE_UNIT_FIELD = "score_unit"
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,8 @@ def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
             status[stage] = "out_of_date"
         elif stage == "preprocessing" and _sampled_at_another_spacing_before_it_was_recorded(record, manifest, current_config):
             status[stage] = "out_of_date"
+        elif stage == "preprocessing" and _scores_in_another_unit_than_the_next_run_writes(manifest, current_config):
+            status[stage] = "out_of_date"
         elif stage == "massing" and manifest.get(MASSING_EXPORT_MESH_FIELD) is None and current_config.final_mesh_format != "obj":
             status[stage] = "out_of_date"
         elif stage in UPSTREAM_STAGE and not _reads_current_upstream(
@@ -108,6 +113,20 @@ def _sampled_at_another_spacing_before_it_was_recorded(record: StageRecord, mani
     stored_spacing = record.config.get("grid_step")
     spacing_used = GRID_STEP_DEFAULT_BEFORE_IT_FOLLOWED_THE_VOXEL_SIZE if stored_spacing is None else float(stored_spacing)
     return spacing_used != resolve_grid_step(current_config.grid_step, current_config.voxel_size)
+
+
+def _scores_in_another_unit_than_the_next_run_writes(manifest: dict, current_config: UserConfig) -> bool:
+    """Whether the scores of a preprocessing run are in another unit than a run of the current mode writes.
+
+    A manifest that does not record the unit is from before the weighted modes' scores were scaled by the area of the sample
+    points; its time-based and angle rule scores are in the units of today (m²·h, rays). The mode is the current one: a run
+    of another mode is already out of date for its settings.
+    """
+    mode = MODES[current_config.mode]
+    recorded_unit = manifest.get(SCORE_UNIT_FIELD)
+    if recorded_unit is None:
+        return mode.score_kind == "weighted_sum"
+    return recorded_unit != mode.score_unit
 
 
 def _reads_current_upstream(upstream_state: StageState, upstream_record: StageRecord | None, manifest: dict) -> bool:

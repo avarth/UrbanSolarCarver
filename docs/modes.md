@@ -19,13 +19,22 @@ USC supports three threshold strategies. The right choice depends on the mode.
 
 ### For weighted modes (irradiance, benefit, daylight, radiative_cooling)
 
-Scores are continuous **weighted sums**: the total sky-patch weight obstructed by each voxel. Their absolute magnitude depends on the mode, weather file, and number of sample points, so they are not directly interpretable as physical quantities.
+Scores are continuous **weighted sums**: the sky-patch weight of every ray a voxel blocks, times the area of protected surface that ray's sample point stands for (about `grid_step`² m², times its `edge_taper` weight when that is set). The score is then a physical quantity that does not change with the sample spacing:
+
+| Mode | Score unit | A voxel's score is |
+|---|---|---|
+| `irradiance` | kWh | the solar energy (direct and diffuse) it keeps from the protected surfaces over the analysis period |
+| `benefit` | kWh | the same for the heating-useful solar energy only (the hours below the balance point, or the simulated weights) |
+| `daylight` | m² | the overcast sky it hides from the protected surfaces, weighted by CIE overcast brightness, in m² of fully hidden sky |
+| `radiative_cooling` | m² | the night sky's cooling potential it hides, in m² of fully hidden sky |
+
+The patch weights of `irradiance` and `benefit` are kWh/m² per patch (Ladybug's sky matrix), counted on a surface facing the patch: there is no reduction for the angle at which a ray meets its surface, so the kWh are those a surface turned towards each sky patch would receive. The `daylight` and `radiative_cooling` weights are each patch's share of its sky and sum to 1, so 1 m² is the whole sky of 1 m² of open horizontal surface (a vertical facade sees half of it at most). Summed over a set of voxels a score counts what they block more than once when a ray crosses several of them; it compares voxels, it is not an energy balance. Scores written before this unit was introduced (preprocessing manifests without `score_unit`) were sums of patch weights without the area, and changed four times when the sample spacing halved.
 
 | Strategy | How it works | When to use |
 |----------|---|---|
 | `carve_fraction` (default) | Removes the highest-scoring voxels until the removed part holds the target fraction of the building's total obstruction weight, counting the voxels that `carve_above` removes with them. `0.7` = aggressive (tall, slim volumes). `0.3` = conservative (bulky volumes). | **Recommended.** Works as a slider; no knowledge of the score distribution needed. |
 | `headtail` | Jiang (2013) head/tail breaks: splits the scores at their mean, then splits the part above the mean again, for as long as that part holds at most 40% of the values. Suited to heavy-tailed distributions. | When you want an automatic, data-driven split without choosing a fraction. |
-| Numeric value | Manual cutoff on raw scores. Voxels scoring above this value are carved. | **Advanced.** Only useful after inspecting the score histogram in `diagnostics/`. The value is mode- and dataset-specific and does not carry over to other runs. |
+| Numeric value | Manual cutoff on the scores, in the score unit above. Voxels scoring above this value are carved. | **Advanced.** Pick it from the score histogram in `diagnostics/` (or the browser UI's). It means the same at any sample spacing, but depends on the weather, the period and the protected surfaces, so it carries over between variants of one project rather than between projects. |
 
 **How carve_fraction and carve_above work together.** With `carve_above` (the default), a column loses everything above its lowest removed voxel. Each voxel therefore goes at the cutoff of the lowest high-scoring voxel below it, and carve_fraction counts the score of everything removed that way: `0.4` removes 40% of the obstruction score. (Before this was counted, carve_above removed extra score on top of the value set, so `0.4` removed 50-62% in the ReSBE test blocks.)
 
@@ -46,7 +55,7 @@ All three strategies, the score smoothing and the reported retention consider **
 String strategies (`carve_fraction`, `headtail`) do **not apply** to violation counts and raise an error. `tilted_plane` is strictly binary (see below).
 
 !!! tip "Physically interpretable thresholds"
-    Unlike weighted modes, the time-based threshold has a direct meaning: `threshold: 0` means zero shadow tolerance during the analysis period; `threshold: 5` lets each voxel cast up to 5 m²·h of shadow on the protected surfaces.
+    The time-based threshold has a direct meaning: `threshold: 0` means zero shadow tolerance during the analysis period; `threshold: 5` lets each voxel cast up to 5 m²·h of shadow on the protected surfaces. A numeric threshold of a weighted mode is read the same way in its unit: `threshold: 20` in `irradiance` keeps a voxel that blocks up to 20 kWh over the period.
 
 ## time-based
 
@@ -104,7 +113,7 @@ See [Simulated Benefit Weights](simulated-weights.md) for the engine's documenta
 
 ## daylight
 
-Weights sky patches using the CIE standard overcast sky luminance distribution. Direct sun is not considered: each patch's weight is its overcast-sky luminance, which depends on the zenith angle, times its solid angle. No weather file or analysis period is needed.
+Weights sky patches using the CIE standard overcast sky luminance distribution. Direct sun is not considered: each patch's weight is its overcast-sky luminance, which depends on the zenith angle, times its solid angle, scaled so the weights sum to 1. No weather file or analysis period is needed.
 
 **Use case**: protect diffuse daylight access (e.g., for daylighting codes, visual comfort).
 

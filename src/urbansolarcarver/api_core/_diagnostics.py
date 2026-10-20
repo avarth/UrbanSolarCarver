@@ -386,10 +386,12 @@ def save_sky_patch_comparison(
 @dataclass(frozen=True)
 class PreprocessingPlotInputs:
     """What the preprocessing plots draw: the raw score volume, the sky-patch
-    weights (None for modes without them) and the score unit label."""
+    weights (None for modes without them), the unit of the weights and the
+    unit of the scores."""
     raw_scores: np.ndarray
     patch_weights: Optional[np.ndarray]
     weight_unit: str
+    score_unit: str
 
 
 @dataclass(frozen=True)
@@ -399,7 +401,7 @@ class ThresholdingPlotInputs:
     occupied_scores: np.ndarray
     threshold_value: float
     method: str
-    weight_unit: str
+    score_unit: str
 
 
 def write_preprocessing_diagnostics(summary: dict, folder: Path, settings: PreprocessingSettings,
@@ -428,7 +430,7 @@ def write_preprocessing_diagnostics(summary: dict, folder: Path, settings: Prepr
                 _write_simulated_weights_comparison(summary, folder, settings, patch_weights)
         summary["score_histogram"] = str(folder / "score_histogram.png")
         save_histogram(plot_inputs.raw_scores, folder, "score_histogram.png",
-                       title=f"Raw Scores ({settings.mode})", xlabel=plot_inputs.weight_unit)
+                       title=f"Raw Scores ({settings.mode})", xlabel=f"Score [{plot_inputs.score_unit}]")
     write_json(folder, "diagnostic.json", summary)
 
 
@@ -473,6 +475,6 @@ def write_thresholding_diagnostics(summary: dict, folder: Path, plot_inputs: Thr
             plot_inputs.occupied_scores, folder, "threshold_histogram.png",
             threshold_line=plot_inputs.threshold_value,
             title=f"Voxel scores, threshold={plot_inputs.threshold_value:.4g} ({plot_inputs.method})",
-            xlabel=plot_inputs.weight_unit,
+            xlabel=f"Score [{plot_inputs.score_unit}]",
         )
     write_json(folder, "diagnostic.json", summary)

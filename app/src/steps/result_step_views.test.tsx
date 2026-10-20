@@ -30,7 +30,7 @@ const SCHEMA = {
   },
 };
 const mode = (name: string, scoreKind: ModeInfo["score_kind"]): ModeInfo =>
-  ({ name, description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: scoreKind, weight_unit: "", starting_values: {} });
+  ({ name, description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: scoreKind, weight_unit: "", score_unit: "", starting_values: {} });
 const MODES = [mode("time-based", "violation_count"), mode("daylight", "weighted_sum"), mode("tilted_plane", "violation_count")];
 
 function formFor(modeName: string, settings: Record<string, unknown> = {}): FormState {
@@ -43,7 +43,7 @@ const CARVING: NonNullable<RunSummary["carving"]> = {
 };
 
 const SCORE_POINTS: ScorePoints = {
-  header: { origin: [0, 0, 0], shape: [2, 2, 2], voxel_size: 2, scores_kind: "violation_count", weight_unit: "m²·h", score_min: 0, score_max: 9.6,
+  header: { origin: [0, 0, 0], shape: [2, 2, 2], voxel_size: 2, scores_kind: "violation_count", weight_unit: "m²·h", score_unit: "m²·h", score_min: 0, score_max: 9.6,
             occupied_count: 4, point_count: 4, thinning_step: 1, has_mask: true, has_compared_scores: true },
   indices: Uint32Array.from([0, 1, 2, 3]),
   scores: Float32Array.from([0, 1, 5, 9.6]),

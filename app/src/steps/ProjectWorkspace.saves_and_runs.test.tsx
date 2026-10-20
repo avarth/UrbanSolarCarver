@@ -351,7 +351,7 @@ const BENEFIT_SCHEMA = {
 };
 const COLD_SEASON = { start_month: 9, start_day: 30, start_hour: 0, end_month: 5, end_day: 15, end_hour: 23 };
 const MODES_WITH_BENEFIT: ModeInfo[] = [...MODES, { name: "benefit", description: "", needs_epw: true, needs_period: true, experimental: false,
-                                                     score_kind: "weighted_sum", weight_unit: "", starting_values: COLD_SEASON }];
+                                                     score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: COLD_SEASON }];
 const BRISBANE = { location: "Brisbane, AUS", latitude: -27.38 };
 const GOLDEN = { location: "Golden, CO, USA", latitude: 39.74 };
 

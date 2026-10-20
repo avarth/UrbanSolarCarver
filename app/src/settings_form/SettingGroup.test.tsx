@@ -41,12 +41,12 @@ const SCHEMA = {
 };
 
 const MODES: ModeInfo[] = [
-  { name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false, score_kind: "violation_count", weight_unit: "",
+  { name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false, score_kind: "violation_count", weight_unit: "", score_unit: "",
     starting_values: { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 } },
-  { name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum", weight_unit: "",
+  { name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum", weight_unit: "", score_unit: "",
     starting_values: {} },
   { name: "tilted_plane", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "violation_count",
-    weight_unit: "", starting_values: { tilted_plane_angle_deg: 45.0 } },
+    weight_unit: "", score_unit: "", starting_values: { tilted_plane_angle_deg: 45.0 } },
 ];
 
 const GRID_PLAN = { resolution: 62, voxel_size: 1, total_voxels: 238328, extent: 62, budget_voxels: 500000000 };

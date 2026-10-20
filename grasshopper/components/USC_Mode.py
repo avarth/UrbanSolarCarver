@@ -6,16 +6,19 @@ determines how voxels are scored:
   - time-based:        Traces actual sun-position rays for the selected
                        hours; carves any voxel that shades a test point
                        during those hours. (needs EPW + analysis period)
-  - irradiance:        Cumulative solar irradiation (kWh/m²) from EPW
-                       direct + diffuse. (needs EPW + analysis period)
+  - irradiance:        Cumulative solar irradiation from EPW direct +
+                       diffuse; a voxel scores the solar energy it
+                       blocks, in kWh. (needs EPW + analysis period)
   - benefit:           Net heating benefit: irradiance weighted by
-                       balance-point temperature or simulated weights.
-                       (needs EPW + analysis period; Benefit Params optional)
-  - daylight:          CIE overcast sky luminance; geometry only,
-                       no weather data needed.
+                       balance-point temperature or simulated weights;
+                       scores in kWh. (needs EPW + analysis period; Benefit Params optional)
+  - daylight:          CIE overcast sky luminance; scores in m² of
+                       fully hidden sky. Geometry only, no weather
+                       data needed.
   - radiative_cooling: Long-wave cooling potential to the sky vault,
-                       as relative patch weights. (uses one dew point
-                       value, no EPW)
+                       patch weights summing to 1; scores in m² of
+                       fully hidden sky. (uses one dew point value,
+                       no EPW)
   - tilted_plane:      Geometric daylight-envelope sweep, not a
                        weighted evaluation. (needs Tilted Plane params)
 

@@ -30,11 +30,17 @@ class ModeSpec:
     needs_period : bool
         The mode uses the analysis period (start/end month, day, hour).
     score_kind : {"weighted_sum", "violation_count"}
-        "weighted_sum": voxel scores are sums of sky-patch weights.
+        "weighted_sum": voxel scores are sums of sky-patch weights, each
+        times the area its sample point stands for (grid_step²).
         "violation_count": voxel scores come from ray hit counts
         (time-based rescales them to m²·h).
     weight_unit : str
-        Unit label for scores and weights in plots and the run summary.
+        Unit of the sky-patch weights, for their plots and the run summary.
+    score_unit : str
+        Unit of a voxel's score, and so of a numeric threshold: the score
+        histograms, the run summary and the browser UI show it.  Written
+        into the preprocessing manifest, so a reader can tell scores of an
+        earlier scale from today's.
     extra_params : frozenset of str
         Mode-specific config fields this mode reads.  Config validation
         warns when a mode-specific field of another mode is set, and the
@@ -54,6 +60,7 @@ class ModeSpec:
     needs_period: bool
     score_kind: Literal["weighted_sum", "violation_count"]
     weight_unit: str
+    score_unit: str
     extra_params: FrozenSet[str] = field(default_factory=frozenset)
     experimental: bool = False
     description: str = ""
@@ -86,7 +93,8 @@ MODES: Dict[str, ModeSpec] = {
         needs_epw=True,
         needs_period=True,
         score_kind="violation_count",
-        weight_unit="m²·h (shaded test surface x duration)",
+        weight_unit="none (sun positions, no sky patches)",
+        score_unit="m²·h",
         extra_params=_EPW_AND_PERIOD | {"min_altitude", "sun_steps_per_hour"},
         description=(
             "Classical solar envelope: traces actual sun-position rays for the "
@@ -101,10 +109,13 @@ MODES: Dict[str, ModeSpec] = {
         needs_period=True,
         score_kind="weighted_sum",
         weight_unit="kWh/m²",
+        score_unit="kWh",
         extra_params=_EPW_AND_PERIOD,
         description=(
-            "Cumulative solar irradiation (kWh/m²). Patches weighted by "
-            "direct + diffuse radiation from EPW. Requires EPW + analysis period."
+            "Cumulative solar irradiation. Patches weighted by direct + diffuse "
+            "radiation from EPW (kWh/m²); a voxel's score is the solar energy it "
+            "blocks from the test surfaces over the period (kWh). Requires EPW + "
+            "analysis period."
         ),
         starting_values=_period_values(1, 1, 0, 12, 31, 23),
     ),
@@ -114,14 +125,16 @@ MODES: Dict[str, ModeSpec] = {
         needs_period=True,
         score_kind="weighted_sum",
         weight_unit="kWh/m² (heating benefit)",
+        score_unit="kWh",
         extra_params=_EPW_AND_PERIOD | {"balance_temperature",
                                         "balance_offset", "include_harm",
                                         "simulated_weights_path"},
         description=(
-            "Net heating benefit (kWh/m²). Solar gain weighted by outdoor "
-            "temperature relative to a balance point (simple weights), or by an "
-            "ISO 13790 5R1C building simulation via USC_SimulateWeights "
-            "(simulated weights). Requires EPW + analysis period; Benefit Params "
+            "Net heating benefit. Solar gain weighted by outdoor temperature "
+            "relative to a balance point (simple weights), or by an ISO 13790 "
+            "5R1C building simulation via USC_SimulateWeights (simulated "
+            "weights); a voxel's score is the heating-useful solar energy it "
+            "blocks (kWh). Requires EPW + analysis period; Benefit Params "
             "optional."
         ),
         starting_values=_period_values(10, 15, 7, 4, 15, 19),
@@ -131,11 +144,14 @@ MODES: Dict[str, ModeSpec] = {
         needs_epw=False,
         needs_period=False,
         score_kind="weighted_sum",
-        weight_unit="CIE overcast sky obstruction score (dimensionless)",
+        weight_unit="share of the CIE overcast sky (sums to 1)",
+        score_unit="m²",
         extra_params=frozenset(),
         description=(
-            "CIE overcast sky obstruction score (dimensionless). Geometry-only model: "
-            "no weather data needed. Good for daylight access studies."
+            "CIE overcast sky obstruction. A voxel's score is the overcast sky it "
+            "hides from the test surfaces, in m² of fully hidden sky. "
+            "Geometry-only model: no weather data needed. Good for daylight "
+            "access studies."
         ),
     ),
     "radiative_cooling": ModeSpec(
@@ -143,12 +159,14 @@ MODES: Dict[str, ModeSpec] = {
         needs_epw=False,
         needs_period=False,
         score_kind="weighted_sum",
-        weight_unit="cooling potential fraction (dimensionless)",
+        weight_unit="share of the sky's cooling potential (sums to 1)",
+        score_unit="m²",
         extra_params=frozenset({"dew_point_celsius", "bliss_k", "min_sky_elevation_deg"}),
         experimental=True,
         description=(
-            "Long-wave radiative cooling potential (relative weights). Patches weighted "
-            "by sky temperature depression from a dew point (no EPW needed). "
+            "Long-wave radiative cooling potential. Patches weighted by sky "
+            "temperature depression from a dew point (no EPW needed); a voxel's "
+            "score is the cooling sky it hides, in m² of fully hidden sky. "
             "[Experimental]"
         ),
         starting_values={"carve_fraction": 0.35},
@@ -158,7 +176,8 @@ MODES: Dict[str, ModeSpec] = {
         needs_epw=False,
         needs_period=False,
         score_kind="violation_count",
-        weight_unit="intersections",
+        weight_unit="none (plane rays, no sky patches)",
+        score_unit="rays",
         extra_params=frozenset({"tilted_plane_angle_deg"}),
         description=(
             "Geometric daylight envelope sweep. Carves every voxel above a tilted "

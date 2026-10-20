@@ -280,7 +280,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     @router.get("/modes")
     def modes() -> list[ModeInfo]:
         return [ModeInfo(name=mode.name, description=mode.description, needs_epw=mode.needs_epw, needs_period=mode.needs_period,
-                         experimental=mode.experimental, score_kind=mode.score_kind, weight_unit=mode.weight_unit,
+                         experimental=mode.experimental, score_kind=mode.score_kind, weight_unit=mode.weight_unit, score_unit=mode.score_unit,
                          starting_values=dict(mode.starting_values)) for mode in MODES.values()]
 
     @router.get("/projects-folder")

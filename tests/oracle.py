@@ -312,7 +312,9 @@ def sky_scores(run: Run, substeps: int = 10) -> np.ndarray:
     o, n, d, _, di = pairs(run.points, run.normals, dirs)
     scores, own_skin = march(run, o, n, d, weights=pw[di],
                              ray_length=run.cfg.get("ray_length", DEFAULT_RAY_LENGTH), substeps=substeps)
-    return follow_own_skin(scores, own_skin)
+    # Each sample point stands for grid_step² of protected surface (the spacing the run used, from its manifest).
+    sample_area = float(json.loads((run.pre / "manifest.json").read_text())["grid_step"]) ** 2
+    return follow_own_skin(scores, own_skin) * sample_area
 
 
 def score_agreement(run: Run) -> dict:

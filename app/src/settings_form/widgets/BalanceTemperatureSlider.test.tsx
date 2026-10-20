@@ -16,7 +16,7 @@ const SCHEMA = {
   },
 };
 const MODES: ModeInfo[] = [{ name: "benefit", description: "", needs_epw: true, needs_period: true, experimental: false,
-                             score_kind: "weighted_sum", weight_unit: "", starting_values: {} }];
+                             score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: {} }];
 const NBSP = " ";
 const degrees = (value: number) => `${value}${NBSP}°C`;
 

@@ -8,7 +8,8 @@ export interface ScorePointsHeader {
   shape: [number, number, number];
   voxel_size: number;
   scores_kind: "weighted_sum" | "violation_count";
-  weight_unit: string;
+  weight_unit: string;            // of the sky patch weights
+  score_unit: string;             // of the scores and of a score cutoff: "kWh", "m²", "m²·h"
   score_min: number | null;       // of all occupied voxels, not only the points sent
   score_max: number | null;
   occupied_count: number;

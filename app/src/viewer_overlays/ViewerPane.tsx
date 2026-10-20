@@ -214,8 +214,8 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   const legend: LegendContent = {
     sunPath: shown("sun_path") && sunPath ? sunPathLegend(sunPath.path) : undefined,
     keptVoxels: shown("kept_voxels") && scorePoints && carving
-      ? { title: keptVoxelsLegendTitle(scorePoints.header.scores_kind, scorePoints.header.weight_unit), cutoff: carving.threshold_value,
-          unit: keptVoxelsLegendUnit(scorePoints.header.scores_kind, scorePoints.header.weight_unit),
+      ? { title: keptVoxelsLegendTitle(scorePoints.header.scores_kind, scorePoints.header.score_unit), cutoff: carving.threshold_value,
+          unit: keptVoxelsLegendUnit(scorePoints.header.scores_kind, scorePoints.header.score_unit),
           thinningStep: scorePoints.header.thinning_step }
       : undefined,
     skyDome: shown("sky_dome") && skyDome

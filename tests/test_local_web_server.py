@@ -252,7 +252,7 @@ def test_schema_and_modes(client):
     modes = client.get("/api/modes").json()
     assert [mode["name"] for mode in modes] == list(MODES)
     time_based = modes[0]
-    assert set(time_based) == {"name", "description", "needs_epw", "needs_period", "experimental", "score_kind", "weight_unit",
+    assert set(time_based) == {"name", "description", "needs_epw", "needs_period", "experimental", "score_kind", "weight_unit", "score_unit",
                                "starting_values"}
     assert time_based["needs_epw"] is True and time_based["starting_values"]["start_month"] == 12
     assert next(mode for mode in modes if mode["name"] == "radiative_cooling")["experimental"] is True

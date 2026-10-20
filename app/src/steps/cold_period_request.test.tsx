@@ -9,7 +9,7 @@ const NUMBER = { type: "number" };
 const SCHEMA = { properties: { mode: { default: "benefit", type: "string" }, balance_temperature: { ...NUMBER, default: 15 },
                                balance_offset: { ...NUMBER, default: 2, minimum: 0 } } };
 const MODES: ModeInfo[] = ["benefit", "irradiance"].map((name) => ({ name, description: "", needs_epw: true, needs_period: true, experimental: false,
-                                                                    score_kind: "weighted_sum", weight_unit: "", starting_values: {} }));
+                                                                    score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: {} }));
 
 const formOf = (settings: Record<string, unknown>): FormState =>
   initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "benefit", ...settings }, gridPlan: null });

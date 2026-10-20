@@ -18,7 +18,10 @@ value : float, optional
     Meaning depends on method:
       carve_fraction → fraction of total obstruction to remove (0-1).
       headtail       → ignored (algorithm is automatic).
-      numeric        → raw score threshold; voxels above are removed.
+      numeric        → raw score threshold in the mode's score unit (kWh
+                       for irradiance and benefit, m² for daylight and
+                       radiative_cooling, m²·h for time-based); voxels
+                       above are removed.
       no method      → used as carve_fraction.
 score_smoothing : float, optional
     Gaussian blur radius (meters) applied to the score volume before
@@ -84,7 +87,8 @@ try:
             "0.7 = remove 70% of obstruction weight, including what carve_above removes. "
             "Start with 0.5.\n"
             "  headtail → ignored (automatic).\n"
-            "  numeric → raw score cutoff. Voxels scoring above this are removed.\n"
+            "  numeric → raw score cutoff in the mode's score unit (kWh for irradiance and benefit, "
+            "m² for daylight and radiative_cooling, m²·h for time-based). Voxels scoring above this are removed.\n"
             "  no method → used as carve_fraction."
         )),
         ("score_smoothing", (

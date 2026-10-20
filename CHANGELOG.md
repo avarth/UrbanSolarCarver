@@ -160,6 +160,36 @@ versioning follows [Semantic Versioning](https://semver.org/).
   analysis period's start date, and once the period changes the notice does
   not come back when the period is set back.
 
+### Changed (score units)
+
+- **The scores of the weighted modes are in physical units.** Each blocked
+  ray's patch weight is multiplied by the area its sample point stands for
+  (`grid_step`², as time-based already did for its m²·h), so a score no
+  longer changes four times when the sample spacing halves (it follows the
+  voxel size now). `irradiance` and `benefit` scores are the solar energy,
+  or heating-useful solar energy, a voxel keeps from the protected surfaces
+  over the period, in kWh (counted on a surface facing each sky patch, with
+  no reduction for the angle of incidence). `daylight` and
+  `radiative_cooling` scores are the sky a voxel hides, in m² of fully
+  hidden sky: their patch weights are each patch's share of the sky and sum
+  to 1 (the `daylight` weights did not; they are now divided by their sum,
+  about 4.2). `edge_taper` weights still multiply each ray, and simulated
+  benefit weights still scale the hours before the sky matrix is summed.
+- **A numeric `threshold` of a weighted mode now means something else**:
+  it is compared with the new scores, in kWh or m². A value chosen on
+  earlier scores must be chosen again (on 0.5 m sample spacing an earlier
+  `irradiance` score is 4 times the new one; `daylight` about 17 times).
+  `carve_fraction` and `headtail` do not depend on the scale and carve as
+  before. No config in `configs/` sets a numeric threshold for these modes.
+- `mode_registry.ModeSpec.score_unit` names the unit of the scores
+  (`"kWh"`, `"m²"`, `"m²·h"`, `"rays"` for `tilted_plane`); `weight_unit`
+  is the unit of the patch weights. The preprocessing manifest records
+  `score_unit`; the score histograms, the thresholding diagnostics
+  (`score_unit`) and the run report give it. The browser service treats a
+  preprocessing run of a weighted mode without `score_unit` as out of date,
+  so its next run rescores it; time-based and angle rule runs stay current.
+  `GET /api/modes` and the score points header give `score_unit`.
+
 ### Changed (ray length)
 
 - **`ray_length` defaults to 3000 m** (it was 300 m). The ray march clips

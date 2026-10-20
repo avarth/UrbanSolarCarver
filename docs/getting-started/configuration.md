@@ -164,7 +164,7 @@ After preprocessing computes per-voxel obstruction scores, thresholding decides 
 :   Jiang (2013) head/tail breaks: splits the scores at their mean and keeps splitting the upper part while it holds at most 40% of the values. Designed for heavy-tailed score distributions where most voxels have low scores and a few have very high scores. Biased toward removing only the worst obstructors.
 
 **Numeric value** (e.g., `threshold: 0.35`)
-:   Manual cutoff on the raw scores. Carves all voxels scoring above this value. Set `diagnostic_plots: true` to get the score histogram and pick a value from it. For `time-based`, the value is the tolerated shading in m²·h (see above).
+:   Manual cutoff on the scores, in the mode's score unit: kWh for `irradiance` and `benefit`, m² of fully hidden sky for `daylight` and `radiative_cooling`, m²·h for `time-based` (see [Modes](../modes.md)). Carves all voxels scoring above this value. Set `diagnostic_plots: true` to get the score histogram and pick a value from it.
 
 !!! tip
     The **decomposed pipeline** is designed for threshold exploration. Compute scores once (`preprocessing`), then re-run `thresholding` with different parameters; it takes seconds because the ray tracing is already done.

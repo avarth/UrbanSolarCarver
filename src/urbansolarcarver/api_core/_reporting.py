@@ -177,9 +177,11 @@ def generate_run_report(
         obs = thr_summary.get("obstruction_fraction_carved")
         if obs is not None:
             lines.append(f"- **Obstruction fraction carved:** {100*obs:.1f}%")
-        unit = thr_summary.get("weight_unit")
+        unit = thr_summary.get("score_unit")
         if unit:
             lines.append(f"- **Score unit:** {unit}")
+        if thr_summary.get("weight_unit"):
+            lines.append(f"- **Sky patch weight unit:** {thr_summary['weight_unit']}")
     if thr_timing:
         lines.append(f"- **Time:** {thr_timing.get('wall_seconds', 0):.1f}s")
     lines.append("")

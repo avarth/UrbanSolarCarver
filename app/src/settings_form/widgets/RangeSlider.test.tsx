@@ -22,7 +22,7 @@ const SCHEMA = {
   },
 };
 const MODES: ModeInfo[] = [{ name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false,
-                             score_kind: "weighted_sum", weight_unit: "", starting_values: {} }];
+                             score_kind: "weighted_sum", weight_unit: "", score_unit: "", starting_values: {} }];
 
 let rendered: RenderedOverlay | null = null;
 

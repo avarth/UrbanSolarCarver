@@ -18,7 +18,7 @@ const SCHEMA = {
 };
 const WINTER_DAY = { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14 };
 const MODES: ModeInfo[] = [{ name: "time-based", description: "", needs_epw: true, needs_period: true, experimental: false,
-                             score_kind: "violation_count", weight_unit: "", starting_values: WINTER_DAY }];
+                             score_kind: "violation_count", weight_unit: "", score_unit: "", starting_values: WINTER_DAY }];
 const NBSP = " ";
 
 let rendered: RenderedOverlay | null = null;

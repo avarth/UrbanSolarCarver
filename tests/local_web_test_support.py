@@ -18,12 +18,14 @@ from pathlib import Path
 import numpy as np
 import pytest
 import trimesh
+import yaml
 
 from urbansolarcarver.io import load_mesh, save_mesh
 from urbansolarcarver.local_web_service.example_catalog import read_examples
 from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunWorker
 from urbansolarcarver.local_web_service.stage_records import UPSTREAM_STAGE
+from urbansolarcarver.mode_registry import MODES
 from urbansolarcarver.pydantic_schemas import ExportingManifest, MassingManifest, PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
 from urbansolarcarver.run_context import report_issue, report_progress, run_context, stage_context
 from urbansolarcarver.stage_settings import PIPELINE_STAGES, stages_needed_for
@@ -130,14 +132,23 @@ def has_vertex_normals(ply_path: Path) -> bool:
 
 # ---- The fake engine and the run worker ----
 
+def _mode_of_the_project(run_folder: Path) -> str:
+    """The mode in the config.yaml of the project whose run folder this is; daylight, the test projects' mode, without one."""
+    config_path = run_folder.parent / "config.yaml"
+    stored = yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None
+    return (stored or {}).get("mode", "daylight")
+
+
 def write_fake_stage_output(run_folder: Path, stage: str) -> None:
     """What a finished stage leaves: a manifest with a new run_id and, for a stage that reads one, the upstream run_id."""
     folder = run_folder / stage
     folder.mkdir(parents=True, exist_ok=True)
     manifest = {"run_id": uuid.uuid4().hex}
     if stage == "preprocessing":
-        # As the engine records them; stage status reads grid_step only to tell a manifest from before it was recorded.
-        manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0, grid_step=0.5)
+        # As the engine records them; stage status reads grid_step only to tell a manifest from before it was recorded, and
+        # score_unit to tell scores of another unit than the project's mode now writes.
+        manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0, grid_step=0.5,
+                        score_unit=MODES[_mode_of_the_project(run_folder)].score_unit)
     if stage == "massing":      # the fake writes its plates as OBJ whatever the format chosen
         manifest.update(plates_path="plates.json", mesh_path="plates.obj", export_mesh_path="plates.obj",
                         upstream_manifest="../thresholding/manifest.json")

@@ -377,7 +377,12 @@ def compute_EPW_based_weights(
     * daylight: the CIE Standard Overcast Sky (see Darula & Kittler
       2002) prescribes a relative luminance L(θ) ∝ (1 + 2 cos θ)/3,
       three times brighter at the zenith than at the horizon.  The
-      weight is that luminance times the patch solid angle Ωᵢ.
+      weight is that luminance times the patch solid angle Ωᵢ, divided
+      by its sum over the 145 patches: each weight is the patch's share
+      of the overcast sky, and the weights sum to 1 (as the
+      radiative_cooling ones do).  A sample point whose whole sky is
+      hidden then counts its whole area, so a daylight score is in m² of
+      fully hidden sky.
 
     * irradiance: 'SkyMatrix.from_epw' (Ladybug Tools) builds a
       Perez all-weather sky for every hour, then sums the selected
@@ -459,12 +464,13 @@ def compute_EPW_based_weights(
     -------
     torch.Tensor
         Shape (P,), dtype float32, on ``device``.
-        Weights are non-negative and not normalized (unlike
-        :func:`compute_radiative_cooling_weights`, whose weights sum to
-        1).  They keep the physical scale returned by Ladybug (kWh/m² for
-        irradiance/benefit) or the CIE luminance distribution (daylight).
-        The threshold methods (carve_fraction, headtail) are
-        scale-invariant, so the scale does not affect carving results.
+        Weights are non-negative.  irradiance and benefit keep the
+        physical scale returned by Ladybug (kWh/m²); daylight weights are
+        shares of the overcast sky and sum to 1, as the weights of
+        :func:`compute_radiative_cooling_weights` do.  The threshold
+        methods (carve_fraction, headtail) are scale-invariant, so the
+        scale does not affect their carving results; a numeric cutoff
+        depends on it.
         In benefit mode an all-zero vector is returned, with a warning,
         when no hour in the period qualifies.
 
@@ -525,7 +531,8 @@ def compute_EPW_based_weights(
         dirs = fetch_tregenza_patch_directions(device)  # [145, 3]
         angles = fetch_tregenza_patch_solid_angles(device) # [145]
         cosz = dirs[:, 2].clamp(min=0.0)
-        return angles * (1.0 + 2.0 * cosz) / 3.0  # Ωᵢ · (1 + 2 cos θᵢ) / 3 (CIE overcast luminance)
+        overcast_brightness = angles * (1.0 + 2.0 * cosz) / 3.0  # Ωᵢ · (1 + 2 cos θᵢ) / 3 (CIE overcast luminance)
+        return overcast_brightness / overcast_brightness.sum()   # each patch's share of the overcast sky
     
     # Modes that need an EPW file and hoys: validate before the slow file I/O.
     if key in ('irradiance', 'benefit'):
