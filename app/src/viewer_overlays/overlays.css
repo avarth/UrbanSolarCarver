@@ -210,6 +210,32 @@
 .viewer-empty-state p { margin: 0; }
 .viewer-centre[data-viewport-theme="dark"] .link-button { color: var(--colour-test-surface-on-dark); }
 
+/* Out of date (UX 6.3): a stamp at the top of the view while a dimmed result is shown, so dimmed results are not taken for
+   current ones. It has nothing to click and lets the pointer through to the view; it goes once the results are current. */
+.viewer-out-of-date {
+  top: var(--overlay-gap);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 2 * var(--overlay-gap));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 12px 6px;
+  border: 2px solid var(--colour-out-of-date);
+  text-align: center;
+  pointer-events: none;
+}
+
+.viewer-out-of-date strong {
+  color: var(--colour-out-of-date);
+  font-size: var(--text-body);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.viewer-out-of-date[data-viewport-theme="dark"] { border-color: var(--colour-out-of-date-on-dark); }
+.viewer-out-of-date[data-viewport-theme="dark"] strong { color: var(--colour-out-of-date-on-dark); }
+
 /* The progress of a run, a thin bar along the top edge of the view (UX 4, 6.3). */
 .viewer-run-progress {
   position: absolute;

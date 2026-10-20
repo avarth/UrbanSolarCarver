@@ -234,6 +234,11 @@ export const messages = {
 
   // Runs and their progress (6.2 to 6.4, 11)
   runProgress: "Run progress",
+  // The stamp at the top of the 3D view while a dimmed result is shown (UX 6.3).
+  viewerStampOutOfDate: "Out of date",
+  viewerStampOutOfDateNote: "The dimmed results do not match the settings.",
+  viewerStampUpdating: "Updating",
+  viewerStampUpdatingNote: "The dimmed results are being replaced.",
   stageStates: { waiting: "waiting", running: "running", done: "done" },
   rayBatches: (done: number, total: number) => `${groupedDigits(done)} of ${groupedDigits(total)} batches`,
   elapsedTime: (secondsText: string) => `Elapsed ${secondsText}`,

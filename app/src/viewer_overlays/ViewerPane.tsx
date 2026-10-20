@@ -1,7 +1,8 @@
 // The 3D view beside the step panel (UX 4, 8): the scene and its overlays, the layers built from what the project has so far.
 // Each step shows its own layers by default (UX 8.2); the layers menu turns them on and off until another step opens.
 // The maximum volume is a light solid in Inputs, Mode and Settings and a ghost, off by default, in the later steps. Result
-// layers that are out of date, or being replaced by a run, are dimmed (UX 6.3); a thin bar along the top shows a run's progress.
+// layers that are out of date, or being replaced by a run, are dimmed (UX 6.3), and while one of them is shown a stamp at the top
+// of the view says so ("Out of date", or "Updating" during a run); a thin bar along the top shows a run's progress.
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
@@ -216,6 +217,7 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
       : undefined,
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
   };
+  const dimmedResultShown = dimmedLayers.some(shown);
   const progressPercent = runProgress === null ? 0 : Math.round(runProgress * 100);
   const progressBar = runProgress !== null && (
     <div className="viewer-run-progress" role="progressbar" aria-label={messages.runProgress} aria-valuemin={0} aria-valuemax={100}
@@ -249,6 +251,12 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
       <AxisGizmo yawDegrees={camera.yawDegrees} elevationDegrees={camera.elevationDegrees} theme={theme} />
       <ScaleBar metresPerPixel={camera.metresPerPixel} theme={theme} />
       <Legend content={legend} theme={theme} />
+      {dimmedResultShown && (
+        <div className="viewer-overlay viewer-out-of-date" data-viewport-theme={theme} role="status">
+          <strong>{runProgress === null ? messages.viewerStampOutOfDate : messages.viewerStampUpdating}</strong>
+          <span>{runProgress === null ? messages.viewerStampOutOfDateNote : messages.viewerStampUpdatingNote}</span>
+        </div>
+      )}
       {centreContent && <div className="viewer-centre" data-viewport-theme={theme}>{centreContent}</div>}
       {overlayContent}
     </div>

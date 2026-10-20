@@ -92,6 +92,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
   the engine's `min_voxels` (a count of voxels, unchanged) with the voxel
   size it shows, and a typed volume back to whole voxels, at least one. The
   Bliss constant is a number without a unit and shows none.
+- **An "Out of date" stamp on the 3D view** while a dimmed result is shown,
+  so a dimmed result is not taken for a current one; it reads "Updating"
+  while a run replaces it. It has nothing to click and goes once the results
+  are current.
 - **Carving rule: Manual or Automatic.** The weighted modes choose between
   Manual (the Carve amount slider) and Automatic (head/tail breaks); Score
   cutoff is no longer a rule of its own, as the line on the histogram sets

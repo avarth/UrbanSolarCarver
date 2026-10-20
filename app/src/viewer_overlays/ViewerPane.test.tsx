@@ -86,3 +86,20 @@ test("the view starts with the ground aid chosen last on this computer, and the 
   expect(FakeViewerScene.latest!.groundAid).toBe("off");
   expect(window.localStorage.getItem("usc.groundAid")).toBe("off");
 });
+
+test("while a dimmed result is shown, a stamp at the top of the view says it is out of date, or being updated during a run; nothing to dismiss", () => {
+  const stamp = () => rendered!.container.querySelector(".viewer-out-of-date");
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} />);
+  expect(stamp()).toBeNull();                                                    // current results: no stamp
+  rendered.rerender(<ViewerPane {...viewWithSkyDome("daylight")} dimmedLayers={["sky_dome"]} />);
+  expect(stamp()!.getAttribute("role")).toBe("status");
+  expect(stamp()!.textContent).toBe("Out of date" + "The dimmed results do not match the settings.");
+  expect(stamp()!.querySelector("button")).toBeNull();
+  rendered.rerender(<ViewerPane {...viewWithSkyDome("daylight")} dimmedLayers={["sky_dome"]} runProgress={0.4} />);
+  expect(stamp()!.textContent).toBe("Updating" + "The dimmed results are being replaced.");
+  // A dimmed layer that is not shown (another step's, or hidden in the Layers menu) brings no stamp.
+  rendered.rerender(<ViewerPane {...viewWithSkyDome("daylight")} dimmedLayers={["envelope"]} />);
+  expect(stamp()).toBeNull();
+  rendered.rerender(<ViewerPane {...viewWithSkyDome("daylight")} shownByDefault={[]} dimmedLayers={["sky_dome"]} />);
+  expect(stamp()).toBeNull();
+});

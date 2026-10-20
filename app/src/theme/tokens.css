@@ -37,6 +37,7 @@
   --colour-carved: #c8553d;
   --colour-ready: #3f8f5a;
   --colour-error: #a3271c;
+  --colour-out-of-date: #8a5a00;     /* the Out of date stamp on the 3D view */
 
   --colour-viewport-light: #e3e8e7;
   --colour-viewport-dark: #22303a;
@@ -55,6 +56,7 @@
   --colour-muted-on-dark: #a9b6bc;
   --colour-line-on-dark: #3b4b56;
   --colour-test-surface-on-dark: #6fa0c4;
+  --colour-out-of-date-on-dark: #f2b632;
 
   /* The building massing: storeys run from the low colour (the ground storey) to the high colour (the top storey) */
   --colour-storey-low: #dfe6ea;
