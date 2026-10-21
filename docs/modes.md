@@ -63,9 +63,13 @@ Casts rays from test surfaces along actual sun vectors for specific dates and ti
 
 The sun is sampled `sun_steps_per_hour` times per hour (default 12, i.e. every 5 minutes). The sun moves about 15° of azimuth per hour, so hourly sampling leaves gaps between the ray sheets of consecutive hours in which mass survives while still shading the protected surface between samples; at 1 m voxels, 5-minute sampling closes them for obstructions up to ~40 m away. Ray count grows linearly with this value.
 
-### Solar time (`time_basis`)
+### Time basis: standard, daylight saving or solar time (`time_basis`)
 
-By default (`time_basis: standard`) the hours of the analysis period are the EPW's local standard time (no daylight saving). With `time_basis: solar` they are true solar time: 12:00 is the moment the sun crosses the meridian, due south at a northern mid-latitude site, on every date. Solar-fence rules (Boulder: 21 December, two hours each side of solar noon) and the Japanese shadow regulation define their hours this way.
+By default (`time_basis: standard`) the hours of the analysis period are the EPW's local standard time.
+
+With `time_basis: daylight_saving` they are daylight saving (summer) time: standard time plus one hour, on every date of the period, so 13:00 is read as 12:00 standard time. Weather files carry no daylight saving dates (TMY files leave the EPW header's field empty), so USC does not look up when the clocks change: a period that runs past the change of the clocks is one hour off on the days outside summer time. Split such a period, or use standard time.
+
+With `time_basis: solar` they are true solar time: 12:00 is the moment the sun crosses the meridian, due south at a northern mid-latitude site, on every date. Solar-fence rules (Boulder: 21 December, two hours each side of solar noon) and the Japanese shadow regulation define their hours this way.
 
 The two clocks differ by the equation of time (between about −14 and +16 minutes over the year) plus the site's distance from its time-zone meridian (4 minutes per degree of longitude). Solar noon in standard time:
 
@@ -76,7 +80,7 @@ The two clocks differ by the equation of time (between about −14 and +16 minut
 
 So a 10:00-14:00 window read in standard time is up to 39 minutes off a 10:00-14:00 solar-time rule in Athens, and the carved envelope shifts with it. Ladybug computes the sun position in either clock (`is_solar_time`).
 
-`time_basis` is read by `time-based` only. `solar` is refused in `irradiance` and `benefit`: their analysis period selects hourly EPW records, which are in standard time, so reading the period in solar time would pair each hour with the wrong weather record. Modes without an analysis period (`daylight`, `tilted_plane`, `radiative_cooling`) ignore it with the usual "does not use" warning. In the browser UI it is **Time basis** under "More sun settings"; in Grasshopper it is the `solar_time` input of USC Analysis Period.
+`time_basis` is read by `time-based` only. `daylight_saving` and `solar` are refused in `irradiance` and `benefit`: their analysis period selects hourly EPW records, which are in standard time, so reading the period in another clock would pair each hour with the wrong weather record. Modes without an analysis period (`daylight`, `tilted_plane`, `radiative_cooling`) ignore it with the usual "does not use" warning. In the browser UI it is **Time** (Standard time / Daylight saving time / Solar time) under "More sun settings"; in Grasshopper it is the `time_basis` text input of USC Analysis Period.
 
 ```yaml
 mode: time-based

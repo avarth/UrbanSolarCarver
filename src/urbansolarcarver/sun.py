@@ -4,8 +4,9 @@ Sun direction vectors for UrbanSolarCarver.
 ``get_sun_vectors(epw_file, date_list, min_altitude, device, north_deg,
 time_basis)`` reads the site location from an EnergyPlus weather (EPW)
 file, computes the sun position for each Ladybug ``DateTime`` (local
-standard time, or true solar time with ``time_basis="solar"``) with a
-Ladybug ``Sunpath``,
+standard time; daylight saving time, one hour ahead, with
+``time_basis="daylight_saving"``; or true solar time with
+``time_basis="solar"``) with a Ladybug ``Sunpath``,
 drops positions at or below ``min_altitude`` degrees, and returns an
 (N, 3) float32 tensor of unit vectors pointing from the model toward the
 sun, in model coordinates.
@@ -28,6 +29,9 @@ from ladybug.sunpath import Sunpath
 from .run_context import report_issue
 from .weather_file import read_weather_file
 from .stage_settings import PreprocessingSettings
+
+TIME_BASES = ("standard", "daylight_saving", "solar")
+MINUTES_PER_YEAR = 525600
 
 @lru_cache(maxsize=None)
 def _initialize_sunpath(
@@ -79,8 +83,10 @@ def get_sun_vectors(
                     (USC convention, same as the ``north_deg`` setting).  Sun
                     vectors are returned in model coordinates.
       time_basis  : "standard": the times are the EPW's local standard
-                    time. "solar": they are true solar time, in which the
-                    sun crosses the meridian at 12:00.
+                    time. "daylight_saving": they are daylight saving time,
+                    standard time plus one hour, on every date. "solar":
+                    they are true solar time, in which the sun crosses the
+                    meridian at 12:00.
 
     Returns:
       A float32 torch.Tensor of shape (N, 3), N <= len(date_list), one
@@ -90,7 +96,7 @@ def get_sun_vectors(
     Raises:
       ValueError: If date_list is not iterable, is empty or holds
         non-DateTime items, min_altitude is not a finite number, or
-        time_basis is neither "standard" nor "solar".
+        time_basis is not one of ``TIME_BASES``.
       FileNotFoundError, IOError: If the EPW file is missing or unreadable.
       RuntimeError: If the sun position calculation fails.
     """
@@ -119,11 +125,14 @@ def get_sun_vectors(
             f"get_sun_vectors: min_altitude must be finite, got {min_altitude}"
         )
 
-    if time_basis not in ("standard", "solar"):
+    if time_basis not in TIME_BASES:
         raise ValueError(
-            f"get_sun_vectors: time_basis must be 'standard' or 'solar', got {time_basis!r}"
+            f"get_sun_vectors: time_basis must be one of {TIME_BASES}, got {time_basis!r}"
         )
     is_solar_time = time_basis == "solar"
+    if time_basis == "daylight_saving":
+        # Clocks one hour ahead: 13:00 daylight saving time is 12:00 standard time.
+        date_list = [_one_hour_earlier(date_time) for date_time in date_list]
 
     # Step 3: Initialize sunpath for this location.
     # USC's north_deg is clockwise from +Y; Ladybug's north_angle is
@@ -174,6 +183,12 @@ def get_sun_vectors(
         )
     )
     return result_array
+
+
+def _one_hour_earlier(date_time: DateTime) -> DateTime:
+    """The Ladybug DateTime one hour before *date_time*; before 1 January 01:00 it wraps to 31 December."""
+    year_minutes = MINUTES_PER_YEAR + (1440 if date_time.leap_year else 0)
+    return DateTime.from_moy((date_time.moy - 60) % year_minutes, date_time.leap_year)
 
 
 def sample_period(settings: PreprocessingSettings, steps_per_hour: int = 1):

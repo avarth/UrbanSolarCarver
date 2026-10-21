@@ -207,7 +207,7 @@ def _date_times_of_minutes(minutes_of_year):
 def _sun_vectors(config: UserConfig, date_times, min_altitude: float, time_basis: str = "standard") -> list[list[float]]:
     """The sun directions at the times when the sun is above ``min_altitude``, in time order.
 
-    *date_times* are in local standard time, or in true solar time with *time_basis* "solar".
+    *date_times* are in the clock *time_basis* names: local standard time, daylight saving time or true solar time.
 
     A time with the sun below it is an ordinary outcome here, so the engine's issue about an empty
     result is collected in a throwaway run context instead of being raised as a warning.

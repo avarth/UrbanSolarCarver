@@ -136,7 +136,7 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | `start_month` .. `end_hour` | `time-based`, `irradiance`, `benefit` | Analysis period (or one `analysis_period:` mapping with Ladybug `AnalysisPeriod.to_dict()` keys) |
 | `sun_steps_per_hour` | `time-based` | Sun positions per hour (default 12 = every 5 min; Ladybug timesteps 1-60) |
 | `min_altitude` | `time-based` | Ignore sun positions below this altitude in degrees (default 5.0) |
-| `time_basis` | `time-based` | Clock of the analysis period's hours: `standard` (default, the EPW's local standard time) or `solar` (true solar time, 12:00 = solar noon). `solar` is refused in `irradiance` and `benefit`, whose hourly EPW records are in standard time ([details](../modes.md#solar-time-time_basis)) |
+| `time_basis` | `time-based` | Clock of the analysis period's hours: `standard` (default, the EPW's local standard time), `daylight_saving` (standard time + 1 h on every date) or `solar` (true solar time, 12:00 = solar noon). Only `standard` is accepted in `irradiance` and `benefit`, whose hourly EPW records are in standard time ([details](../modes.md#time-basis-standard-daylight-saving-or-solar-time-time_basis)) |
 | `balance_temperature` | `benefit` | Free-running balance-point temperature (°C, default 15); unused when `simulated_weights_path` is set |
 | `balance_offset` | `benefit` | Dead-band below the balance point (°C, default 2); unused when `simulated_weights_path` is set |
 | `simulated_weights_path` | `benefit` | Path to a `simulated_weights.json` artifact (`usc simulate-weights`): simulated hourly weights replace the balance-point rule ([details](../modes.md#simulated-weights)) |

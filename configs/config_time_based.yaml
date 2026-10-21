@@ -23,6 +23,7 @@ analysis_period:
   end_day:   21
   end_hour:  14
 # time_basis: solar   # read the hours above in true solar time (12:00 = solar noon);
+#                     # 'daylight_saving' = standard time + 1 h;
 #                     # default 'standard' = the EPW's local standard time
 
 # Grid

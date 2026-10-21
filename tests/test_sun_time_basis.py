@@ -1,7 +1,8 @@
 """time_basis in get_sun_vectors: with "solar", 12:00 is the moment the sun
 crosses the meridian, so it lies due south of a northern mid-latitude site on
 any date; with "standard", 12:00 is the EPW's clock and the sun is off south
-by the equation of time and the site's distance from its time-zone meridian."""
+by the equation of time and the site's distance from its time-zone meridian;
+with "daylight_saving", 13:00 is 12:00 standard time."""
 import math
 
 import numpy as np
@@ -37,6 +38,19 @@ def test_standard_noon_differs_from_solar_noon():
 def test_solar_noon_follows_north_deg():
     # Model north along +X: south is -X, 270° clockwise from +Y.
     assert _azimuth_deg(12, 21, 12, 0, "solar", north_deg=90.0) == pytest.approx(270.0, abs=0.05)
+
+
+@pytest.mark.parametrize("month, day", [(6, 21), (12, 21)])
+def test_daylight_saving_time_is_standard_time_plus_one_hour(month, day):
+    assert _azimuth_deg(month, day, 13, 0, "daylight_saving") == pytest.approx(_azimuth_deg(month, day, 12, 0, "standard"), abs=1e-4)
+    assert _azimuth_deg(month, day, 10, 30, "daylight_saving") == pytest.approx(_azimuth_deg(month, day, 9, 30, "standard"), abs=1e-4)
+
+
+def test_an_hour_earlier_wraps_to_the_end_of_the_year():
+    from ladybug.dt import DateTime
+    from urbansolarcarver.sun import _one_hour_earlier
+    earlier = _one_hour_earlier(DateTime(1, 1, 0, 30))
+    assert (earlier.month, earlier.day, earlier.hour, earlier.minute) == (12, 31, 23, 30)
 
 
 def test_default_is_standard_time():

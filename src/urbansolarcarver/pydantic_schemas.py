@@ -332,16 +332,18 @@ class UserConfig(BaseModel):
             "threshold) does not depend on it."
         ),
     )
-    time_basis: Literal["standard", "solar"] = Field(
+    time_basis: Literal["standard", "daylight_saving", "solar"] = Field(
         "standard",
         description=(
             "time-based only: the clock the analysis period's hours are read in. "
-            "'standard' (default): the EPW's local standard time (no daylight "
-            "saving). 'solar': true solar time, in which the sun crosses the "
-            "meridian (due south at northern mid-latitudes) at 12:00 every day, as "
-            "solar-fence rules and the Japanese shadow regulation define their "
-            "hours. Refused in irradiance and benefit, whose hourly EPW records are "
-            "in standard time."
+            "'standard' (default): the EPW's local standard time. "
+            "'daylight_saving': standard time plus one hour on every date of the "
+            "period (summer clock time; a period that crosses the switch date is "
+            "one hour off outside summer time). 'solar': true solar time, in which "
+            "the sun crosses the meridian (due south at northern mid-latitudes) at "
+            "12:00 every day, as solar-fence rules and the Japanese shadow "
+            "regulation define their hours. 'daylight_saving' and 'solar' are refused in irradiance and "
+            "benefit, whose hourly EPW records are in standard time."
         ),
     )
     ray_length:    float = Field(
@@ -659,16 +661,16 @@ class UserConfig(BaseModel):
 
     @model_validator(mode='after')
     def _check_time_basis(self) -> 'UserConfig':
-        """Refuse solar time in a mode whose analysis hours select EPW records.
+        """Refuse a clock other than standard time in a mode whose analysis hours select EPW records.
 
         The EPW's hourly records are in local standard time, so irradiance and
-        benefit cannot read their period in solar time. The modes with no
+        benefit cannot read their period in another clock. The modes with no
         analysis period ignore ``time_basis`` with the usual warning.
         """
-        if (self.time_basis == "solar" and self.mode in MODES_NEEDING_PERIOD
+        if (self.time_basis != "standard" and self.mode in MODES_NEEDING_PERIOD
                 and "time_basis" not in MODES[self.mode].extra_params):
             raise ValueError(
-                f"time_basis 'solar' is only valid for mode 'time-based' (got mode "
+                f"time_basis '{self.time_basis}' is only valid for mode 'time-based' (got mode "
                 f"'{self.mode}', whose hourly EPW records are in local standard time)"
             )
         return self

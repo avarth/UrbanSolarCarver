@@ -401,25 +401,28 @@ class TestDesignConstraintFields:
 
 
 class TestTimeBasis:
-    """time_basis: standard by default, solar for time-based, refused where
-    the analysis hours select EPW records (irradiance, benefit)."""
+    """time_basis: standard by default, daylight_saving or solar for
+    time-based, refused where the analysis hours select EPW records
+    (irradiance, benefit)."""
 
     _PERIOD = TestThresholdRoundTrip._PERIOD
 
     def test_default_is_standard(self):
         assert _make_config(mode="time-based", **self._PERIOD).time_basis == "standard"
 
-    def test_time_based_accepts_solar(self):
-        assert _make_config(mode="time-based", time_basis="solar", **self._PERIOD).time_basis == "solar"
+    @pytest.mark.parametrize("time_basis", ["daylight_saving", "solar"])
+    def test_time_based_accepts_the_other_clocks(self, time_basis):
+        assert _make_config(mode="time-based", time_basis=time_basis, **self._PERIOD).time_basis == time_basis
 
     def test_unknown_value_rejected(self):
         with pytest.raises(ValidationError, match="time_basis"):
             _make_config(mode="time-based", time_basis="local", **self._PERIOD)
 
+    @pytest.mark.parametrize("time_basis", ["daylight_saving", "solar"])
     @pytest.mark.parametrize("mode", ["irradiance", "benefit"])
-    def test_solar_refused_in_epw_hour_modes(self, mode):
-        with pytest.raises(ValidationError, match="time_basis 'solar' is only valid for mode 'time-based'"):
-            _make_config(mode=mode, time_basis="solar", **self._PERIOD)
+    def test_other_clocks_refused_in_epw_hour_modes(self, mode, time_basis):
+        with pytest.raises(ValidationError, match=f"time_basis '{time_basis}' is only valid for mode 'time-based'"):
+            _make_config(mode=mode, time_basis=time_basis, **self._PERIOD)
 
     @pytest.mark.parametrize("mode", ["irradiance", "benefit"])
     def test_standard_is_ignored_with_a_warning_in_epw_hour_modes(self, mode):

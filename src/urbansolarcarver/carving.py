@@ -326,11 +326,12 @@ def carve_with_sun_rays(
           - epw_path: path to EPW file used for sun positions.
           - min_altitude: degrees above horizon for filtering sun vectors.
           - north_deg: model north, degrees clockwise from +Y.
-          - time_basis: "standard" or "solar", the clock *datetimes* are in.
+          - time_basis: "standard", "daylight_saving" or "solar", the clock
+            *datetimes* are in.
           - ray_length: maximum traced distance along each ray.
     datetimes : Sequence[datetime.datetime]
         Timestamps for which sun vectors are generated, in local standard
-        time or true solar time (``settings.time_basis``).
+        time, daylight saving time or true solar time (``settings.time_basis``).
     return_counts : bool, default False
         If True, return a 4th element: per-voxel hit counts (int32 array).
     return_rays : bool, default False

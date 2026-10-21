@@ -26,9 +26,10 @@ analysis_period:
 # survives while still shading the protected surfaces between samples.
 sun_steps_per_hour: 12
 # time-based only: the clock the period's hours are read in. 'standard' = the
-# EPW's local standard time; 'solar' = true solar time (the sun crosses the
+# EPW's local standard time; 'daylight_saving' = standard time + 1 h on every
+# date of the period; 'solar' = true solar time (the sun crosses the
 # meridian at 12:00), as solar-fence rules and the Japanese shadow regulation
-# define their hours. 'solar' is refused in irradiance and benefit.
+# define their hours. Irradiance and benefit accept 'standard' only.
 time_basis: standard
 # The six flat keys remain valid as well:
 # start_month: 10

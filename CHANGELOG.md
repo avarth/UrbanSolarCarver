@@ -7,17 +7,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-### Added (solar time)
+### Added (solar and daylight saving time)
 
-- **`time_basis: standard | solar`** (default `standard`): `time-based` can
-  read the hours of its analysis period in true solar time, in which 12:00 is
-  solar noon, as solar-fence rules and the Japanese shadow regulation define
-  them. `solar` is refused in `irradiance` and `benefit`, whose hourly EPW
-  records are in standard time; the modes without a period ignore it with a
-  warning. In the browser UI it is "Time basis" under More sun
-  settings, in Grasshopper the `solar_time` input of USC Analysis Period. The
-  sun path drawn in the UI and the run report follow it. See
-  [Carving modes](docs/modes.md#solar-time-time_basis).
+- **`time_basis: standard | daylight_saving | solar`** (default `standard`):
+  `time-based` can read the hours of its analysis period in daylight saving
+  time (standard time plus one hour on every date) or in true solar time, in
+  which 12:00 is solar noon, as solar-fence rules and the Japanese shadow
+  regulation define them. `irradiance` and `benefit` accept `standard` only,
+  as their hourly EPW records are in standard time; the modes without a
+  period ignore it with a warning. In the browser UI it is "Time" under More
+  sun settings, in Grasshopper the `time_basis` input of USC Analysis Period.
+  The sun path drawn in the UI and the run report follow it. See
+  [Carving modes](docs/modes.md#time-basis-standard-daylight-saving-or-solar-time-time_basis).
 
 ### Added (browser UI)
 

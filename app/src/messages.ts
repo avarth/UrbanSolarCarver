@@ -429,7 +429,7 @@ export const messages = {
     stepsPerHour === 1 ? "1 per hour" : stepsPerHour === 60 ? "60 per hour (every minute)" : `${stepsPerHour} per hour (every ${60 / stepsPerHour} minutes)`,
   meshFormatNames: { ply: "PLY", obj: "OBJ", stl: "STL", glb: "GLB" },
   floorStackingChoices: { supported: "Supported", free: "Free" },
-  timeBasisChoices: { standard: "Standard time", solar: "Solar time" },
+  timeBasisChoices: { standard: "Standard time", daylight_saving: "Daylight saving time", solar: "Solar time" },
   carvingRuleChoices: { carve_fraction: "Manual", headtail: "Automatic" },
   // Under the carving rule Automatic, which has no setting: the cut of the last carving.
   automaticCut: (cutoffText: string) =>

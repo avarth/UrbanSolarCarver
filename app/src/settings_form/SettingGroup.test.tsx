@@ -37,7 +37,7 @@ const SCHEMA = {
     min_plate_dimension: { default: 3.0, type: "number" },
     plate_tolerance: { default: 0.2, type: "number" },
     plate_stacking: { default: "supported", enum: ["supported", "free"], type: "string" },
-    time_basis: { default: "standard", enum: ["standard", "solar"], type: "string" },
+    time_basis: { default: "standard", enum: ["standard", "daylight_saving", "solar"], type: "string" },
     tilted_plane_angle_deg: { anyOf: [{ type: "number" }, { type: "array", items: { type: "number" } }, { type: "null" }], default: null },
   },
 };
@@ -289,12 +289,14 @@ test("Sun positions per hour says per hour in each choice", () => {
   expect(options.at(-1)).toBe("60 per hour (every minute)");
 });
 
-test("Time basis offers standard and solar time, sends the engine's value and names time_basis in its tooltip", () => {
+test("Time offers standard, daylight saving and solar time, sends the engine's value and names time_basis in its tooltip", () => {
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "time_basis")} form={formFor("time-based")} onChange={onChange} />);
   const select = rendered.container.querySelector("select")!;
-  expect([...select.querySelectorAll("option")].map((option) => option.textContent)).toEqual(["Standard time", "Solar time"]);
+  expect([...select.querySelectorAll("option")].map((option) => option.textContent)).toEqual(["Standard time", "Daylight saving time", "Solar time"]);
   expect(select.value).toBe("standard");
+  typeInto(select, "daylight_saving");
+  expect(onChange).toHaveBeenCalledWith({ time_basis: "daylight_saving" });
   typeInto(select, "solar");
   expect(onChange).toHaveBeenCalledWith({ time_basis: "solar" });
   const infoButton = rendered.container.querySelector<HTMLButtonElement>("button.setting-info")!;

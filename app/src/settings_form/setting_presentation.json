@@ -42,8 +42,8 @@
       "step": "settings", "group": "When", "essential": "all", "slider": { "low": 0, "high": 359, "step": 1 }
     },
     "time_basis": {
-      "label": "Time basis", "unit": "choice",
-      "help": "How the hours of the analysis period are read. Standard time: the weather file's local clock, without daylight saving. Solar time: 12:00 is solar noon, when the sun is highest, as solar-fence rules and the Japanese shadow regulation count hours.",
+      "label": "Time", "unit": "choice",
+      "help": "How the hours of the analysis period are read. Standard time: the weather file's local time, without daylight saving. Daylight saving time: one hour ahead of standard time on every day of the period, so a period that runs past the change of the clocks is one hour off on the days outside it. Solar time: 12:00 is solar noon, when the sun is highest, as solar-fence rules and the Japanese shadow regulation count hours.",
       "step": "settings", "group": "When", "essential": false, "modes": ["time-based"]
     },
     "sun_steps_per_hour": {
