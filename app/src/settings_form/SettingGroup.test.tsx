@@ -37,6 +37,7 @@ const SCHEMA = {
     min_plate_dimension: { default: 3.0, type: "number" },
     plate_tolerance: { default: 0.2, type: "number" },
     plate_stacking: { default: "supported", enum: ["supported", "free"], type: "string" },
+    time_basis: { default: "standard", enum: ["standard", "solar"], type: "string" },
     tilted_plane_angle_deg: { anyOf: [{ type: "number" }, { type: "array", items: { type: "number" } }, { type: "null" }], default: null },
   },
 };
@@ -286,6 +287,19 @@ test("Sun positions per hour says per hour in each choice", () => {
   expect(options.slice(0, 2)).toEqual(["1 per hour", "2 per hour (every 30 minutes)"]);
   expect(options).toContain("12 per hour (every 5 minutes)");
   expect(options.at(-1)).toBe("60 per hour (every minute)");
+});
+
+test("Clock of the hours offers standard and solar time, sends the engine's value and names time_basis in its tooltip", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "time_basis")} form={formFor("time-based")} onChange={onChange} />);
+  const select = rendered.container.querySelector("select")!;
+  expect([...select.querySelectorAll("option")].map((option) => option.textContent)).toEqual(["Standard time", "Solar time"]);
+  expect(select.value).toBe("standard");
+  typeInto(select, "solar");
+  expect(onChange).toHaveBeenCalledWith({ time_basis: "solar" });
+  const infoButton = rendered.container.querySelector<HTMLButtonElement>("button.setting-info")!;
+  act(() => { infoButton.dispatchEvent(new MouseEvent("mouseover", { bubbles: true })); });
+  expect(rendered.container.querySelector("[role='tooltip']")!.textContent).toContain("Config name: time_basis, default Standard time");
 });
 
 test("a number outside the engine's range is refused in the field, with a message, and never reaches the form", () => {

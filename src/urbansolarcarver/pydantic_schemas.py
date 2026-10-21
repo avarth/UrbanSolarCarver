@@ -332,6 +332,18 @@ class UserConfig(BaseModel):
             "threshold) does not depend on it."
         ),
     )
+    time_basis: Literal["standard", "solar"] = Field(
+        "standard",
+        description=(
+            "time-based only: the clock the analysis period's hours are read in. "
+            "'standard' (default): the EPW's local standard time (no daylight "
+            "saving). 'solar': true solar time, in which the sun crosses the "
+            "meridian (due south at northern mid-latitudes) at 12:00 every day, as "
+            "solar-fence rules and the Japanese shadow regulation define their "
+            "hours. Refused in irradiance and benefit, whose hourly EPW records are "
+            "in standard time."
+        ),
+    )
     ray_length:    float = Field(
         3000.0, gt=0,
         description=(
@@ -642,6 +654,22 @@ class UserConfig(BaseModel):
             report_issue(
                 "settings_unused_by_mode",
                 f"mode '{self.mode}' does not use: {', '.join(ignored)} (ignored)",
+            )
+        return self
+
+    @model_validator(mode='after')
+    def _check_time_basis(self) -> 'UserConfig':
+        """Refuse solar time in a mode whose analysis hours select EPW records.
+
+        The EPW's hourly records are in local standard time, so irradiance and
+        benefit cannot read their period in solar time. The modes with no
+        analysis period ignore ``time_basis`` with the usual warning.
+        """
+        if (self.time_basis == "solar" and self.mode in MODES_NEEDING_PERIOD
+                and "time_basis" not in MODES[self.mode].extra_params):
+            raise ValueError(
+                f"time_basis 'solar' is only valid for mode 'time-based' (got mode "
+                f"'{self.mode}', whose hourly EPW records are in local standard time)"
             )
         return self
 

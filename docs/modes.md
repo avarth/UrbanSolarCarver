@@ -63,6 +63,27 @@ Casts rays from test surfaces along actual sun vectors for specific dates and ti
 
 The sun is sampled `sun_steps_per_hour` times per hour (default 12, i.e. every 5 minutes). The sun moves about 15° of azimuth per hour, so hourly sampling leaves gaps between the ray sheets of consecutive hours in which mass survives while still shading the protected surface between samples; at 1 m voxels, 5-minute sampling closes them for obstructions up to ~40 m away. Ray count grows linearly with this value.
 
+### Solar time (`time_basis`)
+
+By default (`time_basis: standard`) the hours of the analysis period are the EPW's local standard time (no daylight saving). With `time_basis: solar` they are true solar time: 12:00 is the moment the sun crosses the meridian, due south at a northern mid-latitude site, on every date. Solar-fence rules (Boulder: 21 December, two hours each side of solar noon) and the Japanese shadow regulation define their hours this way.
+
+The two clocks differ by the equation of time (between about −14 and +16 minutes over the year) plus the site's distance from its time-zone meridian (4 minutes per degree of longitude). Solar noon in standard time:
+
+| Site | 11 Feb | 21 Jun | 3 Nov | 21 Dec |
+|---|---|---|---|---|
+| Golden, CO (bundled EPW, 105.2° W, UTC−7) | 12:15 | 12:03 | 11:44 | 11:59 |
+| Athens (23.7° E, UTC+2) | 12:39 | 12:27 | 12:09 | 12:23 |
+
+So a 10:00-14:00 window read in standard time is up to 39 minutes off a 10:00-14:00 solar-time rule in Athens, and the carved envelope shifts with it. Ladybug computes the sun position in either clock (`is_solar_time`).
+
+`time_basis` is read by `time-based` only. `solar` is refused in `irradiance` and `benefit`: their analysis period selects hourly EPW records, which are in standard time, so reading the period in solar time would pair each hour with the wrong weather record. Modes without an analysis period (`daylight`, `tilted_plane`, `radiative_cooling`) ignore it with the usual "does not use" warning. In the browser UI it is **Clock of the hours** under "More sun settings"; in Grasshopper it is the `solar_time` input of USC Analysis Period.
+
+```yaml
+mode: time-based
+analysis_period: {st_month: 12, st_day: 21, st_hour: 10, end_month: 12, end_day: 21, end_hour: 14}
+time_basis: solar   # 10:00-14:00 true solar time
+```
+
 **Use case**: protect direct sunlight during specific hours (e.g., winter solstice 10:00-14:00).
 
 **Threshold semantics**: see [violation-count thresholds](#for-violation-count-modes-time-based-tilted_plane) above.

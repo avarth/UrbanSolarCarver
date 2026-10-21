@@ -7,6 +7,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (solar time)
+
+- **`time_basis: standard | solar`** (default `standard`): `time-based` can
+  read the hours of its analysis period in true solar time, in which 12:00 is
+  solar noon, as solar-fence rules and the Japanese shadow regulation define
+  them. `solar` is refused in `irradiance` and `benefit`, whose hourly EPW
+  records are in standard time; the modes without a period ignore it with a
+  warning. In the browser UI it is "Clock of the hours" under More sun
+  settings, in Grasshopper the `solar_time` input of USC Analysis Period. The
+  sun path drawn in the UI and the run report follow it. See
+  [Carving modes](docs/modes.md#solar-time-time_basis).
+
 ### Added (browser UI)
 
 - **Launchers for the browser interface:** `start-urbansolarcarver.bat`

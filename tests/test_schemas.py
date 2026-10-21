@@ -400,6 +400,39 @@ class TestDesignConstraintFields:
             _make_config(min_sky_elevation_deg=-5.0)
 
 
+class TestTimeBasis:
+    """time_basis: standard by default, solar for time-based, refused where
+    the analysis hours select EPW records (irradiance, benefit)."""
+
+    _PERIOD = TestThresholdRoundTrip._PERIOD
+
+    def test_default_is_standard(self):
+        assert _make_config(mode="time-based", **self._PERIOD).time_basis == "standard"
+
+    def test_time_based_accepts_solar(self):
+        assert _make_config(mode="time-based", time_basis="solar", **self._PERIOD).time_basis == "solar"
+
+    def test_unknown_value_rejected(self):
+        with pytest.raises(ValidationError, match="time_basis"):
+            _make_config(mode="time-based", time_basis="local", **self._PERIOD)
+
+    @pytest.mark.parametrize("mode", ["irradiance", "benefit"])
+    def test_solar_refused_in_epw_hour_modes(self, mode):
+        with pytest.raises(ValidationError, match="time_basis 'solar' is only valid for mode 'time-based'"):
+            _make_config(mode=mode, time_basis="solar", **self._PERIOD)
+
+    @pytest.mark.parametrize("mode", ["irradiance", "benefit"])
+    def test_standard_is_ignored_with_a_warning_in_epw_hour_modes(self, mode):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="does not use: time_basis"):
+            _make_config(mode=mode, time_basis="standard", **self._PERIOD)
+
+    def test_ignored_with_a_warning_in_a_mode_without_a_period(self):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="does not use: time_basis"):
+            _make_config(mode="daylight", time_basis="solar")
+
+
 class TestDaylightMode:
     def test_daylight_no_epw_required(self):
         """Daylight mode uses the CIE overcast sky, so it should not require an EPW."""

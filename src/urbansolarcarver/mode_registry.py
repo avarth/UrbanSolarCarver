@@ -95,7 +95,7 @@ MODES: Dict[str, ModeSpec] = {
         score_kind="violation_count",
         weight_unit="none (sun positions, no sky patches)",
         score_unit="m²·h",
-        extra_params=_EPW_AND_PERIOD | {"min_altitude", "sun_steps_per_hour"},
+        extra_params=_EPW_AND_PERIOD | {"min_altitude", "sun_steps_per_hour", "time_basis"},
         description=(
             "Classical solar envelope: traces actual sun-position rays for the "
             "selected hours of year and carves any voxel that shades a test "

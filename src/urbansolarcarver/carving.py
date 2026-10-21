@@ -326,9 +326,11 @@ def carve_with_sun_rays(
           - epw_path: path to EPW file used for sun positions.
           - min_altitude: degrees above horizon for filtering sun vectors.
           - north_deg: model north, degrees clockwise from +Y.
+          - time_basis: "standard" or "solar", the clock *datetimes* are in.
           - ray_length: maximum traced distance along each ray.
     datetimes : Sequence[datetime.datetime]
-        Wall-clock timestamps for which sun vectors are generated.
+        Timestamps for which sun vectors are generated, in local standard
+        time or true solar time (``settings.time_basis``).
     return_counts : bool, default False
         If True, return a 4th element: per-voxel hit counts (int32 array).
     return_rays : bool, default False
@@ -356,7 +358,7 @@ def carve_with_sun_rays(
     # Sun directions in model coordinates (rotated by north_deg).
     sun_dirs = get_sun_vectors(
         settings.epw_path, datetimes, settings.min_altitude,
-        north_deg=settings.north_deg,
+        north_deg=settings.north_deg, time_basis=settings.time_basis,
     )
     if isinstance(sun_dirs, torch.Tensor):
         sun_arr = sun_dirs.clone().detach().to(voxel_grid.device)

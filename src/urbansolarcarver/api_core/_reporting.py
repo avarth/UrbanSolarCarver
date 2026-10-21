@@ -115,6 +115,9 @@ def generate_run_report(
                 period = (f"{run_cfg['start_month']}/{run_cfg['start_day']} {run_cfg['start_hour']}:00 \u2192 "
                           f"{run_cfg['end_month']}/{run_cfg['end_day']} {run_cfg['end_hour']}:00")
                 cfg_items.append(("Analysis period", period))
+        if mode == "time-based":
+            # A snapshot written before time_basis existed was read in standard time.
+            cfg_items.append(("Time basis", run_cfg.get("time_basis", "standard")))
         if mode == "benefit":
             cfg_items.append(("Balance temperature", f"{run_cfg.get('balance_temperature')}\u00b0C"))
             cfg_items.append(("Balance offset", f"\u00b1{run_cfg.get('balance_offset')}\u00b0C"))

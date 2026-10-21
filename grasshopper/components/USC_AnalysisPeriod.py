@@ -12,6 +12,10 @@ start_hour : int (0-23)
 end_month : int (1-12)
 end_day : int (1-31)
 end_hour : int (0-23)
+solar_time : bool, optional
+    time-based only: True reads the hours in true solar time (12:00 = solar
+    noon), False in the EPW's local standard time. Sets ``time_basis``.
+    Default: False. Irradiance and benefit refuse True.
 
 Outputs
 -------
@@ -33,6 +37,7 @@ try:
         ("end_month", "Last month of the analysis window (1-12). For heating-season studies, try 3 (March) or 4 (April)."),
         ("end_day", "Last day of the end month (1-31). Use 31 for the end of the month."),
         ("end_hour", "Last hour of day to include (0-23). For daytime-only analysis, use 17 or 18."),
+        ("solar_time", "Time-based mode only (config key time_basis). True: the hours are true solar time, so 12:00 is solar noon, as solar-fence rules and the Japanese shadow regulation define them. False: the EPW's local standard time. Default: False. Irradiance and benefit refuse True, as their hourly weather data are in standard time."),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d
@@ -50,4 +55,8 @@ for key, val in [
 ]:
     if val is not None:
         _items.append(f"{key}={int(val)}")
+# False is the default, so it is left out: the modes that do not read
+# time_basis would otherwise warn that it is unused.
+if solar_time is not None and bool(solar_time):
+    _items.append("time_basis=solar")
 overrides = ";".join(_items) if _items else None

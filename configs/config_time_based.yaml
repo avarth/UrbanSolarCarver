@@ -22,6 +22,8 @@ analysis_period:
   end_month: 12
   end_day:   21
   end_hour:  14
+# time_basis: solar   # read the hours above in true solar time (12:00 = solar noon);
+#                     # default 'standard' = the EPW's local standard time
 
 # Grid
 voxel_size: 1.0

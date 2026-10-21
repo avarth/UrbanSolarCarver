@@ -41,7 +41,9 @@ export interface SettingFieldProps {
 }
 
 // The words shown for the options of a choice the engine names in code.
-const CHOICE_NAMES: Record<string, Record<string, string>> = { plate_stacking: messages.floorStackingChoices };
+const CHOICE_NAMES: Record<string, Record<string, string>> = {
+  plate_stacking: messages.floorStackingChoices, time_basis: messages.timeBasisChoices,
+};
 
 /** The messages of the last rejected save for the settings *view* draws (the six of the analysis period), or undefined. */
 export function fieldErrorOf(form: FormState, view: SettingView): string | undefined {

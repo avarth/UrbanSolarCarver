@@ -25,6 +25,11 @@ analysis_period:
 # timestep). 12 = every 5 min; hourly sampling leaves gaps in which mass
 # survives while still shading the protected surfaces between samples.
 sun_steps_per_hour: 12
+# time-based only: the clock the period's hours are read in. 'standard' = the
+# EPW's local standard time; 'solar' = true solar time (the sun crosses the
+# meridian at 12:00), as solar-fence rules and the Japanese shadow regulation
+# define their hours. 'solar' is refused in irradiance and benefit.
+time_basis: standard
 # The six flat keys remain valid as well:
 # start_month: 10
 # start_day:   15

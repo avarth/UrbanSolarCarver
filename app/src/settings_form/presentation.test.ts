@@ -18,7 +18,7 @@ test("the Settings step groups, their folds and their fold labels", () => {
   const groups = settingsForStep("settings", "time-based");
   expect(groups.map((group) => group.title)).toEqual(["When", "Detail"]);     // no mode specific settings: left out
   const [when, detail] = groups;
-  expect(names(when.folded)).toEqual(["sun_steps_per_hour", "min_altitude"]);
+  expect(names(when.folded)).toEqual(["time_basis", "sun_steps_per_hour", "min_altitude"]);
   expect(when.foldLabel).toBe("More sun settings");
   // R2 4.5: the computer's settings come last in the detail fold. The sample spacing is the engine's (half the voxel size),
   // the grid margin is hidden for now, and the edge strip is shown in Night cooling only.

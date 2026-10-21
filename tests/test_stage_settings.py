@@ -197,3 +197,14 @@ def test_the_effective_grid_step_decides_a_rerun(tmp_path):
     assert stages_to_rerun(daylight_cube_config(tmp_path, grid_step=1.0), unset, {"preprocessing"}) == ["preprocessing"]
     # A voxel size change moves the unset spacing with it, and reruns preprocessing anyway.
     assert stages_to_rerun(unset, daylight_cube_config(tmp_path, grid_step=None, voxel_size=2.0), {"preprocessing"}) == ["preprocessing"]
+
+
+def test_time_basis_reruns_time_based_preprocessing(tmp_path):
+    from _epw import BUNDLED_EPW
+    period = dict(mode="time-based", epw_path=str(BUNDLED_EPW), start_month=12, start_day=21, start_hour=10,
+                  end_month=12, end_day=21, end_hour=14)
+    standard = daylight_cube_config(tmp_path, **period)
+    assert stages_to_rerun(standard, daylight_cube_config(tmp_path, time_basis="standard", **period),
+                           {"exporting"}) == []
+    assert stages_to_rerun(standard, daylight_cube_config(tmp_path, time_basis="solar", **period),
+                           {"preprocessing"}) == ["preprocessing"]

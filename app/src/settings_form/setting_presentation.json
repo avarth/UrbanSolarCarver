@@ -41,6 +41,11 @@
       "help": "Angle of north, clockwise from the model's +Y axis. 0 means +Y points north.",
       "step": "settings", "group": "When", "essential": "all", "slider": { "low": 0, "high": 359, "step": 1 }
     },
+    "time_basis": {
+      "label": "Clock of the hours", "unit": "choice",
+      "help": "How the hours of the analysis period are read. Standard time: the weather file's local clock, without daylight saving. Solar time: 12:00 is solar noon, when the sun is highest, as solar-fence rules and the Japanese shadow regulation count hours.",
+      "step": "settings", "group": "When", "essential": false, "modes": ["time-based"]
+    },
     "sun_steps_per_hour": {
       "label": "Sun positions per hour", "unit": "per hour",
       "help": "How often the sun is sampled. 12 means every 5 minutes. More is more precise and slower.",

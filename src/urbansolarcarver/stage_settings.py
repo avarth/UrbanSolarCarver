@@ -115,6 +115,7 @@ class PreprocessingSettings(_StageSettings):
     ray_length: float
     min_altitude: float
     sun_steps_per_hour: int
+    time_basis: str
     north_deg: float
     dew_point_celsius: float
     bliss_k: float

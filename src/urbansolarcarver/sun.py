@@ -1,9 +1,11 @@
 """
 Sun direction vectors for UrbanSolarCarver.
 
-``get_sun_vectors(epw_file, date_list, min_altitude, device, north_deg)``
-reads the site location from an EnergyPlus weather (EPW) file, computes
-the sun position for each Ladybug ``DateTime`` with a Ladybug ``Sunpath``,
+``get_sun_vectors(epw_file, date_list, min_altitude, device, north_deg,
+time_basis)`` reads the site location from an EnergyPlus weather (EPW)
+file, computes the sun position for each Ladybug ``DateTime`` (local
+standard time, or true solar time with ``time_basis="solar"``) with a
+Ladybug ``Sunpath``,
 drops positions at or below ``min_altitude`` degrees, and returns an
 (N, 3) float32 tensor of unit vectors pointing from the model toward the
 sun, in model coordinates.
@@ -59,6 +61,7 @@ def get_sun_vectors(
     min_altitude: float = 5.0,
     device: torch.device = torch.device('cpu'),
     north_deg: float = 0.0,
+    time_basis: str = "standard",
 ) -> torch.Tensor:
     """
     Unit vectors toward the sun at the given times, for times when the sun
@@ -67,14 +70,17 @@ def get_sun_vectors(
     Args:
       epw_file    : Path to the EPW weather file; only its location
                     (latitude, longitude, time zone) is used.
-      date_list   : Iterable of Ladybug DateTime objects, in the EPW's
-                    local standard time.
+      date_list   : Iterable of Ladybug DateTime objects, in the clock
+                    ``time_basis`` names.
       min_altitude: Sun altitude in degrees; times with the sun at or
                     below it are dropped.
       device      : Torch device for the result.
       north_deg   : Model north in degrees clockwise from the +Y axis
                     (USC convention, same as the ``north_deg`` setting).  Sun
                     vectors are returned in model coordinates.
+      time_basis  : "standard": the times are the EPW's local standard
+                    time. "solar": they are true solar time, in which the
+                    sun crosses the meridian at 12:00.
 
     Returns:
       A float32 torch.Tensor of shape (N, 3), N <= len(date_list), one
@@ -83,7 +89,8 @@ def get_sun_vectors(
 
     Raises:
       ValueError: If date_list is not iterable, is empty or holds
-        non-DateTime items, or min_altitude is not a finite number.
+        non-DateTime items, min_altitude is not a finite number, or
+        time_basis is neither "standard" nor "solar".
       FileNotFoundError, IOError: If the EPW file is missing or unreadable.
       RuntimeError: If the sun position calculation fails.
     """
@@ -112,6 +119,12 @@ def get_sun_vectors(
             f"get_sun_vectors: min_altitude must be finite, got {min_altitude}"
         )
 
+    if time_basis not in ("standard", "solar"):
+        raise ValueError(
+            f"get_sun_vectors: time_basis must be 'standard' or 'solar', got {time_basis!r}"
+        )
+    is_solar_time = time_basis == "solar"
+
     # Step 3: Initialize sunpath for this location.
     # USC's north_deg is clockwise from +Y; Ladybug's north_angle is
     # counterclockwise, so negate to convert.
@@ -128,7 +141,7 @@ def get_sun_vectors(
         try:
             sun_data = sunpath_calculator.calculate_sun_from_date_time(
                 date_time,
-                is_solar_time=False  # EPW hours are local standard time, not solar time
+                is_solar_time=is_solar_time,
             )
         except Exception as err:
             raise RuntimeError(

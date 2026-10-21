@@ -7,7 +7,7 @@ import { ANALYSIS_PERIOD_FIELDS } from "./presentation";
 const WEATHER_AND_PERIOD = ["epw_path", ...ANALYSIS_PERIOD_FIELDS];
 
 export const ENGINE_SETTINGS_OF_MODE: Readonly<Record<string, readonly string[]>> = {
-  "time-based": [...WEATHER_AND_PERIOD, "min_altitude", "sun_steps_per_hour"],
+  "time-based": [...WEATHER_AND_PERIOD, "min_altitude", "sun_steps_per_hour", "time_basis"],
   irradiance: WEATHER_AND_PERIOD,
   benefit: [...WEATHER_AND_PERIOD, "balance_temperature", "balance_offset", "include_harm", "simulated_weights_path"],
   daylight: [],

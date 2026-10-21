@@ -121,7 +121,7 @@ def sun_path_for_config(config: UserConfig) -> SunPath:
 
     Empty unless the mode is time-based and the weather file and the period are set. The vectors point
     toward the sun in model coordinates (the stored ``north_deg`` applied). The analysis hours drawn
-    are the engine's own: the times of its analysis period that fall on the day.
+    are the engine's own: the times of its analysis period that fall on the day, in its ``time_basis``.
     """
     period = (config.start_month, config.start_day, config.start_hour, config.end_month, config.end_day, config.end_hour)
     if canonical_mode_name(config.mode) != SUN_PATH_MODE or None in period:
@@ -166,10 +166,13 @@ def _sun_path_of_day(config: UserConfig, month: int, day: int, period_date_times
             day_path = [_laid_on_horizon(after_sunrise[0]), *day_path, _laid_on_horizon(before_sunset[-1])]
 
     period_date_times_of_day = [date_time for date_time in period_date_times if (date_time.month, date_time.day) == (month, day)]
-    period_path = _sun_vectors(config, period_date_times_of_day, min_altitude=config.min_altitude)
+    # The analysis hours and their markers are read in the config's clock; the day's arc is the same in either.
+    period_path = _sun_vectors(config, period_date_times_of_day, min_altitude=config.min_altitude,
+                               time_basis=config.time_basis)
     markers = []
     for hour in sun_marker_hours(config.start_hour, config.end_hour):
-        hour_vectors = _sun_vectors(config, _date_times(month, day, hour * 60), min_altitude=config.min_altitude)
+        hour_vectors = _sun_vectors(config, _date_times(month, day, hour * 60), min_altitude=config.min_altitude,
+                                    time_basis=config.time_basis)
         if hour_vectors:
             markers.append(SunMarker(hour=hour, vector=hour_vectors[0]))
     return SunPathDay(date=f"{month:02d}-{day:02d}", day_path=day_path, period_path=period_path, markers=markers)
@@ -201,8 +204,10 @@ def _date_times_of_minutes(minutes_of_year):
     return [DateTime.from_moy(minute % MINUTES_PER_YEAR) for minute in minutes_of_year]
 
 
-def _sun_vectors(config: UserConfig, date_times, min_altitude: float) -> list[list[float]]:
+def _sun_vectors(config: UserConfig, date_times, min_altitude: float, time_basis: str = "standard") -> list[list[float]]:
     """The sun directions at the times when the sun is above ``min_altitude``, in time order.
+
+    *date_times* are in local standard time, or in true solar time with *time_basis* "solar".
 
     A time with the sun below it is an ordinary outcome here, so the engine's issue about an empty
     result is collected in a throwaway run context instead of being raised as a warning.
@@ -213,7 +218,8 @@ def _sun_vectors(config: UserConfig, date_times, min_altitude: float) -> list[li
     from ..run_context import RunContext, run_context
     from ..sun import get_sun_vectors
     with run_context(RunContext()):
-        vectors = get_sun_vectors(config.epw_path, date_times, min_altitude, torch.device("cpu"), config.north_deg)
+        vectors = get_sun_vectors(config.epw_path, date_times, min_altitude, torch.device("cpu"), config.north_deg,
+                                  time_basis)
     return vectors.tolist()
 
 
