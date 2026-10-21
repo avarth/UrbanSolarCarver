@@ -289,7 +289,7 @@ test("Sun positions per hour says per hour in each choice", () => {
   expect(options.at(-1)).toBe("60 per hour (every minute)");
 });
 
-test("Clock of the hours offers standard and solar time, sends the engine's value and names time_basis in its tooltip", () => {
+test("Time basis offers standard and solar time, sends the engine's value and names time_basis in its tooltip", () => {
   const onChange = vi.fn();
   rendered = renderForTest(<SettingField view={viewOf("settings", "time-based", "time_basis")} form={formFor("time-based")} onChange={onChange} />);
   const select = rendered.container.querySelector("select")!;

@@ -76,7 +76,7 @@ The two clocks differ by the equation of time (between about −14 and +16 minut
 
 So a 10:00-14:00 window read in standard time is up to 39 minutes off a 10:00-14:00 solar-time rule in Athens, and the carved envelope shifts with it. Ladybug computes the sun position in either clock (`is_solar_time`).
 
-`time_basis` is read by `time-based` only. `solar` is refused in `irradiance` and `benefit`: their analysis period selects hourly EPW records, which are in standard time, so reading the period in solar time would pair each hour with the wrong weather record. Modes without an analysis period (`daylight`, `tilted_plane`, `radiative_cooling`) ignore it with the usual "does not use" warning. In the browser UI it is **Clock of the hours** under "More sun settings"; in Grasshopper it is the `solar_time` input of USC Analysis Period.
+`time_basis` is read by `time-based` only. `solar` is refused in `irradiance` and `benefit`: their analysis period selects hourly EPW records, which are in standard time, so reading the period in solar time would pair each hour with the wrong weather record. Modes without an analysis period (`daylight`, `tilted_plane`, `radiative_cooling`) ignore it with the usual "does not use" warning. In the browser UI it is **Time basis** under "More sun settings"; in Grasshopper it is the `solar_time` input of USC Analysis Period.
 
 ```yaml
 mode: time-based
