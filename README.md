@@ -3,10 +3,11 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue.svg)](LICENSE)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.19443737.svg)](https://doi.org/10.5281/zenodo.19443737)
+[![Paper DOI](https://img.shields.io/badge/paper-10.1007%2F978--3--032--34930--9__70-blue.svg)](https://doi.org/10.1007/978-3-032-34930-9_70)
 
 Urban Solar Carver (USC) is a Python library for generating maximum buildable volumes that respect solar access, daylight, and thermal comfort constraints in urban environments. It uses GPU-accelerated voxel carving driven by climate data to produce 3D building envelopes ready for urban planning, design, and architectural applications.
 
-> **Upcoming:** USC will be presented at [ReSBE 2026](https://resbe2026.web.auth.gr/) (ReShaping the Built Environment through Sustainability and Circularity), 20-23 October 2026, Thessaloniki, Greece.
+> **Paper:** USC is presented at [ReSBE 2026](https://resbe2026.web.auth.gr/) (ReShaping the Built Environment through Sustainability and Circularity), 20-23 October 2026, Thessaloniki, Greece. The paper is published open access in Springer's Lecture Notes in Civil Engineering, vol. 905: [doi.org/10.1007/978-3-032-34930-9_70](https://doi.org/10.1007/978-3-032-34930-9_70) ([PDF](docs/publications/Vartholomaios_2026_ReSBE_Urban_Solar_Carver.pdf)).
 
 ![USC pipeline overview](docs/assets/explanation.png)
 
@@ -138,11 +139,26 @@ USC builds on earlier solar form-finding methods (Knowles' solar envelope, iso-s
 
 ## Citation
 
-USC is described in a paper accepted for publication (proceedings in press). Please cite:
+If you use USC, please cite the paper:
 
-> Vartholomaios, A. (in press). *Urban Solar Carver: A GPU-accelerated framework for solar-driven urban form finding.* In L. Bragança, K. Tsikaloudaki, C. Giarma, et al. (Eds.), *ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026* (Lecture Notes in Civil Engineering). Springer.
+> Vartholomaios, A. (2026). Urban Solar Carver: A GPU-Accelerated Framework for Solar-Driven Urban Form Finding. In L. Bragança et al. (Eds.), *ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026* (Lecture Notes in Civil Engineering, vol. 905, pp. 600-607). Springer, Cham. https://doi.org/10.1007/978-3-032-34930-9_70
 
-The DOI will be added once the proceedings are published. To cite the software itself, use the [Zenodo DOI](https://doi.org/10.5281/zenodo.19443737). See [`CITATION.cff`](CITATION.cff) for machine-readable metadata.
+```bibtex
+@inproceedings{vartholomaios2026usc,
+  author    = {Vartholomaios, Aristotelis},
+  title     = {Urban Solar Carver: A GPU-Accelerated Framework for Solar-Driven Urban Form Finding},
+  booktitle = {ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026},
+  editor    = {Bragan{\c{c}}a, Lu{\'i}s and others},
+  series    = {Lecture Notes in Civil Engineering},
+  volume    = {905},
+  pages     = {600--607},
+  publisher = {Springer, Cham},
+  year      = {2026},
+  doi       = {10.1007/978-3-032-34930-9_70}
+}
+```
+
+The paper is open access. A copy is in [`docs/publications/`](docs/publications/Vartholomaios_2026_ReSBE_Urban_Solar_Carver.pdf); it is licensed under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/), not under the AGPL-3.0 that covers the code. To cite the software itself, use the [Zenodo DOI](https://doi.org/10.5281/zenodo.19443737). See [`CITATION.cff`](CITATION.cff) for machine-readable metadata.
 
 ## Built With
 

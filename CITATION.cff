@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-message: "If you use Urban Solar Carver, please cite the paper below (in press). To cite the software itself, use the Zenodo DOI."
+message: "If you use Urban Solar Carver, please cite the paper below. To cite the software itself, use the Zenodo DOI."
 title: "Urban Solar Carver"
 abstract: "GPU-accelerated generation of maximum buildable volumes that respect solar access, daylight, and thermal comfort constraints in urban environments."
 type: software
@@ -22,8 +22,9 @@ identifiers:
     description: "Zenodo DOI for version 0.9.0"
 preferred-citation:
   type: conference-paper
-  title: "Urban Solar Carver: A GPU-accelerated framework for solar-driven urban form finding"
-  status: in-press
+  title: "Urban Solar Carver: A GPU-Accelerated Framework for Solar-Driven Urban Form Finding"
+  doi: 10.1007/978-3-032-34930-9_70
+  url: "https://doi.org/10.1007/978-3-032-34930-9_70"
   authors:
     - family-names: "Vartholomaios"
       given-names: "Aristotelis"
@@ -55,6 +56,9 @@ preferred-citation:
     - family-names: "Cervantes"
       given-names: "Camila"
   publisher:
-    name: "Springer"
+    name: "Springer, Cham"
   year: 2026
-  notes: "Accepted; proceedings in press (Springer, Lecture Notes in Civil Engineering). DOI and final page numbers to be added upon publication."
+  volume: 905
+  start: 600
+  end: 607
+  notes: "Lecture Notes in Civil Engineering, vol. 905. Open access under CC BY-NC-ND 4.0."

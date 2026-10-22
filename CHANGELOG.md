@@ -7,6 +7,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (publication)
+
+- **The ReSBE 2026 paper is published** (Lecture Notes in Civil Engineering,
+  vol. 905, pp. 600-607, https://doi.org/10.1007/978-3-032-34930-9_70).
+  `CITATION.cff`, the README and the documentation home page cite it with its
+  DOI, and the open-access PDF is in `docs/publications/` under its own
+  licence, CC BY-NC-ND 4.0.
+
 ### Added (solar and daylight saving time)
 
 - **`time_basis: standard | daylight_saving | solar`** (default `standard`):

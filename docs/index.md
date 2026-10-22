@@ -43,3 +43,11 @@ Each stage reads the previous stage's manifest, so you can re-run thresholding w
 - **[Project Map](project-map.md)**: every file and directory in the repository
 - **[API Reference](api/index.md)**: function signatures, parameters, and return types (generated from docstrings)
 - **[Changelog](https://github.com/avarth/UrbanSolarCarver/blob/main/CHANGELOG.md)**
+
+## Citation
+
+USC is described in a paper presented at ReSBE 2026 and published open access. If you use USC, please cite:
+
+> Vartholomaios, A. (2026). Urban Solar Carver: A GPU-Accelerated Framework for Solar-Driven Urban Form Finding. In L. Bragança et al. (Eds.), *ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026* (Lecture Notes in Civil Engineering, vol. 905, pp. 600-607). Springer, Cham. [https://doi.org/10.1007/978-3-032-34930-9_70](https://doi.org/10.1007/978-3-032-34930-9_70)
+
+[Download the paper (PDF)](publications/Vartholomaios_2026_ReSBE_Urban_Solar_Carver.pdf). The paper is licensed under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/), not under the AGPL-3.0 that covers the code. To cite the software itself, use the [Zenodo DOI](https://doi.org/10.5281/zenodo.19443737); machine-readable metadata is in [`CITATION.cff`](https://github.com/avarth/UrbanSolarCarver/blob/main/CITATION.cff).

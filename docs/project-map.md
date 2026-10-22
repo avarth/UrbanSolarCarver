@@ -13,6 +13,7 @@ UrbanSolarCarver/
 ├── tests/                  Pytest suite
 ├── grasshopper/            Rhino Grasshopper plugin
 ├── docs/                   MkDocs documentation source
+│   └── publications/       The ReSBE 2026 paper (PDF, CC BY-NC-ND 4.0)
 ├── design/                 Design notes (simulated benefit weights)
 ├── pyproject.toml          Package metadata and dependencies
 ├── setup_env.py            Automated environment setup (GPU detection)
