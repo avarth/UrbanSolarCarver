@@ -141,18 +141,18 @@ USC builds on earlier solar form-finding methods (Knowles' solar envelope, iso-s
 
 If you use USC, please cite the paper:
 
-> Vartholomaios, A. (2026). Urban Solar Carver: A GPU-Accelerated Framework for Solar-Driven Urban Form Finding. In L. Bragança et al. (Eds.), *ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026* (Lecture Notes in Civil Engineering, vol. 905, pp. 600-607). Springer, Cham. https://doi.org/10.1007/978-3-032-34930-9_70
+> Vartholomaios, A. (2026). Urban Solar Carver: A GPU-Accelerated Framework for Solar-Driven Urban Form Finding. In: Bragança, L., Tsikaloudaki, K., Giarma, C., Mateus, R., Kontoleon, K., Askar, R., Salles, A. & Cervantes, C. (Eds.), *ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026 International Conference, Volume 1*. Lecture Notes in Civil Engineering, vol. 905. Springer, pp. 600-607. https://doi.org/10.1007/978-3-032-34930-9_70
 
 ```bibtex
 @inproceedings{vartholomaios2026usc,
   author    = {Vartholomaios, Aristotelis},
   title     = {Urban Solar Carver: A GPU-Accelerated Framework for Solar-Driven Urban Form Finding},
-  booktitle = {ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026},
-  editor    = {Bragan{\c{c}}a, Lu{\'i}s and others},
+  booktitle = {ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026 International Conference, Volume 1},
+  editor    = {Bragan{\c{c}}a, Lu{\'i}s and Tsikaloudaki, Katerina and Giarma, Christina and Mateus, Ricardo and Kontoleon, Karolos and Askar, Rand and Salles, Adriana and Cervantes, Camila},
   series    = {Lecture Notes in Civil Engineering},
   volume    = {905},
   pages     = {600--607},
-  publisher = {Springer, Cham},
+  publisher = {Springer},
   year      = {2026},
   doi       = {10.1007/978-3-032-34930-9_70}
 }
