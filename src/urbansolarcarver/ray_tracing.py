@@ -10,7 +10,9 @@ Rays are traced with the DDA (digital differential analyzer, Amanatides &
 Woo 1987) Warp kernels of :mod:`warp_kernels`, launched here, on CUDA or on
 Warp's CPU backend.  The fused wrappers (:func:`trace_and_score_dda`,
 :func:`trace_and_count_dda`) add each ray's weight or a count of 1
-directly into a per-voxel volume, so no list of hits is stored.  There is
+directly into a per-voxel volume, so no list of hits is stored;
+:func:`trace_point_access_dda` adds each ray's weight to its test point when
+it reaches no occupied voxel.  There is
 no other tracer: when Warp cannot run, the carvers raise
 ``WarpBackendUnavailableError`` (see :func:`warp_kernels.require_dda_backend`).
 
@@ -29,8 +31,8 @@ from .warp_kernels import _warp_available
 if _warp_available:
     import warp as wp
     from .warp_kernels import (
-        _dda_fused_count_kernel, _dda_fused_score_kernel, _dda_fused_score_pw_kernel,
-        _skin_follows_mass_behind_kernel,
+        _dda_first_hit_access_kernel, _dda_fused_count_kernel, _dda_fused_score_kernel,
+        _dda_fused_score_pw_kernel, _skin_follows_mass_behind_kernel,
     )
 
 log = logging.getLogger(__name__)
@@ -190,6 +192,84 @@ def trace_and_score_dda(
             wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
             skin_rule, wp_occ, grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
             wp_scores, wp_weights,
+        ],
+        device=device_str,
+    )
+
+
+def trace_point_access_dda(
+    min_corner: Tuple[float, float, float],
+    scale: float,
+    resolution: int,
+    origins: torch.Tensor,
+    ray_dirs: torch.Tensor,
+    patch_ids: torch.Tensor,
+    patch_weights: torch.Tensor,
+    access: torch.Tensor,
+    ray_length: float,
+    occupancy: torch.Tensor,
+    point_ids: torch.Tensor,
+    point_weights: "torch.Tensor | None" = None,
+    surface_normals: "torch.Tensor | None" = None,
+    skin_occupancy: "torch.Tensor | None" = None,
+) -> None:
+    """Trace rays until the first occupied voxel and add each ray's weight
+    to its sample point's accessible or blocked weight in ``access``.
+
+    The grid and ray arguments are those of :func:`trace_and_score_dda`,
+    including the note on parallel CPU calls; voxels count under the same
+    front-face and skin rules.
+
+    Parameters
+    ----------
+    access : torch.Tensor, shape (2 * num_points,)
+        Flat contiguous float64, modified in place: the accessible weight
+        of each sample point, then the blocked weight of each.
+    occupancy : torch.Tensor, shape (resolution**3,) or (res, res, res)
+        The occupancy grid to evaluate (nonzero = occupied).
+    point_ids : torch.Tensor, shape (R,)
+        Sample-point index per ray, below ``access.numel() // 2``.
+    skin_occupancy : torch.Tensor, optional
+        The max volume the skin rule reads (whether a skin voxel has mass
+        behind it), as in scoring; default *occupancy*.  Pass the max volume
+        when *occupancy* is a carved envelope.
+
+    Raises
+    ------
+    ValueError
+        If ``access`` is not a contiguous float64 tensor of even length.
+    """
+    num_rays = origins.shape[0]
+    if num_rays == 0:
+        return
+    if not access.is_contiguous() or access.dtype != torch.float64 or access.numel() % 2:
+        raise ValueError(
+            "trace_point_access_dda: access must be a contiguous float64 tensor "
+            "of 2 * num_points entries"
+        )
+    device_str = warp_device_name(origins.device)
+    wp_point_ids, wp_normals, front, skin_rule, _ = _surface_args(
+        num_rays, point_ids, surface_normals,
+        occupancy if surface_normals is not None else None,
+        device_str, "trace_point_access_dda")
+    if point_weights is not None:
+        use_pw, wp_point_weights = 1, wp.from_torch(point_weights.contiguous().float())
+    else:
+        use_pw, wp_point_weights = 0, wp.zeros(1, dtype=float, device=device_str)
+
+    wp.launch(
+        _dda_first_hit_access_kernel,
+        dim=num_rays,
+        inputs=[
+            wp.from_torch(origins.contiguous().float(), dtype=wp.vec3),
+            wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3),
+            wp.from_torch(patch_ids.contiguous().int()), wp_point_ids, wp_normals, front, skin_rule,
+            _occupancy_array(occupancy),
+            _occupancy_array(occupancy if skin_occupancy is None else skin_occupancy),
+            wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2])),
+            float(scale / resolution), int(resolution), float(ray_length),
+            wp.from_torch(access, dtype=wp.float64), int(access.numel() // 2),
+            wp.from_torch(patch_weights.contiguous().float()), use_pw, wp_point_weights,
         ],
         device=device_str,
     )

@@ -276,6 +276,129 @@ def _carve_by_counts(voxel_grid, counts) -> torch.Tensor:
     return (voxel_grid.bool() & keep).to(voxel_grid.dtype)
 
 
+class SunRaySet(NamedTuple):
+    """Rays from the sample points toward the sun (:func:`sun_ray_set`)."""
+    origins: torch.Tensor          # (N, 3) ray start points
+    directions: torch.Tensor       # (N, 3) unit vectors toward the sun
+    point_ids: torch.Tensor        # (N,) source sample point per ray
+    surface_normals: torch.Tensor  # (P, 3) float32 normal per sample point
+
+
+def sun_ray_set(device, sample_points, sample_normals, settings: PreprocessingSettings,
+                datetimes) -> "SunRaySet | None":
+    """The rays of time-based carving: from each sample point toward the sun
+    at each of *datetimes* that it faces, on *device*.
+
+    Uses ``epw_path``, ``min_altitude``, ``north_deg`` and ``time_basis``
+    of *settings*.  Returns None when no sun position is above
+    ``min_altitude``.
+    """
+    # Sun directions in model coordinates (rotated by north_deg).
+    sun_dirs = get_sun_vectors(
+        settings.epw_path, datetimes, settings.min_altitude,
+        north_deg=settings.north_deg, time_basis=settings.time_basis,
+    )
+    if isinstance(sun_dirs, torch.Tensor):
+        sun_arr = sun_dirs.clone().detach().to(device)
+    else:
+        sun_arr = torch.as_tensor(sun_dirs, dtype=torch.float32, device=device)
+    if sun_arr.numel() == 0:
+        return None
+    # The 1e-9 guards against division by zero for a zero-length vector. It is
+    # far below float32 precision (~1.2e-7), so unit vectors are unchanged.
+    sun_arr = sun_arr / (sun_arr.norm(dim=1, keepdim=True) + 1e-9)
+
+    normals_np = (sample_normals.detach().cpu().numpy()
+                  if isinstance(sample_normals, torch.Tensor) else np.asarray(sample_normals))
+    points_np = (sample_points.detach().cpu().numpy()
+                 if isinstance(sample_points, torch.Tensor) else np.asarray(sample_points))
+    origins, directions, point_idx = generate_sun_rays(
+        points_np, normals_np, sun_arr.cpu().numpy(), device,
+        return_point_idx=True,
+    )
+    surface_normals = torch.as_tensor(normals_np, dtype=torch.float32, device=device)
+    return SunRaySet(origins, directions, point_idx, surface_normals)
+
+
+class SkyPatchRaySet(NamedTuple):
+    """Rays and weights of the sky-patch modes (:func:`sky_patch_ray_set`)."""
+    origins: torch.Tensor                    # (N, 3) ray start points
+    directions: torch.Tensor                 # (N, 3) unit vectors to patch centres
+    patch_ids: torch.Tensor                  # (N,) sky patch per ray
+    point_ids: torch.Tensor                  # (N,) int32 source sample point per ray
+    surface_normals: torch.Tensor            # (P, 3) float32 normal per sample point
+    point_weights: "torch.Tensor | None"     # (P,) edge_taper weight per sample point, or None
+    patch_weights: torch.Tensor              # (145,) weight per sky patch for the mode
+
+
+def sky_patch_ray_set(device, sample_points, sample_normals, settings: PreprocessingSettings,
+                      hoys, point_weights=None) -> SkyPatchRaySet:
+    """The rays and weights of the sky-patch modes, on *device*.
+
+    One ray from each sample point toward every Tregenza patch on the
+    outward side of its normal; rays of points whose *point_weights*
+    (edge_taper) entry is 0 are dropped.  The patch weights are those of
+    ``settings.mode`` over the hours *hoys*.
+
+    Raises
+    ------
+    ValueError
+        If *point_weights* does not have one entry per sample point.
+    """
+    # --- 1) Sky patch directions ------------------------------------------
+    sky_dirs = fetch_tregenza_patch_directions(device)  # (P, 3) unit vectors to patch centres
+
+    # --- 2) Ray generation ------------------------------------------------
+    # point_idx maps each ray back to its source sample point, for the
+    # behind-surface test and the per-point design weights (edge_taper).
+    ray_origins, ray_directions, patch_ids, point_idx = (
+        generate_sky_patch_rays(
+            sample_points,
+            sample_normals,
+            sky_dirs,
+            device=device
+        )
+    )
+    surface_normals = torch.as_tensor(sample_normals, dtype=torch.float32, device=device)
+
+    # --- 2b) Per-point design weights (edge_taper) -------------------------
+    # Fold sample-point weights into per-ray weighting; rays from
+    # zero-weight points contribute nothing, so drop them before tracing.
+    pw_t = None
+    if point_weights is not None:
+        pw_t = torch.as_tensor(point_weights, dtype=torch.float32, device=device)
+        n_pts = sample_points.shape[0]
+        if pw_t.numel() != n_pts:
+            raise ValueError(
+                f"carve_with_sky_patch_rays: point_weights length "
+                f"{pw_t.numel()} does not match sample_points ({n_pts})"
+            )
+        keep = pw_t[point_idx] > 0.0
+        if not bool(keep.all()):
+            ray_origins = ray_origins[keep]
+            ray_directions = ray_directions[keep]
+            patch_ids = patch_ids[keep]
+            point_idx = point_idx[keep]
+
+    # --- 3) Patch weights: one value per sky patch for the chosen mode -----
+    patch_weights = get_weights(
+        mode=settings.mode,
+        device=device,
+        epw_file=settings.epw_path,
+        hoys=hoys,
+        dew_point_celsius=settings.dew_point_celsius,
+        bliss_k=settings.bliss_k,
+        balance_temperature=settings.balance_temperature,
+        balance_offset=settings.balance_offset,
+        north_deg=settings.north_deg,
+        min_sky_elevation_deg=settings.min_sky_elevation_deg,
+        include_harm=settings.include_harm,
+        simulated_weights_path=settings.simulated_weights_path,
+    )
+    return SkyPatchRaySet(ray_origins, ray_directions, patch_ids, point_idx.to(torch.int32),
+                          surface_normals, pw_t, patch_weights)
+
+
 def carve_with_sun_rays(
     voxel_grid,
     grid_origin,
@@ -356,16 +479,8 @@ def carve_with_sun_rays(
     _validate_cubic_resolution(grid_resolution, "carve_with_sun_rays")
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
 
-    # Sun directions in model coordinates (rotated by north_deg).
-    sun_dirs = get_sun_vectors(
-        settings.epw_path, datetimes, settings.min_altitude,
-        north_deg=settings.north_deg, time_basis=settings.time_basis,
-    )
-    if isinstance(sun_dirs, torch.Tensor):
-        sun_arr = sun_dirs.clone().detach().to(voxel_grid.device)
-    else:
-        sun_arr = torch.as_tensor(sun_dirs, dtype=torch.float32, device=voxel_grid.device)
-    if sun_arr.numel() == 0:
+    rays = sun_ray_set(voxel_grid.device, sample_points, sample_normals, settings, datetimes)
+    if rays is None:
         report_issue(
             "no_sun_vectors",
             "carve_with_sun_rays: no sun vectors above min_altitude; "
@@ -375,19 +490,7 @@ def carve_with_sun_rays(
         if return_counts:
             return voxel_grid.clone(), empty, empty, np.zeros(voxel_grid.numel(), dtype=np.int32)
         return voxel_grid.clone(), empty, empty
-    # The 1e-9 guards against division by zero for a zero-length vector. It is
-    # far below float32 precision (~1.2e-7), so unit vectors are unchanged.
-    sun_arr = sun_arr / (sun_arr.norm(dim=1, keepdim=True) + 1e-9)
-
-    normals_np = (sample_normals.detach().cpu().numpy()
-                  if isinstance(sample_normals, torch.Tensor) else np.asarray(sample_normals))
-    points_np = (sample_points.detach().cpu().numpy()
-                 if isinstance(sample_points, torch.Tensor) else np.asarray(sample_points))
-    origins, directions, point_idx = generate_sun_rays(
-        points_np, normals_np, sun_arr.cpu().numpy(), voxel_grid.device,
-        return_point_idx=True,
-    )
-    surface_normals = torch.as_tensor(normals_np, dtype=torch.float32, device=voxel_grid.device)
+    origins, directions, point_idx, surface_normals = rays
     ray_origins = origins.cpu().numpy() if return_rays else None
     ray_directions = directions.cpu().numpy() if return_rays else None
 
@@ -504,60 +607,13 @@ def carve_with_sky_patch_rays(
     require_dda_backend(device)
     _validate_cubic_resolution(grid_resolution, 'carve_with_sky_patch_rays')
 
-    # --- 1) Sky patch directions ------------------------------------------
-    sky_dirs = fetch_tregenza_patch_directions(device)  # (P, 3) unit vectors to patch centres
-
-    # --- 2) Ray generation ------------------------------------------------
-    # point_idx maps each ray back to its source sample point, for the
-    # behind-surface test and the per-point design weights (edge_taper).
-    ray_origins, ray_directions, patch_ids, point_idx = (
-        generate_sky_patch_rays(
-            sample_points,
-            sample_normals,
-            sky_dirs,
-            device=device
-        )
-    )
-    surface_normals = torch.as_tensor(sample_normals, dtype=torch.float32, device=device)
+    # --- 1-3) Rays, per-point design weights and patch weights ------------
+    rays = sky_patch_ray_set(device, sample_points, sample_normals, settings, hoys, point_weights)
+    ray_origins, ray_directions, patch_ids, ray_point_ids = (
+        rays.origins, rays.directions, rays.patch_ids, rays.point_ids)
+    surface_normals, pw_t, patch_weights = rays.surface_normals, rays.point_weights, rays.patch_weights
     occupancy = _occupancy_flat(voxel_grid)
-
-    # --- 2b) Per-point design weights (edge_taper) -------------------------
-    # Fold sample-point weights into per-ray weighting; rays from
-    # zero-weight points contribute nothing, so drop them before tracing.
-    pw_t = None
-    if point_weights is not None:
-        pw_t = torch.as_tensor(point_weights, dtype=torch.float32, device=device)
-        n_pts = sample_points.shape[0]
-        if pw_t.numel() != n_pts:
-            raise ValueError(
-                f"carve_with_sky_patch_rays: point_weights length "
-                f"{pw_t.numel()} does not match sample_points ({n_pts})"
-            )
-        keep = pw_t[point_idx] > 0.0
-        if not bool(keep.all()):
-            ray_origins = ray_origins[keep]
-            ray_directions = ray_directions[keep]
-            patch_ids = patch_ids[keep]
-            point_idx = point_idx[keep]
-    ray_point_ids = point_idx.to(torch.int32)
-
     total_rays = ray_origins.size(0)  # after facing and zero-weight filtering
-
-    # --- 3) Patch weights: one value per sky patch for the chosen mode -----
-    patch_weights = get_weights(
-        mode=settings.mode,
-        device=device,
-        epw_file=settings.epw_path,
-        hoys=hoys,
-        dew_point_celsius=settings.dew_point_celsius,
-        bliss_k=settings.bliss_k,
-        balance_temperature=settings.balance_temperature,
-        balance_offset=settings.balance_offset,
-        north_deg=settings.north_deg,
-        min_sky_elevation_deg=settings.min_sky_elevation_deg,
-        include_harm=settings.include_harm,
-        simulated_weights_path=settings.simulated_weights_path,
-    )
 
     # --- 4) Initialize score accumulation ---------------------------------
     num_voxels = voxel_grid.numel()

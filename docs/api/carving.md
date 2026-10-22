@@ -8,7 +8,15 @@ The carving module implements the three geometric strategies used to remove voxe
 
 All three take a voxel grid and surface sample points with normals. Sky-patch carving returns per-voxel weighted scores; sun-ray and plane carving return a carved grid and, on request, per-voxel hit counts. The preprocessing stage stores these as `scores.npy` (for `time-based`, the counts are converted to m²·h), and the thresholding stage turns them into a binary carving mask.
 
+`sun_ray_set` and `sky_patch_ray_set` build the rays (and, for the sky patches, the patch and edge_taper weights) that the carvers trace, so the access evaluation below traces the same ones.
+
 ::: urbansolarcarver.carving
+
+## Test point access evaluation
+
+`test_point_access_evaluation` (in `access_evaluation.py`) tells how much sun or sky each test point still receives through an occupancy grid: the uncarved max volume or a carved envelope on the same grid. It traces the mode's preprocessing rays until the first occupied voxel, under the same front-face and skin rules as scoring, and returns per test point `test_point_accessible_weight` (rays that reach no occupied voxel) and `test_point_blocked_weight` (the others). The weights are in the mode's patch weight unit (kWh/m² for `irradiance` and `benefit`, a share of the sky for `daylight` and `radiative_cooling`, so a horizontal point in the open has about 1), or hours of sun for `time-based`. `tilted_plane` has no rays toward the sky and is refused. For a carved envelope, pass the max volume as `max_volume`: the skin rule reads it, as in scoring, so a facade voxel left standing in front of carved mass still counts as the test point's own wall. It is a Python function only for now, with no CLI command or stage.
+
+::: urbansolarcarver.access_evaluation
 
 ## Column post-processing
 

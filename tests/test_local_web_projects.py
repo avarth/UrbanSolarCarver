@@ -14,6 +14,7 @@ from local_web_test_support import (
 )
 
 from urbansolarcarver.errors import ConfigError
+from urbansolarcarver.pydantic_schemas import UserConfig
 from urbansolarcarver.io import load_mesh
 from urbansolarcarver.run_context import RunContext, run_context
 from urbansolarcarver.surface_sampling import discretize_surface_with_normals
@@ -554,6 +555,21 @@ def test_a_stored_grid_step_is_dropped_so_the_engine_samples_at_half_the_voxel_s
     reply = store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 2.0, "grid_step": 0.5})
     assert "grid_step" not in reply.settings
     assert "grid_step" not in yaml.safe_load(config_path.read_text(encoding="utf-8"))
+
+
+def test_a_stored_score_rule_is_dropped_and_the_project_still_loads(tmp_path, recwarn):
+    """The score rule was removed (scores are always summed): an earlier version stored "summed" when it was chosen. It is
+    left out when the settings are read and written, so the project loads and the next save writes the file without it."""
+    store = ProjectStore(tmp_path); store.create("p", "daylight")
+    config_path = tmp_path / "p" / "config.yaml"
+    stored = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    config_path.write_text(yaml.safe_dump({**stored, "score_rule": "summed"}), encoding="utf-8")
+    assert "score_rule" not in store.read_settings("p") and "score_rule" not in store.read_stored_config("p")
+    assert "score_rule" not in UserConfig.model_fields and store.load_project_config("p").mode == "daylight"
+    reply = store.write_config_from_values("p", {"mode": "daylight", "score_rule": "summed"})
+    assert "score_rule" not in reply.settings
+    assert "score_rule" not in yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert not [warning for warning in recwarn if "score_rule" in str(warning.message)]   # nothing to fix in the browser
 
 
 def test_config_from_settings_builds_the_config_of_a_settings_dict(tmp_path):

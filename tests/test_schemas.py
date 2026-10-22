@@ -400,6 +400,28 @@ class TestDesignConstraintFields:
             _make_config(min_sky_elevation_deg=-5.0)
 
 
+class TestRemovedScoreRule:
+    """score_rule chose between summed and cost-weighted scores; cost-weighted scoring was removed before a release. A
+    config that still sets it loads, with a warning, and scores are summed."""
+
+    @pytest.mark.parametrize("value", ["summed", "cost_weighted"])
+    def test_a_config_with_score_rule_loads_with_a_warning(self, value):
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        with pytest.warns(UrbanSolarCarverWarning, match="score_rule was removed: scores are summed"):
+            config = _make_config(mode="daylight", score_rule=value)
+        assert "score_rule" not in config.model_dump()
+
+    def test_a_yaml_file_with_score_rule_loads(self, tmp_path):
+        import yaml
+        from urbansolarcarver.load_config import load_config
+        from urbansolarcarver.pydantic_schemas import UrbanSolarCarverWarning
+        path = tmp_path / "config.yaml"
+        path.write_text(yaml.safe_dump({"max_volume_path": "v.ply", "test_surface_path": "s.ply", "out_dir": "out",
+                                        "mode": "daylight", "score_rule": "summed"}), encoding="utf-8")
+        with pytest.warns(UrbanSolarCarverWarning, match="score_rule was removed"):
+            assert load_config(str(path)).mode == "daylight"
+
+
 class TestTimeBasis:
     """time_basis: standard by default, daylight_saving or solar for
     time-based, refused where the analysis hours select EPW records

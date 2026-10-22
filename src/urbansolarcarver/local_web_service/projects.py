@@ -48,8 +48,9 @@ EARLIER_MAX_VOLUMES_FOLDER = "inputs/earlier_max_volumes"   # the max volume fil
 # the browser; simulated_weights_path is never set) and the compute device.
 SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir", "device", "simulated_weights_path")
 # Settings the browser does not set, left to the engine's own value: the sample spacing on the test surfaces (half the voxel
-# size). One stored by an earlier version, or sent by an older page, is left out when the settings are read and written.
-SETTINGS_LEFT_TO_THE_ENGINE = ("grid_step",)
+# size), and the score rule, which was removed (an earlier version stored "summed" when it was chosen; scores are always
+# summed). One stored by an earlier version, or sent by an older page, is left out when the settings are read and written.
+SETTINGS_LEFT_TO_THE_ENGINE = ("grid_step", "score_rule")
 SERVICE_PATHS = {
     "max_volume_path": "inputs/joined/max_volume.ply",
     "test_surface_path": "inputs/joined/test_surfaces.ply",

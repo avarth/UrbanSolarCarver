@@ -9,8 +9,9 @@ device (:func:`dda_backend_available`), precompiles the kernels
 * the DDA traversal (digital differential analyzer, Amanatides & Woo
   1987): one thread per ray, stepping from voxel to voxel and visiting
   every voxel the ray crosses exactly once, with fused kernels that add
-  each ray's weight or a count of 1 directly into a per-voxel volume, and
-  the kernel of the skin rule;
+  each ray's weight or a count of 1 directly into a per-voxel volume, the
+  first-hit kernel of the test point access evaluation and the kernel of
+  the skin rule;
 * the parity voxelizer used by :func:`voxelization.voxelize_solid_warp`.
 
 All kernels live in this one module on purpose: Warp compiles a Python
@@ -591,6 +592,66 @@ if _warp_available:
                 flat_idx = s.vx * res_sq + s.vy * resolution + s.vz
                 wp.atomic_add(counts, flat_idx, 1)
             s = _dda_step(s, resolution, max_t)
+
+    @wp.kernel
+    def _dda_first_hit_access_kernel(
+        # Ray data
+        ray_origins: wp.array(dtype=wp.vec3),
+        ray_dirs: wp.array(dtype=wp.vec3),
+        ray_patch_ids: wp.array(dtype=int),
+        ray_point_ids: wp.array(dtype=int),
+        point_normals: wp.array(dtype=wp.vec3),
+        front_test: int,                        # 1 = skip voxels behind the source surface
+        skin_rule: int,                         # 1 = count skin voxels with no mass behind them
+        occupancy: wp.array(dtype=wp.uint8),    # occupancy grid to evaluate [res^3]
+        skin_occupancy: wp.array(dtype=wp.uint8),  # max volume the skin rule reads [res^3]
+        # Grid parameters
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        max_t: float,
+        # Output (modified in place via atomic_add)
+        access: wp.array(dtype=wp.float64),     # [num_points] accessible, then [num_points] blocked
+        num_points: int,
+        patch_weights: wp.array(dtype=float),   # weight per patch [num_patches]
+        use_point_weights: int,                 # 1 = multiply by point_weights (edge_taper)
+        point_weights: wp.array(dtype=float),   # weight per sample point (placeholder otherwise)
+    ):
+        """Trace one ray per thread until the first occupied voxel it visits
+        and add its weight to its point's blocked weight, or, when it visits
+        none, to its point's accessible weight.
+
+        Voxels count under the same front-face and skin rules as in the
+        scoring kernels, so a point's own skin does not block it.  The skin
+        rule reads *skin_occupancy*, the max volume, as scoring does: on a
+        carved grid, a facade voxel kept in front of carved mass is still
+        the point's own wall, not an obstruction.  The sums
+        are float64: a point's total is hundreds of rays, and float32 atomic
+        sums in varying order would differ by more than small carves change it.
+        """
+        tid = wp.tid()
+        pt = ray_point_ids[tid]
+        w = patch_weights[ray_patch_ids[tid]]
+        if use_point_weights == 1:
+            w = w * point_weights[pt]
+        o = ray_origins[tid]
+        n = wp.vec3(0.0, 0.0, 0.0)
+        if front_test == 1:  # the normals array is a 1-element placeholder otherwise
+            n = point_normals[pt]
+        res_sq = resolution * resolution
+        s = _dda_init(o, ray_dirs[tid], grid_origin, cell_size, resolution, max_t)
+        max_steps = 3 * resolution
+        for _step in range(max_steps):
+            if s.active == 0:
+                break
+            if occupancy[s.vx * res_sq + s.vy * resolution + s.vz] != wp.uint8(0):
+                if (front_test == 0 or _in_front(s, grid_origin, cell_size, o, n) == 1
+                        or _skin_without_mass_behind(s, grid_origin, cell_size, resolution,
+                                                     o, n, skin_rule, skin_occupancy) == 1):
+                    wp.atomic_add(access, num_points + pt, wp.float64(w))
+                    return
+            s = _dda_step(s, resolution, max_t)
+        wp.atomic_add(access, pt, wp.float64(w))
 
     @wp.kernel
     def _skin_follows_mass_behind_kernel(

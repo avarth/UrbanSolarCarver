@@ -249,6 +249,23 @@ class UserConfig(BaseModel):
     def _expand_analysis_period(cls, data):
         return expand_analysis_period(data)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_removed_settings(cls, data):
+        """Drop a setting that was removed, with a warning, so configs that still set it load.
+
+        score_rule chose between summed and cost-weighted scores; cost-weighted scoring was removed before a release,
+        but configs written meanwhile (the browser UI stored ``score_rule: summed``) may hold it. Scores are summed.
+        """
+        if isinstance(data, dict) and "score_rule" in data:
+            data = {key: value for key, value in data.items() if key != "score_rule"}
+            report_issue(
+                "setting_removed",
+                "score_rule was removed: scores are summed (each blocked ray adds its weight to every voxel it "
+                "crosses); the setting is ignored",
+            )
+        return data
+
     # file paths
     max_volume_path: str = Field(..., description="Path to the maximum volume mesh (PLY)")
     test_surface_path: str = Field(..., description="Path to the insolation sampling surface mesh (PLY)")

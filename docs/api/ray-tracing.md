@@ -6,6 +6,7 @@ Ray generation and voxel traversal for the carving pipeline, in two modules. The
 
 - **`trace_and_score_dda`**: traces a batch of rays and adds each ray's weight to every voxel it crosses (weighted modes). Runs on CUDA or on Warp's CPU backend.
 - **`trace_and_count_dda`**: the same traversal, adding a count of 1 per ray (`time-based` and `tilted_plane`).
+- **`trace_point_access_dda`**: stops each ray at the first occupied voxel and adds its weight to its test point's accessible or blocked weight (`test_point_access_evaluation`).
 - **`follow_mass_behind_skin_dda`**: the skin rule, which keeps a test surface's skin voxels with the mass behind them.
 - **`generate_sky_patch_rays`** / **`generate_sun_rays`**: expand sample points × directions into flat ray arrays (origins + directions), keeping only directions the surface faces.
 - **`auto_batch_size`**: picks a ray batch size from the free GPU memory, to avoid out-of-memory errors on large scenes.

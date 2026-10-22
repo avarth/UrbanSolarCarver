@@ -7,6 +7,20 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (test point access evaluation)
+
+- **`test_point_access_evaluation`** (Python API, `urbansolarcarver.access_evaluation`):
+  for an occupancy grid, uncarved or carved, the weight of each test point's
+  rays that reach no occupied voxel (`test_point_accessible_weight`) and of
+  those that are blocked (`test_point_blocked_weight`). It traces the rays,
+  weights, front-face and skin rules of preprocessing (sun rays in hours for
+  `time-based`); for a carved envelope, pass the max volume as `max_volume`,
+  which the skin rule reads. See [Carving](docs/api/carving.md).
+- **`benchmarks/access_baseline.py`**: on the bundled examples, the access
+  gained per m³ removed at 5, 10, 25 and 50 % of the max volume, with the
+  default post-processing, as a baseline for scoring and thresholding
+  changes.
+
 ### Added (publication)
 
 - **The ReSBE 2026 paper is published** (Lecture Notes in Civil Engineering,
