@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/simulated-weights/">
       
       
-        <link rel="prev" href="../modes/">
+        <link rel="prev" href="../massing/">
       
       
         <link rel="next" href="../grasshopper/">
@@ -434,6 +434,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../modes/" class="md-nav__link">
         
   
@@ -442,6 +469,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -654,11 +708,40 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
       
         
           
+        
+      
         
       
         
@@ -702,7 +785,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -724,14 +807,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -806,14 +889,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/raytracer/" class="md-nav__link">
+      <a href="../api/ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -834,14 +917,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/grid/" class="md-nav__link">
+      <a href="../api/geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -946,14 +1029,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/usefulness/" class="md-nav__link">
+      <a href="../api/simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -1038,6 +1121,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1227,7 +1338,7 @@
 
 
 <h1 id="simulated-benefit-weights">Simulated Benefit Weights<a class="headerlink" href="#simulated-benefit-weights" title="Permanent link">&para;</a></h1>
-<p>Benefit mode's optional simulated weighting embeds a small building-simulation engine inside USC. Because a simulation engine carries physics assumptions that a geometric tool otherwise would not, this page documents the engine, its origin, how it was validated, what the user supplies, and where its limits are.</p>
+<p>Benefit mode's optional simulated weighting runs a small building simulation inside USC. A simulation brings physical assumptions that the geometric parts of USC do not have, so this page documents the engine, its origin, how it was validated, what the user supplies, and where its limits are.</p>
 <h2 id="the-engine">The engine<a class="headerlink" href="#the-engine" title="Permanent link">&para;</a></h2>
 <p>USC implements the <strong>ISO 13790 Annex C simple hourly method</strong>, commonly called the <strong>5R1C model</strong>: a single thermal zone represented by five conductances and one lumped thermal-mass capacitance.</p>
 <ul>
@@ -1254,19 +1365,19 @@
 </tr>
 </tbody>
 </table>
-<p>Attributing against the annual totals is what captures <strong>thermal lag</strong>: a noon gain stored in the mass and released into the cold evening still earns heating credit. All 17,521 perturbed year-simulations run as one vectorized NumPy batch, in seconds.</p>
+<p>Attributing against the annual totals captures <strong>thermal lag</strong>: a noon gain stored in the mass and released into the cold evening still earns heating credit. All 17,521 year-simulations (the base run plus two per hour) run as one vectorized NumPy batch, in seconds.</p>
 <h2 id="origin-and-validation">Origin and validation<a class="headerlink" href="#origin-and-validation" title="Permanent link">&para;</a></h2>
-<p>The engine is an <strong>independent implementation</strong>, written directly from the ISO 13790 Annex C equation set in pure NumPy (<code>urbansolarcarver/usefulness.py</code>, ~450 lines). It is <strong>not</strong> a fork, port, or adaptation of an existing simulator.</p>
+<p>The engine is an <strong>independent implementation</strong>, written directly from the ISO 13790 Annex C equation set in NumPy (<code>urbansolarcarver/simulated_weights.py</code>). It is <strong>not</strong> a fork, port, or adaptation of an existing simulator.</p>
 <p>It is <strong>cross-validated against <a href="https://github.com/architecture-building-systems/RC_BuildingSimulator">RC_BuildingSimulator</a></strong>, the ETH Zurich Architecture &amp; Building Systems group's MIT-licensed implementation of the same annex (Jayathissa et al., "Optimising building net energy demand with dynamic BIPV shading", <em>Applied Energy</em> 202, 2017). The validation setup:</p>
 <ul>
 <li><strong>Three archetype scenarios</strong>: medium office, heavy masonry, light insulated.</li>
 <li><strong>Weather</strong>: the bundled Golden, CO TMY3 EPW (dry-bulb direct; transmitted solar from Ladybug's directional irradiance on each scenario's glazing, g = 0.6).</li>
 <li><strong>Compared quantities</strong>: annual heating and cooling demand totals (agreement to roughly 1 Wh/year, relative tolerance 1e-6), mean annual air temperature, and hourly air-temperature, mass-temperature, and heating/cooling-demand values at sampled hours across the year.</li>
 <li><strong>Method</strong>: the oracle's own derived conductances are fed into USC's engine directly, so the comparison isolates the hourly recurrence itself rather than parameter-derivation conventions (the two implementations intentionally differ on one of those: RC_BuildingSimulator uses <code>U·A</code> directly for the opaque-envelope conductance, USC applies the standard's serial split).</li>
-<li><strong>Artifacts</strong>: the oracle's driving arrays and reference outputs are committed verbatim in <code>tests/data/oracle_5r1c_reference.json</code>; the regression runs in the test suite on every change (<code>tests/test_usefulness.py</code>), deterministically, with no weather generation at test time.</li>
+<li><strong>Artifacts</strong>: the oracle's driving arrays and reference outputs are committed verbatim in <code>tests/data/oracle_5r1c_reference.json</code>; the regression runs in the test suite on every change (<code>tests/test_simulated_weights.py</code>), deterministically, with no weather generation at test time.</li>
 </ul>
 <p>Beyond the oracle comparison, the engine is checked for <strong>steady-state energy-balance closure</strong> against an independent hand-derived network reduction (constant outdoor temperature, no gains: demand converges to conductance × ΔT with the air node held at setpoint), and for the physical property that heavier mass classes flatten hour-to-hour mass-temperature variation.</p>
-<p>Full derivation notes and the coefficient provenance live in the repository at <code>design/solar-usefulness.md</code>.</p>
+<p>Full derivation notes and the coefficient provenance live in the repository at <code>design/simulated-weights.md</code>.</p>
 <h2 id="what-you-supply-the-archetype">What you supply: the archetype<a class="headerlink" href="#what-you-supply-the-archetype" title="Permanent link">&para;</a></h2>
 <p>The archetype describes a <em>typical</em> building in about ten numbers. Two equivalent forms are accepted (<code>configs/archetype_example.yaml</code> shows both):</p>
 <p><strong>Shoebox form</strong> (areas derived for you):</p>
@@ -1297,30 +1408,59 @@
 </tbody>
 </table>
 <p><strong>Explicit form</strong>: <code>floor_area</code>, <code>volume</code>, <code>area_opaque</code>, <code>area_window</code>, and a <code>windows</code> list of <code>[azimuth_deg, area_m2, g_value]</code>.</p>
-<p><strong>Both forms</strong> additionally take: <code>u_opaque</code>, <code>u_window</code> (W/m²K), <code>ach_vent</code>, <code>ach_infiltration</code> (1/h), <code>heat_recovery</code> (0-1), <code>mass_class</code> (<code>very_light</code> … <code>very_heavy</code>, ISO 13790 Table 12), <code>t_set_heating</code>, <code>t_set_cooling</code> (°C), and internal gains as either a flat <code>internal_gains_w_m2</code> or a 24-value daily profile.</p>
+<p><strong>Both forms</strong> additionally take: <code>u_opaque</code>, <code>u_window</code> (W/m²K), <code>ach_vent</code>, <code>ach_infiltration</code> (1/h), <code>heat_recovery</code> (0-1), <code>mass_class</code> (<code>very_light</code> … <code>very_heavy</code>, ISO 13790 Table 12), <code>t_set_heating</code>, <code>t_set_cooling</code> (°C), and internal gains as either a flat <code>internal_gains_w_m2</code> (W/m², default 5) or a 24-value daily profile <code>internal_gains_profile_w_m2</code>.</p>
+<p><strong>Shading coefficients</strong> (optional, declared multipliers; no device geometry is modelled):</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>shading_permanent</code></td>
+<td>year-round solar transmission multiplier in [0, 1] (fins, context obstructions); 1 = no shading</td>
+</tr>
+<tr>
+<td><code>shading_hot</code></td>
+<td>additional multiplier applied only during <code>hot_months</code> (awnings, tents, seasonal vegetation); stacks with the permanent factor</td>
+</tr>
+<tr>
+<td><code>hot_months</code></td>
+<td>calendar months (1-12) when <code>shading_hot</code> is deployed, e.g. <code>[6, 7, 8, 9]</code></td>
+</tr>
+</tbody>
+</table>
+<p>Each coefficient accepts a scalar (all facades) or a per-facade mapping (<code>{south: 0.8, west: 0.9}</code>); windows are assigned to their nearest cardinal facade. The perturbation attribution is attenuated by the same factors, so the weights describe a marginal joule of <em>exterior</em> solar: a July joule arriving while the awning is out counts for little. The declared coefficients are recorded in the artifact's provenance. Note that a fixed overhang's blocking is concentrated in high-sun hours, so its effect is usually best expressed through <code>shading_hot</code> rather than <code>shading_permanent</code>.</p>
 <p>The shipped example values are deliberately <strong>neutral, with no national defaults</strong>. For real projects, source values from <a href="https://episcope.eu/building-typology/">TABULA</a> (EU building-stock typologies), DOE prototype buildings (US), or your national code tables.</p>
+<p>The <code>usc archetype</code> command builds and validates the file for you, printing the derived floor area, volume, and per-facade window areas so mistakes surface before any simulation runs:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>usc<span class="w"> </span>archetype<span class="w"> </span>-o<span class="w"> </span>my_building.yaml<span class="w"> </span>-s<span class="w"> </span><span class="nv">width</span><span class="o">=</span><span class="m">12</span><span class="w"> </span>-s<span class="w"> </span><span class="nv">wwr_south</span><span class="o">=</span><span class="m">0</span>.4<span class="w"> </span>-s<span class="w"> </span><span class="nv">mass_class</span><span class="o">=</span>heavy
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>usc<span class="w"> </span>archetype<span class="w"> </span>--from<span class="w"> </span>my_building.yaml<span class="w"> </span>-o<span class="w"> </span>variant.yaml<span class="w"> </span>-s<span class="w"> </span><span class="nv">mass_class</span><span class="o">=</span>light<span class="w">   </span><span class="c1"># derive a variant</span>
+</code></pre></div>
+<p>In Grasshopper, <strong>USC_Archetype</strong> assembles the archetype from five family feeder components (USC_ZoneGeometry / Fabric / Ventilation / Operation / Shading, one wire each), feeding <strong>USC_SimulateWeights</strong>, whose output path wires into <strong>USC_BenefitParams</strong>.</p>
 <h2 id="limitations">Limitations<a class="headerlink" href="#limitations" title="Permanent link">&para;</a></h2>
-<p>The weights are a <em>marginal, single-zone, schedule-free</em> physics signal. That is a large step past the binary balance-point rule (thermal lag, mass state, gain saturation), but the following simplifications are declared and deliberate:</p>
+<p>The weights are a <em>marginal, single-zone, schedule-free</em> physical signal. They capture effects the binary balance-point rule cannot (thermal lag, mass state, gain saturation), but the model makes the following simplifications on purpose:</p>
 <ul>
-<li><strong>Single zone, lumped mass</strong>: usefulness is facade-independent within an hour; time-of-day carries the directional signal. Perimeter-zone effects are out of scope for a massing tool.</li>
+<li><strong>Single zone, lumped mass</strong>: the weights are facade-independent within an hour; time-of-day carries the directional signal. Perimeter-zone effects are out of scope for a massing tool.</li>
 <li><strong>Ideal, unlimited conditioning</strong> at the air node; continuous operation, no setback or occupancy schedules.</li>
-<li><strong>Fixed air-change rates</strong>: no night flushing and no operable shading. Consequently the <code>harm</code> channel is <strong>overstated</strong>, since real buildings have cheap defenses against summer sun that they lack for missing winter sun. This is why <code>include_harm</code> is opt-in and marked experimental.</li>
-<li><strong>Flat (or simple daily-profile) internal gains.</strong></li>
+<li><strong>Fixed air-change rates</strong>: no night flushing, and no <em>adaptive</em> shading control. Without a declared <code>shading_hot</code> coefficient the <code>harm</code> channel is <strong>overstated</strong>, since real buildings have cheap defenses against summer sun that they lack for missing winter sun; declaring seasonal shading in the archetype makes harm a defensible estimate instead of a worst case. <code>include_harm</code> remains opt-in.</li>
+<li><strong>Flat internal gains, or one 24-hour profile repeated every day.</strong></li>
 <li><strong>Marginal linearization</strong>: the weights describe one <em>extra</em> watt at the archetype's operating point; window sizes and g-values in the archetype set where gains saturate, and are recorded in the artifact's provenance metadata.</li>
 <li><strong>Unshaded derivation</strong>: the weights are computed for an unshaded archetype while the carve itself creates shading context; a first-order acceptable inconsistency for massing studies.</li>
 <li><strong>TMY weather</strong>; the ISO coupling coefficients carry the standard's residential-European calibration provenance.</li>
 </ul>
 <div class="admonition warning">
 <p class="admonition-title">Treat <code>include_harm</code> as a bracketing scenario</p>
-<p>Because harm is conservatively overstated (no shading, no night ventilation), the benefit-only weighting is the recommended default; enable the harm subtraction to bracket overheating-critical projects, not as the standard mode.</p>
+<p>Without declared seasonal shading, harm is conservatively overstated (no night ventilation is modelled either), so the benefit-only weighting is the recommended default. Declaring <code>shading_hot</code> + <code>hot_months</code> in the archetype makes the harm channel a defensible estimate; even then, enable the subtraction deliberately for overheating-critical projects rather than as the standard mode.</p>
 </div>
 <h2 id="traceability">Traceability<a class="headerlink" href="#traceability" title="Permanent link">&para;</a></h2>
-<p>Every artifact records its full provenance (<code>meta</code>: method, EPW, the complete expanded archetype, perturbation size, timestamp), and every carve that consumes one records that provenance in its preprocessing diagnostics. The sky-weight cache keys on the artifact's <em>content</em>, so regenerating it with a different archetype can never yield stale results. With <code>diagnostic_plots: true</code>, the run also writes a comparison dome quantifying how the simulated weights shifted the sky relative to the simple rule under the same configuration.</p>
+<p>Every artifact records its full provenance (<code>meta</code>: method, EPW, the complete expanded archetype, perturbation size, timestamp), and every carve that consumes one records that provenance in its preprocessing diagnostics. The artifact file is read again on every preprocessing run, so a regenerated artifact takes effect on the next run. With <code>diagnostic_plots: true</code>, the run also writes a comparison dome quantifying how the simulated weights shifted the sky relative to the simple rule under the same configuration.</p>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../modes/#simulated-weights">Carving Modes -- benefit</a> for the user-level workflow</li>
+<li><a href="../modes/#simulated-weights">Carving Modes: benefit</a> for the user-level workflow</li>
 <li>Tutorial 5 (<code>examples/5_benefit_5r1c.ipynb</code>) for an end-to-end walkthrough</li>
-<li><a href="../api/usefulness/">API reference</a> for <code>generate_usefulness()</code>, <code>ZoneParams</code>, and the artifact I/O</li>
+<li><a href="../api/simulated-weights/">API reference</a> for <code>generate_simulated_weights()</code>, <code>ZoneParams</code>, and the artifact I/O</li>
 </ul>
 
 

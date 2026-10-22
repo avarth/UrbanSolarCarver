@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/api/daemon/">
       
       
-        <link rel="prev" href="../session/">
+        <link rel="prev" href="../engine-requests/">
       
       
         <link rel="next" href="../cli/">
@@ -434,6 +434,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -442,6 +469,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -539,6 +593,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -548,6 +629,8 @@
       
         
           
+        
+      
         
       
         
@@ -589,7 +672,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -611,14 +694,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -693,14 +776,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../raytracer/" class="md-nav__link">
+      <a href="../ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -721,14 +804,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../grid/" class="md-nav__link">
+      <a href="../geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -833,14 +916,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../usefulness/" class="md-nav__link">
+      <a href="../simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -942,6 +1025,34 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1003,6 +1114,17 @@
       Table of contents
     </label>
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-transport-over-the-engine-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A transport over the engine requests
+      
+    </span>
+  </a>
+  
+</li>
       
         <li class="md-nav__item">
   <a href="#urbansolarcarver.daemon" class="md-nav__link">
@@ -1103,6 +1225,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#a-transport-over-the-engine-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A transport over the engine requests
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#urbansolarcarver.daemon" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1151,8 +1284,12 @@
 
 
 <h1 id="daemon">Daemon<a class="headerlink" href="#daemon" title="Permanent link">&para;</a></h1>
-<p>A persistent background process that keeps a <code>CarverSession</code> alive for low-latency calls from Grasshopper or other clients. Communicates via Python's <code>multiprocessing.connection</code> over localhost with a random authkey.</p>
-<p>The daemon is started and stopped via the CLI (<code>urbansolarcarver daemon start/stop</code>) or from within Grasshopper using the <code>USC_Session</code> component. It binds to <code>127.0.0.1</code> only and is not network-accessible.</p>
+<p>A persistent background process that keeps a <code>CarverSession</code> (and with it the CUDA context and the compiled Warp kernels) alive for low-latency calls from Grasshopper or other clients. It communicates via Python's <code>multiprocessing.connection</code> over localhost; clients authenticate with a random key stored in <code>~/.urbansolarcarver/.daemon_authkey</code>.</p>
+<p>The daemon is started and stopped via the CLI (<code>urbansolarcarver daemon start/stop</code>, <code>daemon status</code> to check it) or from within Grasshopper using the <code>USC_Session</code> component. It binds to <code>127.0.0.1</code> only and is not reachable from the network.</p>
+<h2 id="a-transport-over-the-engine-requests">A transport over the engine requests<a class="headerlink" href="#a-transport-over-the-engine-requests" title="Permanent link">&para;</a></h2>
+<p>The daemon only carries messages. Each request is a dict with a <code>cmd</code> key; the daemon passes it to <code>engine_requests.answer_engine_message</code>, which runs it and returns the reply dict, with <code>status</code> <code>"ok"</code> or <code>"error"</code>. The commands, their keys and their replies are described in <a href="../engine-requests/">Engine requests</a>. The daemon itself handles one more command, <strong><code>shutdown</code></strong>, which stops it.</p>
+<p>Clients reach it through <code>daemon_client.py</code>, which uses only the standard library: <code>resolve_daemon_authkey</code> reads (or creates) the key and <code>send_daemon_request</code> sends one request, so asking the daemon something does not load torch. Grasshopper keeps its own copy of the key reading in <code>usc_gh.py</code>, because Rhino's Python does not import this package.</p>
+<p>A message the daemon cannot unpickle gets an error reply too, and the daemon keeps running. Failed requests are logged with their traceback in the daemon's console or log file.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -1167,25 +1304,29 @@
 
     <div class="doc doc-contents first">
 
-        <p>CUDA/Warp session persistence server for IPC (Grasshopper, Revit).</p>
-<p>Keeps the GPU context alive across multiple calls from external
-applications.  Starts a single CarverSession and listens for JSON-like
-RPC messages over a multiprocessing Connection, dispatching each request
-to the appropriate pipeline entry point and returning serialised results.</p>
+        <p>Long-running server that keeps a GPU session alive between pipeline calls.</p>
+<p>Used by the Grasshopper components and the CLI <code>--daemon</code> flag.  Starts a
+single CarverSession and listens on a <code>multiprocessing.connection</code>
+Listener for request dicts such as <code>{"cmd": "run", "produce": [...], ...}</code>.
+The daemon is a transport: each request goes to
+:func:<code>urbansolarcarver.engine_requests.answer_engine_message</code>, which runs it
+and returns the reply dict (<code>"status"</code> is <code>"ok"</code> or <code>"error"</code>) that is
+sent back.  Only <code>shutdown</code> is handled here, since it stops the transport.</p>
 
 
 <details class="security-assumptions" open>
   <summary>Security assumptions</summary>
   <ul>
-<li><strong>Localhost only</strong> — the daemon binds exclusively to the loopback
-  interface. Non-loopback addresses are rejected at startup.</li>
-<li><strong>Authkey</strong> — a random 32-byte token is generated on first start and
-  stored in <code>.daemon_authkey</code>. Clients must present this key.</li>
-<li><strong>Pickle IPC</strong> — <code>multiprocessing.connection</code> uses pickle internally.
+<li><strong>Localhost only</strong>: the daemon binds to the loopback interface.
+  Host names that do not resolve to 127.0.0.1 or ::1 are rejected at startup.</li>
+<li><strong>Authkey</strong>: 32 random bytes, stored as 64 hex characters in
+  <code>~/.urbansolarcarver/.daemon_authkey</code>, are generated on first use.
+  Clients must present this key.</li>
+<li><strong>Pickle IPC</strong>: <code>multiprocessing.connection</code> uses pickle internally.
   Any process that holds the authkey can execute arbitrary code in the
   daemon's context.  This is acceptable because both endpoints run on the
   same machine under the same user account.</li>
-<li><strong>Not designed for multi-tenant or server deployment.</strong> Do not expose
+<li><strong>Not designed for multi-user or server deployment.</strong> Do not expose
   the daemon port to a network.</li>
 </ul>
 </details>
@@ -1220,15 +1361,11 @@ to the appropriate pipeline entry point and returning serialised results.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Start the persistent RPC listener for CUDA/Warp session reuse.</p>
-<p>Binds a multiprocessing.connection Listener on (host, port) and dispatches
-incoming commands to the 3-stage pipeline (preprocessing, thresholding,
-exporting) or to session management (shutdown). Each pipeline command
-runs within a CarverSession context that keeps the CUDA context and
-compiled Warp kernels alive across calls, avoiding the ~5s GPU startup
-penalty on each invocation from Grasshopper or Revit.</p>
-<p>The session's tensor cache is invalidated between runs (bump()) but
-kernels persist for the lifetime of the daemon process.</p>
+        <p>Serve pipeline requests from Grasshopper and the CLI until "shutdown".</p>
+<p>Keeps one CarverSession (CUDA context and compiled Warp kernels) alive
+across requests.  The commands are those of :mod:<code>engine_requests</code>, plus
+<code>shutdown</code>.  Requests are handled one at a time; a failing request
+becomes an error reply and the server keeps running.</p>
 
 
     </div>

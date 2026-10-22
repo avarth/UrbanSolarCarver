@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/api/sky-patches/">
       
       
-        <link rel="prev" href="../grid/">
+        <link rel="prev" href="../geometry/">
       
       
         <link rel="next" href="../sun/">
@@ -434,6 +434,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -442,6 +469,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -539,6 +593,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -548,6 +629,8 @@
       
         
           
+        
+      
         
       
         
@@ -589,7 +672,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -611,14 +694,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -693,14 +776,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../raytracer/" class="md-nav__link">
+      <a href="../ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -721,14 +804,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../grid/" class="md-nav__link">
+      <a href="../geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -825,6 +908,17 @@
     <span class="md-ellipsis">
       
         fetch_tregenza_patch_directions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.tregenza_solid_angles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tregenza_solid_angles
       
     </span>
   </a>
@@ -941,14 +1035,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../usefulness/" class="md-nav__link">
+      <a href="../simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -1033,6 +1127,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1159,6 +1281,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.tregenza_solid_angles" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tregenza_solid_angles
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_solid_angles" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1217,11 +1350,11 @@
 
 
 <h1 id="sky-patches">Sky Patches<a class="headerlink" href="#sky-patches" title="Permanent link">&para;</a></h1>
-<p>Implements the Tregenza hemisphere subdivision (145 patches) used by all weighted carving modes. Each patch represents a solid-angle region of the sky dome; the scoring module assigns a weight to each patch depending on the analysis mode.</p>
+<p>Implements the Tregenza hemisphere subdivision (145 patches) used by all weighted carving modes. Each patch represents a solid-angle region of the sky dome; the weighting functions assign a weight to each patch depending on the analysis mode.</p>
 <ul>
-<li><strong>Tregenza geometry</strong> -- 145 direction vectors and their solid angles, following the standard subdivision used in climate-based daylight modelling.</li>
-<li><strong>EPW-based weights</strong> (<code>compute_EPW_based_weights</code>) -- aggregates hourly direct and diffuse irradiance from an EPW weather file onto each patch using the Perez all-weather sky model. Supports filtering by heating-benefit hours (outdoor temperature below balance point) and CIE overcast luminance.</li>
-<li><strong>Radiative cooling weights</strong> (<code>compute_radiative_cooling_weights</code>) -- models long-wave sky emissivity per patch using the Martin-Berdahl clear-sky model with Bliss angular attenuation.</li>
+<li><strong>Tregenza geometry</strong>: 145 direction vectors and their solid angles, following the standard subdivision used in climate-based daylight modelling.</li>
+<li><strong>EPW-based weights</strong> (<code>compute_EPW_based_weights</code>): for <code>irradiance</code> and <code>benefit</code>, builds a cumulative sky matrix of direct and diffuse irradiance from an EPW weather file with the Perez all-weather sky model. Benefit keeps only hours with outdoor temperature below the balance point, or scales each hour by simulated weights. For <code>daylight</code>, returns the CIE overcast luminance distribution without reading an EPW.</li>
+<li><strong>Radiative cooling weights</strong> (<code>compute_radiative_cooling_weights</code>): long-wave cooling potential per patch from the Martin-Berdahl clear-sky emissivity with Bliss angular attenuation.</li>
 </ul>
 
 
@@ -1239,7 +1372,7 @@
 
         <p>UrbanSolarCarver Sky Patch Weighting Module</p>
 <p>Generates sky-patch direction vectors, solid angles, and per-patch weight
-distributions for the voxel carving pipeline.</p>
+distributions for the voxel carving pipeline. P = 145 Tregenza patches.</p>
 
 
 <details class="core-functions" open>
@@ -1255,19 +1388,22 @@ distributions for the voxel carving pipeline.</p>
    Returns a length-P tensor of solid angles (steradians) per patch.</p>
 </li>
 <li>
-<p>compute_EPW_based_weights(mode, epw_file, hoys, device, ...) → torch.Tensor
-   Climate-based weights via Ladybug SkyMatrix (Perez all-weather model).
-   Supports modes: irradiance, benefit, daylight.</p>
+<p>compute_EPW_based_weights(mode, epw_path, hoys, device, ...) → torch.Tensor
+   Per-patch weights for the modes time-based (uniform), daylight (CIE
+   overcast sky), irradiance and benefit (climate-based, from a Ladybug
+   SkyMatrix built with the Perez all-weather model; units kWh/m²).</p>
 </li>
 <li>
-<p>compute_radiative_cooling_weights(dew_point, bliss_k, device) → torch.Tensor
-   Theoretical radiative cooling potential per patch (Martin-Berdahl +
-   Bliss angular attenuation).  Assumes horizontal analysis surface.
-Compute_weights yields all the sky-patch coefficients necessary to
-accumulate per-voxel exposure scores. Tregenza vectors and solid angles
-are also available for diagnostics or custom weighting schemes.</p>
+<p>compute_radiative_cooling_weights(dewpoint_celsius, bliss_k, device,
+   min_elevation_deg) → torch.Tensor
+   Theoretical long-wave radiative cooling potential per patch
+   (Martin-Berdahl sky emissivity with Bliss angular variation).
+   Assumes a horizontal analysis surface.</p>
 </li>
 </ol>
+<p>The weights are combined with per-voxel sky-patch visibility to accumulate
+exposure scores. The Tregenza vectors and solid angles are also usable on
+their own for diagnostics or custom weighting schemes.</p>
 </details>
 
 
@@ -1300,12 +1436,37 @@ are also available for diagnostics or custom weighting schemes.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Returns the 145 unit direction vectors of the Tregenza hemisphere
+        <p>Return the 145 unit direction vectors of the Tregenza hemisphere
 subdivision (Tregenza, 1987). The dome divides the sky hemisphere
 into 145 patches of approximately equal solid angle, organized in
-7 altitude rings plus a zenith cap.</p>
-<p>Returns tensor [P, 3] of unit vectors for each Tregenza sky patch.
-Uses ladybug ViewSphere internally.</p>
+7 altitude rings (30, 30, 24, 24, 18, 12 and 6 patches) plus a
+zenith cap.</p>
+<p>Returns a float32 tensor of shape [P, 3] (P = 145) on <code>device</code>, one
+unit vector (x, y, z) per patch centre, with z pointing up (z = cos of
+the zenith angle). Uses Ladybug's ViewSphere; the result is cached
+per device for the session.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.tregenza_solid_angles" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">tregenza_solid_angles</span><span class="p">()</span></code>
+
+<a href="#urbansolarcarver.sky_patches.tregenza_solid_angles" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Solid angle of each of the 145 Tregenza patches in steradians (float64).</p>
+<p>Built from Ladybug's per-band constants rather than its
+<code>ViewSphere.tregenza_solid_angles</code> property, which (ladybug-core
+0.44) caches its result in the Reinhart attribute and so returns the
+Reinhart list once <code>reinhart_solid_angles</code> has been read.</p>
 
 
     </div>
@@ -1323,8 +1484,10 @@ Uses ladybug ViewSphere internally.</p>
 
     <div class="doc doc-contents ">
 
-        <p>Returns tensor [P] of solid angles (in steradians) per tregenza sky patch.
-Uses ladybug viewsphere</p>
+        <p>Return a float32 tensor of shape [P] (P = 145) with the solid angle of
+each Tregenza sky patch in steradians, in the same order as
+:func:<code>fetch_tregenza_patch_directions</code> (see :func:<code>tregenza_solid_angles</code>).
+The result is cached per device for the session.</p>
 
 
     </div>
@@ -1348,34 +1511,40 @@ Tregenza sky patch, given an outdoor dew-point temperature.</p>
 
 <details class="scientific-background" open>
   <summary>Scientific background</summary>
-  <p>• Sky (hemispherical) emissivity, εₛky<br />
-  The clear-sky emissivity in the 8-13 µm thermal-IR window can be
+  <p>• Sky (hemispherical) emissivity, εₛky
+  The clear-sky emissivity, integrated over the whole long-wave
+  (thermal infrared) spectrum and the whole hemisphere, can be
   estimated from near-surface water-vapour content.  Martin &amp; Berdahl
-  (1984) fit a quadratic in relative dew-point x = T_dp / 100 °C
-  to a wide range of radiometer measurements:</p>
+  (1984) fit a quadratic in x = T_dp / 100, with the dew point T_dp
+  in °C, to radiometer measurements of clear skies:</p>
 <div class="highlight"><pre><span></span><code>  εₛky(x) = 0.758 + 0.521 x + 0.625 x²                (Eq. 1)
 </code></pre></div>
 <p>A larger εₛky means the sky behaves more like a blackbody,
-  emitting and absorbing more long-wave radiation and therefore
-  offering less potential cooling for a hot surface.</p>
+  sending more long-wave radiation back to the surface and therefore
+  offering less cooling potential.</p>
 <p>• Directional emissivity (ε_dir)
-  Long-wave exchange also depends on zenith angle θ: the drier,
-  higher-altitude air seen near the zenith is usually "blacker" than
-  the humid boundary layer near the horizon.  Bliss (1961) proposed
-  an exponential attenuation law that relates the hemispherical
-  value in Eq. 1 to a direction-dependent value:</p>
+  Sky emissivity also depends on the zenith angle θ.  Looking up,
+  the line of sight crosses the thinnest layer of atmosphere, so the
+  zenith has the lowest emissivity.  Towards the horizon the path
+  through the humid lower air grows like 1/cos θ and the emissivity
+  approaches 1 (a blackbody).  Bliss (1961) relates the hemispherical
+  value of Eq. 1 to a direction-dependent value:</p>
 <div class="highlight"><pre><span></span><code>  ε_dir(θ) = 1 - (1 - εₛky)^(1 /(k · cos θ))          (Eq. 2)
 </code></pre></div>
-<p>with k ≈ 1.8 for clear nocturnal skies.  The code clamps
-  cos θ to <code>1e-3</code> to avoid division by zero at the horizon.</p>
-<p>• Radiative cooling potential<br />
-  A surface "sees" the sky patch through its solid angle Ω_p.
-  Assuming the surface itself is nearly black in the long-wave,
-  its net radiative heat <em>loss</em> in direction <em>p</em> is proportional to</p>
-<div class="highlight"><pre><span></span><code>  (1 - ε_dir) · Ω_p                                 (Eq. 3)
+<p>with k ≈ 1.8 for clear night skies.  The code clamps cos θ to at
+  least 1e-3 to avoid division by zero at the horizon (the lowest
+  Tregenza patch centre is at 6° elevation, so the clamp does not
+  change the result in practice).</p>
+<p>• Radiative cooling potential
+  Take a horizontal surface that is nearly black in the long wave and
+  at about the air temperature.  Its net long-wave loss towards
+  patch p is proportional to the view factor of the patch times the
+  emissivity deficit of that patch:</p>
+<div class="highlight"><pre><span></span><code>  w_p ∝ (cos θ_p / π) · Ω_p · (1 - ε_dir(θ_p))      (Eq. 3)
 </code></pre></div>
-<p>because (1 - ε_dir) is the fraction of the surface's own emission
-  not returned by the sky (i.e. the deficit in sky emission).</p>
+<p>(cos θ_p / π) · Ω_p is the view factor from the horizontal surface
+  to a small patch of solid angle Ω_p.  (1 - ε_dir) is the part of
+  the surface's own emission that the sky does not return.</p>
 </details>
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1399,7 +1568,8 @@ Tregenza sky patch, given an outdoor dew-point temperature.</p>
             <td>
               <div class="doc-md-description">
                 <p>Outdoor dew-point temperature [°C].  Acts as a proxy for
-absolute humidity in Eq. 1.</p>
+absolute humidity in Eq. 1.  A warning is issued outside
+[-15, 25] °C, the range treated as valid for the fit.</p>
               </div>
             </td>
             <td>
@@ -1415,12 +1585,14 @@ absolute humidity in Eq. 1.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Empirical constant from Bliss (1961) governing angular variation of atmospheric
-emissivity. Typical clear-sky values range 1.5 - 2.0; larger k increases zenith-horizon contrast.</p>
+                <p>Empirical constant k from Bliss (1961) in Eq. 2.  Must be
+positive; 1.8 is typical for clear skies, and values usually lie
+between 1.5 and 2.0.  A larger k lowers the emissivity near the
+zenith, which increases the zenith-to-horizon contrast.</p>
               </div>
             </td>
             <td>
-                  <code>1.8</code>
+                <em>required</em>
             </td>
           </tr>
           <tr class="doc-section-item">
@@ -1448,11 +1620,11 @@ emissivity. Typical clear-sky values range 1.5 - 2.0; larger k increases zenith-
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Design-constraint protection cone: sky patches whose center
+                <p>Design-constraint protection cone: sky patches whose centre
 elevation is below this angle are excluded (weight 0) and the
-remaining weights renormalized.  This is NOT part of the physical
-model — it declares which portion of the sky dome the design
-defends, analogous to obstruction-angle rules in daylight codes.
+remaining weights renormalized.  This is not part of the physical
+model.  It declares which portion of the sky dome the design
+protects, similar to obstruction-angle rules in daylight codes.
 0 (default) keeps the full hemisphere (pure physical model).</p>
               </div>
             </td>
@@ -1475,11 +1647,35 @@ defends, analogous to obstruction-angle rules in daylight codes.
       <tbody>
           <tr class="doc-section-item">
             <td>
-                  <code>torch.Tensor  (length = P sky patches, dtype =float32)</code>
+                  <code>torch.Tensor  (shape [P], P = 145 sky patches, dtype float32)</code>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>cooling weights wᵢ ≥ 0,  Σ wᵢ = 1.</p>
+                <p>Cooling weights wᵢ ≥ 0 with Σ wᵢ = 1.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>bliss_k</code> is not positive, or if <code>min_elevation_deg</code>
+excludes every sky patch.</p>
               </div>
             </td>
           </tr>
@@ -1490,16 +1686,15 @@ defends, analogous to obstruction-angle rules in daylight codes.
 <details class="note" open>
   <summary>Notes</summary>
   <ul>
-<li><strong>Assumes horizontal analysis surface</strong> (flat roof).  The view-factor
-  weighting cos(θ)/π used in Eq. 3 is only correct for an upward-facing
-  horizontal surface.  For tilted or vertical surfaces the angular
-  integration bounds change significantly; applying these weights to
-  non-horizontal surfaces will over-weight the zenith and under-weight
-  low-altitude patches.</li>
+<li><strong>Assumes a horizontal analysis surface</strong> (flat roof).  The view
+  factor cos(θ)/π in Eq. 3 is only correct for an upward-facing
+  horizontal surface.  For tilted or vertical surfaces the cosine is
+  taken to the surface normal instead, so applying these weights to
+  them over-weights the zenith and under-weights low-altitude patches.</li>
 <li>Valid for clear nights; clouds would raise εₛky toward unity and
   flatten the weight distribution.</li>
-<li>Units cancel, so the weights are dimensionless fractions that can
-  multiply any radiative-heat-transfer coefficient in further
+<li>The weights are normalized, dimensionless fractions; they can
+  multiply any radiative heat-transfer quantity in further
   calculations.</li>
 </ul>
 </details>
@@ -1522,23 +1717,24 @@ defends, analogous to obstruction-angle rules in daylight codes.
 
 
 <h3 id="urbansolarcarver.sky_patches.compute_EPW_based_weights" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">compute_EPW_based_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">epw_path</span><span class="p">,</span> <span class="n">hoys</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">include_harm</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">usefulness</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">compute_EPW_based_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">epw_path</span><span class="p">,</span> <span class="n">hoys</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">include_harm</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">simulated_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.sky_patches.compute_EPW_based_weights" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Return a vector of sky-patch weights (length P) derived from
-Energy-Plus Weather (EPW) data or CIE overcast sky (for daylight).
+        <p>Return a vector of sky-patch weights (length P = 145) derived from
+EnergyPlus Weather (EPW) data, or from the CIE overcast sky (daylight)
+or a uniform sky (time-based).
 Each weight expresses the relative importance of the
 corresponding Tregenza sky patch for a chosen metric:</p>
 <div class="highlight"><pre><span></span><code>┌──────────────┬──────────────────────────────────────────────┐
 │ mode         │ physical meaning of the weight wᵢ            │
 ├──────────────┼──────────────────────────────────────────────┤
-│ time-based   │ uniform probability 1/P                      │
+│ time-based   │ uniform weight 1 for every patch             │
 │ daylight     │ CIE overcast luminance Ω·(1+2 cos θ)/3       │
-│ irradiance   │ solar short-wave power (direct+diffuse)      │
+│ irradiance   │ cumulative solar energy (direct+diffuse)     │
 │ benefit      │ net *heating benefit* of solar gains         │
 └──────────────┴──────────────────────────────────────────────┘
 </code></pre></div>
@@ -1548,57 +1744,72 @@ corresponding Tregenza sky patch for a chosen metric:</p>
   <summary>Scientific background</summary>
   <ul>
 <li>
-<p>Sky patch geometry — Tregenza subdivides the hemisphere into
-  145 quasi-equal solid-angle patches.
-  <code>fetch_tregenza_patch_</code> returns Ωᵢ and view vector
-  d̂ᵢ = (lᵢ, mᵢ, nᵢ)*<em> with nᵢ = cos θ</em>.</p>
+<p>Sky patch geometry: Tregenza subdivides the hemisphere into
+  145 patches of nearly equal solid angle.
+  <code>fetch_tregenza_patch_directions</code> returns the unit vectors
+  d̂ᵢ = (xᵢ, yᵢ, zᵢ) with zᵢ = cos θᵢ (θ = zenith angle);
+  <code>fetch_tregenza_patch_solid_angles</code> returns the solid angles Ωᵢ.</p>
 </li>
 <li>
-<p>time-based — Baseline uninformative prior:<br />
-  wᵢ = 1/P. 
-  For time-based carving using traditional time-based solar envelope methods.</p>
+<p>time-based: uninformative baseline, wᵢ = 1 for every patch.
+  Used for carving with traditional time-based solar envelope
+  methods, where every unobstructed sun or sky direction counts
+  equally.</p>
 </li>
 <li>
-<p>daylight — The CIE Standard Overcast Sky (Darula &amp; Kittler 2002)
-  prescribes relative luminance<br />
-  L(θ) ∝ (1 + 2 cos θ)/3.  </p>
+<p>daylight: the CIE Standard Overcast Sky (see Darula &amp; Kittler
+  2002) prescribes a relative luminance L(θ) ∝ (1 + 2 cos θ)/3,
+  three times brighter at the zenith than at the horizon.  The
+  weight is that luminance times the patch solid angle Ωᵢ, divided
+  by its sum over the 145 patches: each weight is the patch's share
+  of the overcast sky, and the weights sum to 1 (as the
+  radiative_cooling ones do).  A sample point whose whole sky is
+  hidden then counts its whole area, so a daylight score is in m² of
+  fully hidden sky.</p>
 </li>
 <li>
-<p>irradiance — 'SkyMatrix.from_epw' (Ladybug Tools) builds a
-  Perez All-Weather sky for every time step, then integrates the
-  selected hours ('hoys') to obtain cumulative short-wave
-  energy per patch:</p>
-<p>wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) [J m⁻²]</p>
+<p>irradiance: 'SkyMatrix.from_epw' (Ladybug Tools) builds a
+  Perez all-weather sky for every hour, then sums the selected
+  hours ('hoys') to obtain the cumulative short-wave energy per
+  patch:</p>
+<p>wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) [kWh m⁻²]</p>
 </li>
 </ul>
-<p>where E_dirᵢₜ is direct beam contribution and E_difᵢₜ
-  diffuse.</p>
+<p>where E_dirᵢₜ is the direct-beam contribution and E_difᵢₜ the
+  diffuse sky contribution of patch i in hour t.</p>
 <ul>
 <li>
-<p>benefit — Heating-benefit filter: only solar gains occurring in
-  hours cold enough to offset heating demand are credited,</p>
+<p>benefit: heating-benefit filter.  Only solar gains in hours cold
+  enough to offset heating demand are credited,</p>
 <p>wᵢ = Σₜ (E_dirᵢₜ + E_difᵢₜ) · H( T_bal - ΔT - Tₐₜ )</p>
 </li>
 </ul>
-<p>with Heaviside switch H.  Implemented by selecting the cold hours
-  from the EPW dry-bulb series and building a plain cumulative
-  irradiance SkyMatrix over exactly those hours, so the formula
-  above IS the implementation (period-stable: warm hours in the
-  analysis period contribute nothing).
+<p>with the Heaviside step H (1 for a positive argument, else 0) and
+  Tₐₜ the outdoor dry-bulb temperature.  The code selects the cold
+  hours from the EPW dry-bulb series and builds a plain cumulative
+  irradiance SkyMatrix over exactly those hours, so the formula above
+  is what is computed.  Warm hours in the analysis period contribute
+  nothing, so a longer period does not dilute the result.
   With <code>include_harm=True</code> (opt-in, experimental) the weights
-  instead reproduce Ladybug's composite radiation-benefit concept:
+  instead follow Ladybug's composite radiation-benefit concept:
   hot-hour (Tₐ &gt; T_bal + ΔT) radiation is subtracted per patch and
   the result clipped at zero,</p>
 <div class="highlight"><pre><span></span><code>  wᵢ = max( Σ_cold E − Σ_hot E , 0 )
 </code></pre></div>
 <p>Results then depend on how much of the warm season the analysis
-  period includes, and a patch's weight erodes only to zero, never
-  below — shading value cannot be a carving force.
+  period includes.  A patch's weight can drop to zero but not below,
+  because a negative weight (the value of shade) cannot be expressed
+  as a carving force.
   'balance_temperature' (T_bal) is the building's free-running
-  balance point — derive project-specific values with the
-  Honeybee/E+ balance-point workflow; 'balance_offset' (ΔT) is the
-  dead-band around it (hours inside the band count for neither
-  side).</p>
+  balance point; derive project-specific values with the
+  Honeybee/EnergyPlus balance-point workflow.  'balance_offset' (ΔT)
+  is the half-width of the dead band around it (hours inside the band
+  count for neither side).
+  With <code>simulated_weights</code> the Heaviside step is replaced by hourly
+  weights in [0, 1] from an ISO 13790 zone model (see
+  :mod:<code>urbansolarcarver.simulated_weights</code>): each hour's irradiance
+  is scaled by benefit[t] (and, with <code>include_harm</code>, harm[t] is
+  subtracted the same way) before the sky matrix is summed.</p>
 </details>
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -1621,7 +1832,8 @@ corresponding Tregenza sky patch for a chosen metric:</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Weighting strategy (see table above).</p>
+                <p>Weighting strategy (see table above).  Case and surrounding
+whitespace are ignored.</p>
               </div>
             </td>
             <td>
@@ -1653,9 +1865,10 @@ corresponding Tregenza sky patch for a chosen metric:</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Hour-of-year indices to sample.  For <em>benefit</em>, a full-year
-period is safe and natural: the balance filter selects the
-beneficial hours by itself.</p>
+                <p>Hour-of-year indices (0 to 8759) to sample.  Required and
+non-empty for <em>irradiance</em> and <em>benefit</em>; ignored otherwise.  For
+<em>benefit</em>, a full-year period is a sensible default: the balance
+filter selects the beneficial hours by itself.</p>
               </div>
             </td>
             <td>
@@ -1687,7 +1900,8 @@ beneficial hours by itself.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Free-running balance-point temperature for the benefit filter.</p>
+                <p>Free-running balance-point temperature T_bal for the benefit
+filter.</p>
               </div>
             </td>
             <td>
@@ -1703,11 +1917,66 @@ beneficial hours by itself.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Dead-band below the balance point.</p>
+                <p>Dead-band half-width ΔT: cold hours are below T_bal - ΔT; with
+<code>include_harm</code>, hot hours are above T_bal + ΔT.</p>
               </div>
             </td>
             <td>
                   <code>2 °C</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>north</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>North direction in degrees clockwise from +Y (USC convention).
+Converted to Ladybug's counterclockwise convention internally.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>include_harm</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Benefit mode only.  Subtract hot-hour radiation per patch and
+clip at zero (experimental, see above).</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>simulated_weights</code>
+            </td>
+            <td>
+                  <code>tuple of two arrays</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Benefit mode only.  <code>(benefit, harm)</code> hourly series of length
+8760 with values in [0, 1] (the first two items returned by
+:func:<code>urbansolarcarver.simulated_weights.read_simulated_weights</code>).
+When given, they replace the balance-point filter and
+<code>balance_temperature</code> / <code>balance_offset</code> are not used.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
             </td>
           </tr>
       </tbody>
@@ -1729,13 +1998,71 @@ beneficial hours by itself.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>Shape (P,), dtype float32, residing on device.
-Weights are non-negative.  Only <code>radiative_cooling</code> normalises
-to Σwᵢ = 1.  Other modes preserve the physical scale returned
-by Ladybug (Wh/m² for irradiance/benefit) or the CIE luminance
-distribution (daylight).  Threshold methods (carve_fraction,
-headtail) are scale-invariant, so the difference does not affect
-carving results.</p>
+                <p>Shape (P,), dtype float32, on <code>device</code>.
+Weights are non-negative.  irradiance and benefit keep the
+physical scale returned by Ladybug (kWh/m²); daylight weights are
+shares of the overcast sky and sum to 1, as the weights of
+:func:<code>compute_radiative_cooling_weights</code> do.  The threshold
+methods (carve_fraction, headtail) are scale-invariant, so the
+scale does not affect their carving results; a numeric cutoff
+depends on it.
+In benefit mode an all-zero vector is returned, with a warning,
+when no hour in the period qualifies.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="TypeError">TypeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>mode</code> is not a non-empty string.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="FileNotFoundError">FileNotFoundError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <em>irradiance</em> or <em>benefit</em> is requested without an existing
+EPW file.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>hoys</code> is empty or outside 0 to 8759 for those modes, or if
+<code>mode</code> is not supported.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RuntimeError">RuntimeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If Ladybug's SkyMatrix does not return P patches.</p>
               </div>
             </td>
           </tr>
@@ -1748,9 +2075,9 @@ carving results.</p>
   <ul>
 <li>The EPW-driven modes assume typical meteorology; rare events
   (e.g. &gt; 99th percentile irradiance) may be under-represented.</li>
-<li>For benefit mode the heating-balance filter is purely
-  temperature-based; construction, occupancy and HVAC control logic are not
-  considered.</li>
+<li>Without <code>simulated_weights</code>, the benefit filter is purely
+  temperature-based; construction, occupancy and HVAC control logic
+  are not considered.</li>
 </ul>
 </details>
 
@@ -1762,7 +2089,7 @@ carving results.</p>
   <em>Solar Energy</em> 44(5): 271-289.</li>
 <li>Darula, S. &amp; Kittler, R. 2002. "CIE general sky standard defining
   luminance distributions." <em>Proceedings eSim</em> 11: 13.</li>
-<li>Ladybug Tools. "SkyMatrix" — cumulative Radiance sky matrix
+<li>Ladybug Tools. "SkyMatrix": cumulative Radiance sky matrix
   (gendaymtx / Perez all-weather).
   https://www.ladybug.tools/ladybug-radiance/docs/</li>
 </ul>

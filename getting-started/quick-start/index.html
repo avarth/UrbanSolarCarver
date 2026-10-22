@@ -525,6 +525,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -533,6 +560,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -632,11 +686,40 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
       
         
           
+        
+      
         
       
         
@@ -680,7 +763,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -702,14 +785,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -784,14 +867,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/raytracer/" class="md-nav__link">
+      <a href="../../api/ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -812,14 +895,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/grid/" class="md-nav__link">
+      <a href="../../api/geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -924,14 +1007,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/usefulness/" class="md-nav__link">
+      <a href="../../api/simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -1016,6 +1099,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1189,7 +1300,7 @@
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">cfg</span> <span class="o">=</span> <span class="n">load_config</span><span class="p">(</span><span class="s2">&quot;config.yaml&quot;</span><span class="p">)</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="n">result</span> <span class="o">=</span> <span class="n">run_pipeline</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="n">out_dir</span><span class="o">=</span><span class="s2">&quot;./outputs&quot;</span><span class="p">)</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Carved mesh: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">export_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Carved mesh: </span><span class="si">{</span><span class="n">result</span><span class="o">.</span><span class="n">exporting</span><span class="o">.</span><span class="n">export_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </code></pre></div>
 <p>Or run stages individually for finer control:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">urbansolarcarver</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_config</span><span class="p">,</span> <span class="n">preprocessing</span><span class="p">,</span> <span class="n">thresholding</span><span class="p">,</span> <span class="n">exporting</span>
@@ -1207,6 +1318,7 @@
 <a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="n">exp</span> <span class="o">=</span> <span class="n">exporting</span><span class="p">(</span><span class="n">thr</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;outputs/exporting&quot;</span><span class="p">))</span>
 </code></pre></div>
 <p>The decomposed workflow lets you re-run thresholding with different parameters without recomputing scores.</p>
+<p>Relative paths inside <code>config.yaml</code> are resolved against the YAML file's folder; the <code>out_dir</code> arguments above are relative to the current directory.</p>
 <h2 id="cli">CLI<a class="headerlink" href="#cli" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Run stages sequentially</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>urbansolarcarver<span class="w"> </span>preprocessing<span class="w"> </span>-c<span class="w"> </span>config.yaml
@@ -1222,17 +1334,17 @@
 <h2 id="jupyter-notebooks">Jupyter Notebooks<a class="headerlink" href="#jupyter-notebooks" title="Permanent link">&para;</a></h2>
 <p>Tutorial notebooks are in <code>examples/</code>:</p>
 <ol>
-<li><strong>Quick start</strong> -- basic pipeline walkthrough</li>
-<li><strong>Solar envelope</strong> -- time-based solar envelope</li>
-<li><strong>Tilted plane &amp; daylight</strong> -- geometric and CIE overcast envelopes</li>
-<li><strong>Advanced</strong> -- chaining modes, post-processing, decomposed pipeline</li>
-<li><strong>Benefit with simulated weights</strong> -- building-simulation-driven hour weighting (ISO 13790 5R1C)</li>
+<li><strong>Quick start</strong>: basic pipeline walkthrough</li>
+<li><strong>Solar envelope</strong>: time-based solar envelope</li>
+<li><strong>Tilted plane &amp; daylight</strong>: geometric and CIE overcast envelopes</li>
+<li><strong>Advanced</strong>: chaining modes (annual irradiance on roofs, then daylight on windows)</li>
+<li><strong>Benefit with simulated weights</strong>: hour weighting from a building simulation (ISO 13790 5R1C)</li>
 </ol>
 <h2 id="input-requirements">Input Requirements<a class="headerlink" href="#input-requirements" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>Max volume mesh</strong>: watertight PLY representing the theoretical maximum buildable volume.</li>
-<li><strong>Test surface mesh</strong>: PLY of planar faces whose solar/daylight access is to be protected.</li>
-<li><strong>EPW weather file</strong>: hourly climate data for the site location (required for all modes except <code>tilted_plane</code>).</li>
+<li><strong>Max volume mesh</strong>: watertight mesh (PLY recommended; any format Trimesh reads) representing the theoretical maximum buildable volume.</li>
+<li><strong>Test surface mesh</strong>: planar faces whose solar/daylight access is to be protected. Each face must be a flat panel.</li>
+<li><strong>EPW weather file</strong>: hourly climate data for the site location (required for <code>time-based</code>, <code>irradiance</code> and <code>benefit</code>; not used by <code>daylight</code>, <code>tilted_plane</code> or <code>radiative_cooling</code>).</li>
 <li>All meshes must share the same coordinate system and units (meters recommended).</li>
 </ul>
 

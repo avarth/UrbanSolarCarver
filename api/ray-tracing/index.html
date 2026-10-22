@@ -1,0 +1,2799 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="GPU-accelerated solar envelope generation for urban design">
+      
+      
+      
+        <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/api/ray-tracing/">
+      
+      
+        <link rel="prev" href="../carving/">
+      
+      
+        <link rel="next" href="../geometry/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Ray Tracing - Urban Solar Carver</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#ray-tracing" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Urban Solar Carver" class="md-header__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Urban Solar Carver
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Ray Tracing
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Urban Solar Carver" class="md-nav__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Urban Solar Carver
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../modes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../grasshopper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grasshopper Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../project-map/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Map
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../carving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ray Tracing
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ray Tracing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ray_tracing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ray_tracing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing--urbansolarcarver-ray-generation-and-voxel-grid-traversal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UrbanSolarCarver: ray generation and voxel grid traversal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.trace_and_score_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_and_score_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.trace_and_count_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_and_count_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.follow_mass_behind_skin_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        follow_mass_behind_skin_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.generate_sky_patch_rays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate_sky_patch_rays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.generate_sun_rays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate_sun_rays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.auto_batch_size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        auto_batch_size
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        warp_kernels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="warp_kernels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels--urbansolarcarver-warp-setup-and-kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UrbanSolarCarver: Warp setup and kernels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.warmup_kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        warmup_kernels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.dda_backend_available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dda_backend_available
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.require_dda_backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        require_dda_backend
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../geometry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sky-patches/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sky Patches
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sun Vectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../daemon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Daemon
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ray_tracing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="ray_tracing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing--urbansolarcarver-ray-generation-and-voxel-grid-traversal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UrbanSolarCarver: ray generation and voxel grid traversal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.trace_and_score_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_and_score_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.trace_and_count_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_and_count_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.follow_mass_behind_skin_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        follow_mass_behind_skin_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.generate_sky_patch_rays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate_sky_patch_rays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.generate_sun_rays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        generate_sun_rays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.auto_batch_size" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        auto_batch_size
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        warp_kernels
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="warp_kernels">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels--urbansolarcarver-warp-setup-and-kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        UrbanSolarCarver: Warp setup and kernels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.warmup_kernels" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        warmup_kernels
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.dda_backend_available" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        dda_backend_available
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.require_dda_backend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        require_dda_backend
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="ray-tracing">Ray Tracing<a class="headerlink" href="#ray-tracing" title="Permanent link">&para;</a></h1>
+<p>Ray generation and voxel traversal for the carving pipeline, in two modules. The main kernels use a DDA (Digital Differential Analyzer) that steps each ray through the voxel grid and adds to a per-voxel volume in a single pass.</p>
+<p><code>ray_tracing.py</code> builds and traces the rays:</p>
+<ul>
+<li><strong><code>trace_and_score_dda</code></strong>: traces a batch of rays and adds each ray's weight to every voxel it crosses (weighted modes). Runs on CUDA or on Warp's CPU backend.</li>
+<li><strong><code>trace_and_count_dda</code></strong>: the same traversal, adding a count of 1 per ray (<code>time-based</code> and <code>tilted_plane</code>).</li>
+<li><strong><code>follow_mass_behind_skin_dda</code></strong>: the skin rule, which keeps a test surface's skin voxels with the mass behind them.</li>
+<li><strong><code>generate_sky_patch_rays</code></strong> / <strong><code>generate_sun_rays</code></strong>: expand sample points × directions into flat ray arrays (origins + directions), keeping only directions the surface faces.</li>
+<li><strong><code>auto_batch_size</code></strong>: picks a ray batch size from the free GPU memory, to avoid out-of-memory errors on large scenes.</li>
+</ul>
+<p><code>warp_kernels.py</code> sets up Warp and holds every Warp kernel of the package (the DDA kernels above and the parity voxelizer that <code>voxelization.voxelize_solid_warp</code> launches), so Warp compiles and caches them as one module:</p>
+<ul>
+<li><strong><code>dda_backend_available</code></strong>: whether the Warp DDA backend can run on a device.</li>
+<li><strong><code>require_dda_backend</code></strong>: raises <code>WarpBackendUnavailableError</code>, naming the reason, when it cannot. Ray tracing has no other backend; every carver calls this first.</li>
+<li><strong><code>warmup_kernels</code></strong>: precompiles the Warp kernels (<code>urbansolarcarver warmup</code>).</li>
+</ul>
+<p>Rays are processed in batches. With <code>ray_batch_size: 0</code> (the default) the batch size comes from <code>auto_batch_size</code>; set a positive value to fix it.</p>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="urbansolarcarver.ray_tracing" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-module"></code>            <code>urbansolarcarver.ray_tracing</code>
+
+
+<a href="#urbansolarcarver.ray_tracing" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <h3 id="urbansolarcarver.ray_tracing--urbansolarcarver-ray-generation-and-voxel-grid-traversal">UrbanSolarCarver: ray generation and voxel grid traversal<a class="headerlink" href="#urbansolarcarver.ray_tracing--urbansolarcarver-ray-generation-and-voxel-grid-traversal" title="Permanent link">&para;</a></h3>
+<p>This module builds rays (sample point to sky patch, or sample point to sun,
+keeping only directions the surface faces) and traces them through the
+voxel grid for the carving pipeline.</p>
+<p>Rays are traced with the DDA (digital differential analyzer, Amanatides &amp;
+Woo 1987) Warp kernels of :mod:<code>warp_kernels</code>, launched here, on CUDA or on
+Warp's CPU backend.  The fused wrappers (:func:<code>trace_and_score_dda</code>,
+:func:<code>trace_and_count_dda</code>) add each ray's weight or a count of 1
+directly into a per-voxel volume, so no list of hits is stored.  There is
+no other tracer: when Warp cannot run, the carvers raise
+<code>WarpBackendUnavailableError</code> (see :func:<code>warp_kernels.require_dda_backend</code>).</p>
+<p>The coordinate conventions are those of :mod:<code>warp_kernels</code>.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.trace_and_score_dda" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_score_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">point_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.trace_and_score_dda" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Trace rays with the Warp DDA kernel and add each ray's weight to every
+voxel it visits, directly into <code>scores</code>.</p>
+<p>Runs on CUDA or the Warp CPU backend.  On CPU, do not let parallel
+calls write into the same <code>scores</code> tensor (see the note above
+<code>_DDAState</code>).</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_corner</code>
+            </td>
+            <td>
+                  <code>tuple of float</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>World-space (x, y, z) of the grid's lower corner.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>scale</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Edge length of the cubic grid in meters.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>resolution</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Voxels per axis.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>origins</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>, 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Ray start points and unit directions.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ray_dirs</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>, 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Ray start points and unit directions.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>patch_ids</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sky patch index per ray.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>patch_weights</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="P">P</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Weight per sky patch.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>scores</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="resolution">resolution</span> ** 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Flat contiguous float32 score volume, modified in place.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ray_length</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Maximum distance traced along each ray, in meters (directions must
+be unit length for this to be a distance).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_ids</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sample-point index per ray; required by <code>point_weights</code> and
+<code>surface_normals</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_weights</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="num_points">num_points</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Weight per sample point in [0, 1] (per-ray weight =
+patch_weight × point_weight; edge_taper design constraint).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>surface_normals</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="num_points">num_points</span>, 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Normal of each ray's source surface.  When given, only voxels that
+lie entirely in front of that surface are scored; voxels behind it
+or crossed by its plane (the surface's own mass and skin) are not.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>occupancy</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="resolution">resolution</span> ** 3) or (<span title="res">res</span>, <span title="res">res</span>, <span title="res">res</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Max volume occupancy (nonzero = occupied); requires
+<code>surface_normals</code>.  When given, a voxel crossed by the source
+surface's plane is scored too if the voxel behind it (see
+:func:<code>follow_mass_behind_skin_dda</code>) is empty or outside the grid:
+the surface's building is then not part of the max volume, so the
+voxel is not its skin.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>scores</code> is not a contiguous float32 tensor (Warp would then
+write into a copy), if <code>point_ids</code> is given with neither
+<code>point_weights</code> nor <code>surface_normals</code>, or if either of those
+is given without <code>point_ids</code>, or if <code>occupancy</code> is given
+without <code>surface_normals</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.trace_and_count_dda" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_count_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">counts</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">point_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.trace_and_count_dda" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Trace rays with the Warp DDA kernel and add 1 to <code>counts</code> for every
+voxel each ray visits, in place.</p>
+<p>The grid and ray arguments are the same as in
+:func:<code>trace_and_score_dda</code>, including the note on parallel CPU calls.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>counts</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="resolution">resolution</span> ** 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Flat contiguous int32 hit-count volume, modified in place.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_ids</code>
+            </td>
+            <td>
+                  <code><span title="optional">optional</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-ray sample-point index and per-point surface normal; when both
+are given, voxels behind the ray's source surface are not counted.
+<code>point_ids</code> alone is accepted and ignored.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>surface_normals</code>
+            </td>
+            <td>
+                  <code><span title="optional">optional</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Per-ray sample-point index and per-point surface normal; when both
+are given, voxels behind the ray's source surface are not counted.
+<code>point_ids</code> alone is accepted and ignored.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>occupancy</code>
+            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Max volume occupancy; skin voxels with nothing behind them are
+counted, as in :func:<code>trace_and_score_dda</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>counts</code> is not a contiguous int32 tensor, or
+<code>surface_normals</code> is given without <code>point_ids</code>, or <code>occupancy</code>
+without <code>surface_normals</code>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.follow_mass_behind_skin_dda" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">follow_mass_behind_skin_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">surface_normals</span><span class="p">,</span> <span class="n">occupancy</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.follow_mass_behind_skin_dda" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Return <em>values</em> with every own-skin voxel raised to the value of the
+voxel behind it.</p>
+<p>A voxel the source surface's plane passes through is that surface's
+skin.  When the skin voxel and the voxel behind it are both occupied,
+the skin belongs to the mass behind the surface: its own rays do not count it, but it must not
+outlast that mass.  So each skin voxel a ray visits takes the maximum
+of its value and the value of the voxel behind it (counts: removed when
+the mass behind is removed; scores: never below the mass behind).</p>
+<p>The voxel behind a skin voxel is found by stepping from the skin
+voxel's centre one cell length at a time against the surface normal,
+up to three steps, until the voxel containing the stepped point lies
+wholly behind the plane.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_corner</code>
+            </td>
+            <td>
+                  <code><span title="typing.Tuple">Tuple</span>[<span title="float">float</span>, <span title="float">float</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_count_dda</code>; pass the same rays.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>scale</code>
+            </td>
+            <td>
+                  <code><span title="typing.Tuple">Tuple</span>[<span title="float">float</span>, <span title="float">float</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_count_dda</code>; pass the same rays.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>resolution</code>
+            </td>
+            <td>
+                  <code><span title="typing.Tuple">Tuple</span>[<span title="float">float</span>, <span title="float">float</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_count_dda</code>; pass the same rays.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>origins</code>
+            </td>
+            <td>
+                  <code><span title="typing.Tuple">Tuple</span>[<span title="float">float</span>, <span title="float">float</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_count_dda</code>; pass the same rays.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ray_dirs</code>
+            </td>
+            <td>
+                  <code><span title="typing.Tuple">Tuple</span>[<span title="float">float</span>, <span title="float">float</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_count_dda</code>; pass the same rays.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>ray_length</code>
+            </td>
+            <td>
+                  <code><span title="typing.Tuple">Tuple</span>[<span title="float">float</span>, <span title="float">float</span>, <span title="float">float</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_count_dda</code>; pass the same rays.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_ids</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sample-point index per ray.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>surface_normals</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="num_points">num_points</span>, 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unit normal of each sample point's surface.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>occupancy</code>
+            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Max volume occupancy, resolution**3 voxels (nonzero = occupied).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>values</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="resolution">resolution</span> ** 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Finished int32 counts or float32 scores; not modified.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A new flat tensor like <em>values</em>.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <em>values</em> is not int32 or float32.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.generate_sky_patch_rays" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">generate_sky_patch_rays</span><span class="p">(</span><span class="n">pts</span><span class="p">,</span> <span class="n">norms</span><span class="p">,</span> <span class="n">patch_dirs</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.generate_sky_patch_rays" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>One ray per (sample point, sky patch) pair whose patch the surface faces.</p>
+<p>A ray is kept only where dot(normal, patch direction) &gt; 0.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>pts</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span>(<span title="P">P</span>, 3)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sample points and their outward unit normals.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>norms</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span>(<span title="P">P</span>, 3)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sample points and their outward unit normals.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>patch_dirs</code>
+            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span>(<span title="V">V</span>, 3)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Unit directions of the sky patches.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Device for the returned tensors.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>origins</code></td>            <td>
+                  <code>(R, 3)      ray start points (the sample points)</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>ray_dirs</code></td>            <td>
+                  <code>(R, 3)     unit ray directions</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>patch_ids</code></td>            <td>
+                  <code>(R,)      sky patch index of each ray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>point_idx</code></td>            <td>
+                  <code>(R,)      sample point index of each ray</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.generate_sun_rays" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">generate_sun_rays</span><span class="p">(</span><span class="n">points_3d</span><span class="p">,</span> <span class="n">point_normals</span><span class="p">,</span> <span class="n">sun_directions</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">return_point_idx</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.generate_sun_rays" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Build one ray per (sample point, sun direction) pair that the surface
+faces, i.e. where dot(normal, sun direction) &gt; 0.</p>
+<p>Args:
+  points_3d:    (P,3) NumPy array of sample points on the surface.
+  point_normals:(P,3) NumPy array of normals at each sample point.
+  sun_directions:(S,3) NumPy array of unit vectors pointing toward the
+                 sun.  They are used as ray directions unchanged, so
+                 they must be unit length for ray_length to be a distance.
+  device:       Torch device for the returned tensors.
+  return_point_idx: also return the source sample-point index per ray.</p>
+<p>Returns:
+  ray_origins:   (R,3) float32 tensor of ray start points.
+  ray_directions:(R,3) float32 tensor of ray direction vectors.
+  point_idx:     (R,) int64 source sample-point index per ray, only when
+                 return_point_idx is True.</p>
+<p>Raises:
+  ValueError: if the arrays are not (N,3) or the normals do not match
+              the points.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.auto_batch_size" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">auto_batch_size</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">vram_fraction</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">fallback</span><span class="o">=</span><span class="mi">300000</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.auto_batch_size" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Choose a ray batch size from the free GPU memory.</p>
+<p>The budget is <code>vram_fraction</code> of free VRAM (video memory).  The fused
+DDA kernels accumulate into the voxel grid and keep no hit lists, so a
+batch only adds its slice of the ray inputs: 96 bytes per ray (see the
+comment in the code).  The result is at least 10,000 and at most
+5,000,000 rays.</p>
+<p>Returns <code>fallback</code> on CPU or if VRAM cannot be queried.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target compute device.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>vram_fraction</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Fraction of free VRAM to budget for ray tracing (default 0.6).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.6</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>fallback</code>
+            </td>
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Batch size when VRAM cannot be queried (default 300K).</p>
+              </div>
+            </td>
+            <td>
+                  <code>300000</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="int">int</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Recommended ray batch size.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="urbansolarcarver.warp_kernels" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-module"></code>            <code>urbansolarcarver.warp_kernels</code>
+
+
+<a href="#urbansolarcarver.warp_kernels" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <h3 id="urbansolarcarver.warp_kernels--urbansolarcarver-warp-setup-and-kernels">UrbanSolarCarver: Warp setup and kernels<a class="headerlink" href="#urbansolarcarver.warp_kernels--urbansolarcarver-warp-setup-and-kernels" title="Permanent link">&para;</a></h3>
+<p>Initializes NVIDIA Warp, tells whether its exact DDA backend can run on a
+device (:func:<code>dda_backend_available</code>), precompiles the kernels
+(:func:<code>warmup_kernels</code>), and defines every Warp kernel of the package:</p>
+<ul>
+<li>the DDA traversal (digital differential analyzer, Amanatides &amp; Woo
+  1987): one thread per ray, stepping from voxel to voxel and visiting
+  every voxel the ray crosses exactly once, with fused kernels that add
+  each ray's weight or a count of 1 directly into a per-voxel volume, and
+  the kernel of the skin rule;</li>
+<li>the parity voxelizer used by :func:<code>voxelization.voxelize_solid_warp</code>.</li>
+</ul>
+<p>All kernels live in this one module on purpose: Warp compiles a Python
+module as one unit and caches it on disk by module, so
+:func:<code>warmup_kernels</code> compiles them all at once.  The kernels exist only
+when Warp imports and initializes (<code>_warp_available</code>).  Their launch
+wrappers are in :mod:<code>ray_tracing</code> and :mod:<code>voxelization</code>.</p>
+
+
+<details class="references" open>
+  <summary>References</summary>
+  <p>Amanatides, J. &amp; Woo, A. (1987). "A Fast Voxel Traversal Algorithm for
+Ray Tracing." Eurographics '87, pp. 3-10.</p>
+</details>
+
+<details class="coordinate-conventions" open>
+  <summary>Coordinate conventions</summary>
+  <ul>
+<li>World to grid:  grid_idx = floor((world_pt - origin) / cell_size)</li>
+<li>Cell size:      cell_size = scale / resolution   (meters per voxel)</li>
+<li>Flat index:     x * resolution**2 + y * resolution + z (row-major, C order)</li>
+<li>floor maps a point to the voxel that contains it; rounding would shift
+  every index by half a voxel.</li>
+</ul>
+</details>
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.warp_kernels.warmup_kernels" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">warmup_kernels</span><span class="p">(</span><span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.warp_kernels.warmup_kernels" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Compile (or load from the on-disk cache) this module's Warp kernels
+for <em>device</em> now instead of on first use.</p>
+<p>Warp compiles all kernels in a module on the first launch.  This costs
+roughly 3-10 s once per machine, device and code version; afterwards
+the compiled binaries load from Warp's disk cache in milliseconds.
+Calling this during installation (<code>setup_env.py</code>), at daemon startup,
+or via <code>usc warmup</code> moves that cost to a moment where the user
+already expects to wait, so the first carving run is not slowed by it.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span> | <span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Target device.  None resolves like <code>cfg.device='auto'</code>:
+CUDA when available, else the Warp CPU backend.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>True if the kernels are ready on the device (compiled or cached);
+False if Warp is unavailable or compilation failed.  When only the
+precompilation failed, the kernels compile on first use instead.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.warp_kernels.dda_backend_available" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">dda_backend_available</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.warp_kernels.dda_backend_available" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>True if the Warp DDA backend can run on <em>device</em>: Warp initialised
+and, for the CPU, Warp's CPU backend can compile kernels.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.warp_kernels.require_dda_backend" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">require_dda_backend</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.warp_kernels.require_dda_backend" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Raise WarpBackendUnavailableError unless the Warp DDA backend can run
+on <em>device</em>.  Ray tracing has no other backend; the error says why
+Warp cannot run and how to repair the installation.</p>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

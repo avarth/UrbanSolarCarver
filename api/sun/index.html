@@ -434,6 +434,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -442,6 +469,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -539,6 +593,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -548,6 +629,8 @@
       
         
           
+        
+      
         
       
         
@@ -589,7 +672,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -611,14 +694,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -693,14 +776,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../raytracer/" class="md-nav__link">
+      <a href="../ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -721,14 +804,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../grid/" class="md-nav__link">
+      <a href="../geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -849,10 +932,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.sun.warm_up" class="md-nav__link">
+  <a href="#urbansolarcarver.sun.get_sun_vectors" class="md-nav__link">
     <span class="md-ellipsis">
       
-        warm_up
+        get_sun_vectors
       
     </span>
   </a>
@@ -860,10 +943,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.sun.get_sun_vectors" class="md-nav__link">
+  <a href="#urbansolarcarver.sun.sample_period" class="md-nav__link">
     <span class="md-ellipsis">
       
-        get_sun_vectors
+        sample_period
       
     </span>
   </a>
@@ -919,14 +1002,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../usefulness/" class="md-nav__link">
+      <a href="../simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -1011,6 +1094,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1126,10 +1237,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.sun.warm_up" class="md-nav__link">
+  <a href="#urbansolarcarver.sun.get_sun_vectors" class="md-nav__link">
     <span class="md-ellipsis">
       
-        warm_up
+        get_sun_vectors
       
     </span>
   </a>
@@ -1137,10 +1248,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#urbansolarcarver.sun.get_sun_vectors" class="md-nav__link">
+  <a href="#urbansolarcarver.sun.sample_period" class="md-nav__link">
     <span class="md-ellipsis">
       
-        get_sun_vectors
+        sample_period
       
     </span>
   </a>
@@ -1175,8 +1286,8 @@
 <h1 id="sun-vectors">Sun Vectors<a class="headerlink" href="#sun-vectors" title="Permanent link">&para;</a></h1>
 <p>Computes solar position vectors for specified dates and times using Ladybug's sunpath model. Used by the <code>time-based</code> carving mode.</p>
 <ul>
-<li><strong><code>get_sun_vectors</code></strong> -- returns unit direction vectors pointing toward the sun for each hour in the analysis period, filtered by a minimum altitude threshold (to exclude hours when the sun is too low to matter).</li>
-<li><strong><code>warm_up</code></strong> -- pre-loads the EPW file and sunpath data into memory to reduce latency on the first real call. Called automatically by the daemon on startup.</li>
+<li><strong><code>get_sun_vectors</code></strong>: returns unit direction vectors pointing toward the sun for each sampled date-time of the analysis period (<code>sun_steps_per_hour</code> per hour), dropping positions below <code>min_altitude</code> and rotating by <code>north_deg</code>. The date-times are local standard time, daylight saving time (<code>time_basis="daylight_saving"</code>, one hour ahead on every date) or true solar time (<code>time_basis="solar"</code>).</li>
+<li><strong><code>sample_period</code></strong>: builds the list of Ladybug date-times of the analysis period that the sun positions are computed for.</li>
 </ul>
 
 
@@ -1192,72 +1303,22 @@
 
     <div class="doc doc-contents first">
 
-        <p>UrbanSolarCarver Solar Vector Module</p>
-<p>This module handles solar position computations and caching for the
-UrbanSolarCarver pipeline. It converts meteorological data and date-time
-information into normalized sun direction vectors suitable for voxel
-carving or ray tracing.</p>
+        <p>Sun direction vectors for UrbanSolarCarver.</p>
+<p><code>get_sun_vectors(epw_file, date_list, min_altitude, device, north_deg,
+time_basis)</code> reads the site location from an EnergyPlus weather (EPW)
+file, computes the sun position for each Ladybug <code>DateTime</code> (local
+standard time; daylight saving time, one hour ahead, with
+<code>time_basis="daylight_saving"</code>; or true solar time with
+<code>time_basis="solar"</code>) with a Ladybug <code>Sunpath</code>,
+drops positions at or below <code>min_altitude</code> degrees, and returns an
+(N, 3) float32 tensor of unit vectors pointing from the model toward the
+sun, in model coordinates.</p>
+<p>EPW files are read through the cached <code>weather_file.read_weather_file</code>
+and Sunpath objects (<code>_initialize_sunpath</code>) are cached, so repeated
+calls, for example in the daemon, do not re-read or rebuild them.</p>
+<p><code>sample_period</code> turns the analysis period of the preprocessing settings
+into the Ladybug <code>DateTime</code> list the sun positions are computed for.</p>
 
-
-<details class="core-responsibilities" open>
-  <summary>Core Responsibilities</summary>
-  <ol>
-<li>
-<p>EPW Loading and Caching
-   • _load_epw(epw_file: str) → EPW</p>
-<ul>
-<li>Validates and reads an EnergyPlus weather (EPW) file.</li>
-<li>Caches the EPW object to avoid repeated disk and parse overhead.</li>
-</ul>
-</li>
-<li>
-<p>Sunpath Initialization and Caching
-   • _get_sunpath(latitude: float, longitude: float, time_zone: float) → Sunpath</p>
-<ul>
-<li>Creates a Ladybug Sunpath instance for the site location.</li>
-<li>Caches the Sunpath to reuse across multiple calls.</li>
-</ul>
-</li>
-<li>
-<p>Cache Pre-Warming
-   • warm_up(epw_file: str) → None</p>
-<ul>
-<li>Loads EPW and Sunpath caches on demand to improve the first-call latency.</li>
-</ul>
-</li>
-<li>
-<p>Sun Vector Computation
-   • get_sun_vectors(
-         epw_file: str,
-         datetimes: Sequence[DateTime],
-         min_altitude: float,
-         device: torch.device
-     ) → torch.Tensor</p>
-<ul>
-<li>Validates inputs: EPW path, Ladybug DateTime sequence, and altitude threshold.</li>
-<li>Computes sun position for each DateTime.</li>
-<li>Filters out sun positions below the minimum solar altitude.</li>
-<li>Returns an Nx3 tensor of unit vectors (x, y, z) pointing toward the sun.</li>
-</ul>
-</li>
-</ol>
-</details>
-
-<details class="key-data-structures" open>
-  <summary>Key Data Structures</summary>
-  <p>• EPW                - Ladybug class representing weather data.
-• Sunpath            - Ladybug class for solar geometry calculations.
-• torch.Tensor       - Used to return GPU- or CPU-ready arrays of sun vectors.
-• Ladybug DateTime   - Input time stamps for sun position queries.</p>
-</details>
-
-<details class="usage-context" open>
-  <summary>Usage Context</summary>
-  <p>Import this module when you need to translate a series of date-times into
-sun direction vectors for carving routines. The caching mechanisms ensure
-that repeated calls reuse loaded EPW and Sunpath objects, minimizing I/O
-and initialization overhead during high-throughput analyses.</p>
-</details>
 
 
 
@@ -1281,16 +1342,42 @@ and initialization overhead during high-throughput analyses.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="urbansolarcarver.sun.warm_up" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">warm_up</span><span class="p">(</span><span class="n">epw_file</span><span class="p">)</span></code>
+<h3 id="urbansolarcarver.sun.get_sun_vectors" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">get_sun_vectors</span><span class="p">(</span><span class="n">epw_file</span><span class="p">,</span> <span class="n">date_list</span><span class="p">,</span> <span class="n">min_altitude</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cpu&#39;</span><span class="p">),</span> <span class="n">north_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">time_basis</span><span class="o">=</span><span class="s1">&#39;standard&#39;</span><span class="p">)</span></code>
 
-<a href="#urbansolarcarver.sun.warm_up" class="headerlink" title="Permanent link">&para;</a></h3>
+<a href="#urbansolarcarver.sun.get_sun_vectors" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Load weather and sunpath data into memory to reduce latency on first real call.
-Ensures that subsequent calls to get_sun_vectors are faster.</p>
+        <p>Unit vectors toward the sun at the given times, for times when the sun
+is above <code>min_altitude</code>.</p>
+<p>Args:
+  epw_file    : Path to the EPW weather file; only its location
+                (latitude, longitude, time zone) is used.
+  date_list   : Iterable of Ladybug DateTime objects, in the clock
+                <code>time_basis</code> names.
+  min_altitude: Sun altitude in degrees; times with the sun at or
+                below it are dropped.
+  device      : Torch device for the result.
+  north_deg   : Model north in degrees clockwise from the +Y axis
+                (USC convention, same as the <code>north_deg</code> setting).  Sun
+                vectors are returned in model coordinates.
+  time_basis  : "standard": the times are the EPW's local standard
+                time. "daylight_saving": they are daylight saving time,
+                standard time plus one hour, on every date. "solar":
+                they are true solar time, in which the sun crosses the
+                meridian at 12:00.</p>
+<p>Returns:
+  A float32 torch.Tensor of shape (N, 3), N &lt;= len(date_list), one
+  unit vector per kept time pointing from the model toward the sun.
+  Empty (0, 3) with a UserWarning if no time is kept.</p>
+<p>Raises:
+  ValueError: If date_list is not iterable, is empty or holds
+    non-DateTime items, min_altitude is not a finite number, or
+    time_basis is not one of <code>TIME_BASES</code>.
+  FileNotFoundError, IOError: If the EPW file is missing or unreadable.
+  RuntimeError: If the sun position calculation fails.</p>
 
 
     </div>
@@ -1300,34 +1387,49 @@ Ensures that subsequent calls to get_sun_vectors are faster.</p>
 <div class="doc doc-object doc-function">
 
 
-<h3 id="urbansolarcarver.sun.get_sun_vectors" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">get_sun_vectors</span><span class="p">(</span><span class="n">epw_file</span><span class="p">,</span> <span class="n">date_list</span><span class="p">,</span> <span class="n">min_altitude</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cpu&#39;</span><span class="p">),</span> <span class="n">north_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></code>
+<h3 id="urbansolarcarver.sun.sample_period" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sample_period</span><span class="p">(</span><span class="n">settings</span><span class="p">,</span> <span class="n">steps_per_hour</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span></code>
 
-<a href="#urbansolarcarver.sun.get_sun_vectors" class="headerlink" title="Permanent link">&para;</a></h3>
+<a href="#urbansolarcarver.sun.sample_period" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Determine the sun's unit direction vectors at specified times.</p>
-<p>Explanation:
-  1. Read location and climate data from an EPW file.
-  2. For each datetime in the list, compute sun position.
-  3. Filter out moments when the sun is below a minimum elevation angle.
-  4. Return a list of 3D vectors pointing toward the sun for each valid time.</p>
-<p>Args:
-  epw_file    : File path to the climate data (EPW format).
-  date_list   : Collection of Ladybug DateTime objects to evaluate.
-  min_altitude: Minimum sun elevation (degrees) to include.
-  device      : Torch device to store result (CPU or GPU).
-  north_deg   : Model north in degrees CLOCKWISE from the +Y axis
-                (USC convention, same as <code>cfg.north_deg</code>).  Sun
-                vectors are returned in model coordinates.</p>
-<p>Returns:
-  A torch.Tensor of shape (N,3), dtype float32, where each row
-  is a normalized vector pointing from origin toward the sun.</p>
-<p>Raises:
-  ValueError: If inputs are of incorrect type or empty.
-  RuntimeError: If sun position calculation fails.</p>
+        <p>Build analysis datetimes and HOYs via Ladybug's AnalysisPeriod.</p>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+<th>Name</th>          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+<td><code>datetimes</code></td>            <td>
+                  <code><span title="list">list</span>[<span title="datetime.datetime">datetime</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Start to end (inclusive) at <code>1/steps_per_hour</code>-hour steps.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+<td><code>hoys</code></td>            <td>
+                  <code><span title="list">list</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Hour-of-year indices (0..8759, 0 = 1 January 00:00) of the period,
+always hourly: they index EPW records, which are hourly.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>

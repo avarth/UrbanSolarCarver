@@ -13,10 +13,10 @@
         <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/modes/">
       
       
-        <link rel="prev" href="../getting-started/configuration/">
+        <link rel="prev" href="../ui/">
       
       
-        <link rel="next" href="../simulated-weights/">
+        <link rel="next" href="../massing/">
       
       
         
@@ -431,6 +431,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -552,6 +579,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="time-based">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#time-basis-standard-daylight-saving-or-solar-time-time_basis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Time basis: standard, daylight saving or solar time (time_basis)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -630,6 +674,33 @@
   
 </nav>
       
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -721,11 +792,40 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
       
         
           
+        
+      
         
       
         
@@ -769,7 +869,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -791,14 +891,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -873,14 +973,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/raytracer/" class="md-nav__link">
+      <a href="../api/ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -901,14 +1001,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/grid/" class="md-nav__link">
+      <a href="../api/geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -1013,14 +1113,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/usefulness/" class="md-nav__link">
+      <a href="../api/simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -1105,6 +1205,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1266,6 +1394,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="time-based">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#time-basis-standard-daylight-saving-or-solar-time-time_basis" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Time basis: standard, daylight saving or solar time (time_basis)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1375,7 +1520,7 @@
 <tbody>
 <tr>
 <td><code>time-based</code></td>
-<td>Binary</td>
+<td>Violation count</td>
 <td>Sun vectors from EPW</td>
 <td>EPW + analysis period</td>
 </tr>
@@ -1389,13 +1534,13 @@
 <td><code>benefit</code></td>
 <td>Weighted</td>
 <td>Heating-benefit sky</td>
-<td>EPW + analysis period + balance temp</td>
+<td>EPW + analysis period (+ balance temperature or a simulated-weights file)</td>
 </tr>
 <tr>
 <td><code>daylight</code></td>
 <td>Weighted</td>
 <td>CIE overcast luminance</td>
-<td>Analysis period</td>
+<td>None (no EPW, no analysis period)</td>
 </tr>
 <tr>
 <td><code>tilted_plane</code></td>
@@ -1407,14 +1552,46 @@
 <td><code>radiative_cooling</code></td>
 <td>Weighted</td>
 <td>Martin-Berdahl + Bliss</td>
-<td>Dew point temperature</td>
+<td>Dew point temperature (no EPW)</td>
 </tr>
 </tbody>
 </table>
 <h2 id="thresholding-strategies">Thresholding strategies<a class="headerlink" href="#thresholding-strategies" title="Permanent link">&para;</a></h2>
 <p>USC supports three threshold strategies. The right choice depends on the mode.</p>
 <h3 id="for-weighted-modes-irradiance-benefit-daylight-radiative_cooling">For weighted modes (irradiance, benefit, daylight, radiative_cooling)<a class="headerlink" href="#for-weighted-modes-irradiance-benefit-daylight-radiative_cooling" title="Permanent link">&para;</a></h3>
-<p>Scores are continuous <strong>weighted sums</strong> -- the total sky-patch weight obstructed by each voxel. Their absolute magnitude depends on the mode, weather file, and number of sample points, so they are not directly interpretable as physical quantities.</p>
+<p>Scores are continuous <strong>weighted sums</strong>: the sky-patch weight of every ray a voxel blocks, times the area of protected surface that ray's sample point stands for (about <code>grid_step</code>² m², times its <code>edge_taper</code> weight when that is set). The score is then a physical quantity that does not change with the sample spacing:</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Score unit</th>
+<th>A voxel's score is</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>irradiance</code></td>
+<td>kWh</td>
+<td>the solar energy (direct and diffuse) it keeps from the protected surfaces over the analysis period</td>
+</tr>
+<tr>
+<td><code>benefit</code></td>
+<td>kWh</td>
+<td>the same for the heating-useful solar energy only (the hours below the balance point, or the simulated weights)</td>
+</tr>
+<tr>
+<td><code>daylight</code></td>
+<td>m²</td>
+<td>the overcast sky it hides from the protected surfaces, weighted by CIE overcast brightness, in m² of fully hidden sky</td>
+</tr>
+<tr>
+<td><code>radiative_cooling</code></td>
+<td>m²</td>
+<td>the night sky's cooling potential it hides, in m² of fully hidden sky</td>
+</tr>
+</tbody>
+</table>
+<p>The patch weights of <code>irradiance</code> and <code>benefit</code> are kWh/m² per patch (Ladybug's sky matrix), counted on a surface facing the patch: there is no reduction for the angle at which a ray meets its surface, so the kWh are those a surface turned towards each sky patch would receive. The <code>daylight</code> and <code>radiative_cooling</code> weights are each patch's share of its sky and sum to 1, so 1 m² is the whole sky of 1 m² of open horizontal surface (a vertical facade sees half of it at most). Summed over a set of voxels a score counts what they block more than once when a ray crosses several of them; it compares voxels, it is not an energy balance. Scores written before this unit was introduced (preprocessing manifests without <code>score_unit</code>) were sums of patch weights without the area, and changed four times when the sample spacing halved.</p>
 <table>
 <thead>
 <tr>
@@ -1426,23 +1603,26 @@
 <tbody>
 <tr>
 <td><code>carve_fraction</code> (default)</td>
-<td>Ranks voxels by score, removes top-scorers until the target fraction of total obstruction weight is eliminated. <code>0.7</code> = aggressive (tall, slim volumes). <code>0.3</code> = conservative (bulky volumes).</td>
-<td><strong>Recommended.</strong> Intuitive slider; no knowledge of score distribution needed.</td>
+<td>Removes the highest-scoring voxels until the removed part holds the target fraction of the building's total obstruction weight, counting the voxels that <code>carve_above</code> removes with them. <code>0.7</code> = aggressive (tall, slim volumes). <code>0.3</code> = conservative (bulky volumes).</td>
+<td><strong>Recommended.</strong> Works as a slider; no knowledge of the score distribution needed.</td>
 </tr>
 <tr>
 <td><code>headtail</code></td>
-<td>Jiang (2013) head/tail breaks: iteratively splits the distribution at the mean. Good for heavy-tailed distributions.</td>
+<td>Jiang (2013) head/tail breaks: splits the scores at their mean, then splits the part above the mean again, for as long as that part holds at most 40% of the values. Suited to heavy-tailed distributions.</td>
 <td>When you want an automatic, data-driven split without choosing a fraction.</td>
 </tr>
 <tr>
 <td>Numeric value</td>
-<td>Manual cutoff on raw scores. Voxels scoring above this value are carved.</td>
-<td><strong>Advanced.</strong> Only useful after inspecting the score histogram in <code>diagnostics/</code>. The value is mode- and dataset-specific; not portable across runs.</td>
+<td>Manual cutoff on the scores, in the score unit above. Voxels scoring above this value are carved.</td>
+<td><strong>Advanced.</strong> Pick it from the score histogram in <code>diagnostics/</code> (or the browser UI's). It means the same at any sample spacing, but depends on the weather, the period and the protected surfaces, so it carries over between variants of one project rather than between projects.</td>
 </tr>
 </tbody>
 </table>
+<p><strong>How carve_fraction and carve_above work together.</strong> With <code>carve_above</code> (the default), a column loses everything above its lowest removed voxel. Each voxel therefore goes at the cutoff of the lowest high-scoring voxel below it, and carve_fraction counts the score of everything removed that way: <code>0.4</code> removes 40% of the obstruction score. (Before this was counted, carve_above removed extra score on top of the value set, so <code>0.4</code> removed 50-62% in the ReSBE test blocks.)</p>
+<p><strong>Slope limit (<code>max_slope_deg</code>, default 75 degrees for these modes).</strong> Scores in a column are low near the ground, peak partway up and fall again, and a column is cut at its lowest voxel above the cutoff. Two neighbouring columns whose peaks fall just above and just below the cutoff end 10-15 m apart, and small score differences leave single-column spires. After carve_above, each column may rise at most <code>tan(max_slope_deg)</code> above a 5 x 5 median of its neighbours' heights; anything higher is removed. Cliffs become ramps and spires end one step above their surroundings. The limit only removes voxels, and carving more before it never keeps more after it. In the ReSBE test blocks (33 m, 0.5 m voxels) it cut the spike area from 26-186 m² to 0-25 m² for 0-10% of extra obstruction score, reported as <code>obstruction_fraction_carved_by_slope_limit</code> (it is not counted in carve_fraction). The median window and the allowed step are counted in voxels, so at 1 m voxels the limit is weaker than at 0.5 m. <code>90</code> turns it off. Finer sampling (<code>grid_step</code>) reduces spikes only a little; they come from the column rule, not from rays missing voxels.</p>
+<p>All three strategies, the score smoothing and the reported retention consider <strong>occupied voxels only</strong>. Rays also cross the empty cells of streets, courtyards and the grid margin, and those cells typically hold 60-80% of the total score mass; including them would make the result depend on how much air the grid contains.</p>
 <h3 id="for-violation-count-modes-time-based-tilted_plane">For violation-count modes (time-based, tilted_plane)<a class="headerlink" href="#for-violation-count-modes-time-based-tilted_plane" title="Permanent link">&para;</a></h3>
-<p>Scores are <strong>integer violation counts</strong> -- the number of time steps (sun hours) or plane intersections that each voxel causes. These have direct physical meaning:</p>
+<p><code>time-based</code> scores measure <strong>how much protected surface a voxel shades, and for how long</strong>, in m²·h: the shaded test-surface area times the duration, summed over the analysis period. Each sample point stands for about <code>grid_step</code>² m² of surface and each sun position for 1/<code>sun_steps_per_hour</code> h, so the score does not depend on the sampling density.</p>
 <table>
 <thead>
 <tr>
@@ -1453,15 +1633,11 @@
 <tbody>
 <tr>
 <td><code>0</code> (default)</td>
-<td><strong>Strict</strong> -- remove any voxel that causes even one violation</td>
+<td><strong>Strict</strong>: remove any voxel that shades any protected surface at any sampled moment</td>
 </tr>
 <tr>
-<td><code>1</code></td>
-<td>Allow one hour of shadow (or one plane intersection)</td>
-</tr>
-<tr>
-<td><code>2</code></td>
-<td>Allow two violations, etc.</td>
+<td><code>5</code></td>
+<td>Tolerate a voxel that shades up to 5 m²·h, e.g. 5 m² of facade for one hour, or 1 m² for five hours</td>
 </tr>
 <tr>
 <td><code>None</code></td>
@@ -1469,50 +1645,90 @@
 </tr>
 </tbody>
 </table>
-<p>String strategies (<code>carve_fraction</code>, <code>headtail</code>) are <strong>not applicable</strong> to integer counts and will raise an error for <code>tilted_plane</code>. For <code>time-based</code>, the threshold is applied as a simple integer cutoff.</p>
+<p>String strategies (<code>carve_fraction</code>, <code>headtail</code>) do <strong>not apply</strong> to violation counts and raise an error. <code>tilted_plane</code> is strictly binary (see below).</p>
 <div class="admonition tip">
-<p class="admonition-title">Violation counts are powerful</p>
-<p>Unlike weighted modes, violation-count thresholds have a clear physical interpretation. <code>threshold: 0</code> means "zero shadow tolerance during the analysis period." <code>threshold: 2</code> means "allow up to 2 hours of shadow." This makes time-based mode the most transparent and controllable carving strategy.</p>
+<p class="admonition-title">Physically interpretable thresholds</p>
+<p>The time-based threshold has a direct meaning: <code>threshold: 0</code> means zero shadow tolerance during the analysis period; <code>threshold: 5</code> lets each voxel cast up to 5 m²·h of shadow on the protected surfaces. A numeric threshold of a weighted mode is read the same way in its unit: <code>threshold: 20</code> in <code>irradiance</code> keeps a voxel that blocks up to 20 kWh over the period.</p>
 </div>
 <h2 id="time-based">time-based<a class="headerlink" href="#time-based" title="Permanent link">&para;</a></h2>
-<p>Casts rays from test surfaces along actual sun vectors for specific dates and times. A voxel is carved if <strong>any</strong> sun ray passes through it. Simple binary logic -- no weighting.</p>
-<p><strong>Use case</strong>: protect direct sunlight during specific hours (e.g., winter solstice 10:00--14:00).</p>
+<p>Casts rays from test surfaces along actual sun vectors for specific dates and times. Each voxel's score is the shading it causes (m²·h, see above); with the default <code>threshold: 0</code>, a voxel is carved if <strong>any</strong> sun ray passes through it. There is no sky-patch weighting.</p>
+<p>The sun is sampled <code>sun_steps_per_hour</code> times per hour (default 12, i.e. every 5 minutes). The sun moves about 15° of azimuth per hour, so hourly sampling leaves gaps between the ray sheets of consecutive hours in which mass survives while still shading the protected surface between samples; at 1 m voxels, 5-minute sampling closes them for obstructions up to ~40 m away. Ray count grows linearly with this value.</p>
+<h3 id="time-basis-standard-daylight-saving-or-solar-time-time_basis">Time basis: standard, daylight saving or solar time (<code>time_basis</code>)<a class="headerlink" href="#time-basis-standard-daylight-saving-or-solar-time-time_basis" title="Permanent link">&para;</a></h3>
+<p>By default (<code>time_basis: standard</code>) the hours of the analysis period are the EPW's local standard time.</p>
+<p>With <code>time_basis: daylight_saving</code> they are daylight saving (summer) time: standard time plus one hour, on every date of the period, so 13:00 is read as 12:00 standard time. Weather files carry no daylight saving dates (TMY files leave the EPW header's field empty), so USC does not look up when the clocks change: a period that runs past the change of the clocks is one hour off on the days outside summer time. Split such a period, or use standard time.</p>
+<p>With <code>time_basis: solar</code> they are true solar time: 12:00 is the moment the sun crosses the meridian, due south at a northern mid-latitude site, on every date. Solar-fence rules (Boulder: 21 December, two hours each side of solar noon) and the Japanese shadow regulation define their hours this way.</p>
+<p>The two clocks differ by the equation of time (between about −14 and +16 minutes over the year) plus the site's distance from its time-zone meridian (4 minutes per degree of longitude). Solar noon in standard time:</p>
+<table>
+<thead>
+<tr>
+<th>Site</th>
+<th>11 Feb</th>
+<th>21 Jun</th>
+<th>3 Nov</th>
+<th>21 Dec</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Golden, CO (bundled EPW, 105.2° W, UTC−7)</td>
+<td>12:15</td>
+<td>12:03</td>
+<td>11:44</td>
+<td>11:59</td>
+</tr>
+<tr>
+<td>Athens (23.7° E, UTC+2)</td>
+<td>12:39</td>
+<td>12:27</td>
+<td>12:09</td>
+<td>12:23</td>
+</tr>
+</tbody>
+</table>
+<p>So a 10:00-14:00 window read in standard time is up to 39 minutes off a 10:00-14:00 solar-time rule in Athens, and the carved envelope shifts with it. Ladybug computes the sun position in either clock (<code>is_solar_time</code>).</p>
+<p><code>time_basis</code> is read by <code>time-based</code> only. <code>daylight_saving</code> and <code>solar</code> are refused in <code>irradiance</code> and <code>benefit</code>: their analysis period selects hourly EPW records, which are in standard time, so reading the period in another clock would pair each hour with the wrong weather record. Modes without an analysis period (<code>daylight</code>, <code>tilted_plane</code>, <code>radiative_cooling</code>) ignore it with the usual "does not use" warning. In the browser UI it is <strong>Time</strong> (Standard time / Daylight saving time / Solar time) under "More sun settings"; in Grasshopper it is the <code>time_basis</code> text input of USC Analysis Period.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">time-based</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">analysis_period</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">st_month</span><span class="p">:</span><span class="w"> </span><span class="nv">12</span><span class="p p-Indicator">,</span><span class="nt"> st_day</span><span class="p">:</span><span class="w"> </span><span class="nv">21</span><span class="p p-Indicator">,</span><span class="nt"> st_hour</span><span class="p">:</span><span class="w"> </span><span class="nv">10</span><span class="p p-Indicator">,</span><span class="nt"> end_month</span><span class="p">:</span><span class="w"> </span><span class="nv">12</span><span class="p p-Indicator">,</span><span class="nt"> end_day</span><span class="p">:</span><span class="w"> </span><span class="nv">21</span><span class="p p-Indicator">,</span><span class="nt"> end_hour</span><span class="p">:</span><span class="w"> </span><span class="nv">14</span><span class="p p-Indicator">}</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">time_basis</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solar</span><span class="w">   </span><span class="c1"># 10:00-14:00 true solar time</span>
+</code></pre></div>
+<p><strong>Use case</strong>: protect direct sunlight during specific hours (e.g., winter solstice 10:00-14:00).</p>
 <p><strong>Threshold semantics</strong>: see <a href="#for-violation-count-modes-time-based-tilted_plane">violation-count thresholds</a> above.</p>
 <h2 id="irradiance">irradiance<a class="headerlink" href="#irradiance" title="Permanent link">&para;</a></h2>
 <p>Weights each Tregenza sky patch by its cumulative direct + diffuse irradiance over the analysis period, using the Perez all-weather sky model. Voxels blocking high-irradiance patches receive higher scores.</p>
 <p><strong>Use case</strong>: climate-based solar resource assessment over an entire heating or cooling season.</p>
 <h2 id="benefit">benefit<a class="headerlink" href="#benefit" title="Permanent link">&para;</a></h2>
 <p>Similar to irradiance, but weights hours by a heating-benefit criterion. Two weightings are available:</p>
-<p><strong>Simple weights (default)</strong>: only hours when the outdoor temperature is below the building's balance-point temperature contribute to patch weights. This focuses carving on protecting solar access when it is most useful for passive heating.</p>
+<p><strong>Simple weights (default)</strong>: only hours when the outdoor temperature is below <code>balance_temperature - balance_offset</code> contribute to patch weights. This protects solar access in the hours when it is useful for passive heating.</p>
 <p><strong>Use case</strong>: maximize passive solar heating potential during the heating season.</p>
-<p><strong>Key parameters</strong>: <code>balance_temperature</code> (free-running balance point, typically 15--20 C), <code>balance_offset</code> (dead-band width).</p>
+<p><strong>Key parameters</strong>: <code>balance_temperature</code> (free-running balance point; default 15 °C, typically about 12 °C for commercial to 18 °C for residential buildings), <code>balance_offset</code> (dead-band width, default 2 °C).</p>
+<p><strong>Cold period</strong>: <code>urbansolarcarver.cold_period.cold_period_from_weather_file(epw_path, base_temperature)</code> gives the start and end dates of the site's cold period, to use as the analysis period: the longest run of days whose 31-day running mean dry-bulb temperature (wrapping across the new year) is below the base, for benefit mode <code>balance_temperature - balance_offset</code>. It may wrap across the new year. Hours the EPW marks missing (99.9) are left out. The browser UI offers it as a preset of the analysis period. With <code>simulated_weights_path</code> set, the balance values are unused by the mode, so the cold period found from them describes the simple rule, not the simulated building. In climates whose temperature stays near the base all year, the longest run can be short and its dates arbitrary.</p>
 <h3 id="simulated-weights">Simulated weights<a class="headerlink" href="#simulated-weights" title="Permanent link">&para;</a></h3>
-<p>Instead of the binary cold-hour rule, benefit mode can consume hourly weights derived from a thermal simulation of a typical building (the compact 5R1C hourly model from ISO 13790). For every hour of the year the simulation answers: <em>if one extra watt of sun arrived in this hour, how much less heating, and how much more cooling, would the building need over the whole year?</em> This captures thermal lag (a noon gain stored in the mass and released into the cold evening still earns credit), diurnal mass state, and gain saturation -- everything the binary rule cannot express. The simple rule is the special case where the weights are 0 or 1.</p>
+<p>Instead of the binary cold-hour rule, benefit mode can consume hourly weights derived from a thermal simulation of a typical building (the compact 5R1C hourly model from ISO 13790). For every hour of the year the simulation answers: <em>if one extra watt of sun arrived in this hour, how much less heating, and how much more cooling, would the building need over the whole year?</em> This captures thermal lag (a noon gain stored in the mass and released into the cold evening still earns credit), diurnal mass state, and gain saturation, none of which the binary rule can express. The simple rule is the special case where the weights are 0 or 1.</p>
 <p>Generate the weights once from an EPW and a building <strong>archetype</strong> (roughly ten numbers describing a typical building; the easiest form is a shoebox with per-facade window-to-wall ratios, see <code>configs/archetype_example.yaml</code>):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>urbansolarcarver<span class="w"> </span>usefulness<span class="w"> </span>-e<span class="w"> </span>weather.epw<span class="w"> </span>-a<span class="w"> </span>configs/archetype_example.yaml
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>urbansolarcarver<span class="w"> </span>simulate-weights<span class="w"> </span>-e<span class="w"> </span>weather.epw<span class="w"> </span>-a<span class="w"> </span>configs/archetype_example.yaml
 </code></pre></div>
-<p>This writes <code>solar_usefulness.json</code> (the weights plus full provenance) and a <code>.png</code> preview of the weights next to it. Then point a benefit config at the artifact:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benefit</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">usefulness_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">solar_usefulness.json</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># include_harm: true   # experimental: also subtract summer-overheating contributions</span>
+<p>This writes <code>simulated_weights.json</code> (the weights plus full provenance) and a <code>.png</code> preview of the weights next to it. Then point a benefit config at the artifact:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benefit</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">simulated_weights_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">simulated_weights.json</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="c1"># include_harm: true   # experimental: also subtract summer-overheating contributions</span>
 </code></pre></div>
 <p>A full-year <code>analysis_period</code> is the natural choice with simulated weights, since the schedule itself selects the useful hours. <code>balance_temperature</code> / <code>balance_offset</code> are unused (USC warns if you customize them). With <code>diagnostic_plots: true</code>, the run's diagnostics include a comparison dome showing how the simulated weights shifted the sky relative to the simple rule.</p>
 <p><strong>Use case</strong>: benefit envelopes that respond to the thermal mass, insulation, and glazing of the building stock being protected.</p>
-<p><strong>Key parameters</strong>: <code>usefulness_path</code>, <code>include_harm</code> (experimental; the model has no operable shading or night ventilation, so harm is overstated -- treat it as a bracketing scenario).</p>
-<p>See <a href="../simulated-weights/">Simulated Benefit Weights</a> for the engine's documentation -- what it implements, how it was validated against RC_BuildingSimulator, the archetype inputs, and the declared limitations -- and Tutorial 5 (<code>examples/5_benefit_5r1c.ipynb</code>) for an end-to-end walkthrough.</p>
+<p><strong>Key parameters</strong>: <code>simulated_weights_path</code>, <code>include_harm</code> (experimental; without declared seasonal shading (<code>shading_hot</code> in the archetype) harm is overstated, so treat it as a bracketing scenario).</p>
+<p>See <a href="../simulated-weights/">Simulated Benefit Weights</a> for the engine's documentation (what it implements, how it was validated against RC_BuildingSimulator, the archetype inputs, and the declared limitations) and Tutorial 5 (<code>examples/5_benefit_5r1c.ipynb</code>) for an end-to-end walkthrough.</p>
 <h2 id="daylight">daylight<a class="headerlink" href="#daylight" title="Permanent link">&para;</a></h2>
-<p>Weights sky patches using the CIE standard overcast sky luminance distribution. No direct sun is considered -- only diffuse sky luminance weighted by solid angle and zenith angle.</p>
+<p>Weights sky patches using the CIE standard overcast sky luminance distribution. Direct sun is not considered: each patch's weight is its overcast-sky luminance, which depends on the zenith angle, times its solid angle, scaled so the weights sum to 1. No weather file or analysis period is needed.</p>
 <p><strong>Use case</strong>: protect diffuse daylight access (e.g., for daylighting codes, visual comfort).</p>
 <h2 id="tilted_plane">tilted_plane<a class="headerlink" href="#tilted_plane" title="Permanent link">&para;</a></h2>
-<p>Traditional geometric solar envelope method. Voxels above a tilted plane at a fixed angle from each test surface are carved. No weather data or ray tracing is involved -- purely geometric.</p>
-<p>The angle can be a single float (applied uniformly) or a list of 8 floats (one per octant, for directional control).</p>
+<p>Traditional geometric solar envelope method. Every voxel above a tilted plane at a fixed angle from each test surface is carved. No weather data is involved. Each sample point casts one ray at the plane angle, outward along the facade's horizontal normal, and every voxel at or above that ray in its (x, y) column is removed: the whole half-space above the plane, not only the band the rays cross. Where two test-surface panels meet at a convex corner or kink, their rays diverge; extra rays from the corner sweep the headings between the two normals, so the plane rotates around the corner (at 45 degrees, a column outside a right-angle corner is capped at its distance from the corner). Concave corners need no extra rays: the two planes already meet there.</p>
+<p>The angle can be a single float (applied uniformly) or a list of 8 floats (one per compass octant N, NE, E, SE, S, SW, W, NW, chosen by the direction each facade faces).</p>
 <p><strong>Use case</strong>: quick regulatory envelopes, traditional Knowles-style solar access planes.</p>
 <p><strong>Key parameter</strong>: <code>tilted_plane_angle_deg</code></p>
-<p><strong>Threshold semantics</strong>: this mode is strictly binary -- a voxel either protrudes above the cut plane or it does not. Do not set <code>threshold</code>; leave it unset (the default <code>None</code>). Setting any string method or a numeric value &gt; 0 raises a validation error.</p>
+<p><strong>Threshold semantics</strong>: this mode is strictly binary: a voxel either protrudes above the cut plane or it does not. Do not set <code>threshold</code>; leave it unset (the default <code>None</code>). Setting any string method or a numeric value &gt; 0 raises a validation error.</p>
 <h2 id="radiative_cooling-experimental">radiative_cooling (experimental)<a class="headerlink" href="#radiative_cooling-experimental" title="Permanent link">&para;</a></h2>
-<p>Weights sky patches by their radiative cooling potential, using the Martin-Berdahl atmospheric emissivity model and a Bliss angular attenuation factor. Designed to preserve access to the cold sky dome for passive nighttime cooling.</p>
+<p>Weights sky patches by their radiative cooling potential, using the Martin-Berdahl atmospheric emissivity model and a Bliss angular attenuation factor. The aim is to keep access to the cold sky dome for passive nighttime cooling. The model uses one representative night-time dew point and reads no weather file.</p>
 <p><strong>Use case</strong>: hot-arid climates where nighttime radiative cooling is a significant design strategy.</p>
-<p><strong>Key parameters</strong>: <code>dew_point_celsius</code>, <code>bliss_k</code></p>
+<p><strong>Key parameters</strong>: <code>dew_point_celsius</code>, <code>bliss_k</code>, <code>min_sky_elevation_deg</code> (optional: ignore sky patches below this elevation and renormalize the rest)</p>
 <div class="admonition warning">
 <p class="admonition-title">Warning</p>
 <p>This mode is experimental. The clear-sky assumption may not hold in humid or cloudy climates.</p>

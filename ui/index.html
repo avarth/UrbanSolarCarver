@@ -1,0 +1,1755 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="GPU-accelerated solar envelope generation for urban design">
+      
+      
+      
+        <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/ui/">
+      
+      
+        <link rel="prev" href="../getting-started/configuration/">
+      
+      
+        <link rel="next" href="../modes/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Browser UI - Urban Solar Carver</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#browser-ui" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Urban Solar Carver" class="md-header__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Urban Solar Carver
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Browser UI
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Urban Solar Carver" class="md-nav__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Urban Solar Carver
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#starting-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting the interface
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-start-screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The start screen
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The start screen">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-projects-folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The projects folder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#managing-a-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Managing a project
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#carving-further-with-another-criterion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carving further with another criterion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#entering-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entering values
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-two-phases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running: two phases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-3d-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The 3D view
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-projects-are-kept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where projects are kept
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#without-a-cuda-enabled-gpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Without a CUDA-enabled GPU
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rebuilding-the-front-end-after-changing-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rebuilding the front-end after changing app/
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../grasshopper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grasshopper Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-map/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Map
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/carving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/ray-tracing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ray Tracing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/geometry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sky-patches/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sky Patches
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sun Vectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/daemon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Daemon
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#starting-the-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting the interface
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-start-screen" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The start screen
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The start screen">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-projects-folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The projects folder
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#managing-a-project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Managing a project
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#carving-further-with-another-criterion" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Carving further with another criterion
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#entering-values" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Entering values
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-two-phases" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running: two phases
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-3d-view" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The 3D view
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-projects-are-kept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where projects are kept
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#security" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Security
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#without-a-cuda-enabled-gpu" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Without a CUDA-enabled GPU
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#rebuilding-the-front-end-after-changing-app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rebuilding the front-end after changing app/
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="browser-ui">Browser UI<a class="headerlink" href="#browser-ui" title="Permanent link">&para;</a></h1>
+<p><code>usc ui</code> opens UrbanSolarCarver in your browser. You add the maximum volume and the test surfaces, choose a mode, run the analysis, adjust how much to carve while watching the result in 3D, build the envelope and building massing, and download the files. It runs the same engine as the CLI and the Python API; everything stays on your computer.</p>
+<h2 id="starting-the-interface">Starting the interface<a class="headerlink" href="#starting-the-interface" title="Permanent link">&para;</a></h2>
+<p>In the UrbanSolarCarver folder, double-click <code>start-urbansolarcarver.bat</code> on Windows, or run <code>./start-urbansolarcarver.sh</code> in a terminal on Linux and macOS. The first time, the launcher installs UrbanSolarCarver with <code>setup_env.py</code> (this takes several minutes and needs Python 3.10 or newer); after that it starts the interface at once. A window stays open while the interface runs: close it (Windows) or press Ctrl+C (Linux, macOS) to stop UrbanSolarCarver. The launcher passes its arguments on to <code>usc ui</code>, so <code>start-urbansolarcarver.bat --port 8780</code> works too. It uses the environment in <code>.venv</code> in the folder, or <code>~/.usc-venv</code> when <code>setup_env.py</code> had to put it there; for an environment made with <code>setup_env.py --venv-dir</code>, set <code>USC_VENV</code> to that folder.</p>
+<p>From a terminal with the environment active, the same command is:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>usc<span class="w"> </span>ui
+</code></pre></div>
+<p>The command prints the address to open and opens it in your default browser once the service is listening. When another program already uses the port, the command says so and stops without opening the browser; choose a free port with <code>--port</code>. The address carries a token that is new on every launch, so keep using the page it opened (or the printed address) and not a bookmark from an earlier launch. Press Ctrl+C in the terminal to stop the service.</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--port</code></td>
+<td><code>8770</code></td>
+<td>Port on <code>127.0.0.1</code></td>
+</tr>
+<tr>
+<td><code>--projects-folder</code></td>
+<td>the folder chosen in the app, else <code>~/UrbanSolarCarver/projects</code></td>
+<td>Folder that holds one subfolder per project; it is created when missing. It wins over the folder chosen in the app for that launch</td>
+</tr>
+<tr>
+<td><code>--no-browser</code></td>
+<td>off</td>
+<td>Print the address without opening the browser</td>
+</tr>
+<tr>
+<td><code>--device</code>, <code>-d</code></td>
+<td><code>auto</code></td>
+<td>Compute device: <code>auto</code>, <code>cpu</code> or <code>cuda</code></td>
+</tr>
+</tbody>
+</table>
+<p>The browser interface is an optional extra of the package. <code>setup_env.py</code> installs it unless you pass <code>--no-ui</code>; to add it to an existing environment run <code>python -m pip install -e ".[ui]"</code> (see <a href="../getting-started/installation/#browser-ui">Installation</a>). Without the extra, <code>usc ui</code> prints that command and exits, and every other command is unaffected.</p>
+<p>When the service starts it compiles the GPU kernels in the background. The start screen shows "Preparing the GPU" until that ends; you can open a project and add files meanwhile, and the run buttons wait for the GPU.</p>
+<h2 id="the-start-screen">The start screen<a class="headerlink" href="#the-start-screen" title="Permanent link">&para;</a></h2>
+<p>The start screen shows the version, the device (the GPU's name, or that the CPU is used) and three cards:</p>
+<ul>
+<li><strong>New project</strong>: type a name (up to 64 letters, numbers, spaces, hyphens or underscores) and create the project.</li>
+<li><strong>Open a project</strong>: the projects folder, with <strong>Change folder</strong>, and the projects in it, newest first. Each project has a menu (see <a href="#managing-a-project">Managing a project</a>).</li>
+<li><strong>Try an example</strong>: three projects with their files already in place, so you can run an analysis without preparing any input. <em>Perimeter block</em> (a perimeter block 126 by 92 m, mode Solar time-based) is the smallest, <em>New building among neighbors</em> (a plot of about 18 by 17 m among existing buildings, mode Solar energy) is the middle one, and <em>District of many buildings</em> (about 208 by 227 m, mode Solar energy) is the largest. The first time you choose an example, it makes a copy as a new project, so the example itself never changes. After that, choosing it opens that project again. A project records which example it came from, so it is found after a rename. To start from a fresh copy, use <strong>Reset to the example</strong> in the project's menu.</li>
+</ul>
+<h3 id="the-projects-folder">The projects folder<a class="headerlink" href="#the-projects-folder" title="Permanent link">&para;</a></h3>
+<p><strong>Change folder</strong> opens the operating system's folder picker on this computer. The browser never sends a path: the service shows the picker and reads the folder you choose. The folder is remembered in <code>~/.urbansolarcarver/ui.json</code> and used at the next launch. The projects already in the old folder stay there, and the list shows the projects of the new folder.</p>
+<ul>
+<li><strong>Change folder</strong> is offered on the start screen only, with no run active. While a run is active the start screen says the folder can be changed once the run has ended.</li>
+<li>When the folder was given with <code>--projects-folder</code>, it wins for that launch and the start screen offers no Change folder. Start <code>usc ui</code> without the option to change it there.</li>
+<li>When the folder picker cannot open (no display, or tkinter missing), the start screen says so and the old folder stays. The way that always works is to start with <code>usc ui --projects-folder &lt;folder&gt;</code>.</li>
+</ul>
+<h3 id="managing-a-project">Managing a project<a class="headerlink" href="#managing-a-project" title="Permanent link">&para;</a></h3>
+<p>Each project in the list, and the project name in the top bar, has a menu:</p>
+<ul>
+<li><strong>Open folder</strong> opens the project's folder in Explorer (Finder, or the file manager on Linux) on this computer. It works during a run.</li>
+<li><strong>Rename</strong> asks for a new name, checked by the same rule as a new project's name, and renames the folder.</li>
+<li><strong>Delete</strong> names the project and its folder and asks you to type the project name to confirm.</li>
+<li><strong>Reset to the example</strong> (projects made from an example) replaces the project's inputs, settings and results with a fresh copy of the example, after a confirmation. The project keeps its name.</li>
+</ul>
+<p>Rename, delete and reset wait while the project's run is active.</p>
+<p>Delete and Reset send the project folder to the recycle bin (Windows) or trash (macOS, Linux), so a mistake can be undone; UrbanSolarCarver does not delete it for good. They remove only that one project folder, and refuse when the folder is not a direct child of the projects folder, has no <code>project.json</code> of that project, or is or holds a symbolic link or junction. On Windows they work only for a folder on a fixed disk of this computer: on a network, removable or other drive they are refused, and you can delete the folder in the file manager. A folder larger than the recycle bin's size limit may be deleted for good by Windows, and the app cannot check this beforehand.</p>
+<h2 id="the-steps">The steps<a class="headerlink" href="#the-steps" title="Permanent link">&para;</a></h2>
+<p>A project opens as a list of six steps on the left, with the 3D view on the right. Each step shows a one-line summary when it is closed.</p>
+<ol>
+<li><strong>Inputs.</strong> Drop or choose the maximum volume (the largest building you would allow), the test surfaces (the surfaces whose sun or sky the carving protects) and, for the modes that need one, a weather file (<code>.epw</code>). Meshes may be PLY, OBJ, STL or GLB; several files for one role are joined into one. The step lists each file with its triangle count and the size of all inputs together, and warns when the model looks as if it is not in meters.</li>
+<li>
+<p><strong>Mode.</strong> Six tiles in a grid of three by two, each with a coloured symbol and a plain name. The tile's tooltip holds a one-line description, what the mode needs and the engine name, for people who use the CLI.</p>
+<table>
+<thead>
+<tr>
+<th>Tile</th>
+<th>Engine name</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Angle rule</td>
+<td><code>tilted_plane</code></td>
+<td>Removes everything above a plane at a fixed angle from each facade</td>
+</tr>
+<tr>
+<td>Solar time-based</td>
+<td><code>time-based</code></td>
+<td>Keeps direct sun on the test surfaces during the hours you choose</td>
+</tr>
+<tr>
+<td>Solar energy</td>
+<td><code>irradiance</code></td>
+<td>Keeps sun and sky energy over the period</td>
+</tr>
+<tr>
+<td>Solar usefulness</td>
+<td><code>benefit</code></td>
+<td>Keeps sun in the hours that need heating</td>
+</tr>
+<tr>
+<td>Daylight</td>
+<td><code>daylight</code></td>
+<td>Keeps the view of an overcast sky</td>
+</tr>
+<tr>
+<td>Night cooling</td>
+<td><code>radiative_cooling</code></td>
+<td>Keeps a flat roof's view of the cold night sky. Experimental, and it assumes horizontal test surfaces</td>
+</tr>
+</tbody>
+</table>
+<p>Choosing a mode fills its starting values in Settings. <a href="../modes/">Carving Modes</a> explains the methods.
+3. <strong>Settings.</strong> The analysis settings with plain labels, units and a help text for each: the analysis period, the mode's own settings and the detail (voxel size and, at the end of the detail settings, the rays per batch and the detailed statistics, which only change the run report). The sample spacing on the test surfaces, the grid margin and the ray length have no field: the engine's values apply (see below). The step shows the size of the voxel grid and refuses a grid larger than the analysis can handle, naming the smallest voxel size that fits. <strong>Run analysis</strong> is in this step. See <a href="#entering-values">Entering values</a>.
+4. <strong>Carving.</strong> How much to carve, with a histogram of the scores of the voxels (a log or linear scale) and the numbers of the last carving. In the weighted modes the <em>Carving rule</em> comes first: <em>Manual</em> (the <em>Carve amount</em> slider, in percent of the total score) or <em>Automatic</em> (no setting: the cut is found from the spread of the scores, and the step says where it fell). A cutoff on the scores that a config holds (from the command line or an earlier version) shows as Manual, at the carve amount it stands for. Solar time-based has a <em>Shadow tolerated</em> slider in m²·h; the Angle rule has no threshold. The histogram follows the control in both rules; the other carving settings (score smoothing, the cut above a carved voxel, the steepest step between columns) are folded at the end. Scores are in physical units: m²·h of shade (Solar time-based), kWh of solar energy or of useful solar heat a voxel blocks (Solar energy, Solar usefulness), and m² of fully hidden sky (Daylight, Night cooling); the histogram axis, the cutoff, the 3D legend and the slider ends say which.
+5. <strong>Envelope and massing.</strong> Two parts that are built on their own, since the massing reads the carving and not the envelope.
+- <strong>Envelope</strong>: its settings (smooth surface, smoothing passes, the smallest pieces and fragments kept), <strong>Build envelope</strong>, and its result, the envelope volume (counted on the kept voxels the mesh was built from, after small pieces are dropped, not on the smoothed surface).
+- <strong>Building massing</strong>: its settings (ground floor and upper floor heights, grid module, permitted volume exceedance, whether floors rest on the floors below), <strong>Build massing</strong>, and its results: the gross floor area, the number of storeys and a table with the bottom, top and floor area of each storey.</p>
+<p>Each part has its own out-of-date mark, "Out of date for the current settings". The step's summary says what exists, for example "Envelope built, massing not built". A link at the bottom opens the run report. The <em>grid module</em> is the square module the storeys are built from and the narrowest piece of floor allowed. The <em>permitted volume exceedance</em> is the share of a module on a storey that may lie outside the carved envelope; the massing never leaves the maximum volume. <a href="../massing/">Floor-plate massing</a> describes the method.
+6. <strong>Export.</strong> The mesh format of the carved envelope and the building massing, and the downloads: the carved envelope, the building massing, the building massing data (JSON), the settings (<code>config.yaml</code>) and the whole project as a zip. Each file is offered once it exists. The envelope and the massing are the files that were built, in the format they were built in. A change of format rebuilds the parts that exist (the envelope, the massing or both); while Carving is locked (see below), the format is stored without a build, Export says so, and the next build of each part writes the chosen format.</p>
+</li>
+</ol>
+<h2 id="carving-further-with-another-criterion">Carving further with another criterion<a class="headerlink" href="#carving-further-with-another-criterion" title="Permanent link">&para;</a></h2>
+<p>The Export step's <strong>Carve further with another criterion</strong> makes the built envelope the project's maximum volume, so a second criterion carves what the first one kept. The result keeps only what every criterion in the chain keeps (the intersection of their envelopes). Each step voxelizes the envelope again on the new run's grid, so surfaces can move by up to about half a voxel per step. The order matters for settings that are a share of the current volume, such as <code>carve_fraction</code>.</p>
+<p>The button asks once before it acts, and works only when the envelope is up to date with the settings. Then:</p>
+<ul>
+<li>the envelope becomes the only maximum volume file, <code>carved_envelope_1</code> (then <code>_2</code>, and so on), in the format it was exported in;</li>
+<li>the files it replaces move to <code>inputs/earlier_max_volumes/&lt;step&gt;/</code> in the project folder, so the maximum volume you started from is never lost;</li>
+<li><code>project.json</code> records each step in <code>carving_chain</code>: the mode and settings the envelope was carved with, when, and which files it replaced; the Inputs step shows the chain under the maximum volume ("Carved by Daylight, then Solar time-based");</li>
+<li>the settings return to those of a new project, and the Mode step opens to choose the next criterion (when the default voxel size would make the grid too large, the voxel size the envelope was built with stays);</li>
+<li>the test surfaces and the weather file stay; every result is out of date and the next run starts from the analysis.</li>
+</ul>
+<h2 id="entering-values">Entering values<a class="headerlink" href="#entering-values" title="Permanent link">&para;</a></h2>
+<p>A number with a range is entered with a slider and a number field side by side. The number field takes any value the engine accepts; the slider covers the range people normally use (for example 0.1 to 5 m for the voxel size). The balance temperature and the analysis period are strips with two handles instead, each handle with its exact value in a bubble over it, always shown; where the two handles are close, their bubbles move apart so they never overlap.</p>
+<ul>
+<li><strong>Balance temperature</strong> (Solar usefulness) is a strip from 10 to 30 °C, with a tick a degree and a label every 5 °C, and two handles, the two ends of the dead band, with the band between them filled. The lower end (named "Counts below" for a screen reader) is where sun starts to count: in hours colder than this. The upper end ("Too warm above") is where, with harm counted, hours warmer than this count against the sun. Each end moves on its own and cannot pass the other; the app sends the engine the middle as <code>balance_temperature</code> and half the width as <code>balance_offset</code>, the dead band the engine reads on both sides of the balance temperature. A press on the strip moves the nearer handle there, to the step of 0.5 °C; the arrow keys move a handle by 0.5 °C, Page Up and Page Down by 2 °C, Home and End to the ends of the strip. A value outside 10 to 30 °C (from a hand-edited <code>config.yaml</code>) pins its handle at the end of the strip, and its bubble shows the value. The lower handle comes first for Tab, as on the strip; where the two handles lie on one spot, the direction picks the end: a drag to the left or an arrow key toward the lower end moves the lower one, and to the right the upper one, the focus moving to that end's handle. Home or End on one spot take the lower or the upper end to the end of the strip.</li>
+<li><strong>Sample spacing</strong> on the test surfaces is not set in the browser: the engine samples them at half the voxel size, and a quiet line under Voxel size says so ("Test surfaces sampled every 0.5 m"). On the District example (Solar usefulness, 1 m voxels) half the voxel size differs from a 0.25 m reference in 0.9 % of the kept voxels, against 2.0 % for a spacing of 1 m, at about twice the analysis time (13.9 s against 7.1 s; 0.25 m takes 37 s). A project that stored a sample spacing (an earlier version let you set one) drops it when it opens, so its analysis shows as out of date once if that spacing was not half its voxel size. An analysis made before this change without a stored spacing sampled every 1 m, the old default, so it too shows as out of date once unless its voxel size is 2 m. In <code>config.yaml</code>, on the command line and in Grasshopper <code>grid_step</code> can still be set.</li>
+<li><strong>Units.</strong> Every number shows its unit beside the value: counts say what they count (Smoothing passes in passes, Rays per batch in rays, Cut voxels in voxels, Drop mesh fragments in faces), Sun positions per hour reads "12 per hour (every 5 minutes)", and only the Bliss constant, a number without a unit, has none.</li>
+<li><strong>Drop pieces smaller than</strong> is shown and typed in m³, though the engine stores <code>min_voxels</code>, a count of voxels: the form multiplies the count by the volume of a voxel at the voxel size it shows (300 voxels at 0.5 m read 37.5 m³) and turns a volume typed back into whole voxels, at least one. The stored count does not change when the voxel size does, so the volume shown follows the voxel size.</li>
+<li><strong>Grid margin</strong> (<code>margin_frac</code>) is hidden for now; the engine's default (1 % of the longest side) applies, or a value already in <code>config.yaml</code>.</li>
+<li><strong>Ray length</strong> (<code>ray_length</code>) has no field: rays stop where they leave the voxel grid, so the engine's default of 3000 m reaches across any grid at no cost. A value already in a project's <code>config.yaml</code> is kept and applies.</li>
+<li><strong>Edge strip with less weight</strong> (<code>edge_taper</code>) is shown in Night cooling only, under <strong>More mode settings</strong>: sample points closer than this to the edge of a test surface count less, from 0 at the edge to full at this distance, so a cooling street or courtyard does not clear the mass right beside it. 0 is off. The engine reads it in every weighted mode: a value already in a project's <code>config.yaml</code> is kept when the project opens, in any mode, and dropped when you choose a mode that does not show it.</li>
+<li><strong>Analysis period</strong> is one control with two strips.<ul>
+<li>The year strip has twelve months and two handles for the start and the end date, each with its date in a bubble ("21 Dec"). A period across the new year (start after end, as in October to April) is drawn wrapped.</li>
+<li>The hour strip has two handles for the first and the last hour, each with its hour in a bubble ("10 h"). The last hour is inclusive, so 10 to 14 h samples 10:00 through 14:00. A range across midnight is drawn wrapped.</li>
+<li>A drag is sent once, when you let go; a key or a preset is sent at once. The step summary writes the period in words ("21 Dec, 10 to 14 h"). A period not set yet says "Not set yet" under the strips.</li>
+<li>Presets set the dates and keep the hours: 21 December, 21 June, Heating season and Whole year. The heating season follows the hemisphere of the weather file's latitude: 1 April to 31 October south of the Tropic of Capricorn (23.44 degrees), 1 October to 30 April elsewhere, within the tropics and without a weather file.</li>
+<li>In Solar usefulness a fifth preset, <strong>Cold period from the weather file</strong>, sets the dates of the site's cold period: the longest run of days whose mean temperature over the month around them is below the balance temperature minus the dead band. Its tooltip, shown while the pointer is over the button or the keyboard focus is on it (Escape closes it), says what it found ("Cold period of the weather file, where the mean of the month around each day is below 13 °C: 30 Sep to 15 May."), or why it cannot be used yet: no weather file, no cold period in it, or a failure to read it. A screen reader reads the same text as the button's description. It needs the weather file. Changing the balance temperature later updates that text but not the dates already set; press the preset again to use the new ones. Solar usefulness already counts only the hours colder than that threshold, so the cold period mostly leaves out cold hours outside the heating season, such as cool summer mornings; it changes more when the experimental "include harm" option is on, whose warm hours depend on the period.</li>
+<li>When you add or replace the weather file (not when a project opens with one), Settings shows one notice about the new file, with two buttons; either button closes it, and a later weather file replaces it. In Solar usefulness it offers the cold period of the new file when its dates differ from the period's, keeping the hours ("The new weather file (Brisbane, AUS) has its cold period from 3 May to 20 Sep; the analysis period is 30 Sep to 15 May.", <strong>Use the cold period</strong> or <strong>Keep</strong>); it waits for the cold period and shows nothing when the file has none. In Solar time-based and Solar energy it appears only when the new file is in the other hemisphere from the one before (a project without one counts as northern, as the starting values are), and offers the same dates six months on: the month plus six, the day held to the month's length, the last day of a month staying the last day (30 Apr gives 31 Oct). For example "The new weather file (Brisbane, AUS) is in the southern hemisphere: winter there is June to August. Shift the analysis period by six months, to 21 Jun, 10 to 14 h?", <strong>Shift by six months</strong> or <strong>Keep</strong>. A period that covers the whole year covers the same days six months on, so it gets no offer. A file within the tropics, or one whose latitude cannot be read, brings no offer, and the hemisphere of the file before it still counts for the next one. The offer is saved as any change of the period is; while a run is in progress the buttons are disabled, as the settings are. Either button moves the focus to the analysis period's start date. Once the period changes, by the button or by hand, the notice is gone and stays gone if the period is set back; choosing a mode without an analysis period (Angle rule, Daylight, Night cooling) dismisses it too. Screen readers announce the notice as it appears.</li>
+<li>Each handle takes the keyboard: the arrow keys move it by one day or one hour, Page Up and Page Down by a month or six hours, Home and End to the first or last day or hour.</li>
+<li>When the hours cross midnight on a single date, the end date moves to the next day ("21 to 22 Dec, 22 to 2 h"). A period stored earlier with one date and hours across midnight (an older save or a hand-edited <code>config.yaml</code>) is what the engine runs on every day of the year: the year strip is filled whole, the step summary reads "Every day, 22 to 2 h", and a note under the strips says so: "Every day, 22 to 2 h: the hours cross midnight on one date, which the engine runs on every day of the year. The next change makes it one night." The period is not written until you change it.</li>
+</ul>
+</li>
+</ul>
+<h2 id="running-two-phases">Running: two phases<a class="headerlink" href="#running-two-phases" title="Permanent link">&para;</a></h2>
+<p>A run has two phases, so that the part that takes time happens once and the part you adjust is quick.</p>
+<ol>
+<li><strong>Run analysis</strong> runs the sun analysis and the carving (the preprocessing and thresholding stages). The 3D view then shows the kept voxels coloured by score; the carved voxels are a separate layer, hidden at first, which the Layers menu shows. The progress shows the stages, the ray batches and the elapsed time, with a Cancel button.</li>
+<li><strong>Build envelope</strong> and <strong>Build massing</strong> (in Envelope and massing) run on the voxel result you settled on in the Carving step: the exporting stage and the massing stage. <strong>Build envelope and massing</strong> in Carving builds both.</li>
+</ol>
+<p>Between the two you change the threshold. The cutoff line on the histogram can be dragged in every rule, or moved with the keys of its handle (arrow keys a hundredth of the range, Page Up and Page Down a tenth, Home and End to the ends). While it moves, a line under the histogram previews the share of the volume the cut keeps, worked out in the browser from the voxel scores of the last carving, before the slope limit (the run gives the exact numbers); in the weighted modes it also gives the carve amount the cut stands for, which the slider shows. Letting go sets that carve amount (under Automatic it switches the rule to Manual, and the step says so), or in Solar time-based the cutoff itself, whose slider ends at the highest score the cutoff is compared with (after <em>Remove everything above a cut</em>), past which a cutoff carves nothing more. Choosing Manual starts from the amount the cut on the histogram carves. Moving the slider or typing a value moves the line too. <strong>Update carving</strong> applies the change, which thresholds the scores again without repeating the analysis; until then the line stays where it was set, drawn in the accent colour as a preview. Switching on <strong>Update when I change the threshold</strong> applies each change as you let go of the line or the slider or leave the field. The choice is remembered per project in the browser.</p>
+<p>The interface keeps track of what each result was built from. When you change a setting or an input after a result exists, that result stays visible, dimmed and labelled out of date, and the step that needs a run says so. While a dimmed result is shown in the 3D view, an <strong>Out of date</strong> stamp sits at the top of the view (<strong>Updating</strong> while a run replaces it); it has nothing to click and goes once the results are current. Running again replaces it. A run only starts the stages whose results are missing or out of date.</p>
+<p>While the mode or the analysis settings in the form differ from the stored ones, Carving is locked, because a build would have to run the analysis first. The two builds then wait with a message to run the analysis again, and a mesh format change is stored and written by the next build of each part.</p>
+<h2 id="the-3d-view">The 3D view<a class="headerlink" href="#the-3d-view" title="Permanent link">&para;</a></h2>
+<p>The view has a compass, an axis gizmo (the three lettered axes, drawn straight on the viewport) and a legend for the coloured layers. The <strong>Layers</strong> menu switches the maximum volume, the test surfaces, the kept and carved voxels, the sun path, the sky dome, the carved envelope and the building massing. Buttons frame the whole model, show the top view and switch between a light and a dark viewport (remembered in the browser).</p>
+<p>The ground aid button cycles through three states: off, a ground grid with a scale bar, and a compass ring on the ground around the scene (ticks every 10 degrees, the letters N, E, S and W every 90 degrees, rotated by the north direction). The button names the aid it switches to, and the choice is remembered in the browser. The compass ring, the sun path and the sky dome are centred on, and sized to, everything loaded (the maximum volume and the test surfaces together).</p>
+<h2 id="where-projects-are-kept">Where projects are kept<a class="headerlink" href="#where-projects-are-kept" title="Permanent link">&para;</a></h2>
+<p>Each project is a folder in the projects folder:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>&lt;projects folder&gt;/&lt;project name&gt;/
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── inputs/        The files you added (max_volume/, test_surfaces/, weather.epw)
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│                  and the joined meshes the engine reads (joined/)
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>├── config.yaml    The settings, a normal USC configuration file
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── project.json   The project&#39;s record: the files you added with their triangle counts, the input revision,
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│                  the example it came from (if any)
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│                  and one record per completed stage (with the settings that stage ran with)
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>└── run/           The engine&#39;s output: preprocessing/, thresholding/, exporting/ and massing/
+</code></pre></div>
+<p><code>config.yaml</code> works outside the interface: its paths are relative to the project folder, so <code>usc run -c &lt;project folder&gt;/config.yaml</code> runs the same analysis from the command line. Thresholding also writes <code>scores_compared_with_cutoff.npy</code> in its folder (the values the cutoff is applied to, which the histogram draws). To delete a project, use Delete in its menu (see <a href="#managing-a-project">Managing a project</a>), or delete its folder in the file manager.</p>
+<h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
+<p>The service listens on <code>127.0.0.1</code> only and checks the <code>Host</code> header of every request, which stops a web page on another site from reaching it. Every request to the API needs the token of the launch, which only the printed and opened address carries, and the service takes no file path from the browser: it derives every folder from a validated project name, and the folder picker is shown by the service on this computer.</p>
+<h2 id="without-a-cuda-enabled-gpu">Without a CUDA-enabled GPU<a class="headerlink" href="#without-a-cuda-enabled-gpu" title="Permanent link">&para;</a></h2>
+<p>When no CUDA-enabled GPU is found, the start screen says so and the engine runs on the CPU. The results are the same, and an analysis takes noticeably longer, so start with a larger voxel size or with the smallest example. <code>--device cpu</code> chooses the CPU even when a GPU is present.</p>
+<h2 id="rebuilding-the-front-end-after-changing-app">Rebuilding the front-end after changing <code>app/</code><a class="headerlink" href="#rebuilding-the-front-end-after-changing-app" title="Permanent link">&para;</a></h2>
+<p>The interface is a React and three.js application whose source is in <code>app/</code>. The package carries its built files in <code>src/urbansolarcarver/ui_static/</code>, so using <code>usc ui</code> needs no Node.js. After changing <code>app/</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">cd</span><span class="w"> </span>app
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>npm<span class="w"> </span>install
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>npm<span class="w"> </span>run<span class="w"> </span>typecheck<span class="w">  </span><span class="c1"># tsc --noEmit: the type check alone</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>npm<span class="w"> </span>run<span class="w"> </span>build<span class="w">      </span><span class="c1"># runs the type check first, then writes src/urbansolarcarver/ui_static/ and build_info.json</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>npm<span class="w"> </span><span class="nb">test</span><span class="w">           </span><span class="c1"># the front-end tests</span>
+</code></pre></div>
+<p>A type error stops <code>npm run build</code> before anything is written.</p>
+<p>Commit the rebuilt <code>ui_static/</code> with the source change: a test compares the hash in <code>build_info.json</code> with the sources and fails when they differ.</p>
+<p>If the service's API changed, regenerate the client types with <code>npm run api-types</code>. It runs <code>python</code> with the <code>ui</code> extra installed, so activate the repository's environment first (in a git worktree without an environment, set <code>PYTHONPATH=../src</code> and use a Python that has the extra).</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

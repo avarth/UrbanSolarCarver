@@ -344,6 +344,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#citation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Citation
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -512,6 +523,33 @@
   
   
     <li class="md-nav__item">
+      <a href="ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="modes/" class="md-nav__link">
         
   
@@ -520,6 +558,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -619,11 +684,40 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
       
         
           
+        
+      
         
       
         
@@ -667,7 +761,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -689,14 +783,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -771,14 +865,14 @@
   
   
     <li class="md-nav__item">
-      <a href="api/raytracer/" class="md-nav__link">
+      <a href="api/ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -799,14 +893,14 @@
   
   
     <li class="md-nav__item">
-      <a href="api/grid/" class="md-nav__link">
+      <a href="api/geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -911,14 +1005,14 @@
   
   
     <li class="md-nav__item">
-      <a href="api/usefulness/" class="md-nav__link">
+      <a href="api/simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -1003,6 +1097,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="api/engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1138,6 +1260,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#citation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Citation
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -1160,14 +1293,14 @@
 
 <h1 id="urban-solar-carver">Urban Solar Carver<a class="headerlink" href="#urban-solar-carver" title="Permanent link">&para;</a></h1>
 <p>GPU-accelerated generation of maximum developable building volumes that protect solar and daylight access in urban environments.</p>
-<p>USC follows a <strong>subtractive logic</strong>: a theoretical maximum volume is progressively carved by casting rays from protected surfaces toward the sky, removing voxels that obstruct solar/daylight access beyond a configurable threshold.</p>
+<p>USC works by subtraction: it starts from a theoretical maximum volume, casts rays from the protected surfaces toward the sky, and removes the voxels that obstruct solar or daylight access beyond a configurable threshold.</p>
 <p><img alt="USC pipeline overview" src="assets/explanation.png" /></p>
 <h2 id="overview">Overview<a class="headerlink" href="#overview" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>6 carving modes</strong> covering solar access, passive heating, daylighting, and radiative cooling</li>
-<li><strong>3-stage pipeline</strong> (preprocessing, thresholding, exporting) -- each stage independently re-runnable</li>
+<li><strong>3-stage pipeline</strong> (preprocessing, thresholding, exporting); each stage can be re-run on its own</li>
 <li><strong>GPU-accelerated</strong> ray tracing via NVIDIA Warp (DDA kernel), with CPU fallback</li>
-<li><strong>Grasshopper plugin</strong> (15 components) for Rhino 3D integration</li>
+<li><strong>Grasshopper plugin</strong> (27 components) for Rhino 3D integration</li>
 <li><strong>Python API</strong>, <strong>CLI</strong>, and <strong>Jupyter notebooks</strong></li>
 </ul>
 <h2 id="pipeline">Pipeline<a class="headerlink" href="#pipeline" title="Permanent link">&para;</a></h2>
@@ -1180,23 +1313,30 @@
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>Thresholding ─── mask.npy (binary carving mask)
 <a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>    |
 <a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>    v
-<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>Exporting ────── carved_mesh.ply
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>Exporting ────── export.ply (or .obj/.stl/.glb, set by final_mesh_format)
 </code></pre></div>
 <p>Each stage reads the previous stage's manifest, so you can re-run thresholding with different parameters without re-computing scores.</p>
 <h2 id="documentation">Documentation<a class="headerlink" href="#documentation" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>Getting Started</strong><ul>
-<li><a href="getting-started/installation/">Installation</a> -- setup via <code>setup_env.py</code> or manual install</li>
-<li><a href="getting-started/quick-start/">Quick Start</a> -- Python API, CLI, and notebook tutorials</li>
-<li><a href="getting-started/configuration/">Configuration</a> -- YAML config reference with per-mode examples</li>
+<li><a href="getting-started/installation/">Installation</a>: setup via <code>setup_env.py</code> or manual install</li>
+<li><a href="getting-started/quick-start/">Quick Start</a>: Python API, CLI, and notebook tutorials</li>
+<li><a href="getting-started/configuration/">Configuration</a>: YAML config reference with per-mode examples</li>
 </ul>
 </li>
-<li><strong><a href="modes/">Carving Modes</a></strong> -- the 6 analysis modes explained (tilted_plane, time-based, irradiance, benefit, daylight, radiative_cooling)</li>
-<li><strong><a href="grasshopper/">Grasshopper Plugin</a></strong> -- Rhino 3D integration, component list, daemon setup</li>
-<li><strong><a href="project-map/">Project Map</a></strong> -- every file and directory in the repository</li>
-<li><strong><a href="api/">API Reference</a></strong> -- full function signatures, parameters, and return types (auto-generated from docstrings)</li>
+<li><strong><a href="modes/">Carving Modes</a></strong>: the 6 analysis modes (tilted_plane, time-based, irradiance, benefit, daylight, radiative_cooling)</li>
+<li><strong><a href="simulated-weights/">Simulated Weights</a></strong>: the building-simulation engine behind benefit mode's simulated weights</li>
+<li><strong><a href="grasshopper/">Grasshopper Plugin</a></strong>: Rhino 3D integration, component list, daemon setup</li>
+<li><strong><a href="project-map/">Project Map</a></strong>: every file and directory in the repository</li>
+<li><strong><a href="api/">API Reference</a></strong>: function signatures, parameters, and return types (generated from docstrings)</li>
 <li><strong><a href="https://github.com/avarth/UrbanSolarCarver/blob/main/CHANGELOG.md">Changelog</a></strong></li>
 </ul>
+<h2 id="citation">Citation<a class="headerlink" href="#citation" title="Permanent link">&para;</a></h2>
+<p>USC is described in a paper presented at ReSBE 2026 and published open access. If you use USC, please cite:</p>
+<blockquote>
+<p>Vartholomaios, A. (2026). Urban Solar Carver: A GPU-Accelerated Framework for Solar-Driven Urban Form Finding. In: Bragança, L., Tsikaloudaki, K., Giarma, C., Mateus, R., Kontoleon, K., Askar, R., Salles, A. &amp; Cervantes, C. (Eds.), <em>ReShaping the Built Environment through Sustainability and Circularity: Proceedings of ReSBE 2026 International Conference, Volume 1</em>. Lecture Notes in Civil Engineering, vol. 905. Springer, pp. 600-607. <a href="https://doi.org/10.1007/978-3-032-34930-9_70">https://doi.org/10.1007/978-3-032-34930-9_70</a></p>
+</blockquote>
+<p><a href="publications/Vartholomaios_2026_ReSBE_Urban_Solar_Carver.pdf">Download the paper (PDF)</a>. The paper is licensed under <a href="https://creativecommons.org/licenses/by-nc-nd/4.0/">CC BY-NC-ND 4.0</a>, not under the AGPL-3.0 that covers the code. To cite the software itself, use the <a href="https://doi.org/10.5281/zenodo.19443737">Zenodo DOI</a>; machine-readable metadata is in <a href="https://github.com/avarth/UrbanSolarCarver/blob/main/CITATION.cff"><code>CITATION.cff</code></a>.</p>
 
 
 

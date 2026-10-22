@@ -16,7 +16,7 @@
         <link rel="prev" href="../sun/">
       
       
-        <link rel="next" href="../usefulness/">
+        <link rel="next" href="../simulated-weights/">
       
       
         
@@ -434,6 +434,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -442,6 +469,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -539,6 +593,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -548,6 +629,8 @@
       
         
           
+        
+      
         
       
         
@@ -589,7 +672,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -611,14 +694,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -693,14 +776,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../raytracer/" class="md-nav__link">
+      <a href="../ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -721,14 +804,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../grid/" class="md-nav__link">
+      <a href="../geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -930,14 +1013,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../usefulness/" class="md-nav__link">
+      <a href="../simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -1022,6 +1105,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1195,14 +1306,13 @@
 
 
 <h1 id="scoring">Scoring<a class="headerlink" href="#scoring" title="Permanent link">&para;</a></h1>
-<p>Handles the conversion from raw per-voxel obstruction counts to a binary carving decision:</p>
+<p>Sky-patch weight dispatch and threshold selection:</p>
 <ul>
-<li><strong>Weight dispatch</strong> (<code>get_weights</code>) -- routes to the correct sky-patch weighting function based on the selected mode (Perez irradiance, heating benefit, CIE daylight luminance, or radiative cooling).</li>
-<li><strong>Normalization</strong> (<code>normalize_scores</code>) -- rescales raw scores to [0, 1] using min-max or other strategies.</li>
-<li><strong>Thresholding</strong> -- three automatic methods:<ul>
-<li><code>otsu_threshold</code> -- minimizes intra-class variance (good general default).</li>
-<li><code>headtail_threshold</code> -- iterative head-tail breaks for heavy-tailed score distributions.</li>
-<li><code>carve_fraction</code> -- removes a fixed percentage of the scored volume.</li>
+<li><strong>Weight dispatch</strong> (<code>get_weights</code>): calls the sky-patch weighting function for the selected mode (Perez irradiance, heating benefit, CIE daylight luminance, or radiative cooling).</li>
+<li><strong>Thresholds</strong>, applied by the thresholding stage to the raw scores of the occupied voxels:<ul>
+<li><code>carve_fraction_threshold</code>: the cutoff above which the voxels hold a given fraction of the total score mass.</li>
+<li><code>headtail_threshold</code>: Jiang (2013) head/tail breaks for heavy-tailed score distributions.</li>
+<li>A numeric cutoff from the config is used as given.</li>
 </ul>
 </li>
 </ul>
@@ -1220,20 +1330,28 @@
 
     <div class="doc doc-contents first">
 
-        <p>UrbanSolarCarver Scoring Module</p>
-<p>Provides sky-patch weight computation and threshold selection for voxel carving.</p>
+        <p>UrbanSolarCarver scoring module</p>
+<p>Sky-patch weight computation and threshold selection for voxel carving.</p>
 <ol>
 <li>
 <p>get_weights(mode, device, epw_file, hoys, …) → torch.Tensor
    Per-patch weight vector for the specified mode.  Delegates to
-   compute_EPW_based_weights (sky_patches.py) for climate-based modes
-   and compute_radiative_cooling_weights for radiative_cooling.</p>
+   compute_EPW_based_weights (sky_patches.py) for irradiance, benefit and
+   daylight, and to compute_radiative_cooling_weights for radiative_cooling.
+   Inside a CarverSession the result is cached, keyed by every argument
+   and by the contents of the EPW and simulated-weights files, so a
+   preprocessing run with unchanged weather settings skips the sky matrix.</p>
+</li>
+<li>
+<p>carve_fraction_threshold(scores, fraction) → float
+   Score cutoff above which the highest-scoring voxels hold <em>fraction</em> of
+   the total score.</p>
 </li>
 <li>
 <p>headtail_threshold(scores) → float
-   Head/tail breaks (Jiang 2013): iteratively partitions right-skewed
-   score distributions at the arithmetic mean.  Well-suited for solar
-   obstruction scores which are typically heavy-tailed.</p>
+   Head/tail breaks (Jiang 2013): repeatedly splits a right-skewed score
+   distribution at its arithmetic mean.  Suited to obstruction scores,
+   which are usually heavy-tailed.</p>
 </li>
 </ol>
 
@@ -1261,30 +1379,306 @@
 
 
 <h3 id="urbansolarcarver.scoring.get_weights" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">get_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">device</span><span class="p">(</span><span class="s1">&#39;cuda&#39;</span><span class="p">),</span> <span class="n">epw_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">hoys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dew_point_celsius</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">bliss_k</span><span class="o">=</span><span class="mf">1.8</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">min_sky_elevation_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">include_harm</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">usefulness_path</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">get_weights</span><span class="p">(</span><span class="n">mode</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">epw_file</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">hoys</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">dew_point_celsius</span><span class="o">=</span><span class="mf">14.0</span><span class="p">,</span> <span class="n">bliss_k</span><span class="o">=</span><span class="mf">1.8</span><span class="p">,</span> <span class="n">balance_temperature</span><span class="o">=</span><span class="mf">15.0</span><span class="p">,</span> <span class="n">balance_offset</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">north_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">min_sky_elevation_deg</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">include_harm</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">simulated_weights_path</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.scoring.get_weights" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Build a vector of weights for each sky patch, according to a chosen analysis mode.</p>
-<p>Explanation:
-- We represent the sky as discrete patches. This function assigns a numeric weight to each patch.
-- Modes include simple uniform weighting, solar irradiance, passive solar benefit, daylighting and radiative cooling.
-- Solar irradiance uses EPW data, Passive solar benefit uses Ladybug's method that employs a balance temp and offset.
-- Daylight uses CIE overcast approximation. Radiative cooling uses dew point temperature to estimate cooling potential of a night sky.
-Args:
-  mode: Analysis type (e.g., 'time-based', 'irradiance', 'benefit', 'daylight', 'radiative_cooling').
-  device: Compute device identifier (e.g., 'cuda' or 'cpu').
-  epw_file: Path to weather data file; required for certain modes.
-  hoys : Hour-of-year indices for EPW sampling.
-  dew_point_celsius: Parameter for radiative cooling estimation.
-  bliss_k: Angular-attenuation constant for radiative cooling.
-  balance_temperature: Free-running balance-point temperature for benefit mode.
-  balance_offset: Dead-band below the balance point for benefit mode.</p>
-<p>Returns:
-  Tensor of length V (number of sky patches) with the computed weight for each patch.</p>
+        <p>Return one weight per Tregenza sky patch for the given analysis mode.</p>
+<ul>
+<li>irradiance: cumulative direct + diffuse irradiance per patch over the
+  hours in <em>hoys</em> (kWh/m²), from the EPW via a Ladybug sky matrix.</li>
+<li>benefit: the same, counted only in hours below the heating balance
+  point (<em>balance_temperature</em> minus <em>balance_offset</em>); with
+  <em>include_harm</em>, irradiance in hours above <em>balance_temperature</em> plus
+  <em>balance_offset</em> is subtracted (clipped at 0).</li>
+<li>daylight: CIE standard overcast sky luminance; needs no EPW.</li>
+<li>radiative_cooling: long-wave cooling potential from the dew point
+  (Martin-Berdahl emissivity, Bliss angular law), normalized to sum to 1.</li>
+</ul>
+<p>'time-based' and 'tilted_plane' do not use sky-patch weights and raise
+ValueError here.</p>
+<p>Inside a CarverSession the weights are cached (see the module notes):
+the returned tensor may be shared, so callers must not modify it.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>mode</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>One of 'irradiance', 'benefit', 'daylight', 'radiative_cooling'
+(case and surrounding spaces are ignored).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>device</code>
+            </td>
+            <td>
+                  <code><span title="torch.device">device</span> or <span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Device of the returned tensor; default CUDA if available, else CPU.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>epw_file</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>EPW weather file; required for irradiance and benefit.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>hoys</code>
+            </td>
+            <td>
+                  <code><span title="typing.Sequence">Sequence</span>[<span title="int">int</span>]</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Hour-of-year indices (0..8759); required for irradiance and benefit.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>dew_point_celsius</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dew-point temperature for radiative_cooling (°C).</p>
+              </div>
+            </td>
+            <td>
+                  <code>14.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>bliss_k</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Bliss angular-attenuation constant for radiative_cooling.</p>
+              </div>
+            </td>
+            <td>
+                  <code>1.8</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>balance_temperature</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Free-running balance-point temperature for benefit (°C).</p>
+              </div>
+            </td>
+            <td>
+                  <code>15.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>balance_offset</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Dead band around the balance point for benefit (°C).</p>
+              </div>
+            </td>
+            <td>
+                  <code>2.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>north_deg</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Model north, degrees clockwise from +Y (irradiance, benefit, daylight).</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>min_sky_elevation_deg</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>radiative_cooling only: patches below this elevation get weight 0.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>include_harm</code>
+            </td>
+            <td>
+                  <code><span title="bool">bool</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>benefit only: subtract hot-hour irradiance, as described above.</p>
+              </div>
+            </td>
+            <td>
+                  <code>False</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>simulated_weights_path</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>benefit only: file of simulated hourly benefit/harm weights, read
+with :func:<code>read_simulated_weights</code>; each hour's irradiance is
+scaled by its weight instead of the 0/1 temperature filter.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Shape (P,), one non-negative weight per sky patch (P = 145).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="TypeError">TypeError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <em>mode</em> is not a non-empty string.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <em>mode</em> is not supported, or <em>epw_file</em> / <em>hoys</em> are missing for
+irradiance or benefit.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="FileNotFoundError">FileNotFoundError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <em>epw_file</em> is given but does not exist (irradiance, benefit).</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
 
 
     </div>
@@ -1295,7 +1689,7 @@ Args:
 
 
 <h3 id="urbansolarcarver.scoring.carve_fraction_threshold" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">carve_fraction_threshold</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">fraction</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">carve_fraction_threshold</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">fraction</span><span class="p">,</span> <span class="n">mass</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.scoring.carve_fraction_threshold" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1305,9 +1699,12 @@ Args:
         <p>Score-mass cutoff: the threshold above which voxels collectively
 account for <em>fraction</em> of the total score mass.</p>
 <p>Equivalent to sorting all scores descending and walking the cumulative
-sum until it reaches <code>fraction * total</code> — but a full argsort of a
-large grid is O(N log N) with a heavy constant (seconds to minutes at
-300³+).  This implementation makes two O(N) passes instead:</p>
+sum until it reaches <code>fraction * total</code>.  With <em>mass</em>, the voxels are
+ranked by <em>scores</em> but the sum counts <em>mass</em> (thresholding ranks by the
+cutoff at which carve_above removes a voxel and counts each voxel's own
+score, so the fraction includes what carve_above removes).  A full sort of a large grid
+is O(N log N) and takes seconds to minutes at 300³ voxels and above, so
+this implementation makes two O(N) passes instead:</p>
 <ol>
 <li>A weighted histogram locates the bin containing the cutoff.</li>
 <li>Only the scores inside that single bin (N / n_bins expected) are
@@ -1358,6 +1755,23 @@ large grid is O(N log N) with a heavy constant (seconds to minutes at
                 <em>required</em>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>mass</code>
+            </td>
+            <td>
+                  <code><span title="numpy.ndarray">ndarray</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Non-negative mass of each voxel, same shape as <em>scores</em>; default
+<em>scores</em> itself.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1393,89 +1807,23 @@ large grid is O(N log N) with a heavy constant (seconds to minutes at
 
 
 <h3 id="urbansolarcarver.scoring.headtail_threshold" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">headtail_threshold</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">max_iterations</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">headtail_threshold</span><span class="p">(</span><span class="n">scores</span><span class="p">,</span> <span class="n">max_iterations</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">head_limit</span><span class="o">=</span><span class="mf">0.4</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.scoring.headtail_threshold" class="headerlink" title="Permanent link">&para;</a></h3>
 
 
     <div class="doc doc-contents ">
 
-        <p>Head-tail breaks (Jiang, 2013): iteratively partition scores into 'head'
-(above mean) and 'tail' (below mean). Each iteration re-computes the mean
-of the head subset. The process stops when the head mean drops below the
-overall mean, indicating the distribution's heavy tail has been isolated.
-This is well-suited for right-skewed score distributions typical of solar
-exposure data.</p>
-
-
-<p><span class="doc-section-title">Parameters:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Type</th>
-          <th>Description</th>
-          <th>Default</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                <code>scores</code>
-            </td>
-            <td>
-                  <code><span title="numpy.ndarray">ndarray</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>1-D array of non-negative voxel scores.</p>
-              </div>
-            </td>
-            <td>
-                <em>required</em>
-            </td>
-          </tr>
-          <tr class="doc-section-item">
-            <td>
-                <code>max_iterations</code>
-            </td>
-            <td>
-                  <code><span title="int">int</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Safety cap on recursion depth.</p>
-              </div>
-            </td>
-            <td>
-                  <code>10</code>
-            </td>
-          </tr>
-      </tbody>
-    </table>
-
-
-    <p><span class="doc-section-title">Returns:</span></p>
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Description</th>
-        </tr>
-      </thead>
-      <tbody>
-          <tr class="doc-section-item">
-            <td>
-                  <code><span title="float">float</span></code>
-            </td>
-            <td>
-              <div class="doc-md-description">
-                <p>Threshold value (the last computed mean).</p>
-              </div>
-            </td>
-          </tr>
-      </tbody>
-    </table>
+        <p>Head/tail breaks cutoff (Jiang, 2013).</p>
+<p>Split the scores at their mean.  If the part above the mean (the head)
+is a minority (at most <em>head_limit</em> of the values), the mean is a valid
+break; split the head again at its own mean, and so on.  Stop when the
+head is no longer a minority (or is empty).</p>
+<p>Returns the last valid break, so only the heaviest obstructors score
+above it.  If even the first split has a majority head (no heavy tail),
+the overall mean is returned.</p>
+<p>Example: 80 values of 1, 16 of 10 and 4 of 100 give breaks 6.4 (head
+20 %) and 28 (head 20 %), then an empty head: the cutoff is 28.</p>
 
 
     </div>

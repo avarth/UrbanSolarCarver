@@ -16,7 +16,7 @@
         <link rel="prev" href="../quick-start/">
       
       
-        <link rel="next" href="../../modes/">
+        <link rel="next" href="../../ui/">
       
       
         
@@ -558,6 +558,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -566,6 +593,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -665,11 +719,40 @@
   
   
   
+    <li class="md-nav__item">
+      <a href="../../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
     
     
       
         
           
+        
+      
         
       
         
@@ -713,7 +796,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -735,14 +818,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -817,14 +900,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/raytracer/" class="md-nav__link">
+      <a href="../../api/ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -845,14 +928,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/grid/" class="md-nav__link">
+      <a href="../../api/geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -957,14 +1040,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../api/usefulness/" class="md-nav__link">
+      <a href="../../api/simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -1049,6 +1132,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../api/engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1249,9 +1360,10 @@
 
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
-<p>USC uses YAML configuration files. Mode-specific templates are in <code>configs/</code>.</p>
+<p>USC uses YAML configuration files. Mode-specific templates are in <code>configs/</code>. Relative paths inside a config file (meshes, EPW, <code>out_dir</code>, <code>simulated_weights_path</code>) are resolved against the folder that contains the YAML file.</p>
+<p>From Python, <code>load_config(path, overrides)</code> reads a file and <code>build_config(values)</code> validates values you already hold; both raise <code>ConfigError</code>, which lists the field and message of every problem. A client with no YAML file (the Grasshopper components, through the daemon) starts from the starting values of the chosen mode and applies its overrides. The starting values are the analysis period for <code>time-based</code> (21 Dec, 10:00 to 14:00), <code>irradiance</code> (the full year) and <code>benefit</code> (15 Oct 07:00 to 15 Apr 19:00), <code>tilted_plane_angle_deg: 45</code> for <code>tilted_plane</code> and <code>carve_fraction: 0.35</code> for <code>radiative_cooling</code>; the templates in <code>configs/</code> repeat them. They do not change the schema defaults.</p>
 <h2 id="minimal-configs-by-mode">Minimal configs by mode<a class="headerlink" href="#minimal-configs-by-mode" title="Permanent link">&para;</a></h2>
-<p>Required parameters vary by mode. Every config needs at minimum <code>max_volume_path</code>, <code>test_surface_path</code>, <code>mode</code>, and <code>out_dir</code>. Weather-dependent modes also require <code>epw_path</code> and an analysis period.</p>
+<p>Required parameters vary by mode. Every config needs <code>max_volume_path</code>, <code>test_surface_path</code>, and <code>out_dir</code>; <code>mode</code> defaults to <code>time-based</code>. The weather-dependent modes (<code>time-based</code>, <code>irradiance</code>, <code>benefit</code>) also require <code>epw_path</code> and an analysis period. <code>daylight</code>, <code>tilted_plane</code> and <code>radiative_cooling</code> need neither, and USC warns if you set settings the chosen mode does not use.</p>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:6"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><input id="__tabbed_1_5" name="__tabbed_1" type="radio" /><input id="__tabbed_1_6" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">tilted_plane</label><label for="__tabbed_1_2">time-based</label><label for="__tabbed_1_3">irradiance</label><label for="__tabbed_1_4">benefit</label><label for="__tabbed_1_5">daylight</label><label for="__tabbed_1_6">radiative_cooling</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
@@ -1320,33 +1432,20 @@
 <a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
 <a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;daylight&quot;</span>
 <a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="nt">end_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
-<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">31</span>
-<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">18</span>
-<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
-<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/maxVolume.ply&quot;</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/testSurfaces.ply&quot;</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nt">epw_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/weather.epw&quot;</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
-<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;radiative_cooling&quot;</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
-<a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="nt">end_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">31</span>
-<a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6</span>
-<a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="nt">dew_point_celsius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15.0</span>
-<a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="nt">bliss_k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.22</span>
-<a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
-<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.6</span>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;radiative_cooling&quot;</span>
+<a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nt">dew_point_celsius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.0</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nt">bliss_k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.8</span>
+<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
+<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span><span class="w">   </span><span class="c1"># cooling scores are diffuse; 0.7 over-carves</span>
 </code></pre></div>
 </div>
 </div>
@@ -1363,48 +1462,78 @@
 <tbody>
 <tr>
 <td><code>mode</code></td>
-<td>--</td>
+<td><code>"time-based"</code></td>
 <td>Carving mode (see <a href="../../modes/">Modes</a>)</td>
 </tr>
 <tr>
 <td><code>voxel_size</code></td>
 <td>1.0</td>
-<td>Grid resolution in meters (0.01 -- 100)</td>
+<td>Voxel edge length in meters (0.01-100)</td>
 </tr>
 <tr>
 <td><code>grid_step</code></td>
-<td>1.0</td>
-<td>Surface sampling spacing in meters (must be &lt;= voxel_size)</td>
+<td><code>null</code></td>
+<td>Surface sampling spacing in meters; <code>null</code> = half the voxel size. An explicit value must be &lt;= voxel_size</td>
 </tr>
 <tr>
 <td><code>ray_length</code></td>
-<td>300.0</td>
-<td>Maximum ray cast distance in meters</td>
-</tr>
-<tr>
-<td><code>min_altitude</code></td>
-<td>5.0</td>
-<td>Minimum sun altitude in degrees</td>
+<td>3000.0</td>
+<td>Maximum ray cast distance in meters. A ray stops where it leaves the voxel grid, so a length beyond the grid costs nothing</td>
 </tr>
 <tr>
 <td><code>threshold</code></td>
-<td><code>"carve_fraction"</code></td>
-<td>See <a href="#thresholding-strategies">Thresholding strategies</a> below</td>
+<td>mode default</td>
+<td><code>carve_fraction</code> for weighted modes, <code>0</code> for <code>time-based</code>, unset for <code>tilted_plane</code>. See <a href="#thresholding-strategies">Thresholding strategies</a> below</td>
 </tr>
 <tr>
 <td><code>carve_fraction</code></td>
 <td>0.7</td>
-<td>Solar protection slider: 0.7 = aggressive (remove 70% obstruction), 0.3 = conservative</td>
+<td>Solar protection slider: 0.7 = aggressive (remove 70% of the obstruction weight, including what <code>carve_above</code> removes), 0.3 = conservative</td>
+</tr>
+<tr>
+<td><code>score_smoothing</code></td>
+<td><code>null</code></td>
+<td>Gaussian blur radius (m) on the scores before thresholding; <code>null</code> = 1.1 x voxel_size, 0 = off. Weighted modes only</td>
 </tr>
 <tr>
 <td><code>carve_above</code></td>
-<td>false</td>
-<td>Carve all occupied voxels above the lowest carved region in each column</td>
+<td>true</td>
+<td>Carve all occupied voxels above the lowest carved region in each column, so the result is a buildable height field without floating mass (empty cells such as a ground-floor passage never trigger it). <code>false</code> keeps mass that floats above carved zones but casts no violating shadow</td>
 </tr>
 <tr>
 <td><code>carve_above_min_consecutive</code></td>
 <td>1</td>
-<td>Min consecutive carved voxels to trigger carve_above (2-3 recommended)</td>
+<td>Min consecutive carved voxels to trigger carve_above (2-3 avoid column removal from stray single voxels; shorter runs stay carved)</td>
+</tr>
+<tr>
+<td><code>ground_floor_height</code></td>
+<td>5.0</td>
+<td>Massing: height of the ground floor (m). See <a href="../../massing/">Floor-plate massing</a></td>
+</tr>
+<tr>
+<td><code>floor_height</code></td>
+<td>3.0</td>
+<td>Massing: height of every floor above the ground floor (m)</td>
+</tr>
+<tr>
+<td><code>min_plate_dimension</code></td>
+<td>3.0</td>
+<td>Massing: side of the square module and minimum floor-plate width (m)</td>
+</tr>
+<tr>
+<td><code>plate_tolerance</code></td>
+<td>0.2</td>
+<td>Massing: largest share of a module's volume on a floor outside the carved envelope; plates never leave the maximum volume</td>
+</tr>
+<tr>
+<td><code>plate_stacking</code></td>
+<td>supported</td>
+<td>Massing: <code>supported</code> builds a module only where it is built on the floor below; <code>free</code> decides each floor on its own</td>
+</tr>
+<tr>
+<td><code>max_slope_deg</code></td>
+<td>75 (weighted modes), off otherwise</td>
+<td>Steepest rise (degrees) allowed between neighbouring columns after carve_above; taller columns are cut into ramps, which removes cliffs and spires. <code>90</code> = off. The extra score it removes is reported, not counted in <code>carve_fraction</code></td>
 </tr>
 <tr>
 <td><code>apply_smoothing</code></td>
@@ -1414,7 +1543,12 @@
 <tr>
 <td><code>min_voxels</code></td>
 <td>300</td>
-<td>Remove connected components smaller than this</td>
+<td>Remove connected voxel clusters smaller than this</td>
+</tr>
+<tr>
+<td><code>final_mesh_format</code></td>
+<td><code>"ply"</code></td>
+<td>Mesh format of the envelope and the massing plates: <code>ply</code>, <code>obj</code>, <code>stl</code>, or <code>glb</code> (massing writes <code>plates.obj</code> as well)</td>
 </tr>
 <tr>
 <td><code>device</code></td>
@@ -1423,8 +1557,13 @@
 </tr>
 <tr>
 <td><code>diagnostics</code></td>
-<td>true</td>
-<td>Write score histograms and diagnostic JSON</td>
+<td>false</td>
+<td>Add detailed score statistics (median, std, percentiles) to the diagnostics JSON. Basic statistics and timings are always written</td>
+</tr>
+<tr>
+<td><code>diagnostic_plots</code></td>
+<td>false</td>
+<td>Write plot images (score histograms, sky-patch weight plots, threshold histogram)</td>
 </tr>
 </tbody>
 </table>
@@ -1440,28 +1579,43 @@
 <tbody>
 <tr>
 <td><code>epw_path</code></td>
-<td>all except <code>tilted_plane</code>, <code>daylight</code></td>
+<td><code>time-based</code>, <code>irradiance</code>, <code>benefit</code></td>
 <td>Path to EPW weather file</td>
 </tr>
 <tr>
 <td><code>start_month</code> .. <code>end_hour</code></td>
-<td>all except <code>tilted_plane</code>, <code>daylight</code></td>
-<td>Analysis period</td>
+<td><code>time-based</code>, <code>irradiance</code>, <code>benefit</code></td>
+<td>Analysis period (or one <code>analysis_period:</code> mapping with Ladybug <code>AnalysisPeriod.to_dict()</code> keys)</td>
+</tr>
+<tr>
+<td><code>sun_steps_per_hour</code></td>
+<td><code>time-based</code></td>
+<td>Sun positions per hour (default 12 = every 5 min; Ladybug timesteps 1-60)</td>
+</tr>
+<tr>
+<td><code>min_altitude</code></td>
+<td><code>time-based</code></td>
+<td>Ignore sun positions below this altitude in degrees (default 5.0)</td>
+</tr>
+<tr>
+<td><code>time_basis</code></td>
+<td><code>time-based</code></td>
+<td>Clock of the analysis period's hours: <code>standard</code> (default, the EPW's local standard time), <code>daylight_saving</code> (standard time + 1 h on every date) or <code>solar</code> (true solar time, 12:00 = solar noon). Only <code>standard</code> is accepted in <code>irradiance</code> and <code>benefit</code>, whose hourly EPW records are in standard time (<a href="../../modes/#time-basis-standard-daylight-saving-or-solar-time-time_basis">details</a>)</td>
 </tr>
 <tr>
 <td><code>balance_temperature</code></td>
 <td><code>benefit</code></td>
-<td>Free-running balance-point temperature (C); unused when <code>usefulness_path</code> is set</td>
+<td>Free-running balance-point temperature (°C, default 15); unused when <code>simulated_weights_path</code> is set</td>
 </tr>
 <tr>
 <td><code>balance_offset</code></td>
 <td><code>benefit</code></td>
-<td>Dead-band offset (C); unused when <code>usefulness_path</code> is set</td>
+<td>Dead-band below the balance point (°C, default 2); unused when <code>simulated_weights_path</code> is set</td>
 </tr>
 <tr>
-<td><code>usefulness_path</code></td>
+<td><code>simulated_weights_path</code></td>
 <td><code>benefit</code></td>
-<td>Path to a <code>solar_usefulness.json</code> artifact (<code>usc usefulness</code>): simulated hourly weights replace the balance-point rule (<a href="../../modes/#simulated-weights">details</a>)</td>
+<td>Path to a <code>simulated_weights.json</code> artifact (<code>usc simulate-weights</code>): simulated hourly weights replace the balance-point rule (<a href="../../modes/#simulated-weights">details</a>)</td>
 </tr>
 <tr>
 <td><code>include_harm</code></td>
@@ -1476,49 +1630,63 @@
 <tr>
 <td><code>dew_point_celsius</code></td>
 <td><code>radiative_cooling</code></td>
-<td>Night-time dew point (C)</td>
+<td>Night-time dew point (°C, default 14)</td>
 </tr>
 <tr>
 <td><code>bliss_k</code></td>
 <td><code>radiative_cooling</code></td>
-<td>Bliss angular-attenuation constant</td>
+<td>Bliss angular-attenuation constant (default 1.8)</td>
+</tr>
+<tr>
+<td><code>min_sky_elevation_deg</code></td>
+<td><code>radiative_cooling</code></td>
+<td>Ignore sky patches below this elevation in degrees (default 0 = full hemisphere)</td>
+</tr>
+<tr>
+<td><code>edge_taper</code></td>
+<td>weighted modes</td>
+<td>Sample points closer than this (m) to their surface's edge count proportionally less (default 0 = off), so a cooling street or courtyard does not clear the mass right beside it. The browser UI shows it in Night cooling (<code>radiative_cooling</code>) only</td>
 </tr>
 </tbody>
 </table>
 <h2 id="thresholding-strategies">Thresholding strategies<a class="headerlink" href="#thresholding-strategies" title="Permanent link">&para;</a></h2>
-<p>After preprocessing computes per-voxel obstruction scores, thresholding decides which voxels to remove. This is the primary design lever -- it controls the trade-off between solar protection and buildable volume.</p>
+<p>After preprocessing computes per-voxel obstruction scores, thresholding decides which voxels to remove. This is the main design control: it sets the trade-off between solar protection and buildable volume.</p>
 <div class="admonition note">
 <p class="admonition-title">Mode-specific threshold semantics</p>
 <p>The strategies below apply to the <strong>weighted modes</strong> (<code>irradiance</code>, <code>benefit</code>, <code>daylight</code>, <code>radiative_cooling</code>) whose scores are continuous values.</p>
-<p><strong><code>tilted_plane</code></strong> is strictly binary -- a voxel either protrudes above the cut plane (removed) or it does not (kept). Do not set <code>threshold</code>; leave it unset (<code>None</code>). Setting a string method or a value &gt; 0 raises a validation error.</p>
-<p><strong><code>time-based</code></strong> scores are <strong>integer violation counts</strong> (how many sun-position time steps the voxel shadows a test surface). Use a non-negative integer: <code>threshold: 0</code> removes any voxel that shadows even once (strict, default); <code>threshold: 1</code> allows one time step of shadowing; and so on. See <a href="../../modes/#for-violation-count-modes-time-based-tilted_plane">Modes -- violation-count thresholds</a> for details.</p>
+<p><strong><code>tilted_plane</code></strong> is strictly binary: a voxel either protrudes above the cut plane (removed) or it does not (kept). Do not set <code>threshold</code>; leave it unset (<code>None</code>). Setting a string method or a value &gt; 0 raises a validation error.</p>
+<p><strong><code>time-based</code></strong> scores are <strong>shaded area x duration in m²·h</strong> (how much protected surface the voxel shades, and for how long, during the period). Use a non-negative number: <code>threshold: 0</code> removes any voxel that shadows at any sampled moment (strict, default); <code>threshold: 5</code> tolerates up to 5 m²·h; and so on. See <a href="../../modes/#for-violation-count-modes-time-based-tilted_plane">Modes: violation-count thresholds</a> for details.</p>
 </div>
 <p><strong><code>carve_fraction</code></strong> (recommended for weighted modes)
-:   Removes a percentage of total obstruction weight. Set <code>carve_fraction: 0.7</code> to remove 70% of obstruction (aggressive -- taller, slimmer result with better solar access). Set <code>carve_fraction: 0.3</code> for a conservative result (bulkier volume, more floor area). This is the most intuitive option: a <strong>solar protection slider</strong>.</p>
+:   Removes a fraction of the total obstruction weight of the building's voxels, counting what <code>carve_above</code> removes. Set <code>carve_fraction: 0.7</code> to remove 70% of the obstruction (aggressive: taller, slimmer result with better solar access). Set <code>carve_fraction: 0.3</code> for a conservative result (bulkier volume, more floor area). It works as a <strong>solar protection slider</strong>.</p>
 <p><strong><code>headtail</code></strong>
-:   Jiang (2013) head/tail breaks: iteratively splits the distribution at the mean. Designed for heavy-tailed score distributions where most voxels have low scores and a few have very high scores. Biased toward removing only the worst obstructors.</p>
+:   Jiang (2013) head/tail breaks: splits the scores at their mean and keeps splitting the upper part while it holds at most 40% of the values. Designed for heavy-tailed score distributions where most voxels have low scores and a few have very high scores. Biased toward removing only the worst obstructors.</p>
 <p><strong>Numeric value</strong> (e.g., <code>threshold: 0.35</code>)
-:   Manual threshold on normalized scores. Carves all voxels scoring above this value. Enable <code>diagnostics: true</code> to inspect the score histogram and pick a value by eye. For <code>time-based</code>, use an integer (e.g., <code>threshold: 2</code> = allow up to 2 shadow steps).</p>
+:   Manual cutoff on the scores, in the mode's score unit: kWh for <code>irradiance</code> and <code>benefit</code>, m² of fully hidden sky for <code>daylight</code> and <code>radiative_cooling</code>, m²·h for <code>time-based</code> (see <a href="../../modes/">Modes</a>). Carves all voxels scoring above this value. Set <code>diagnostic_plots: true</code> to get the score histogram and pick a value from it.</p>
 <div class="admonition tip">
 <p class="admonition-title">Tip</p>
-<p>The <strong>decomposed pipeline</strong> is designed for threshold exploration. Compute scores once (<code>preprocessing</code>), then re-run <code>thresholding</code> with different parameters -- it's nearly instant since the expensive ray tracing is already done.</p>
+<p>The <strong>decomposed pipeline</strong> is designed for threshold exploration. Compute scores once (<code>preprocessing</code>), then re-run <code>thresholding</code> with different parameters; it takes seconds because the ray tracing is already done.</p>
 </div>
 <h2 id="cli-overrides">CLI overrides<a class="headerlink" href="#cli-overrides" title="Permanent link">&para;</a></h2>
 <p>Any config value can be overridden from the command line:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>urbansolarcarver<span class="w"> </span>preprocessing<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">    </span>-o<span class="w"> </span><span class="nv">voxel_size</span><span class="o">=</span><span class="m">0</span>.5<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">    </span>-o<span class="w"> </span><span class="nv">mode</span><span class="o">=</span>irradiance<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">    </span>-o<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span>carve_fraction
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>urbansolarcarver<span class="w"> </span>preprocessing<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w">     </span>-o<span class="w"> </span><span class="nv">voxel_size</span><span class="o">=</span><span class="m">0</span>.5<span class="w">     </span>-o<span class="w"> </span><span class="nv">mode</span><span class="o">=</span>irradiance<span class="w">     </span>-o<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span>carve_fraction
 </code></pre></div>
+<p>Relative paths given in overrides are resolved against the current directory, not the YAML's folder.</p>
 <h2 id="output-structure">Output structure<a class="headerlink" href="#output-structure" title="Permanent link">&para;</a></h2>
+<p>With the default output folders (<code>&lt;out_dir&gt;/preprocessing</code>, <code>&lt;out_dir&gt;/thresholding</code>, <code>&lt;out_dir&gt;/exporting</code>, and <code>&lt;out_dir&gt;/massing</code> when massing runs):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>outputs/
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>  preprocessing/
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    scores.npy, voxel_grid.npy, manifest.json, diagnostics/
+<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    scores.npy, voxel_grid.npy, footprint.json, test_points.npy, test_normals.npy, manifest.json, diagnostics/
 <a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>  thresholding/
 <a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    mask.npy, manifest.json, diagnostics/
 <a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  exporting/
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    carved_mesh.ply, manifest.json, diagnostics/
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    export.ply (or .obj/.stl/.glb), manifest.json, diagnostics/
+<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>  massing/
+<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    plates.json, plates.obj (and plates.ply/.stl/.glb), manifest.json, diagnostics/
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>  run_report.md
 </code></pre></div>
+<p>Every manifest carries a <code>run_id</code>, new on each run of its stage, and the manifests after preprocessing record the <code>run_id</code> they were built from. A stage refuses an upstream that was re-run since (<code>StageChainError</code>, naming the stage to re-run), so re-run preprocessing once for a run folder written by an earlier version.</p>
+<p>Weighted modes also write <code>preprocessing/patch_weights.npy</code>.</p>
 <h2 id="full-reference">Full reference<a class="headerlink" href="#full-reference" title="Permanent link">&para;</a></h2>
 <p>See <code>configs/REFERENCE_all_options.yaml</code> for every parameter with descriptions, or run:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>urbansolarcarver<span class="w"> </span>schema

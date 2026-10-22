@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/api/">
       
       
-        <link rel="prev" href="../project-map/">
+        <link rel="prev" href="../testing/">
       
       
         <link rel="next" href="pipeline/">
@@ -434,6 +434,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../modes/" class="md-nav__link">
         
   
@@ -442,6 +469,33 @@
     
   
     Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
   
 
     
@@ -539,6 +593,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -548,6 +629,8 @@
       
         
           
+        
+      
         
       
         
@@ -589,7 +672,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -611,14 +694,14 @@
             </a>
             
               
-              <label class="md-nav__link md-nav__link--active" for="__nav_7" id="__nav_7_label" tabindex="">
+              <label class="md-nav__link md-nav__link--active" for="__nav_10" id="__nav_10_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_10">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -693,14 +776,14 @@
   
   
     <li class="md-nav__item">
-      <a href="raytracer/" class="md-nav__link">
+      <a href="ray-tracing/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Ray Tracer
+    Ray Tracing
   
 
     
@@ -721,14 +804,14 @@
   
   
     <li class="md-nav__item">
-      <a href="grid/" class="md-nav__link">
+      <a href="geometry/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Grid Operations
+    Geometry
   
 
     
@@ -833,14 +916,14 @@
   
   
     <li class="md-nav__item">
-      <a href="usefulness/" class="md-nav__link">
+      <a href="simulated-weights/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Solar Usefulness
+    Simulated Weights
   
 
     
@@ -925,6 +1008,34 @@
     
   
     Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
   
 
     
@@ -1103,9 +1214,9 @@
 
 
 <h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
-<p>Auto-generated from source docstrings. Every public function and class includes its full signature, parameters, return type, and description.</p>
+<p>Generated from the source docstrings: each documented public function and class is shown with its signature, parameters, return type, and description.</p>
 <h2 id="pipeline">Pipeline<a class="headerlink" href="#pipeline" title="Permanent link">&para;</a></h2>
-<p>The main entry points for running USC -- one-shot or stage-by-stage.</p>
+<p>The main entry points for running USC, in one call or stage by stage.</p>
 <table>
 <thead>
 <tr>
@@ -1116,7 +1227,7 @@
 <tbody>
 <tr>
 <td><a href="pipeline/">Pipeline</a></td>
-<td><code>run_pipeline()</code>, <code>preprocessing()</code>, <code>thresholding()</code>, <code>exporting()</code>, result dataclasses</td>
+<td><code>run_pipeline()</code> (<code>produce</code>, <code>start_from</code>, <code>context</code>), <code>PipelineResult</code>, <code>stages_to_rerun()</code>, <code>preprocessing()</code>, <code>thresholding()</code>, <code>exporting()</code>, <code>massing()</code>, result dataclasses, <code>RunContext</code> and issues, the error classes</td>
 </tr>
 </tbody>
 </table>
@@ -1132,19 +1243,19 @@
 <tbody>
 <tr>
 <td><a href="carving/">Carving</a></td>
-<td><code>carve_with_sun_rays()</code>, <code>carve_with_sky_patch_rays()</code>, <code>carve_with_planes()</code>, <code>validate_inputs()</code>, <code>load_meshes()</code>, <code>sample_period()</code></td>
+<td><code>carve_with_sun_rays()</code>, <code>carve_with_sky_patch_rays()</code>, <code>carve_with_planes()</code> (carving); <code>carve_above_columns()</code>, <code>carve_above_scores()</code>, <code>limit_column_slope()</code> (column_postprocessing)</td>
 </tr>
 <tr>
-<td><a href="raytracer/">Ray Tracer</a></td>
-<td><code>trace_and_score_dda()</code> (fused DDA kernel), <code>generate_sky_patch_rays()</code>, <code>generate_sun_rays()</code>, <code>auto_batch_size()</code></td>
+<td><a href="ray-tracing/">Ray Tracing</a></td>
+<td><code>trace_and_score_dda()</code> / <code>trace_and_count_dda()</code> (DDA kernels), <code>generate_sky_patch_rays()</code>, <code>generate_sun_rays()</code>, <code>auto_batch_size()</code> (ray_tracing); <code>dda_backend_available()</code>, <code>warmup_kernels()</code> (warp_kernels)</td>
 </tr>
 <tr>
-<td><a href="grid/">Grid Operations</a></td>
-<td><code>voxelize()</code>, <code>sample_surface()</code>, <code>prune_voxels()</code>, <code>mesh_from_voxels()</code>, <code>mesh_from_voxels_smoothed()</code>, <code>polish_mesh_taubin()</code></td>
+<td><a href="geometry/">Geometry</a></td>
+<td><code>sample_surface()</code> (surface_sampling), <code>voxelize()</code> (voxelization), <code>finalize_mesh()</code>, <code>prune_voxels()</code>, <code>mesh_from_voxels()</code>, <code>mesh_from_voxels_smoothed()</code>, <code>polish_mesh_taubin()</code> (meshing)</td>
 </tr>
 <tr>
 <td><a href="io/">I/O</a></td>
-<td><code>load_mesh()</code>, <code>save_mesh()</code>, <code>save_pointcloud()</code>, diagnostic exporters (sun vectors, rays, bounding boxes)</td>
+<td><code>load_mesh()</code>, <code>save_mesh()</code>, <code>validate_inputs()</code>, <code>load_meshes()</code></td>
 </tr>
 </tbody>
 </table>
@@ -1164,15 +1275,15 @@
 </tr>
 <tr>
 <td><a href="sun/">Sun Vectors</a></td>
-<td><code>get_sun_vectors()</code> -- solar positions from EPW via Ladybug sunpath, altitude filtering</td>
+<td><code>get_sun_vectors()</code>: solar positions from the EPW location via Ladybug's sunpath, altitude filtering</td>
 </tr>
 <tr>
 <td><a href="scoring/">Scoring</a></td>
-<td><code>get_weights()</code> (mode dispatch), <code>normalize_scores()</code>, <code>otsu_threshold()</code>, <code>headtail_threshold()</code></td>
+<td><code>get_weights()</code> (mode dispatch), <code>carve_fraction_threshold()</code>, <code>headtail_threshold()</code></td>
 </tr>
 <tr>
-<td><a href="usefulness/">Solar Usefulness</a></td>
-<td>Simulated benefit weights: <code>generate_usefulness()</code>, <code>ZoneParams</code>, <code>solar_usefulness()</code> (5R1C + perturbation), <code>expand_shoebox()</code>, artifact I/O</td>
+<td><a href="simulated-weights/">Simulated Weights</a></td>
+<td>Simulated benefit weights: <code>generate_simulated_weights()</code>, <code>ZoneParams</code>, <code>attribute_solar_gains()</code> (5R1C + perturbation), <code>expand_shoebox()</code>, artifact I/O</td>
 </tr>
 </tbody>
 </table>
@@ -1188,12 +1299,12 @@
 <tbody>
 <tr>
 <td><a href="config/">Configuration</a></td>
-<td><code>load_config()</code>, <code>parse_override_value()</code>, <code>UserConfig</code> (Pydantic model), manifest schemas</td>
+<td><code>load_config()</code>, <code>build_config()</code>, <code>parse_override_value()</code>, <code>UserConfig</code> (Pydantic model), <code>ThresholdSpec</code>, manifest schemas, mode starting values</td>
 </tr>
 </tbody>
 </table>
 <h2 id="infrastructure">Infrastructure<a class="headerlink" href="#infrastructure" title="Permanent link">&para;</a></h2>
-<p>GPU session management, Grasshopper daemon, and CLI.</p>
+<p>Compute sessions, the Grasshopper daemon, and the CLI.</p>
 <table>
 <thead>
 <tr>
@@ -1204,15 +1315,15 @@
 <tbody>
 <tr>
 <td><a href="session/">Session</a></td>
-<td><code>CarverSession</code> -- CUDA context lifecycle, <code>session_cache</code> decorator for tensor memoisation</td>
+<td><code>CarverSession</code> (CUDA context and value cache), <code>session_cache</code> decorator</td>
 </tr>
 <tr>
 <td><a href="daemon/">Daemon</a></td>
-<td>Persistent localhost TCP server for Grasshopper RPC, authkey authentication</td>
+<td>Persistent localhost server for Grasshopper requests, authkey authentication, the <code>run</code> command</td>
 </tr>
 <tr>
 <td><a href="cli/">CLI</a></td>
-<td><code>urbansolarcarver</code> command: <code>preprocessing</code>, <code>thresholding</code>, <code>exporting</code>, <code>schema</code>, <code>daemon start/stop</code></td>
+<td><code>urbansolarcarver</code> / <code>usc</code> command: <code>run</code> (<code>--produce</code>, <code>--start-from</code>), <code>preprocessing</code>, <code>thresholding</code>, <code>exporting</code>, <code>validate</code>, <code>schema</code>, <code>warmup</code>, <code>simulate-weights</code>, <code>archetype</code>, <code>daemon start/stop/status</code></td>
 </tr>
 </tbody>
 </table>
