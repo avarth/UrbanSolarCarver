@@ -235,7 +235,8 @@ def _example_input_files(example: ExampleProject) -> list[tuple[str, str, bytes]
     """The packaged files of an example as (role, file name, content), all read before any project is made from them."""
     example_folder = EXAMPLE_PROJECTS_FOLDER / example.name
     files = [(role, file_name, (example_folder / file_name).read_bytes())
-             for role, file_names in (("max_volume", example.max_volume), ("test_surfaces", example.test_surfaces))
+             for role, file_names in (("max_volume", example.max_volume), ("test_surfaces", example.test_surfaces),
+                                      ("context", example.context), ("terrain", example.terrain))
              for file_name in file_names]
     if example.weather:
         files.append((WEATHER_ROLE, EXAMPLE_WEATHER_FILE_NAME, (EXAMPLE_PROJECTS_FOLDER / "weather" / EXAMPLE_WEATHER_FILE_NAME).read_bytes()))

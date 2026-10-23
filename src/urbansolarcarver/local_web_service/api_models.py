@@ -236,6 +236,8 @@ class ExampleProject(BaseModel):
     max_volume: list[str]       # file names in the example's folder
     test_surfaces: list[str]
     weather: bool               # whether the project gets the packaged weather file
+    context: list[str] = []     # optional: existing surroundings
+    terrain: list[str] = []     # optional
 
 
 class ExampleInfo(BaseModel):
@@ -299,4 +301,4 @@ class ErrorDetailReply(BaseModel):
 
 class MissingInputsReply(ErrorDetailReply):
     """The body of a run request that lacks input files."""
-    missing_inputs: list[str]   # the roles: max_volume, test_surfaces, weather
+    missing_inputs: list[str]   # the roles: max_volume, test_surfaces, weather (context and terrain are optional)

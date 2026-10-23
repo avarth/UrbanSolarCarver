@@ -377,3 +377,23 @@ def test_a_time_based_run_from_before_the_score_unit_was_recorded_stays_current(
     assert stage_status(store, name) == ALL_CURRENT
     _rewrite_preprocessing_manifest(store, name, score_unit=None)
     assert stage_status(store, name) == ALL_CURRENT
+
+
+# ---- The optional context and terrain inputs ----
+
+def test_optional_roles_are_not_missing_inputs(project_with_inputs):
+    store, name = project_with_inputs
+    assert missing_inputs(store, name, store.load_project_config(name)) == []
+
+
+def test_removing_the_context_drops_the_path_and_marks_the_run_out_of_date(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
+    worker = make_worker(store)
+    run_and_wait(worker, name, ["preprocessing"])
+    assert stage_status(store, name)["preprocessing"] == "current"
+    store.remove_input(name, "context", "ctx.ply")
+    assert store.load_project_config(name).context_path is None
+    assert stage_status(store, name)["preprocessing"] == "out_of_date"
+    assert run_and_wait(worker, name, ["preprocessing"]).stages == ["preprocessing"]
+    assert stage_status(store, name)["preprocessing"] == "current"

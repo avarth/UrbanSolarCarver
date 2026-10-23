@@ -17,7 +17,7 @@ from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig, resolve_grid_step
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 from .api_models import StageRecord, StageState
-from .projects import INPUTS_FOLDER, JOINED_FOLDER, MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
+from .projects import INPUTS_FOLDER, JOINED_FOLDER, REQUIRED_MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
 
 MANIFEST_FILE_NAME = "manifest.json"
 # The stage whose manifest each of these stages names as its upstream (the engine's chain).
@@ -204,9 +204,10 @@ def record_stages(store: ProjectStore, name: str, stages, settings: dict, inputs
 
 
 def missing_inputs(store: ProjectStore, name: str, config: UserConfig) -> list[str]:
-    """The input roles a run of this config still lacks: meshes without a joined file, and the weather file when the mode reads one."""
+    """The input roles a run of this config still lacks: required meshes without a joined file, and the weather file when the mode
+    reads one. Context and terrain are optional."""
     project_folder = store.open(name)
-    absent = [role for role in MESH_ROLES if not (project_folder / JOINED_FOLDER / f"{role}.ply").is_file()]
+    absent = [role for role in REQUIRED_MESH_ROLES if not (project_folder / JOINED_FOLDER / f"{role}.ply").is_file()]
     if MODES[config.mode].needs_epw and not (project_folder / INPUTS_FOLDER / WEATHER_FILE_NAME).is_file():
         absent.append(WEATHER_ROLE)
     return absent

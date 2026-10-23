@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from urbansolarcarver.local_web_service.projects import SERVICE_OWNED_SETTINGS
 from urbansolarcarver.mode_registry import MODES
 from urbansolarcarver.pydantic_schemas import UserConfig, resolve_max_slope_deg
 from urbansolarcarver.stage_settings import (
@@ -102,15 +103,19 @@ STEP_STAGES = {"settings": {*PreprocessingSettings.model_fields, *RunOptions.mod
                "carving": set(ThresholdingSettings.model_fields),
                "envelope_and_massing": {*ExportingSettings.model_fields, *MassingSettings.model_fields} - {"final_mesh_format"},
                "export": {"final_mesh_format"}}
-# Set by the service, chosen in the Mode step, replaced by the in-app charts, or left for milestone 2: never in the form. The
-# sample spacing is the engine's (half the voxel size, which the service leaves to it), the grid margin is hidden for now, and the
-# ray length is the engine's (rays stop at the edge of the grid, so its 3000 m default costs nothing).
-NOT_IN_THE_FORM = {"max_volume_path", "test_surface_path", "context_path", "terrain_path", "epw_path", "out_dir", "device", "mode", "diagnostic_plots",
-                   "simulated_weights_path", "grid_step", "margin_frac", "ray_length"}
+# Set by the service (every file path, the context and terrain ones included, and the device), chosen in the Mode step, replaced by
+# the in-app charts, or left for milestone 2: never in the form. The sample spacing is the engine's (half the voxel size, which the
+# service leaves to it), the grid margin is hidden for now, and the ray length is the engine's (rays stop at the edge of the grid,
+# so its 3000 m default costs nothing).
+NOT_IN_THE_FORM = {*SERVICE_OWNED_SETTINGS, "mode", "diagnostic_plots", "grid_step", "margin_frac", "ray_length"}
 
 
 def presented_settings() -> dict:
     return json.loads(SETTING_PRESENTATION_PATH.read_text(encoding="utf-8"))["settings"]
+
+
+def test_the_service_owns_the_context_and_terrain_paths():
+    assert {"context_path", "terrain_path"} <= set(SERVICE_OWNED_SETTINGS)
 
 
 def test_every_shown_setting_is_presented_exactly_once():

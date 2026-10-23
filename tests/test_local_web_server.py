@@ -268,7 +268,8 @@ def test_the_openapi_document_describes_the_routes():
 
 def test_project_inputs_config_run_and_files(client):
     created = create_project(client, "p", "tilted_plane")
-    assert created["settings"]["mode"] == "tilted_plane" and created["inputs"] == {"max_volume": [], "test_surfaces": [], "weather": []}
+    assert created["settings"]["mode"] == "tilted_plane" and created["inputs"] == {
+        "max_volume": [], "test_surfaces": [], "context": [], "terrain": [], "weather": []}
     assert created["stage_status"]["stages"] == {stage: "missing" for stage in PIPELINE_STAGES}
     uploaded = upload(client, "p", "max_volume", VOLUME).json()
     assert uploaded["files"] == [{"name": "volume.ply", "triangle_count": 12}] and uploaded["joined_bounds"] is not None
@@ -1400,3 +1401,16 @@ def test_carve_further_during_a_run_is_refused(client_with_blocking_run):
 
 def test_carve_further_without_an_envelope_is_refused(client_with_inputs):
     assert client_with_inputs.post("/api/projects/p/carve-further", headers=AUTH).status_code == 409
+
+
+def test_context_and_terrain_routes_upload_list_and_remove(client_with_inputs):
+    client = client_with_inputs
+    for role in ("context", "terrain"):
+        reply = upload(client, "p", role, ("mass.ply", box_bytes([30, 0, 5])))
+        assert reply.status_code == 200, reply.text
+        assert [file["name"] for file in reply.json()["files"]] == ["mass.ply"]
+    detail = client.get("/api/projects/p").json()
+    assert [file["name"] for file in detail["inputs"]["context"]] == ["mass.ply"]
+    assert "context_path" not in detail["settings"]
+    assert client.delete("/api/projects/p/inputs/context/mass.ply").status_code == 200
+    assert client.get("/api/projects/p").json()["inputs"]["context"] == []

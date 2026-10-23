@@ -34,9 +34,11 @@ from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_win
 from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, move_to_recycle_bin
 
 CONFIG_FILE_NAME = "config.yaml"
-INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/joined")
+INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/context", "inputs/terrain", "inputs/joined")
 RUN_FOLDER = "run"
-MESH_ROLES = ("max_volume", "test_surfaces")
+REQUIRED_MESH_ROLES = ("max_volume", "test_surfaces")
+OPTIONAL_MESH_ROLES = ("context", "terrain")   # existing surroundings and terrain: a run without them is a run as before
+MESH_ROLES = REQUIRED_MESH_ROLES + OPTIONAL_MESH_ROLES
 WEATHER_ROLE = "weather"
 MESH_EXTENSIONS = (".ply", ".obj", ".stl", ".glb")
 WEATHER_EXTENSION = ".epw"
@@ -46,7 +48,8 @@ JOINED_FOLDER = "inputs/joined"
 EARLIER_MAX_VOLUMES_FOLDER = "inputs/earlier_max_volumes"   # the max volume files each "carve further" replaced, by step
 # Settings the service decides, whatever the browser sends: every file location (the service takes no path from
 # the browser; simulated_weights_path is never set) and the compute device.
-SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir", "device", "simulated_weights_path")
+SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "context_path", "terrain_path", "epw_path", "out_dir", "device",
+                          "simulated_weights_path")
 # Settings the browser does not set, left to the engine's own value: the sample spacing on the test surfaces (half the voxel
 # size), and the score rule, which was removed (an earlier version stored "summed" when it was chosen; scores are always
 # summed). One stored by an earlier version, or sent by an older page, is left out when the settings are read and written.
@@ -57,6 +60,11 @@ SERVICE_PATHS = {
     "epw_path": "inputs/weather.epw",
     "out_dir": "run",
 }   # relative to the project folder; epw_path only for modes that read a weather file
+# The paths of the optional mesh roles, set in config.yaml exactly when the role's joined file exists.
+OPTIONAL_SERVICE_PATHS = {
+    "context": ("context_path", "inputs/joined/context.ply"),
+    "terrain": ("terrain_path", "inputs/joined/terrain.ply"),
+}
 UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
 FILE_NAME_SEPARATORS = re.compile(r"[\\/]")
 
@@ -397,7 +405,7 @@ class ProjectStore:
             project_folder = self.open(name)
             browser_values = {key: value for key, value in values.items()
                               if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
-            service_paths = self._service_paths_for_mode(values.get("mode"))
+            service_paths = {**self._service_paths_for_mode(values.get("mode")), **self._optional_service_paths(project_folder)}
             config = build_config_from_mode_starting_values(
                 {**browser_values, **service_paths, "device": self._device}, base_folder=project_folder)
             grid_plan = self._plan_and_check_grid(name, config)
@@ -469,6 +477,26 @@ class ProjectStore:
         return dict(SERVICE_PATHS)
 
     @staticmethod
+    def _optional_service_paths(project_folder: Path) -> dict:
+        """The paths of the optional mesh roles whose joined file exists (context_path, terrain_path)."""
+        return {key: path for key, path in OPTIONAL_SERVICE_PATHS.values() if (project_folder / path).is_file()}
+
+    def _update_optional_paths(self, project_folder: Path, name: str) -> None:
+        """Rewrite config.yaml so it carries each optional path exactly when the role's joined file exists.
+
+        The rest of the stored config stays as it is; nothing is written when nothing changes.
+        """
+        config_path = project_folder / CONFIG_FILE_NAME
+        if not config_path.is_file():
+            return
+        stored_config = self._parse_config_file(config_path, name)
+        updated = {key: value for key, value in stored_config.items()
+                   if key not in {key for key, _path in OPTIONAL_SERVICE_PATHS.values()}}
+        updated.update(self._optional_service_paths(project_folder))
+        if updated != stored_config:
+            self._write_bytes_atomically(config_path, yaml.safe_dump(updated, sort_keys=False).encode("utf-8"))
+
+    @staticmethod
     def _grid_plan_reply(plan: VoxelGridPlan) -> GridPlanReply:
         return GridPlanReply(resolution=plan.resolution, voxel_size=plan.voxel_size, total_voxels=plan.total_voxels,
                              extent=plan.extent, budget_voxels=MAX_GRID_VOXELS)
@@ -500,6 +528,8 @@ class ProjectStore:
                 if extension not in MESH_EXTENSIONS:
                     raise ProjectError(f"A mesh file must be one of {', '.join(MESH_EXTENSIONS)}.", status_code=422)
                 self._add_mesh_file(project_folder, project_json, role, clean_name, data)
+                if role in OPTIONAL_MESH_ROLES:
+                    self._update_optional_paths(project_folder, name)
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
             return self._reply(name, role, project_json)
@@ -528,6 +558,8 @@ class ProjectStore:
                 if joined_temporary_path is not None:
                     joined_temporary_path.unlink(missing_ok=True)
             del project_json.input_files[role][file_name]
+            if role in OPTIONAL_MESH_ROLES:
+                self._update_optional_paths(project_folder, name)
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
             return self._reply(name, role, project_json)
@@ -729,6 +761,7 @@ class ProjectStore:
     def _add_mesh_file(self, project_folder: Path, project_json: ProjectJson, role: str, clean_name: str, data: bytes) -> None:
         """Check an uploaded mesh, build the joined file with it, then move both into place."""
         role_folder = project_folder / INPUTS_FOLDER / role
+        role_folder.mkdir(parents=True, exist_ok=True)      # a project made before the role existed has no folder for it
         recorded_names = project_json.input_files.setdefault(role, {})
         stored_name = next((recorded for recorded in recorded_names if recorded.lower() == clean_name.lower()), clean_name)
         descriptor, upload_name = tempfile.mkstemp(dir=role_folder, prefix="upload", suffix=Path(clean_name).suffix.lower())
@@ -773,9 +806,9 @@ class ProjectStore:
     def _write_joined_temporary_file(project_folder: Path, role: str, meshes: list[trimesh.Trimesh]) -> Path | None:
         """Join the meshes of a role as the Grasshopper components do (spec 5.3) into a new temporary file.
 
-        Max volume meshes are concatenated and their coincident vertices merged; test surface
-        meshes are only concatenated, and written with their vertex normals (see
-        _write_ply_with_vertex_normals). Returns None for no meshes (the joined file is then removed).
+        Max volume, context and terrain meshes are concatenated and their coincident vertices
+        merged; test surface meshes are only concatenated, and written with their vertex normals
+        (see _write_ply_with_vertex_normals). Returns None for no meshes (the joined file is then removed).
         The temporary name is unique, so concurrent builds never share a file.
         """
         if not meshes:
@@ -784,7 +817,7 @@ class ProjectStore:
         os.close(descriptor)
         temporary_path = Path(temporary_name)
         try:
-            if role == "max_volume":
+            if role != "test_surfaces":
                 joined_mesh = trimesh.util.concatenate(meshes)
                 joined_mesh.merge_vertices()
                 save_mesh(joined_mesh, str(temporary_path))

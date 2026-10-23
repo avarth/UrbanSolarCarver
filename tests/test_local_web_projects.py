@@ -1,5 +1,6 @@
 """Project folders, names and project.json of the local web service."""
 import os
+import shutil
 import threading
 import warnings
 from pathlib import Path
@@ -10,7 +11,7 @@ import send2trash
 import trimesh
 import yaml
 from local_web_test_support import (
-    FakeRecycleBin, has_vertex_normals, make_link_to_folder, wait_until_finished, write_joined_test_surfaces_without_normals,
+    FakeRecycleBin, box_bytes, has_vertex_normals, make_link_to_folder, wait_until_finished, write_joined_test_surfaces_without_normals,
 )
 
 from urbansolarcarver.errors import ConfigError
@@ -1183,3 +1184,89 @@ def test_the_examples_are_matched_to_projects_in_one_pass_over_the_projects(tmp_
     titles = {example.name: example.title for example in read_examples()}
     assert store.projects_of_examples(titles) == {"basic_perimeter_block": "b", "new_building": "a", "multiple_buildings": None}
     assert len(listings) == 1
+
+
+# ---- The optional context and terrain inputs ----
+
+def _stored_config(store, name):
+    return yaml.safe_load((store.open(name) / projects.CONFIG_FILE_NAME).read_text(encoding="utf-8"))
+
+
+def _sheet_bytes(z=0.0, half=50.0) -> bytes:
+    sheet = trimesh.Trimesh([(-half, -half, z), (half, -half, z), (half, half, z), (-half, half, z)], [[0, 1, 2], [0, 2, 3]])
+    return sheet.export(file_type="ply")
+
+
+def test_context_upload_adds_context_path_to_config(project_with_inputs):
+    store, name = project_with_inputs
+    assert "context_path" not in _stored_config(store, name)
+    reply = store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
+    assert [file.name for file in reply.files] == ["ctx.ply"]
+    assert _stored_config(store, name)["context_path"] == "inputs/joined/context.ply"
+    assert (store.open(name) / "inputs" / "joined" / "context.ply").is_file()
+    assert "terrain_path" not in _stored_config(store, name)
+    store.add_input(name, "terrain", "ground.ply", _sheet_bytes())
+    assert _stored_config(store, name)["terrain_path"] == "inputs/joined/terrain.ply"
+    config = store.load_project_config(name)
+    assert Path(config.context_path) == store.open(name) / "inputs" / "joined" / "context.ply"
+    assert "context_path" not in store.read_settings(name)   # a path the service owns
+
+
+def test_two_context_files_join_into_one_mesh(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_input(name, "context", "a.ply", box_bytes([30, 0, 5]))
+    store.add_input(name, "context", "b.ply", box_bytes([-30, 0, 5]))
+    joined = load_mesh(str(store.open(name) / "inputs" / "joined" / "context.ply"))
+    assert len(joined.faces) == 24 and joined.is_watertight
+
+
+def test_settings_saved_after_a_context_upload_keep_the_context_path(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
+    store.write_config_from_values(name, {**store.read_settings(name), "voxel_size": 2.0, "context_path": "elsewhere.ply"})
+    stored = _stored_config(store, name)
+    assert stored["context_path"] == "inputs/joined/context.ply" and stored["voxel_size"] == 2.0
+    assert "terrain_path" not in stored
+
+
+def test_removing_the_context_drops_the_path(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
+    revision = store.read_project_json(name).inputs_revision
+    store.remove_input(name, "context", "ctx.ply")
+    assert "context_path" not in _stored_config(store, name)
+    assert not (store.open(name) / "inputs" / "joined" / "context.ply").exists()
+    assert store.read_project_json(name).inputs_revision == revision + 1
+    assert store.load_project_config(name).context_path is None
+
+
+def test_existing_project_without_role_folders_accepts_context(project_with_inputs):
+    store, name = project_with_inputs
+    for role in ("context", "terrain"):
+        shutil.rmtree(store.open(name) / "inputs" / role, ignore_errors=True)
+    store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
+    store.add_input(name, "terrain", "ground.ply", _sheet_bytes())
+    assert [file.name for file in store.input_files(name, "context")] == ["ctx.ply"]
+
+
+def test_an_unknown_role_is_refused(project_with_inputs):
+    store, name = project_with_inputs
+    with pytest.raises(ProjectError) as caught:
+        store.add_input(name, "trees", "t.ply", box_bytes([30, 0, 5]))
+    assert caught.value.status_code == 422
+
+
+def test_carve_further_keeps_context_and_terrain(project_with_inputs):
+    from local_web_test_support import make_worker, run_and_wait, write_envelope_as_exported
+    store, name = project_with_inputs
+    store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
+    store.add_input(name, "terrain", "ground.ply", _sheet_bytes())
+    joined = store.open(name) / "inputs" / "joined"
+    before = {role: (joined / f"{role}.ply").read_bytes() for role in ("context", "terrain")}
+    run_and_wait(make_worker(store), name, ["exporting"])
+    envelope_path = store.open(name) / "run" / "exporting" / "export.ply"
+    write_envelope_as_exported(store.open(name))
+    store.replace_max_volume_with_envelope(name, envelope_path, "daylight", store.read_stored_config(name))
+    assert {role: (joined / f"{role}.ply").read_bytes() for role in ("context", "terrain")} == before
+    stored = _stored_config(store, name)
+    assert stored["context_path"] == "inputs/joined/context.ply" and stored["terrain_path"] == "inputs/joined/terrain.ply"
