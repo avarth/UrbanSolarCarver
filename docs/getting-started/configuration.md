@@ -1,12 +1,19 @@
 # Configuration
 
-USC uses YAML configuration files. Mode-specific templates are in `configs/`. Relative paths inside a config file (meshes, EPW, `out_dir`, `simulated_weights_path`) are resolved against the folder that contains the YAML file.
+USC uses YAML configuration files. Mode-specific templates are in `configs/`. Relative paths inside a config file (meshes, including `context_path` and `terrain_path`, EPW, `out_dir`, `simulated_weights_path`) are resolved against the folder that contains the YAML file.
 
 From Python, `load_config(path, overrides)` reads a file and `build_config(values)` validates values you already hold; both raise `ConfigError`, which lists the field and message of every problem. A client with no YAML file (the Grasshopper components, through the daemon) starts from the starting values of the chosen mode and applies its overrides. The starting values are the analysis period for `time-based` (21 Dec, 10:00 to 14:00), `irradiance` (the full year) and `benefit` (15 Oct 07:00 to 15 Apr 19:00), `tilted_plane_angle_deg: 45` for `tilted_plane` and `carve_fraction: 0.35` for `radiative_cooling`; the templates in `configs/` repeat them. They do not change the schema defaults.
 
 ## Minimal configs by mode
 
 Required parameters vary by mode. Every config needs `max_volume_path`, `test_surface_path`, and `out_dir`; `mode` defaults to `time-based`. The weather-dependent modes (`time-based`, `irradiance`, `benefit`) also require `epw_path` and an analysis period. `daylight`, `tilted_plane` and `radiative_cooling` need neither, and USC warns if you set settings the chosen mode does not use.
+
+Two optional meshes describe what is around (or inside) the site and stays, in every mode: `context_path` (existing buildings and large trees) and `terrain_path` (the ground, an open sheet is fine). Leave them out and the run is the same as without them. See [Context and terrain](../modes.md#context-and-terrain).
+
+```yaml
+context_path: "path/to/surroundings.ply"   # optional
+terrain_path: "path/to/terrain.ply"        # optional
+```
 
 === "tilted_plane"
 
@@ -107,6 +114,8 @@ Required parameters vary by mode. Every config needs `max_volume_path`, `test_su
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `mode` | `"time-based"` | Carving mode (see [Modes](../modes.md)) |
+| `context_path` | `null` | Optional mesh of the existing surroundings that stay (buildings, large trees). Rays that hit it are dropped before scoring, and every voxel column of the maximum volume it overlaps is removed. Not for balconies or shading devices |
+| `terrain_path` | `null` | Optional terrain mesh. Rays that hit it are dropped, and only the voxels below the ground are removed, so the site stays buildable above it |
 | `voxel_size` | 1.0 | Voxel edge length in meters (0.01-100) |
 | `grid_step` | `null` | Surface sampling spacing in meters; `null` = half the voxel size. An explicit value must be <= voxel_size |
 | `ray_length` | 3000.0 | Maximum ray cast distance in meters. A ray stops where it leaves the voxel grid, so a length beyond the grid costs nothing |

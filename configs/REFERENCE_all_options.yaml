@@ -1,6 +1,8 @@
 # Mesh and weather files
 max_volume_path:             "Path\\to\\maxVolume.ply"            # PLY of the full volume envelope
 test_surface_path:     "Path\\to\\insolationSrfs.ply"       # PLY of surfaces to sample. Each surface must be a single flat panel. Explode polysurfaces (e.g. extruded block boundaries) into individual faces in GH before exporting.
+context_path:                null                                # Optional mesh of the existing surroundings that stay (buildings, large trees; not balconies or shading devices). Blocks rays; every voxel column of the maximum volume it overlaps is removed
+terrain_path:                null                                # Optional terrain mesh (an open sheet is fine). Blocks rays; only the voxels below the ground are removed
 epw_path:                    "Path\\to\\weather.epw"              # Weather data file
 
 # Output

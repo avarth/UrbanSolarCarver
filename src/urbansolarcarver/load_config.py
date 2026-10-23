@@ -24,7 +24,7 @@ from .pydantic_schemas import expand_analysis_period, threshold_reads_carve_frac
 # Config fields holding file or folder paths. Relative values in a YAML file
 # are resolved against the YAML's own folder, so a config means the same
 # thing whichever directory the CLI, the daemon or Grasshopper runs from.
-PATH_FIELDS = ("max_volume_path", "test_surface_path", "epw_path", "out_dir",
+PATH_FIELDS = ("max_volume_path", "test_surface_path", "context_path", "terrain_path", "epw_path", "out_dir",
                "simulated_weights_path")
 
 

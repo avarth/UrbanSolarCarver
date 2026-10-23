@@ -100,6 +100,8 @@ class _StageSettings(BaseModel):
 class PreprocessingSettings(_StageSettings):
     max_volume_path: str
     test_surface_path: str
+    context_path: Optional[str]
+    terrain_path: Optional[str]
     epw_path: Optional[str]
     start_month: Optional[int]
     start_day: Optional[int]

@@ -5,7 +5,8 @@
 float32 would round georeferenced coordinates.  ``validate_inputs`` checks
 that the files a preprocessing run needs exist, and ``load_meshes`` loads
 the maximum volume and the test surfaces, reporting coordinates that a
-float32 file has rounded.
+float32 file has rounded; ``load_optional_mesh`` loads the optional context
+and terrain meshes.
 """
 
 import os
@@ -40,8 +41,24 @@ def load_mesh(path: str) -> trimesh.Trimesh:
         triangles (empty, or only points or curves).  Without the last check
         the problem would only show up later as an empty voxel grid.
     """
+    mesh = _read_triangles(path)
+    if mesh is None:
+        raise InputError(
+            f"load_mesh: no triangle geometry found in {path!r}; the file is "
+            f"empty, contains only points/curves, or could not be parsed as a mesh."
+        )
+    return mesh
+
+
+def _read_triangles(path: str):
+    """The triangle mesh in *path* with its normals fixed as :func:`load_mesh` describes, or None when it has no triangles.
+
+    Raises InputError if *path* is not a file or trimesh cannot parse it.
+    """
     if not os.path.isfile(path):
         raise InputError(f"load_mesh: file not found: {path}")
+    if os.path.getsize(path) == 0:
+        return None
     try:
         mesh = trimesh.load(path, force="mesh")
     except Exception as exc:
@@ -52,11 +69,23 @@ def load_mesh(path: str) -> trimesh.Trimesh:
             f"({type(exc).__name__}: {exc})"
         ) from exc
     if not isinstance(mesh, trimesh.Trimesh) or len(mesh.faces) == 0:
-        raise InputError(
-            f"load_mesh: no triangle geometry found in {path!r}; the file is "
-            f"empty, contains only points/curves, or could not be parsed as a mesh."
-        )
+        return None
     mesh.fix_normals(multibody=mesh.is_watertight)
+    return mesh
+
+
+def load_optional_mesh(path, name: str):
+    """Load an optional input mesh (context, terrain), or None when there is none.
+
+    No path gives None. A file without triangles counts as absent: it is
+    reported as a ``<name>_empty`` issue and gives None, so the run behaves as
+    without it. A missing or unreadable file raises InputError.
+    """
+    if path is None:
+        return None
+    mesh = _read_triangles(path)
+    if mesh is None:
+        report_issue(f"{name}_empty", f"{os.path.basename(path)}: the {name} file has no triangles; it is ignored.")
     return mesh
 
 FLOAT32_REL_SPACING = 2.0 ** -23  # float32 spacing relative to magnitude
@@ -150,7 +179,8 @@ def validate_inputs(settings: PreprocessingSettings):
     Raises
     ------
     InputError
-        If the max-volume or test-surface mesh is missing, or the EPW file is
+        If the max-volume or test-surface mesh is missing, a context or
+        terrain path is given and its file is missing, or the EPW file is
         missing for a mode that needs one.
     ValueError
         If `settings.mode` is not one of:
@@ -162,6 +192,9 @@ def validate_inputs(settings: PreprocessingSettings):
     ]:
         if not filepath or not os.path.isfile(filepath):
             raise InputError(f"{name} file missing: {filepath!r}")
+    for filepath, key in [(settings.context_path, 'context_path'), (settings.terrain_path, 'terrain_path')]:
+        if filepath is not None and not os.path.isfile(filepath):
+            raise InputError(f"{key}: file missing: {filepath!r}")
     # EPW is required for modes that use weather data
     if settings.mode in MODES_NEEDING_EPW:
         if not settings.epw_path or not os.path.isfile(settings.epw_path):

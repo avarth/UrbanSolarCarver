@@ -269,6 +269,14 @@ class UserConfig(BaseModel):
     # file paths
     max_volume_path: str = Field(..., description="Path to the maximum volume mesh (PLY)")
     test_surface_path: str = Field(..., description="Path to the insolation sampling surface mesh (PLY)")
+    context_path: Optional[str] = Field(
+        None,
+        description="Path to a mesh of the existing surroundings that stay (buildings, large trees): it blocks rays, and "
+                    "every voxel column of the maximum volume it overlaps is removed. Optional")
+    terrain_path: Optional[str] = Field(
+        None,
+        description="Path to a terrain mesh (an open sheet is fine): it blocks rays, and the voxels below the ground are "
+                    "removed. Optional")
     epw_path: Optional[str] = Field(None, description="Path to EPW weather file (required for time-based, irradiance and benefit)")
     out_dir: str = Field(..., description="Output directory for carved meshes and diagnostics")
     final_mesh_format: str = Field(
@@ -798,6 +806,10 @@ class PreprocessingManifest(BaseModel):
     # None in manifests written before preprocessing recorded them.
     max_volume_lowest_z: Optional[float] = None
     max_volume_highest_z: Optional[float] = None
+    # The optional context and terrain meshes the run used; None when absent (and in manifests written before
+    # preprocessing recorded them).
+    context_path: Optional[str] = None
+    terrain_path: Optional[str] = None
 
 class ThresholdingManifest(BaseModel):
     """Manifest written by thresholding, read by exporting and massing."""
