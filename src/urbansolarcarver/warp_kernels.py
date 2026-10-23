@@ -14,7 +14,8 @@ device (:func:`dda_backend_available`), precompiles the kernels
   the skin rule;
 * the parity voxelizer used by :func:`voxelization.voxelize_solid_warp`;
 * the ground heights of a terrain mesh, used by
-  :func:`context_geometry.ground_heights`.
+  :func:`context_geometry.ground_heights`, and the any-hit test of rays
+  against the context and terrain meshes (:func:`ray_tracing.mesh_blocks_rays`).
 
 All kernels live in this one module on purpose: Warp compiles a Python
 module as one unit and caches it on disk by module, so
@@ -855,3 +856,40 @@ if _warp_available:
             heights[tid] = start_z - q.t
         else:
             heights[tid] = wp.nan
+
+    @wp.kernel
+    def _mesh_any_hit_kernel(
+        mesh_id: wp.uint64,                       # BVH of the context and terrain
+        origins: wp.array(dtype=wp.vec3),         # (R,) ray origins (the test points)
+        directions: wp.array(dtype=wp.vec3),      # (R,) unit ray directions
+        point_ids: wp.array(dtype=int),           # (R,) test point of each ray
+        normals: wp.array(dtype=wp.vec3),         # (P,) outward unit normal of each test point
+        origin_offset: float,                     # origin moved this far along the normal (m)
+        min_hit: float,                           # hits closer than this to the origin are ignored (m)
+        max_t: float,                             # ray length (m)
+        blocked: wp.array(dtype=wp.uint8),        # out: 1 where the ray hits the mesh
+    ):
+        """Whether each ray hits the mesh within *max_t*, one thread per ray.
+
+        The ray starts *origin_offset* off its test surface along the
+        surface normal, and hits closer than *min_hit* are skipped by
+        querying again from just beyond them, so a test surface lying on a
+        context face is not blocked by that face.
+        """
+        i = wp.tid()
+        d = directions[i]
+        o = origins[i] + normals[point_ids[i]] * origin_offset
+        t_off = float(0.0)
+        hit = wp.uint8(0)
+        for _skip in range(16):
+            if t_off >= max_t:
+                break
+            q = wp.mesh_query_ray(mesh_id, o + d * t_off, d, max_t - t_off)
+            if not q.result:
+                break
+            t_hit = t_off + q.t
+            if t_hit >= min_hit:
+                hit = wp.uint8(1)
+                break
+            t_off = t_hit + wp.max(1.0e-5, t_hit * 1.0e-6)
+        blocked[i] = hit

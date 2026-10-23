@@ -12,7 +12,8 @@ Warp's CPU backend.  The fused wrappers (:func:`trace_and_score_dda`,
 :func:`trace_and_count_dda`) add each ray's weight or a count of 1
 directly into a per-voxel volume, so no list of hits is stored;
 :func:`trace_point_access_dda` adds each ray's weight to its test point when
-it reaches no occupied voxel.  There is
+it reaches no occupied voxel.  :func:`mesh_blocks_rays` tests rays against the
+context and terrain meshes (a Warp BVH) instead of the grid.  There is
 no other tracer: when Warp cannot run, the carvers raise
 ``WarpBackendUnavailableError`` (see :func:`warp_kernels.require_dda_backend`).
 
@@ -32,7 +33,7 @@ if _warp_available:
     import warp as wp
     from .warp_kernels import (
         _dda_first_hit_access_kernel, _dda_fused_count_kernel, _dda_fused_score_kernel,
-        _dda_fused_score_pw_kernel, _skin_follows_mass_behind_kernel,
+        _dda_fused_score_pw_kernel, _mesh_any_hit_kernel, _skin_follows_mass_behind_kernel,
     )
 
 log = logging.getLogger(__name__)
@@ -422,6 +423,60 @@ def follow_mass_behind_skin_dda(
     if origins.is_cuda:
         torch.cuda.synchronize()
     return values_out
+
+def mesh_blocks_rays(
+    blocking,
+    origins: torch.Tensor,
+    directions: torch.Tensor,
+    point_ids: torch.Tensor,
+    surface_normals: torch.Tensor,
+    max_t: float,
+    origin_offset: float = 0.01,
+    min_hit: float = 1e-3,
+) -> torch.Tensor:
+    """Which rays hit the context or terrain mesh within *max_t*.
+
+    Parameters
+    ----------
+    blocking : context_geometry.BlockingMesh
+        The context and terrain meshes, in the frame of *origins*.
+    origins, directions : torch.Tensor, shape (R, 3)
+        Ray start points (the test points) and unit directions.
+    point_ids : torch.Tensor, shape (R,)
+        Test point of each ray, an index into *surface_normals*.
+    surface_normals : torch.Tensor, shape (P, 3)
+        Outward unit normal of each test point.  Each ray starts
+        *origin_offset* off its test surface along it, and hits closer than
+        *min_hit* are ignored, so a test surface lying on a context face
+        (a neighbour's facade) is not blocked by that face.
+
+    Returns
+    -------
+    torch.Tensor
+        (R,) bool on the device of *origins*, True where the ray is blocked.
+    """
+    num_rays = origins.shape[0]
+    if num_rays == 0:
+        return torch.zeros(0, dtype=torch.bool, device=origins.device)
+    device_str = warp_device_name(origins.device)
+    blocked = torch.zeros(num_rays, dtype=torch.uint8, device=origins.device)
+    wp.launch(
+        _mesh_any_hit_kernel,
+        dim=num_rays,
+        inputs=[
+            blocking.mesh.id,
+            wp.from_torch(origins.contiguous().float(), dtype=wp.vec3),
+            wp.from_torch(directions.contiguous().float(), dtype=wp.vec3),
+            wp.from_torch(point_ids.contiguous().int()),
+            wp.from_torch(surface_normals.contiguous().float(), dtype=wp.vec3),
+            float(origin_offset), float(min_hit), float(max_t),
+            wp.from_torch(blocked, dtype=wp.uint8),
+        ],
+        device=device_str,
+    )
+    wp.synchronize_device(device_str)
+    return blocked.bool()
+
 
 def generate_sky_patch_rays(
     pts: np.ndarray,
