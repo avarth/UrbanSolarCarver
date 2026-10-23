@@ -22,7 +22,7 @@ is the input most other planned features depend on (Simulate's "now" scene, view
 Goals:
 
 1. An optional input, **context**, next to the maximum volume and the test surfaces, in the CLI/config, the Python
-   API, the browser app and Grasshopper **(user)**.
+   API and the browser app **(user)**. Grasshopper follows right after this version **(user)**.
 2. In the ray-based modes (time-based, irradiance, benefit, daylight, radiative_cooling), every ray from a test point
    that hits context is dropped before scoring: that sun or sky is already lost, so no voxel is blamed for it **(user)**.
 3. Voxels of the maximum volume that intersect context are removed from the buildable mass before scoring. Context is
@@ -83,11 +83,10 @@ never whole columns (4.2).
   context: where context shares a face with the maximum volume (party walls, a maximum volume standing on terrain),
   the surface-through rule would remove a one-voxel strip that belongs to the site. Only the part of the context
   inside the grid matters here.
-- **Only closed (watertight) context bodies remove voxels** **(designer's call)**. Open context bodies (a tree drawn
-  as surfaces, a city-model shell that is not watertight) only block rays (4.3), which works on open meshes. The run
-  report and the app say how many context bodies were open and therefore block rays only, without repairing them
-  ("not a geometry doctor"). Overlapping closed bodies are voxelized per body and combined, so an overlap (a context
-  building extruded below the ground) does not flip the parity.
+- **Voxelize the context as one mesh** with the existing voxelizer, changed in that one rule for context (centre
+  inside only, no surface-through) **(user: keep it simple)**. If the context mesh is not closed (watertight), warn
+  and carry on: the voxel removal may be incomplete there, and the mesh still blocks rays (4.3), which works on open
+  meshes ("not a geometry doctor"). Per-body handling of open or overlapping bodies is deferred (section 8).
 - **Terrain removes only what lies below ground** **(user)**: for each column, the ground height is where the terrain
   surface crosses the column's vertical centre line (the highest crossing if there are several); voxels whose centre
   lies below it are removed and the rest of the column stays buildable. This works for an open terrain sheet. A column
@@ -105,33 +104,38 @@ never whole columns (4.2).
 ### 4.3 Effect on rays (ray-based modes only)
 
 - Before scoring, each ray from a test point (sky-patch rays in the weighted modes, sun rays in time-based) is tested
-  against the context and terrain meshes. A ray that hits context or terrain within the ray length is dropped: it adds nothing to any voxel,
-  wherever the voxel lies along it **(user)**.
-- The test is against the **mesh**, not voxels, so context outside the grid counts and no voxel staircase is
-  introduced **(proposed)**. Reuse or adapt the Warp mesh-ray kernel built on branch `feature/solar-check`
+  against the context and terrain meshes. A ray that hits context or terrain within the ray length is dropped: it
+  adds nothing to any voxel, wherever the voxel lies along it **(user)**.
+- **Voxels for removal, mesh for rays** (agreed with the user): the ray test is against the **mesh**, not a voxelized
+  context. (1) Most context lies outside the grid, which covers only the maximum volume plus a small margin; growing
+  the cubic grid to cover it multiplies the voxel count (a 230 m site with 200 m of context around it is a 630 m cube:
+  about 250 million voxels at 1 m, 2 billion at 0.5 m, against the 500 million budget). (2) A voxelized facade fills
+  the voxel a test point sits in and bulges up to one voxel beyond the true surface, so test surfaces on context
+  buildings (the expected case) would be blocked by their own building: the false-shadow problem that removed the old
+  evaluation stage. (3) The mesh test is one extra pass with an existing kernel and works on open meshes. Reuse or adapt the Warp mesh-ray kernel built on branch `feature/solar-check`
   (commit `4a213be`, `mesh_visible_weight_kernel` in `warp_kernels.py`, `wp.Mesh` + `wp.mesh_query_ray`) rather than
   merging that branch **(user: build from main and borrow the kernel)**.
 - **Own surface:** a test point on a context building's facade must not be blocked by that facade. The user expects
   **many test surfaces to be faces of the context itself** (a neighbour's facade is part of its context building),
   so this is the normal case, not an edge case, and boundary conditions (coincident faces, shared faces) must not
   disturb the calculation **(user)**. Test surfaces and context may also come from different sources (a facade drawn
-  by hand on a city-model mass), so the test point can sit some way inside the context mass, not only on its face. Reuse the start-inside tolerance of `feature/solar-check`
-  (`_check_near_surface` / `_check_start` in `4a213be`: a ray that starts inside or just behind a context face is
-  allowed to leave it when it faces outward, within a reach limit) **(designer's call)**. Test points whose rays are
-  still all blocked are counted and reported, and shown in the app, so the user can fix the geometry in CAD. Other
-  parts of the same building (a second wing) block normally.
+  by hand on a city-model mass), so the test point can sit some way inside the context mass, not only on its face.
+  **First version:** start each ray slightly off the test surface along its normal and ignore hits closer than a small
+  distance; this covers coincident faces, the expected case **(user: keep it simple)**. Test points whose rays are all
+  blocked are counted in the report, so the harder case (test surfaces drawn inside a context mass) shows up if it
+  occurs; a start-inside tolerance is deferred (section 8). Other parts of the same building (a second wing) block
+  normally.
 - Weights are not renormalised: a point whose sky is half blocked by context keeps half its weight in play.
 - `tilted_plane`: no ray test **(user)**; context columns and below-ground voxels are still removed.
 
 ### 4.4 Interactions
 
-- **Test points inside context**: handled by the start-inside tolerance of 4.3; test points whose rays are all still
-  blocked are counted and reported **(proposed)**.
+- **Test points inside context**: their rays are all blocked; they are counted in the report (4.3, 4.5).
 - **Carve further** (the app's chain that replaces the maximum volume with the last envelope): context and terrain
   stay the same inputs at every step; the terrain removal and the column rule apply again (idempotent, since removed
   voxels stay removed) **(proposed)**.
-- **test_point_access_evaluation** (voxel evaluation, Python API): applies the same context ray drop, so its numbers
-  agree with what the carving saw **(proposed)**.
+- **test_point_access_evaluation** (voxel evaluation, Python API, used by benchmarks): unchanged in the first version;
+  applying the context ray drop there is deferred (section 8).
 - **Fingerprint:** the context and terrain files are part of the preprocessing settings, so changing it reruns preprocessing; it
   appears in the manifest and the config snapshot.
 
@@ -139,7 +143,7 @@ never whole columns (4.2).
 
 Run report and preprocessing diagnostics **(proposed)**: whether context and terrain were used; voxels removed from
 the maximum volume by the context columns and by the ground, separately (count and m³, share of the maximum volume);
-open context bodies that only block rays; rays dropped (count, share) and ray weight dropped (share), per
+a warning when the context mesh is not closed; rays dropped (count, share) and ray weight dropped (share), per
 mode's unit; test points with all rays blocked.
 
 ## 5. Clients
@@ -155,11 +159,12 @@ mode's unit; test points with all rays blocked.
   "test_surfaces")` in `local_web_service/projects.py`). The 3D view shows context as neutral grey massing and terrain
   as a ground surface, on by default, each with its own entry in the layers menu **(proposed)**. Follow the standing UI preferences in
   the vault (`ui-ux/backlog.md`): plain labels, units, tooltips naming the config key, minimal text.
-- **Grasshopper:** `context` and `terrain` inputs (Mesh or Brep, list) on `USC_Preprocess`, next to `max_volume`
-  and `test_surfaces`, rebuilt `.ghuser`, `docs/grasshopper.md`.
+- **Grasshopper:** not in this version; right after it (section 8) **(user)**.
 
 ## 6. Constraints
 
+- **Simple solutions that work** **(user)**: this is a new concept, so the first version takes the simplest path
+  that gives correct results; anything heavier is deferred and documented (section 8).
 - No change to results when context is absent (anti-goal). The existing suites, including the Monte Carlo sweep
   (`pytest -n 8`, merge tier), must pass unchanged.
 - Performance: the ray test should add little to preprocessing on the bundled examples; context meshes can be large
@@ -175,11 +180,11 @@ mode's unit; test points with all rays blocked.
   grazing past the box is kept; a test point on a context facade is not blocked by that facade).
 - Voxel removal: a context box inside the maximum volume clears its whole columns (above and below the box), which
   are then unscored; context outside the grid changes nothing in the grid; a context face shared with the maximum
-  volume (party wall) removes no site voxels; an open context body removes nothing and is reported.
+  volume (party wall) removes no site voxels; a context mesh that is not closed gives a warning.
 - Terrain: a sloping sheet through the bottom of the maximum volume removes only the voxels below it, column by
   column, and the columns stay buildable above it; rays that hit the terrain are dropped.
-- Test surfaces that are faces of context buildings (coincident), and test surfaces drawn just inside a context mass,
-  are not blocked by their own building; points still fully blocked are counted.
+- Test surfaces that are faces of context buildings (coincident) are not blocked by their own building; a test
+  surface drawn inside a context mass has its points counted as fully blocked.
 - Mode coverage: time-based and one weighted mode drop rays; `tilted_plane` removes context columns and below-ground
   voxels and otherwise matches the no-context result.
 - End to end on synthetic scenes from `tests/typologies.py`, building the neighbours as context masses (the generator
@@ -188,6 +193,21 @@ mode's unit; test points with all rays blocked.
 - No-context regression: existing tests unchanged.
 
 ## 8. Follow-up work, not in this version
+
+Deferred from the first version to keep it simple **(user)**, documented here so they are not lost:
+
+- **Grasshopper:** `context` and `terrain` inputs (Mesh or Brep, list) on `USC_Preprocess`, next to `max_volume` and
+  `test_surfaces`, rebuilt `.ghuser`, `docs/grasshopper.md`. Right after this version.
+- **Per-body voxelization** of context: splitting the context into bodies, detecting open ones (they would only block
+  rays) and voxelizing closed ones separately, so overlapping bodies do not flip the parity vote. The first version
+  voxelizes the context as one mesh and warns when it is not closed.
+- **Start-inside tolerance** for test points that sit inside a context mass (test surfaces drawn from a different
+  source than the context): reuse `_check_near_surface` / `_check_start` from `feature/solar-check` (`4a213be`), a ray
+  starting inside or just behind a context face may leave it when it faces outward, within a reach limit. The first
+  version uses an origin offset and a minimum hit distance, and reports fully blocked points.
+- **Context in `test_point_access_evaluation`** (the benchmark tool), so its numbers match the carving with context.
+
+Further follow-ups:
 
 - Real-world example projects with context (vault `features/real-world-examples`, prioritised by the user): the
   current examples are arbitrary and have no context, so they cannot show the effect of this feature.
