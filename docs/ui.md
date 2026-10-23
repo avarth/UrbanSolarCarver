@@ -58,7 +58,7 @@ Delete and Reset send the project folder to the recycle bin (Windows) or trash (
 
 A project opens as a list of six steps on the left, with the 3D view on the right. Each step shows a one-line summary when it is closed.
 
-1. **Inputs.** Drop or choose the maximum volume (the largest building you would allow), the test surfaces (the surfaces whose sun or sky the carving protects) and, for the modes that need one, a weather file (`.epw`). Meshes may be PLY, OBJ, STL or GLB; several files for one role are joined into one. The step lists each file with its triangle count and the size of all inputs together, and warns when the model looks as if it is not in meters.
+1. **Inputs.** Drop or choose the maximum volume (the largest building you would allow), the test surfaces (the surfaces whose sun or sky the carving protects) and, for the modes that need one, a weather file (`.epw`). Two boxes are optional: **Existing surroundings** (buildings and large trees that stay, `context_path`; not balconies or shading devices) and **Terrain** (the ground, `terrain_path`). Both block sun and sky; nothing is built in the columns the surroundings take, and the site stays buildable above the terrain (see [Context and terrain](modes.md#context-and-terrain)). Removing their files makes the analysis out of date, and the next run goes without them. Meshes may be PLY, OBJ, STL or GLB; several files for one role are joined into one. The step lists each file with its triangle count and the size of all inputs together, and warns when the model looks as if it is not in meters.
 2. **Mode.** Six tiles in a grid of three by two, each with a coloured symbol and a plain name. The tile's tooltip holds a one-line description, what the mode needs and the engine name, for people who use the CLI.
 
     | Tile | Engine name | What it does |
@@ -128,9 +128,9 @@ While the mode or the analysis settings in the form differ from the stored ones,
 
 ## The 3D view
 
-The view has a compass, an axis gizmo (the three lettered axes, drawn straight on the viewport) and a legend for the coloured layers. The **Layers** menu switches the maximum volume, the test surfaces, the kept and carved voxels, the sun path, the sky dome, the carved envelope and the building massing. Buttons frame the whole model, show the top view and switch between a light and a dark viewport (remembered in the browser).
+The view has a compass, an axis gizmo (the three lettered axes, drawn straight on the viewport) and a legend for the coloured layers. The **Layers** menu switches the maximum volume, the test surfaces, the existing surroundings (neutral grey massing) and the terrain (a ground surface), both shown in every step, the kept and carved voxels, the sun path, the sky dome, the carved envelope and the building massing. Buttons frame the whole model, show the top view and switch between a light and a dark viewport (remembered in the browser).
 
-The ground aid button cycles through three states: off, a ground grid with a scale bar, and a compass ring on the ground around the scene (ticks every 10 degrees, the letters N, E, S and W every 90 degrees, rotated by the north direction). The button names the aid it switches to, and the choice is remembered in the browser. The compass ring, the sun path and the sky dome are centred on, and sized to, everything loaded (the maximum volume and the test surfaces together).
+The ground aid button cycles through three states: off, a ground grid with a scale bar, and a compass ring on the ground around the scene (ticks every 10 degrees, the letters N, E, S and W every 90 degrees, rotated by the north direction). The button names the aid it switches to, and the choice is remembered in the browser. The compass ring, the sun path and the sky dome are centred on, and sized to, everything loaded (the maximum volume and the test surfaces together). Framing the model leaves out the surroundings and the terrain, which can reach far beyond the site.
 
 ## Where projects are kept
 
@@ -138,7 +138,7 @@ Each project is a folder in the projects folder:
 
 ```
 <projects folder>/<project name>/
-├── inputs/        The files you added (max_volume/, test_surfaces/, weather.epw)
+├── inputs/        The files you added (max_volume/, test_surfaces/, context/, terrain/, weather.epw)
 │                  and the joined meshes the engine reads (joined/)
 ├── config.yaml    The settings, a normal USC configuration file
 ├── project.json   The project's record: the files you added with their triangle counts, the input revision,

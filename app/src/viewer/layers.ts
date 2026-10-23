@@ -14,10 +14,15 @@ import { pointOnHemisphere, skyPatchOutline, skyPatchShares, type Hemisphere } f
 import type { SunPathObjects } from "./sun_path";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
-export type LayerName = "max_volume" | "test_surfaces" | "kept_voxels" | "carved_voxels" | "sun_path" | "sky_dome" | "envelope" | "building_massing";
+export type LayerName = "max_volume" | "test_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "sun_path" | "sky_dome" | "envelope" |
+  "building_massing";
 
 /** The layers in the order of UX 8.2, which the layers menu and the accessible name follow. */
-export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "kept_voxels", "carved_voxels", "sun_path", "sky_dome", "envelope", "building_massing"];
+export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "sun_path", "sky_dome",
+  "envelope", "building_massing"];
+
+/** The layers that can reach far beyond the site (a city model, a terrain kilometres wide): the camera frames the rest. */
+export const SURROUNDING_LAYERS: readonly LayerName[] = ["context", "terrain"];
 
 export type MaxVolumeAppearance = "solid" | "ghost";
 
@@ -137,6 +142,21 @@ export function testSurfacesLayer(geometry: THREE.BufferGeometry): THREE.Object3
   const surfaces = new THREE.Mesh(geometry, material);
   surfaces.userData.applyTheme = (theme: ViewportTheme) => material.color.set(colourToken(theme === "dark" ? "test-surface-on-dark" : "accent"));
   return surfaces;
+}
+
+/** The existing surroundings: neutral grey massing with soft edges. */
+export function contextLayer(geometry: THREE.BufferGeometry): THREE.Object3D {
+  const body = new THREE.Mesh(geometry, solidMaterial(colourToken("context"), 1, THREE.DoubleSide));
+  const edges = edgeLines(geometry, colourToken("ink"), SOFT_EDGE_OPACITY);
+  const group = new THREE.Group();
+  group.add(body, edges);
+  group.userData.applyTheme = (theme: ViewportTheme) => (edges.material as THREE.LineBasicMaterial).color.set(inkColour(theme));
+  return group;
+}
+
+/** The terrain: a ground surface, without edges (a terrain mesh has many). */
+export function terrainLayer(geometry: THREE.BufferGeometry): THREE.Object3D {
+  return new THREE.Mesh(geometry, solidMaterial(colourToken("terrain"), 1, THREE.DoubleSide));
 }
 
 /** The carved envelope: a light solid with soft edges, or translucent white while the building massing is shown inside it. */

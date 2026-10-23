@@ -103,3 +103,17 @@ test("while a dimmed result is shown, a stamp at the top of the view says it is 
   rendered.rerender(<ViewerPane {...viewWithSkyDome("daylight")} shownByDefault={[]} dimmedLayers={["sky_dome"]} />);
   expect(stamp()).toBeNull();
 });
+
+test("with surroundings and terrain, the layers menu lists them after the test surfaces, shown as the step asks", async () => {
+  const { BoxGeometry } = await import("three");
+  const { LAYERS_SHOWN_IN_STEP } = await import("../steps/ProjectWorkspace");
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} testSurfaces={new BoxGeometry(1, 1, 0.1)} context={new BoxGeometry(2, 2, 2)}
+                                       terrain={new BoxGeometry(50, 50, 0.1)} shownByDefault={LAYERS_SHOWN_IN_STEP.inputs} />);
+  expect(FakeViewerScene.latest!.layersWithObjects()).toEqual(expect.arrayContaining(["context", "terrain"]));
+  expect(FakeViewerScene.latest!.visibleLayers.has("context")).toBe(true);
+  expect(FakeViewerScene.latest!.visibleLayers.has("terrain")).toBe(true);
+  click(rendered.container.querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!);
+  const names = [...rendered.container.querySelectorAll(".viewer-layers-panel label")].map((label) => label.textContent);
+  expect(names.slice(0, 3)).toEqual(["Test surfaces", "Existing surroundings", "Terrain"]);
+  for (const step of Object.values(LAYERS_SHOWN_IN_STEP)) expect(step).toEqual(expect.arrayContaining(["context", "terrain"]));
+});

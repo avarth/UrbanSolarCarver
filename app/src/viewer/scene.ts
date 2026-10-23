@@ -11,7 +11,7 @@ import { colourToken, viewportBackground, type ViewportTheme } from "./colour_sc
 import { northDirection } from "./compass";
 import { compassRing } from "./compass_ring";
 import { groundGrid, groundGridSpacing } from "./ground_grid";
-import { LAYER_NAMES, applyLayerAppearance, disposeLayer, type LayerName } from "./layers";
+import { LAYER_NAMES, SURROUNDING_LAYERS, applyLayerAppearance, disposeLayer, type LayerName } from "./layers";
 import type { Hemisphere } from "./sky_dome";
 import { fitTextSpritesToView } from "./text_sprite";
 
@@ -305,7 +305,8 @@ export class ViewerScene {
    * (nothing loaded yet) the ring is drawn around the local origin, EMPTY_SCENE_RADIUS_METRES wide, as the grid is.
    */
   private rebuildGroundAids(): void {
-    const modelLayers = this.slots.get("max_volume")!.object ? ["max_volume" as const] : LAYER_NAMES.filter((name) => name !== "sky_dome" && name !== "sun_path");
+    const modelLayers = this.slots.get("max_volume")!.object ? ["max_volume" as const] : LAYER_NAMES.filter((name) => name !== "sky_dome" && name !== "sun_path"
+      && !SURROUNDING_LAYERS.includes(name));
     const modelBox = this.boxOf(modelLayers, false);     // a hidden maximum volume still sets the grid
     const size = modelBox.isEmpty() ? new THREE.Vector3() : modelBox.getSize(new THREE.Vector3());
     const centre = modelBox.isEmpty() ? new THREE.Vector3() : modelBox.getCenter(new THREE.Vector3());
@@ -338,8 +339,10 @@ export class ViewerScene {
     return box;
   }
 
+  /** What the camera frames: the visible layers, the surroundings only when nothing else is shown (they can reach far beyond the site). */
   private contentSphere(): { centre: THREE.Vector3; radius: number } {
-    const box = this.boxOf(LAYER_NAMES);
+    const siteBox = this.boxOf(LAYER_NAMES.filter((name) => !SURROUNDING_LAYERS.includes(name)));
+    const box = siteBox.isEmpty() ? this.boxOf(SURROUNDING_LAYERS) : siteBox;
     if (box.isEmpty()) return { centre: new THREE.Vector3(), radius: EMPTY_SCENE_RADIUS_METRES };
     const sphere = box.getBoundingSphere(new THREE.Sphere());
     return { centre: sphere.center, radius: Math.max(sphere.radius, 0.5) };

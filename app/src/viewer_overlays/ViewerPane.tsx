@@ -10,8 +10,8 @@ import type { RunSummary, SkyDome } from "../api_client/client";
 import { messages } from "../messages";
 import { keptScoreRange } from "../viewer/colour_scales";
 import {
-  buildingMassingLayer, carvedVoxelsLayer, envelopeLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer, skyDomeLayer, splitScorePoints,
-  storeyOfPart, sunPathLayer, testSurfacesLayer, volumeOutline, type MaxVolumeAppearance, type VolumeOutline,
+  buildingMassingLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer, skyDomeLayer, splitScorePoints,
+  storeyOfPart, sunPathLayer, terrainLayer, testSurfacesLayer, volumeOutline, type MaxVolumeAppearance, type VolumeOutline,
 } from "../viewer/layers";
 import type { Point3 } from "../viewer/local_origin";
 import { DEFAULT_SKY_DOME_OPACITY, ViewerScene, type CameraState, type GroundAid, type LayerName, type ViewportTheme } from "../viewer/scene";
@@ -40,6 +40,9 @@ export const NO_VIEWER_RESULTS: ViewerResults = { scorePoints: null, carving: nu
 export interface ViewerPaneProps {
   maxVolume: THREE.BufferGeometry | null;
   testSurfaces: THREE.BufferGeometry | null;
+  /** The existing surroundings and the terrain, when the project has them. */
+  context?: THREE.BufferGeometry | null;
+  terrain?: THREE.BufferGeometry | null;
   /** The sun path of the stored settings; it turns by the North shown since (*northDegrees*), as the compass ring does. */
   sunPath: SunPathWithNorth | null;
   /**
@@ -100,8 +103,8 @@ function storeyCountOf(massing: THREE.BufferGeometry): number {
   return partNames.reduce((count, name) => Math.max(count, (storeyOfPart(name) ?? 0) + 1), 0);
 }
 
-export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVolumeAppearance, shownByDefault, northDegrees, framingRequest,
-                             centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
+export function ViewerPane({ maxVolume, testSurfaces, context = null, terrain = null, sunPath, hemisphere, maxVolumeAppearance, shownByDefault,
+                             northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
                              analysisCurrent = false }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
@@ -148,6 +151,8 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   // Every layer gets its own copy of the geometry: the scene disposes a layer's geometry when the layer is replaced.
   useEffect(() => scene?.setLayer("max_volume", maxVolume && maxVolumeLayer(maxVolume.clone(), maxVolumeAppearance)), [scene, maxVolume, maxVolumeAppearance]);
   useEffect(() => scene?.setLayer("test_surfaces", testSurfaces && testSurfacesLayer(testSurfaces.clone())), [scene, testSurfaces]);
+  useEffect(() => scene?.setLayer("context", context && contextLayer(context.clone())), [scene, context]);
+  useEffect(() => scene?.setLayer("terrain", terrain && terrainLayer(terrain.clone())), [scene, terrain]);
   useEffect(() => {
     const northTurnDegrees = sunPath === null ? 0 : northDegrees - sunPath.northDegrees;
     scene?.setLayer("sun_path", sunPath && hemisphere && sunPathLayer(sunPathObjects(sunPath.path, hemisphere, northTurnDegrees), hemisphere));
@@ -177,6 +182,8 @@ export function ViewerPane({ maxVolume, testSurfaces, sunPath, hemisphere, maxVo
   const present: LayerName[] = [];
   if (maxVolume) present.push("max_volume");
   if (testSurfaces) present.push("test_surfaces");
+  if (context) present.push("context");
+  if (terrain) present.push("terrain");
   if (voxels) present.push("kept_voxels", "carved_voxels");
   if (sunPath && hemisphere) present.push("sun_path");
   if (skyDome && hemisphere) present.push("sky_dome");

@@ -115,8 +115,10 @@ export const messages = {
     envelope_and_massing: "Envelope and massing",
     export: "Export",
   },
-  inputsSummary: (volumeCount: number, testSurfaceCount: number, hasWeatherFile: boolean) =>
+  inputsSummary: (volumeCount: number, testSurfaceCount: number, hasWeatherFile: boolean, contextCount = 0, hasTerrain = false) =>
     `${volumeCount} ${volumeCount === 1 ? "volume" : "volumes"}, ${testSurfaceCount} ${testSurfaceCount === 1 ? "test surface" : "test surfaces"}` +
+    (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "surroundings file" : "surroundings files"}` : "") +
+    (hasTerrain ? ", terrain" : "") +
     (hasWeatherFile === true ? ", weather" : ""),
   maxVolumeMissing: "Maximum volume missing",
   testSurfacesMissing: "Test surfaces missing",
@@ -151,12 +153,16 @@ export const messages = {
   // Inputs (5.2)
   maxVolumeTitle: "Maximum volume",
   testSurfacesTitle: "Test surfaces",
+  contextTitle: "Existing surroundings (optional)",
+  terrainTitle: "Terrain (optional)",
   weatherFileTitle: "Weather file (optional)",
   weatherFileNeededTitle: "Weather file",
   requiredInput: "Required",
   weatherFileExtension: ".epw",
   maxVolumeHint: "The largest building you would allow, as one or more closed meshes.",
   testSurfacesHint: "The surfaces whose sun or sky the carving protects, such as neighbouring facades.",
+  contextHint: "Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.",
+  terrainHint: "The ground. It blocks sun and sky; the site stays buildable above it.",
   weatherNeededFor: (modeNames: string) => `Needed for ${modeNames}.`,
   orDropThemHere: "or drop them here",
   replaceFile: "Replace",
@@ -444,6 +450,8 @@ export const messages = {
   layerNames: {
     max_volume: "Maximum volume",
     test_surfaces: "Test surfaces",
+    context: "Existing surroundings",
+    terrain: "Terrain",
     kept_voxels: "Kept voxels, coloured by score",
     carved_voxels: "Carved voxels",
     sun_path: "Sun path",

@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
-import { buildingMassingLayer, carvedOutlineSegments, keptColumnTops, pointSizeForVoxel, splitScorePoints, storeyOfPart, volumeOutline } from "./layers";
+import { buildingMassingLayer, carvedOutlineSegments, contextLayer, LAYER_NAMES, terrainLayer, keptColumnTops, pointSizeForVoxel, splitScorePoints, storeyOfPart, volumeOutline } from "./layers";
 import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
@@ -100,4 +100,11 @@ test("a building massing without storeys has none", () => {
   const empty = new THREE.BufferGeometry().setAttribute("position", new THREE.Float32BufferAttribute([], 3));
   empty.userData.partNames = [];
   expect(buildingMassingLayer(empty).userData.storeyCount).toBe(0);
+});
+
+test("the existing surroundings and the terrain are layers of their own, listed after the test surfaces", () => {
+  expect(LAYER_NAMES.slice(0, 4)).toEqual(["max_volume", "test_surfaces", "context", "terrain"]);
+  const geometry = new THREE.BoxGeometry(1, 1, 1);
+  expect(contextLayer(geometry.clone())).toBeInstanceOf(THREE.Object3D);
+  expect(terrainLayer(geometry.clone())).toBeInstanceOf(THREE.Object3D);
 });

@@ -1,4 +1,5 @@
-// The input meshes the 3D view draws (UX 8.2): the files of the maximum volume and of the test surfaces, each role's files
+// The input meshes the 3D view draws (UX 8.2): the files of the maximum volume, the test surfaces, the existing surroundings and
+// the terrain, each role's files
 // joined into one geometry in local coordinates, fetched again when the files, their contents or the local origin change.
 // A file the service accepted (the engine reads it) that the view cannot parse is left out of the drawing and named in its
 // input box (UX 11); the role's other files are still drawn.

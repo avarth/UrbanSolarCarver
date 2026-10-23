@@ -38,12 +38,12 @@ const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "mode", "set
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
 // they cover the kept ones; the Layers menu shows them.
 export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
-  inputs: ["max_volume", "test_surfaces"],
-  mode: ["max_volume", "test_surfaces"],
-  settings: ["max_volume", "test_surfaces", "sun_path"],
-  carving: ["test_surfaces", "sun_path", "kept_voxels", "sky_dome"],
-  envelope_and_massing: ["envelope", "building_massing"],
-  export: ["envelope", "building_massing"],
+  inputs: ["max_volume", "test_surfaces", "context", "terrain"],
+  mode: ["max_volume", "test_surfaces", "context", "terrain"],
+  settings: ["max_volume", "test_surfaces", "context", "terrain", "sun_path"],
+  carving: ["test_surfaces", "context", "terrain", "sun_path", "kept_voxels", "sky_dome"],
+  envelope_and_massing: ["context", "terrain", "envelope", "building_massing"],
+  export: ["context", "terrain", "envelope", "building_massing"],
 };
 
 interface ProjectWorkspaceProps {
@@ -113,12 +113,13 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     return () => props.onSettingsSaverReady?.(null);
   }, []);
   const [files, setFiles] = useState<Record<InputRole, InputFileInfo[]>>({
-    max_volume: project.inputs.max_volume ?? [], test_surfaces: project.inputs.test_surfaces ?? [], weather: project.inputs.weather ?? [],
+    max_volume: project.inputs.max_volume ?? [], test_surfaces: project.inputs.test_surfaces ?? [], context: project.inputs.context ?? [],
+    terrain: project.inputs.terrain ?? [], weather: project.inputs.weather ?? [],
   });
   const [joinedBounds, setJoinedBounds] = useState<Bounds3 | null>(project.joined_bounds as Bounds3 | null);
   const [weatherLocation, setWeatherLocation] = useState(project.weather_location);
   const [weatherLatitude, setWeatherLatitude] = useState(project.weather_latitude);
-  const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0 });
+  const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0, context: 0, terrain: 0 });
   // Goes up whenever the weather file is added, replaced or removed: the service keeps one name for it, so its file list may not change.
   const [weatherFileRevision, setWeatherFileRevision] = useState(0);
   const weatherFileRevisionNow = useRef(0);
@@ -148,6 +149,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const maxVolumeMesh = useInputGeometry(token, project.name, "max_volume", files.max_volume, origin, inputRevisions.max_volume, frameAllInputs, onServiceProblem);
   const testSurfacesMesh = useInputGeometry(token, project.name, "test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, frameAllInputs,
                                         onServiceProblem);
+  const contextMesh = useInputGeometry(token, project.name, "context", files.context, origin, inputRevisions.context, frameAllInputs, onServiceProblem);
+  const terrainMesh = useInputGeometry(token, project.name, "terrain", files.terrain, origin, inputRevisions.terrain, frameAllInputs, onServiceProblem);
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
   // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
   const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
@@ -306,6 +309,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     maxVolumeFiles: files.max_volume.length,
     testSurfaceFiles: files.test_surfaces.length,
     hasWeatherFile,
+    contextFiles: files.context.length,
+    terrainFiles: files.terrain.length,
     mode: form.mode,
     analysisPeriod: analysisPeriodOf(form, modeInfo?.needs_period ?? false),
     voxelSize: Number(shownValue(form, "voxel_size")),
@@ -325,7 +330,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     inputs: (
       <InputsStep files={files} weatherLocation={weatherLocation} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
-                  drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, test_surfaces: testSurfacesMesh.drawingProblems }} />
+                  drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, test_surfaces: testSurfacesMesh.drawingProblems,
+                                     context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
     ),
     mode: (
       <ModeStep mode={form.mode} onChoose={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
@@ -396,7 +402,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        pinnedAction={saveFailureNotice === null && openStepAction === null ? null : <>{saveFailureNotice}{openStepAction}</>} />
       </aside>
       <section className="workspace-view">
-        <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaces} sunPath={sunPath}
+        <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaces} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}

@@ -102,3 +102,25 @@ test("a file the 3D view cannot draw is named in its box, next to the files, whi
   expect([...testSurfaces.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbor_roofs.ply", "neighbor_windows.ply"]);
   expect(boxTitled("Maximum volume").querySelector(".input-box-problem")).toBeNull();
 });
+
+test("the optional boxes for the existing surroundings and the terrain follow the test surfaces, with no Required badge", () => {
+  rendered = renderForTest(inputsStep(NO_FILES));
+  const titles = [...rendered.container.querySelectorAll(".input-box h3")].map((title) => title.textContent);
+  expect(titles).toEqual(["Maximum volume", "Test surfaces", "Existing surroundings (optional)", "Terrain (optional)", "Weather file (optional)"]);
+  const context = boxTitled("Existing surroundings (optional)");
+  expect(context.querySelector(".input-box-required")).toBeNull();
+  expect(context.textContent).toContain("Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.");
+  const terrain = boxTitled("Terrain (optional)");
+  expect(terrain.querySelector(".input-box-required")).toBeNull();
+  expect(terrain.textContent).toContain("The ground. It blocks sun and sky; the site stays buildable above it.");
+  expect(terrain.querySelector(".input-box-actions")!.textContent).toBe("Add filesor drop them here");
+});
+
+test("a surroundings file is listed in its box with its triangle count", () => {
+  rendered = renderForTest(
+    <InputsStep files={{ ...NO_FILES, context: [{ name: "neighbours.ply", triangle_count: 96 }] }} weatherLocation={null} weatherHint={WEATHER_HINT}
+                inputsBounds={null} onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} />);
+  const context = boxTitled("Existing surroundings (optional)");
+  expect(context.querySelector(".input-file-name")!.textContent).toBe("neighbours.ply");
+  expect(context.querySelector(".input-file-detail")!.textContent).toBe("96 triangles");
+});

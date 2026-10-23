@@ -1,4 +1,4 @@
-// The Inputs step (UX 5.2): one box per input role with its files, "Add files" (picker, or drop the files onto the box) and a
+// The Inputs step (UX 5.2): one box per input role with its files (the existing surroundings and the terrain are optional), "Add files" (picker, or drop the files onto the box) and a
 // remove button per file; under the boxes the size of all inputs together and the warning when it does not look like metres.
 // While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason.
 import { useId, useRef, useState, type DragEvent } from "react";
@@ -10,8 +10,10 @@ import { sizeWarning } from "../viewer/size_check";
 import { formatNumber, formattedNumber } from "./format_numbers";
 import "./steps.css";
 
-export type InputRole = "max_volume" | "test_surfaces" | "weather";
-export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "test_surfaces", "weather"];
+export type InputRole = "max_volume" | "test_surfaces" | "context" | "terrain" | "weather";
+export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "test_surfaces", "context", "terrain", "weather"];
+/** The mesh roles a run can do without: no "Required" beside their titles. */
+const OPTIONAL_MESH_ROLES: readonly InputRole[] = ["context", "terrain"];
 
 const MESH_FILE_TYPES = ".ply,.obj,.stl,.glb";
 const WEATHER_FILE_TYPE = ".epw";
@@ -42,7 +44,16 @@ interface InputBoxProps {
 const TITLES: Record<InputRole, string> = {
   max_volume: messages.maxVolumeTitle,
   test_surfaces: messages.testSurfacesTitle,
+  context: messages.contextTitle,
+  terrain: messages.terrainTitle,
   weather: messages.weatherFileTitle,
+};
+
+const MESH_HINTS: Record<Exclude<InputRole, "weather">, string> = {
+  max_volume: messages.maxVolumeHint,
+  test_surfaces: messages.testSurfacesHint,
+  context: messages.contextHint,
+  terrain: messages.terrainHint,
 };
 
 function RemoveIcon() {
@@ -66,7 +77,8 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
   const isWeather = role === "weather";
   const filled = files.length > 0;
   const disabled = disabledReason !== null || busy;
-  const hint = role === "max_volume" ? messages.maxVolumeHint : role === "test_surfaces" ? messages.testSurfacesHint : weatherHint;
+  const hint = role === "weather" ? weatherHint : MESH_HINTS[role];
+  const badge = isWeather ? messages.weatherFileExtension : OPTIONAL_MESH_ROLES.includes(role) ? null : messages.requiredInput;
 
   const add = async (chosen: File[]) => {
     const toAdd = isWeather ? chosen.slice(0, 1) : chosen;     // one weather file per project
@@ -110,7 +122,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
              onChange={(event) => { void add(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
       <div className="input-box-title-row">
         <h3 id={titleId} className="input-box-title">{isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role]}</h3>
-        {filled ? addButton : <span className="input-box-required">{isWeather ? messages.weatherFileExtension : messages.requiredInput}</span>}
+        {filled ? addButton : badge !== null && <span className="input-box-required">{badge}</span>}
       </div>
       {!filled && (
         <>
@@ -141,6 +153,8 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
   );
 }
 
+const NO_FILES: InputFileInfo[] = [];
+
 /** "52 × 44 × 30 m": whole metres from 10 m up, finer below. */
 export function inputsSizeText(bounds: Bounds3): string {
   const sides = [0, 1, 2].map((axis) => bounds[1][axis] - bounds[0][axis]);
@@ -149,7 +163,8 @@ export function inputsSizeText(bounds: Bounds3): string {
 }
 
 interface InputsStepProps {
-  files: Record<InputRole, InputFileInfo[]>;
+  /** The files of each role; a role left out has none. */
+  files: Partial<Record<InputRole, InputFileInfo[]>>;
   weatherLocation: string | null;
   weatherHint: string;
   /** The bounds of all input meshes together, null before any is shown. */
@@ -169,7 +184,7 @@ export function InputsStep({ files, weatherLocation, weatherHint, inputsBounds, 
   return (
     <div className="inputs-step">
       {INPUT_ROLES.map((role) => (
-        <InputBox key={role} role={role} files={files[role]} weatherLocation={weatherLocation} weatherHint={weatherHint}
+        <InputBox key={role} role={role} files={files[role] ?? NO_FILES} weatherLocation={weatherLocation} weatherHint={weatherHint}
                   onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason} drawingProblems={drawingProblems[role]}
                   note={role === "max_volume" ? maxVolumeNote : null} />
       ))}

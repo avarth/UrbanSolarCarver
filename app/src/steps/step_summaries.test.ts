@@ -8,6 +8,8 @@ interface StateOverrides {
   maxVolume?: number;
   testSurfaces?: number;
   weather?: boolean;
+  context?: number;
+  terrain?: number;
   mode?: string;
   analysisPeriod?: ProjectViewState["analysisPeriod"];
   voxelSize?: number;
@@ -25,6 +27,8 @@ function stateWith(overrides: StateOverrides): ProjectViewState {
     maxVolumeFiles: overrides.maxVolume ?? 1,
     testSurfaceFiles: overrides.testSurfaces ?? 1,
     hasWeatherFile: overrides.weather ?? false,
+    contextFiles: overrides.context ?? 0,
+    terrainFiles: overrides.terrain ?? 0,
     mode: overrides.mode ?? "time-based",
     analysisPeriod: overrides.analysisPeriod === undefined ? DECEMBER_21_10_TO_14 : overrides.analysisPeriod,
     voxelSize: overrides.voxelSize ?? 1,
@@ -125,4 +129,11 @@ test("a setting to fix is counted and marked on the step that holds it", () => {
   expect(stepMark("settings", state)).toBe("done");
   expect(stepMark("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("error");
   expect(stepSummary("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("1 setting to fix");
+});
+
+test("the inputs summary counts the surroundings files and names the terrain when there are some", () => {
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 2, context: 3 }))).toBe("1 volume, 2 test surfaces, 3 surroundings files");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 1, context: 1, terrain: 1, weather: true })))
+    .toBe("1 volume, 1 test surface, 1 surroundings file, terrain, weather");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 1, terrain: 2 }))).toBe("1 volume, 1 test surface, terrain");
 });

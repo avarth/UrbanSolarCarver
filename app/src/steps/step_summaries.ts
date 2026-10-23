@@ -40,6 +40,9 @@ export interface ProjectViewState {
   maxVolumeFiles: number;
   testSurfaceFiles: number;
   hasWeatherFile: boolean;
+  /** The files of the optional existing surroundings and terrain; absent: none. */
+  contextFiles?: number;
+  terrainFiles?: number;
   mode: string;
   /** The period the analysis reads; null for a mode that reads none, or while a part of it is unset. */
   analysisPeriod: AnalysisPeriod | null;
@@ -58,7 +61,8 @@ function inputsSummary(state: ProjectViewState): string {
   if (!hasMaxVolume && !hasTestSurfaces) return messages.maxVolumeAndTestSurfacesMissing;
   if (!hasMaxVolume) return messages.maxVolumeMissing;
   if (!hasTestSurfaces) return messages.testSurfacesMissing;
-  return messages.inputsSummary(state.maxVolumeFiles, state.testSurfaceFiles, state.hasWeatherFile);
+  return messages.inputsSummary(state.maxVolumeFiles, state.testSurfaceFiles, state.hasWeatherFile, state.contextFiles ?? 0,
+                                (state.terrainFiles ?? 0) > 0);
 }
 
 const settingsToFixIn = (step: StepName, state: ProjectViewState) => state.settingsToFix[step] ?? 0;
