@@ -19,6 +19,10 @@ context_occupancy(vertices, faces, grid_origin, voxel_size, resolution, device)
     Cells of the grid whose centre lies inside the context.
 remove_context_columns(occupancy, inside) -> ColumnRemoval
     The column rule.
+ground_heights(vertices, faces, grid_origin, voxel_size, resolution, device)
+    Ground height per column where the terrain crosses its centre line.
+remove_below_ground(occupancy, heights, grid_origin, voxel_size)
+    Clear the voxels whose centre lies below the ground.
 """
 from __future__ import annotations
 
@@ -26,8 +30,20 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from .compute_device import warp_device_name
 from .voxelization import voxelize_solid_warp
-from .warp_kernels import require_dda_backend
+from .warp_kernels import _warp_available, require_dda_backend
+
+if _warp_available:
+    import warp as wp
+    from .warp_kernels import _ground_height_kernel
+
+
+def _warp_mesh(vertices: np.ndarray, faces: np.ndarray, device_str: str) -> "wp.Mesh":
+    """A Warp BVH mesh of the triangles (float32 points, int32 indices)."""
+    points = wp.array(np.ascontiguousarray(vertices, dtype=np.float32), dtype=wp.vec3, device=device_str)
+    indices = wp.array(np.ascontiguousarray(faces, dtype=np.int32).ravel(), dtype=wp.int32, device=device_str)
+    return wp.Mesh(points=points, indices=indices)
 
 
 def context_occupancy(vertices: np.ndarray, faces: np.ndarray, grid_origin: np.ndarray, voxel_size: float,
@@ -68,3 +84,42 @@ def remove_context_columns(occupancy: np.ndarray, inside: np.ndarray) -> ColumnR
     voxels_removed = int(occupied.sum() - reduced.sum())
     return ColumnRemoval(occupancy=reduced.astype(np.uint8), removed_columns=removed_columns,
                          voxels_removed=voxels_removed)
+
+
+def ground_heights(vertices: np.ndarray, faces: np.ndarray, grid_origin: np.ndarray, voxel_size: float,
+                   resolution: int, device) -> np.ndarray:
+    """The (R, R) float64 ground height (local z) of each grid column, NaN where the terrain does not cross it.
+
+    The height is where the terrain crosses the column's vertical centre line,
+    the highest crossing if there are several (an overhang). One downward ray
+    per column from above the terrain's top; an open sheet works.
+    """
+    require_dda_backend(device)
+    device_str = warp_device_name(device)
+    vertices = np.asarray(vertices, dtype=np.float64)
+    mesh = _warp_mesh(vertices, faces, device_str)
+    top, bottom = float(vertices[:, 2].max()), float(vertices[:, 2].min())
+    start_z = top + float(voxel_size)
+    heights = wp.zeros(resolution * resolution, dtype=wp.float32, device=device_str)
+    wp.launch(_ground_height_kernel, dim=resolution * resolution,
+              inputs=[mesh.id, wp.vec3(*(float(value) for value in grid_origin)), float(voxel_size),
+                      int(resolution), start_z, start_z - bottom + float(voxel_size), heights],
+              device=device_str)
+    wp.synchronize()
+    return heights.numpy().astype(np.float64).reshape(resolution, resolution)
+
+
+def remove_below_ground(occupancy: np.ndarray, heights: np.ndarray, grid_origin: np.ndarray,
+                        voxel_size: float) -> tuple[np.ndarray, int]:
+    """Clear the voxels whose centre z lies below their column's ground height (NaN columns keep all theirs).
+
+    Returns the new uint8 occupancy and the number of voxels removed. The
+    column rule does not apply: the column stays buildable above the ground.
+    """
+    occupied = np.asarray(occupancy) != 0
+    resolution = occupied.shape[2]
+    centres_z = float(grid_origin[2]) + (np.arange(resolution) + 0.5) * float(voxel_size)
+    with np.errstate(invalid="ignore"):
+        below = centres_z[None, None, :] < np.asarray(heights, dtype=np.float64)[:, :, None]
+    reduced = occupied & ~below
+    return reduced.astype(np.uint8), int(occupied.sum() - reduced.sum())

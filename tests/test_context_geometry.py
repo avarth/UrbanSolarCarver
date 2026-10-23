@@ -7,7 +7,9 @@ import pytest
 import torch
 import trimesh
 
-from urbansolarcarver.context_geometry import context_occupancy, remove_context_columns
+from urbansolarcarver.context_geometry import (
+    context_occupancy, ground_heights, remove_below_ground, remove_context_columns,
+)
 from urbansolarcarver.grid_planning import plan_voxel_grid
 from urbansolarcarver.voxelization import voxelize_solid_warp
 
@@ -105,3 +107,76 @@ def test_context_outside_the_grid_changes_nothing(cube_grid):
     removal = _removal(cube_grid, _box((100, 100, 0), (110, 110, 10)))
     assert removal.voxels_removed == 0
     np.testing.assert_array_equal(removal.occupancy, cube_grid[0])
+
+
+# ---- Terrain: ground heights and the voxels below the ground ----
+
+def _sheet(x0, x1, y0, y1, z_of):
+    """An open terrain sheet of two triangles over [x0, x1] x [y0, y1], its corners at the heights z_of(x, y)."""
+    corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)]
+    vertices = np.array([(x, y, z_of(x, y)) for x, y in corners], dtype=float)
+    return trimesh.Trimesh(vertices=vertices, faces=[[0, 1, 2], [0, 2, 3]], process=False)
+
+
+def _below_ground(cube_grid, terrain):
+    occupancy, origin, resolution = cube_grid
+    heights = ground_heights(terrain.vertices, terrain.faces, origin, VOXEL, resolution, DEVICE)
+    return heights, remove_below_ground(occupancy, heights, origin, VOXEL)
+
+
+def _centres(origin, resolution, axis):
+    return origin[axis] + (np.arange(resolution) + 0.5) * VOXEL
+
+
+def test_flat_terrain_at_three_metres_removes_three_layers(cube_grid):
+    occupancy, origin, resolution = cube_grid
+    heights, (reduced, removed) = _below_ground(cube_grid, _sheet(-50, 50, -50, 50, lambda x, y: 3.0))
+    np.testing.assert_allclose(heights, 3.0, atol=1e-5)
+    expected = occupancy.copy()
+    expected[:, :, _centres(origin, resolution, 2) < 3.0] = 0
+    np.testing.assert_array_equal(reduced, expected)
+    assert removed == 3 * 100
+    assert reduced.dtype == np.uint8
+
+
+def test_sloping_terrain_keeps_columns_above_ground(cube_grid):
+    """A plane rising from z = 0 at x = 0 to z = 6 at x = 10: each column loses only what lies below it."""
+    occupancy, origin, resolution = cube_grid
+    heights, (reduced, removed) = _below_ground(cube_grid, _sheet(-20, 30, -20, 30, lambda x, y: 0.6 * x))
+    cx = _centres(origin, resolution, 0)
+    np.testing.assert_allclose(heights, np.broadcast_to(0.6 * cx[:, None], heights.shape), atol=1e-4)
+    cz = _centres(origin, resolution, 2)
+    expected = occupancy.copy()
+    expected[cz[None, None, :] < 0.6 * cx[:, None, None] + np.zeros((1, resolution, 1))] = 0
+    np.testing.assert_array_equal(reduced, expected)
+    assert removed == int(occupancy.sum() - expected.sum()) > 0
+    columns = occupancy.any(axis=2)
+    assert (reduced.any(axis=2) == columns).all()  # every column of the cube keeps voxels above the ground
+
+
+def test_terrain_not_covering_a_column_leaves_it(cube_grid):
+    occupancy, origin, resolution = cube_grid
+    heights, (reduced, removed) = _below_ground(cube_grid, _sheet(-20, 5, -20, 30, lambda x, y: 4.0))
+    cx = _centres(origin, resolution, 0)
+    assert np.isnan(heights[cx > 5]).all()
+    assert not np.isnan(heights[cx < 5]).any()
+    np.testing.assert_array_equal(reduced[cx > 5], occupancy[cx > 5])
+    assert removed == 5 * 10 * 4
+
+
+def test_terrain_far_larger_than_the_grid(cube_grid):
+    small = _below_ground(cube_grid, _sheet(-50, 50, -50, 50, lambda x, y: 2.0))
+    large = _below_ground(cube_grid, _sheet(-2500, 2500, -2500, 2500, lambda x, y: 2.0))
+    np.testing.assert_allclose(small[0], large[0], atol=1e-4)
+    np.testing.assert_array_equal(small[1][0], large[1][0])
+    assert small[1][1] == large[1][1] == 2 * 100
+
+
+def test_terrain_takes_the_highest_crossing(cube_grid):
+    """Two sheets over each other (an overhang): the ground is the upper one."""
+    lower = _sheet(-50, 50, -50, 50, lambda x, y: 1.0)
+    upper = _sheet(-50, 50, -50, 50, lambda x, y: 4.0)
+    both = trimesh.util.concatenate([lower, upper])
+    heights, (_, removed) = _below_ground(cube_grid, both)
+    np.testing.assert_allclose(heights, 4.0, atol=1e-5)
+    assert removed == 4 * 100

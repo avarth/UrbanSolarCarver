@@ -12,7 +12,9 @@ device (:func:`dda_backend_available`), precompiles the kernels
   each ray's weight or a count of 1 directly into a per-voxel volume, the
   first-hit kernel of the test point access evaluation and the kernel of
   the skin rule;
-* the parity voxelizer used by :func:`voxelization.voxelize_solid_warp`.
+* the parity voxelizer used by :func:`voxelization.voxelize_solid_warp`;
+* the ground heights of a terrain mesh, used by
+  :func:`context_geometry.ground_heights`.
 
 All kernels live in this one module on purpose: Warp compiles a Python
 module as one unit and caches it on disk by module, so
@@ -829,3 +831,27 @@ if _warp_available:
                 entry_pos = pos
             inside = 1 - inside
             t_off = t_hit + eps_t
+
+    @wp.kernel
+    def _ground_height_kernel(
+        mesh_id: wp.uint64,
+        grid_origin: wp.vec3,
+        cell_size: float,
+        resolution: int,
+        start_z: float,                       # above the terrain's top
+        max_t: float,                         # how far down the rays run
+        heights: wp.array(dtype=wp.float32),  # out: ground z per column (x * res + y), NaN where none
+    ):
+        """Ground height per grid column: one downward ray along the column's
+        vertical centre line from above the terrain; its first hit is the
+        highest crossing of the terrain with that line."""
+        tid = wp.tid()
+        i = tid // resolution
+        j = tid % resolution
+        ro = wp.vec3(grid_origin[0] + (float(i) + 0.5) * cell_size,
+                     grid_origin[1] + (float(j) + 0.5) * cell_size, start_z)
+        q = wp.mesh_query_ray(mesh_id, ro, wp.vec3(0.0, 0.0, -1.0), max_t)
+        if q.result:
+            heights[tid] = start_z - q.t
+        else:
+            heights[tid] = wp.nan
