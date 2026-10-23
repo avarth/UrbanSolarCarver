@@ -13,8 +13,8 @@ device (:func:`dda_backend_available`), precompiles the kernels
   first-hit kernel of the test point access evaluation and the kernel of
   the skin rule;
 * the parity voxelizer used by :func:`voxelization.voxelize_solid_warp`;
-* the ground heights of a terrain mesh, used by
-  :func:`context_geometry.ground_heights`, and the any-hit test of rays
+* the ground heights of a terrain mesh and the voxel centres on the context's
+  surface, used by :mod:`context_geometry`, and the any-hit test of rays
   against the context and terrain meshes (:func:`ray_tracing.mesh_blocks_rays`).
 
 All kernels live in this one module on purpose: Warp compiles a Python
@@ -893,3 +893,18 @@ if _warp_available:
                 break
             t_off = t_hit + wp.max(1.0e-5, t_hit * 1.0e-6)
         blocked[i] = hit
+
+    @wp.kernel
+    def _near_mesh_kernel(
+        mesh_id: wp.uint64,
+        points: wp.array(dtype=wp.vec3),     # (N,) query points
+        max_distance: float,
+        near: wp.array(dtype=wp.uint8),      # out: 1 where the mesh lies within max_distance of the point
+    ):
+        """Whether the mesh surface passes within *max_distance* of each point."""
+        i = wp.tid()
+        q = wp.mesh_query_point_no_sign(mesh_id, points[i], max_distance)
+        if q.result:
+            near[i] = wp.uint8(1)
+        else:
+            near[i] = wp.uint8(0)

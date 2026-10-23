@@ -180,3 +180,68 @@ def test_terrain_takes_the_highest_crossing(cube_grid):
     heights, (_, removed) = _below_ground(cube_grid, both)
     np.testing.assert_allclose(heights, 4.0, atol=1e-5)
     assert removed == 4 * 100
+
+
+# ---- Review fixes: the column rule over the grid, bodies far from the grid, ties at voxel centres ----
+
+def test_context_above_the_max_volume_removes_the_columns_under_it(cube_grid):
+    """A tree crown over part of the site, above the max volume: nothing is built under it."""
+    removal = _removal(cube_grid, _box((2, 2, 10.2), (4, 4, 11.9)))
+    assert removal.removed_columns.sum() == 4
+    assert removal.voxels_removed == 4 * 10
+
+
+def test_context_below_the_max_volume_removes_the_columns_over_it(cube_grid):
+    """A kept low building under a max volume drawn on top of it: to build over it, remove it from the context."""
+    removal = _removal(cube_grid, _box((6, 6, -1.8), (8, 8, 0)))
+    assert removal.removed_columns.sum() == 4
+    assert removal.voxels_removed == 4 * 10
+
+
+def _open_box(lo, hi, axis):
+    box = _box(lo, hi)
+    box.update_faces(box.face_normals[:, axis] > -0.5)   # the wall facing -axis missing
+    return box
+
+
+def test_open_bodies_far_from_the_grid_do_not_flip_the_parity_inside_it(cube_grid):
+    """Open bodies 500 m away and intact ones beyond the site, along the grid's rows: no context near the site."""
+    far = [_open_box((-520, -5, -5), (-510, 15, 15), 0), _box((-720, -5, -5), (-710, 15, 15)), _box((700, -5, -5), (710, 15, 15)),
+           _open_box((-5, -520, -5), (15, -510, 15), 1), _box((-5, -720, -5), (15, -710, 15)), _box((-5, 700, -5), (15, 710, 15))]
+    assert not far[0].is_watertight and not far[3].is_watertight
+    removal = _removal(cube_grid, trimesh.util.concatenate(far))
+    assert removal.voxels_removed == 0
+
+
+def test_many_bodies_along_a_row_do_not_hide_context_inside_the_grid(cube_grid):
+    """130 closed boxes in a row before the grid along x and along y (more crossings than a parity ray follows) and a chimney
+    inside the site."""
+    rows = [_box((-1000 + 6 * k, -5, -5), (-997 + 6 * k, 15, 15)) for k in range(130)]
+    rows += [_box((-5, -1000 + 6 * k, -5), (15, -997 + 6 * k, 15)) for k in range(130)]
+    removal = _removal(cube_grid, trimesh.util.concatenate([*rows, _box((4, 4, 4), (6, 6, 6))]))
+    assert removal.voxels_removed == 4 * 10
+
+
+@pytest.fixture
+def cube_grid_default_margin():
+    """The 10 m cube at the default grid margin: voxel centres lie on its faces (whole metres)."""
+    cube = _box((0, 0, 0), (10, 10, 10))
+    plan = plan_voxel_grid(cube.bounds, VOXEL, 0.01)
+    grid = voxelize_solid_warp(cube.vertices, cube.faces, plan.origin, VOXEL, plan.resolution, DEVICE)
+    assert np.isclose(plan.origin[0] + 0.5 * VOXEL, 0.0)
+    return grid.astype(np.uint8), plan.origin, plan.resolution
+
+
+def test_party_wall_on_voxel_centres_removes_no_site_voxel(cube_grid_default_margin):
+    removal = _removal(cube_grid_default_margin, _box((10, 2, 0), (14, 8, 10)))
+    assert removal.voxels_removed == 0
+
+
+@pytest.mark.parametrize("far_height", [13.3, 51.7, 123.456])
+def test_flat_ground_on_voxel_centres_with_high_ground_far_away_removes_nothing(cube_grid_default_margin, far_height):
+    """Ground at z = 0 (the bottom voxel centres) in one terrain mesh with higher ground outside the grid: the height read
+    from above the terrain's top must not land a hair above the voxel centres."""
+    ground = _sheet(-100, 100, -100, 100, lambda x, y: 0.0)
+    far = _sheet(500, 510, 500, 510, lambda x, y: far_height)
+    _heights, (_reduced, removed) = _below_ground(cube_grid_default_margin, trimesh.util.concatenate([ground, far]))
+    assert removed == 0

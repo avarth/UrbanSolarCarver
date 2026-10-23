@@ -21,11 +21,12 @@ devices and billboards are not context. Without them a run is the same as before
 
 **Context** does two things, in every mode:
 
-- **Whole columns go.** Where the context overlaps the maximum volume (a voxel overlaps when its centre lies inside
-  the context), the whole voxel column is removed from the buildable mass, above and below the context. Nothing is
-  built on top of kept buildings, under tree crowns or beside a chimney within its columns. To build on or over an
-  existing building, remove it from the context. A context face shared with the maximum volume (a party wall) takes
-  no voxel of the site.
+- **Whole columns go.** Where the context lies in a voxel column of the maximum volume (a voxel of the grid counts
+  when its centre lies inside the context, not on its surface), the whole column is removed from the buildable mass,
+  above and below the context. Nothing is built on top of kept buildings, under tree crowns or beside a chimney within
+  its columns. To build on or over an existing building, remove it from the context. A context face shared with the
+  maximum volume (a party wall) takes no voxel of the site. Only the context bodies that reach the voxel grid count
+  here, so a large city model around the site costs little and its distant parts cannot disturb the result.
 - **Rays that hit it are dropped** (ray-based modes: `time-based`, `irradiance`, `benefit`, `daylight`,
   `radiative_cooling`). Each ray from a test point is tested against the context mesh before scoring; a ray that hits
   it within `ray_length` adds nothing to any voxel, because that sun or sky is lost whatever is carved. The test is
@@ -34,7 +35,8 @@ devices and billboards are not context. Without them a run is the same as before
 
 **Terrain** blocks rays exactly like context, but removes only the voxels whose centre lies below the ground (where
 the terrain crosses the column's vertical centre line, the highest crossing if there are several). The rest of the
-column stays buildable, so a sloping site keeps its volume above the ground. An open sheet is fine; a column the
+column stays buildable, so a sloping site keeps its volume above the ground. A voxel centre on the ground counts as
+above it. An open sheet is fine; a column the
 terrain does not cover keeps all its voxels.
 
 **Test surfaces on context buildings.** A neighbour's facade is usually a face of its own context building. Each ray
@@ -46,9 +48,9 @@ points.
 **`tilted_plane`** traces no rays to the sky, so context and terrain only remove voxels there: the planes are the
 same as without them.
 
-**Context mesh not closed.** The column rule needs a closed (watertight) context mesh to tell inside from outside. An
-open one gives a `context_not_closed` warning: the voxels it overlaps may not all be removed, and it still blocks
-rays.
+**Context mesh not closed.** The column rule needs closed (watertight) context bodies to tell inside from outside. An
+open context mesh gives a `context_not_closed` warning: where an open body reaches the voxel grid, the columns removed
+may be too few or too many. It still blocks rays.
 
 The run report (and `summary["context"]` in the preprocessing diagnostics) gives the voxels removed by the context
 columns and below the ground, the volume and share of the maximum volume removed, the rays dropped and their share

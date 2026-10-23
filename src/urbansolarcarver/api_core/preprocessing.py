@@ -126,8 +126,8 @@ def _remove_context_voxels(voxel_grid, origin, resolution, voxel_size: float, co
         if not closed:
             report_issue(
                 "context_not_closed",
-                "preprocessing: the context mesh is not closed (watertight), so the voxels it overlaps may not all "
-                "be found and removed; it still blocks rays",
+                "preprocessing: the context mesh is not closed (watertight), so where an open body reaches the voxel "
+                "grid the columns removed may be too few or too many; it still blocks rays",
             )
         inside = context_occupancy(context_mesh.vertices, context_mesh.faces, origin, voxel_size, resolution,
                                    device)

@@ -46,7 +46,7 @@ def _context_lines(context: dict) -> list:
     used = [name for name, key in (("context", "context_used"), ("terrain", "terrain_used")) if context.get(key)]
     lines = ["### Context and terrain\n", f"- **Used:** {' and '.join(used) or 'none'}"]
     if context.get("context_closed") is False:
-        lines.append("- **Context mesh not closed:** the voxels it overlaps may not all have been removed")
+        lines.append("- **Context mesh not closed:** the columns removed may be too few or too many where it reaches the grid")
     lines.append(f"- **Voxels removed by context columns:** {context.get('voxels_removed_by_context', 0):,}")
     lines.append(f"- **Voxels removed below the ground:** {context.get('voxels_removed_below_ground', 0):,}")
     lines.append(f"- **Volume removed:** {context.get('volume_removed_m3', 0.0):,.1f} m³ "

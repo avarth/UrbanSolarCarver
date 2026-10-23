@@ -39,6 +39,7 @@ import numpy as np
 import shapely
 import torch
 import trimesh
+from scipy import ndimage as ndi
 from shapely.geometry import Polygon, box
 
 from .compute_device import warp_device_name
@@ -47,7 +48,7 @@ from .warp_kernels import _warp_available, require_dda_backend
 
 if _warp_available:
     import warp as wp
-    from .warp_kernels import _ground_height_kernel
+    from .warp_kernels import _ground_height_kernel, _near_mesh_kernel
 
 
 def _warp_mesh(vertices: np.ndarray, faces: np.ndarray, device_str: str,
@@ -65,22 +66,83 @@ def _warp_mesh(vertices: np.ndarray, faces: np.ndarray, device_str: str,
     return wp.Mesh(**arrays)
 
 
+# How far (in voxels) a voxel centre must lie inside the context, or below the ground, to count: a face through voxel
+# centres (whole-metre models on a whole-metre lattice, a party wall, flat ground) then takes no voxel by rounding.
+CENTRE_MARGIN = 1e-3
+
+
+def _bodies_meeting_grid(vertices: np.ndarray, faces: np.ndarray, grid_min: np.ndarray, grid_max: np.ndarray) -> np.ndarray:
+    """The vertices (merged) and the faces of the connected bodies of the mesh whose bounds meet the grid's box.
+
+    Only the context inside the grid matters for the voxels. A closed body
+    outside the grid cannot change the parity inside it, but an open one, or
+    many bodies along a grid line (each parity ray follows at most 256
+    crossings), would.
+    """
+    mesh = trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+    mesh.merge_vertices()
+    labels = trimesh.graph.connected_component_labels(mesh.face_adjacency, node_count=len(mesh.faces))
+    corners = mesh.vertices[mesh.faces]                 # (F, 3, 3)
+    count = int(labels.max()) + 1 if len(labels) else 0
+    body_min = np.full((count, 3), np.inf)
+    body_max = np.full((count, 3), -np.inf)
+    np.minimum.at(body_min, labels, corners.min(axis=1))
+    np.maximum.at(body_max, labels, corners.max(axis=1))
+    meets = ((body_max >= grid_min) & (body_min <= grid_max)).all(axis=1)
+    return mesh.vertices, mesh.faces[meets[labels]]
+
+
 def context_occupancy(vertices: np.ndarray, faces: np.ndarray, grid_origin: np.ndarray, voxel_size: float,
                       resolution: int, device) -> np.ndarray:
     """The (R, R, R) bool cells of the grid whose centre lies inside the context mesh.
 
     The parity voxelizer runs with the centre-inside rule only (no surface
-    through the voxel), so a context face shared with the max volume (a party
-    wall) takes no voxel of the site. Its rays start and end at the context's
-    bounds, so a context far larger than the grid is classified correctly
-    inside it. An open context mesh gives an incomplete result there (the
-    caller warns).
+    through the voxel, and a centre on a face is outside), so a context face
+    shared with the max volume (a party wall) takes no voxel of the site.
+    Only the context's bodies whose bounds meet the grid are voxelized, and
+    their rays start and end at those bodies' bounds, so a context far larger
+    than the grid is classified correctly inside it whatever lies far away.
+    An open body meeting the grid gives an incomplete or excessive result
+    there (the caller warns).
     """
     require_dda_backend(device)
-    vertices = np.asarray(vertices, dtype=np.float64)
-    inside = voxelize_solid_warp(vertices, faces, grid_origin, voxel_size, resolution, device, centre_only=True,
-                                 span_min=vertices.min(axis=0), span_max=vertices.max(axis=0))
-    return inside
+    grid_min = np.asarray(grid_origin, dtype=np.float64)
+    grid_max = grid_min + resolution * float(voxel_size)
+    vertices, near_faces = _bodies_meeting_grid(np.asarray(vertices, dtype=np.float64), np.asarray(faces), grid_min, grid_max)
+    if len(near_faces) == 0:
+        return np.zeros((resolution, resolution, resolution), dtype=bool)
+    used = vertices[np.unique(near_faces)]
+    inside = voxelize_solid_warp(vertices, near_faces, grid_origin, voxel_size, resolution, device, centre_only=True,
+                                 span_min=used.min(axis=0), span_max=used.max(axis=0))
+    return _without_centres_on_the_surface(inside, vertices, near_faces, grid_min, voxel_size, device)
+
+
+def _without_centres_on_the_surface(inside: np.ndarray, vertices: np.ndarray, faces: np.ndarray, grid_min: np.ndarray,
+                                    voxel_size: float, device) -> np.ndarray:
+    """*inside* without the cells whose centre lies within CENTRE_MARGIN voxels of the mesh surface.
+
+    A centre on a face is outside: the parity rays that run in the face's
+    plane (a party wall on voxel centres) decide it by rounding otherwise.
+    Only the cells on the boundary of the inside region can lie on the
+    surface, so only those are queried.
+    """
+    shell = inside & ~ndi.binary_erosion(inside)
+    cells = np.argwhere(shell)
+    if not len(cells):
+        return inside
+    device_str = warp_device_name(device)
+    mesh = _warp_mesh(vertices, faces, device_str)
+    centres = grid_min + (cells + 0.5) * float(voxel_size)
+    near = wp.zeros(len(cells), dtype=wp.uint8, device=device_str)
+    wp.launch(_near_mesh_kernel, dim=len(cells),
+              inputs=[mesh.id, wp.array(centres.astype(np.float32), dtype=wp.vec3, device=device_str),
+                      CENTRE_MARGIN * float(voxel_size), near],
+              device=device_str)
+    wp.synchronize()
+    on_surface = cells[near.numpy() != 0]
+    result = inside.copy()
+    result[tuple(on_surface.T)] = False
+    return result
 
 
 @dataclass(frozen=True)
@@ -92,12 +154,13 @@ class ColumnRemoval:
 
 
 def remove_context_columns(occupancy: np.ndarray, inside: np.ndarray) -> ColumnRemoval:
-    """Remove every column (i, j) in which a context cell overlaps an occupied voxel, over its full height.
+    """Remove every column (i, j) of the max volume that holds a context cell anywhere in the grid, over its full height.
 
-    Nothing is built above, below or beside kept context within its columns.
+    Nothing is built above, below or beside kept context within its columns:
+    not on top of a kept building, nor under a tree crown.
     """
     occupied = np.asarray(occupancy) != 0
-    removed_columns = (np.asarray(inside, dtype=bool) & occupied).any(axis=2)
+    removed_columns = np.asarray(inside, dtype=bool).any(axis=2) & occupied.any(axis=2)
     reduced = occupied.copy()
     reduced[removed_columns, :] = False
     voxels_removed = int(occupied.sum() - reduced.sum())
@@ -132,6 +195,9 @@ def remove_below_ground(occupancy: np.ndarray, heights: np.ndarray, grid_origin:
                         voxel_size: float) -> tuple[np.ndarray, int]:
     """Clear the voxels whose centre z lies below their column's ground height (NaN columns keep all theirs).
 
+    A centre within CENTRE_MARGIN voxels of the ground (the height is read in
+    float32) counts as above it.
+
     Returns the new uint8 occupancy and the number of voxels removed. The
     column rule does not apply: the column stays buildable above the ground.
     """
@@ -139,7 +205,7 @@ def remove_below_ground(occupancy: np.ndarray, heights: np.ndarray, grid_origin:
     resolution = occupied.shape[2]
     centres_z = float(grid_origin[2]) + (np.arange(resolution) + 0.5) * float(voxel_size)
     with np.errstate(invalid="ignore"):
-        below = centres_z[None, None, :] < np.asarray(heights, dtype=np.float64)[:, :, None]
+        below = centres_z[None, None, :] < np.asarray(heights, dtype=np.float64)[:, :, None] - CENTRE_MARGIN * float(voxel_size)
     reduced = occupied & ~below
     return reduced.astype(np.uint8), int(occupied.sum() - reduced.sum())
 
