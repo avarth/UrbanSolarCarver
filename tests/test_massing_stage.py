@@ -383,3 +383,29 @@ def test_empty_footprint_falls_back_to_voxels(tmp_path, monkeypatch):
     # The voxel footprint covers every column the box touches: between the
     # true 30 x 12 m and one voxel more on each axis (31 x 13 m).
     assert 30 * 12 - 1e-6 <= res.floor_areas[0] <= 31 * 13 + 1e-6
+
+
+def test_plates_avoid_removed_columns(tmp_path):
+    """A chimney kept as context inside the max volume: no plate stands in the columns it took."""
+    import shapely
+    from shapely.geometry import Polygon, box
+    chimney = _box([3, 3, 30], center_xy=(2.0, 0.5), z0=-5.0)
+    context_path = tmp_path / "context.ply"
+    chimney.export(context_path)
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]), context_path=str(context_path))
+    _set_mask(thr, lambda occ: occ)
+    res = _massing(cfg, thr, tmp_path / "out" / "massing")
+    plates = json.loads(res.plates_path.read_text())["plates"]
+    assert plates
+    manifest = json.loads((tmp_path / "out" / "preprocessing" / "manifest.json").read_text())
+    occ = np.load(tmp_path / "out" / "preprocessing" / manifest["voxel_grid_path"]).astype(bool)
+    ox, oy = manifest["origin"][:2]
+    size = manifest["voxel_size"]
+    lo, hi = chimney.bounds
+    taken = [box(ox + i * size, oy + j * size, ox + (i + 1) * size, oy + (j + 1) * size)
+             for i, j in np.argwhere(~occ.any(axis=2))
+             if lo[0] <= ox + (i + 0.5) * size <= hi[0] and lo[1] <= oy + (j + 0.5) * size <= hi[1]]
+    assert len(taken) >= 6   # the columns whose centre lies inside the chimney (or on its faces)
+    removed = shapely.union_all(taken)
+    for plate in plates:
+        assert Polygon(plate["outline"], plate["holes"]).intersection(removed).area < 1e-6

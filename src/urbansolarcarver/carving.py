@@ -30,6 +30,13 @@ the surface's own skin: not counted, but raised to the value of the voxel
 behind them once tracing is done (`_follow_mass_behind_skin`), so they
 never outlast the mass behind them.
 
+Context and terrain
+-------------------
+With a ``blocking_mesh`` (context_geometry.build_blocking_mesh), the two ray
+carvers drop every ray that hits the context or terrain right after the ray
+set is built, before scoring and before the skin rule: that sun or sky is
+lost whatever is built, so no voxel is blamed for it.
+
 Coordinate/scale conventions
 ----------------------------
 `grid_origin` is the world-space min corner for grid index [0,0,0].
@@ -62,6 +69,7 @@ from .ray_tracing import (
     follow_mass_behind_skin_dda, auto_batch_size,
 )
 from .warp_kernels import require_dda_backend
+from .context_geometry import BlockingMesh, RayDrop, drop_blocked_rays
 from typing import NamedTuple, Sequence
 
 
@@ -76,6 +84,7 @@ class SkyPatchCarvingResult(NamedTuple):
     ray_directions: "np.ndarray | None"   # (N, 3) ray unit vectors, or None
     raw_voxel_scores: np.ndarray          # (X*Y*Z,) float32 per-voxel weighted scores
     patch_weights: np.ndarray             # (P,) weight per Tregenza sky patch
+    ray_drop: "RayDrop | None" = None     # rays the context and terrain dropped; None without them
 
 
 def _resolve_batch_size(device, *, ray_batch_size: int) -> int:
@@ -412,6 +421,8 @@ def carve_with_sun_rays(
     return_rays: bool = False,
     *,
     ray_batch_size: int,
+    blocking_mesh: "BlockingMesh | None" = None,
+    return_ray_drop: bool = False,
 ):
     """
     Time-based carving of a voxel grid with sun vectors for explicit datetimes.
@@ -463,6 +474,11 @@ def carve_with_sun_rays(
         device-to-host transfer that the pipeline never uses.
     ray_batch_size : int
         Rays processed per batch (0 = automatic); keyword only.
+    blocking_mesh : BlockingMesh, optional
+        Context and terrain: rays that hit it are dropped before counting.
+    return_ray_drop : bool, default False
+        If True, return a last element: the RayDrop (None without
+        *blocking_mesh*); keyword only.
 
     Returns
     -------
@@ -487,10 +503,18 @@ def carve_with_sun_rays(
             "the grid is returned unmodified.",
         )
         empty = np.empty((0, 3), dtype=np.float32) if return_rays else None
+        out = (voxel_grid.clone(), empty, empty)
         if return_counts:
-            return voxel_grid.clone(), empty, empty, np.zeros(voxel_grid.numel(), dtype=np.int32)
-        return voxel_grid.clone(), empty, empty
+            out += (np.zeros(voxel_grid.numel(), dtype=np.int32),)
+        if return_ray_drop:
+            out += (None if blocking_mesh is None else RayDrop(0, 0, 0.0, 0.0, 0),)
+        return out
     origins, directions, point_idx, surface_normals = rays
+    ray_drop = None
+    if blocking_mesh is not None:
+        keep, ray_drop = drop_blocked_rays(blocking_mesh, origins, directions, point_idx, surface_normals,
+                                           float(settings.ray_length))
+        origins, directions, point_idx = origins[keep], directions[keep], point_idx[keep]
     ray_origins = origins.cpu().numpy() if return_rays else None
     ray_directions = directions.cpu().numpy() if return_rays else None
 
@@ -506,9 +530,12 @@ def carve_with_sun_rays(
         point_idx, surface_normals, occupancy, float(settings.ray_length))
     carved_grid = _carve_by_counts(voxel_grid, counts)
 
-    if not return_counts:
-        return carved_grid, ray_origins, ray_directions
-    return carved_grid, ray_origins, ray_directions, counts.detach().cpu().numpy()
+    out = (carved_grid, ray_origins, ray_directions)
+    if return_counts:
+        out += (counts.detach().cpu().numpy(),)
+    if return_ray_drop:
+        out += (ray_drop,)
+    return out
 
 def carve_with_sky_patch_rays(
     voxel_grid,
@@ -523,6 +550,7 @@ def carve_with_sky_patch_rays(
     point_weights: "np.ndarray | None" = None,
     *,
     ray_batch_size: int,
+    blocking_mesh: "BlockingMesh | None" = None,
 ):
     """
     Score each voxel by the sky-patch weight of the rays that cross it.
@@ -586,6 +614,9 @@ def carve_with_sky_patch_rays(
         fully.
     ray_batch_size : int
         Rays processed per batch (0 = automatic); keyword only.
+    blocking_mesh : BlockingMesh, optional
+        Context and terrain: rays that hit it are dropped before scoring;
+        keyword only.
 
     Returns
     -------
@@ -595,6 +626,7 @@ def carve_with_sky_patch_rays(
         - ray_directions (N, 3): unit ray vectors, or None unless return_rays.
         - raw_voxel_scores (X*Y*Z,): accumulated weights per voxel (float32).
         - patch_weights (P,): weight per Tregenza sky patch.
+        - ray_drop: the RayDrop of *blocking_mesh*, or None without it.
 
     Raises
     ------
@@ -612,6 +644,15 @@ def carve_with_sky_patch_rays(
     ray_origins, ray_directions, patch_ids, ray_point_ids = (
         rays.origins, rays.directions, rays.patch_ids, rays.point_ids)
     surface_normals, pw_t, patch_weights = rays.surface_normals, rays.point_weights, rays.patch_weights
+    ray_drop = None
+    if blocking_mesh is not None:
+        ray_weights = patch_weights.to(torch.float64)[patch_ids.long()]
+        if pw_t is not None:
+            ray_weights = ray_weights * pw_t.to(torch.float64)[ray_point_ids.long()]
+        keep, ray_drop = drop_blocked_rays(blocking_mesh, ray_origins, ray_directions, ray_point_ids,
+                                           surface_normals, float(settings.ray_length), ray_weights)
+        ray_origins, ray_directions = ray_origins[keep], ray_directions[keep]
+        patch_ids, ray_point_ids = patch_ids[keep], ray_point_ids[keep]
     occupancy = _occupancy_flat(voxel_grid)
     total_rays = ray_origins.size(0)  # after facing and zero-weight filtering
 
@@ -665,6 +706,7 @@ def carve_with_sky_patch_rays(
         ray_directions=ray_directions.cpu().numpy() if return_rays else None,
         raw_voxel_scores=raw_voxel_scores,
         patch_weights=patch_weights.cpu().numpy(),
+        ray_drop=ray_drop,
     )
 
 

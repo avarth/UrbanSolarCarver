@@ -7,6 +7,17 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (context geometry)
+
+- **Context and terrain as optional inputs** (`context_path`, `terrain_path`): opaque meshes of what stays around or
+  inside the site. Context (existing buildings, large trees) removes every voxel column of the maximum volume it
+  overlaps; terrain removes only the voxels below the ground. In the ray-based modes, every ray from a test point
+  that hits context or terrain is dropped before scoring, so no voxel is blamed for sun or sky that is lost anyway.
+  `tilted_plane` loses the voxels only. A test surface lying on a context face is not blocked by it. The run report
+  gives the voxels removed, the rays dropped and the test points with every ray blocked; the massing footprint
+  leaves out the removed columns; an open context mesh gives a `context_not_closed` warning. See
+  [Context and terrain](docs/modes.md#context-and-terrain).
+
 ### Added (test point access evaluation)
 
 - **`test_point_access_evaluation`** (Python API, `urbansolarcarver.access_evaluation`):

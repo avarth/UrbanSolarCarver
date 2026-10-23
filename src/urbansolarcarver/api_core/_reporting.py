@@ -41,6 +41,26 @@ def write_run_report(stage: str, stage_out_path: Path, pre_dir: Path, thr_dir: P
         return None
 
 
+def _context_lines(context: dict) -> list:
+    """The "Context and terrain" block of the report, from preprocessing's ``summary["context"]``."""
+    used = [name for name, key in (("context", "context_used"), ("terrain", "terrain_used")) if context.get(key)]
+    lines = ["### Context and terrain\n", f"- **Used:** {' and '.join(used) or 'none'}"]
+    if context.get("context_closed") is False:
+        lines.append("- **Context mesh not closed:** the voxels it overlaps may not all have been removed")
+    lines.append(f"- **Voxels removed by context columns:** {context.get('voxels_removed_by_context', 0):,}")
+    lines.append(f"- **Voxels removed below the ground:** {context.get('voxels_removed_below_ground', 0):,}")
+    lines.append(f"- **Volume removed:** {context.get('volume_removed_m3', 0.0):,.1f} m³ "
+                 f"({100 * context.get('share_of_max_volume_removed', 0.0):.1f}% of the maximum volume)")
+    total = context.get("rays_total", 0)
+    if total:
+        dropped = context.get("rays_dropped", 0)
+        lines.append(f"- **Rays dropped:** {dropped:,} of {total:,} ({100 * dropped / total:.1f}%), "
+                     f"{100 * context.get('weight_dropped_share', 0.0):.1f}% of the ray weight")
+        lines.append(f"- **Test points with every ray blocked:** {context.get('test_points_fully_blocked', 0):,}")
+    lines.append("")
+    return lines
+
+
 def _leaf_stage_dir(stage_dir: Path, thresholding_run_id: str):
     """*stage_dir* if its manifest was built from the given thresholding run, else None."""
     manifest_path = stage_dir / "manifest.json"
@@ -161,6 +181,9 @@ def generate_run_report(
     if pre_timing:
         lines.append(f"- **Time:** {pre_timing.get('wall_seconds', 0):.1f}s")
     lines.append("")
+    context = pre_summary.get("context") if pre_summary else None
+    if context:
+        lines.extend(_context_lines(context))
 
     # --- Thresholding ---
     thr_summary, thr_timing = _load_diag(thr_dir)

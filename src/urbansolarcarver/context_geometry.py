@@ -26,13 +26,20 @@ remove_below_ground(occupancy, heights, grid_origin, voxel_size)
 build_blocking_mesh(meshes, device) -> BlockingMesh | None
     One Warp BVH of the context and terrain, for
     :func:`ray_tracing.mesh_blocks_rays`.
+drop_blocked_rays(blocking, origins, directions, point_ids, surface_normals, max_t, ray_weights)
+    The rays to keep and what the drop removed (RayDrop).
+subtract_columns(polygons, removed_columns, grid_origin_world, voxel_size)
+    The max volume's footprint without the removed columns, for massing.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 import numpy as np
+import shapely
+import torch
 import trimesh
+from shapely.geometry import Polygon, box
 
 from .compute_device import warp_device_name
 from .voxelization import voxelize_solid_warp
@@ -159,3 +166,61 @@ def build_blocking_mesh(meshes: list[trimesh.Trimesh], device) -> BlockingMesh |
     combined = meshes[0] if len(meshes) == 1 else trimesh.util.concatenate(meshes)
     mesh = _warp_mesh(combined.vertices, combined.faces, device_str, bvh_constructor="sah")
     return BlockingMesh(mesh=mesh, device=device_str, triangle_count=int(len(combined.faces)))
+
+
+@dataclass(frozen=True)
+class RayDrop:
+    """What dropping the rays that hit context or terrain removed, before scoring."""
+    rays_total: int
+    rays_dropped: int
+    weight_total: float              # in the mode's weight unit (one per ray for time-based)
+    weight_dropped: float
+    test_points_fully_blocked: int   # test points that had rays and lost all of them
+
+    @property
+    def weight_dropped_share(self) -> float:
+        return self.weight_dropped / self.weight_total if self.weight_total > 0 else 0.0
+
+
+def drop_blocked_rays(blocking: BlockingMesh, origins: torch.Tensor, directions: torch.Tensor,
+                      point_ids: torch.Tensor, surface_normals: torch.Tensor, max_t: float,
+                      ray_weights: "torch.Tensor | None" = None) -> tuple[torch.Tensor, RayDrop]:
+    """The (R,) bool mask of rays to keep (those that miss the blocking mesh), and the RayDrop.
+
+    *ray_weights* (R,) is each ray's weight; None counts each ray as 1.
+    """
+    from .ray_tracing import mesh_blocks_rays
+    blocked = mesh_blocks_rays(blocking, origins, directions, point_ids, surface_normals, max_t)
+    weights = (torch.ones(blocked.shape[0], dtype=torch.float64, device=blocked.device) if ray_weights is None
+               else ray_weights.to(torch.float64))
+    ids = point_ids.long()
+    num_points = int(surface_normals.shape[0])
+    rays_of_point = torch.bincount(ids, minlength=num_points)
+    blocked_of_point = torch.bincount(ids[blocked], minlength=num_points)
+    fully_blocked = int(((rays_of_point > 0) & (blocked_of_point == rays_of_point)).sum())
+    drop = RayDrop(rays_total=int(blocked.shape[0]), rays_dropped=int(blocked.sum()),
+                   weight_total=float(weights.sum()), weight_dropped=float(weights[blocked].sum()),
+                   test_points_fully_blocked=fully_blocked)
+    return ~blocked, drop
+
+
+def subtract_columns(polygons: list[Polygon], removed_columns: np.ndarray, grid_origin_world: np.ndarray,
+                     voxel_size: float) -> list[Polygon]:
+    """The footprint *polygons* (world xy) minus the plan squares of the removed columns.
+
+    Massing builds plates inside the footprint, so they never stand in a
+    column that context took. Returns the polygons of what is left.
+    """
+    cells = np.argwhere(np.asarray(removed_columns, dtype=bool))
+    if not len(cells) or not polygons:
+        return list(polygons)
+    x0, y0 = float(grid_origin_world[0]), float(grid_origin_world[1])
+    size = float(voxel_size)
+    squares = shapely.union_all([box(x0 + i * size, y0 + j * size, x0 + (i + 1) * size, y0 + (j + 1) * size)
+                                 for i, j in cells])
+    left = []
+    for polygon in polygons:
+        rest = polygon.difference(squares)
+        left.extend(part for part in getattr(rest, "geoms", [rest])
+                    if isinstance(part, Polygon) and not part.is_empty and part.area > 0)
+    return left

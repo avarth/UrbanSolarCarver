@@ -13,6 +13,49 @@ USC supports six carving modes, each using a different strategy to determine whi
 | `tilted_plane` | Binary | Geometric fixed angle | Angle specification only |
 | `radiative_cooling` | Weighted | Martin-Berdahl + Bliss | Dew point temperature (no EPW) |
 
+## Context and terrain
+
+Two optional meshes describe what is around (or inside) the site and stays whatever is built: `context_path` for
+existing buildings and large trees, `terrain_path` for the ground. Both are opaque. Balconies, external shading
+devices and billboards are not context. Without them a run is the same as before.
+
+**Context** does two things, in every mode:
+
+- **Whole columns go.** Where the context overlaps the maximum volume (a voxel overlaps when its centre lies inside
+  the context), the whole voxel column is removed from the buildable mass, above and below the context. Nothing is
+  built on top of kept buildings, under tree crowns or beside a chimney within its columns. To build on or over an
+  existing building, remove it from the context. A context face shared with the maximum volume (a party wall) takes
+  no voxel of the site.
+- **Rays that hit it are dropped** (ray-based modes: `time-based`, `irradiance`, `benefit`, `daylight`,
+  `radiative_cooling`). Each ray from a test point is tested against the context mesh before scoring; a ray that hits
+  it within `ray_length` adds nothing to any voxel, because that sun or sky is lost whatever is carved. The test is
+  against the mesh, not the voxel grid, so context far outside the grid still blocks. Weights are not renormalised:
+  a test point whose sky is half hidden keeps half its weight in play.
+
+**Terrain** blocks rays exactly like context, but removes only the voxels whose centre lies below the ground (where
+the terrain crosses the column's vertical centre line, the highest crossing if there are several). The rest of the
+column stays buildable, so a sloping site keeps its volume above the ground. An open sheet is fine; a column the
+terrain does not cover keeps all its voxels.
+
+**Test surfaces on context buildings.** A neighbour's facade is usually a face of its own context building. Each ray
+starts 1 cm off the test surface along its normal and hits closer than 1 mm are ignored, so a test surface lying on
+a context face is not blocked by that face; other parts of the same building (a second wing) block normally. A test
+surface drawn inside a context mass, or facing into it, has all its rays blocked: the run report counts those test
+points.
+
+**`tilted_plane`** traces no rays to the sky, so context and terrain only remove voxels there: the planes are the
+same as without them.
+
+**Context mesh not closed.** The column rule needs a closed (watertight) context mesh to tell inside from outside. An
+open one gives a `context_not_closed` warning: the voxels it overlaps may not all be removed, and it still blocks
+rays.
+
+The run report (and `summary["context"]` in the preprocessing diagnostics) gives the voxels removed by the context
+columns and below the ground, the volume and share of the maximum volume removed, the rays dropped and their share
+of the ray weight, and the test points with every ray blocked. Everything after preprocessing (thresholding,
+`carve_above`, the slope limit, export, massing) sees the reduced maximum volume; the massing footprint leaves out
+the columns context took.
+
 ## Thresholding strategies
 
 USC supports three threshold strategies. The right choice depends on the mode.
