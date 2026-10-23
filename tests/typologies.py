@@ -4,6 +4,8 @@ Every scene is one plot (max volume) with, unless ``neighbours`` is False,
 four edge neighbours across streets. Protected test surfaces are the neighbour facades facing the plot
 and, optionally, the plot's own lower floors (0..own_h). Each protected
 panel is a separate inset quad: USC rejects joined non-planar components.
+The neighbours' masses (one closed box behind each neighbour facade, its
+front face on the facade) are the scene's context.
 
 Scenes are built around the origin, then rotated by ``rotation_deg`` about
 +Z and translated by ``offset``; rotation and translation tests rely on
@@ -51,6 +53,7 @@ class Scene:
     surfaces: trimesh.Trimesh
     panels: list = field(default_factory=list)   # [(quad_vertices (4,3), normal (3,))]
     own_panels: list = field(default_factory=list)
+    context: "trimesh.Trimesh | None" = None      # the neighbour masses, when the scene has neighbours
 
     def write(self, folder: Path) -> tuple[Path, Path]:
         """PLY files with float64 vertices, so translated copies of a scene
@@ -61,6 +64,16 @@ class Scene:
         _export_ply_double(self.volume, str(vol))
         _export_ply_double(self.surfaces, str(srf))
         return vol, srf
+
+    def write_context(self, folder: Path) -> "Path | None":
+        """The context as ``context.ply`` (float64 vertices) in *folder*; None when the scene has none."""
+        if self.context is None:
+            return None
+        from urbansolarcarver.io import _export_ply_double
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / "context.ply"
+        _export_ply_double(self.context, str(path))
+        return path
 
 
 # --------------------------------------------------------------------- footprints
@@ -176,6 +189,15 @@ def neighbour_facades(spec: SceneSpec):
     ) if q is not None]
 
 
+NEIGHBOUR_DEPTH = 10.0
+
+
+def neighbour_masses(spec: SceneSpec) -> list:
+    """One closed box behind each neighbour facade: its front face is the facade quad, NEIGHBOUR_DEPTH deep, as high
+    as the neighbours (before the scene's rotation and offset)."""
+    return [trimesh.convex.convex_hull(np.vstack([v, v - NEIGHBOUR_DEPTH * n])) for v, n in neighbour_facades(spec)]
+
+
 def _panel_mesh(v, n):
     m = trimesh.Trimesh(v, [[0, 1, 2], [0, 2, 3]], process=False)
     a, b, c = v[:3]
@@ -212,7 +234,11 @@ def build(spec: SceneSpec) -> Scene:
     vol = vol.copy()
     vol.apply_transform(T)
     surfaces = trimesh.util.concatenate([_panel_mesh(v, n) for v, n in all_panels])
-    return Scene(spec=spec, volume=vol, surfaces=surfaces, panels=all_panels, own_panels=own)
+    context = None
+    if spec.neighbours:
+        context = trimesh.util.concatenate(neighbour_masses(spec))
+        context.apply_transform(T)
+    return Scene(spec=spec, volume=vol, surfaces=surfaces, panels=all_panels, own_panels=own, context=context)
 
 
 def random_spec(rng: np.random.Generator, **overrides) -> SceneSpec:
