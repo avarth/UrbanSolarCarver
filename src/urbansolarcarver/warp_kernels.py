@@ -729,13 +729,17 @@ if _warp_available:
         grid_origin: wp.vec3,
         cell_size: float,
         resolution: int,
+        start_before: wp.vec3,           # extra distance before the grid where the rays start, per axis (>= 0)
+        end_after: wp.vec3,              # extra distance after the grid where the rays end, per axis (>= 0)
         votes: wp.array(dtype=wp.int32),    # +1 per axis whose parity sees the voxel inside
         surface: wp.array(dtype=wp.int32),  # 1 where a ray/mesh hit falls in the voxel
     ):
         """Solid voxelization by parity ray casting, one thread per grid
         column along *axis*.
 
-        The ray starts one cell before the grid on the marching axis and
+        The ray starts one cell (plus *start_before*) before the grid on the
+        marching axis and runs to one cell (plus *end_after*) beyond it, so a
+        mesh reaching beyond the grid keeps a correct parity inside it; it
         finds successive mesh crossings (at most 256).  Voxels whose centres
         lie between an odd crossing and the next even one get one inside
         vote, and every crossing marks the voxel that contains it as
@@ -754,22 +758,22 @@ if _warp_available:
         # flat-index mapping coords[axis]=k, coords[(axis+1)%3]=i,
         # coords[(axis+2)%3]=j with flat = x*res^2 + y*res + z.
         if axis == 0:
-            ro = wp.vec3(grid_origin[0] - cell_size, grid_origin[1] + ci, grid_origin[2] + cj)
+            ro = wp.vec3(grid_origin[0] - cell_size - start_before[0], grid_origin[1] + ci, grid_origin[2] + cj)
             rd = wp.vec3(1.0, 0.0, 0.0)
             base = i * resolution + j
             stride = res_sq
         elif axis == 1:
-            ro = wp.vec3(grid_origin[0] + cj, grid_origin[1] - cell_size, grid_origin[2] + ci)
+            ro = wp.vec3(grid_origin[0] + cj, grid_origin[1] - cell_size - start_before[1], grid_origin[2] + ci)
             rd = wp.vec3(0.0, 1.0, 0.0)
             base = j * res_sq + i
             stride = resolution
         else:
-            ro = wp.vec3(grid_origin[0] + ci, grid_origin[1] + cj, grid_origin[2] - cell_size)
+            ro = wp.vec3(grid_origin[0] + ci, grid_origin[1] + cj, grid_origin[2] - cell_size - start_before[2])
             rd = wp.vec3(0.0, 0.0, 1.0)
             base = i * res_sq + j * resolution
             stride = 1
 
-        span = (float(resolution) + 2.0) * cell_size
+        span = (float(resolution) + 2.0) * cell_size + start_before[axis] + end_after[axis]
         eps = 1.0e-4 * cell_size
 
         t_off = float(0.0)

@@ -266,6 +266,10 @@ def voxelize_solid_warp(
     voxel_size: float,
     resolution: int,
     device,
+    *,
+    centre_only: bool = False,
+    span_min: "np.ndarray | None" = None,
+    span_max: "np.ndarray | None" = None,
 ) -> "np.ndarray | None":
     """Solid-voxelize a triangle mesh by parity ray casting along x, y and z
     against a Warp BVH (bounding volume hierarchy).
@@ -277,6 +281,14 @@ def voxelize_solid_warp(
     on CUDA or the Warp CPU device; voxelization.py uses trimesh's slower
     rasterize-and-fill only when this returns None, and lets anything it
     raises propagate.
+
+    With *centre_only* the surface-through rule is left out: a voxel is
+    occupied only when its centre is inside (the context rule).  *span_min*
+    and *span_max* (same frame as *grid_origin*) move the start and end of
+    the per-axis rays out to them where they lie beyond the grid, so a mesh
+    larger than the grid keeps a correct parity inside it; votes are still
+    written only for cells of the grid.  The defaults give the maximum
+    volume's voxelization unchanged.
 
     Returns
     -------
@@ -303,18 +315,26 @@ def voxelize_solid_warp(
     votes = wp.zeros(n, dtype=wp.int32, device=device_str)
     surface = wp.zeros(n, dtype=wp.int32, device=device_str)
     origin_wp = wp.vec3(float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
+    grid_min = np.asarray(grid_origin, dtype=np.float64)
+    grid_max = grid_min + resolution * float(voxel_size)
+    before = np.zeros(3) if span_min is None else np.maximum(grid_min - np.asarray(span_min, dtype=np.float64), 0.0)
+    after = np.zeros(3) if span_max is None else np.maximum(np.asarray(span_max, dtype=np.float64) - grid_max, 0.0)
+    before_wp = wp.vec3(*(float(value) for value in before))
+    after_wp = wp.vec3(*(float(value) for value in after))
 
     for axis in (0, 1, 2):
         wp.launch(
             _parity_voxelize_kernel,
             dim=resolution * resolution,
             inputs=[wp_mesh.id, axis, origin_wp, float(voxel_size), int(resolution),
-                    votes, surface],
+                    before_wp, after_wp, votes, surface],
             device=device_str,
         )
     wp.synchronize()
 
     shape = (resolution, resolution, resolution)
     v = votes.numpy().reshape(shape)
+    if centre_only:
+        return v >= 2
     s = surface.numpy().reshape(shape)
     return (v >= 2) | (s > 0)
