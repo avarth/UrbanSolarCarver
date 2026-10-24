@@ -17,6 +17,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
   gives the voxels removed, the rays dropped and the test points with every ray blocked; the massing footprint
   leaves out the removed columns; an open context mesh gives a `context_not_closed` warning. See
   [Context and terrain](docs/modes.md#context-and-terrain).
+- Context and ground are solid: the rule that keeps a facade's own building from counting as its obstruction treats
+  everything inside the context and below the terrain as mass behind the facade, like the maximum volume.
+- Test points with every ray blocked by context or terrain (inside a context mass, below the terrain, or facing into
+  their building) give a `test_points_blocked` warning with their count.
+- **`benchmarks/context_sanity.py`**: checks the context path against independent references (trimesh point and ray
+  queries, the CPU reference march) on synthetic typology scenes, and the properties the method promises (nothing lost
+  at the same cutoff, a taller south neighbour keeps more only on the south side).
 
 ### Added (test point access evaluation)
 

@@ -42,11 +42,18 @@ terrain does not cover keeps all its voxels.
 **Test surfaces on context buildings.** A neighbour's facade is usually a face of its own context building. Each ray
 starts 1 cm off the test surface along its normal and hits closer than 1 mm are ignored, so a test surface lying on
 a context face is not blocked by that face; other parts of the same building (a second wing) block normally. A test
-surface drawn inside a context mass, or facing into it, has all its rays blocked: the run report counts those test
-points.
+surface drawn inside a context mass, below the terrain, or facing into its own building has all its rays blocked:
+the run reports a `test_points_blocked` warning with their count (ray-based modes), since those points protect
+nothing.
 
 **`tilted_plane`** traces no rays to the sky, so context and terrain only remove voxels there: the planes are the
 same as without them.
+
+**Context and ground are solid.** The rule that keeps a facade's own building from counting as its obstruction (a
+voxel the facade plane passes through, with mass behind it, is the facade's own skin) treats everything inside the
+context and below the terrain as solid mass, like the maximum volume. The space under a tree crown or above a kept
+building is not solid: a column removed there is empty, and a sliver of the maximum volume left in front of it counts
+as an obstruction like any thin part of the maximum volume.
 
 **Context mesh not closed.** The column rule needs closed (watertight) context bodies to tell inside from outside. An
 open context mesh gives a `context_not_closed` warning: where an open body reaches the voxel grid, the columns removed

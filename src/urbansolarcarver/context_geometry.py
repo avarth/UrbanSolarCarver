@@ -23,6 +23,8 @@ ground_heights(vertices, faces, grid_origin, voxel_size, resolution, device)
     Ground height per column where the terrain crosses its centre line.
 remove_below_ground(occupancy, heights, grid_origin, voxel_size)
     Clear the voxels whose centre lies below the ground.
+below_ground_cells(heights, grid_origin, voxel_size, resolution)
+    The cells whose centre lies below the ground.
 build_blocking_mesh(meshes, device) -> BlockingMesh | None
     One Warp BVH of the context and terrain, for
     :func:`ray_tracing.mesh_blocks_rays`.
@@ -191,6 +193,16 @@ def ground_heights(vertices: np.ndarray, faces: np.ndarray, grid_origin: np.ndar
     return heights.numpy().astype(np.float64).reshape(resolution, resolution)
 
 
+def below_ground_cells(heights: np.ndarray, grid_origin: np.ndarray, voxel_size: float, resolution: int) -> np.ndarray:
+    """The (R, R, R) bool cells whose centre z lies below their column's ground height (none in NaN columns).
+
+    A centre within CENTRE_MARGIN voxels of the ground counts as above it.
+    """
+    centres_z = float(grid_origin[2]) + (np.arange(resolution) + 0.5) * float(voxel_size)
+    with np.errstate(invalid="ignore"):
+        return centres_z[None, None, :] < np.asarray(heights, dtype=np.float64)[:, :, None] - CENTRE_MARGIN * float(voxel_size)
+
+
 def remove_below_ground(occupancy: np.ndarray, heights: np.ndarray, grid_origin: np.ndarray,
                         voxel_size: float) -> tuple[np.ndarray, int]:
     """Clear the voxels whose centre z lies below their column's ground height (NaN columns keep all theirs).
@@ -202,10 +214,7 @@ def remove_below_ground(occupancy: np.ndarray, heights: np.ndarray, grid_origin:
     column rule does not apply: the column stays buildable above the ground.
     """
     occupied = np.asarray(occupancy) != 0
-    resolution = occupied.shape[2]
-    centres_z = float(grid_origin[2]) + (np.arange(resolution) + 0.5) * float(voxel_size)
-    with np.errstate(invalid="ignore"):
-        below = centres_z[None, None, :] < np.asarray(heights, dtype=np.float64)[:, :, None] - CENTRE_MARGIN * float(voxel_size)
+    below = below_ground_cells(heights, grid_origin, voxel_size, occupied.shape[2])
     reduced = occupied & ~below
     return reduced.astype(np.uint8), int(occupied.sum() - reduced.sum())
 

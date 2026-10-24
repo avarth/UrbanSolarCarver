@@ -261,3 +261,37 @@ def test_no_context_matches_the_outputs_recorded_before_context_existed(tmp_path
     else:
         assert float(scores.astype(np.float64).sum()) == pytest.approx(pinned["scores_sum"], rel=1e-6)
         assert float(scores.max()) == pytest.approx(pinned["scores_max"], rel=1e-6)
+
+
+@pytest.mark.parametrize("mode", ["daylight", "tilted_plane"])
+def test_context_behind_a_facade_counts_as_solid_mass_for_its_own_skin(tmp_path, mode):
+    """A facade of the site (on the volume's south face) with a kept chimney right behind its first voxel layer: the
+    chimney is solid, so that layer stays the facade's own skin, and no remaining voxel scores higher than without it."""
+    facade = _quad([(1, 0, 0.5), (9, 0, 0.5), (9, 0, 5.5), (1, 0, 5.5)])        # normal -y, out of the volume
+    assert facade.face_normals[0][1] < -0.99
+    # The default grid margin puts voxel centres on whole metres, so the facade plane y = 0 passes through the first layer
+    # of voxels (the skin), as a facade usually does; the chimney takes the columns of the layer behind it.
+    chimney = _box((3.4, 0.6, 0), (6.6, 3.6, 15))
+    plain, _, _ = _run(tmp_path / "plain", mode=mode, surface=facade, margin_frac=0.01)
+    kept, summary, _ = _run(tmp_path / "chimney", mode=mode, surface=facade, context=chimney, margin_frac=0.01)
+    assert summary["context"]["voxels_removed_by_context"] > 0
+    occ = _occupancy(kept).astype(bool).ravel()
+    before, after = _scores(plain)[occ], _scores(kept)[occ]
+    assert (after <= before * (1 + 1e-5) + 1e-9).all(), f"{int((after > before * (1 + 1e-5) + 1e-9).sum())} voxels rose"
+
+
+def test_test_points_inside_context_or_below_terrain_are_a_warning(tmp_path):
+    """A test panel drawn inside a neighbour's mass and one below the terrain: every ray of their points is blocked, and the
+    run warns with the count; a panel in the open gives no warning."""
+    neighbour = _box((20, 0, 0), (30, 10, 10))
+    inside = _quad([(22, 2, 2), (22, 8, 2), (22, 8, 8), (22, 2, 8)])         # within the neighbour, facing +x
+    buried = _quad([(0, 14, -3), (10, 14, -3), (10, 16, -3), (0, 16, -3)])    # facing up, 1 m below the terrain at z = -2
+    ground = _quad([(-100, -100, -2), (100, -100, -2), (100, 100, -2), (-100, 100, -2)])
+    surface = trimesh.util.concatenate([inside, buried, _ground_north()])
+    pre, summary, _ = _run(tmp_path / "blocked", surface=surface, context=neighbour, terrain=ground)
+    blocked = summary["context"]["test_points_fully_blocked"]
+    assert 0 < blocked < summary["test_surface_points"]
+    issues = [issue for issue in pre.issues if issue.code == "test_points_blocked"]
+    assert len(issues) == 1 and f"{blocked} of {summary['test_surface_points']}" in issues[0].message
+    clear, _, _ = _run(tmp_path / "clear", context=neighbour, terrain=ground)
+    assert not [issue for issue in clear.issues if issue.code == "test_points_blocked"]

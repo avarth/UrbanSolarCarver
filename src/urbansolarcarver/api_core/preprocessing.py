@@ -19,8 +19,8 @@ from ..run_context import Issue, RunContext, report_issue, stage_context
 from ..stage_settings import PreprocessingSettings, RunOptions
 from ..carving import carve_with_sky_patch_rays, carve_with_sun_rays, carve_with_planes
 from ..context_geometry import (
-    build_blocking_mesh, context_occupancy, ground_heights, remove_below_ground, remove_context_columns,
-    subtract_columns,
+    below_ground_cells, build_blocking_mesh, context_occupancy, ground_heights, remove_below_ground,
+    remove_context_columns, subtract_columns,
 )
 from ..io import load_meshes, load_optional_mesh, validate_inputs
 from ..sun import sample_period
@@ -107,9 +107,11 @@ def _remove_context_voxels(voxel_grid, origin, resolution, voxel_size: float, co
     """The max volume's occupancy without the context columns and the voxels below the ground.
 
     *context_mesh* and *terrain_mesh* (either may be None) are in the local
-    frame of *origin*.  Returns ``(voxel_grid, removed_columns, report)``:
-    the reduced grid (a new uint8 tensor on the device of *voxel_grid*), the
-    (R, R) bool columns context took, and the voxel part of
+    frame of *origin*.  Returns ``(voxel_grid, solid, removed_columns,
+    report)``: the reduced grid (a new uint8 tensor on the device of
+    *voxel_grid*); the solid mass the skin rule reads (the same, plus every
+    cell inside the context and below the ground: both are solid); the
+    (R, R) bool columns context took; and the voxel part of
     ``summary["context"]``.
 
     Raises InputError, naming the context or the terrain, when nothing of
@@ -119,6 +121,7 @@ def _remove_context_voxels(voxel_grid, origin, resolution, voxel_size: float, co
     occupancy = (voxel_grid.cpu().numpy() != 0).astype(np.uint8)
     filled_before = int(occupancy.sum())
     removed_columns = np.zeros(occupancy.shape[:2], dtype=bool)
+    solid_outside = np.zeros(occupancy.shape, dtype=bool)     # context and ground cells
     by_context = below_ground = 0
     closed = None
     if context_mesh is not None:
@@ -131,6 +134,7 @@ def _remove_context_voxels(voxel_grid, origin, resolution, voxel_size: float, co
             )
         inside = context_occupancy(context_mesh.vertices, context_mesh.faces, origin, voxel_size, resolution,
                                    device)
+        solid_outside |= inside
         removal = remove_context_columns(occupancy, inside)
         occupancy, removed_columns, by_context = removal.occupancy, removal.removed_columns, removal.voxels_removed
         if not occupancy.any():
@@ -140,6 +144,7 @@ def _remove_context_voxels(voxel_grid, origin, resolution, voxel_size: float, co
     if terrain_mesh is not None:
         heights = ground_heights(terrain_mesh.vertices, terrain_mesh.faces, origin, voxel_size, resolution, device)
         occupancy, below_ground = remove_below_ground(occupancy, heights, origin, voxel_size)
+        solid_outside |= below_ground_cells(heights, origin, voxel_size, resolution)
         if not occupancy.any():
             if by_context:
                 raise InputError(
@@ -157,7 +162,9 @@ def _remove_context_voxels(voxel_grid, origin, resolution, voxel_size: float, co
         "volume_removed_m3": float(removed * float(voxel_size) ** 3),
         "share_of_max_volume_removed": float(removed / filled_before) if filled_before else 0.0,
     }
-    return torch.from_numpy(occupancy).to(voxel_grid.device), removed_columns, report
+    solid = ((occupancy != 0) | solid_outside).astype(np.uint8)
+    return (torch.from_numpy(occupancy).to(voxel_grid.device), torch.from_numpy(solid).to(voxel_grid.device),
+            removed_columns, report)
 
 
 def _ray_drop_report(ray_drop) -> dict:
@@ -187,7 +194,7 @@ def _compute_raw_scores(voxel_grid, origin, extent, resolution, pts, norms,
 
 def _compute_raw_scores_and_ray_drop(voxel_grid, origin, extent, resolution, pts, norms,
                                      settings: PreprocessingSettings, options: RunOptions,
-                                     point_weights=None, blocking_mesh=None):
+                                     point_weights=None, blocking_mesh=None, skin_occupancy=None):
     """Run the carver for ``settings.mode`` and return the per-voxel scores.
 
     Parameters
@@ -197,6 +204,9 @@ def _compute_raw_scores_and_ray_drop(voxel_grid, origin, extent, resolution, pts
     blocking_mesh : context_geometry.BlockingMesh | None
         Context and terrain: the ray carvers drop the rays that hit it;
         ``tilted_plane`` does not read it.
+    skin_occupancy : torch.Tensor | None
+        The solid mass every carver's skin rule reads (max volume, context,
+        ground); None: the max volume.
 
     Returns
     -------
@@ -225,7 +235,8 @@ def _compute_raw_scores_and_ray_drop(voxel_grid, origin, extent, resolution, pts
         datetimes, hoys = [], []
 
     # Without context or terrain the carvers are called exactly as before.
-    with_context = {} if blocking_mesh is None else {"blocking_mesh": blocking_mesh}
+    solid = {} if skin_occupancy is None else {"skin_occupancy": skin_occupancy}
+    with_context = {**solid, **({} if blocking_mesh is None else {"blocking_mesh": blocking_mesh})}
 
     # Route by the registry's score_kind so that a new violation-count mode
     # without a carver raises here instead of falling through to the
@@ -233,7 +244,7 @@ def _compute_raw_scores_and_ray_drop(voxel_grid, origin, extent, resolution, pts
     if spec.score_kind == "violation_count":
         ray_drop = None
         if mode == "time-based":
-            if with_context:
+            if blocking_mesh is not None:
                 with_context["return_ray_drop"] = True
             _carved, _ro, _rd, counts, *drop = carve_with_sun_rays(
                 voxel_grid, origin, extent, resolution, pts, norms, settings,
@@ -249,7 +260,7 @@ def _compute_raw_scores_and_ray_drop(voxel_grid, origin, extent, resolution, pts
         elif mode == "tilted_plane":
             _carved, _ro, _rd, counts = carve_with_planes(
                 voxel_grid, origin, extent, resolution, pts, norms, settings,
-                return_counts=True, ray_batch_size=options.ray_batch_size,
+                return_counts=True, ray_batch_size=options.ray_batch_size, **solid,
             )
         else:
             raise NotImplementedError(
@@ -270,7 +281,7 @@ def _compute_raw_scores_and_ray_drop(voxel_grid, origin, extent, resolution, pts
     # which does not change with the sample spacing.
     sample_area = float(settings.grid_step) ** 2
     raw_scores = np.asarray(carve_out.raw_voxel_scores, dtype=np.float32) * np.float32(sample_area)
-    return raw_scores, spec.score_kind, carve_out.patch_weights, carve_out.ray_drop if with_context else None
+    return raw_scores, spec.score_kind, carve_out.patch_weights, carve_out.ray_drop if blocking_mesh is not None else None
 
 
 def preprocessing(
@@ -434,9 +445,9 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
     # voxelize checks the grid size against grid_planning.MAX_GRID_VOXELS
     # before allocating anything.
     voxel_grid, origin, extent, resolution = voxelize(mesh_env, settings, device=resolved_device)
-    context_report, removed_columns, blocking_mesh = None, None, None
+    context_report, removed_columns, blocking_mesh, solid = None, None, None, None
     if context_mesh is not None or terrain_mesh is not None:
-        voxel_grid, removed_columns, context_report = _remove_context_voxels(
+        voxel_grid, solid, removed_columns, context_report = _remove_context_voxels(
             voxel_grid, origin, resolution, settings.voxel_size, context_mesh, terrain_mesh, resolved_device)
         if settings.mode != "tilted_plane":   # the angle rule traces no rays to the sky
             blocking_mesh = build_blocking_mesh([context_mesh, terrain_mesh], resolved_device)
@@ -471,8 +482,15 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
 
     raw_scores, scores_kind, patch_weights, ray_drop = _compute_raw_scores_and_ray_drop(
         voxel_grid, origin, extent, resolution, pts, norms, settings, options,
-        point_weights=point_weights, blocking_mesh=blocking_mesh,
+        point_weights=point_weights, blocking_mesh=blocking_mesh, skin_occupancy=solid,
     )
+    if ray_drop is not None and ray_drop.test_points_fully_blocked:
+        report_issue(
+            "test_points_blocked",
+            f"preprocessing: {ray_drop.test_points_fully_blocked} of {int(pts.shape[0])} test points have every ray "
+            f"blocked by the context or the terrain: they lie inside a context mass or below the terrain, or face "
+            f"into it, so they protect nothing. Check the test surfaces there.",
+        )
     warn_score_anomalies(raw_scores, context="preprocessing")
     _mark("ray_tracing")
 

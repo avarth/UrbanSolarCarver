@@ -35,7 +35,10 @@ Context and terrain
 With a ``blocking_mesh`` (context_geometry.build_blocking_mesh), the two ray
 carvers drop every ray that hits the context or terrain right after the ray
 set is built, before scoring and before the skin rule: that sun or sky is
-lost whatever is built, so no voxel is blamed for it.
+lost whatever is built, so no voxel is blamed for it.  With a
+``skin_occupancy`` (the max volume plus the cells inside the context and
+below the ground), every carver's skin rule counts context and ground as
+solid mass behind a skin voxel, as the max volume is.
 
 Coordinate/scale conventions
 ----------------------------
@@ -423,6 +426,7 @@ def carve_with_sun_rays(
     ray_batch_size: int,
     blocking_mesh: "BlockingMesh | None" = None,
     return_ray_drop: bool = False,
+    skin_occupancy=None,
 ):
     """
     Time-based carving of a voxel grid with sun vectors for explicit datetimes.
@@ -479,6 +483,10 @@ def carve_with_sun_rays(
     return_ray_drop : bool, default False
         If True, return a last element: the RayDrop (None without
         *blocking_mesh*); keyword only.
+    skin_occupancy : torch.Tensor, optional
+        The solid mass the skin rule reads (whether a skin voxel has mass
+        behind it): the max volume plus the context and the ground; default
+        *voxel_grid*; keyword only.
 
     Returns
     -------
@@ -520,7 +528,7 @@ def carve_with_sun_rays(
 
     # scale is the cubic grid extent in world units (meters), not per-voxel size
     min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-    occupancy = _occupancy_flat(voxel_grid)
+    occupancy = _occupancy_flat(voxel_grid if skin_occupancy is None else skin_occupancy)
     counts = _count_ray_hits(
         voxel_grid, min_corner, float(grid_extent), res, origins, directions, settings,
         point_idx, surface_normals, occupancy, ray_batch_size=ray_batch_size,
@@ -551,6 +559,7 @@ def carve_with_sky_patch_rays(
     *,
     ray_batch_size: int,
     blocking_mesh: "BlockingMesh | None" = None,
+    skin_occupancy=None,
 ):
     """
     Score each voxel by the sky-patch weight of the rays that cross it.
@@ -617,6 +626,9 @@ def carve_with_sky_patch_rays(
     blocking_mesh : BlockingMesh, optional
         Context and terrain: rays that hit it are dropped before scoring;
         keyword only.
+    skin_occupancy : torch.Tensor, optional
+        The solid mass the skin rule reads, as in :func:`carve_with_sun_rays`;
+        keyword only.
 
     Returns
     -------
@@ -653,7 +665,7 @@ def carve_with_sky_patch_rays(
                                            surface_normals, float(settings.ray_length), ray_weights)
         ray_origins, ray_directions = ray_origins[keep], ray_directions[keep]
         patch_ids, ray_point_ids = patch_ids[keep], ray_point_ids[keep]
-    occupancy = _occupancy_flat(voxel_grid)
+    occupancy = _occupancy_flat(voxel_grid if skin_occupancy is None else skin_occupancy)
     total_rays = ray_origins.size(0)  # after facing and zero-weight filtering
 
     # --- 4) Initialize score accumulation ---------------------------------
@@ -870,6 +882,7 @@ def carve_with_planes(
     return_counts: bool = False,
     *,
     ray_batch_size: int,
+    skin_occupancy=None,
 ):
     """
     Tilted-plane daylight carving.
@@ -903,6 +916,9 @@ def carve_with_planes(
         column (a voxel's count is the largest ray count at or below it).
     ray_batch_size : int
         Rays processed per batch (0 = automatic); keyword only.
+    skin_occupancy : torch.Tensor, optional
+        The solid mass the skin rule reads, as in :func:`carve_with_sun_rays`;
+        keyword only.
 
     Returns
     -------
@@ -989,7 +1005,7 @@ def carve_with_planes(
     dirs_tensor = torch.from_numpy(all_dirs).to(device, non_blocking=True)
 
     grid_min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
-    occupancy = _occupancy_flat(voxel_grid)
+    occupancy = _occupancy_flat(voxel_grid if skin_occupancy is None else skin_occupancy)
     # Corner rays use their source sample point's facade plane, for both the
     # in-front test and the own-skin rule.
     ray_point_ids = torch.from_numpy(source_ids).to(device)
