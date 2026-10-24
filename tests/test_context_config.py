@@ -57,3 +57,15 @@ def test_context_mesh_loads(tmp_path):
     trimesh.creation.box(extents=(2, 2, 2)).export(str(path))
     mesh = load_optional_mesh(str(path), "context")
     assert len(mesh.faces) == 12
+
+
+def test_context_mesh_is_loaded_without_fixing_its_normals(tmp_path):
+    """Neither the column rule nor the ray test reads the faces' orientation, so loading skips the slow fix_normals
+    (4 s for 270k triangles): an inside-out box stays as stored, where load_mesh would turn it outward."""
+    from urbansolarcarver.io import load_mesh
+    box = trimesh.creation.box(extents=(2, 2, 2))
+    box.invert()
+    path = tmp_path / "inside_out.ply"
+    box.export(str(path))
+    assert load_mesh(str(path)).volume > 0
+    assert load_optional_mesh(str(path), "context").volume < 0

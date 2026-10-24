@@ -1270,3 +1270,29 @@ def test_carve_further_keeps_context_and_terrain(project_with_inputs):
     assert {role: (joined / f"{role}.ply").read_bytes() for role in ("context", "terrain")} == before
     stored = _stored_config(store, name)
     assert stored["context_path"] == "inputs/joined/context.ply" and stored["terrain_path"] == "inputs/joined/terrain.ply"
+
+
+def test_context_upload_is_joined_without_fixing_its_normals(project_with_inputs):
+    """The joined context keeps the faces as uploaded (an inside-out box stays inside out): fixing normals is slow on large
+    context and nothing reads them."""
+    store, name = project_with_inputs
+    box = trimesh.creation.box(extents=(4, 4, 4))
+    box.apply_translation((30, 0, 2))
+    box.invert()
+    store.add_input(name, "context", "inside_out.ply", box.export(file_type="ply"))
+    joined = trimesh.load(store.open(name) / "inputs" / "joined" / "context.ply", force="mesh", process=False)
+    assert joined.volume < 0
+
+
+def test_context_upload_leaves_a_config_with_a_yaml_error_untouched(project_with_inputs):
+    """A hand-edited config.yaml that does not parse is left as it is (the next settings save replaces it, as before);
+    the upload itself still succeeds."""
+    store, name = project_with_inputs
+    config_path = store.open(name) / projects.CONFIG_FILE_NAME
+    broken = "mode: daylight\nvoxel_size: [1.0\n"
+    config_path.write_text(broken, encoding="utf-8")
+    reply = store.add_input(name, "context", "ctx.ply", box_bytes([30, 0, 5]))
+    assert [file.name for file in reply.files] == ["ctx.ply"]
+    assert config_path.read_text(encoding="utf-8") == broken
+    store.remove_input(name, "context", "ctx.ply")
+    assert config_path.read_text(encoding="utf-8") == broken

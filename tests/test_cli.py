@@ -537,3 +537,11 @@ class TestUiCommand:
         assert token not in record.getMessage()
         assert "token=" in record.getMessage() and "x=1" in record.getMessage()
 
+
+
+@pytest.mark.parametrize("key", ["context_path", "terrain_path"])
+def test_validate_warns_about_a_missing_context_or_terrain_file(tmp_path, key):
+    config = _write_cube_config(tmp_path, **{key: str(tmp_path / "absent.ply")})
+    result = _invoke(["validate", "-c", str(config)])
+    assert result.exit_code == 0, result.output
+    assert f"WARNING: {key} not found" in result.output

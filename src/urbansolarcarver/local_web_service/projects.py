@@ -484,10 +484,18 @@ class ProjectStore:
     def _update_optional_paths(self, project_folder: Path, name: str) -> None:
         """Rewrite config.yaml so it carries each optional path exactly when the role's joined file exists.
 
-        The rest of the stored config stays as it is; nothing is written when nothing changes.
+        The rest of the stored config stays as it is; nothing is written when nothing changes. A config.yaml that does
+        not hold a settings mapping (a hand edit with a YAML error, an empty file) is left as it is: the next settings
+        save replaces it, as it does without the optional inputs.
         """
         config_path = project_folder / CONFIG_FILE_NAME
         if not config_path.is_file():
+            return
+        try:
+            readable = isinstance(yaml.safe_load(config_path.read_text(encoding="utf-8")), dict)
+        except (OSError, UnicodeDecodeError, yaml.YAMLError):
+            readable = False
+        if not readable:
             return
         stored_config = self._parse_config_file(config_path, name)
         updated = {key: value for key, value in stored_config.items()
@@ -771,7 +779,7 @@ class ProjectStore:
             with os.fdopen(descriptor, "wb") as upload_file:
                 upload_file.write(data)
             try:
-                uploaded_mesh = load_mesh(str(upload_path))
+                uploaded_mesh = load_mesh(str(upload_path), fix_normals=role not in OPTIONAL_MESH_ROLES)
             except InputError as error:
                 # the engine message names the temporary file; the person knows the file by its own name
                 message = str(error).removeprefix("load_mesh: ")
@@ -792,11 +800,15 @@ class ProjectStore:
 
     @staticmethod
     def _load_stored_meshes(project_folder: Path, role: str, file_names: list[str]) -> dict[str, trimesh.Trimesh]:
-        """The meshes of recorded files by file name, in name order, or ProjectError when one cannot be read."""
+        """The meshes of recorded files by file name, in name order, or ProjectError when one cannot be read.
+
+        Context and terrain keep their faces as stored (nothing reads their orientation; fixing it is slow on large
+        meshes)."""
         meshes = {}
         for file_name in sorted(file_names):
             try:
-                meshes[file_name] = load_mesh(str(project_folder / INPUTS_FOLDER / role / file_name))
+                meshes[file_name] = load_mesh(str(project_folder / INPUTS_FOLDER / role / file_name),
+                                              fix_normals=role not in OPTIONAL_MESH_ROLES)
             except InputError as error:
                 raise ProjectError(f"The {role} file '{file_name}' cannot be read, so the joined file was not rebuilt: {error}",
                                    status_code=422) from error

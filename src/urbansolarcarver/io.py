@@ -24,7 +24,7 @@ def _ensure_dir(path: str) -> None:
     if parent and not os.path.isdir(parent):
         os.makedirs(parent, exist_ok=True)
 
-def load_mesh(path: str) -> trimesh.Trimesh:
+def load_mesh(path: str, fix_normals: bool = True) -> trimesh.Trimesh:
     """
     Load a triangle mesh from file.
 
@@ -33,6 +33,9 @@ def load_mesh(path: str) -> trimesh.Trimesh:
     ``fix_normals`` is then called: it makes the face winding consistent
     across connected faces, and for watertight meshes it also turns each
     closed body that is stored inside out so its normals point outward.
+    With *fix_normals* False that step is left out (for meshes whose face
+    orientation nothing reads, such as context and terrain: it takes seconds
+    on large meshes).
 
     Raises
     ------
@@ -41,7 +44,7 @@ def load_mesh(path: str) -> trimesh.Trimesh:
         triangles (empty, or only points or curves).  Without the last check
         the problem would only show up later as an empty voxel grid.
     """
-    mesh = _read_triangles(path)
+    mesh = _read_triangles(path, fix_normals)
     if mesh is None:
         raise InputError(
             f"load_mesh: no triangle geometry found in {path!r}; the file is "
@@ -50,8 +53,9 @@ def load_mesh(path: str) -> trimesh.Trimesh:
     return mesh
 
 
-def _read_triangles(path: str):
-    """The triangle mesh in *path* with its normals fixed as :func:`load_mesh` describes, or None when it has no triangles.
+def _read_triangles(path: str, fix_normals: bool = True):
+    """The triangle mesh in *path* (normals fixed as :func:`load_mesh` describes, unless *fix_normals* is False), or None
+    when it has no triangles.
 
     Raises InputError if *path* is not a file or trimesh cannot parse it.
     """
@@ -70,7 +74,8 @@ def _read_triangles(path: str):
         ) from exc
     if not isinstance(mesh, trimesh.Trimesh) or len(mesh.faces) == 0:
         return None
-    mesh.fix_normals(multibody=mesh.is_watertight)
+    if fix_normals:
+        mesh.fix_normals(multibody=mesh.is_watertight)
     return mesh
 
 
@@ -79,11 +84,13 @@ def load_optional_mesh(path, name: str):
 
     No path gives None. A file without triangles counts as absent: it is
     reported as a ``<name>_empty`` issue and gives None, so the run behaves as
-    without it. A missing or unreadable file raises InputError.
+    without it. A missing or unreadable file raises InputError. The faces are
+    kept as stored: neither the column rule nor the ray test reads their
+    orientation, and fixing it takes seconds on large meshes.
     """
     if path is None:
         return None
-    mesh = _read_triangles(path)
+    mesh = _read_triangles(path, fix_normals=False)
     if mesh is None:
         report_issue(f"{name}_empty", f"{os.path.basename(path)}: the {name} file has no triangles; it is ignored.")
     return mesh

@@ -811,7 +811,7 @@ def validate(
     """Parse and validate the YAML config through Pydantic.
 
     Exits with code 1 if the config fails schema or value checks.  Missing
-    mesh, EPW and simulated-weights files, and a simulated-weights file that
+    mesh (context and terrain included), EPW and simulated-weights files, and a simulated-weights file that
     cannot be read, are printed as warnings only (exit code 0).  Does not
     initialise CUDA or import torch.
     """
@@ -836,6 +836,9 @@ def validate(
         problems.append(f"test_surface_path not found: {cfg.test_surface_path}")
     if cfg.epw_path and not Path(cfg.epw_path).exists():
         problems.append(f"epw_path not found: {cfg.epw_path}")
+    for key in ("context_path", "terrain_path"):
+        if getattr(cfg, key) and not Path(getattr(cfg, key)).exists():
+            problems.append(f"{key} not found: {getattr(cfg, key)}")
     if getattr(cfg, "simulated_weights_path", None):
         # Validate the artifact itself, not just the path: a wrong-schema
         # or truncated file should fail here, not mid-preprocessing.

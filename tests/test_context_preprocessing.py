@@ -222,3 +222,42 @@ def test_run_report_without_context_has_no_context_block(tmp_path):
     (tmp_path / "report").mkdir()
     text = generate_run_report(tmp_path / "report", pre.out_dir, thr.out_dir).read_text(encoding="utf-8")
     assert "Context and terrain" not in text
+
+
+def test_nothing_left_after_context_and_terrain_names_both(tmp_path):
+    """The context takes the east half of the columns and the terrain buries the rest: the message names both."""
+    with pytest.raises(InputError) as caught:
+        _run(tmp_path, context=_box((5, -5, 2), (15, 15, 4)),
+             terrain=_quad([(-100, -100, 20), (100, -100, 20), (100, 100, 20), (-100, 100, 20)]))
+    message = str(caught.value)
+    assert "context" in message and "terrain" in message
+
+
+# Recorded with main's sources (b30e518) on the scene below, CPU: the outputs a run without context must keep. The voxel
+# grid, the footprint and the count scores (time-based, tilted_plane) are compared byte for byte; the daylight scores are
+# float sums, so their sum, maximum and non-zero count are compared within 1e-6.
+PINNED_WITHOUT_CONTEXT = {
+    "daylight": {"scores_sum": 178.97823151759803, "scores_max": 0.4078991115093231, "scores_nonzero": 2209},
+    "tilted_plane": {"scores_sha1": "069bc994c75362ecf5d081fe23d6142b7c99ad39", "scores_nonzero": 231},
+    "time-based": {"scores_sha1": "9324a2c020bb4f37772524af0c347c701fdba7d7", "scores_nonzero": 1426},
+}
+PINNED_VOXEL_GRID_SHA1 = "036890aa28c56860348c6489f8f83b34e405798c"
+PINNED_FOOTPRINT_SHA1 = "90e991b388bc7ccb51ce9897da2f7ad2ac1a8647"
+
+
+@pytest.mark.parametrize("mode", list(PINNED_WITHOUT_CONTEXT))
+def test_no_context_matches_the_outputs_recorded_before_context_existed(tmp_path, mode, example_epw_path):
+    import hashlib
+    facade = _quad([(10, 18, 0), (10, 18, 10), (0, 18, 10), (0, 18, 0)])     # facing south, 8 m north of the volume
+    over = {"epw_path": str(example_epw_path)} if mode == "time-based" else {}
+    pre, summary, _ = _run(tmp_path, mode=mode, surface=facade, **over)
+    assert "context" not in summary
+    assert hashlib.sha1(_occupancy(pre).tobytes()).hexdigest() == PINNED_VOXEL_GRID_SHA1
+    assert hashlib.sha1((pre.out_dir / "footprint.json").read_bytes()).hexdigest() == PINNED_FOOTPRINT_SHA1
+    scores, pinned = _scores(pre), PINNED_WITHOUT_CONTEXT[mode]
+    assert int((scores != 0).sum()) == pinned["scores_nonzero"]
+    if "scores_sha1" in pinned:
+        assert hashlib.sha1(scores.tobytes()).hexdigest() == pinned["scores_sha1"]
+    else:
+        assert float(scores.astype(np.float64).sum()) == pytest.approx(pinned["scores_sum"], rel=1e-6)
+        assert float(scores.max()) == pytest.approx(pinned["scores_max"], rel=1e-6)

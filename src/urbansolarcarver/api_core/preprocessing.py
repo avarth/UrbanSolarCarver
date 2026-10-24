@@ -141,6 +141,10 @@ def _remove_context_voxels(voxel_grid, origin, resolution, voxel_size: float, co
         heights = ground_heights(terrain_mesh.vertices, terrain_mesh.faces, origin, voxel_size, resolution, device)
         occupancy, below_ground = remove_below_ground(occupancy, heights, origin, voxel_size)
         if not occupancy.any():
+            if by_context:
+                raise InputError(
+                    f"Nothing of the maximum volume is left to carve: the context (context_path) takes the columns of "
+                    f"{by_context} of its {filled_before} voxels, and the rest lies below the terrain (terrain_path)")
             raise InputError(
                 "Nothing of the maximum volume is left to carve: all of it lies below the terrain (terrain_path)")
     removed = by_context + below_ground
