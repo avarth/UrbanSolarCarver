@@ -295,3 +295,25 @@ def test_test_points_inside_context_or_below_terrain_are_a_warning(tmp_path):
     assert len(issues) == 1 and f"{blocked} of {summary['test_surface_points']}" in issues[0].message
     clear, _, _ = _run(tmp_path / "clear", context=neighbour, terrain=ground)
     assert not [issue for issue in clear.issues if issue.code == "test_points_blocked"]
+
+
+def test_context_blocking_off_keeps_the_voxel_removal_and_drops_no_ray(tmp_path):
+    """With context_blocks_rays off, a neighbour that removes no voxel changes nothing (bit for bit, CPU); a chimney inside
+    the volume still takes its columns; the report says the rays were not tested."""
+    plain, _, _ = _run(tmp_path / "plain")
+    off, summary, _ = _run(tmp_path / "off", context=_south_neighbour(), context_blocks_rays=False)
+    assert (plain.out_dir / "scores.npy").read_bytes() == (off.out_dir / "scores.npy").read_bytes()
+    report = summary["context"]
+    assert report["context_blocks_rays"] is False and report["rays_dropped"] == 0 and report["rays_total"] == 0
+    on, on_summary, _ = _run(tmp_path / "on", context=_south_neighbour())
+    assert on_summary["context"]["context_blocks_rays"] is True and on_summary["context"]["rays_dropped"] > 0
+    chimney_off, chimney_summary, _ = _run(tmp_path / "chimney", context=_box((4, 4, 4), (6, 6, 6)), context_blocks_rays=False)
+    assert chimney_summary["context"]["voxels_removed_by_context"] == 40
+
+
+def test_run_report_says_when_context_blocking_is_off(tmp_path):
+    from urbansolarcarver.api_core._reporting import generate_run_report
+    pre, _, thr = _run(tmp_path, context=_south_neighbour(), context_blocks_rays=False, threshold=True)
+    (tmp_path / "report").mkdir()
+    text = generate_run_report(tmp_path / "report", pre.out_dir, thr.out_dir).read_text(encoding="utf-8")
+    assert "Account for context blocking:** off" in text

@@ -102,6 +102,7 @@ class PreprocessingSettings(_StageSettings):
     test_surface_path: str
     context_path: Optional[str]
     terrain_path: Optional[str]
+    context_blocks_rays: bool
     epw_path: Optional[str]
     start_month: Optional[int]
     start_day: Optional[int]
@@ -137,8 +138,11 @@ class PreprocessingSettings(_StageSettings):
         return cls(**values)
 
     def effective_values(self) -> dict:
-        """Every field except the mode-specific ones this mode does not read."""
-        unread = _MODE_SPECIFIC_FIELDS - MODES[self.mode].extra_params
+        """Every field except the mode-specific ones this mode does not read, and ``context_blocks_rays`` where it has no
+        effect (no context or terrain, or tilted_plane, which traces no rays to the sky)."""
+        unread = set(_MODE_SPECIFIC_FIELDS - MODES[self.mode].extra_params)
+        if (self.context_path is None and self.terrain_path is None) or self.mode == "tilted_plane":
+            unread.add("context_blocks_rays")
         return {name: value for name, value in self.model_dump().items() if name not in unread}
 
 

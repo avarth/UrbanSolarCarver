@@ -214,9 +214,14 @@ interface SettingsStepProps {
   hemisphere?: Hemisphere;
   /** The notice of a weather file added or replaced in this session; null when there is none to show. */
   weatherChangeNotice?: WeatherChangeNoticeContent | null;
+  /** The input roles the project has files for: Account for context blocking shows only with surroundings or terrain. */
+  inputRoles?: readonly string[];
 }
 
-export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern", weatherChangeNotice = null }: SettingsStepProps) {
+const NO_INPUT_ROLES: readonly string[] = [];
+
+export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern", weatherChangeNotice = null,
+                               inputRoles = NO_INPUT_ROLES }: SettingsStepProps) {
   const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
   return (
     <div className="settings-step">
@@ -228,7 +233,7 @@ export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null
         )}
       </div>
       {form.stepErrors.map((error) => <p key={error} className="setting-error step-error"><WarningIcon /><span>{error}</span></p>)}
-      {settingsForStep("settings", form.mode).map((group) => (
+      {settingsForStep("settings", form.mode, inputRoles).map((group) => (
         <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras} />
       ))}
     </div>

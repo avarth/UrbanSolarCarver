@@ -208,3 +208,20 @@ def test_time_basis_reruns_time_based_preprocessing(tmp_path):
                            {"exporting"}) == []
     assert stages_to_rerun(standard, daylight_cube_config(tmp_path, time_basis="solar", **period),
                            {"preprocessing"}) == ["preprocessing"]
+
+
+def test_context_blocks_rays_reruns_preprocessing_only_when_it_has_an_effect(tmp_path):
+    """The switch matters with context or terrain in a mode that traces rays to the sky: elsewhere it reruns nothing."""
+    without = daylight_cube_config(tmp_path)
+    assert without.context_blocks_rays is True
+    assert stages_to_rerun(without, daylight_cube_config(tmp_path, context_blocks_rays=False), {"exporting"}) == []
+    context = str(tmp_path / "ctx.ply")
+    on = daylight_cube_config(tmp_path, context_path=context)
+    off = daylight_cube_config(tmp_path, context_path=context, context_blocks_rays=False)
+    assert stages_to_rerun(on, off, {"exporting"}) == ["preprocessing", "thresholding", "exporting"]
+    terrain_on = daylight_cube_config(tmp_path, terrain_path=context)
+    terrain_off = daylight_cube_config(tmp_path, terrain_path=context, context_blocks_rays=False)
+    assert stages_to_rerun(terrain_on, terrain_off, {"exporting"}) == ["preprocessing", "thresholding", "exporting"]
+    angle = dict(mode="tilted_plane", tilted_plane_angle_deg=45.0, context_path=context)
+    assert stages_to_rerun(daylight_cube_config(tmp_path, **angle),
+                           daylight_cube_config(tmp_path, **angle, context_blocks_rays=False), {"exporting"}) == []

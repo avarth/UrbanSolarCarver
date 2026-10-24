@@ -325,7 +325,8 @@ def preprocessing(
     (``cfg.terrain_path``) meshes, step 1 also removes every voxel column the
     context overlaps and the voxels below the ground, and in the ray-based
     modes step 3 drops every ray that hits the context or the terrain before
-    scoring.  ``tilted_plane`` loses the voxels only.
+    scoring (unless ``cfg.context_blocks_rays`` is off).  ``tilted_plane``
+    loses the voxels only.
 
     Parameters
     ----------
@@ -449,7 +450,8 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
     if context_mesh is not None or terrain_mesh is not None:
         voxel_grid, solid, removed_columns, context_report = _remove_context_voxels(
             voxel_grid, origin, resolution, settings.voxel_size, context_mesh, terrain_mesh, resolved_device)
-        if settings.mode != "tilted_plane":   # the angle rule traces no rays to the sky
+        # The angle rule traces no rays to the sky; with context_blocks_rays off the rays are not tested.
+        if settings.mode != "tilted_plane" and settings.context_blocks_rays:
             blocking_mesh = build_blocking_mesh([context_mesh, terrain_mesh], resolved_device)
     _mark("voxelize")
     pts, norms, analysis_mesh, sample_weights, taper_stats = sample_surface(mesh_insol, settings)
@@ -581,7 +583,8 @@ def _run_preprocessing(settings: PreprocessingSettings, options: RunOptions, out
         "score_stats": score_statistics(rs, detailed=options.diagnostics),
     }
     if context_report is not None:
-        summary["context"] = {**context_report, **_ray_drop_report(ray_drop)}
+        summary["context"] = {**context_report, "context_blocks_rays": bool(settings.context_blocks_rays),
+                              **_ray_drop_report(ray_drop)}
     if settings.edge_taper > 0.0:
         # Taper transparency: record what the design constraint excluded.
         sw = np.asarray(sample_weights)

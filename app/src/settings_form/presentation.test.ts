@@ -132,3 +132,16 @@ test("Drop pieces smaller than is shown in m³ at the voxel size the form shows,
   expect(toDisplayValue("min_voxels", null, 0.5)).toBeNull();
   expect(toDisplayValue("carve_fraction", 0.3)).toBe(30);            // the percent display needs no voxel size
 });
+
+test("Account for context blocking shows in Settings only for a project with surroundings or terrain, in a mode that traces rays", () => {
+  const surroundings = (mode: string, inputRoles: readonly string[]) =>
+    settingsForStep("settings", mode, inputRoles).find((group) => group.title === "Surroundings");
+  const group = surroundings("daylight", ["max_volume", "test_surfaces", "context"])!;
+  expect(names(group.essential)).toEqual(["context_blocks_rays"]);
+  expect(group.essential[0].label).toBe("Account for context blocking");
+  expect(names(surroundings("time-based", ["terrain"])!.essential)).toEqual(["context_blocks_rays"]);
+  expect(surroundings("daylight", ["max_volume", "test_surfaces"])).toBeUndefined();
+  expect(surroundings("daylight", [])).toBeUndefined();
+  expect(surroundings("tilted_plane", ["context", "terrain"])).toBeUndefined();     // the angle rule traces no rays to the sky
+  expect(settingsForStep("settings", "daylight").map((group) => group.title)).not.toContain("Surroundings");
+});

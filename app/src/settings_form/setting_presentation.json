@@ -1,6 +1,6 @@
 {
   "steps": {
-    "settings": ["When", "Mode specific", "Detail"],
+    "settings": ["When", "Mode specific", "Surroundings", "Detail"],
     "carving": ["How much to carve"],
     "envelope_and_massing": ["Envelope", "Building massing"],
     "export": ["Export"]
@@ -113,6 +113,12 @@
       "label": "Detailed statistics", "unit": "on/off",
       "help": "Adds median, spread and percentiles to the run report. They change only the run report, not the carving.",
       "step": "settings", "group": "Detail", "essential": false
+    },
+    "context_blocks_rays": {
+      "label": "Account for context blocking", "unit": "on/off",
+      "help": "On: sun and sky that the existing surroundings or the terrain already block count for no voxel, so the carving keeps more where they shade. Off: they still take their voxels, but block nothing, to compare with the carving without them.",
+      "step": "settings", "group": "Surroundings", "essential": "all",
+      "modes": ["time-based", "irradiance", "benefit", "daylight", "radiative_cooling"], "shown_with_inputs": ["context", "terrain"]
     },
     "threshold": {
       "label": "Carving rule", "unit": "choice",

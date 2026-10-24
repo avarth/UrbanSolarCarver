@@ -116,6 +116,7 @@ terrain_path: "path/to/terrain.ply"        # optional
 | `mode` | `"time-based"` | Carving mode (see [Modes](../modes.md)) |
 | `context_path` | `null` | Optional mesh of the existing surroundings that stay (buildings, large trees). Rays that hit it are dropped before scoring, and every voxel column of the maximum volume it overlaps is removed. Not for balconies or shading devices |
 | `terrain_path` | `null` | Optional terrain mesh. Rays that hit it are dropped, and only the voxels below the ground are removed, so the site stays buildable above it |
+| `context_blocks_rays` | true | With context or terrain, in the ray-based modes: drop the rays that hit them before scoring. `false` keeps the voxels they remove and their solid mass, but drops no ray, to compare with the carving that ignores them |
 | `voxel_size` | 1.0 | Voxel edge length in meters (0.01-100) |
 | `grid_step` | `null` | Surface sampling spacing in meters; `null` = half the voxel size. An explicit value must be <= voxel_size |
 | `ray_length` | 3000.0 | Maximum ray cast distance in meters. A ray stops where it leaves the voxel grid, so a length beyond the grid costs nothing |

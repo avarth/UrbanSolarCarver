@@ -49,6 +49,11 @@ nothing.
 **`tilted_plane`** traces no rays to the sky, so context and terrain only remove voxels there: the planes are the
 same as without them.
 
+**Account for context blocking** (`context_blocks_rays`, on by default). Off, the context and the terrain still
+remove their voxels and still count as solid mass, but no ray is tested against them: the carving is the one that
+ignores what they block, on the same reduced maximum volume, for comparison. The run report says when it is off.
+Dropping the rays lowers the scores, so with it on the cutoff usually needs another look.
+
 **Context and ground are solid.** The rule that keeps a facade's own building from counting as its obstruction (a
 voxel the facade plane passes through, with mass behind it, is the facade's own skin) treats everything inside the
 context and below the terrain as solid mass, like the maximum volume. The space under a tree crown or above a kept

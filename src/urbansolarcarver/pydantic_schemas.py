@@ -277,6 +277,11 @@ class UserConfig(BaseModel):
         None,
         description="Path to a terrain mesh (an open sheet is fine): it blocks rays, and the voxels below the ground are "
                     "removed. Optional")
+    context_blocks_rays: bool = Field(
+        True,
+        description="Whether rays from the test surfaces that hit the context or the terrain are dropped before scoring "
+                    "(ray-based modes). Off: the context and terrain still remove their voxels and count as solid, but "
+                    "block no ray, to compare with the carving that ignores them")
     epw_path: Optional[str] = Field(None, description="Path to EPW weather file (required for time-based, irradiance and benefit)")
     out_dir: str = Field(..., description="Output directory for carved meshes and diagnostics")
     final_mesh_format: str = Field(

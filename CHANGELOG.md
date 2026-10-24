@@ -19,6 +19,8 @@ versioning follows [Semantic Versioning](https://semver.org/).
   [Context and terrain](docs/modes.md#context-and-terrain).
 - Context and ground are solid: the rule that keeps a facade's own building from counting as its obstruction treats
   everything inside the context and below the terrain as mass behind the facade, like the maximum volume.
+- **Account for context blocking** (`context_blocks_rays`, default on; a switch in the app's Settings step, shown with
+  surroundings or terrain): off, context and terrain still remove their voxels and count as solid, but drop no ray.
 - Test points with every ray blocked by context or terrain (inside a context mass, below the terrain, or facing into
   their building) give a `test_points_blocked` warning with their count.
 - **`benchmarks/context_sanity.py`**: checks the context path against independent references (trimesh point and ray

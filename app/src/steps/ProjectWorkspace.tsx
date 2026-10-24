@@ -204,6 +204,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   }, [weatherChangeOutlived]);
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
+  const inputRolesWithFiles = (Object.keys(files) as InputRole[]).filter((role) => files[role].length > 0);
 
   const applyFilesReply = (reply: InputFilesReply) => {
     setFiles((current) => ({ ...current, [reply.role]: reply.files }));
@@ -339,6 +340,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                 weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} />
     ),
     settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason}
+                            inputRoles={inputRolesWithFiles}
                             coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
                             weatherChangeNotice={weatherChangeSuggestionNow === null ? null
                               : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }} />,

@@ -23,7 +23,10 @@ export interface SliderRange {
  */
 export type DisplayConversion = "percent" | "voxel_volume";
 
-/** One entry of setting_presentation.json. *modes*: the modes whose form shows the setting; absent, every mode's. */
+/**
+ * One entry of setting_presentation.json. *modes*: the modes whose form shows the setting; absent, every mode's.
+ * *shown_with_inputs*: the input roles of which the project must have files for the form to show it (any of them); absent, always.
+ */
 export interface SettingPresentation {
   label: string;
   unit: string;
@@ -32,6 +35,7 @@ export interface SettingPresentation {
   group: string;
   essential: "all" | string[] | false;
   modes?: string[];
+  shown_with_inputs?: string[];
   display?: DisplayConversion;
   widget?: WidgetName;
   slider?: SliderRange;
@@ -128,10 +132,19 @@ function foldLabelOf(title: string, essential: SettingView[]): string {
   return messages.moreSettingsOfGroup[title as keyof typeof messages.moreSettingsOfGroup] ?? title;
 }
 
-/** The groups of *step* in *mode*, in the file's order, each with its essential and folded settings; empty groups are left out. */
-export function settingsForStep(step: StepName, mode: string): SettingGroupView[] {
+/** Whether a project with files in *inputRoles* has the inputs a setting needs (shown_with_inputs). */
+function hasInputsFor(name: string, inputRoles: readonly string[]): boolean {
+  const needed = SETTING_PRESENTATIONS[name]?.shown_with_inputs;
+  return needed === undefined || needed.some((role) => inputRoles.includes(role));
+}
+
+/**
+ * The groups of *step* in *mode*, in the file's order, each with its essential and folded settings; empty groups are left out.
+ * *inputRoles*: the input roles the project has files for; a setting that needs inputs (shown_with_inputs) shows only with them.
+ */
+export function settingsForStep(step: StepName, mode: string, inputRoles: readonly string[] = []): SettingGroupView[] {
   const shownNames = Object.keys(SETTING_PRESENTATIONS).filter((name) =>
-    SETTING_PRESENTATIONS[name].step === step && settingIsShownIn(name, mode) && fieldSettingOf(name) === name);
+    SETTING_PRESENTATIONS[name].step === step && settingIsShownIn(name, mode) && hasInputsFor(name, inputRoles) && fieldSettingOf(name) === name);
   return PRESENTATION.steps[step].flatMap((title) => {
     const names = shownNames.filter((name) => SETTING_PRESENTATIONS[name].group === title);
     const essential = names.filter((name) => isEssentialIn(SETTING_PRESENTATIONS[name], mode)).map((name) => settingView(name, mode));

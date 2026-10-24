@@ -218,3 +218,19 @@ test("the sample spacing the line gives is the engine's rule for an unset grid_s
   expect(schemas).toContain("GRID_STEP_PER_VOXEL_SIZE_WHEN_UNSET = 0.5");
   expect(schemas).toContain("None (default): half the voxel size.");
 });
+
+test("a project with surroundings shows Account for context blocking, on by default, and changing it reaches onChange", () => {
+  const schema = { properties: { ...SCHEMA.properties, context_blocks_rays: { default: true, type: "boolean" } } };
+  const withSwitch = initialFormState({ schema, modes: MODES, settings: { mode: "time-based" }, gridPlan: PLAN_WITHIN_BUDGET });
+  const onChange = vi.fn();
+  rendered = renderForTest(<SettingsStep form={withSwitch} onChange={onChange} disabledReason={null} inputRoles={["context"]} />);
+  const field = [...rendered.container.querySelectorAll<HTMLElement>(".setting-field")]
+    .find((candidate) => candidate.textContent!.startsWith("Account for context blocking"))!;
+  const box = field.querySelector<HTMLInputElement>("input[type=checkbox]")!;
+  expect(box.checked).toBe(true);
+  click(box);
+  expect(onChange).toHaveBeenLastCalledWith({ context_blocks_rays: false });
+  rendered.unmount();
+  rendered = renderForTest(<SettingsStep form={withSwitch} onChange={() => {}} disabledReason={null} />);
+  expect(rendered.container.textContent).not.toContain("Account for context blocking");
+});

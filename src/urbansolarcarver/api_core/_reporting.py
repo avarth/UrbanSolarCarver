@@ -51,6 +51,8 @@ def _context_lines(context: dict) -> list:
     lines.append(f"- **Voxels removed below the ground:** {context.get('voxels_removed_below_ground', 0):,}")
     lines.append(f"- **Volume removed:** {context.get('volume_removed_m3', 0.0):,.1f} m³ "
                  f"({100 * context.get('share_of_max_volume_removed', 0.0):.1f}% of the maximum volume)")
+    if context.get("context_blocks_rays") is False:
+        lines.append("- **Account for context blocking:** off (no ray was tested against the context or the terrain)")
     total = context.get("rays_total", 0)
     if total:
         dropped = context.get("rays_dropped", 0)
