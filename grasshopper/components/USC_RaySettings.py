@@ -10,6 +10,10 @@ north_deg : float, optional
     North direction in degrees clockwise from Y-axis. Default: 0.0
     (Y-up is north). Rotates the sky dome / sun positions to match
     your model's orientation.
+context_blocks_rays : bool, optional
+    With context or terrain connected to USC Preprocess: drop the rays
+    that hit them before scoring. Default: True. False keeps the voxels
+    they remove, but drops no ray, to compare the carvings.
 
 Outputs
 -------
@@ -27,10 +31,11 @@ try:
         ("ray_length", "Maximum distance each ray travels, in meters. A ray stops where it leaves the voxel grid, so a length beyond the grid costs nothing. Default: 3000 m, enough for any grid at 1 m voxels."),
         ("min_altitude", "Minimum sun altitude angle in degrees above the horizon. Sun positions below this angle are skipped. Used by time-based mode only. Default: 5 deg. Typical: 0-20 deg."),
         ("north_deg", "North direction in degrees clockwise from the Y-axis. 0 = Y-up is north (Rhino default). Set this to match your model's orientation. E.g. if your model's north points along +X, set to 90."),
+        ("context_blocks_rays", "Account for context blocking. With context or terrain connected to USC_Preprocess (ray-based modes): True drops the rays that hit them before scoring, so the carving keeps more where they shade; False keeps the voxels they remove but drops no ray, to compare the two carvings. Default: True."),
     ]):
         if i < len(ii):
             ii[i].Name, ii[i].Description = n, d
-    oo[0].Name, oo[0].Description = "overrides", "Ray and sky settings formatted for USC_Config. Connect to Config's 'overrides' input."
+    oo[0].Name, oo[0].Description = "overrides", "Ray, sky and context settings formatted for USC_Config. Connect to Config's 'overrides' input."
 except Exception:
     pass
 
@@ -42,4 +47,6 @@ for key, val in [
 ]:
     if val is not None:
         _items.append(f"{key}={float(val)}")
+if context_blocks_rays is not None:
+    _items.append("context_blocks_rays=" + ("true" if context_blocks_rays else "false"))
 overrides = ";".join(_items) if _items else None

@@ -74,7 +74,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 - **USC_EPW** (*USC EPW Path*): passes the EPW file path
 - **USC_AnalysisPeriod**: defines the analysis date/time range
 - **USC_GridSettings**: voxel size, surface sampling spacing (`grid_step`), grid padding (`margin_frac`)
-- **USC_RaySettings**: ray length, minimum sun altitude, north direction (`north_deg`)
+- **USC_RaySettings**: ray length, minimum sun altitude, north direction (`north_deg`), and `context_blocks_rays` (Account for context blocking: with context or terrain, whether the rays that hit them are dropped; default true)
 - **USC_BenefitParams**: benefit-mode hour weighting: balance temperature and offset (simple weights), or a `simulated_weights.json` artifact plus the experimental `include_harm` toggle (simulated weights)
 - **USC_TiltedPlane**: fixed-angle envelope parameters
 - **USC_RadCooling** (*USC Radiative Cooling*): radiative cooling parameters (dew point, Bliss constant)
@@ -86,6 +86,8 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 
 - **USC_RunPipeline**: runs all three stages in one go (quick prototyping)
 - **USC_Preprocess**: runs preprocessing only (ray tracing + scoring). Errors turn the component red.
+
+Both take the geometry: `max_volume`, `test_surfaces`, and the optional `context` (existing buildings and large trees that stay) and `terrain` (the ground), each a list of Meshes or Breps. Context removes every voxel column of the max volume it overlaps and, with `context_blocks_rays` on, drops the rays that hit it; terrain removes only the voxels below the ground and drops the rays that hit it. See [Context and terrain](modes.md#context-and-terrain). Leave them unconnected for a run without them.
 
 - **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.
 - **USC_Export**: runs exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
@@ -101,6 +103,8 @@ The stage components send the daemon's `run` command, each producing its own sta
 - **USC_SimulateWeights**: runs the ISO 13790 5R1C simulation through the daemon; outputs the `simulated_weights.json` path (wire into USC_BenefitParams) and a heatmap preview image
 
 ## Input geometry
+
+Context should be **closed bodies** (Breps or closed Meshes): the voxels it takes are found by an inside test, and an open context gives a `context_not_closed` warning. Terrain may be an open sheet. A test surface on the face of a context building (a neighbour's facade) is not blocked by that face; one drawn inside a context mass or under the terrain has all its rays blocked and gives a `test_points_blocked` warning.
 
 Test surfaces must be **individual flat panels**. If you are using extruded block boundaries or any joined polysurface, explode it into its faces before connecting it to USC_Preprocess. Otherwise the planarity check rejects the combined surface and preprocessing fails with a "No points sampled" error.
 

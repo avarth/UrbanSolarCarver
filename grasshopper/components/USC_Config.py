@@ -135,7 +135,7 @@ else:
         # resolved against the .gh file here, as this component's own are.
         try:
             for key in ("epw_path", "simulated_weights_path", "max_volume_path",
-                        "test_surface_path"):
+                        "test_surface_path", "context_path", "terrain_path"):
                 if overrides_dict.get(key):
                     overrides_dict[key] = gh.resolve_path(ghenv.Component, overrides_dict[key])
         except ValueError as exc:

@@ -15,6 +15,13 @@ max_volume : Mesh or Brep (list)
     Maximum volume envelope geometry.
 test_surfaces : Mesh or Brep (list)
     Insolation test surfaces.
+context : Mesh or Brep (list), optional
+    Existing surroundings that stay (buildings, large trees), closed
+    bodies. They block rays, and every voxel column of the max volume
+    they overlap is removed.
+terrain : Mesh or Brep (list), optional
+    The ground (an open sheet is fine). It blocks rays, and the voxels
+    below it are removed.
 run : bool
     True to execute. False to idle (no computation).
 
@@ -47,7 +54,9 @@ try:
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config. Contains all settings for the full pipeline."
     ii[1].Name, ii[1].Description = "max_volume", "Maximum building envelope geometry (Mesh or Brep). Multiple objects are joined into one volume."
     ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces requiring solar access (Mesh or Brep), one or many. Each must be a single flat panel; explode polysurfaces first."
-    ii[3].Name, ii[3].Description = "run", "Boolean toggle. True to run the complete pipeline (preprocessing + thresholding + exporting) in one step."
+    ii[3].Name, ii[3].Description = "context", "Optional. Existing surroundings that stay (buildings, large trees; not balconies or shading devices), as closed Meshes or Breps. Rays that hit them are dropped before scoring (switch: context_blocks_rays in USC_RaySettings), and every voxel column of the max volume they overlap is removed: nothing is built over, under or beside them within their columns."
+    ii[4].Name, ii[4].Description = "terrain", "Optional. The ground as a Mesh or Brep (an open sheet is fine). Rays that hit it are dropped before scoring, and only the voxels below it are removed, so the site stays buildable above it."
+    ii[5].Name, ii[5].Description = "run", "Boolean toggle. True to run the complete pipeline (preprocessing + thresholding + exporting) in one step."
     oo[0].Name, oo[0].Description = "mesh", "The carved envelope as a Rhino Mesh. Displayed directly in the viewport. Empty when final_mesh_format is not ply."
     oo[1].Name, oo[1].Description = "export_path", "Full path to the exported mesh file on disk."
     oo[2].Name, oo[2].Description = "report_path", "Full path to the run_report.md file. Contains a human-readable summary of the entire pipeline run."
@@ -99,8 +108,12 @@ else:
     out_dir = Path(config.out_dir)
     try:
         vol_path, srf_path = gh.write_input_geometry(max_volume, test_surfaces, out_dir / "incoming")
-        reply = gh.run_stages(config.session, config, ["exporting"], "preprocessing",
-                              {"max_volume_path": vol_path, "test_surface_path": srf_path})
+        extra = {"max_volume_path": vol_path, "test_surface_path": srf_path}
+        for key, items, name in (("context_path", context, "context"), ("terrain_path", terrain, "terrain")):
+            path = gh.write_optional_geometry(items, out_dir / "incoming", name)
+            if path is not None:
+                extra[key] = path
+        reply = gh.run_stages(config.session, config, ["exporting"], "preprocessing", extra)
         gh.show_issues(ghenv.Component, reply)
         folders = reply["stage_folders"]
         export_path = reply["export_path"]

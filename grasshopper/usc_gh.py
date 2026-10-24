@@ -386,6 +386,35 @@ def write_input_geometry(max_volume, test_surfaces, folder):
     return str(vol_path), str(srf_path)
 
 
+def write_optional_geometry(items, folder, name):
+    """Write an optional mesh input (context, terrain) as <folder>/<name>.ply for the daemon.
+
+    Returns the path, or None when nothing is connected (an earlier file of
+    that name is removed, so a disconnected input is not used again).  The
+    input's meshes are joined and welded like the max volume: the column rule
+    of the context needs closed bodies.  Raises ValueError when the input
+    holds items but no Mesh or Brep geometry.
+    """
+    path = Path(folder) / (name + ".ply")
+    if not items:
+        path.unlink(missing_ok=True)
+        return None
+    import Rhino.Geometry as rg
+
+    meshes = meshes_from_input(items)
+    if not meshes:
+        raise ValueError(name + " contains no Mesh or Brep geometry")
+    joined = rg.Mesh()
+    for m in meshes:
+        joined.Append(m)
+    joined.Vertices.CombineIdentical(True, True)
+    joined.Faces.CullDegenerateFaces()
+    joined.Compact()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    export_mesh_to_ply(joined, path, include_normals=False)
+    return str(path)
+
+
 def export_mesh_to_ply(mesh, path, include_normals=True):
     """Write a Rhino Mesh as binary little-endian PLY with double-precision vertices.
 

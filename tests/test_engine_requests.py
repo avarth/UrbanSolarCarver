@@ -291,3 +291,25 @@ def test_handle_reports_progress_through_a_given_run_context(tmp_path, tmp_mesh_
         reply = handle_engine_request(request, session, context=context)
     assert reply.status == "ok"
     assert ("preprocessing", 0, 1) in seen and ("thresholding", 1, 1) in seen
+
+
+@pytest.mark.parametrize("switch, dropped", [(None, True), ("context_blocks_rays=false", False)])
+def test_a_run_request_takes_context_and_the_blocking_switch_as_overrides(tmp_path, tmp_mesh_files, switch, dropped):
+    """The overrides the Grasshopper components send: context_path, and context_blocks_rays from USC_RaySettings."""
+    import json
+    import trimesh
+    vol_path, srf_path = tmp_mesh_files
+    canopy = trimesh.creation.box(extents=(200, 200, 1))
+    canopy.apply_translation((0, 0, 20.5))           # over the test surface, outside the grid, within the ray length
+    context_path = tmp_path / "context.ply"
+    canopy.export(str(context_path))
+    overrides = ["mode=daylight", f"max_volume_path={vol_path}", f"test_surface_path={srf_path}", f"context_path={context_path}",
+                 f"out_dir={tmp_path / 'run'}", "device=cpu", "voxel_size=2.0", "grid_step=2.0", "ray_length=50.0"]
+    overrides += [switch] if switch else []
+    with CarverSession(device="cpu") as session:
+        reply = answer_engine_message({"cmd": "run", "produce": ["preprocessing"], "run_folder": str(tmp_path / "run"),
+                                       "overrides": overrides}, session)
+    assert reply["status"] == "ok", reply
+    report = json.loads((tmp_path / "run" / "preprocessing" / "diagnostics" / "diagnostic.json").read_text())["context"]
+    assert report["context_blocks_rays"] is dropped
+    assert (report["rays_dropped"] > 0) is dropped

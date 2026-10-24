@@ -5,8 +5,9 @@ the grid to compute per-voxel obstruction scores. It re-runs whenever its
 inputs change, including the Config, so wire threshold and postprocess
 settings into USC Threshold Stage and USC Export instead of Config.
 
-The geometry is written to <out_dir>/incoming/ as PLY files and the
-results to <out_dir>/preprocessing/. Connect the pre_result output to
+The geometry (the optional context and terrain included) is written to
+<out_dir>/incoming/ as PLY files and the results to
+<out_dir>/preprocessing/. Connect the pre_result output to
 USC Threshold Stage.
 
 Inputs
@@ -17,6 +18,13 @@ max_volume : Mesh or Brep (list)
     Maximum volume envelope geometry.
 test_surfaces : Mesh or Brep (list)
     Insolation test surfaces.
+context : Mesh or Brep (list), optional
+    Existing surroundings that stay (buildings, large trees), closed
+    bodies. They block rays, and every voxel column of the max volume
+    they overlap is removed.
+terrain : Mesh or Brep (list), optional
+    The ground (an open sheet is fine). It blocks rays, and the voxels
+    below it are removed.
 run : bool
     True to execute. False to idle.
 
@@ -50,7 +58,9 @@ try:
     ii[0].Name, ii[0].Description = "config", "Configuration handle from USC_Config. Contains mode, file paths, and all parameter overrides."
     ii[1].Name, ii[1].Description = "max_volume", "The maximum building envelope: the largest volume the building could occupy before solar carving. Provide as Rhino Mesh or Brep. Multiple objects are joined into one volume."
     ii[2].Name, ii[2].Description = "test_surfaces", "Surfaces that need solar access (neighbouring facades, public spaces, parks). Rays are cast from these surfaces through the max volume. Provide as Rhino Mesh or Brep (one or many). Surfaces are sampled as a uniform point grid at grid_step spacing (set in USC_GridSettings); each sample point casts rays, so a smaller grid_step gives more points, finer results and a slower run. Each surface must be a single flat panel: explode polysurfaces (e.g. extruded block boundaries) into individual faces before connecting. Non-flat pieces are skipped, and preprocessing fails if no piece is flat."
-    ii[3].Name, ii[3].Description = "run", "Boolean toggle to execute. Set True to run preprocessing. Set False to prevent computation (useful while adjusting parameters)."
+    ii[3].Name, ii[3].Description = "context", "Optional. Existing surroundings that stay (buildings, large trees; not balconies or shading devices), as closed Meshes or Breps. Rays that hit them are dropped before scoring (switch: context_blocks_rays in USC_RaySettings), and every voxel column of the max volume they overlap is removed: nothing is built over, under or beside them within their columns."
+    ii[4].Name, ii[4].Description = "terrain", "Optional. The ground as a Mesh or Brep (an open sheet is fine). Rays that hit it are dropped before scoring, and only the voxels below it are removed, so the site stays buildable above it."
+    ii[5].Name, ii[5].Description = "run", "Boolean toggle to execute. Set True to run preprocessing. Set False to prevent computation (useful while adjusting parameters)."
     oo[0].Name, oo[0].Description = "pre_result", "Path to the preprocessing manifest file. Connect this to USC_ThresholdStage's 'pre_result' input to continue the pipeline."
     oo[1].Name, oo[1].Description = "diagnostics", "Text summary: grid dimensions, filled voxels, score range, timing. Check this to verify the preprocessing ran correctly."
     oo[2].Name, oo[2].Description = "diag_images", "Paths to diagnostic images (score histogram, sky patch weight/intensity plots). Feed to Ladybug Image Viewer for in-canvas visualisation. Empty unless plots are enabled (USC_Diagnostics)."
@@ -104,8 +114,12 @@ else:
     out_dir = Path(config.out_dir)
     try:
         vol_path, srf_path = gh.write_input_geometry(max_volume, test_surfaces, out_dir / "incoming")
-        reply = gh.run_stages(config.session, config, ["preprocessing"], "preprocessing",
-                              {"max_volume_path": vol_path, "test_surface_path": srf_path})
+        extra = {"max_volume_path": vol_path, "test_surface_path": srf_path}
+        for key, items, name in (("context_path", context, "context"), ("terrain_path", terrain, "terrain")):
+            path = gh.write_optional_geometry(items, out_dir / "incoming", name)
+            if path is not None:
+                extra[key] = path
+        reply = gh.run_stages(config.session, config, ["preprocessing"], "preprocessing", extra)
         gh.show_issues(ghenv.Component, reply)
         pre_out = Path(reply["stage_folders"]["preprocessing"])
         pre_result = reply["manifest"]
@@ -121,6 +135,15 @@ else:
             "Scores: [{:.4g} - {:.4g}]".format(stats.get("min", 0), stats.get("max", 0)),
             "Test points: {}".format(data.get("test_surface_points", "?")),
         ]
+        ctx = data.get("context")
+        if ctx:
+            lines.append("Context: {} voxels removed by context columns, {} below the ground".format(
+                ctx.get("voxels_removed_by_context", 0), ctx.get("voxels_removed_below_ground", 0)))
+            if ctx.get("context_blocks_rays", True):
+                lines.append("Rays dropped: {} of {} ({:.1f}% of the ray weight)".format(
+                    ctx.get("rays_dropped", 0), ctx.get("rays_total", 0), 100 * ctx.get("weight_dropped_share", 0.0)))
+            else:
+                lines.append("Rays dropped: none (context_blocks_rays is off)")
         cmp_stats = data.get("sky_patch_comparison_stats")
         if cmp_stats:
             lines.append(

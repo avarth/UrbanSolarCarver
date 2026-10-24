@@ -52,3 +52,20 @@ def test_geometry_inputs_reach_the_script_as_geometry(fname):
     for name in ("max_volume", "test_surfaces"):
         assert ports[name]["hint"] == "geometrybase" and ports[name]["is_list"]
     assert build_ghuser.TYPE_HINTS["geometrybase"][2] == "Rhino.Geometry.GeometryBase"
+
+
+@pytest.mark.parametrize("fname", ["USC_Preprocess.py", "USC_RunPipeline.py"])
+def test_context_and_terrain_inputs_follow_the_test_surfaces(fname):
+    comp = build_ghuser.describe(GH_DIR / "components" / fname, MANIFEST["components"][fname])
+    names = [p["name"] for p in comp["inputs"]]
+    assert names.index("context") == names.index("test_surfaces") + 1
+    assert names.index("terrain") == names.index("context") + 1
+    ports = {p["name"]: p for p in comp["inputs"]}
+    for name in ("context", "terrain"):
+        assert ports[name]["hint"] == "geometrybase" and ports[name]["is_list"]
+
+
+def test_ray_settings_take_the_context_blocking_switch():
+    comp = build_ghuser.describe(GH_DIR / "components" / "USC_RaySettings.py", MANIFEST["components"]["USC_RaySettings.py"])
+    ports = {p["name"]: p for p in comp["inputs"]}
+    assert ports["context_blocks_rays"]["hint"] == "bool" and not ports["context_blocks_rays"]["is_list"]

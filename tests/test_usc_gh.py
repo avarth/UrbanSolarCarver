@@ -5,6 +5,7 @@ exercised inside Rhino; see docs/grasshopper.md.
 """
 import ast
 import importlib.util
+import re
 import socket
 import subprocess
 import sys
@@ -330,3 +331,41 @@ def test_components_no_longer_use_the_replaced_helpers_or_stage_commands():
         assert "_mode_default_yaml" not in text and "_mode_canonical" not in text, src.name
         for command in ("preprocessing", "thresholding", "exporting", "massing", "run_pipeline"):
             assert f'call_daemon(config.session, "{command}"' not in text, f"{src.name} still sends {command}"
+
+
+def _run_component(name, **inputs):
+    """Execute a component script outside Grasshopper (its GH UI block fails quietly without ghenv); return its globals."""
+    namespace = dict(inputs)
+    exec(compile((GH_DIR / "components" / name).read_text(encoding="utf-8"), name, "exec"), namespace)
+    return namespace
+
+
+@pytest.mark.parametrize("value, expected", [(False, "context_blocks_rays=false"), (True, "context_blocks_rays=true"), (None, None)])
+def test_ray_settings_pass_the_context_blocking_switch(value, expected):
+    out = _run_component("USC_RaySettings.py", ray_length=None, min_altitude=None, north_deg=None, context_blocks_rays=value)
+    assert out["overrides"] == expected
+
+
+def test_ray_settings_keep_the_numbers_beside_the_switch():
+    out = _run_component("USC_RaySettings.py", ray_length=500, min_altitude=None, north_deg=10, context_blocks_rays=False)
+    assert out["overrides"] == "ray_length=500.0;north_deg=10.0;context_blocks_rays=false"
+
+
+@pytest.mark.parametrize("name", ["USC_Preprocess.py", "USC_RunPipeline.py"])
+def test_preprocessing_components_write_and_pass_the_context_and_terrain(name):
+    text = (GH_DIR / "components" / name).read_text(encoding="utf-8")
+    assert "gh.write_optional_geometry(" in text
+    for key in ('"context_path"', '"terrain_path"'):
+        assert key in text, f"{name} does not pass {key}"
+
+
+def test_config_resolves_context_and_terrain_paths_against_the_gh_file():
+    text = (GH_DIR / "components" / "USC_Config.py").read_text(encoding="utf-8")
+    resolved = re.search(r"for key in \(([^)]*)\):\s*\n\s*if overrides_dict.get\(key\)", text).group(1)
+    assert '"context_path"' in resolved and '"terrain_path"' in resolved
+
+
+def test_write_optional_geometry_without_input_writes_nothing(gh, tmp_path):
+    assert gh.write_optional_geometry(None, tmp_path, "context") is None
+    assert gh.write_optional_geometry([], tmp_path, "context") is None
+    assert not any(tmp_path.iterdir())
