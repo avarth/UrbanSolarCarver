@@ -129,14 +129,17 @@ def _resolve_threshold(scores, spec, removal_scores=None):
 
 
 @overload
-def thresholding(volume: "PreprocessingResult", cfg: Union[user_config, str, Path], out_dir: Union[str, Path]) -> ThresholdingResult: ...
+def thresholding(volume: "PreprocessingResult", cfg: Union[user_config, str, Path], out_dir: Union[str, Path],
+                 after: Union[ThresholdingResult, str, Path, None] = None) -> ThresholdingResult: ...
 @overload
-def thresholding(volume: Union[str, Path], cfg: Union[user_config, str, Path], out_dir: Union[str, Path]) -> ThresholdingResult: ...
+def thresholding(volume: Union[str, Path], cfg: Union[user_config, str, Path], out_dir: Union[str, Path],
+                 after: Union[ThresholdingResult, str, Path, None] = None) -> ThresholdingResult: ...
 
 def thresholding(
     volume: Union["PreprocessingResult", str, Path],
     cfg: Union[user_config, str, Path],
     out_dir: Union[str, Path],
+    after: Union[ThresholdingResult, str, Path, None] = None,
 ) -> ThresholdingResult:
     """Second stage of the 3-stage pipeline: score-to-mask binarisation.
 
@@ -176,6 +179,20 @@ def thresholding(
     ``obstruction_fraction_carved_by_slope_limit``.  ``mask.npy`` is the
     final mask that gets exported.
 
+    After a previous criterion (``after``): in a chain of criteria on one
+    voxel grid, each criterion decides only among the voxels the previous
+    one kept.  The base of this run is then the occupied voxels that the
+    previous criterion's ``mask.npy`` keeps, instead of all occupied voxels:
+    smoothing, the threshold statistics, ``carve_fraction``, ``carve_above``
+    and the slope limit all act on those voxels, and the mask is never True
+    where the previous mask is False.  Both runs must share the grid (max
+    volume, context, terrain, voxel size and margin); otherwise a
+    StageChainError is raised.  When the previous criterion kept no voxel,
+    the mask is empty and the issue ``nothing_left_to_carve`` is reported.
+    The manifest then records ``after_manifest`` and ``after_run_id``, and
+    the diagnostics ``after_run_id`` and ``voxels_at_start`` (the voxels this
+    criterion decides about).
+
     Score smoothing (``cfg.score_smoothing``):
 
     Before thresholding, a Gaussian blur can be applied to the continuous
@@ -206,6 +223,10 @@ def thresholding(
     out_dir : str | Path
         Output directory for this stage; created if it does not exist.
         All artifacts are written directly into it.
+    after : ThresholdingResult | str | Path | None
+        The previous criterion's :class:`ThresholdingResult`, or a path to
+        its thresholding folder / ``manifest.json``; None (default) for a
+        first or only criterion, which decides among all occupied voxels.
 
     Returns
     -------
@@ -228,7 +249,9 @@ def thresholding(
         ``ThresholdingManifest`` recording a random ``run_id`` (new on every
         run), the mask path, the path of ``scores_compared_with_cutoff.npy``,
         the path and ``run_id`` of the upstream
-        preprocessing manifest (paths relative to the manifest's folder), and
+        preprocessing manifest and, with ``after``, of the previous
+        criterion's thresholding manifest (paths relative to the manifest's
+        folder), and
         the resolved threshold strategy, score smoothing radius (m) and slope
         limit this run applied.  The
         outputs of an earlier run in *out_dir* are deleted first and the
@@ -242,7 +265,9 @@ def thresholding(
     ------
     StageChainError
         If the preprocessing manifest cannot be read, the config's mode
-        differs from the preprocessing run's, or the scores or the occupancy
+        differs from the preprocessing run's, the previous criterion (with
+        ``after``) is missing, was built on another grid, or has itself been
+        re-run since its own upstream, or the scores or the occupancy
         grid it names are missing or do not match its grid shape (a
         ValueError; the message names the stage to re-run).
     ValueError
@@ -252,6 +277,7 @@ def thresholding(
         conf = _resolve_cfg(cfg)
         out_path = begin_stage(out_dir, _THRESHOLDING_OUTPUTS)
         pre = load_upstream(volume, "preprocessing")
+        previous = None if after is None else load_upstream(after, "thresholding")
         # The threshold defaults and units differ per mode, and the settings
         # model does not carry the mode. A standalone re-thresholding (CLI,
         # daemon, Grasshopper) can pair a config with scores from a run in
@@ -264,16 +290,38 @@ def thresholding(
             )
         return _run_thresholding(
             ThresholdingSettings.from_config(conf), RunOptions.from_config(conf),
-            pre, out_path, context)
+            pre, out_path, context, previous)
+
+
+def _check_same_grid(pre: LoadedManifest, previous_pre: LoadedManifest, occ: np.ndarray) -> None:
+    """Raise StageChainError unless *previous_pre* (the preprocessing run of the
+    previous criterion) has the voxel grid of *pre*: voxel size, origin,
+    shape and occupancy (*occ* is the occupancy of *pre*)."""
+    a, b = pre.manifest, previous_pre.manifest
+    if a.voxel_size != b.voxel_size:
+        reason = f"voxel size {b.voxel_size:g} m, this run has {a.voxel_size:g} m"
+    elif not np.allclose(a.origin, b.origin, rtol=0.0, atol=1e-9):
+        reason = f"grid origin {tuple(b.origin)}, this run has {tuple(a.origin)}"
+    elif tuple(a.shape) != tuple(b.shape):
+        reason = f"grid shape {tuple(b.shape)}, this run has {tuple(a.shape)}"
+    elif not np.array_equal(occ, load_occupancy(previous_pre)):
+        reason = "another maximum volume (its occupied voxels differ from this run's)"
+    else:
+        return
+    raise StageChainError(
+        f"The previous criterion was built on a different grid: {reason}. Every criterion of a "
+        f"chain must share the max volume, context, terrain, voxel size and margin.")
 
 
 def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstream: LoadedManifest,
-                      out_path: Path, context: RunContext) -> ThresholdingResult:
+                      out_path: Path, context: RunContext,
+                      previous: LoadedManifest | None = None) -> ThresholdingResult:
     """The computation of :func:`thresholding`, from its own settings only.
 
     *upstream* is the loaded preprocessing manifest: its mode and voxel size
     resolve the settings' defaults.  *out_path* is the stage folder, already
-    cleared by :func:`begin_stage`.
+    cleared by :func:`begin_stage`.  *previous* is the loaded thresholding
+    manifest of the previous criterion, or None.
     """
     t0_wall = time.perf_counter()
     t0_cpu = time.process_time()
@@ -312,6 +360,23 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     # building alone; otherwise carve_fraction/headtail would depend on how
     # much air the grid happens to contain.
     occ = load_occupancy(pre)
+    if previous is not None:
+        previous_pre = load_upstream(previous.resolve(previous.manifest.upstream_manifest), "preprocessing")
+        _check_same_grid(pre, previous_pre, occ)
+        previous_mask_path = previous.resolve(previous.manifest.mask_path)
+        if not previous_mask_path.is_file():
+            raise StageChainError(
+                f"Mask not found: {previous_mask_path} (named by the previous criterion's "
+                f"manifest). Re-run thresholding of the previous criterion.")
+        # This criterion decides only among the voxels the previous one kept.
+        occ = occ & np.load(previous_mask_path, allow_pickle=False).astype(bool)
+    nothing_left = previous is not None and not occ.any()
+    if nothing_left:
+        report_issue(
+            "nothing_left_to_carve",
+            "thresholding: the previous criterion kept no voxel, so this criterion has nothing to "
+            "decide; the mask is empty",
+        )
 
     raw, _smooth_applied, _smooth_radius_m, _sigma_voxels = _apply_score_smoothing(
         raw, kind, pre_manifest.voxel_size, settings.score_smoothing, occ=occ
@@ -331,10 +396,13 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     # With carve_above, each voxel goes at the cutoff of the lowest
     # carved run below it; comparing that value with the cutoff gives the
     # mask after carve_above, and lets carve_fraction count what it removes.
+    # With no voxel left to decide about there is nothing to resolve a cutoff
+    # from or to carve: the mask stays empty.
+    carve_above = effective["carve_above"] and not nothing_left
     removal_scores = (carve_above_scores(scores.reshape(grid_shape), occ,
                                          effective["carve_above_min_consecutive"])
-                      if effective["carve_above"] else None)
-    thr_val = _resolve_threshold(
+                      if carve_above else None)
+    thr_val = 0.0 if nothing_left else _resolve_threshold(
         occ_scores, spec, None if removal_scores is None else removal_scores[occ])
 
     # The values the cutoff is applied to, for tools that show the cutoff
@@ -347,7 +415,9 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
 
     # Threshold to mask. Empty cells are False: there is nothing to keep.
     mask = occ & (scores <= thr_val).reshape(grid_shape)
-    if mask.sum() == occ.sum():
+    if nothing_left:
+        pass    # already reported
+    elif mask.sum() == occ.sum():
         report_issue(
             "nothing_carved",
             f"Thresholding produced an all-True mask (nothing carved). "
@@ -362,14 +432,14 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
     # Column post-processing belongs to the mask, so that mask.npy and the
     # retention reported below describe the envelope that gets exported.
     carve_above_removed = 0
-    if effective["carve_above"]:
+    if carve_above:
         kept_before = int(mask.sum())
         mask = occ & (removal_scores <= thr_val)
         carve_above_removed = kept_before - int(mask.sum())
     # Slope limit: turns cliffs and spires left by per-voxel cutoffs into ramps.
     max_slope = effective["max_slope_deg"]
     mask_before_slope = mask
-    if max_slope is not None:
+    if max_slope is not None and not nothing_left:
         mask = limit_column_slope(mask, occ, max_slope)
     slope_removed = int(mask_before_slope.sum()) - int(mask.sum())
 
@@ -393,6 +463,9 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         "retention_pct": round(100.0 * kept / max(occupied, 1), 2),
         "mask_shape": [int(x) for x in grid_shape],
         "upstream_run_id": pre_manifest.run_id,
+        "after_run_id": None if previous is None else previous.manifest.run_id,
+        # The occupied voxels this criterion decides about (the ones the previous criterion kept).
+        "voxels_at_start": occupied,
         "carve_above_applied": effective["carve_above"],
         "carve_above_min_consecutive": effective["carve_above_min_consecutive"] if effective["carve_above"] else None,
         "carve_above_extra_voxels_removed": carve_above_removed,
@@ -442,7 +515,7 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         ThresholdingPlotInputs(
             occupied_scores=nn, threshold_value=float(thr_val),
             method=threshold_method, score_unit=score_unit),
-        options.diagnostic_plots,
+        options.diagnostic_plots and not nothing_left,
     )
 
     # Manifest last (see begin_stage at the start).
@@ -456,6 +529,8 @@ def _run_thresholding(settings: ThresholdingSettings, options: RunOptions, upstr
         resolved_threshold=spec,
         score_smoothing_m=_smooth_radius_m,
         max_slope_deg=max_slope,
+        after_manifest=None if previous is None else stored_path(previous.manifest_path, out_path),
+        after_run_id=None if previous is None else previous.manifest.run_id,
     ))
 
     return ThresholdingResult(

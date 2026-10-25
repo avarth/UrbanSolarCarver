@@ -846,6 +846,10 @@ class ThresholdingManifest(BaseModel):
     resolved_threshold: ThresholdSpec
     score_smoothing_m: float
     max_slope_deg: Optional[float]
+    # The previous criterion's thresholding manifest (relative to this manifest's folder) and run id when this run
+    # decided only among the voxels it kept; None for a first or only criterion.
+    after_manifest: Optional[str] = None
+    after_run_id: Optional[str] = None
 
 class ExportingManifest(BaseModel):
     """Manifest written by exporting."""

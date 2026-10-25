@@ -124,6 +124,11 @@ def load_upstream(source, expected_stage: str) -> LoadedManifest:
     Raises :class:`StageChainError`, naming the stage to re-run, when a
     manifest is missing or unreadable (a manifest written by an older
     version has no ``run_id``) or the run IDs differ.
+
+    A thresholding manifest with an ``after_manifest`` (a criterion decided
+    after another one) is checked the same way against that criterion's
+    thresholding manifest and ``after_run_id``; that load checks the
+    criterion's own links in turn.
     """
     manifest_path = _manifest_path_of(source)
     try:
@@ -144,5 +149,14 @@ def load_upstream(source, expected_stage: str) -> LoadedManifest:
                 f"The {upstream_stage} output at {upstream.manifest_path} is not the run that "
                 f"the {expected_stage} output at {manifest_path} was built from (it has been "
                 f"re-run since). Re-run the stages after {upstream_stage}."
+            )
+    # A criterion that decided after another one also depends on that criterion's thresholding.
+    after_manifest = getattr(manifest, "after_manifest", None)
+    if expected_stage == "thresholding" and after_manifest is not None:
+        previous = load_upstream(loaded.resolve(after_manifest), "thresholding")
+        if previous.manifest.run_id != manifest.after_run_id:
+            raise StageChainError(
+                f"The previous criterion's thresholding at {previous.folder} was re-run after "
+                f"this one. Re-run thresholding of the criteria after it."
             )
     return loaded
