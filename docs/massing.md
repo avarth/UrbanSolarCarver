@@ -57,7 +57,10 @@ simulation input (one closed prism per floor and plate).
    the carved envelope, and (with `plate_stacking: supported`) it is built on
    the floor below. A column along a facade not aligned with the voxel grid
    counts only for its share inside the footprint, so whether a module is
-   built does not depend on the angle of the footprint to the grid. A module
+   built does not depend on the angle of the footprint to the grid; a column
+   less than half inside the footprint need not be filled by the maximum
+   volume at all (along a wall the voxels can reach up to a voxel past the
+   footprint, as the re-voxelized envelope of an earlier carving does). A module
    over the tolerance is not built even when built modules enclose it, so a
    local dip in the envelope can leave a hole of one or two modules in a
    floor; holes are not filled. Parts narrower than `min_plate_dimension` are dropped

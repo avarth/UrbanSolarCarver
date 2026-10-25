@@ -7,6 +7,13 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed (massing)
+
+- A module no longer fails the maximum-volume test because of a voxel column less than half inside the footprint.
+  Along a wall the voxels can reach up to a voxel past the footprint (the envelope of an earlier carving, voxelized
+  again after **Carve further**, does), and one such column, empty above the lowest floors, dropped the whole module.
+  Allatini example after two carve-further steps: 715 of 9,872 columns lay wholly outside the drawn outlines.
+
 ### Added (sky sampling)
 
 - **Rays per sky patch** (`rays_per_patch`: 1, 4, 9 or 16; default 4) in the weighted modes (irradiance, benefit,

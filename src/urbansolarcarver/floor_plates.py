@@ -923,13 +923,19 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
     outside the envelope and in the test for narrow parts: a column along a
     facade not aligned with the grid counts only for the part of its volume
     inside the building, so a module's share does not depend on the angle of
-    the footprint to the grid.
+    the footprint to the grid.  A column less than half inside the footprint
+    need not be filled for its bay to stay in the maximum volume: along a
+    wall the voxels can reach up to a voxel past the footprint (the envelope
+    of an earlier carving, voxelized again on another grid, does), and one
+    such column, empty above the lowest floors, would otherwise fail the
+    whole module.
     """
     n_bays = int(bay.max()) + 1 if bay.size else 0
     column_share = np.ones(len(bay)) if column_share is None else np.asarray(column_share, dtype=np.float64)
     occ_cols = occupancy[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
     kept_cols = (kept & occupancy)[cells_ij[:, 0], cells_ij[:, 1], :].astype(np.float64)
     bay_columns = np.maximum(bay_column_counts(bay, n_bays, column_share), 1e-9)
+    mostly_inside = column_share >= 0.5
     grid_shape = occupancy.shape[:2]
     side = max(1, int(round(min_dimension / voxel_size)))
     n_layers = occupancy.shape[2]
@@ -940,7 +946,7 @@ def build_floors(cells_ij, bay, occupancy, kept, z_grid0, voxel_size, levels,
         height = zt - zb - overlap[not_counted].sum()
         overlap[not_counted] = 0.0
         column_full = occ_cols @ overlap >= height - 1e-6
-        in_max = np.bincount(bay, weights=(~column_full).astype(np.float64), minlength=n_bays) == 0
+        in_max = np.bincount(bay, weights=(~column_full & mostly_inside).astype(np.float64), minlength=n_bays) == 0
         outside = (np.bincount(bay, weights=(height - kept_cols @ overlap) * column_share, minlength=n_bays)
                    / (bay_columns * height))
         keep = in_max & (outside <= tolerance + 1e-9)

@@ -257,6 +257,24 @@ class TestFloors:
         assert all(floor.kept_bays.all() for floor in floors)
         assert np.allclose(floors[0].outside_share, 0.0)
 
+    def test_a_column_mostly_outside_the_footprint_need_not_be_filled(self):
+        """A carved envelope of an earlier run, voxelized again, reaches a voxel past the first footprint: its columns
+        there are empty above the lowest floors. A column less than half inside the footprint must not fail its module;
+        one at least half inside still does."""
+        ij, bays, occ = _bar_grid()
+        share = np.ones(len(ij))
+        edge = ij[:, 1] == 0                        # the row of columns along the bar's facade at y = 0
+        occ[:, 0, 10:] = False                      # empty from z 10
+        share[edge] = 0.3
+        floors = mg.build_floors(ij, bays, occ, occ.copy(), 0.0, 1.0, mg.floor_levels(0.0, 33.0, 5.0, 3.0),
+                                 0.2, "supported", 3.0, column_share=share)
+        assert all(floor.kept_bays.all() for floor in floors)
+        share[edge] = 0.6
+        floors = mg.build_floors(ij, bays, occ, occ.copy(), 0.0, 1.0, mg.floor_levels(0.0, 33.0, 5.0, 3.0),
+                                 0.2, "supported", 3.0, column_share=share)
+        facade_bays = np.unique(bays[edge])
+        assert floors[1].kept_bays[facade_bays].all() and not floors[3].kept_bays[facade_bays].any()
+
     def test_a_layer_mostly_above_the_top_does_not_count_against_the_top_floor(self):
         """The grid starts 0.2 m below the base at z 0 and the volume ends at z 17.1: layer 17 spans 16.8..17.8 and
         its centre lies above the top.
