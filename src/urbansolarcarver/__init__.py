@@ -11,6 +11,8 @@ from importlib.metadata import PackageNotFoundError, version as _distribution_ve
 __all__ = [
     "run_pipeline",
     "PipelineResult",
+    "run_chain",
+    "ChainResult",
     "stages_to_rerun",
     "preprocessing",
     "thresholding",
@@ -45,7 +47,7 @@ from typing import TYPE_CHECKING  # noqa: E402
 
 if TYPE_CHECKING:  # pragma: no cover
     from .api import (  # noqa: F401
-        run_pipeline, PipelineResult, stages_to_rerun,
+        run_pipeline, PipelineResult, run_chain, ChainResult, stages_to_rerun,
         preprocessing, thresholding, exporting, massing,
         PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
     )

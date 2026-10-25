@@ -75,6 +75,40 @@ def _leaf_stage_dir(stage_dir: Path, thresholding_run_id: str):
     return stage_dir if upstream_run_id == thresholding_run_id else None
 
 
+def _criteria_lines(report_folder: Path, thr_dir: Path) -> list:
+    """The "Criteria" section of a chain run: one row per criterion, from ``criteria/chain.json`` and each criterion's
+    thresholding diagnostics. Empty when there is no chain file, or its last criterion is not the thresholding run
+    this report describes (the file belongs to an earlier run)."""
+    criteria_folder = Path(report_folder) / "criteria"
+    try:
+        listed = json.loads((criteria_folder / "chain.json").read_text(encoding="utf-8"))["criteria"]
+        last_run_id = json.loads((Path(thr_dir) / "manifest.json").read_text(encoding="utf-8")).get("run_id")
+        if not listed or listed[-1]["thresholding_run_id"] != last_run_id:
+            return []
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    dash = "—"
+    lines = ["## Criteria\n",
+             "Each criterion decides among the voxels the one before it kept. The Configuration, Preprocessing and "
+             "Thresholding sections describe the last criterion.\n",
+             "| # | Name | Mode | Threshold | Voxels at start | Voxels kept |",
+             "|---|------|------|-----------|-----------------|-------------|"]
+    for position, row in enumerate(listed, start=1):
+        diag_path = criteria_folder / str(row["id"]) / "thresholding" / "diagnostics" / "diagnostic.json"
+        try:
+            diag = json.loads(diag_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            diag = {}
+        threshold = f"{diag.get('threshold_method', 'unknown')} {diag.get('threshold_value', 0):.4g}" if diag else dash
+        started = diag.get("voxels_at_start", diag.get("voxels_occupied"))
+        kept = diag.get("voxels_kept")
+        cells = [str(position), str(row.get("name", row["id"])), str(row.get("mode", dash)), threshold,
+                 dash if started is None else f"{started:,}", dash if kept is None else f"{kept:,}"]
+        lines.append("| " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
 def generate_run_report(
     out_dir: Union[str, Path],
     pre_dir: Union[str, Path],
@@ -151,6 +185,9 @@ def generate_run_report(
     else:
         lines.append("- No configuration snapshot in the preprocessing diagnostics.")
     lines.append("")
+
+    # --- Criteria of a chain run ---
+    lines.extend(_criteria_lines(Path(out_dir), Path(thr_dir)))
 
     # --- Preprocessing ---
     pre_summary, pre_timing = _load_diag(pre_dir)

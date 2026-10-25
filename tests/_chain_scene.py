@@ -8,6 +8,7 @@ from pathlib import Path
 
 import numpy as np
 import trimesh
+import yaml
 
 
 @dataclass(frozen=True)
@@ -27,12 +28,48 @@ class ChainScene:
         settings.update({k: str(v) if isinstance(v, Path) else v for k, v in values.items()})
         return user_config(**settings)
 
+    def chain_config(self, folder, criteria):
+        """A chain on this scene: *criteria* (dicts, see :func:`daylight_on_south`) under shared settings, written as
+        ``<folder>/chain.yaml`` and loaded from it. The run folder of the chain is ``<folder>/run``."""
+        from urbansolarcarver.chain_config import load_chain
+        folder = Path(folder)
+        folder.mkdir(parents=True, exist_ok=True)
+        surfaces = {"south": str(self.south), "east": str(self.east)}
+        data = dict(
+            max_volume_path=str(self.volume), out_dir=str(folder / "run"), voxel_size=1.0, grid_step=1.0,
+            ray_length=80.0, device="cpu", min_voxels=1, min_face_count=0,
+            criteria=[{**item, "test_surface_path": surfaces.get(item["test_surface_path"], item["test_surface_path"])}
+                      for item in criteria],
+        )
+        path = folder / "chain.yaml"
+        path.write_text(yaml.safe_dump(data), encoding="utf-8")
+        return load_chain(str(path))
 
-def chain_scene(tmp_path) -> ChainScene:
+
+def daylight_on_south(carve_fraction):
+    """A criterion for ``ChainScene.chain_config``: daylight on the south facade, carving *carve_fraction*."""
+    return {"mode": "daylight", "test_surface_path": "south", "carve_fraction": carve_fraction}
+
+
+def daylight_on_east(carve_fraction):
+    """A criterion for ``ChainScene.chain_config``: daylight on the east facade, carving *carve_fraction*."""
+    return {"mode": "daylight", "test_surface_path": "east", "carve_fraction": carve_fraction}
+
+
+def tilted_plane_on_east(angle_deg):
+    """A criterion for ``ChainScene.chain_config``: a tilted plane of *angle_deg* from the east facade."""
+    return {"mode": "tilted_plane", "test_surface_path": "east", "tilted_plane_angle_deg": angle_deg}
+
+
+def chain_scene(tmp_path, turn_deg=0.0) -> ChainScene:
     """A 30 x 12 x 20 m box at the origin, a facade 8 m south of it and one 8 m east
-    of it, both 10 m high and facing the box (PLY files in *tmp_path*)."""
+    of it, both 10 m high and facing the box (PLY files in *tmp_path*). With *turn_deg*
+    the box is turned by that angle about the vertical axis, and the facades stand 8 m
+    from the bounds of the turned box."""
     volume = trimesh.creation.box(extents=(30.0, 12.0, 20.0))
     volume.apply_translation([0.0, 0.0, 10.0])
+    if turn_deg:
+        volume.apply_transform(trimesh.transformations.rotation_matrix(np.radians(turn_deg), [0, 0, 1]))
     lo, hi = volume.bounds
     y, x = lo[1] - 8.0, hi[0] + 8.0
     south = trimesh.Trimesh([[lo[0], y, 0], [hi[0], y, 0], [hi[0], y, 10], [lo[0], y, 10]],

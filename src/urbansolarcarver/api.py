@@ -1,4 +1,4 @@
-"""Public API: the pipeline stages, the ``run_pipeline`` sequencer, and config helpers.
+"""Public API: the pipeline stages, the ``run_pipeline`` and ``run_chain`` sequencers, and config helpers.
 
 Importing this module imports torch, and Warp if it is installed, through
 ``api_core``.
@@ -14,6 +14,7 @@ from .api_core import (
     preprocessing, thresholding, exporting, massing,
     PreprocessingResult, ThresholdingResult, ExportingResult, MassingResult,
 )
+from .api_core.chain import ChainResult, run_chain
 from .run_context import Issue, RunContext, report_progress, run_context, stage_context
 from .stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 
@@ -133,6 +134,8 @@ def run_pipeline(
 __all__ = [
     "run_pipeline",
     "PipelineResult",
+    "run_chain",
+    "ChainResult",
     "stages_to_rerun",
     "preprocessing",
     "thresholding",
