@@ -509,10 +509,13 @@ def test_files_outside_the_run_folder_are_404(client_after_fake_run):
 def test_stage_status_summary_and_sky_dome_routes(projects_folder):
     client = build_client(projects_folder)[0]
     create_project_with_inputs(client, "p", "tilted_plane")
-    assert client.get("/api/projects/p/stage-status").json() == {"stages": {stage: "missing" for stage in PIPELINE_STAGES}}
+    assert client.get("/api/projects/p/stage-status").json() == {
+        "stages": {stage: "missing" for stage in PIPELINE_STAGES}, "criteria": {"1": {"preprocessing": "missing", "thresholding": "missing"}}}
     events = read_events(client, start_run(client)["run_id"])
     assert events[-1]["type"] == "run_finished"
-    assert client.get("/api/projects/p/stage-status").json() == {"stages": {stage: "current" for stage in PIPELINE_STAGES}}
+    assert client.get("/api/projects/p/stage-status").json() == {
+        "stages": {stage: "current" for stage in PIPELINE_STAGES}, "criteria": {"1": {"preprocessing": "current", "thresholding": "current"}}}
+    assert client.get("/api/projects/p").json()["stage_status"]["criteria"] == {"1": {"preprocessing": "current", "thresholding": "current"}}
     summary = client.get("/api/projects/p/run/summary")
     assert summary.status_code == 200 and "carving" in summary.json() and "massing" in summary.json()
     assert client.get("/api/projects/p/run/sky-patches").status_code == 404

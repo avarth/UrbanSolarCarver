@@ -1,7 +1,8 @@
 """Fakes and helpers that several tests of the local web service share (tests/test_local_web_*.py).
 
 The engine is replaced by a fake that writes a manifest with a new run_id (and the current upstream run_id) for each stage it
-runs, as the real stages do; the run folders of finished runs are written without computing anything. The fixture
+runs, as the real stages do, in the chain layout of run_chain (run/criteria/<id>/<stage>, then run/exporting and run/massing).
+The run folders of finished runs are written without computing anything. The fixture
 ``project_with_inputs`` is in conftest.py and builds its project with ``add_project_with_inputs``.
 """
 import json
@@ -14,6 +15,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Collection
 
 import numpy as np
 import pytest
@@ -21,10 +23,11 @@ import trimesh
 import yaml
 
 from urbansolarcarver.io import load_mesh, save_mesh
+from urbansolarcarver.local_web_service import test_surfaces
+from urbansolarcarver.local_web_service.api_models import StageRecord
 from urbansolarcarver.local_web_service.example_catalog import read_examples
 from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunWorker
-from urbansolarcarver.local_web_service.stage_records import UPSTREAM_STAGE
 from urbansolarcarver.mode_registry import MODES
 from urbansolarcarver.pydantic_schemas import ExportingManifest, MassingManifest, PreprocessingManifest, ThresholdSpec, ThresholdingManifest, schema_to_json
 from urbansolarcarver.run_context import report_issue, report_progress, run_context, stage_context
@@ -132,29 +135,62 @@ def has_vertex_normals(ply_path: Path) -> bool:
 
 # ---- The fake engine and the run worker ----
 
-def _mode_of_the_project(run_folder: Path) -> str:
-    """The mode of the first criterion in the config.yaml of the project whose run folder this is; daylight, the test projects' mode, without one."""
+def criteria_in_config(run_folder: Path) -> list[tuple[str, str]]:
+    """The id and mode of each criterion that the config.yaml of the project whose run folder this is lists (the ones that are
+    on), in order; one criterion "1" of daylight, the test projects' mode, for a config.yaml without criteria."""
     config_path = run_folder.parent / "config.yaml"
     stored = (yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None) or {}
-    first_criterion = (stored.get("criteria") or [{}])[0]
-    return first_criterion.get("mode", stored.get("mode", "daylight"))
+    if not stored.get("criteria"):
+        return [("1", stored.get("mode", "daylight"))]
+    return [(str(criterion["id"]), criterion.get("mode", "daylight")) for criterion in stored["criteria"]]
 
 
-def write_fake_stage_output(run_folder: Path, stage: str) -> None:
-    """What a finished stage leaves: a manifest with a new run_id and, for a stage that reads one, the upstream run_id."""
+def run_id_in(manifest_folder: Path) -> str:
+    """The run_id of the manifest in a stage folder."""
+    return json.loads((manifest_folder / "manifest.json").read_text(encoding="utf-8"))["run_id"]
+
+
+def write_fake_stage_output(run_folder: Path, stage: str, criteria: list[tuple[str, str]] | None = None,
+                            criterion_ids: Collection[str] | None = None) -> None:
+    """What a finished stage leaves in the chain layout of run_chain: a manifest with a new run_id and the run_ids it read.
+
+    *criteria* is the chain as (id, mode) pairs (default: config.yaml's). Preprocessing and thresholding write the folder of each
+    criterion in *criterion_ids* (default: every one); a thresholding names its criterion's preprocessing as upstream and the
+    previous criterion's thresholding as after (none for the first), and thresholding writes criteria/chain.json. Exporting and
+    massing name the last criterion's thresholding as upstream.
+    """
+    criteria = criteria_in_config(run_folder) if criteria is None else criteria
+    if stage in ("preprocessing", "thresholding"):
+        previous_thresholding = None
+        for criterion_id, mode in criteria:
+            folder = run_folder / "criteria" / criterion_id / stage
+            if criterion_ids is None or criterion_id in criterion_ids:
+                manifest = {"run_id": uuid.uuid4().hex}
+                if stage == "preprocessing":
+                    # As the engine records them; stage status reads grid_step only to tell a manifest from before it was
+                    # recorded, and score_unit to tell scores of another unit than the criterion's mode now writes.
+                    manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0, grid_step=0.5, score_unit=MODES[mode].score_unit)
+                else:
+                    manifest.update(upstream_manifest="../preprocessing/manifest.json", upstream_run_id=run_id_in(folder.parent / "preprocessing"))
+                    if previous_thresholding is not None:
+                        manifest.update(after_manifest=f"../../{previous_thresholding.parent.name}/thresholding/manifest.json",
+                                        after_run_id=run_id_in(previous_thresholding))
+                folder.mkdir(parents=True, exist_ok=True)
+                (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+            previous_thresholding = run_folder / "criteria" / criterion_id / "thresholding"
+        if stage == "thresholding":
+            listed = [{"id": criterion_id, "name": criterion_id, "mode": mode,
+                       "thresholding_run_id": run_id_in(run_folder / "criteria" / criterion_id / "thresholding")}
+                      for criterion_id, mode in criteria]
+            (run_folder / "criteria" / "chain.json").write_text(json.dumps({"criteria": listed}), encoding="utf-8")
+        return
+    last_id = criteria[-1][0]
     folder = run_folder / stage
     folder.mkdir(parents=True, exist_ok=True)
-    manifest = {"run_id": uuid.uuid4().hex}
-    if stage == "preprocessing":
-        # As the engine records them; stage status reads grid_step only to tell a manifest from before it was recorded, and
-        # score_unit to tell scores of another unit than the project's mode now writes.
-        manifest.update(max_volume_lowest_z=0.0, max_volume_highest_z=10.0, grid_step=0.5,
-                        score_unit=MODES[_mode_of_the_project(run_folder)].score_unit)
+    manifest = {"run_id": uuid.uuid4().hex, "upstream_run_id": run_id_in(run_folder / "criteria" / last_id / "thresholding"),
+                "upstream_manifest": f"../criteria/{last_id}/thresholding/manifest.json"}
     if stage == "massing":      # the fake writes its plates as OBJ whatever the format chosen
-        manifest.update(plates_path="plates.json", mesh_path="plates.obj", export_mesh_path="plates.obj",
-                        upstream_manifest="../thresholding/manifest.json")
-    if stage in UPSTREAM_STAGE:
-        manifest["upstream_run_id"] = json.loads((run_folder / UPSTREAM_STAGE[stage] / "manifest.json").read_text())["run_id"]
+        manifest.update(plates_path="plates.json", mesh_path="plates.obj", export_mesh_path="plates.obj")
     (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     if stage == "exporting":
         (folder / "export.ply").write_bytes(b"ply")
@@ -164,6 +200,33 @@ def write_fake_stage_output(run_folder: Path, stage: str) -> None:
         (run_folder / "run_report.md").write_text("report", encoding="utf-8")
 
 
+def write_fake_chain_run(store: ProjectStore, name: str, criterion_ids: list[str]) -> None:
+    """A finished run of every stage of the chain *criterion_ids* (in order) and the records a run leaves: every stage is current.
+
+    The manifests are those of write_fake_stage_output. Each criterion's records hold its settings, the inputs revision and the
+    fingerprint of its test surfaces; exporting's and massing's hold the settings of the last criterion.
+    """
+    project_folder = store.open(name)
+    run_folder = project_folder / "run"
+    modes = {entry.id: entry.settings.get("mode", "daylight") for entry in store.criteria(name)}
+    criteria = [(criterion_id, modes[criterion_id]) for criterion_id in criterion_ids]
+    for stage in PIPELINE_STAGES:
+        write_fake_stage_output(run_folder, stage, criteria)
+    settings = {criterion_id: store.read_stored_config(name, criterion_id) for criterion_id in criterion_ids}
+    with store.project_lock(name):
+        project_json = store.read_project_json(name)
+        for criterion_id in criterion_ids:
+            project_json.criterion_records[criterion_id] = {stage: StageRecord(
+                config=settings[criterion_id], inputs_revision=project_json.inputs_revision,
+                manifest_run_id=run_id_in(run_folder / "criteria" / criterion_id / stage),
+                test_surfaces_fingerprint=test_surfaces.fingerprint(project_folder, criterion_id))
+                for stage in ("preprocessing", "thresholding")}
+        for stage in ("exporting", "massing"):
+            project_json.stage_records[stage] = StageRecord(
+                config=settings[criterion_ids[-1]], inputs_revision=project_json.inputs_revision, manifest_run_id=run_id_in(run_folder / stage))
+        store.write_project_json(name, project_json)
+
+
 def write_envelope_as_exported(project_folder: Path, extents=(8, 8, 6)) -> trimesh.Trimesh:
     """Put a real envelope mesh where the fake exporting stage left its placeholder, named by the manifest as the engine does."""
     exporting_folder = project_folder / "run" / "exporting"
@@ -171,8 +234,7 @@ def write_envelope_as_exported(project_folder: Path, extents=(8, 8, 6)) -> trime
     envelope.apply_translation([0, 0, extents[2] / 2])
     envelope.export(exporting_folder / "export.ply")
     manifest = json.loads((exporting_folder / "manifest.json").read_text(encoding="utf-8"))
-    # as the engine writes them; the run_id stays, so the stage stays current
-    manifest.update(mesh_path="export.ply", upstream_manifest="../thresholding/manifest.json")
+    manifest.update(mesh_path="export.ply")     # as the engine writes it; the run_id stays, so the stage stays current
     (exporting_folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     return envelope
 
@@ -182,14 +244,28 @@ def stages_the_engine_runs(request) -> list[str]:
     return path[path.index(request.start_from):]
 
 
+def criteria_the_engine_runs(request, stage: str, criterion_ids: list[str]) -> list[str]:
+    """The criteria whose *stage* folder run_chain writes for *request*: preprocessing traces the criteria in trace_criteria (every
+    one without it), and thresholding starts at the first traced one, or at the first criterion when preprocessing does not run."""
+    traces = request.start_from == "preprocessing"
+    traced = [criterion_id for criterion_id in criterion_ids
+              if not traces or request.trace_criteria is None or criterion_id in request.trace_criteria]
+    if stage == "preprocessing":
+        return traced
+    return criterion_ids[criterion_ids.index(traced[0]):] if traces and traced else list(criterion_ids)
+
+
 class FakeEngine:
-    """Stands in for ``handle_engine_request``; keeps the requests it received."""
+    """Stands in for ``handle_engine_request``; keeps the requests it received. It writes the chain layout as run_chain does."""
 
     def __init__(self):
         self.requests = []
 
     def __call__(self, request, session, context):
         self.requests.append(request)
+        run_folder = Path(request.run_folder)
+        criteria = criteria_in_config(run_folder)
+        criterion_ids = [criterion_id for criterion_id, _mode in criteria]
         with run_context(context):
             for stage in stages_the_engine_runs(request):
                 with stage_context(stage):
@@ -197,7 +273,7 @@ class FakeEngine:
                     context.raise_if_cancelled()
                     if stage == "preprocessing":
                         report_issue("fake_issue", "preprocessing noticed something")
-                    write_fake_stage_output(Path(request.run_folder), stage)
+                    write_fake_stage_output(run_folder, stage, criteria, criteria_the_engine_runs(request, stage, criterion_ids))
                     report_progress(1, 1)
 
 

@@ -49,7 +49,8 @@ class ProjectJson(BaseModel):
     created: str                # ISO 8601, UTC
     inputs_revision: int = 1    # raised by every upload and removal of an input file
     input_files: dict[str, dict[str, int]] = Field(default_factory=dict)  # role -> file name -> triangle count
-    stage_records: dict[str, StageRecord] = Field(default_factory=dict)   # stage name -> record
+    # "exporting" / "massing" -> record, run with the settings of the last criterion that is on (the criteria's own: criterion_records)
+    stage_records: dict[str, StageRecord] = Field(default_factory=dict)
     example: str | None = None  # the example the project was made from (examples.json name); None for other projects and older ones
     carving_chain: list["CarvingChainStep"] = Field(default_factory=list)  # each "carve further", oldest first
     criteria: list[CriterionEntry] = Field(default_factory=list)   # the chain, in carving order
@@ -63,7 +64,9 @@ StageState = Literal["current", "out_of_date", "missing"]
 
 class StageStatusReply(BaseModel):
     """Whether each pipeline stage of a project has output that matches the settings and inputs now."""
-    stages: dict[str, StageState]   # stage name -> state, in pipeline order
+    stages: dict[str, StageState]   # stage name -> state, in pipeline order; preprocessing and thresholding sum up the criteria
+    # criterion id -> "preprocessing" / "thresholding" -> state, for every criterion that is on, in chain order
+    criteria: dict[str, dict[str, StageState]] = Field(default_factory=dict)
 
 
 class StartRunReply(BaseModel):

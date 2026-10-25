@@ -19,7 +19,7 @@ from ..run_context import RunContext
 from ..stage_settings import PIPELINE_STAGES
 from .api_models import StartRunReply
 from .projects import RUN_FOLDER, ProjectError, ProjectStore
-from .stage_records import choose_stages, forget_stages, missing_inputs, record_stages
+from .stage_records import RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_stages, run_settings
 
 _log = logging.getLogger(__name__)
 
@@ -146,22 +146,21 @@ class RunWorker:
             choice = choose_stages(self._store, name, produce)
             if not choice.stages:
                 return StartRunReply(status="up_to_date", run_id=None, stages=[])
-            settings = self._store.read_stored_config(name)
-            inputs_revision = self._store.read_project_json(name).inputs_revision
+            settings = run_settings(self._store, name)
             # Removed before the engine starts: a run that stops without finishing (a crash, a closed service)
             # leaves these stages missing, so the next run completes them.
-            forget_stages(self._store, name, choice.stages)
+            forget_stages(self._store, name, choice.stages, choice.criterion_stages)
             state = RunState(uuid.uuid4().hex, name, choice.stages)
             context = RunContext()
             thread = threading.Thread(
-                target=self._run, args=(state, context, choice.produce_for_engine, settings, inputs_revision),
+                target=self._run, args=(state, context, choice, settings),
                 name=f"run-{state.run_id}", daemon=True)
             self._run_states[state.run_id] = state
             self._active = _ActiveRun(state, context, thread)
             thread.start()
             return StartRunReply(status="started", run_id=state.run_id, stages=choice.stages)
 
-    def _run(self, state: RunState, context: RunContext, produce_for_engine: list[str], settings: dict, inputs_revision: int) -> None:
+    def _run(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> None:
         """The thread body: run the engine, record the stages on success, and end the event log with one final event.
 
         Whatever goes wrong while finishing, the worker is released and the readers get a final event: a run that
@@ -171,7 +170,7 @@ class RunWorker:
         context.on_progress = issues_forwarder.forward_progress
         final_event = None
         try:
-            final_event = self._final_event_of_run(state, context, produce_for_engine, settings, inputs_revision)
+            final_event = self._final_event_of_run(state, context, choice, settings)
             issues_forwarder.forward_new_issues()
         except Exception as error:
             _log.exception("Finishing a run of project '%s' failed", state.project)
@@ -182,12 +181,11 @@ class RunWorker:
             self._active = None     # before the final event: a reader that sees the run end can start the next one
             state.finish(final_event or _run_failed_event("RunAborted", "The run stopped unexpectedly."))
 
-    def _final_event_of_run(self, state: RunState, context: RunContext, produce_for_engine: list[str],
-                            settings: dict, inputs_revision: int) -> dict:
+    def _final_event_of_run(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> dict:
         """Run the engine and give the event that ends the run, whether it finished, was cancelled or failed."""
         try:
-            self._call_engine(state, context, produce_for_engine)
-            record_stages(self._store, state.project, state.stages, settings, inputs_revision)
+            self._call_engine(state, context, choice)
+            record_stages(self._store, state.project, choice, settings)
             return {"type": "run_finished", "stages": state.stages,
                     "files": _result_files(self._store.open(state.project) / RUN_FOLDER)}
         except RunCancelled:
@@ -212,14 +210,15 @@ class RunWorker:
         except Exception:
             _log.exception("Releasing the compute memory after a run failed")
 
-    def _call_engine(self, state: RunState, context: RunContext, produce_for_engine: list[str]) -> None:
+    def _call_engine(self, state: RunState, context: RunContext, choice: StageChoice) -> None:
         from ..engine_requests import RunRequest
 
         if self._session is None:
             self._session = self._create_session()
         request = RunRequest(
-            cmd="run", produce=produce_for_engine, run_folder=str(self._store.open(state.project) / RUN_FOLDER),
-            start_from=state.stages[0], config=str(self._store.open(state.project) / "config.yaml"),
+            cmd="run", produce=choice.produce_for_engine, run_folder=str(self._store.open(state.project) / RUN_FOLDER),
+            start_from=choice.start_from, config=str(self._store.open(state.project) / "config.yaml"),
+            trace_criteria=choice.trace_criteria or None,       # traced again; the others keep their preprocessing
             overrides={"device": self._device})     # the device of this service, not the one stored at the last save
         self._handler()(request, self._session, context)
 

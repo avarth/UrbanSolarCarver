@@ -260,10 +260,10 @@ def test_a_failure_while_finishing_still_ends_the_run_and_frees_the_worker(proje
 
     forget_all_stages = run_worker_module.forget_stages
 
-    def forget_stages_failing_for_the_whole_pipeline(store_, name_, stages):
+    def forget_stages_failing_for_the_whole_pipeline(store_, name_, stages, *criterion_stages):
         if len(stages) == len(PIPELINE_STAGES):
             raise OSError("disk error")
-        forget_all_stages(store_, name_, stages)
+        forget_all_stages(store_, name_, stages, *criterion_stages)
 
     monkeypatch.setattr(run_worker_module, "forget_stages", forget_stages_failing_for_the_whole_pipeline)
     worker = make_worker(store, handle_request=engine_with_broken_chain)

@@ -526,7 +526,7 @@ def test_the_perimeter_block_carved_through_the_service_equals_the_cli_run_on_th
     result = CliRunner().invoke(app, ["run", "-c", str(cli_config_path), "--produce", "thresholding"], env={"COLUMNS": "200"})
     assert result.exit_code == 0, result.output
 
-    service_mask = np.load(store.open("block") / "run" / "thresholding" / "mask.npy")
+    service_mask = np.load(store.open("block") / "run" / "criteria" / "1" / "thresholding" / "mask.npy")
     cli_mask = np.load(tmp_path / "cli_run" / "thresholding" / "mask.npy")
     # The kept voxels of the packaged perimeter block with its example settings. After a deliberate change of the example
     # files, its settings or the carving, rerun `usc run` on the example (as above) and take the new count from mask.npy.

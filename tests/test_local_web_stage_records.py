@@ -3,17 +3,20 @@
 The engine is replaced by the fake of local_web_test_support.py, which writes a manifest with a new run_id (and the current
 upstream run_id) for each stage it runs, as the real stages do. The fixture project_with_inputs is in conftest.py.
 """
+import dataclasses
 import json
 
 import pytest
 
 from local_web_test_support import (
-    ALL_CURRENT, ALL_MISSING, GOLDEN_EPW, box_bytes, change_settings, make_worker, run_and_wait, write_fake_stage_output,
+    ALL_CURRENT, ALL_MISSING, GOLDEN_EPW, FakeEngine, box_bytes, change_settings, make_worker, run_and_wait, run_id_in,
+    write_fake_chain_run, write_fake_stage_output,
 )
 from urbansolarcarver.stage_settings import PIPELINE_STAGES
+from urbansolarcarver.local_web_service import test_surfaces
 from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.stage_records import (
-    choose_stages, envelope_voxel_size, forget_stages, missing_inputs, record_stages, stage_status,
+    choose_stages, criterion_status, envelope_voxel_size, forget_stages, missing_inputs, record_stages, run_settings, stage_status,
 )
 
 @pytest.fixture
@@ -55,7 +58,8 @@ def test_threshold_change_after_a_build_marks_envelope_and_massing_out_of_date(b
 def _record_runs_with_grid_step(store, name, grid_step):
     """Rewrites every stage record as if the runs had used config.yaml with *grid_step* set (an earlier version stored one)."""
     project_json = store.read_project_json(name)
-    for record in project_json.stage_records.values():
+    criterion_records = [record for records in project_json.criterion_records.values() for record in records.values()]
+    for record in [*project_json.stage_records.values(), *criterion_records]:
         record.config["grid_step"] = grid_step
     store.write_project_json(name, project_json)
 
@@ -94,7 +98,7 @@ def test_massing_alone_runs_while_the_envelope_is_out_of_date_and_the_envelope_k
 
 def write_voxel_size_into_preprocessing_manifest(store, name, voxel_size):
     """The fake engine writes no voxel size; the real preprocessing manifest has the one it ran with."""
-    manifest_path = store.open(name) / "run" / "preprocessing" / "manifest.json"
+    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
     manifest_path.write_text(json.dumps({**json.loads(manifest_path.read_text()), "voxel_size": voxel_size}), encoding="utf-8")
 
 
@@ -133,7 +137,7 @@ def test_a_broken_manifest_chain_gives_no_envelope_voxel_size(built_project):
     store, name, _worker = built_project
     write_voxel_size_into_preprocessing_manifest(store, name, 0.5)
     forget_stages(store, name, ["exporting"])
-    manifest_path = store.open(name) / "run" / "thresholding" / "manifest.json"
+    manifest_path = store.open(name) / "run" / "criteria" / "1" / "thresholding" / "manifest.json"
     manifest_path.write_text(json.dumps({**json.loads(manifest_path.read_text()), "upstream_run_id": "another"}), encoding="utf-8")
     assert envelope_voxel_size(store, name) is None
 
@@ -211,7 +215,7 @@ def test_a_new_project_has_every_stage_missing_and_nothing_to_skip(project_with_
 
 def test_a_stage_without_its_manifest_is_missing_and_its_dependants_out_of_date(built_project):
     store, name, _worker = built_project
-    (store.open(name) / "run" / "thresholding" / "manifest.json").unlink()
+    (store.open(name) / "run" / "criteria" / "1" / "thresholding" / "manifest.json").unlink()
     assert stage_status(store, name) == {
         "preprocessing": "current", "thresholding": "missing", "exporting": "out_of_date", "massing": "out_of_date"}
 
@@ -234,7 +238,7 @@ def test_a_stage_whose_manifest_is_not_json_is_missing(built_project):
 def test_a_preprocessing_run_from_before_the_manifest_recorded_the_max_volume_heights_is_out_of_date(built_project, field_name):
     """Massing of such a run starts and ends the floors at the voxel layers, up to a voxel outside the max volume."""
     store, name, _worker = built_project
-    manifest_path = store.open(name) / "run" / "preprocessing" / "manifest.json"
+    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     del manifest[field_name]
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -247,7 +251,7 @@ def _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(sto
 
     It keeps the score unit of today, so that only the sample spacing is compared (a manifest really that old also lacks
     score_unit, which makes a weighted run out of date on its own: see the score unit tests below)."""
-    manifest_path = store.open(name) / "run" / "preprocessing" / "manifest.json"
+    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
     run_id = json.loads(manifest_path.read_text(encoding="utf-8"))["run_id"]
     old_manifest = {"run_id": run_id, "scores_path": "scores.npy", "scores_kind": "weighted_sum", "shape": [12, 12, 12],
                     "origin": [-6.0, -6.0, -1.0], "voxel_size": 1.0, "mode": "daylight", "voxel_grid_path": "voxel_grid.npy",
@@ -269,7 +273,7 @@ def test_a_run_from_before_the_manifest_recorded_the_sample_spacing_used_the_old
     """Without grid_step in its config, such a run sampled every 1 m; the next run samples at half the 1 m voxel size, so the
     analysis and everything built on it are out of date once, and the run after brings them back."""
     store, name, worker = _built_at_voxel_size(project_with_inputs, 1.0)
-    assert "grid_step" not in store.read_project_json(name).stage_records["preprocessing"].config
+    assert "grid_step" not in store.read_project_json(name).criterion_records["1"]["preprocessing"].config
     _write_preprocessing_manifest_from_before_it_recorded_the_sample_spacing(store, name)
     assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
     assert choose_stages(store, name, ["thresholding"]).stages == ["preprocessing", "thresholding"]
@@ -297,20 +301,24 @@ def test_a_run_from_before_the_manifest_recorded_the_sample_spacing_with_a_store
 def test_forgetting_stages_removes_only_their_records(built_project):
     store, name, _worker = built_project
     forget_stages(store, name, ["exporting", "massing"])
-    assert sorted(store.read_project_json(name).stage_records) == ["preprocessing", "thresholding"]
+    project_json = store.read_project_json(name)
+    assert project_json.stage_records == {} and sorted(project_json.criterion_records["1"]) == ["preprocessing", "thresholding"]
     assert stage_status(store, name) == {
         "preprocessing": "current", "thresholding": "current", "exporting": "missing", "massing": "missing"}
 
 
-def test_recording_stages_stores_settings_revision_and_the_manifest_run_id(project_with_inputs):
+def test_recording_stages_stores_settings_revision_test_surfaces_and_the_manifest_run_id(project_with_inputs):
     store, name = project_with_inputs
     run_folder = store.open(name) / "run"
+    choice = choose_stages(store, name, ["preprocessing"])
+    settings = dataclasses.replace(run_settings(store, name), inputs_revision=7)    # what the run started with is recorded
     write_fake_stage_output(run_folder, "preprocessing")
-    settings = store.read_stored_config(name)
-    record_stages(store, name, ["preprocessing"], settings, inputs_revision=7)
-    record = store.read_project_json(name).stage_records["preprocessing"]
-    assert record.config == settings and record.inputs_revision == 7
-    assert record.manifest_run_id == json.loads((run_folder / "preprocessing" / "manifest.json").read_text())["run_id"]
+    record_stages(store, name, choice, settings)
+    record = store.read_project_json(name).criterion_records["1"]["preprocessing"]
+    assert record.config == store.read_stored_config(name, "1") and record.inputs_revision == 7
+    assert record.test_surfaces_fingerprint == test_surfaces.fingerprint(store.open(name), "1") is not None
+    assert record.manifest_run_id == run_id_in(run_folder / "criteria" / "1" / "preprocessing")
+    assert store.read_project_json(name).stage_records == {}
 
 
 def test_the_status_ignores_a_change_of_device(built_project, tmp_path):
@@ -319,6 +327,165 @@ def test_the_status_ignores_a_change_of_device(built_project, tmp_path):
     change_settings(other_device_store, name)
     assert store.read_stored_config(name)["device"] == "cpu"
     assert stage_status(store, name) == ALL_CURRENT
+
+
+# ---- Criteria: each criterion's analysis and carving, and the chain they make ----
+
+CURRENT = {"preprocessing": "current", "thresholding": "current"}
+THRESHOLDING_OUT_OF_DATE = {"preprocessing": "current", "thresholding": "out_of_date"}
+ANALYSIS_OUT_OF_DATE = {"preprocessing": "out_of_date", "thresholding": "out_of_date"}
+
+
+@pytest.fixture
+def chain_of_three(project_with_inputs):
+    """The project with criteria "1", "2" and "3", each protecting its own file, after a run of every stage: the store and the name."""
+    store, name = project_with_inputs
+    for number in (2, 3):
+        entry = store.add_criterion(name, "daylight")
+        store.add_criterion_test_surface(name, entry.id, f"surface_{number}.ply", box_bytes([number, 0, 0], extents=(6, 6, 0.1)))
+    write_fake_chain_run(store, name, ["1", "2", "3"])
+    assert criterion_status(store, name) == {"1": CURRENT, "2": CURRENT, "3": CURRENT}
+    assert stage_status(store, name) == ALL_CURRENT
+    return store, name
+
+
+def change_shared_setting(store, name, **changes):
+    store.write_config_from_values(name, {**store.read_settings(name, "1"), **changes}, criterion_id="1")
+
+
+def test_changing_a_criterions_settings_dates_it_and_the_ones_after(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "2", values={"rays_per_patch": 9})     # a setting of its analysis
+    assert criterion_status(store, name) == {"1": CURRENT, "2": ANALYSIS_OUT_OF_DATE, "3": THRESHOLDING_OUT_OF_DATE}
+    assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
+
+
+def test_changing_a_criterions_carving_rule_dates_its_carving_and_the_ones_after(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "2", values={"carve_fraction": 0.3})
+    assert criterion_status(store, name) == {"1": CURRENT, "2": THRESHOLDING_OUT_OF_DATE, "3": THRESHOLDING_OUT_OF_DATE}
+
+
+def test_reordering_dates_thresholding_from_the_first_moved_position(chain_of_three):
+    store, name = chain_of_three
+    store.reorder_criteria(name, ["1", "3", "2"])
+    status = criterion_status(store, name)
+    assert list(status) == ["1", "3", "2"]
+    assert status == {"1": CURRENT, "3": THRESHOLDING_OUT_OF_DATE, "2": THRESHOLDING_OUT_OF_DATE}
+
+
+def test_bypassing_a_criterion_dates_the_thresholding_after_it(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "2", bypassed=True)
+    assert criterion_status(store, name) == {"1": CURRENT, "3": THRESHOLDING_OUT_OF_DATE}
+    store.update_criterion(name, "2", bypassed=False)    # back where it was: the chain on disk is the chain again
+    assert criterion_status(store, name) == {"1": CURRENT, "2": CURRENT, "3": CURRENT}
+
+
+def test_deleting_the_last_criterion_makes_the_new_last_feed_the_envelope(chain_of_three):
+    store, name = chain_of_three
+    store.delete_criterion(name, "3")
+    assert criterion_status(store, name) == {"1": CURRENT, "2": CURRENT}
+    assert stage_status(store, name) == {**ALL_CURRENT, "exporting": "out_of_date", "massing": "out_of_date"}
+    choice = choose_stages(store, name, ["exporting", "massing"])
+    assert (choice.stages, choice.start_from, choice.trace_criteria) == (["exporting", "massing"], "exporting", [])
+
+
+def test_a_test_surface_change_dates_only_the_criteria_using_it(chain_of_three):
+    store, name = chain_of_three
+    revision = store.read_project_json(name).inputs_revision
+    # another file under the stored name of criterion 2's file: it replaces it
+    store.add_criterion_test_surface(name, "2", "surface_2.ply", box_bytes([2, 1, 0], extents=(4, 4, 0.1)))
+    assert store.read_project_json(name).inputs_revision == revision
+    assert criterion_status(store, name) == {"1": CURRENT, "2": ANALYSIS_OUT_OF_DATE, "3": THRESHOLDING_OUT_OF_DATE}
+
+
+def test_a_shared_setting_dates_everything(chain_of_three):
+    store, name = chain_of_three
+    change_shared_setting(store, name, voxel_size=2.0)
+    assert criterion_status(store, name) == {"1": ANALYSIS_OUT_OF_DATE, "2": ANALYSIS_OUT_OF_DATE, "3": ANALYSIS_OUT_OF_DATE}
+    assert stage_status(store, name) == {stage: "out_of_date" for stage in PIPELINE_STAGES}
+
+
+def test_a_new_maximum_volume_dates_everything(chain_of_three):
+    store, name = chain_of_three
+    store.add_input(name, "max_volume", "second.ply", box_bytes([30, 0, 5]))
+    assert criterion_status(store, name) == {"1": ANALYSIS_OUT_OF_DATE, "2": ANALYSIS_OUT_OF_DATE, "3": ANALYSIS_OUT_OF_DATE}
+
+
+def test_the_flat_status_aggregates_the_criteria(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "3", values={"carve_fraction": 0.3})
+    assert stage_status(store, name) == {
+        "preprocessing": "current", "thresholding": "out_of_date", "exporting": "out_of_date", "massing": "out_of_date"}
+    (store.open(name) / "run" / "criteria" / "2" / "preprocessing" / "manifest.json").unlink()
+    assert criterion_status(store, name) == {
+        "1": CURRENT, "2": {"preprocessing": "missing", "thresholding": "out_of_date"}, "3": THRESHOLDING_OUT_OF_DATE}
+    assert stage_status(store, name) == {
+        "preprocessing": "missing", "thresholding": "out_of_date", "exporting": "out_of_date", "massing": "out_of_date"}
+
+
+def test_with_no_criterion_on_there_is_no_criterion_status_and_the_analysis_is_missing(chain_of_three):
+    store, name = chain_of_three
+    for criterion_id in ("1", "2", "3"):
+        store.update_criterion(name, criterion_id, bypassed=True)
+    assert criterion_status(store, name) == {}
+    assert stage_status(store, name) == {
+        "preprocessing": "missing", "thresholding": "missing", "exporting": "out_of_date", "massing": "out_of_date"}
+
+
+def test_choose_stages_traces_only_the_changed_criteria(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "2", values={"rays_per_patch": 9})
+    choice = choose_stages(store, name, ["exporting", "massing"])
+    assert (choice.stages, choice.start_from, choice.trace_criteria) == (list(PIPELINE_STAGES), "preprocessing", ["2"])
+    assert choice.criterion_stages == {"1": [], "2": ["preprocessing", "thresholding"], "3": ["thresholding"]}
+    assert choice.produce_for_engine == ["exporting", "massing"]
+
+
+def test_choose_stages_rethresholds_the_chain_when_only_a_carving_rule_changed(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "3", values={"carve_fraction": 0.3})
+    choice = choose_stages(store, name, ["thresholding"])
+    assert (choice.stages, choice.start_from, choice.trace_criteria) == (["thresholding"], "thresholding", [])
+    assert choice.criterion_stages == {"1": ["thresholding"], "2": ["thresholding"], "3": ["thresholding"]}
+    assert choose_stages(store, name, ["preprocessing"]).stages == []
+
+
+def test_a_run_of_the_chosen_stages_brings_every_criterion_back(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "2", values={"rays_per_patch": 9})
+    engine = FakeEngine()
+    run_and_wait(make_worker(store, handle_request=engine), name, ["exporting", "massing"])
+    assert (engine.requests[0].start_from, engine.requests[0].trace_criteria) == ("preprocessing", ["2"])
+    assert criterion_status(store, name) == {"1": CURRENT, "2": CURRENT, "3": CURRENT}
+    assert stage_status(store, name) == ALL_CURRENT
+
+
+def test_recording_stages_keeps_each_criterions_settings_and_test_surfaces(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "3", values={"carve_fraction": 0.3})
+    choice = choose_stages(store, name, ["thresholding"])
+    settings = run_settings(store, name)
+    run_folder = store.open(name) / "run"
+    write_fake_stage_output(run_folder, "thresholding")     # as the engine rethresholds the chain
+    record_stages(store, name, choice, settings)
+    records = store.read_project_json(name).criterion_records
+    assert records["3"]["thresholding"].config == store.read_stored_config(name, "3")
+    assert records["3"]["thresholding"].config["carve_fraction"] == 0.3
+    assert records["2"]["thresholding"].test_surfaces_fingerprint == test_surfaces.fingerprint(store.open(name), "2")
+    assert records["2"]["thresholding"].manifest_run_id == run_id_in(run_folder / "criteria" / "2" / "thresholding")
+    assert criterion_status(store, name) == {"1": CURRENT, "2": CURRENT, "3": CURRENT}
+
+
+def test_forgetting_a_criterion_stage_removes_it_for_the_criteria_named(chain_of_three):
+    store, name = chain_of_three
+    forget_stages(store, name, ["thresholding"], {"2": ["thresholding"], "3": ["thresholding"]})
+    assert criterion_status(store, name) == {"1": CURRENT, "2": {"preprocessing": "current", "thresholding": "missing"},
+                                             "3": {"preprocessing": "current", "thresholding": "missing"}}
+    forget_stages(store, name, ["preprocessing"])        # no criteria named: every criterion
+    assert {criterion_id: sorted(records) for criterion_id, records in store.read_project_json(name).criterion_records.items()} == {
+        "1": ["thresholding"], "2": [], "3": []}
 
 
 # ---- Missing inputs ----
@@ -341,7 +508,7 @@ def test_missing_inputs_names_the_weather_file_for_a_mode_that_reads_one(tmp_pat
 
 def _rewrite_preprocessing_manifest(store, name, **changes):
     """Changes fields of the preprocessing manifest on disk; a value of None removes the field, as an earlier version wrote it."""
-    manifest_path = store.open(name) / "run" / "preprocessing" / "manifest.json"
+    manifest_path = store.open(name) / "run" / "criteria" / "1" / "preprocessing" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     for field, value in changes.items():
         if value is None:

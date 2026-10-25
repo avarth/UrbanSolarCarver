@@ -47,7 +47,7 @@ from .projects import (
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_score_points
-from .stage_records import envelope_voxel_size, stage_status
+from .stage_records import envelope_voxel_size, stage_status_reply
 
 API_PREFIX = "/api"
 TOKEN_HEADER = "X-USC-Token"
@@ -266,7 +266,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                 inputs={role: store.input_files(name, role) for role in (*MESH_ROLES, WEATHER_ROLE)},
                 joined_bounds=store.joined_bounds(name), weather_location=store.weather_location(name),
                 weather_latitude=store.weather_latitude(name),
-                stage_status=StageStatusReply(stages=stage_status(store, name)), grid_plan=store.stored_grid_plan(name),
+                stage_status=stage_status_reply(store, name), grid_plan=store.stored_grid_plan(name),
                 carving_chain=store.read_project_json(name).carving_chain)
 
     def run_folder_of(name: str) -> Path:
@@ -394,7 +394,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/projects/{name}/stage-status")
     def project_stage_status(name: str) -> StageStatusReply:
-        return StageStatusReply(stages=stage_status(folder_in_use.store, name))
+        return stage_status_reply(folder_in_use.store, name)
 
     @router.get("/projects/{name}/sun-path")
     def sun_path(name: str) -> SunPath:

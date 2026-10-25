@@ -1,14 +1,22 @@
 """Which stages of a project have output that matches its settings and inputs, and which stages a run has to execute.
 
-project.json keeps one record per completed stage: the settings it ran with, the inputs revision and the
-run_id of its manifest. A stage is ``current`` when its record still matches the project, ``out_of_date``
-when it completed but its settings, its inputs or the stage it read changed since, and ``missing`` when it
-never completed (or a run that was cut off removed its record). The engine compares settings only and does
-not know whether a stage ever ran, so this module is where the service decides that.
+project.json keeps one record per completed stage: the settings it ran with, the inputs revision and the run_id of its
+manifest. Preprocessing and thresholding run once per criterion, so each criterion has its own records of them
+(``criterion_records``), with the fingerprint of its joined test surfaces; exporting and massing are built once, from the
+last criterion that is on, and their records (``stage_records``) hold that criterion's settings. A stage is ``current``
+when its record still matches the project, ``out_of_date`` when it completed but its settings, its inputs or the stage it
+read changed since, and ``missing`` when it never completed (or a run that was cut off removed its record). The engine
+compares settings only and does not know whether a stage ever ran, so this module is where the service decides that.
+
+What goes out of date: the maximum volume, context, terrain, weather file or a shared setting change every criterion's
+settings or the inputs revision, so everything; a criterion's own settings or test surfaces (its fingerprint) date its
+preprocessing, and through it the thresholding of every criterion after it; a change of order, a bypass or a deletion
+gives a criterion another previous one than its thresholding was decided after, which dates it and every one after it.
 """
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,13 +25,15 @@ from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig, resolve_grid_step
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 from . import test_surfaces
-from .api_models import StageRecord, StageState
+from .api_models import ProjectJson, StageRecord, StageState, StageStatusReply
 from .projects import INPUTS_FOLDER, JOINED_FOLDER, REQUIRED_MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
 
 MANIFEST_FILE_NAME = "manifest.json"
-# The stage whose manifest each of these stages names as its upstream (the engine's chain).
-UPSTREAM_STAGE = {"thresholding": "preprocessing", "exporting": "thresholding", "massing": "thresholding"}
-ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every result is built on
+# The folder of the criteria's stage folders in a run folder: run/criteria/<id>/<stage>, the layout of the engine's run_chain
+# (api_core/chain.py, which this module does not import: it pulls in torch).
+CRITERIA_FOLDER = "criteria"
+ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every criterion runs, and every result is built on
+LEAF_STAGES = ("exporting", "massing")                  # built once, from the last criterion's thresholding
 # Preprocessing manifest fields that massing reads; a manifest without them is from before preprocessing recorded
 # them, and massing of that run would start and end its floors up to a voxel outside the maximum volume.
 MAX_VOLUME_HEIGHT_FIELDS = ("max_volume_lowest_z", "max_volume_highest_z")
@@ -41,57 +51,177 @@ SCORE_UNIT_FIELD = "score_unit"
 
 @dataclass(frozen=True)
 class StageChoice:
-    """The stages a run executes and the stages it asks the engine to produce."""
+    """The stages a run executes, the stages it asks the engine to produce, and where in the chain it starts."""
     stages: list[str]               # pipeline order; empty when everything asked for is current
     produce_for_engine: list[str]   # the chosen stages that were asked for
+    start_from: str | None          # the first of stages (the engine's start_from); None when nothing runs
+    trace_criteria: list[str]       # the criteria that are on whose preprocessing is not current, in chain order: traced again
+    # Every criterion that is on -> the stages the run executes for it, as run_chain runs them (empty when it runs none).
+    criterion_stages: dict[str, list[str]]
 
 
-def _read_manifest(run_folder: Path, stage: str) -> dict | None:
-    """The manifest of a stage as a dict; None when the stage has none or it cannot be read."""
+@dataclass(frozen=True)
+class RunSettings:
+    """What a run starts with, which the records of the stages it completes keep."""
+    inputs_revision: int
+    criteria: dict[str, dict]                       # criterion id -> its settings as one flat mapping (read_stored_config)
+    test_surfaces_fingerprints: dict[str, str | None]   # criterion id -> fingerprint of its joined test surface file
+    leaf_settings: dict                             # the settings of the last criterion that is on: exporting and massing run with them
+
+
+@dataclass(frozen=True)
+class _ProjectStatus:
+    criteria: dict[str, dict[str, StageState]]      # as criterion_status
+    stages: dict[str, StageState]                   # as stage_status
+
+
+def _read_manifest_file(manifest_path: Path) -> dict | None:
+    """A manifest as a dict; None when it is not there or cannot be read."""
     try:
-        manifest = json.loads((stage_folder(run_folder, stage) / MANIFEST_FILE_NAME).read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return manifest if isinstance(manifest, dict) else None
 
 
+def _read_manifest(run_folder: Path, stage: str) -> dict | None:
+    """The manifest of exporting or massing; None when the stage has none or it cannot be read."""
+    return _read_manifest_file(stage_folder(run_folder, stage) / MANIFEST_FILE_NAME)
+
+
+def _criterion_stage_folder(run_folder: Path, criterion_id: str, stage: str) -> Path:
+    return run_folder / CRITERIA_FOLDER / criterion_id / stage
+
+
+def _read_criterion_manifest(run_folder: Path, criterion_id: str, stage: str) -> dict | None:
+    """The manifest of a criterion's preprocessing or thresholding; None when it has none or it cannot be read."""
+    return _read_manifest_file(_criterion_stage_folder(run_folder, criterion_id, stage) / MANIFEST_FILE_NAME)
+
+
+def _active_criterion_ids(project_json: ProjectJson) -> list[str]:
+    """The ids of the criteria that are on, in chain order: the chain a run carves."""
+    return [criterion.id for criterion in project_json.criteria if not criterion.bypassed]
+
+
+def criterion_status(store: ProjectStore, name: str) -> dict[str, dict[str, StageState]]:
+    """The state of the preprocessing and the thresholding of every criterion that is on, in chain order; a bypassed criterion is
+    not listed, and with no criterion on the mapping is empty.
+
+    A criterion's preprocessing is current when its record and manifest exist, the inputs revision and the fingerprint of its
+    test surfaces are the recorded ones and its settings would not run it again. Its thresholding is current when its
+    preprocessing is current and is the run the thresholding read, its settings would not run it again, and it was decided after
+    the thresholding run of the previous criterion that is on (none for the first), which is current.
+    """
+    return _project_status(store, name).criteria
+
+
 def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
     """The state of every pipeline stage of a project, in pipeline order.
 
-    When the stored settings do not validate (a hand-edited config.yaml, or an engine update that validates a
-    setting differently), no stage can be current, so every completed stage is out_of_date; the project still
-    opens and the next save or run reports the field.
+    Preprocessing and thresholding sum up the criteria that are on (criterion_status): missing when one is missing (or no
+    criterion is on), else out_of_date when one is, else current. Exporting and massing read the thresholding of the last
+    criterion that is on. When the stored settings of a criterion do not validate (a hand-edited config.yaml, or an engine update
+    that validates a setting differently), none of its stages can be current, so every completed one is out_of_date; the
+    project still opens and the next save or run reports the field.
     """
+    return _project_status(store, name).stages
+
+
+def stage_status_reply(store: ProjectStore, name: str) -> StageStatusReply:
+    """stage_status and criterion_status in one reply."""
+    status = _project_status(store, name)
+    return StageStatusReply(stages=status.stages, criteria=status.criteria)
+
+
+def _project_status(store: ProjectStore, name: str) -> _ProjectStatus:
     project_json = store.read_project_json(name)
-    run_folder = store.open(name) / RUN_FOLDER
+    project_folder = store.open(name)
+    run_folder = project_folder / RUN_FOLDER
+    criteria: dict[str, dict[str, StageState]] = {}
+    last_config = None
+    previous_thresholding: tuple[StageState, StageRecord | None] | None = None   # of the previous criterion that is on
+    for criterion_id in _active_criterion_ids(project_json):
+        last_config = _criterion_config(store, name, criterion_id)
+        records = project_json.criterion_records.get(criterion_id, {})
+        preprocessing = _preprocessing_state(
+            store, name, project_json, records.get("preprocessing"), _read_criterion_manifest(run_folder, criterion_id, "preprocessing"),
+            last_config, test_surfaces.fingerprint(project_folder, criterion_id))
+        thresholding = _thresholding_state(
+            store, name, project_json, records.get("thresholding"), _read_criterion_manifest(run_folder, criterion_id, "thresholding"),
+            last_config, (preprocessing, records.get("preprocessing")), previous_thresholding)
+        criteria[criterion_id] = {"preprocessing": preprocessing, "thresholding": thresholding}
+        previous_thresholding = (thresholding, records.get("thresholding"))
+    stages: dict[str, StageState] = {stage: _sum_of([states[stage] for states in criteria.values()]) for stage in ANALYSIS_STAGES}
+    for stage in LEAF_STAGES:
+        stages[stage] = _leaf_state(store, name, project_json, stage, _read_manifest(run_folder, stage), last_config,
+                                    previous_thresholding or ("missing", None))
+    return _ProjectStatus(criteria=criteria, stages=stages)
+
+
+def _criterion_config(store: ProjectStore, name: str, criterion_id: str) -> UserConfig | None:
+    """The validated config of a criterion; None when its stored settings do not validate."""
     try:
-        current_config = store.load_project_config(name)
+        return store.load_project_config(name, criterion_id)
     except ConfigError:
-        current_config = None
-    status: dict[str, StageState] = {}
-    for stage in PIPELINE_STAGES:
-        record = project_json.stage_records.get(stage)
-        manifest = _read_manifest(run_folder, stage)
-        if record is None or manifest is None:
-            status[stage] = "missing"
-        elif current_config is None or record.inputs_revision != project_json.inputs_revision:
-            status[stage] = "out_of_date"
-        elif _settings_changed(store, name, stage, record, current_config):
-            status[stage] = "out_of_date"
-        elif stage == "preprocessing" and any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
-            status[stage] = "out_of_date"
-        elif stage == "preprocessing" and _sampled_at_another_spacing_before_it_was_recorded(record, manifest, current_config):
-            status[stage] = "out_of_date"
-        elif stage == "preprocessing" and _scores_in_another_unit_than_the_next_run_writes(manifest, current_config):
-            status[stage] = "out_of_date"
-        elif stage == "massing" and manifest.get(MASSING_EXPORT_MESH_FIELD) is None and current_config.final_mesh_format != "obj":
-            status[stage] = "out_of_date"
-        elif stage in UPSTREAM_STAGE and not _reads_current_upstream(
-                status[UPSTREAM_STAGE[stage]], project_json.stage_records.get(UPSTREAM_STAGE[stage]), manifest):
-            status[stage] = "out_of_date"
-        else:
-            status[stage] = "current"
-    return status
+        return None
+
+
+def _sum_of(states: list[StageState]) -> StageState:
+    """One state for a stage of several criteria: missing when one is missing or there is none, else out_of_date when one is."""
+    if not states or "missing" in states:
+        return "missing"
+    return "out_of_date" if "out_of_date" in states else "current"
+
+
+def _preprocessing_state(store: ProjectStore, name: str, project_json: ProjectJson, record: StageRecord | None, manifest: dict | None,
+                         current_config: UserConfig | None, fingerprint: str | None) -> StageState:
+    """The state of a criterion's preprocessing; *fingerprint* is the one of its joined test surface file now."""
+    if record is None or manifest is None:
+        return "missing"
+    if current_config is None or record.inputs_revision != project_json.inputs_revision:
+        return "out_of_date"
+    if record.test_surfaces_fingerprint != fingerprint or _settings_changed(store, name, "preprocessing", record, current_config):
+        return "out_of_date"
+    if any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
+        return "out_of_date"
+    if _sampled_at_another_spacing_before_it_was_recorded(record, manifest, current_config):
+        return "out_of_date"
+    if _scores_in_another_unit_than_the_next_run_writes(manifest, current_config):
+        return "out_of_date"
+    return "current"
+
+
+def _thresholding_state(store: ProjectStore, name: str, project_json: ProjectJson, record: StageRecord | None, manifest: dict | None,
+                        current_config: UserConfig | None, preprocessing: tuple[StageState, StageRecord | None],
+                        previous_thresholding: tuple[StageState, StageRecord | None] | None) -> StageState:
+    """The state of a criterion's thresholding; *preprocessing* is the state and record of its preprocessing, *previous_thresholding*
+    those of the previous criterion's thresholding (None for the first criterion)."""
+    if record is None or manifest is None:
+        return "missing"
+    if current_config is None or record.inputs_revision != project_json.inputs_revision:
+        return "out_of_date"
+    if _settings_changed(store, name, "thresholding", record, current_config):
+        return "out_of_date"
+    if not _reads_current_run(*preprocessing, manifest.get("upstream_run_id")):
+        return "out_of_date"
+    if previous_thresholding is None:
+        return "current" if manifest.get("after_run_id") is None else "out_of_date"
+    return "current" if _reads_current_run(*previous_thresholding, manifest.get("after_run_id")) else "out_of_date"
+
+
+def _leaf_state(store: ProjectStore, name: str, project_json: ProjectJson, stage: str, manifest: dict | None,
+                current_config: UserConfig | None, last_thresholding: tuple[StageState, StageRecord | None]) -> StageState:
+    """The state of exporting or massing; *current_config* and *last_thresholding* are of the last criterion that is on."""
+    record = project_json.stage_records.get(stage)
+    if record is None or manifest is None:
+        return "missing"
+    if current_config is None or record.inputs_revision != project_json.inputs_revision:
+        return "out_of_date"
+    if _settings_changed(store, name, stage, record, current_config):
+        return "out_of_date"
+    if stage == "massing" and manifest.get(MASSING_EXPORT_MESH_FIELD) is None and current_config.final_mesh_format != "obj":
+        return "out_of_date"
+    return "current" if _reads_current_run(*last_thresholding, manifest.get("upstream_run_id")) else "out_of_date"
 
 
 def _settings_changed(store: ProjectStore, name: str, stage: str, record: StageRecord, current_config: UserConfig) -> bool:
@@ -130,30 +260,47 @@ def _scores_in_another_unit_than_the_next_run_writes(manifest: dict, current_con
     return recorded_unit != mode.score_unit
 
 
-def _reads_current_upstream(upstream_state: StageState, upstream_record: StageRecord | None, manifest: dict) -> bool:
-    """Whether the stage's manifest was built from the run the upstream stage's record describes."""
-    return (upstream_state == "current" and upstream_record is not None
-            and upstream_record.manifest_run_id == manifest.get("upstream_run_id"))
+def _reads_current_run(state: StageState, record: StageRecord | None, run_id_read: str | None) -> bool:
+    """Whether a manifest read (as its upstream, or as the thresholding it was decided after) the run that a current stage's record describes."""
+    return state == "current" and record is not None and record.manifest_run_id == run_id_read
 
 
 def choose_stages(store: ProjectStore, name: str, produce: list[str]) -> StageChoice:
-    """The stages to execute to bring *produce* up to date.
+    """The stages to execute to bring *produce* up to date, and the criteria they run for.
 
-    When preprocessing or thresholding (as far as *produce* needs them) is not current, the run starts at the
-    first of them, goes through thresholding and then runs every stage of *produce* that follows: those read
-    the new thresholding, so they cannot stay. Otherwise it runs each stage of *produce* that is not current.
-    Raises ValueError for a stage name the pipeline does not have.
+    When the preprocessing of a criterion that is on is not current (as far as *produce* needs it), the run starts at
+    preprocessing and traces those criteria again (trace_criteria); run_chain then thresholds every criterion from the first
+    traced one on. Else, when the thresholding of one is not current, it starts at thresholding and thresholds the whole chain
+    again. Either way it runs every stage of *produce* that follows: those read the new thresholding, so they cannot stay.
+    Otherwise it runs each stage of *produce* that is not current. Raises ValueError for a stage name the pipeline does not have.
     """
     needed = stages_needed_for(produce)
-    status = stage_status(store, name)
+    status = _project_status(store, name)
     analysis_stages = [stage for stage in ANALYSIS_STAGES if stage in needed]
-    first_stale_analysis = next((index for index, stage in enumerate(analysis_stages) if status[stage] != "current"), None)
-    if first_stale_analysis is None:
-        chosen = {stage for stage in needed if status[stage] != "current"}
+    leaves = [stage for stage in needed if stage in LEAF_STAGES]
+    trace = [criterion_id for criterion_id, states in status.criteria.items() if states["preprocessing"] != "current"]
+    if trace and "preprocessing" in analysis_stages:
+        chosen = {*analysis_stages, *leaves}
+    elif "thresholding" in analysis_stages and any(states["thresholding"] != "current" for states in status.criteria.values()):
+        trace, chosen = [], {"thresholding", *leaves}
     else:
-        chosen = {*analysis_stages[first_stale_analysis:], *(stage for stage in needed if stage not in ANALYSIS_STAGES)}
+        trace, chosen = [], {stage for stage in leaves if status.stages[stage] != "current"}
     stages = [stage for stage in PIPELINE_STAGES if stage in chosen]
-    return StageChoice(stages=stages, produce_for_engine=[stage for stage in stages if stage in produce])
+    return StageChoice(stages=stages, produce_for_engine=[stage for stage in stages if stage in produce],
+                       start_from=stages[0] if stages else None, trace_criteria=trace,
+                       criterion_stages=_criterion_stages(list(status.criteria), stages, trace))
+
+
+def _criterion_stages(criterion_ids: list[str], stages: list[str], trace: list[str]) -> dict[str, list[str]]:
+    """The analysis stages a run of *stages* executes for each criterion, as run_chain runs them: from preprocessing it traces the
+    criteria of *trace* and thresholds every criterion from the first of them on; from thresholding it thresholds every criterion."""
+    thresholds = "thresholding" in stages
+    if "preprocessing" in stages:
+        first_traced = criterion_ids.index(trace[0])
+        return {criterion_id: [*(["preprocessing"] if criterion_id in trace else []),
+                               *(["thresholding"] if thresholds and position >= first_traced else [])]
+                for position, criterion_id in enumerate(criterion_ids)}
+    return {criterion_id: ["thresholding"] if thresholds else [] for criterion_id in criterion_ids}
 
 
 def envelope_voxel_size(store: ProjectStore, name: str) -> float | None:
@@ -161,7 +308,8 @@ def envelope_voxel_size(store: ProjectStore, name: str) -> float | None:
 
     It is the one of the settings exporting last completed with. Without that record (a run that redoes exporting removed
     it when it began, or a run was cut off) it is the one of the manifest chain: the preprocessing run that the thresholding
-    run exporting read was built on. None when that chain is broken (a later run replaced one of them) or the recorded
+    run exporting read was built on, found through the upstream manifest each names (in the chain layout, exporting names the
+    last criterion's thresholding). None when that chain is broken (a later run replaced one of them) or the recorded
     settings no longer validate.
     """
     record = store.read_project_json(name).stage_records.get("exporting")
@@ -175,32 +323,78 @@ def envelope_voxel_size(store: ProjectStore, name: str) -> float | None:
 
 def _voxel_size_of_the_exporting_chain(run_folder: Path) -> float | None:
     """The preprocessing manifest's voxel size when exporting read the thresholding run on disk, and it the preprocessing run."""
-    exporting, thresholding, preprocessing = (_read_manifest(run_folder, stage) for stage in ("exporting", "thresholding", "preprocessing"))
-    if exporting is None or thresholding is None or preprocessing is None:
+    exporting_folder = stage_folder(run_folder, "exporting")
+    exporting = _read_manifest_file(exporting_folder / MANIFEST_FILE_NAME)
+    thresholding = _upstream_of(exporting_folder, exporting)
+    preprocessing = _upstream_of(*thresholding) if thresholding is not None else None
+    if preprocessing is None:
         return None
-    if exporting.get("upstream_run_id") != thresholding.get("run_id") or thresholding.get("upstream_run_id") != preprocessing.get("run_id"):
-        return None
-    voxel_size = preprocessing.get("voxel_size")
+    voxel_size = preprocessing[1].get("voxel_size")
     return float(voxel_size) if isinstance(voxel_size, (int, float)) else None
 
 
-def forget_stages(store: ProjectStore, name: str, stages) -> None:
-    """Remove the records of *stages*, so they count as missing until a run completes them again."""
+def _upstream_of(manifest_folder: Path, manifest: dict | None) -> tuple[Path, dict] | None:
+    """The folder and the manifest that a manifest names as its upstream, when it is there and is the run that manifest read."""
+    stored_path = manifest.get("upstream_manifest") if manifest is not None else None
+    if not isinstance(stored_path, str):
+        return None
+    path = Path(stored_path)
+    upstream_path = path if path.is_absolute() else Path(os.path.normpath(manifest_folder / path))
+    upstream = _read_manifest_file(upstream_path)
+    if upstream is None or upstream.get("run_id") != manifest.get("upstream_run_id"):
+        return None
+    return upstream_path.parent, upstream
+
+
+def forget_stages(store: ProjectStore, name: str, stages, criterion_stages: dict[str, list[str]] | None = None) -> None:
+    """Remove the records of *stages*, so they count as missing until a run completes them again.
+
+    *criterion_stages* names the preprocessing and thresholding records to remove per criterion (StageChoice.criterion_stages);
+    without it those of *stages* are removed for every criterion.
+    """
     with store.project_lock(name):
         project_json = store.read_project_json(name)
         for stage in stages:
-            project_json.stage_records.pop(stage, None)
+            if stage not in ANALYSIS_STAGES:
+                project_json.stage_records.pop(stage, None)
+                continue
+            for criterion_id, records in project_json.criterion_records.items():
+                if criterion_stages is None or stage in criterion_stages.get(criterion_id, ()):
+                    records.pop(stage, None)
         store.write_project_json(name, project_json)
 
 
-def record_stages(store: ProjectStore, name: str, stages, settings: dict, inputs_revision: int) -> None:
-    """Record *stages* as completed with *settings* (the config.yaml content) and the manifest each wrote."""
+def run_settings(store: ProjectStore, name: str) -> RunSettings:
+    """The settings, inputs revision and test surface fingerprints a run starting now runs with, for record_stages."""
+    with store.project_lock(name):
+        project_json = store.read_project_json(name)
+        project_folder = store.open(name)
+        active_ids = _active_criterion_ids(project_json)
+        criteria = {criterion_id: store.read_stored_config(name, criterion_id) for criterion_id in active_ids}
+        return RunSettings(
+            inputs_revision=project_json.inputs_revision, criteria=criteria,
+            test_surfaces_fingerprints={criterion_id: test_surfaces.fingerprint(project_folder, criterion_id) for criterion_id in active_ids},
+            leaf_settings=criteria[active_ids[-1]] if active_ids else store.read_stored_config(name))
+
+
+def record_stages(store: ProjectStore, name: str, choice: StageChoice, settings: RunSettings) -> None:
+    """Record the stages of *choice* as completed with *settings* (taken when the run started) and the manifest each wrote:
+    each criterion's preprocessing and thresholding that ran, with its settings and test surface fingerprint, and exporting and
+    massing, with the settings of the last criterion."""
     run_folder = store.open(name) / RUN_FOLDER
     with store.project_lock(name):
         project_json = store.read_project_json(name)
-        for stage in stages:
-            project_json.stage_records[stage] = StageRecord(
-                config=settings, inputs_revision=inputs_revision, manifest_run_id=_read_manifest(run_folder, stage)["run_id"])
+        for criterion_id, stages in choice.criterion_stages.items():
+            for stage in stages:
+                project_json.criterion_records.setdefault(criterion_id, {})[stage] = StageRecord(
+                    config=settings.criteria[criterion_id], inputs_revision=settings.inputs_revision,
+                    manifest_run_id=_read_criterion_manifest(run_folder, criterion_id, stage)["run_id"],
+                    test_surfaces_fingerprint=settings.test_surfaces_fingerprints[criterion_id])
+        for stage in choice.stages:
+            if stage in LEAF_STAGES:
+                project_json.stage_records[stage] = StageRecord(
+                    config=settings.leaf_settings, inputs_revision=settings.inputs_revision,
+                    manifest_run_id=_read_manifest(run_folder, stage)["run_id"])
         store.write_project_json(name, project_json)
 
 
