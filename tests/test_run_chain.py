@@ -191,8 +191,10 @@ def test_tracing_the_first_rethresholds_the_ones_after(tmp_path):
 
 
 def test_tracing_no_criterion_of_the_chain_is_refused(tmp_path):
-    with pytest.raises(ValueError, match="trace"):
-        run_chain(_two_criteria(tmp_path), tmp_path / "run", trace={"7"})
+    chain = _two_criteria(tmp_path)
+    for trace in ({"7"}, set()):
+        with pytest.raises(ValueError, match="trace"):
+            run_chain(chain, tmp_path / "run", trace=trace)
 
 
 def test_tracing_a_criterion_without_the_preprocessing_of_a_later_one_names_the_folder(tmp_path):

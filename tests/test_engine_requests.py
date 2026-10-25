@@ -343,6 +343,19 @@ def test_after_is_a_key_of_the_stage_request():
     assert parse_engine_request({"cmd": "thresholding", "config": "c.yaml", "from": "p"}).after is None
 
 
+@pytest.mark.slow
+def test_a_run_request_tracing_no_criterion_of_the_chain_gets_an_error_reply(tmp_path):
+    from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
+    chain_scene(tmp_path).chain_config(tmp_path / "chain", [daylight_on_south(0.3), daylight_on_east(0.3)])
+    for trace in (["7"], []):
+        reply = answer_engine_message({"cmd": "run", "produce": ["thresholding"], "trace_criteria": trace,
+                                       "config": str(tmp_path / "chain" / "chain.yaml"),
+                                       "run_folder": str(tmp_path / "chain" / "run")}, _CountingSession())
+        assert reply["status"] == "error" and reply["error_type"] == "ValueError", reply
+        assert "trace" in reply["error"]
+
+
+@pytest.mark.slow
 def test_a_chain_run_request_passes_trace_criteria(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
