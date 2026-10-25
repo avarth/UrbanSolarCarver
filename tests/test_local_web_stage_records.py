@@ -382,6 +382,19 @@ def test_bypassing_a_criterion_dates_the_thresholding_after_it(chain_of_three):
     assert criterion_status(store, name) == {"1": CURRENT, "2": CURRENT, "3": CURRENT}
 
 
+@pytest.mark.parametrize("change", [
+    lambda store, name: store.update_criterion(name, "1", bypassed=True),
+    lambda store, name: store.delete_criterion(name, "1"),
+    lambda store, name: store.reorder_criteria(name, ["2", "3", "1"]),
+])
+def test_a_criterion_that_becomes_the_first_was_carved_after_another_and_is_out_of_date(chain_of_three, change):
+    """The first criterion that is on carves the whole maximum volume: a thresholding decided after another criterion is not its result."""
+    store, name = chain_of_three
+    change(store, name)
+    status = criterion_status(store, name)
+    assert list(status)[0] == "2" and status["2"] == THRESHOLDING_OUT_OF_DATE and status["3"] == THRESHOLDING_OUT_OF_DATE
+
+
 def test_deleting_the_last_criterion_makes_the_new_last_feed_the_envelope(chain_of_three):
     store, name = chain_of_three
     store.delete_criterion(name, "3")

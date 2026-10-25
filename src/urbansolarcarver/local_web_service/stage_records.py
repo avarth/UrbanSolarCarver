@@ -173,14 +173,26 @@ def _sum_of(states: list[StageState]) -> StageState:
     return "out_of_date" if "out_of_date" in states else "current"
 
 
-def _preprocessing_state(store: ProjectStore, name: str, project_json: ProjectJson, record: StageRecord | None, manifest: dict | None,
-                         current_config: UserConfig | None, fingerprint: str | None) -> StageState:
-    """The state of a criterion's preprocessing; *fingerprint* is the one of its joined test surface file now."""
+def _state_from_record(store: ProjectStore, name: str, project_json: ProjectJson, stage: str, record: StageRecord | None,
+                       manifest: dict | None, current_config: UserConfig | None) -> StageState | None:
+    """The checks every stage starts with: missing without its record or manifest; out_of_date when the current settings do not
+    validate, the inputs revision changed or the settings would run the stage again. None when the stage passes them."""
     if record is None or manifest is None:
         return "missing"
     if current_config is None or record.inputs_revision != project_json.inputs_revision:
         return "out_of_date"
-    if record.test_surfaces_fingerprint != fingerprint or _settings_changed(store, name, "preprocessing", record, current_config):
+    if _settings_changed(store, name, stage, record, current_config):
+        return "out_of_date"
+    return None
+
+
+def _preprocessing_state(store: ProjectStore, name: str, project_json: ProjectJson, record: StageRecord | None, manifest: dict | None,
+                         current_config: UserConfig | None, fingerprint: str | None) -> StageState:
+    """The state of a criterion's preprocessing; *fingerprint* is the one of its joined test surface file now."""
+    state = _state_from_record(store, name, project_json, "preprocessing", record, manifest, current_config)
+    if state is not None:
+        return state
+    if record.test_surfaces_fingerprint != fingerprint:
         return "out_of_date"
     if any(manifest.get(field) is None for field in MAX_VOLUME_HEIGHT_FIELDS):
         return "out_of_date"
@@ -196,12 +208,9 @@ def _thresholding_state(store: ProjectStore, name: str, project_json: ProjectJso
                         previous_thresholding: tuple[StageState, StageRecord | None] | None) -> StageState:
     """The state of a criterion's thresholding; *preprocessing* is the state and record of its preprocessing, *previous_thresholding*
     those of the previous criterion's thresholding (None for the first criterion)."""
-    if record is None or manifest is None:
-        return "missing"
-    if current_config is None or record.inputs_revision != project_json.inputs_revision:
-        return "out_of_date"
-    if _settings_changed(store, name, "thresholding", record, current_config):
-        return "out_of_date"
+    state = _state_from_record(store, name, project_json, "thresholding", record, manifest, current_config)
+    if state is not None:
+        return state
     if not _reads_current_run(*preprocessing, manifest.get("upstream_run_id")):
         return "out_of_date"
     if previous_thresholding is None:
@@ -212,13 +221,9 @@ def _thresholding_state(store: ProjectStore, name: str, project_json: ProjectJso
 def _leaf_state(store: ProjectStore, name: str, project_json: ProjectJson, stage: str, manifest: dict | None,
                 current_config: UserConfig | None, last_thresholding: tuple[StageState, StageRecord | None]) -> StageState:
     """The state of exporting or massing; *current_config* and *last_thresholding* are of the last criterion that is on."""
-    record = project_json.stage_records.get(stage)
-    if record is None or manifest is None:
-        return "missing"
-    if current_config is None or record.inputs_revision != project_json.inputs_revision:
-        return "out_of_date"
-    if _settings_changed(store, name, stage, record, current_config):
-        return "out_of_date"
+    state = _state_from_record(store, name, project_json, stage, project_json.stage_records.get(stage), manifest, current_config)
+    if state is not None:
+        return state
     if stage == "massing" and manifest.get(MASSING_EXPORT_MESH_FIELD) is None and current_config.final_mesh_format != "obj":
         return "out_of_date"
     return "current" if _reads_current_run(*last_thresholding, manifest.get("upstream_run_id")) else "out_of_date"
