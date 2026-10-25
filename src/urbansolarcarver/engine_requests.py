@@ -28,6 +28,7 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
+from .chain_config import ChainConfig, is_chain_file, load_chain
 from .errors import ConfigError, MalformedEngineRequest
 from .load_config import (
     build_config_from_mode_starting_values, load_config, parse_overrides, user_config,
@@ -57,7 +58,9 @@ class PingRequest(_EngineRequest):
 class RunRequest(_EngineRequest):
     """Run the stages needed to produce *produce* in *run_folder*
     (:func:`urbansolarcarver.api.run_pipeline`).  Without *config* (a YAML
-    path) the overrides must name the mode."""
+    path) the overrides must name the mode.  When *config* is a chain file
+    (a ``criteria:`` list) the request runs :func:`urbansolarcarver.api.run_chain`
+    and the overrides set shared settings only."""
     cmd: Literal["run"]
     produce: List[str]
     run_folder: str
@@ -69,12 +72,16 @@ class RunRequest(_EngineRequest):
 class StageRequest(_EngineRequest):
     """Run one stage.  Every stage except preprocessing reads
     *upstream_output*, the upstream stage's folder or manifest, sent under
-    the key ``from``.  *out_dir* defaults to ``<config out_dir>/<stage>``."""
+    the key ``from``.  *out_dir* defaults to ``<config out_dir>/<stage>``.
+    *after* (thresholding only) is the previous criterion's thresholding
+    folder or manifest: the stage then decides only among the voxels that
+    criterion kept."""
     cmd: Literal["preprocessing", "thresholding", "exporting", "massing"]
     config: str
     overrides: Overrides = Field(default_factory=list)
     out_dir: Optional[str] = None
     upstream_output: Optional[str] = Field(None, alias="from")
+    after: Optional[str] = None
 
 
 class RunPipelineRequest(_EngineRequest):
@@ -234,6 +241,8 @@ def handle_engine_request(request: EngineRequest, session, context: Optional[Run
         with run_context(context):
             # The config is built inside the run context, so the issues its
             # validators report reach the reply.
+            if isinstance(request, RunRequest) and request.config is not None and is_chain_file(request.config):
+                return _run_chain(request, load_chain(request.config, request.overrides), context)
             config = config_for_engine_request(request)
             if isinstance(request, RunRequest):
                 return _run(request, config, context)
@@ -254,9 +263,29 @@ def _run(request: RunRequest, config: user_config, context: RunContext) -> RunRe
     result = api.run_pipeline(config, request.run_folder, produce=request.produce,
                               start_from=request.start_from, context=context)
     ran = [stage for stage in PIPELINE_STAGES if getattr(result, stage) is not None]
+    return _run_reply({stage: stage_folder(request.run_folder, stage) for stage in ran}, result, context)
+
+
+def _run_chain(request: RunRequest, chain: ChainConfig, context: RunContext) -> RunReply:
+    """Run a chain; the reply is a normal run's, filled from the last criterion's folders and the chain's
+    exporting and massing."""
+    from . import api
+    from .api_core.chain import criterion_folder
+    result = api.run_chain(chain, request.run_folder, produce=request.produce,
+                           start_from=request.start_from, context=context)
+    last_id, last = chain.criteria[-1].id, result.criteria[-1]
+    folders = {stage: criterion_folder(request.run_folder, last_id, stage)
+               for stage in ("preprocessing", "thresholding") if getattr(last, stage) is not None}
+    folders.update({stage: stage_folder(request.run_folder, stage)
+                    for stage in ("exporting", "massing") if getattr(result, stage) is not None})
+    return _run_reply(folders, result, context)
+
+
+def _run_reply(folders: Dict[str, Path], result, context: RunContext) -> RunReply:
+    """The reply for the stages that ran (*folders*, in stage order) of a result with ``exporting`` and ``massing``."""
     return RunReply(
-        stage_folders={stage: str(stage_folder(request.run_folder, stage)) for stage in ran},
-        manifest=str(stage_folder(request.run_folder, ran[-1]) / "manifest.json"),
+        stage_folders={stage: str(folder) for stage, folder in folders.items()},
+        manifest=str(list(folders.values())[-1] / "manifest.json"),
         issues=_issue_replies(context),
         export_path=str(result.exporting.export_path) if result.exporting else None,
         plates_path=str(result.massing.plates_path) if result.massing else None,
@@ -278,7 +307,7 @@ def _run_stage(request: StageRequest, config: user_config, context: RunContext) 
         result = api.preprocessing(config, out_dir)
         return StageReply(manifest=str(result.out_dir / "manifest.json"), issues=_issue_replies(context))
     if request.cmd == "thresholding":
-        result = api.thresholding(request.upstream_output, config, out_dir)
+        result = api.thresholding(request.upstream_output, config, out_dir, after=request.after)
         return StageReply(manifest=str(result.out_dir / "manifest.json"), issues=_issue_replies(context))
     if request.cmd == "massing":
         result = api.massing(request.upstream_output, config, out_dir)

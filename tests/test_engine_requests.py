@@ -313,3 +313,74 @@ def test_a_run_request_takes_context_and_the_blocking_switch_as_overrides(tmp_pa
     report = json.loads((tmp_path / "run" / "preprocessing" / "diagnostics" / "diagnostic.json").read_text())["context"]
     assert report["context_blocks_rays"] is dropped
     assert (report["rays_dropped"] > 0) is dropped
+
+
+# ---- chained carvings ----------------------------------------------------------
+
+def test_a_thresholding_stage_request_passes_after(tmp_path, tmp_mesh_files, monkeypatch):
+    from types import SimpleNamespace
+    from urbansolarcarver import api
+    cfg_path = _write_daylight_yaml(tmp_path, *tmp_mesh_files)
+    seen = []
+
+    def fake_thresholding(upstream, config, out_dir, after=None):
+        seen.append((upstream, after))
+        return SimpleNamespace(out_dir=Path(out_dir))
+
+    monkeypatch.setattr(api, "thresholding", fake_thresholding)
+    for after in ("earlier/thresholding", None):
+        message = {"cmd": "thresholding", "config": str(cfg_path), "from": "pre/manifest.json"}
+        if after is not None:
+            message["after"] = after
+        reply = answer_engine_message(message, _CountingSession())
+        assert reply["status"] == "ok", reply
+        assert seen[-1] == ("pre/manifest.json", after)
+
+
+def test_after_is_a_key_of_the_stage_request():
+    request = parse_engine_request({"cmd": "thresholding", "config": "c.yaml", "from": "p", "after": "a"})
+    assert request.after == "a"
+    assert parse_engine_request({"cmd": "thresholding", "config": "c.yaml", "from": "p"}).after is None
+
+
+@pytest.mark.slow
+def test_a_run_request_on_a_chain_file_replies_from_the_last_criterion(tmp_path):
+    from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
+    chain_scene(tmp_path).chain_config(tmp_path / "chain", [daylight_on_south(0.3), daylight_on_east(0.3)])
+    run = tmp_path / "chain" / "run"
+    with CarverSession(device="cpu") as session:
+        reply = answer_engine_message({"cmd": "run", "produce": ["exporting", "massing"],
+                                       "config": str(tmp_path / "chain" / "chain.yaml"), "run_folder": str(run)},
+                                      session)
+    assert reply["status"] == "ok", reply
+    assert reply["stage_folders"] == {
+        "preprocessing": str(run / "criteria" / "2" / "preprocessing"),
+        "thresholding": str(run / "criteria" / "2" / "thresholding"),
+        "exporting": str(run / "exporting"), "massing": str(run / "massing")}
+    assert reply["manifest"] == str(run / "massing" / "manifest.json")
+    assert (run / "criteria" / "1" / "thresholding" / "manifest.json").is_file()
+    assert Path(reply["export_path"]).is_file()
+    assert reply["plates_path"].endswith("plates.json")
+    assert set(reply) == {"status", "stage_folders", "manifest", "issues", "export_path", "plates_path",
+                          "mesh_path", "export_mesh_path"}
+
+
+@pytest.mark.slow
+def test_a_run_request_on_a_chain_file_applies_shared_overrides_and_start_from(tmp_path):
+    from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
+    chain_scene(tmp_path).chain_config(tmp_path / "chain", [daylight_on_south(0.3), daylight_on_east(0.3)])
+    run = tmp_path / "chain" / "run"
+    config = str(tmp_path / "chain" / "chain.yaml")
+    with CarverSession(device="cpu") as session:
+        first = answer_engine_message({"cmd": "run", "produce": ["thresholding"], "config": config,
+                                       "run_folder": str(run)}, session)
+        assert first["status"] == "ok", first
+        reply = answer_engine_message({"cmd": "run", "produce": ["exporting"], "start_from": "thresholding",
+                                       "config": config, "run_folder": str(run),
+                                       "overrides": ["final_mesh_format=obj"]}, session)
+        bad = answer_engine_message({"cmd": "run", "produce": ["thresholding"], "config": config,
+                                     "run_folder": str(run), "overrides": ["carve_fraction=0.9"]}, session)
+    assert reply["status"] == "ok", reply
+    assert set(reply["stage_folders"]) == {"thresholding", "exporting"}
+    assert reply["export_path"].endswith(".obj")
+    assert bad["status"] == "error" and bad["error_type"] == "ConfigError"

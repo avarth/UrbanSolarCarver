@@ -266,6 +266,124 @@ def test_daemon_error_reply_is_reported(tmp_path, monkeypatch):
     assert result.exit_code == 1 and "ConfigError: bad" in result.output
 
 
+# ---------------------------------------------------------------------------
+# Chained carvings: a config with criteria:, and thresholding --after
+# ---------------------------------------------------------------------------
+def _chain_yaml(tmp_path):
+    """A chain of two daylight criteria (south facade, then east facade) on the chain scene."""
+    from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
+    scene = chain_scene(tmp_path)
+    south = {**daylight_on_south(0.3), "name": "South daylight"}
+    east = {**daylight_on_east(0.3), "name": "East daylight"}
+    chain = scene.chain_config(tmp_path / "chain", [south, east])
+    return chain, tmp_path / "chain" / "chain.yaml"
+
+
+@pytest.mark.slow
+def test_run_on_a_chain_file_runs_every_criterion(tmp_path):
+    _, config = _chain_yaml(tmp_path)
+    result = _invoke(["run", "-c", str(config)])
+    assert result.exit_code == 0, result.output
+    for criterion in ("1", "2"):
+        assert (tmp_path / "chain" / "run" / "criteria" / criterion / "thresholding" / "manifest.json").is_file()
+    assert (tmp_path / "chain" / "run" / "criteria" / "chain.json").is_file()
+    assert (tmp_path / "chain" / "run" / "exporting").is_dir()
+    assert "Traceback" not in result.output
+
+
+def test_run_on_a_chain_file_refuses_a_criterion_setting_as_an_override(tmp_path):
+    _, config = _chain_yaml(tmp_path)
+    result = _invoke(["run", "-c", str(config), "-o", "carve_fraction=0.5"])
+    assert result.exit_code == 1, result.output
+    assert "Error:" in result.output and "carve_fraction" in result.output
+    assert not (tmp_path / "chain" / "run").exists()
+
+
+def test_run_start_from_outside_the_path_is_refused_for_a_chain_too(tmp_path):
+    _, config = _chain_yaml(tmp_path)
+    result = _invoke(["run", "-c", str(config), "--produce", "preprocessing", "--start-from", "massing"])
+    assert result.exit_code == 2, result.output
+    assert not (tmp_path / "chain" / "run").exists()
+
+
+def test_run_on_a_chain_file_on_the_daemon_sends_the_chain_path(tmp_path, monkeypatch):
+    from urbansolarcarver import carver_cli
+    _, config = _chain_yaml(tmp_path)
+    sent = []
+    monkeypatch.setattr(carver_cli, "_daemon_send", lambda payload: sent.append(payload) or {
+        "status": "ok", "stage_folders": {}, "manifest": "m.json", "issues": []})
+    result = _invoke(["run", "-c", str(config), "--daemon"])
+    assert result.exit_code == 0, result.output
+    assert sent[0]["cmd"] == "run" and sent[0]["config"] == str(config.resolve())
+    assert sent[0]["run_folder"] == str((tmp_path / "chain" / "run").resolve())
+
+
+def test_validate_lists_the_criteria(tmp_path):
+    _, config = _chain_yaml(tmp_path)
+    result = _invoke(["validate", "-c", str(config)])
+    assert result.exit_code == 0, result.output
+    assert "South daylight" in result.output and "East daylight" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_validate_reports_the_invalid_criterion_of_a_chain(tmp_path):
+    import yaml
+    _, config = _chain_yaml(tmp_path)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["criteria"][1]["carve_fraction"] = 7.0
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    result = _invoke(["validate", "-c", str(config)])
+    assert result.exit_code == 1, result.output
+    assert "INVALID" in result.output and "East daylight" in result.output
+
+
+def test_validate_warns_about_a_missing_test_surface_of_a_criterion(tmp_path):
+    import yaml
+    _, config = _chain_yaml(tmp_path)
+    data = yaml.safe_load(config.read_text(encoding="utf-8"))
+    data["criteria"][1]["test_surface_path"] = str(tmp_path / "gone.ply")
+    config.write_text(yaml.safe_dump(data), encoding="utf-8")
+    result = _invoke(["validate", "-c", str(config)])
+    assert result.exit_code == 0, result.output
+    assert "criterion 2" in result.output and "gone.ply" in result.output
+
+
+@pytest.mark.slow
+def test_thresholding_after_flag_writes_the_after_link(tmp_path):
+    import json
+    import yaml
+    from urbansolarcarver.api import run_chain
+    chain, _ = _chain_yaml(tmp_path)
+    run = tmp_path / "chain" / "run"
+    run_chain(chain, run, produce=["thresholding"])
+    second = tmp_path / "second.yaml"
+    second.write_text(yaml.safe_dump(chain.criteria[1].config.model_dump(mode="json", exclude_none=True)),
+                      encoding="utf-8")
+    first_folder = run / "criteria" / "1" / "thresholding"
+    out = tmp_path / "again"
+    result = _invoke(["thresholding", "-c", str(second), "-f", str(run / "criteria" / "2" / "preprocessing" / "manifest.json"),
+                      "--after", str(first_folder), "--out", str(out)])
+    assert result.exit_code == 0, result.output
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    first = json.loads((first_folder / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["after_run_id"] == first["run_id"]
+
+
+def test_thresholding_after_flag_reaches_the_daemon_payload(tmp_path, monkeypatch):
+    from urbansolarcarver import carver_cli
+    config = _write_cube_config(tmp_path)
+    earlier = tmp_path / "earlier"
+    earlier.mkdir()
+    sent = []
+    monkeypatch.setattr(carver_cli, "_daemon_send", lambda payload: sent.append(payload) or {"status": "ok", "issues": []})
+    result = _invoke(["thresholding", "-c", str(config), "-f", str(tmp_path / "pre.json"), "--after", str(earlier), "--daemon"])
+    assert result.exit_code == 0, result.output
+    assert sent[0]["after"] == str(earlier.resolve())
+    result = _invoke(["thresholding", "-c", str(config), "-f", str(tmp_path / "pre.json"), "--daemon"])
+    assert result.exit_code == 0, result.output
+    assert sent[1]["after"] is None
+
+
 class TestUiCommand:
     """`usc ui` checks the install, then starts the local service on 127.0.0.1 with a fresh token."""
 

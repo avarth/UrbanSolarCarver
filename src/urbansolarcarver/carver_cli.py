@@ -51,6 +51,7 @@ from typer.core import TyperGroup
 from .archetype_defaults import (
     ARCHETYPE_DEFAULTS, ARCHETYPE_OPTIONAL_KEYS, WINDOW_TO_WALL_DEFAULTS,
 )
+from .chain_config import is_chain_file, load_chain
 from .errors import UrbanSolarCarverError
 from .load_config import load_config, user_config
 from .run_context import RunContext, run_context
@@ -247,6 +248,13 @@ def run(
     ``--start-from thresholding`` the scores already in ``<out>/preprocessing``
     are reused, which is the way to iterate on threshold parameters without
     recomputing them.
+
+    A config with a ``criteria:`` list is a chain: the criteria are carved one
+    after the other on one voxel grid, each deciding only among the voxels the
+    one before kept, and exporting and massing build from the last. Each
+    criterion's stages go to ``<out>/criteria/<id>/preprocessing`` and
+    ``<out>/criteria/<id>/thresholding``. ``--override`` then sets shared
+    settings only (meshes, voxel size, out_dir, exporting, massing).
     """
     produce = produce or ["exporting"]
     for option, names in (("--produce", produce), ("--start-from", [start_from])):
@@ -261,9 +269,11 @@ def run(
             f"{start_from!r} is not on the path to {', '.join(produce)} ({', '.join(path)})",
             param_hint="--start-from")
 
+    chain = is_chain_file(str(config))
     context = RunContext()
     with run_context(context):
-        cfg = load_config(str(config), override)
+        loaded = load_chain(str(config), override) if chain else load_config(str(config), override)
+    cfg = loaded.shared if chain else loaded
     out = out_dir or Path(cfg.out_dir)
 
     if daemon:
@@ -275,17 +285,24 @@ def run(
         return
 
     if not quiet:
-        typer.secho(f"  Mode: {cfg.mode}", bold=True)
+        if chain:
+            typer.secho(f"  Chain of {len(loaded.criteria)} criteria: "
+                        + ", ".join(f"{c.id} ({c.config.mode})" for c in loaded.criteria), bold=True)
+        else:
+            typer.secho(f"  Mode: {cfg.mode}", bold=True)
         typer.secho(f"  Voxel size: {cfg.voxel_size}m")
         typer.secho(f"  Output: {out}\n")
 
-    from .api import run_pipeline
+    from .api import run_chain, run_pipeline
 
     if not quiet:
-        typer.secho(f"  Running pipeline (produce {', '.join(produce)}; "
+        typer.secho(f"  Running {'chain' if chain else 'pipeline'} (produce {', '.join(produce)}; "
                     f"start from {start_from})...", fg="yellow")
     t0 = time.perf_counter()
-    result = run_pipeline(cfg, out, produce=produce, start_from=start_from, context=context)
+    if chain:
+        result = run_chain(loaded, out, produce=produce, start_from=start_from, context=context)
+    else:
+        result = run_pipeline(loaded, out, produce=produce, start_from=start_from, context=context)
     elapsed = time.perf_counter() - t0
 
     summary = {}
@@ -300,10 +317,16 @@ def run(
         summary["Floor plates"] = f"{result.massing.n_plates}"
         summary["Total floor area"] = f"{result.massing.total_floor_area:,.0f} m²"
     if not summary:
-        last = [stage for stage in PIPELINE_STAGES if getattr(result, stage) is not None][-1]
-        summary["Output"] = str(stage_folder(out, last))
+        if chain:
+            from .api_core.chain import criterion_folder
+            last = [stage for stage in ("preprocessing", "thresholding")
+                    if getattr(result.criteria[-1], stage) is not None][-1]
+            summary["Output"] = str(criterion_folder(out, loaded.criteria[-1].id, last))
+        else:
+            last = [stage for stage in PIPELINE_STAGES if getattr(result, stage) is not None][-1]
+            summary["Output"] = str(stage_folder(out, last))
     summary["Time"] = f"{elapsed:.1f}s"
-    _echo_result("Pipeline", summary)
+    _echo_result("Chain" if chain else "Pipeline", summary)
     _echo_issues(context.issues)
 
 
@@ -384,6 +407,8 @@ def cmd_thresholding(
     from_manifest: Optional[Path] = Option(None, "-f", "--from", help="Path to preprocessing manifest.json (auto-detected if omitted)"),
     config: Path = Option(..., "-c", "--config", exists=True, readable=True, help="YAML config path"),
     override: List[str] = Option([], "-o", "--override", help="Override config fields"),
+    after: Optional[Path] = Option(None, "--after", exists=True, readable=True,
+                                   help="Thresholding folder or manifest.json of the previous criterion: decide only among the voxels it kept"),
     out_dir: Optional[Path] = Option(None, "--out", help="Output directory"),
     daemon: bool = Option(False, "--daemon", help="Send to running daemon"),
     quiet: bool = Option(False, "-q", "--quiet", help="Minimal output"),
@@ -397,6 +422,10 @@ def cmd_thresholding(
     This is the cheapest stage and is meant for quick iteration.  Re-run with
     different ``-o threshold=...`` or ``-o carve_fraction=...`` values without
     recomputing scores.
+
+    With ``--after`` the threshold applies only to the voxels the previous
+    criterion's thresholding kept (one step of a chain; ``run`` does the whole
+    chain from a config with ``criteria:``).
     """
     context = RunContext()
     with run_context(context):
@@ -408,6 +437,7 @@ def cmd_thresholding(
     if daemon:
         _run_on_daemon({
             "cmd": "thresholding", "from": str(from_manifest.resolve()),
+            "after": str(after.resolve()) if after is not None else None,
             "config": str(config.resolve()), "overrides": _absolute_overrides(override),
             "out_dir": str(out_dir.resolve()),
         }, quiet)
@@ -419,10 +449,11 @@ def cmd_thresholding(
     t0 = time.perf_counter()
     with run_context(context):
         from .api import thresholding
-        res = thresholding(from_manifest, cfg, out_dir)
+        res = thresholding(from_manifest, cfg, out_dir, after=after)
     elapsed = time.perf_counter() - t0
 
     _echo_result("Thresholding", {
+        **({"After": str(after)} if after is not None else {}),
         "Method": f"{res.threshold_method} -> {res.threshold_value:.4g}",
         "Carved": f"{res.voxels_removed:,} voxels ({100 - res.retention_pct:.1f}% of volume)",
         "Retained": f"{res.voxels_kept:,} voxels ({res.retention_pct:.1f}%)",
@@ -814,41 +845,64 @@ def validate(
     mesh (context and terrain included), EPW and simulated-weights files, and a simulated-weights file that
     cannot be read, are printed as warnings only (exit code 0).  Does not
     initialise CUDA or import torch.
+
+    A config with a ``criteria:`` list is a chain: every criterion is
+    validated and listed on a line of its own, with the settings the
+    criteria share printed once.
     """
+    chain = None
     try:
-        cfg = load_config(str(config), override)
+        if is_chain_file(str(config)):
+            chain = load_chain(str(config), override)
+            cfg = chain.shared
+        else:
+            cfg = load_config(str(config), override)
     except Exception as e:
         typer.secho(f"  INVALID: {e}", fg="red")
         raise typer.Exit(1)
 
-    typer.secho("  Config OK", fg="green", bold=True)
-    typer.echo(f"    mode:       {cfg.mode}")
-    typer.echo(f"    voxel_size: {cfg.voxel_size}")
-    typer.echo(f"    threshold:  {cfg.resolved_threshold()}")
-    typer.echo(f"    device:     {cfg.device}")
-    typer.echo(f"    out_dir:    {cfg.out_dir}")
-
     # Missing files are warnings, not errors: the user may add them before running.
     problems = []
-    if cfg.max_volume_path and not Path(cfg.max_volume_path).exists():
-        problems.append(f"max_volume_path not found: {cfg.max_volume_path}")
-    if cfg.test_surface_path and not Path(cfg.test_surface_path).exists():
-        problems.append(f"test_surface_path not found: {cfg.test_surface_path}")
-    if cfg.epw_path and not Path(cfg.epw_path).exists():
-        problems.append(f"epw_path not found: {cfg.epw_path}")
-    for key in ("context_path", "terrain_path"):
-        if getattr(cfg, key) and not Path(getattr(cfg, key)).exists():
-            problems.append(f"{key} not found: {getattr(cfg, key)}")
-    if getattr(cfg, "simulated_weights_path", None):
-        # Validate the artifact itself, not just the path: a wrong-schema
-        # or truncated file should fail here, not mid-preprocessing.
-        try:
-            from urbansolarcarver.simulated_weights import read_simulated_weights
-            _b, _h, meta = read_simulated_weights(cfg.simulated_weights_path)
-            typer.echo(f"    weights:    {cfg.simulated_weights_path} "
-                       f"({meta.get('method', 'unknown method')})")
-        except (ValueError, OSError) as exc:
-            problems.append(f"simulated_weights_path invalid: {exc}")
+
+    def check_files(settings, keys, prefix=""):
+        for key in keys:
+            if getattr(settings, key) and not Path(getattr(settings, key)).exists():
+                problems.append(f"{prefix}{key} not found: {getattr(settings, key)}")
+
+    def check_weights(settings, prefix=""):
+        if getattr(settings, "simulated_weights_path", None):
+            # Validate the artifact itself, not just the path: a wrong-schema
+            # or truncated file should fail here, not mid-preprocessing.
+            try:
+                from urbansolarcarver.simulated_weights import read_simulated_weights
+                _b, _h, meta = read_simulated_weights(settings.simulated_weights_path)
+                typer.echo(f"    {prefix}weights:    {settings.simulated_weights_path} "
+                           f"({meta.get('method', 'unknown method')})")
+            except (ValueError, OSError) as exc:
+                problems.append(f"{prefix}simulated_weights_path invalid: {exc}")
+
+    if chain is None:
+        typer.secho("  Config OK", fg="green", bold=True)
+        typer.echo(f"    mode:       {cfg.mode}")
+        typer.echo(f"    voxel_size: {cfg.voxel_size}")
+        typer.echo(f"    threshold:  {cfg.resolved_threshold()}")
+        typer.echo(f"    device:     {cfg.device}")
+        typer.echo(f"    out_dir:    {cfg.out_dir}")
+        check_files(cfg, ("max_volume_path", "test_surface_path", "epw_path", "context_path", "terrain_path"))
+        check_weights(cfg)
+    else:
+        typer.secho(f"  Chain OK: {len(chain.criteria)} criteria", fg="green", bold=True)
+        typer.echo(f"    voxel_size: {cfg.voxel_size}")
+        typer.echo(f"    device:     {cfg.device}")
+        typer.echo(f"    out_dir:    {cfg.out_dir}")
+        for criterion in chain.criteria:
+            typer.echo(f"    criterion {criterion.id}: {criterion.name} "
+                       f"({criterion.config.mode}, threshold {criterion.config.resolved_threshold()})")
+        check_files(cfg, ("max_volume_path", "context_path", "terrain_path"))
+        for criterion in chain.criteria:
+            prefix = f"criterion {criterion.id}: "
+            check_files(criterion.config, ("test_surface_path", "epw_path"), prefix)
+            check_weights(criterion.config, prefix)
 
     if problems:
         typer.echo()
