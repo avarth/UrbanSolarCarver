@@ -113,6 +113,7 @@ terrain_path: "path/to/terrain.ply"        # optional
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
+| `criteria` | `null` | A list of criteria carved in sequence on one voxel grid, each deciding among the voxels the one before it kept. With `criteria:` present, `mode`, `test_surface_path`, the carving rule and the mode settings (the list is in [Criteria](../criteria.md#shared-settings-and-criterion-settings)) go inside each criterion, and every other key stays at the top level, shared by the chain. Run it with `usc run`; `load_config` refuses a chain file |
 | `mode` | `"time-based"` | Carving mode (see [Modes](../modes.md)) |
 | `context_path` | `null` | Optional mesh of the existing surroundings that stay (buildings, large trees). Rays that hit it are dropped before scoring, and every voxel column of the maximum volume it overlaps is removed. Not for balconies or shading devices |
 | `terrain_path` | `null` | Optional terrain mesh. Rays that hit it are dropped, and only the voxels below the ground are removed, so the site stays buildable above it |
@@ -211,6 +212,10 @@ outputs/
 Every manifest carries a `run_id`, new on each run of its stage, and the manifests after preprocessing record the `run_id` they were built from. A stage refuses an upstream that was re-run since (`StageChainError`, naming the stage to re-run), so re-run preprocessing once for a run folder written by an earlier version.
 
 Weighted modes also write `preprocessing/patch_weights.npy`.
+
+A chain (`criteria:`) writes each criterion's `preprocessing` and `thresholding` folders to
+`<out_dir>/criteria/<id>/`, with `criteria/chain.json` beside them; `exporting`, `massing` and `run_report.md` stay
+in `<out_dir>` ([details](../criteria.md#output-folders)).
 
 ## Full reference
 

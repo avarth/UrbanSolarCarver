@@ -7,6 +7,32 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (chained carvings, engine)
+
+- **Criteria in sequence on one voxel grid.** A config with a `criteria:` list carves several criteria one after the
+  other, each with its own mode, test surfaces, mode settings and carving rule, while the maximum volume, context,
+  terrain, voxel size and the other fundamentals are set once at the top level. Each criterion traces its rays over
+  the drawn maximum volume, so its scores equal those of an unchained run of its settings; its carving rule then
+  decides only among the voxels the criterion before it kept, so `carve_fraction` is a share of what is left. No mesh
+  is made between criteria. Exporting and massing build once, from the last criterion, and massing measures its floor
+  plates against the drawn maximum volume and its footprint instead of the voxel staircase of an earlier envelope.
+- `usc run -c chain.yaml` and `run_chain(chain, out_dir, produce, start_from, context)` run a chain into
+  `<out>/criteria/<id>/preprocessing` and `<out>/criteria/<id>/thresholding`, then `<out>/exporting` and
+  `<out>/massing`; `criteria/chain.json` lists the criteria, and the run report gets a Criteria section (voxels at
+  start and kept by each). `usc validate -c chain.yaml` lists the criteria. The daemon runs a chain for a `run`
+  request on a chain file.
+- **`thresholding(..., after=...)`** and `usc thresholding --after <folder or manifest>` (`StageRequest.after` in the
+  daemon): one step of a chain. The manifest records `after_manifest` and `after_run_id`, the diagnostics
+  `voxels_at_start`; a criterion whose predecessor was re-run later is refused with `StageChainError`, a predecessor
+  on another grid too, and an empty start gives the issue `nothing_left_to_carve`. Changing an earlier criterion
+  needs only the thresholding of the later ones again, which takes seconds.
+- `load_chain`, `ChainConfig`, `Criterion`, `is_chain_file` and `CRITERION_KEYS` in `chain_config.py`. Criterion ids
+  are folder names (letters, digits, `_`, `-`; unique ignoring case; default: the position), and the weather file is
+  shared but reaches only the criteria whose mode reads one. `load_config` refuses a chain file.
+- Monte Carlo oracle: chained cases (daylight then benefit, time-based then daylight) in `tests/montecarlo.py`.
+- The browser app and Grasshopper follow in later phases; **Carve further** stays in the app until then. See
+  [Chained carvings](docs/criteria.md).
+
 ### Fixed (massing)
 
 - A module no longer fails the maximum-volume test because of a voxel column less than half inside the footprint.
