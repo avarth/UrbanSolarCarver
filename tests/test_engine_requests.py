@@ -356,7 +356,7 @@ def test_a_run_request_tracing_no_criterion_of_the_chain_gets_an_error_reply(tmp
 
 
 @pytest.mark.slow
-def test_a_chain_run_request_passes_trace_criteria(tmp_path, monkeypatch):
+def test_a_chain_run_request_passes_trace_criteria_and_threshold_from_criterion(tmp_path, monkeypatch):
     from types import SimpleNamespace
     from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
     from urbansolarcarver import api
@@ -364,14 +364,15 @@ def test_a_chain_run_request_passes_trace_criteria(tmp_path, monkeypatch):
     config = str(tmp_path / "chain" / "chain.yaml")
     seen = []
 
-    def fake_run_chain(chain, out_dir, produce, start_from, context, trace=None):
-        seen.append(trace)
+    def fake_run_chain(chain, out_dir, produce, start_from, context, trace=None, threshold_from=None):
+        seen.append((trace, threshold_from))
         stage = SimpleNamespace(run_id="r")
         return SimpleNamespace(criteria=(SimpleNamespace(preprocessing=stage, thresholding=stage),),
                                exporting=None, massing=None)
 
     monkeypatch.setattr(api, "run_chain", fake_run_chain)
-    for extra, expected in (({"trace_criteria": ["2"]}, ["2"]), ({}, None)):
+    for extra, expected in (({"trace_criteria": ["2"]}, (["2"], None)), ({}, (None, None)),
+                            ({"trace_criteria": ["2"], "threshold_from_criterion": "1"}, (["2"], "1"))):
         reply = answer_engine_message({"cmd": "run", "produce": ["thresholding"], "config": config,
                                        "run_folder": str(tmp_path / "run"), **extra}, _CountingSession())
         assert reply["status"] == "ok", reply

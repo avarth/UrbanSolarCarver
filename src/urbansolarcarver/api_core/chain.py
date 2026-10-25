@@ -60,6 +60,7 @@ def run_chain(
     start_from: str = "preprocessing",
     context: Optional[RunContext] = None,
     trace: Optional[Collection[str]] = None,
+    threshold_from: Optional[str] = None,
 ) -> ChainResult:
     """Carve the criteria of *chain* one after the other on one voxel grid, then build from the last.
 
@@ -90,6 +91,11 @@ def run_chain(
         ``criteria/<id>/preprocessing`` folder, and every criterion from the first traced one on is thresholded
         again (the ones before it keep their thresholding, which the first thresholded one decides after).
         Default: trace every criterion. Ignored for the other values of *start_from*.
+    threshold_from : str | None
+        With ``start_from="preprocessing"``: the id of a criterion to threshold again even when it comes before the first
+        traced one (its preprocessing, which was not traced, is read as it is). Thresholding then starts at the earlier of
+        this criterion and the first traced one. Default: start at the first traced criterion. Ignored for the other
+        values of *start_from*.
 
     Returns
     -------
@@ -100,7 +106,7 @@ def run_chain(
     ------
     ValueError
         If *produce* is empty or names an unknown stage, *start_from* is not on the path to a produced stage, or
-        *trace* names no criterion of the chain.
+        *trace* names no criterion of the chain, or *threshold_from* names none.
     StageChainError
         If a folder to read before ``start_from`` (or the preprocessing folder of a criterion that *trace* leaves
         out) has no usable output; the message names the stage to re-run.
@@ -134,6 +140,8 @@ def run_chain(
         ran = [stage for stage in _CRITERION_STAGES if stage in stages_to_run]
         if trace is not None and start_from == "preprocessing" and not {c.id for c in criteria} & set(trace):
             raise ValueError(f"trace names no criterion of the chain (ids {[c.id for c in criteria]}): {sorted(trace)}")
+        if threshold_from is not None and start_from == "preprocessing" and threshold_from not in {c.id for c in criteria}:
+            raise ValueError(f"threshold_from names no criterion of the chain (ids {[c.id for c in criteria]}): {threshold_from!r}")
         if "thresholding" in ran:
             # A run that stops before the last criterion must not leave a list that names the earlier run.
             (run_folder / CRITERIA_FOLDER / CHAIN_FILE).unlink(missing_ok=True)
@@ -151,6 +159,8 @@ def run_chain(
                 thr_folder = criterion_folder(run_folder, criterion.id, "thresholding")
                 if "preprocessing" in ran and (trace is None or criterion.id in trace):
                     pre = preprocessing(criterion.config, pre_folder)
+                    thresholding_started = True
+                if criterion.id == threshold_from:
                     thresholding_started = True
                 if "thresholding" in ran and (thresholding_started or "preprocessing" not in ran):
                     thr = thresholding(pre if pre is not None else pre_folder, criterion.config, thr_folder,

@@ -190,6 +190,43 @@ def test_tracing_the_first_rethresholds_the_ones_after(tmp_path):
     assert manifest_2["after_run_id"] == first.thresholding.run_id
 
 
+def test_tracing_a_later_criterion_can_rethreshold_an_earlier_one_without_its_preprocessing(tmp_path):
+    out = tmp_path / "run"
+    chain = _two_criteria(tmp_path)
+    run_chain(chain, out)
+    scores_1 = out / "criteria/1/preprocessing/scores.npy"
+    mtime_1 = scores_1.stat().st_mtime_ns
+    old = {name: _run_id(out / folder) for name, folder in (
+        ("pre_1", "criteria/1/preprocessing"), ("thr_1", "criteria/1/thresholding"),
+        ("pre_2", "criteria/2/preprocessing"), ("thr_2", "criteria/2/thresholding"))}
+    again = run_chain(chain, out, trace={"2"}, threshold_from="1")
+    assert scores_1.stat().st_mtime_ns == mtime_1 and _run_id(out / "criteria/1/preprocessing") == old["pre_1"]
+    first, second = again.criteria
+    assert first.preprocessing is None and first.thresholding is not None
+    assert second.preprocessing is not None and second.thresholding is not None
+    assert first.thresholding.run_id != old["thr_1"] and _run_id(out / "criteria/2/preprocessing") != old["pre_2"]
+    manifest_2 = json.loads((out / "criteria/2/thresholding/manifest.json").read_text())
+    assert manifest_2["after_run_id"] == first.thresholding.run_id
+    listed = json.loads((out / "criteria/chain.json").read_text())["criteria"]
+    assert [row["thresholding_run_id"] for row in listed] == [first.thresholding.run_id, second.thresholding.run_id]
+
+
+def test_thresholding_from_a_later_criterion_than_the_first_traced_changes_nothing(tmp_path):
+    out = tmp_path / "run"
+    chain = _two_criteria(tmp_path)
+    run_chain(chain, out)
+    old_thr_1 = _run_id(out / "criteria/1/thresholding")
+    again = run_chain(chain, out, trace={"1"}, threshold_from="2")
+    first, second = again.criteria
+    assert first.thresholding is not None and first.thresholding.run_id != old_thr_1
+    assert second.preprocessing is None and second.thresholding is not None
+
+
+def test_thresholding_from_a_criterion_not_in_the_chain_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="threshold_from"):
+        run_chain(_two_criteria(tmp_path), tmp_path / "run", trace={"2"}, threshold_from="7")
+
+
 def test_tracing_no_criterion_of_the_chain_is_refused(tmp_path):
     chain = _two_criteria(tmp_path)
     for trace in ({"7"}, set()):

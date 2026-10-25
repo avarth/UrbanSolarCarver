@@ -62,7 +62,9 @@ class RunRequest(_EngineRequest):
     (a ``criteria:`` list) the request runs :func:`urbansolarcarver.api.run_chain`
     and the overrides set shared settings only.  *trace_criteria* (chain only,
     ignored otherwise) lists the criterion ids to trace again when starting
-    from preprocessing; the others reuse their existing preprocessing."""
+    from preprocessing; the others reuse their existing preprocessing.
+    *threshold_from_criterion* (chain only, with *trace_criteria*) names a criterion
+    to threshold again even though it comes before the first traced one."""
     cmd: Literal["run"]
     produce: List[str]
     run_folder: str
@@ -70,6 +72,7 @@ class RunRequest(_EngineRequest):
     config: Optional[str] = None
     overrides: Overrides = Field(default_factory=list)
     trace_criteria: Optional[List[str]] = None
+    threshold_from_criterion: Optional[str] = None
 
 
 class StageRequest(_EngineRequest):
@@ -275,7 +278,8 @@ def _run_chain(request: RunRequest, chain: ChainConfig, context: RunContext) -> 
     from . import api
     from .api_core.chain import criterion_folder
     result = api.run_chain(chain, request.run_folder, produce=request.produce,
-                           start_from=request.start_from, context=context, trace=request.trace_criteria)
+                           start_from=request.start_from, context=context, trace=request.trace_criteria,
+                           threshold_from=request.threshold_from_criterion)
     last_id, last = chain.criteria[-1].id, result.criteria[-1]
     folders = {stage: criterion_folder(request.run_folder, last_id, stage)
                for stage in ("preprocessing", "thresholding") if getattr(last, stage) is not None}
