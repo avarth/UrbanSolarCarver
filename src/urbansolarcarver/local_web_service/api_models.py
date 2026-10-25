@@ -317,4 +317,4 @@ class ErrorDetailReply(BaseModel):
 
 class MissingInputsReply(ErrorDetailReply):
     """The body of a run request that lacks input files."""
-    missing_inputs: list[str]   # the roles: max_volume, test_surfaces, weather (context and terrain are optional)
+    missing_inputs: list[str]   # max_volume, "test_surfaces:<criterion id>" (a criterion that is on protects nothing), "criteria" (none is on), weather; context and terrain are optional

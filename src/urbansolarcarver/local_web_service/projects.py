@@ -28,7 +28,7 @@ from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_bud
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..pydantic_schemas import UserConfig
-from . import test_surfaces
+from . import test_surfaces, uploads
 from .api_models import (
     CarvingChainStep, ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply,
     ProjectJson, ProjectSummary,
@@ -448,7 +448,8 @@ class ProjectStore:
             shutil.rmtree(project_folder / RUN_FOLDER / "criteria" / removed.id, ignore_errors=True)
             (project_folder / joined_test_surfaces_path(removed.id)).unlink(missing_ok=True)
             for file_name in unused_files:
-                test_surfaces.stored_path(project_folder, file_name).unlink(missing_ok=True)
+                with contextlib.suppress(OSError):      # a program has the file open: it stays, project.json no longer lists it
+                    test_surfaces.stored_path(project_folder, file_name).unlink(missing_ok=True)
 
     def duplicate_criterion(self, name: str, criterion_id: str) -> CriterionEntry:
         """Add a copy of a criterion at the end of the chain: its settings and test surfaces, named "<name> copy"."""
@@ -895,9 +896,11 @@ class ProjectStore:
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
-            stale_file_names = {criterion.id: sorted(criterion.test_surface_files) for criterion in project_json.criteria
-                         if test_surfaces.joined_path(project_folder, criterion.id).is_file()
-                         and not test_surfaces.has_vertex_normals(test_surfaces.joined_path(project_folder, criterion.id))}
+            stale_file_names = {}
+            for criterion in project_json.criteria:
+                joined_path = test_surfaces.joined_path(project_folder, criterion.id)
+                if joined_path.is_file() and not test_surfaces.has_vertex_normals(joined_path):
+                    stale_file_names[criterion.id] = sorted(criterion.test_surface_files)
             if not stale_file_names:
                 return False
             joined_files = test_surfaces.build_joined_files(project_folder, stale_file_names)
@@ -1041,22 +1044,11 @@ class ProjectStore:
     def _add_mesh_file(self, project_folder: Path, project_json: ProjectJson, role: str, clean_name: str, data: bytes) -> None:
         """Check an uploaded mesh, build the joined file with it, then move both into place."""
         role_folder = project_folder / INPUTS_FOLDER / role
-        role_folder.mkdir(parents=True, exist_ok=True)      # a project made before the role existed has no folder for it
         recorded_names = project_json.input_files.setdefault(role, {})
-        stored_name = next((recorded for recorded in recorded_names if recorded.lower() == clean_name.lower()), clean_name)
-        descriptor, upload_name = tempfile.mkstemp(dir=role_folder, prefix="upload", suffix=Path(clean_name).suffix.lower())
-        upload_path = Path(upload_name)
+        stored_name = uploads.matching_stored_name(recorded_names, clean_name) or clean_name
+        upload_path, uploaded_mesh = uploads.checked_upload(role_folder, clean_name, data, fix_normals=role not in OPTIONAL_MESH_ROLES)
         joined_temporary_path = None
         try:
-            with os.fdopen(descriptor, "wb") as upload_file:
-                upload_file.write(data)
-            try:
-                uploaded_mesh = load_mesh(str(upload_path), fix_normals=role not in OPTIONAL_MESH_ROLES)
-            except InputError as error:
-                # the engine message names the temporary file; the person knows the file by its own name
-                message = str(error).removeprefix("load_mesh: ")
-                raise ProjectError(message.replace(repr(str(upload_path)), repr(clean_name)).replace(str(upload_path), clean_name),
-                                   status_code=422) from error
             other_names = [recorded for recorded in recorded_names if recorded != stored_name]
             meshes_by_name = self._load_stored_meshes(project_folder, role, other_names)
             meshes_by_name[stored_name] = uploaded_mesh

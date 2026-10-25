@@ -240,3 +240,43 @@ def test_a_joined_file_without_normals_is_rebuilt_for_each_criterion(tmp_path):
     assert all(has_vertex_normals(test_surfaces.joined_path(folder, criterion_id)) for criterion_id in ("1", "2"))
     assert store.read_project_json("p").inputs_revision == revision + 1
     assert store.rebuild_joined_test_surfaces_without_normals("p") is False
+
+
+def test_the_same_file_uploaded_twice_to_one_criterion_is_listed_once(tmp_path):
+    store = _store_with_criteria(tmp_path, count=1)
+    store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
+    before = _fingerprints(store, "1")
+    store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
+    assert _uses(store, "1") == ["facade.ply"] and _stored_file_names(store) == ["facade.ply"]
+    assert _fingerprints(store, "1") == before
+    store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0, extents=(8, 8, 0.1)))
+    assert _uses(store, "1") == ["facade.ply"] and _fingerprints(store, "1") != before
+
+
+def test_a_name_that_differs_only_in_letter_case_is_the_stored_file(tmp_path):
+    store = _store_with_criteria(tmp_path)
+    store.add_criterion_test_surface("p", "1", "Facade.ply", _panel(0))
+    store.add_criterion_test_surface("p", "2", "Facade.ply", _panel(0))
+    before = _fingerprints(store, "1", "2")
+    store.add_criterion_test_surface("p", "1", "FACADE.PLY", _panel(0, extents=(8, 8, 0.1)))
+    assert _stored_file_names(store) == ["Facade.ply"]
+    assert _uses(store, "1") == ["Facade.ply"] and _uses(store, "2") == ["Facade.ply"]
+    assert [file.name for file in store.input_files("p", "test_surfaces")] == ["Facade.ply"]
+    assert all(after != earlier for after, earlier in zip(_fingerprints(store, "1", "2"), before))
+
+
+def test_deleting_a_criterion_does_not_fail_when_a_stored_file_cannot_be_deleted(tmp_path, monkeypatch):
+    store = _store_with_criteria(tmp_path)
+    store.add_criterion_test_surface("p", "2", "roof.ply", _panel(50))
+    stored = store.open("p") / "inputs" / "test_surfaces" / "roof.ply"
+    original_unlink = type(stored).unlink
+
+    def refuse_roof(path, *args, **kwargs):
+        if path.name == "roof.ply":
+            raise PermissionError("in use")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(type(stored), "unlink", refuse_roof)
+    store.delete_criterion("p", "2")
+    assert [entry.id for entry in store.criteria("p")] == ["1"] and store.input_files("p", "test_surfaces") == []
+    assert stored.exists()

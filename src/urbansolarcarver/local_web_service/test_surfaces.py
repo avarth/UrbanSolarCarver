@@ -18,6 +18,7 @@ import trimesh
 
 from ..errors import InputError
 from ..io import load_mesh
+from . import uploads
 from .api_models import CriterionEntry
 from .criteria import default_criterion_name, joined_test_surfaces_path
 from .project_names import ProjectError
@@ -180,34 +181,17 @@ def accept_upload(project_folder: Path, recorded_names: dict[str, int], clean_na
                   data: bytes) -> tuple[str, Path | None, trimesh.Trimesh | None]:
     """Check an uploaded test surface file and say which stored file it is: (stored name, checked upload, its mesh).
 
-    An upload that has the name of a stored file (letter case ignored, one name one file on Windows) is that file: the same
-    content changes nothing, other content replaces it. Otherwise an upload with the content of another stored file is that
-    file, stored under its name. Anything else is new. For a file already stored with this content the upload and mesh are None;
-    otherwise the upload is a temporary file in the store's folder, for the caller to move into place or remove, and the mesh is
-    what the engine's loader makes of it. ProjectError(422), and no temporary file, when the engine's loader refuses it.
+    An upload that has the name of a stored file (letter case ignored) is that file: the same content changes nothing, other
+    content replaces it. Otherwise an upload with the content of another stored file is that file, stored under its name.
+    Anything else is new. For a file already stored with this content the upload and mesh are None; otherwise the upload is a
+    temporary file in the store's folder, for the caller to move into place or remove (see uploads.checked_upload), and the mesh
+    is what the engine's loader makes of it. ProjectError(422), and no temporary file, when the loader refuses it.
     """
-    folder = Path(project_folder) / STORED_FOLDER
-    folder.mkdir(parents=True, exist_ok=True)       # a project made before the role existed has no folder for it
-    same_name = next((recorded for recorded in recorded_names if recorded.lower() == clean_name.lower()), None)
+    same_name = uploads.matching_stored_name(recorded_names, clean_name)
     digest = hashlib.sha256(data).hexdigest()
-    candidates = [same_name] if same_name is not None else list(recorded_names)
-    for candidate in candidates:
+    for candidate in [same_name] if same_name is not None else list(recorded_names):
         path = stored_path(project_folder, candidate)
         if path.is_file() and path.stat().st_size == len(data) and content_digest(path) == digest:
             return candidate, None, None
-    descriptor, upload_name = tempfile.mkstemp(dir=folder, prefix="upload", suffix=Path(clean_name).suffix.lower())
-    upload_path = Path(upload_name)
-    try:
-        with os.fdopen(descriptor, "wb") as upload_file:
-            upload_file.write(data)
-        try:
-            mesh = load_mesh(str(upload_path))
-        except InputError as error:
-            # the engine message names the temporary file; the person knows the file by its own name
-            message = str(error).removeprefix("load_mesh: ")
-            raise ProjectError(message.replace(repr(str(upload_path)), repr(clean_name)).replace(str(upload_path), clean_name),
-                               status_code=422) from error
-    except BaseException:
-        upload_path.unlink(missing_ok=True)
-        raise
+    upload_path, mesh = uploads.checked_upload(Path(project_folder) / STORED_FOLDER, clean_name, data)
     return same_name or clean_name, upload_path, mesh
