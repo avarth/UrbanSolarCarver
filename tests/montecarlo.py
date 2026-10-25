@@ -48,21 +48,15 @@ def _random_period(rng):
                 end_month=month, end_day=end_day, end_hour=end)
 
 
-def draw_case(seed: int, device: str) -> tuple:
-    rng = np.random.default_rng(seed)
-    spec = random_spec(rng)
-    mode = str(rng.choice(MODES))
-    voxel = float(rng.choice([1.0, 1.5, 2.0]))
-    drawn_device = str(rng.choice(["cpu", "cuda"]))  # always drawn: a seed means the same case on any --device
-    over = dict(
-        voxel=voxel,
-        grid_step=float(voxel if rng.random() < 0.7 else voxel / 2),
-        north_deg=float(rng.uniform(0, 360)) if rng.random() < 0.5 else 0.0,
-        margin_frac=float(rng.choice([0.01, 0.01, 0.15])),
-        device=drawn_device if device == "auto" else device,
-    )
+def _draw_carve_above(rng) -> dict:
     if rng.random() < 0.4:
-        over.update(carve_above=True, carve_above_min_consecutive=int(rng.integers(1, 4)))
+        return dict(carve_above=True, carve_above_min_consecutive=int(rng.integers(1, 4)))
+    return {}
+
+
+def _draw_mode_settings(rng, mode: str) -> dict:
+    """The settings of one criterion that depend on its mode: angles, analysis period, threshold."""
+    over = {}
     if mode == "tilted_plane":
         over["tilted_plane_angle_deg"] = (float(rng.uniform(25, 70)) if rng.random() < 0.6
                                           else [float(a) for a in rng.uniform(25, 70, 8)])
@@ -82,6 +76,24 @@ def draw_case(seed: int, device: str) -> tuple:
         over["score_smoothing"] = None if rng.random() < 0.7 else 0.0
         if mode == "benefit" and rng.random() < 0.25:
             over["edge_taper"] = float(rng.uniform(0.5, 4.0))
+    return over
+
+
+def draw_case(seed: int, device: str) -> tuple:
+    rng = np.random.default_rng(seed)
+    spec = random_spec(rng)
+    mode = str(rng.choice(MODES))
+    voxel = float(rng.choice([1.0, 1.5, 2.0]))
+    drawn_device = str(rng.choice(["cpu", "cuda"]))  # always drawn: a seed means the same case on any --device
+    over = dict(
+        voxel=voxel,
+        grid_step=float(voxel if rng.random() < 0.7 else voxel / 2),
+        north_deg=float(rng.uniform(0, 360)) if rng.random() < 0.5 else 0.0,
+        margin_frac=float(rng.choice([0.01, 0.01, 0.15])),
+        device=drawn_device if device == "auto" else device,
+    )
+    over.update(_draw_carve_above(rng))
+    over.update(_draw_mode_settings(rng, mode))
     return spec, mode, over
 
 
@@ -95,7 +107,23 @@ def _rethreshold(run, root, **cfg_over):
     return np.load(thr.mask_path).reshape(run.shape)
 
 
-def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
+def _check_score_agreement(run, metrics: dict, failed: list) -> None:
+    """The raw scores of a weighted-mode run against the reference marcher."""
+    agree = oracle.score_agreement(run)
+    if agree["ref_mass"] > 0:
+        metrics.update(score_shortfall_voxels=agree["shortfall_voxels"],
+                       score_excess=round(agree["excess"], 4))
+        if "excess_fine" in agree:
+            metrics["score_excess_fine"] = round(agree["excess_fine"], 4)
+        if agree["shortfall_voxels"] > max(2, 1e-4 * int(run.occ.sum())):
+            failed.append("score_shortfall")
+        if agree.get("excess_fine", 0.0) > 0.05:
+            failed.append("score_excess")
+
+
+def check(run, mode, epw, root: Path, rng, export: bool = True) -> tuple[dict, list]:
+    """Check one run against the reference and the invariants. With ``export=False`` the run has no exporting folder
+    (a criterion of a chain other than the last), so the exporting diagnostics and the mesh are left out."""
     metrics, failed = {}, []
     occ = run.occ
     metrics["occupied"] = int(occ.sum())
@@ -125,16 +153,7 @@ def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
         if unexplained:
             failed.append("tightness")
     elif not run.cfg.get("edge_taper"):
-        agree = oracle.score_agreement(run)
-        if agree["ref_mass"] > 0:
-            metrics.update(score_shortfall_voxels=agree["shortfall_voxels"],
-                           score_excess=round(agree["excess"], 4))
-            if "excess_fine" in agree:
-                metrics["score_excess_fine"] = round(agree["excess_fine"], 4)
-            if agree["shortfall_voxels"] > max(2, 1e-4 * int(occ.sum())):
-                failed.append("score_shortfall")
-            if agree.get("excess_fine", 0.0) > 0.05:
-                failed.append("score_excess")
+        _check_score_agreement(run, metrics, failed)
 
     # 2. thresholding ignores empty cells
     noisy = run.scores.copy()
@@ -175,11 +194,15 @@ def check(run, mode, epw, root: Path, rng) -> tuple[dict, list]:
             failed.append("diag_carve_above")
 
     # 5. diagnostics agree across stages
-    pre, thr, exp = run.diag("pre"), run.diag("thr"), run.diag("exp")
-    if not (pre["voxels_filled"] == thr["voxels_occupied"] == exp["voxels_original"] == int(occ.sum())):
+    pre, thr = run.diag("pre"), run.diag("thr")
+    exp = run.diag("exp") if export else None
+    counts = [pre["voxels_filled"], thr["voxels_occupied"]] + ([exp["voxels_original"]] if export else [])
+    if any(count != int(occ.sum()) for count in counts):
         failed.append("diag_occupied")
     if thr["voxels_kept"] != int(run.mask.sum()) or thr["voxels_kept"] + thr["voxels_removed"] != int(occ.sum()):
         failed.append("diag_threshold")
+    if not export:
+        return metrics, failed  # a criterion of a chain before the last has no exporting folder
     if exp["voxels_retained"] + exp["voxels_removed"] != exp["voxels_original"]:
         failed.append("diag_export")
 
@@ -217,6 +240,126 @@ def run_case(seed: int, epw: str, device: str, workdir: Path, translate_prob: fl
             rec["metrics"]["translated_mask_diff"] = differ
             if differ < 0 or differ > 0.002 * max(int(run.occ.sum()), 1):
                 rec["failed"].append("translation")
+    except Exception as exc:
+        rec["failed"].append("exception")
+        rec["error"] = f"{type(exc).__name__}: {exc}"
+        rec["traceback"] = traceback.format_exc(limit=6)
+    rec["seconds"] = round(time.perf_counter() - t0, 2)
+    if not rec["failed"]:
+        shutil.rmtree(root, ignore_errors=True)
+    return rec
+
+
+def _write_chain_scene(scene, panel_sets, folder: Path) -> tuple[Path, list[Path]]:
+    """The max volume and, for each set of panel indices, a test surface file made of those panels."""
+    import trimesh
+    from typologies import _panel_mesh
+    from urbansolarcarver.io import _export_ply_double
+    folder.mkdir(parents=True, exist_ok=True)
+    volume = folder / "max_volume.ply"
+    _export_ply_double(scene.volume, str(volume))
+    surfaces = []
+    for position, indices in enumerate(panel_sets, start=1):
+        path = folder / f"test_surfaces_{position}.ply"
+        _export_ply_double(trimesh.util.concatenate([_panel_mesh(*scene.panels[i]) for i in indices]), str(path))
+        surfaces.append(path)
+    return volume, surfaces
+
+
+def draw_chain_case(seed: int, device: str, modes: tuple) -> tuple:
+    """A scene, the settings its criteria share, and for each criterion in *modes* the panels it protects and its own
+    settings (carve_above, threshold, analysis period, mode parameters)."""
+    from typologies import build
+    rng = np.random.default_rng(seed)
+    spec = random_spec(rng)
+    scene = build(spec)
+    voxel = float(rng.choice([1.0, 1.5, 2.0]))
+    drawn_device = str(rng.choice(["cpu", "cuda"]))
+    shared = dict(
+        voxel=voxel,
+        grid_step=float(voxel if rng.random() < 0.7 else voxel / 2),
+        north_deg=float(rng.uniform(0, 360)) if rng.random() < 0.5 else 0.0,
+        margin_frac=float(rng.choice([0.01, 0.01, 0.15])),
+        device=drawn_device if device == "auto" else device,
+    )
+    panel_sets, criteria = [], []
+    for mode in modes:
+        count = int(rng.integers(1, len(scene.panels) + 1))
+        panel_sets.append(sorted(int(i) for i in rng.choice(len(scene.panels), count, replace=False)))
+        criteria.append({**_draw_carve_above(rng), **_draw_mode_settings(rng, mode)})
+    return scene, shared, panel_sets, criteria
+
+
+def run_chain_case(seed: int, epw: str, device: str, workdir: Path, modes: tuple) -> dict:
+    """A chain of criteria (one per entry of *modes*) on the random scene of *seed*, checked against the reference.
+
+    Each criterion protects its own random set of panels and has its own random settings. The first criterion gets the
+    checks of :func:`run_case`, minus the exporting ones. Every later criterion is checked for score agreement with the
+    reference on its own preprocessing (weighted modes only), for a mask inside the previous criterion's, and for
+    a mask equal to thresholding its preprocessing, with the occupancy cut down to the previous mask, as an ordinary run.
+    A failed check is named ``criterion <id>: <check>``, and the files of a failing case are kept in *workdir*.
+    """
+    import yaml
+    from _chain_scene import copy_preprocessing_with_occupancy
+    from urbansolarcarver import run_chain
+    from urbansolarcarver.api_core.thresholding import thresholding
+    from urbansolarcarver.chain_config import CRITERION_KEYS, load_chain
+    from urbansolarcarver.load_config import user_config
+
+    modes = tuple(modes)
+    root = workdir / f"chain_case_{seed}"
+    rec = dict(seed=seed, mode=">".join(modes), failed=[], metrics={})
+    t0 = time.perf_counter()
+    try:
+        if len(modes) < 2 or not set(modes) <= set(MODES) or not set(modes[1:]) <= set(WEIGHTED):
+            raise ValueError(f"modes must be two or more known modes, the later ones weighted, got {modes}")
+        scene, shared, panel_sets, drawn = draw_chain_case(seed, device, modes)
+        rec["spec"] = asdict(scene.spec)
+        rec["settings"] = dict(shared=shared, criteria=drawn, panels=panel_sets)
+        volume, surfaces = _write_chain_scene(scene, panel_sets, root / "scene")
+        out = root / "out"
+        # One config dict per criterion as a single run would take it; the chain file splits it into the settings
+        # the criteria share and the ones each decides.
+        cfgs = [cases.config((volume, surface), out, epw, mode, **shared, **over)
+                for mode, surface, over in zip(modes, surfaces, drawn)]
+        top = {key: value for key, value in cfgs[0].items() if key not in CRITERION_KEYS}
+        top["epw_path"] = epw
+        data = dict(top, criteria=[{key: value for key, value in cfg.items() if key in CRITERION_KEYS}
+                                   for cfg in cfgs])
+        chain_file = root / "chain.yaml"
+        chain_file.write_text(yaml.safe_dump(data), encoding="utf-8")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            chain = load_chain(str(chain_file))
+            result = run_chain(chain, out, produce=("thresholding",))
+
+        runs = [oracle.Run.load(out / "criteria" / criterion.id, cfg) for criterion, cfg in zip(chain.criteria, cfgs)]
+        for position, (criterion, run) in enumerate(zip(chain.criteria, runs)):
+            label = f"criterion {criterion.id}"
+            metrics, failed = {}, []
+            if position == 0:
+                metrics, failed = check(run, modes[0], epw, root / "check_first", np.random.default_rng(seed + 1),
+                                        export=False)
+            else:
+                previous = runs[position - 1]
+                if not run.cfg.get("edge_taper"):
+                    _check_score_agreement(run, metrics, failed)
+                metrics["decided_among"] = int(previous.mask.sum())
+                metrics["kept"] = int(run.mask.sum())
+                if (run.mask & ~previous.mask).any():
+                    failed.append("mask_outside_previous")
+                # The same decision made by an ordinary run on the voxels the previous criterion kept.
+                cut = copy_preprocessing_with_occupancy(result.criteria[position].preprocessing, previous.mask,
+                                                        root / f"cut_{criterion.id}")
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    alone = thresholding(cut, user_config(**run.cfg), root / f"alone_{criterion.id}")
+                alone_mask = np.load(alone.mask_path).reshape(run.shape)
+                metrics["differs_from_cut_run"] = int((alone_mask ^ run.mask).sum())
+                if metrics["differs_from_cut_run"]:
+                    failed.append("differs_from_cut_run")
+            rec["metrics"].update({f"{criterion.id}_{key}": value for key, value in metrics.items()})
+            rec["failed"] += [f"{label}: {name}" for name in failed]
     except Exception as exc:
         rec["failed"].append("exception")
         rec["error"] = f"{type(exc).__name__}: {exc}"

@@ -38,3 +38,17 @@ def epw():
 def test_montecarlo_case(tmp_path, epw, seed):
     rec = montecarlo.run_case(seed, epw, "cpu", tmp_path, translate_prob=1.0)
     assert not rec["failed"], (rec["failed"], rec.get("error"), rec.get("traceback"), rec["metrics"])
+
+
+# Chains of two criteria on one scene: the first is checked as a single run, the second against the reference and
+# against the first.
+CHAIN_CASES = [
+    (1042, ("daylight", "benefit")),
+    (1036, ("time-based", "daylight")),
+]
+
+
+@pytest.mark.parametrize("seed, modes", CHAIN_CASES)
+def test_montecarlo_chain_case(tmp_path, epw, seed, modes):
+    rec = montecarlo.run_chain_case(seed, epw, "cpu", tmp_path, modes)
+    assert not rec["failed"], (rec["failed"], rec.get("error"), rec.get("traceback"), rec["metrics"])
