@@ -1431,7 +1431,7 @@
 <li><strong>USC_EPW</strong> (<em>USC EPW Path</em>): passes the EPW file path</li>
 <li><strong>USC_AnalysisPeriod</strong>: defines the analysis date/time range</li>
 <li><strong>USC_GridSettings</strong>: voxel size, surface sampling spacing (<code>grid_step</code>), grid padding (<code>margin_frac</code>)</li>
-<li><strong>USC_RaySettings</strong>: ray length, minimum sun altitude, north direction (<code>north_deg</code>)</li>
+<li><strong>USC_RaySettings</strong>: ray length, minimum sun altitude, north direction (<code>north_deg</code>), <code>context_blocks_rays</code> (Account for context blocking: with context or terrain, whether the rays that hit them are dropped; default true), and <code>rays_per_patch</code> (rays per sky patch in the weighted modes: 1, 4, 9 or 16; default 4)</li>
 <li><strong>USC_BenefitParams</strong>: benefit-mode hour weighting: balance temperature and offset (simple weights), or a <code>simulated_weights.json</code> artifact plus the experimental <code>include_harm</code> toggle (simulated weights)</li>
 <li><strong>USC_TiltedPlane</strong>: fixed-angle envelope parameters</li>
 <li><strong>USC_RadCooling</strong> (<em>USC Radiative Cooling</em>): radiative cooling parameters (dew point, Bliss constant)</li>
@@ -1442,12 +1442,11 @@
 <p><strong>Pipeline execution</strong> (<code>2::Main</code>)</p>
 <ul>
 <li><strong>USC_RunPipeline</strong>: runs all three stages in one go (quick prototyping)</li>
-<li>
-<p><strong>USC_Preprocess</strong>: runs preprocessing only (ray tracing + scoring). Errors turn the component red.</p>
-</li>
-<li>
-<p><strong>USC_ThresholdStage</strong>: runs thresholding only. Accepts <code>threshold_overrides</code> directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.</p>
-</li>
+<li><strong>USC_Preprocess</strong>: runs preprocessing only (ray tracing + scoring). Errors turn the component red.</li>
+</ul>
+<p>Both take the geometry: <code>max_volume</code>, <code>test_surfaces</code>, and the optional <code>context</code> (existing buildings and large trees that stay) and <code>terrain</code> (the ground), each a list of Meshes or Breps. Context removes every voxel column of the max volume it overlaps and, with <code>context_blocks_rays</code> on, drops the rays that hit it; terrain removes only the voxels below the ground and drops the rays that hit it. See <a href="../modes/#context-and-terrain">Context and terrain</a>. Leave them unconnected for a run without them.</p>
+<ul>
+<li><strong>USC_ThresholdStage</strong>: runs thresholding only. Accepts <code>threshold_overrides</code> directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.</li>
 <li><strong>USC_Export</strong>: runs exporting only. Accepts <code>postprocess_overrides</code> directly. Errors turn the component red.</li>
 <li><strong>USC_Massing</strong>: stage 4, builds floor plates from the carving mask (inputs <code>config</code>, <code>thr_result</code>, <code>massing_overrides</code>, <code>run</code>; outputs closed Breps, floor areas per floor and in total, and the <code>plates.json</code> path). See <a href="../massing/">Floor-plate massing</a>.</li>
 <li><strong>USC_MassingSettings</strong>: floor heights, module size, tolerance and stacking for USC_Massing. Connect its output to USC_Massing's <code>massing_overrides</code> input so changes re-run only massing.</li>
@@ -1460,6 +1459,7 @@
 <li><strong>USC_SimulateWeights</strong>: runs the ISO 13790 5R1C simulation through the daemon; outputs the <code>simulated_weights.json</code> path (wire into USC_BenefitParams) and a heatmap preview image</li>
 </ul>
 <h2 id="input-geometry">Input geometry<a class="headerlink" href="#input-geometry" title="Permanent link">&para;</a></h2>
+<p>Context should be <strong>closed bodies</strong> (Breps or closed Meshes): the voxels it takes are found by an inside test, and an open context gives a <code>context_not_closed</code> warning. Terrain may be an open sheet. A test surface on the face of a context building (a neighbour's facade) is not blocked by that face; one drawn inside a context mass or under the terrain has all its rays blocked and gives a <code>test_points_blocked</code> warning.</p>
 <p>Test surfaces must be <strong>individual flat panels</strong>. If you are using extruded block boundaries or any joined polysurface, explode it into its faces before connecting it to USC_Preprocess. Otherwise the planarity check rejects the combined surface and preprocessing fails with a "No points sampled" error.</p>
 <h2 id="recommended-workflow">Recommended workflow<a class="headerlink" href="#recommended-workflow" title="Permanent link">&para;</a></h2>
 <p>Use the <strong>decomposed pipeline</strong> (Preprocess → ThresholdStage → Export as separate components) rather than RunPipeline. This lets you:</p>

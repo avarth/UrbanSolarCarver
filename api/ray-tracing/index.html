@@ -859,10 +859,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.SkySubRays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SkySubRays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.SkySubRayBlocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SkySubRayBlocking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.ray_tracing.trace_and_score_dda" class="md-nav__link">
     <span class="md-ellipsis">
       
         trace_and_score_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.trace_point_access_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_point_access_dda
       
     </span>
   </a>
@@ -885,6 +918,39 @@
     <span class="md-ellipsis">
       
         follow_mass_behind_skin_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.mesh_blocks_rays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_blocks_rays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.mesh_blocks_sky_sub_rays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_blocks_sky_sub_rays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.sky_sub_ray_directions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sky_sub_ray_directions
       
     </span>
   </a>
@@ -1364,10 +1430,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.SkySubRays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SkySubRays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.SkySubRayBlocking" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SkySubRayBlocking
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.ray_tracing.trace_and_score_dda" class="md-nav__link">
     <span class="md-ellipsis">
       
         trace_and_score_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.trace_point_access_dda" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        trace_point_access_dda
       
     </span>
   </a>
@@ -1390,6 +1489,39 @@
     <span class="md-ellipsis">
       
         follow_mass_behind_skin_dda
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.mesh_blocks_rays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_blocks_rays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.mesh_blocks_sky_sub_rays" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_blocks_sky_sub_rays
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.ray_tracing.sky_sub_ray_directions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sky_sub_ray_directions
       
     </span>
   </a>
@@ -1521,6 +1653,7 @@
 <ul>
 <li><strong><code>trace_and_score_dda</code></strong>: traces a batch of rays and adds each ray's weight to every voxel it crosses (weighted modes). Runs on CUDA or on Warp's CPU backend.</li>
 <li><strong><code>trace_and_count_dda</code></strong>: the same traversal, adding a count of 1 per ray (<code>time-based</code> and <code>tilted_plane</code>).</li>
+<li><strong><code>trace_point_access_dda</code></strong>: stops each ray at the first occupied voxel and adds its weight to its test point's accessible or blocked weight (<code>test_point_access_evaluation</code>).</li>
 <li><strong><code>follow_mass_behind_skin_dda</code></strong>: the skin rule, which keeps a test surface's skin voxels with the mass behind them.</li>
 <li><strong><code>generate_sky_patch_rays</code></strong> / <strong><code>generate_sun_rays</code></strong>: expand sample points × directions into flat ray arrays (origins + directions), keeping only directions the surface faces.</li>
 <li><strong><code>auto_batch_size</code></strong>: picks a ray batch size from the free GPU memory, to avoid out-of-memory errors on large scenes.</li>
@@ -1554,7 +1687,14 @@ voxel grid for the carving pipeline.</p>
 Woo 1987) Warp kernels of :mod:<code>warp_kernels</code>, launched here, on CUDA or on
 Warp's CPU backend.  The fused wrappers (:func:<code>trace_and_score_dda</code>,
 :func:<code>trace_and_count_dda</code>) add each ray's weight or a count of 1
-directly into a per-voxel volume, so no list of hits is stored.  There is
+directly into a per-voxel volume, so no list of hits is stored;
+:func:<code>trace_point_access_dda</code> adds each ray's weight to its test point when
+it reaches no occupied voxel.  :func:<code>mesh_blocks_rays</code> tests rays against the
+context and terrain meshes (a Warp BVH) instead of the grid.  In the sky-patch
+modes the wrappers can take a :class:<code>SkySubRays</code>: each ray then stands for
+several jittered sub-rays over its patch, whose directions the kernels compute,
+so the sub-rays are never stored (:func:<code>mesh_blocks_sky_sub_rays</code> is their
+context test).  There is
 no other tracer: when Warp cannot run, the carvers raise
 <code>WarpBackendUnavailableError</code> (see :func:<code>warp_kernels.require_dda_backend</code>).</p>
 <p>The coordinate conventions are those of :mod:<code>warp_kernels</code>.</p>
@@ -1578,12 +1718,113 @@ no other tracer: when Warp cannot run, the carvers raise
 
 
 
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="urbansolarcarver.ray_tracing.SkySubRays" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <code>SkySubRays</code>
+
+
+<a href="#urbansolarcarver.ray_tracing.SkySubRays" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+
+
+
+        <p>How the kernels split each sky-patch ray into jittered sub-rays.</p>
+<p>Ray <code>r</code> becomes the <code>side**2</code> threads <code>r * side**2 + k</code>, each
+tracing the direction :func:<code>sky_patches.sub_ray_directions</code> gives and
+carrying <code>1 / side**2</code> of the patch weight; the sub-rays the surface
+does not face are skipped.  Pass None instead to trace each ray's own
+direction (the patch centre).</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="urbansolarcarver.ray_tracing.SkySubRayBlocking" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <code>SkySubRayBlocking</code>
+
+
+<a href="#urbansolarcarver.ray_tracing.SkySubRayBlocking" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="typing.NamedTuple">NamedTuple</span></code></p>
+
+
+
+        <p>What the context and terrain block of the sky sub-rays (:func:<code>mesh_blocks_sky_sub_rays</code>).</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
 
 <div class="doc doc-object doc-function">
 
 
 <h3 id="urbansolarcarver.ray_tracing.trace_and_score_dda" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_score_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">point_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_and_score_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">scores</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">point_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sub_rays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">skip</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.ray_tracing.trace_and_score_dda" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1826,6 +2067,41 @@ voxel is not its skin.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sub_rays</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="            SkySubRays (urbansolarcarver.ray_tracing.SkySubRays)" href="#urbansolarcarver.ray_tracing.SkySubRays">SkySubRays</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Trace <code>sub_rays.count</code> jittered sub-rays per ray instead of its
+direction, each with that share of the patch weight; requires
+<code>surface_normals</code>.  None (default) traces <code>ray_dirs</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>skip</code>
+            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>uint8, one entry per traced ray (R, or R * sub_rays.count): rays
+whose entry is nonzero are not traced (the context blocks them).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -1849,7 +2125,152 @@ voxel is not its skin.</p>
 write into a copy), if <code>point_ids</code> is given with neither
 <code>point_weights</code> nor <code>surface_normals</code>, or if either of those
 is given without <code>point_ids</code>, or if <code>occupancy</code> is given
-without <code>surface_normals</code>.</p>
+without <code>surface_normals</code>, or <em>sub_rays</em> without
+<code>surface_normals</code>, or <em>skip</em> of another length.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.trace_point_access_dda" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">trace_point_access_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">access</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">occupancy</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">surface_normals</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">skin_occupancy</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sub_rays</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.trace_point_access_dda" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Trace rays until the first occupied voxel and add each ray's weight
+to its sample point's accessible or blocked weight in <code>access</code>.</p>
+<p>The grid and ray arguments are those of :func:<code>trace_and_score_dda</code>,
+including the note on parallel CPU calls; voxels count under the same
+front-face and skin rules.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>access</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(2 * <span title="num_points">num_points</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Flat contiguous float64, modified in place: the accessible weight
+of each sample point, then the blocked weight of each.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>occupancy</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="resolution">resolution</span> ** 3) or (<span title="res">res</span>, <span title="res">res</span>, <span title="res">res</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The occupancy grid to evaluate (nonzero = occupied).</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_ids</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Sample-point index per ray, below <code>access.numel() // 2</code>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>skin_occupancy</code>
+            </td>
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The max volume the skin rule reads (whether a skin voxel has mass
+behind it), as in scoring; default <em>occupancy</em>.  Pass the max volume
+when <em>occupancy</em> is a carved envelope.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sub_rays</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="            SkySubRays (urbansolarcarver.ray_tracing.SkySubRays)" href="#urbansolarcarver.ray_tracing.SkySubRays">SkySubRays</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_score_dda</code>: a sub-ray the surface does not
+face counts as neither accessible nor blocked.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <code>access</code> is not a contiguous float64 tensor of even length.</p>
               </div>
             </td>
           </tr>
@@ -1995,7 +2416,7 @@ without <code>surface_normals</code>.</p>
 
 
 <h3 id="urbansolarcarver.ray_tracing.follow_mass_behind_skin_dda" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">follow_mass_behind_skin_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">surface_normals</span><span class="p">,</span> <span class="n">occupancy</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">follow_mass_behind_skin_dda</span><span class="p">(</span><span class="n">min_corner</span><span class="p">,</span> <span class="n">scale</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">ray_dirs</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">surface_normals</span><span class="p">,</span> <span class="n">occupancy</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">ray_length</span><span class="p">,</span> <span class="n">patch_ids</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sub_rays</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">skip</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.ray_tracing.follow_mass_behind_skin_dda" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2187,6 +2608,57 @@ wholly behind the plane.</p>
                 <em>required</em>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>patch_ids</code>
+            </td>
+            <td>
+                  <code><span title="optional">optional</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_score_dda</code>; pass the ones the scores were
+traced with.  <em>patch_ids</em> is required with <em>sub_rays</em>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>sub_rays</code>
+            </td>
+            <td>
+                  <code><span title="optional">optional</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_score_dda</code>; pass the ones the scores were
+traced with.  <em>patch_ids</em> is required with <em>sub_rays</em>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>skip</code>
+            </td>
+            <td>
+                  <code><span title="optional">optional</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>As in :func:<code>trace_and_score_dda</code>; pass the ones the scores were
+traced with.  <em>patch_ids</em> is required with <em>sub_rays</em>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2244,8 +2716,192 @@ wholly behind the plane.</p>
 <div class="doc doc-object doc-function">
 
 
+<h3 id="urbansolarcarver.ray_tracing.mesh_blocks_rays" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">mesh_blocks_rays</span><span class="p">(</span><span class="n">blocking</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">directions</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">surface_normals</span><span class="p">,</span> <span class="n">max_t</span><span class="p">,</span> <span class="n">origin_offset</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">min_hit</span><span class="o">=</span><span class="mf">0.001</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.mesh_blocks_rays" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Which rays hit the context or terrain mesh within <em>max_t</em>.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>blocking</code>
+            </td>
+            <td>
+                  <code><span title="urbansolarcarver.context_geometry.BlockingMesh">BlockingMesh</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The context and terrain meshes, in the frame of <em>origins</em>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>origins</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>, 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Ray start points (the test points) and unit directions.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>directions</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>, 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Ray start points (the test points) and unit directions.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>point_ids</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="R">R</span>))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Test point of each ray, an index into <em>surface_normals</em>.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>surface_normals</code>
+            </td>
+            <td>
+                  <code>(<span title="torch.Tensor">Tensor</span>, <span title="shape">shape</span>(<span title="P">P</span>, 3))</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Outward unit normal of each test point.  Each ray starts
+<em>origin_offset</em> off its test surface along it, and hits closer than
+<em>min_hit</em> are ignored, so a test surface lying on a context face
+(a neighbour's facade) is not blocked by that face.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="torch.Tensor">Tensor</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>(R,) bool on the device of <em>origins</em>, True where the ray is blocked.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.mesh_blocks_sky_sub_rays" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">mesh_blocks_sky_sub_rays</span><span class="p">(</span><span class="n">blocking</span><span class="p">,</span> <span class="n">origins</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">point_ids</span><span class="p">,</span> <span class="n">surface_normals</span><span class="p">,</span> <span class="n">sub_rays</span><span class="p">,</span> <span class="n">patch_weights</span><span class="p">,</span> <span class="n">max_t</span><span class="p">,</span> <span class="n">point_weights</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">origin_offset</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">min_hit</span><span class="o">=</span><span class="mf">0.001</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.mesh_blocks_sky_sub_rays" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>:func:<code>mesh_blocks_rays</code> for the sky sub-rays of <em>sub_rays</em>.</p>
+<p>Each ray of <em>origins</em>, <em>patch_ids</em> and <em>point_ids</em> stands for
+<code>sub_rays.count</code> sub-rays, tested one thread each in launches of
+about 16 million.  Returns each sub-ray's status and, per test point,
+how many sub-rays it faces and their weight (<code>patch_weights[patch] /
+count</code>, times <em>point_weights</em> when given), and how much of that the
+mesh blocks.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.ray_tracing.sky_sub_ray_directions" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sky_sub_ray_directions</span><span class="p">(</span><span class="n">point_ids</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">sub_rays</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.ray_tracing.sky_sub_ray_directions" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The (R * count, 3) float32 sub-ray directions the kernels trace for these rays, on their device.</p>
+<p>The same directions as :func:<code>sky_patches.sub_ray_directions</code>, computed
+by the kernels' own function (float32).  Includes the sub-rays the
+surface does not face.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
 <h3 id="urbansolarcarver.ray_tracing.generate_sky_patch_rays" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">generate_sky_patch_rays</span><span class="p">(</span><span class="n">pts</span><span class="p">,</span> <span class="n">norms</span><span class="p">,</span> <span class="n">patch_dirs</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">generate_sky_patch_rays</span><span class="p">(</span><span class="n">pts</span><span class="p">,</span> <span class="n">norms</span><span class="p">,</span> <span class="n">patch_dirs</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">facing_margin</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.ray_tracing.generate_sky_patch_rays" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2253,7 +2909,15 @@ wholly behind the plane.</p>
     <div class="doc doc-contents ">
 
         <p>One ray per (sample point, sky patch) pair whose patch the surface faces.</p>
-<p>A ray is kept only where dot(normal, patch direction) &gt; 0.</p>
+<p>A ray is kept only where dot(normal, patch direction) &gt; -facing_margin:
+with the default 0, where the surface faces the patch centre; with sky
+sub-rays, :func:<code>sky_patches.patch_facing_margin</code> keeps every patch the
+surface faces in part.</p>
+<p>The rays are ordered by patch, then by sample point, so the threads that
+run together trace one direction from neighbouring points and visit
+nearby voxels; on the GPU this keeps the voxel arrays in the cache (on
+the District example, tracing took a quarter of the time it took with
+the rays ordered by point).</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -2329,6 +2993,22 @@ wholly behind the plane.</p>
             </td>
             <td>
                 <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>facing_margin</code>
+            </td>
+            <td>
+                  <code><span title="float">float</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>See above; 0 or more.</p>
+              </div>
+            </td>
+            <td>
+                  <code>0.0</code>
             </td>
           </tr>
       </tbody>
@@ -2565,9 +3245,15 @@ device (:func:<code>dda_backend_available</code>), precompiles the kernels
 <li>the DDA traversal (digital differential analyzer, Amanatides &amp; Woo
   1987): one thread per ray, stepping from voxel to voxel and visiting
   every voxel the ray crosses exactly once, with fused kernels that add
-  each ray's weight or a count of 1 directly into a per-voxel volume, and
-  the kernel of the skin rule;</li>
-<li>the parity voxelizer used by :func:<code>voxelization.voxelize_solid_warp</code>.</li>
+  each ray's weight or a count of 1 directly into a per-voxel volume, the
+  first-hit kernel of the test point access evaluation and the kernel of
+  the skin rule; in the sky-patch modes a thread can trace one of several
+  jittered sub-rays of a sky patch, whose direction it computes itself
+  (see the note above <code>_lowbias32</code>);</li>
+<li>the parity voxelizer used by :func:<code>voxelization.voxelize_solid_warp</code>;</li>
+<li>the ground heights of a terrain mesh and the voxel centres on the context's
+  surface, used by :mod:<code>context_geometry</code>, and the any-hit test of rays
+  against the context and terrain meshes (:func:<code>ray_tracing.mesh_blocks_rays</code>).</li>
 </ul>
 <p>All kernels live in this one module on purpose: Warp compiles a Python
 module as one unit and caches it on disk by module, so

@@ -532,6 +532,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#sky-patches-and-rays-per-patch-rays_per_patch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sky patches and rays per patch (rays_per_patch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-terrain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and terrain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#thresholding-strategies" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1347,6 +1369,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#sky-patches-and-rays-per-patch-rays_per_patch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sky patches and rays per patch (rays_per_patch)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#context-and-terrain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Context and terrain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#thresholding-strategies" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1556,6 +1600,119 @@
 </tr>
 </tbody>
 </table>
+<h2 id="sky-patches-and-rays-per-patch-rays_per_patch">Sky patches and rays per patch (<code>rays_per_patch</code>)<a class="headerlink" href="#sky-patches-and-rays-per-patch-rays_per_patch" title="Permanent link">&para;</a></h2>
+<p>The four weighted modes divide the sky into the 145 Tregenza patches, give each patch a weight, and trace rays from
+every test point toward the patches its surface faces. A voxel's score is the weight of the rays that cross it.</p>
+<p>With <code>rays_per_patch: 1</code> each point sends one ray to each patch centre. The centres are 12° apart in altitude (12° to
+60° in azimuth), so the rays of one point reach a voxel layer at distance d about 0.21 × d apart. Rays from the other
+points of a test surface fill the space between them only up to the surface's own extent. Beyond about five times
+the height of the test surfaces, voxels between the rows of rays get no ray at all and score 0, and the scores show
+horizontal and diagonal bands. On the Allatini example (facades 8 to 24 m high, maximum volumes 30 to 190 m away),
+38 % of the maximum volume's voxels scored 0 and the tallest tower column scored 0 over four bands 4 to 12 m high.</p>
+<p><code>rays_per_patch</code> 4 (the default), 9 or 16 trace that many rays per patch. The patch is cut into 2 × 2, 3 × 3 or
+4 × 4 cells of equal solid angle, and each ray points at a place in its cell drawn from a hash of the test point, the
+patch and the cell, carrying that share of the patch weight. Neighbouring points draw different places, so their
+rays no longer line up into rows. The places depend on nothing else, so a run gives the same scores every time and
+for any batch size; CPU and GPU agree to float32 rounding (their sine and cosine can differ in the last bit, so a ray
+grazing a voxel edge may cross the neighbour). Rays that the surface does not face are skipped, so a patch its plane cuts counts the part
+in front of it: a wall sees exactly half of the overcast sky.</p>
+<p>Measured in daylight mode on an RTX 3060. Allatini (19,193 test points), against 64 rays per patch; District of many
+buildings (527,000 test points, test surfaces beside the volumes, so little banding at 1 ray):</p>
+<table>
+<thead>
+<tr>
+<th><code>rays_per_patch</code></th>
+<th>Allatini: voxels scoring 0</th>
+<th>Allatini: keep or carve decisions at 70 % that differ</th>
+<th>Allatini: preprocessing</th>
+<th>District: preprocessing</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>38 %</td>
+<td>30 %</td>
+<td>1.15 s</td>
+<td>12.3 s</td>
+</tr>
+<tr>
+<td>4</td>
+<td>6 %</td>
+<td>6.4 %</td>
+<td>1.18 s</td>
+<td>13.9 s</td>
+</tr>
+<tr>
+<td>9</td>
+<td>5.5 %</td>
+<td>4.7 %</td>
+<td>1.20 s</td>
+<td>15.2 s</td>
+</tr>
+<tr>
+<td>16</td>
+<td>5 %</td>
+<td>3.8 %</td>
+<td>1.33 s</td>
+<td>17.0 s</td>
+</tr>
+</tbody>
+</table>
+<p>The remaining zeros are voxels that no test point sees (behind context, or behind the surfaces). The sub-rays are
+generated inside the tracing kernels, so memory does not grow with them. The rays are ordered by patch, so the GPU
+threads that run together trace the same direction from neighbouring points and find the voxels they visit in its
+cache; this is what keeps the extra rays cheap.
+<code>rays_per_patch: 1</code> reproduces the scores of earlier versions. Time-based mode traces sun positions and <code>tilted_plane</code>
+its planes, so neither reads this setting.</p>
+<h2 id="context-and-terrain">Context and terrain<a class="headerlink" href="#context-and-terrain" title="Permanent link">&para;</a></h2>
+<p>Two optional meshes describe what is around (or inside) the site and stays whatever is built: <code>context_path</code> for
+existing buildings and large trees, <code>terrain_path</code> for the ground. Both are opaque. Balconies, external shading
+devices and billboards are not context. Without them a run is the same as before.</p>
+<p><strong>Context</strong> does two things, in every mode:</p>
+<ul>
+<li><strong>Whole columns go.</strong> Where the context lies in a voxel column of the maximum volume (a voxel of the grid counts
+  when its centre lies inside the context, not on its surface), the whole column is removed from the buildable mass,
+  above and below the context. Nothing is built on top of kept buildings, under tree crowns or beside a chimney within
+  its columns. To build on or over an existing building, remove it from the context. A context face shared with the
+  maximum volume (a party wall) takes no voxel of the site. Only the context bodies that reach the voxel grid count
+  here, so a large city model around the site costs little and its distant parts cannot disturb the result.</li>
+<li><strong>Rays that hit it are dropped</strong> (ray-based modes: <code>time-based</code>, <code>irradiance</code>, <code>benefit</code>, <code>daylight</code>,
+  <code>radiative_cooling</code>). Each ray from a test point is tested against the context mesh before scoring; a ray that hits
+  it within <code>ray_length</code> adds nothing to any voxel, because that sun or sky is lost whatever is carved. The test is
+  against the mesh, not the voxel grid, so context far outside the grid still blocks. Weights are not renormalised:
+  a test point whose sky is half hidden keeps half its weight in play.</li>
+</ul>
+<p><strong>Terrain</strong> blocks rays exactly like context, but removes only the voxels whose centre lies below the ground (where
+the terrain crosses the column's vertical centre line, the highest crossing if there are several). The rest of the
+column stays buildable, so a sloping site keeps its volume above the ground. A voxel centre on the ground counts as
+above it. An open sheet is fine; a column the
+terrain does not cover keeps all its voxels.</p>
+<p><strong>Test surfaces on context buildings.</strong> A neighbour's facade is usually a face of its own context building. Each ray
+starts 1 cm off the test surface along its normal and hits closer than 1 mm are ignored, so a test surface lying on
+a context face is not blocked by that face; other parts of the same building (a second wing) block normally. A test
+surface drawn inside a context mass, below the terrain, or facing into its own building has all its rays blocked:
+the run reports a <code>test_points_blocked</code> warning with their count (ray-based modes), since those points protect
+nothing.</p>
+<p><strong><code>tilted_plane</code></strong> traces no rays to the sky, so context and terrain only remove voxels there: the planes are the
+same as without them.</p>
+<p><strong>Account for context blocking</strong> (<code>context_blocks_rays</code>, on by default). Off, the context and the terrain still
+remove their voxels and still count as solid mass, but no ray is tested against them: the carving is the one that
+ignores what they block, on the same reduced maximum volume, for comparison. The run report says when it is off.
+Dropping the rays lowers the scores, so with it on the cutoff usually needs another look.</p>
+<p><strong>Context and ground are solid.</strong> The rule that keeps a facade's own building from counting as its obstruction (a
+voxel the facade plane passes through, with mass behind it, is the facade's own skin) treats everything inside the
+context and below the terrain as solid mass, like the maximum volume. The space under a tree crown or above a kept
+building is not solid: a column removed there is empty, and a sliver of the maximum volume left in front of it counts
+as an obstruction like any thin part of the maximum volume.</p>
+<p><strong>Context mesh not closed.</strong> The column rule needs closed (watertight) context bodies to tell inside from outside. An
+open context mesh gives a <code>context_not_closed</code> warning: where an open body reaches the voxel grid, the columns removed
+may be too few or too many. It still blocks rays.</p>
+<p>The run report (and <code>summary["context"]</code> in the preprocessing diagnostics) gives the voxels removed by the context
+columns and below the ground, the volume and share of the maximum volume removed, the rays dropped and their share
+of the ray weight, and the test points with every ray blocked. Everything after preprocessing (thresholding,
+<code>carve_above</code>, the slope limit, export, massing) sees the reduced maximum volume; the massing footprint leaves out
+the columns context took.</p>
 <h2 id="thresholding-strategies">Thresholding strategies<a class="headerlink" href="#thresholding-strategies" title="Permanent link">&para;</a></h2>
 <p>USC supports three threshold strategies. The right choice depends on the mode.</p>
 <h3 id="for-weighted-modes-irradiance-benefit-daylight-radiative_cooling">For weighted modes (irradiance, benefit, daylight, radiative_cooling)<a class="headerlink" href="#for-weighted-modes-irradiance-benefit-daylight-radiative_cooling" title="Permanent link">&para;</a></h3>

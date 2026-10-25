@@ -1027,6 +1027,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.io.load_optional_mesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_optional_mesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.io.float32_resolution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1292,6 +1303,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.io.load_optional_mesh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        load_optional_mesh
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.io.float32_resolution" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1399,7 +1421,8 @@
 float32 would round georeferenced coordinates.  <code>validate_inputs</code> checks
 that the files a preprocessing run needs exist, and <code>load_meshes</code> loads
 the maximum volume and the test surfaces, reporting coordinates that a
-float32 file has rounded.</p>
+float32 file has rounded; <code>load_optional_mesh</code> loads the optional context
+and terrain meshes.</p>
 
 
 
@@ -1425,7 +1448,7 @@ float32 file has rounded.</p>
 
 
 <h3 id="urbansolarcarver.io.load_mesh" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">load_mesh</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">load_mesh</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">fix_normals</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.io.load_mesh" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1437,7 +1460,10 @@ float32 file has rounded.</p>
 duplicate vertices; it does not fix winding or remove degenerate faces.
 <code>fix_normals</code> is then called: it makes the face winding consistent
 across connected faces, and for watertight meshes it also turns each
-closed body that is stored inside out so its normals point outward.</p>
+closed body that is stored inside out so its normals point outward.
+With <em>fix_normals</em> False that step is left out (for meshes whose face
+orientation nothing reads, such as context and terrain: it takes seconds
+on large meshes).</p>
 
 
 <p><span class="doc-section-title">Raises:</span></p>
@@ -1463,6 +1489,29 @@ the problem would only show up later as an empty voxel grid.</p>
           </tr>
       </tbody>
     </table>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.io.load_optional_mesh" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">load_optional_mesh</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.io.load_optional_mesh" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Load an optional input mesh (context, terrain), or None when there is none.</p>
+<p>No path gives None. A file without triangles counts as absent: it is
+reported as a <code>&lt;name&gt;_empty</code> issue and gives None, so the run behaves as
+without it. A missing or unreadable file raises InputError. The faces are
+kept as stored: neither the column rule nor the ray test reads their
+orientation, and fixing it takes seconds on large meshes.</p>
 
 
     </div>
@@ -1562,7 +1611,8 @@ double in the file's JSON, moves it back, so readers place the vertices exactly.
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If the max-volume or test-surface mesh is missing, or the EPW file is
+                <p>If the max-volume or test-surface mesh is missing, a context or
+terrain path is given and its file is missing, or the EPW file is
 missing for a mode that needs one.</p>
               </div>
             </td>

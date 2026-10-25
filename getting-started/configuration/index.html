@@ -1360,34 +1360,23 @@
 
 
 <h1 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h1>
-<p>USC uses YAML configuration files. Mode-specific templates are in <code>configs/</code>. Relative paths inside a config file (meshes, EPW, <code>out_dir</code>, <code>simulated_weights_path</code>) are resolved against the folder that contains the YAML file.</p>
+<p>USC uses YAML configuration files. Mode-specific templates are in <code>configs/</code>. Relative paths inside a config file (meshes, including <code>context_path</code> and <code>terrain_path</code>, EPW, <code>out_dir</code>, <code>simulated_weights_path</code>) are resolved against the folder that contains the YAML file.</p>
 <p>From Python, <code>load_config(path, overrides)</code> reads a file and <code>build_config(values)</code> validates values you already hold; both raise <code>ConfigError</code>, which lists the field and message of every problem. A client with no YAML file (the Grasshopper components, through the daemon) starts from the starting values of the chosen mode and applies its overrides. The starting values are the analysis period for <code>time-based</code> (21 Dec, 10:00 to 14:00), <code>irradiance</code> (the full year) and <code>benefit</code> (15 Oct 07:00 to 15 Apr 19:00), <code>tilted_plane_angle_deg: 45</code> for <code>tilted_plane</code> and <code>carve_fraction: 0.35</code> for <code>radiative_cooling</code>; the templates in <code>configs/</code> repeat them. They do not change the schema defaults.</p>
 <h2 id="minimal-configs-by-mode">Minimal configs by mode<a class="headerlink" href="#minimal-configs-by-mode" title="Permanent link">&para;</a></h2>
 <p>Required parameters vary by mode. Every config needs <code>max_volume_path</code>, <code>test_surface_path</code>, and <code>out_dir</code>; <code>mode</code> defaults to <code>time-based</code>. The weather-dependent modes (<code>time-based</code>, <code>irradiance</code>, <code>benefit</code>) also require <code>epw_path</code> and an analysis period. <code>daylight</code>, <code>tilted_plane</code> and <code>radiative_cooling</code> need neither, and USC warns if you set settings the chosen mode does not use.</p>
+<p>Two optional meshes describe what is around (or inside) the site and stays, in every mode: <code>context_path</code> (existing buildings and large trees) and <code>terrain_path</code> (the ground, an open sheet is fine). Leave them out and the run is the same as without them. See <a href="../../modes/#context-and-terrain">Context and terrain</a>.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">context_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/surroundings.ply&quot;</span><span class="w">   </span><span class="c1"># optional</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">terrain_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/terrain.ply&quot;</span><span class="w">        </span><span class="c1"># optional</span>
+</code></pre></div>
 <div class="tabbed-set tabbed-alternate" data-tabs="1:6"><input checked="checked" id="__tabbed_1_1" name="__tabbed_1" type="radio" /><input id="__tabbed_1_2" name="__tabbed_1" type="radio" /><input id="__tabbed_1_3" name="__tabbed_1" type="radio" /><input id="__tabbed_1_4" name="__tabbed_1" type="radio" /><input id="__tabbed_1_5" name="__tabbed_1" type="radio" /><input id="__tabbed_1_6" name="__tabbed_1" type="radio" /><div class="tabbed-labels"><label for="__tabbed_1_1">tilted_plane</label><label for="__tabbed_1_2">time-based</label><label for="__tabbed_1_3">irradiance</label><label for="__tabbed_1_4">benefit</label><label for="__tabbed_1_5">daylight</label><label for="__tabbed_1_6">radiative_cooling</label></div>
 <div class="tabbed-content">
 <div class="tabbed-block">
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/maxVolume.ply&quot;</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/testSurfaces.ply&quot;</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tilted_plane&quot;</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">tilted_plane_angle_deg</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">45.0</span><span class="w">   </span><span class="c1"># single angle, or list of 8 for octants</span>
-</code></pre></div>
-</div>
-<div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/maxVolume.ply&quot;</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/testSurfaces.ply&quot;</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">epw_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/weather.epw&quot;</span>
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;time-based&quot;</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">21</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="nt">end_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">21</span>
-<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tilted_plane&quot;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nt">tilted_plane_angle_deg</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">45.0</span><span class="w">   </span><span class="c1"># single angle, or list of 8 for octants</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
@@ -1395,16 +1384,14 @@
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/testSurfaces.ply&quot;</span>
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">epw_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/weather.epw&quot;</span>
 <a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
-<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;irradiance&quot;</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;time-based&quot;</span>
 <a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
-<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">21</span>
+<a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">9</span>
 <a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="nt">end_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
-<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">31</span>
-<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">18</span>
-<a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
-<a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
+<a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">21</span>
+<a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
@@ -1412,40 +1399,57 @@
 <a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/testSurfaces.ply&quot;</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="nt">epw_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/weather.epw&quot;</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;benefit&quot;</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;irradiance&quot;</span>
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="nt">end_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="nt">balance_temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">18.0</span>
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="nt">balance_offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="nt">end_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">31</span>
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">18</span>
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/maxVolume.ply&quot;</span>
 <a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/testSurfaces.ply&quot;</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;daylight&quot;</span>
-<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
-<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="nt">epw_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/weather.epw&quot;</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
+<a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;benefit&quot;</span>
+<a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+<a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="nt">end_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+<a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
+<a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="nt">balance_temperature</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">18.0</span>
+<a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="nt">balance_offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
+<a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
 </code></pre></div>
 </div>
 <div class="tabbed-block">
 <div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/maxVolume.ply&quot;</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/testSurfaces.ply&quot;</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
-<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;radiative_cooling&quot;</span>
+<a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;daylight&quot;</span>
 <a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
-<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nt">dew_point_celsius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.0</span>
-<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nt">bliss_k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.8</span>
-<a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
-<a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span><span class="w">   </span><span class="c1"># cooling scores are diffuse; 0.7 over-carves</span>
+<a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
+<a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
+</code></pre></div>
+</div>
+<div class="tabbed-block">
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/maxVolume.ply&quot;</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;path/to/testSurfaces.ply&quot;</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
+<a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;radiative_cooling&quot;</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="nt">dew_point_celsius</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">14.0</span>
+<a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="nt">bliss_k</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.8</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="nt">threshold</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;carve_fraction&quot;</span>
+<a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.35</span><span class="w">   </span><span class="c1"># cooling scores are diffuse; 0.7 over-carves</span>
 </code></pre></div>
 </div>
 </div>
@@ -1464,6 +1468,21 @@
 <td><code>mode</code></td>
 <td><code>"time-based"</code></td>
 <td>Carving mode (see <a href="../../modes/">Modes</a>)</td>
+</tr>
+<tr>
+<td><code>context_path</code></td>
+<td><code>null</code></td>
+<td>Optional mesh of the existing surroundings that stay (buildings, large trees). Rays that hit it are dropped before scoring, and every voxel column of the maximum volume it overlaps is removed. Not for balconies or shading devices</td>
+</tr>
+<tr>
+<td><code>terrain_path</code></td>
+<td><code>null</code></td>
+<td>Optional terrain mesh. Rays that hit it are dropped, and only the voxels below the ground are removed, so the site stays buildable above it</td>
+</tr>
+<tr>
+<td><code>context_blocks_rays</code></td>
+<td>true</td>
+<td>With context or terrain, in the ray-based modes: drop the rays that hit them before scoring. <code>false</code> keeps the voxels they remove and their solid mass, but drops no ray, to compare with the carving that ignores them</td>
 </tr>
 <tr>
 <td><code>voxel_size</code></td>
@@ -1643,6 +1662,11 @@
 <td>Ignore sky patches below this elevation in degrees (default 0 = full hemisphere)</td>
 </tr>
 <tr>
+<td><code>rays_per_patch</code></td>
+<td>weighted modes</td>
+<td>Rays per Tregenza sky patch from each test point: 1 (the patch centre), 4 (default), 9 or 16 (spread over the patch, repeatable), which close the gaps between patch centres far from the test surfaces (<a href="../../modes/#sky-patches-and-rays-per-patch-rays_per_patch">details</a>)</td>
+</tr>
+<tr>
 <td><code>edge_taper</code></td>
 <td>weighted modes</td>
 <td>Sample points closer than this (m) to their surface's edge count proportionally less (default 0 = off), so a cooling street or courtyard does not clear the mass right beside it. The browser UI shows it in Night cooling (<code>radiative_cooling</code>) only</td>
@@ -1669,27 +1693,27 @@
 </div>
 <h2 id="cli-overrides">CLI overrides<a class="headerlink" href="#cli-overrides" title="Permanent link">&para;</a></h2>
 <p>Any config value can be overridden from the command line:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>urbansolarcarver<span class="w"> </span>preprocessing<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w">     </span>-o<span class="w"> </span><span class="nv">voxel_size</span><span class="o">=</span><span class="m">0</span>.5<span class="w">     </span>-o<span class="w"> </span><span class="nv">mode</span><span class="o">=</span>irradiance<span class="w">     </span>-o<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span>carve_fraction
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>urbansolarcarver<span class="w"> </span>preprocessing<span class="w"> </span>-c<span class="w"> </span>config.yaml<span class="w">     </span>-o<span class="w"> </span><span class="nv">voxel_size</span><span class="o">=</span><span class="m">0</span>.5<span class="w">     </span>-o<span class="w"> </span><span class="nv">mode</span><span class="o">=</span>irradiance<span class="w">     </span>-o<span class="w"> </span><span class="nv">threshold</span><span class="o">=</span>carve_fraction
 </code></pre></div>
 <p>Relative paths given in overrides are resolved against the current directory, not the YAML's folder.</p>
 <h2 id="output-structure">Output structure<a class="headerlink" href="#output-structure" title="Permanent link">&para;</a></h2>
 <p>With the default output folders (<code>&lt;out_dir&gt;/preprocessing</code>, <code>&lt;out_dir&gt;/thresholding</code>, <code>&lt;out_dir&gt;/exporting</code>, and <code>&lt;out_dir&gt;/massing</code> when massing runs):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>outputs/
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>  preprocessing/
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    scores.npy, voxel_grid.npy, footprint.json, test_points.npy, test_normals.npy, manifest.json, diagnostics/
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>  thresholding/
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    mask.npy, manifest.json, diagnostics/
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>  exporting/
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    export.ply (or .obj/.stl/.glb), manifest.json, diagnostics/
-<a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>  massing/
-<a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    plates.json, plates.obj (and plates.ply/.stl/.glb), manifest.json, diagnostics/
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>  run_report.md
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>outputs/
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>  preprocessing/
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    scores.npy, voxel_grid.npy, footprint.json, test_points.npy, test_normals.npy, manifest.json, diagnostics/
+<a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>  thresholding/
+<a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    mask.npy, manifest.json, diagnostics/
+<a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>  exporting/
+<a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    export.ply (or .obj/.stl/.glb), manifest.json, diagnostics/
+<a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>  massing/
+<a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    plates.json, plates.obj (and plates.ply/.stl/.glb), manifest.json, diagnostics/
+<a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>  run_report.md
 </code></pre></div>
 <p>Every manifest carries a <code>run_id</code>, new on each run of its stage, and the manifests after preprocessing record the <code>run_id</code> they were built from. A stage refuses an upstream that was re-run since (<code>StageChainError</code>, naming the stage to re-run), so re-run preprocessing once for a run folder written by an earlier version.</p>
 <p>Weighted modes also write <code>preprocessing/patch_weights.npy</code>.</p>
 <h2 id="full-reference">Full reference<a class="headerlink" href="#full-reference" title="Permanent link">&para;</a></h2>
 <p>See <code>configs/REFERENCE_all_options.yaml</code> for every parameter with descriptions, or run:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>urbansolarcarver<span class="w"> </span>schema
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>urbansolarcarver<span class="w"> </span>schema
 </code></pre></div>
 
 

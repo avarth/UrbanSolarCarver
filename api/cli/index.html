@@ -1884,7 +1884,7 @@ are edited directly in YAML (see configs/archetype_example.yaml).</p>
 
         <p>Parse and validate the YAML config through Pydantic.</p>
 <p>Exits with code 1 if the config fails schema or value checks.  Missing
-mesh, EPW and simulated-weights files, and a simulated-weights file that
+mesh (context and terrain included), EPW and simulated-weights files, and a simulated-weights file that
 cannot be read, are printed as warnings only (exit code 0).  Does not
 initialise CUDA or import torch.</p>
 

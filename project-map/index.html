@@ -1581,6 +1581,10 @@
 <td>Converts a watertight mesh into a dense cubic boolean grid at the configured <code>voxel_size</code>, using the Warp parity voxelizer (<code>voxelize_solid_warp</code>, kernel in <code>warp_kernels.py</code>) (trimesh's rasterize-and-fill when Warp cannot run on the device) and filling enclosed cavities; the grid is cached in the active <code>CarverSession</code>. <strong><code>voxelize</code></strong> is the preprocessing entry point.</td>
 </tr>
 <tr>
+<td><code>context_geometry.py</code></td>
+<td>Context and terrain on the max volume's lattice. <strong><code>context_occupancy</code></strong>: voxels whose centre lies inside the context (parity voxelizer, centre rule only, rays spanning the context's bounds). <strong><code>remove_context_columns</code></strong>: the column rule. <strong><code>ground_heights</code></strong> / <strong><code>remove_below_ground</code></strong>: the voxels below the terrain. <strong><code>build_blocking_mesh</code></strong> / <strong><code>drop_blocked_rays</code></strong>: one Warp BVH of context and terrain, and the rays that hit it (dropped before scoring). <strong><code>drop_blocked_sky_sub_rays</code></strong>: the same per jittered sky sub-ray, as a skip mask. <strong><code>subtract_columns</code></strong>: the footprint without the removed columns, for massing.</td>
+</tr>
+<tr>
 <td><code>meshing.py</code></td>
 <td>Mesh reconstruction. Removes small disconnected voxel clusters with <code>scipy.ndimage.label</code> and converts carved voxel masks back to triangle meshes, either as cubic voxel faces or through signed-distance-field smoothing, marching cubes, and Taubin polishing. <strong><code>finalize_mesh</code></strong> is the exporting entry point.</td>
 </tr>
@@ -1601,7 +1605,7 @@
 <tbody>
 <tr>
 <td><code>carving.py</code></td>
-<td>The three carving strategies. <strong><code>carve_with_sun_rays</code></strong> (<code>time-based</code>): traces rays from test-surface points toward the sun positions of the analysis period and returns the carved grid and per-voxel hit counts. <strong><code>carve_with_sky_patch_rays</code></strong> (<code>irradiance</code>, <code>benefit</code>, <code>daylight</code>, <code>radiative_cooling</code>): traces rays toward the 145 Tregenza sky patches, weights each ray by its patch's mode-specific value, and returns the accumulated per-voxel scores. <strong><code>carve_with_planes</code></strong> (<code>tilted_plane</code>): traces one ray per sample point at the plane angle (per-octant angles supported) and removes every voxel at or above it in its column.</td>
+<td>The three carving strategies. <strong><code>carve_with_sun_rays</code></strong> (<code>time-based</code>): traces rays from test-surface points toward the sun positions of the analysis period and returns the carved grid and per-voxel hit counts. <strong><code>carve_with_sky_patch_rays</code></strong> (<code>irradiance</code>, <code>benefit</code>, <code>daylight</code>, <code>radiative_cooling</code>): traces rays toward the 145 Tregenza sky patches (<code>rays_per_patch</code> per patch: the centre, or jittered sub-rays spread over the patch), weights each ray by its share of its patch's mode-specific value, and returns the accumulated per-voxel scores. <strong><code>carve_with_planes</code></strong> (<code>tilted_plane</code>): traces one ray per sample point at the plane angle (per-octant angles supported) and removes every voxel at or above it in its column.</td>
 </tr>
 <tr>
 <td><code>column_postprocessing.py</code></td>
@@ -1609,11 +1613,11 @@
 </tr>
 <tr>
 <td><code>ray_tracing.py</code></td>
-<td>Ray generation and voxel traversal. <strong><code>trace_and_score_dda</code></strong> / <strong><code>trace_and_count_dda</code></strong>: launch the Digital Differential Analyzer (DDA) kernels that step each ray through the voxel grid cell by cell and add the ray's weight (or a count of 1) to every voxel it crosses; they run on CUDA or on Warp's CPU backend, and there is no other tracer. <strong><code>follow_mass_behind_skin_dda</code></strong>: the skin rule. <strong><code>generate_sky_patch_rays</code></strong> / <strong><code>generate_sun_rays</code></strong>: expand sample points × directions into flat ray arrays, keeping only directions the surface faces. <strong><code>auto_batch_size</code></strong>: picks a ray batch size from the free GPU memory.</td>
+<td>Ray generation and voxel traversal. <strong><code>trace_and_score_dda</code></strong> / <strong><code>trace_and_count_dda</code></strong>: launch the Digital Differential Analyzer (DDA) kernels that step each ray through the voxel grid cell by cell and add the ray's weight (or a count of 1) to every voxel it crosses; they run on CUDA or on Warp's CPU backend, and there is no other tracer. <strong><code>follow_mass_behind_skin_dda</code></strong>: the skin rule. <strong><code>SkySubRays</code></strong>: passed to the wrappers, has the kernels trace each sky-patch ray as <code>side²</code> jittered sub-rays whose directions they compute themselves (no sub-ray arrays are stored); <strong><code>mesh_blocks_sky_sub_rays</code></strong> tests them against context and terrain, <strong><code>sky_sub_ray_directions</code></strong> returns them. <strong><code>generate_sky_patch_rays</code></strong> / <strong><code>generate_sun_rays</code></strong>: expand sample points × directions into flat ray arrays, keeping only directions the surface faces. <strong><code>auto_batch_size</code></strong>: picks a ray batch size from the free GPU memory.</td>
 </tr>
 <tr>
 <td><code>warp_kernels.py</code></td>
-<td>Warp setup and every Warp kernel of the package (DDA traversal, skin rule, parity voxelizer), kept in one module so Warp compiles and caches them as one unit. <strong><code>dda_backend_available</code></strong>: whether the DDA backend can run on a device; <strong><code>require_dda_backend</code></strong> raises <code>WarpBackendUnavailableError</code> with the reason when it cannot. <strong><code>warmup_kernels</code></strong>: precompiles the kernels.</td>
+<td>Warp setup and every Warp kernel of the package (DDA traversal, jittered sky sub-ray directions, skin rule, parity voxelizer, ground heights, mesh any-hit test), kept in one module so Warp compiles and caches them as one unit. <strong><code>dda_backend_available</code></strong>: whether the DDA backend can run on a device; <strong><code>require_dda_backend</code></strong> raises <code>WarpBackendUnavailableError</code> with the reason when it cannot. <strong><code>warmup_kernels</code></strong>: precompiles the kernels.</td>
 </tr>
 </tbody>
 </table>
@@ -1628,7 +1632,7 @@
 <tbody>
 <tr>
 <td><code>sky_patches.py</code></td>
-<td>Tregenza hemisphere subdivision (145 patches) used by the weighted carving modes. <strong><code>fetch_tregenza_patch_directions</code></strong>: the 145 unit direction vectors. <strong><code>fetch_tregenza_patch_solid_angles</code></strong>: the solid angle (sr) of each patch. <strong><code>compute_EPW_based_weights</code></strong>: for <code>irradiance</code> and <code>benefit</code>, builds a Ladybug <code>SkyMatrix</code> (Perez all-weather model) from the EPW's direct-normal and diffuse-horizontal irradiance over the analysis period, each computation in a temporary folder of its own; benefit keeps only the hours below the balance point, or scales each hour by simulated weights. For <code>daylight</code>, returns the CIE standard overcast luminance distribution (brightest at the zenith, no EPW). <strong><code>compute_radiative_cooling_weights</code></strong>: long-wave cooling potential per patch from the Martin-Berdahl clear-sky emissivity with Bliss angular attenuation, for a horizontal surface; patches near the zenith get higher weights than those near the horizon.</td>
+<td>Tregenza hemisphere subdivision (145 patches) used by the weighted carving modes. <strong><code>fetch_tregenza_patch_directions</code></strong>: the 145 unit direction vectors. <strong><code>fetch_tregenza_patch_solid_angles</code></strong>: the solid angle (sr) of each patch. <strong><code>tregenza_patch_cells</code></strong>: each patch's band of altitude and share of azimuth. <strong><code>sub_ray_directions</code></strong>: the NumPy definition of the jittered sub-ray directions the kernels compute (a hash of point, patch and cell picks a place in each cell of equal solid angle); <strong><code>patch_facing_margin</code></strong>: how far behind a surface a patch centre can lie while the surface still faces part of the patch. <strong><code>compute_EPW_based_weights</code></strong>: for <code>irradiance</code> and <code>benefit</code>, builds a Ladybug <code>SkyMatrix</code> (Perez all-weather model) from the EPW's direct-normal and diffuse-horizontal irradiance over the analysis period, each computation in a temporary folder of its own; benefit keeps only the hours below the balance point, or scales each hour by simulated weights. For <code>daylight</code>, returns the CIE standard overcast luminance distribution (brightest at the zenith, no EPW). <strong><code>compute_radiative_cooling_weights</code></strong>: long-wave cooling potential per patch from the Martin-Berdahl clear-sky emissivity with Bliss angular attenuation, for a horizontal surface; patches near the zenith get higher weights than those near the horizon.</td>
 </tr>
 <tr>
 <td><code>sun.py</code></td>
@@ -1807,41 +1811,42 @@ tuned defaults commented at the bottom.</p>
 <a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>├── test_carve_above.py      carve_above_columns, carve_above_scores, limit_column_slope
 <a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>├── test_cli.py              CLI commands and the schema table
 <a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>├── test_compute_device.py   The device rule: auto, explicit choices, CUDA missing, Warp device names
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>├── test_daemon.py           Daemon survives misbehaving clients and failing requests
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>├── test_engine_requests.py  Request parsing, configs from starting values, replies and real runs through the request core
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>├── test_exporting.py        Exporting stage: mesh placement, diagnostics, run report
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>├── test_local_web_*.py      The browser UI service: packaging and build hash, projects, stage records, run worker, run summaries, score points, HTTP routes and security
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>├── test_floor_plates.py     Floor-plate geometry: facades, faces, bays, floors, outlines, prisms
-<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>├── test_massing_stage.py    Massing stage end to end on synthetic scenes
-<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>├── test_meshing.py          Cubic and smoothed meshing, pruning, diffusion, Taubin polish, cleanup
-<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>├── test_gh_components.py    Grasshopper sources stay buildable into .ghuser files
-<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>├── test_modes.py            End-to-end smoke tests per mode, benefit weight formula
-<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>├── test_montecarlo.py       Fixed Monte Carlo seeds in the regular suite
-<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>├── test_north.py            north_deg convention (clockwise from +Y) at every Ladybug boundary
-<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>├── test_package_imports.py  Every public name resolves; importing the package and `usc daemon status` do not load torch
-<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>├── test_pipeline.py         Full runs, stage-boundary validation, overrides, simulated weights
-<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>├── test_preprocessing.py    Preprocessing helpers and manifest keys
-<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>├── test_ray_tracing.py      Warp DDA kernel launches, ray generation, batch size
-<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>├── test_schemas.py          Config schema validation, grid resolution cap, overrides, relative paths
-<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>├── test_run_context.py      RunContext: issues, progress, cancel, and the error classes
-<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a>├── test_scoring.py          Head/tail and carve-fraction thresholds
-<a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a>├── test_sequencer.py        run_pipeline: produce, start_from, collected issues, progress, cancel
-<a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a>├── test_setup_env.py        setup_env.py: choosing the PyTorch wheel index for the driver
-<a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a>├── test_session.py          CarverSession caching and the session_cache decorator
-<a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a>├── test_sky_matrix_folder.py  Sky matrices in their own temporary folder: concurrent runs, nothing left behind
-<a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a>├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
-<a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>│                            steady-state closure, attribution, shoebox expansion, artifact I/O
-<a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>├── test_stage_chain.py      Run IDs, upstream checks, relative manifest paths
-<a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>├── test_stage_outputs.py    Outputs cleared before a stage, manifest written last, run report sections
-<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>├── test_stage_settings.py   Per-stage settings models and stages_to_rerun
-<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>├── test_surface_sampling.py  Test-surface sampling: coplanarity, boundary samples, edge taper, degenerate faces
-<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>├── test_typologies.py       End-to-end carving checks on procedural urban typologies
-<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
-<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>├── test_util.py             Diagnostics helpers and the grid memory estimate
-<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a>├── test_version.py          The version in pyproject.toml, the package, the CLI and CITATION.cff
-<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
-<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>├── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
-<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>└── test_weather_file.py     The cached EPW reader: re-read on a changed file, copies for each caller
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>├── test_context_*.py        Context and terrain: config keys, voxels on the lattice and the column rule, ground heights, the ray mask, preprocessing, typology scenes
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>├── test_daemon.py           Daemon survives misbehaving clients and failing requests
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>├── test_engine_requests.py  Request parsing, configs from starting values, replies and real runs through the request core
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>├── test_exporting.py        Exporting stage: mesh placement, diagnostics, run report
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>├── test_local_web_*.py      The browser UI service: packaging and build hash, projects, stage records, run worker, run summaries, score points, HTTP routes and security
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>├── test_floor_plates.py     Floor-plate geometry: facades, faces, bays, floors, outlines, prisms
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>├── test_massing_stage.py    Massing stage end to end on synthetic scenes
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>├── test_meshing.py          Cubic and smoothed meshing, pruning, diffusion, Taubin polish, cleanup
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>├── test_gh_components.py    Grasshopper sources stay buildable into .ghuser files
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>├── test_modes.py            End-to-end smoke tests per mode, benefit weight formula
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>├── test_montecarlo.py       Fixed Monte Carlo seeds in the regular suite
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>├── test_north.py            north_deg convention (clockwise from +Y) at every Ladybug boundary
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>├── test_package_imports.py  Every public name resolves; importing the package and `usc daemon status` do not load torch
+<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>├── test_pipeline.py         Full runs, stage-boundary validation, overrides, simulated weights
+<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>├── test_preprocessing.py    Preprocessing helpers and manifest keys
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>├── test_ray_tracing.py      Warp DDA kernel launches, ray generation, batch size
+<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>├── test_schemas.py          Config schema validation, grid resolution cap, overrides, relative paths
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a>├── test_run_context.py      RunContext: issues, progress, cancel, and the error classes
+<a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a>├── test_scoring.py          Head/tail and carve-fraction thresholds
+<a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a>├── test_sequencer.py        run_pipeline: produce, start_from, collected issues, progress, cancel
+<a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a>├── test_setup_env.py        setup_env.py: choosing the PyTorch wheel index for the driver
+<a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a>├── test_session.py          CarverSession caching and the session_cache decorator
+<a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a>├── test_sky_matrix_folder.py  Sky matrices in their own temporary folder: concurrent runs, nothing left behind
+<a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
+<a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>│                            steady-state closure, attribution, shoebox expansion, artifact I/O
+<a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>├── test_stage_chain.py      Run IDs, upstream checks, relative manifest paths
+<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>├── test_stage_outputs.py    Outputs cleared before a stage, manifest written last, run report sections
+<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>├── test_stage_settings.py   Per-stage settings models and stages_to_rerun
+<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>├── test_surface_sampling.py  Test-surface sampling: coplanarity, boundary samples, edge taper, degenerate faces
+<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>├── test_typologies.py       End-to-end carving checks on procedural urban typologies
+<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
+<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a>├── test_util.py             Diagnostics helpers and the grid memory estimate
+<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>├── test_version.py          The version in pyproject.toml, the package, the CLI and CITATION.cff
+<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
+<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>├── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
+<a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a>└── test_weather_file.py     The cached EPW reader: re-read on a changed file, copies for each caller
 </code></pre></div>
 
 

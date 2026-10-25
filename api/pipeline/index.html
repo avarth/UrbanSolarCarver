@@ -3505,6 +3505,12 @@ blocks sun or sky from the test surfaces.  The steps are:</p>
      (irradiance, benefit), or the sky it hides in m² of fully hidden
      sky (daylight, radiative_cooling; their weights sum to 1).</li>
 </ol>
+<p>With the optional context (<code>cfg.context_path</code>) and terrain
+(<code>cfg.terrain_path</code>) meshes, step 1 also removes every voxel column the
+context overlaps and the voxels below the ground, and in the ray-based
+modes step 3 drops every ray that hits the context or the terrain before
+scoring (unless <code>cfg.context_blocks_rays</code> is off).  <code>tilted_plane</code>
+loses the voxels only.</p>
 
 
 <p><span class="doc-section-title">Parameters:</span></p>
@@ -3600,8 +3606,9 @@ Artifacts are written directly into it, diagnostics into its
             <td>
               <div class="doc-md-description">
                 <p>If the mesh or required EPW file is missing, the voxel grid is empty,
-no test-surface points are sampled, or, in radiative_cooling mode,
-the test surfaces do not face up.</p>
+the context or the terrain leaves nothing of it, no test-surface
+points are sampled, or, in radiative_cooling mode, the test surfaces
+do not face up.</p>
               </div>
             </td>
           </tr>
@@ -3627,12 +3634,13 @@ allocated).</p>
     Flat <code>float32</code> array of length X<em>Y</em>Z (C order of the voxel grid)
     with raw obstruction scores; thresholding reshapes it.
 <code>voxel_grid.npy</code>
-    Occupancy grid (uint8, 1 = inside the max volume) so downstream
-    stages can skip re-voxelization.
+    Occupancy grid (uint8, 1 = inside the max volume, without the voxels
+    context and terrain removed) so downstream stages can skip
+    re-voxelization.
 <code>footprint.json</code>
     The max volume's plan projection in world xy (<code>{"polygons": [{"exterior":
-    [[x, y], ...], "holes": [...]}, ...]}</code>), which massing reads instead of
-    the input mesh.  An empty list when the projection failed; massing then
+    [[x, y], ...], "holes": [...]}, ...]}</code>), without the columns context
+    took, which massing reads instead of the input mesh.  An empty list when the projection failed; massing then
     uses the voxel footprint.
 <code>test_points.npy</code>, <code>test_normals.npy</code>, <code>analysis_mesh.json</code>
     Sample points (world coordinates), their normals, and the analysis

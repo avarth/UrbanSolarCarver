@@ -937,6 +937,50 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.tregenza_patch_cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tregenza_patch_cells
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fetch_tregenza_patch_cells
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.patch_facing_margin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        patch_facing_margin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.sub_ray_directions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sub_ray_directions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1303,6 +1347,50 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.tregenza_patch_cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        tregenza_patch_cells
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_cells" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        fetch_tregenza_patch_cells
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.patch_facing_margin" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        patch_facing_margin
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.sub_ray_directions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sub_ray_directions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1387,6 +1475,11 @@ distributions for the voxel carving pipeline. P = 145 Tregenza patches.</p>
 <p>fetch_tregenza_patch_solid_angles(device) → torch.Tensor
    Returns a length-P tensor of solid angles (steradians) per patch.</p>
 </li>
+</ol>
+<p>tregenza_patch_cells() and sub_ray_directions(point_ids, patch_ids,
+   side, cells) define the jittered sub-rays that trace a patch as
+   side × side rays (<code>rays_per_patch</code>), which the Warp kernels compute.</p>
+<ol>
 <li>
 <p>compute_EPW_based_weights(mode, epw_path, hoys, device, ...) → torch.Tensor
    Per-patch weights for the modes time-based (uniform), daylight (CIE
@@ -1488,6 +1581,99 @@ Reinhart list once <code>reinhart_solid_angles</code> has been read.</p>
 each Tregenza sky patch in steradians, in the same order as
 :func:<code>fetch_tregenza_patch_directions</code> (see :func:<code>tregenza_solid_angles</code>).
 The result is cached per device for the session.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.tregenza_patch_cells" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">tregenza_patch_cells</span><span class="p">()</span></code>
+
+<a href="#urbansolarcarver.sky_patches.tregenza_patch_cells" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The extent of each of the 145 Tregenza patches, (145, 4) float64.</p>
+<p>Each row is <code>(sin_alt_low, sin_alt_high, az_low, az_high)</code>: the patch
+spans its band of altitude (12° per row, the zenith cap from 84° up) and
+an equal share of azimuth around Ladybug's patch centre, azimuth in
+radians clockwise from +Y like the centres themselves (a direction is
+<code>(cos alt sin az, cos alt cos az, sin alt)</code>).  The zenith cap spans
+azimuth 0 to 2 pi.  Equal steps of sin(altitude) and of azimuth inside a
+patch cut it into cells of equal solid angle (:func:<code>sub_ray_directions</code>).</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.fetch_tregenza_patch_cells" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">fetch_tregenza_patch_cells</span><span class="p">(</span><span class="n">device</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.sky_patches.fetch_tregenza_patch_cells" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>:func:<code>tregenza_patch_cells</code> as a float32 (145, 4) tensor on <em>device</em>, cached for the session.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.patch_facing_margin" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">patch_facing_margin</span><span class="p">(</span><span class="n">cells</span><span class="p">,</span> <span class="n">centres</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.sky_patches.patch_facing_margin" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>sin of the largest angle between a patch's centre and any point of the patch.</p>
+<p>A surface faces part of a patch only if dot(normal, centre) exceeds minus
+this value, so the sky-patch rays split into sub-rays keep every such
+patch (the sub-rays that face away are skipped in the kernels).  Measured
+on 33 points along each edge of every patch.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.sub_ray_directions" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sub_ray_directions</span><span class="p">(</span><span class="n">point_ids</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">side</span><span class="p">,</span> <span class="n">cells</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.sky_patches.sub_ray_directions" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>The <code>side**2</code> sub-ray directions of each (sample point, sky patch) ray, (R * side**2, 3) float64.</p>
+<p>The reference for the Warp kernels, which compute the same directions in
+float32 (<code>warp_kernels._sky_sub_ray_direction</code>): ray <code>r</code> becomes
+sub-rays <code>r * side**2 + k</code>.  The patch is cut into side × side cells
+of equal solid angle (equal steps of sin(altitude) and of azimuth, see
+:func:<code>tregenza_patch_cells</code>), cell <code>k</code> being row <code>k // side</code> and
+column <code>k % side</code>, and each sub-ray points at a place in its cell
+drawn from a hash of the sample point, the patch and <code>k</code>: the same
+point and patch give the same directions on every run, device and batch
+size, and neighbouring points draw different ones, so their rays do not
+line up into bands.</p>
 
 
     </div>

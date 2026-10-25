@@ -2972,7 +2972,7 @@ trimesh voxelization fails.</p>
 
 
 <h3 id="urbansolarcarver.voxelization.voxelize_solid_warp" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">voxelize_solid_warp</span><span class="p">(</span><span class="n">vertices</span><span class="p">,</span> <span class="n">faces</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">device</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">voxelize_solid_warp</span><span class="p">(</span><span class="n">vertices</span><span class="p">,</span> <span class="n">faces</span><span class="p">,</span> <span class="n">grid_origin</span><span class="p">,</span> <span class="n">voxel_size</span><span class="p">,</span> <span class="n">resolution</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">centre_only</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">span_min</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">span_max</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.voxelization.voxelize_solid_warp" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2988,6 +2988,13 @@ uses the same idea), or when the mesh surface passes through it.  Runs
 on CUDA or the Warp CPU device; voxelization.py uses trimesh's slower
 rasterize-and-fill only when this returns None, and lets anything it
 raises propagate.</p>
+<p>With <em>centre_only</em> the surface-through rule is left out: a voxel is
+occupied only when its centre is inside (the context rule).  <em>span_min</em>
+and <em>span_max</em> (same frame as <em>grid_origin</em>) move the start and end of
+the per-axis rays out to them where they lie beyond the grid, so a mesh
+larger than the grid keeps a correct parity inside it; votes are still
+written only for cells of the grid.  The defaults give the maximum
+volume's voxelization unchanged.</p>
 
 
     <p><span class="doc-section-title">Returns:</span></p>
