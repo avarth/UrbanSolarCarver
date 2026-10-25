@@ -111,3 +111,18 @@ def test_a_stale_previous_criterion_refuses_the_chain_downstream(tmp_path):
     with pytest.raises(StageChainError, match=re.escape(str(thr1.out_dir))) as refused:
         exporting(thr2, c2, tmp_path / "exp")
     assert "was re-run after this one" in str(refused.value)
+
+
+@pytest.mark.parametrize("spelling", ["folder", "manifest", "result"])
+def test_the_output_folder_of_the_previous_criterion_is_refused_and_its_output_kept(tmp_path, spelling):
+    s = chain_scene(tmp_path)
+    _, _, thr1 = _first_criterion(s, tmp_path, carve_fraction=0.6)
+    mask_before = np.load(thr1.mask_path).copy()
+    manifest_before = thr1.manifest_path.read_text()
+    c2 = s.config(tmp_path / "c2", test_surface_path=s.east, carve_fraction=0.5)
+    pre2 = preprocessing(c2, tmp_path / "c2/pre")
+    after = {"folder": thr1.out_dir, "manifest": thr1.manifest_path, "result": thr1}[spelling]
+    with pytest.raises(StageChainError, match="previous criterion's thresholding folder"):
+        thresholding(pre2, c2, thr1.out_dir, after=after)
+    assert thr1.manifest_path.is_file() and thr1.manifest_path.read_text() == manifest_before
+    assert np.array_equal(np.load(thr1.mask_path), mask_before)

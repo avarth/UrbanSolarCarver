@@ -101,7 +101,8 @@ def test_a_criterion_error_names_the_criterion(tmp_path):
     assert caught.value.errors and "analysis period" in caught.value.errors[0].message
 
 
-@pytest.mark.parametrize("ids", [["a/b", "x"], ["x", "x"], ["A", "a"], ["Slope", "x", "slope"], ["", "x"], ["a" * 41, "x"], ["a b", "x"]])
+@pytest.mark.parametrize("ids", [["a/b", "x"], ["x", "x"], ["A", "a"], ["Slope", "x", "slope"], ["", "x"], ["a" * 41, "x"], ["a b", "x"],
+                                 ["x\n", "y"], ["nul", "y"], ["COM1", "y"], ["Lpt9", "y"]])
 def test_ids_must_be_unique_and_safe_folder_names(tmp_path, ids):
     path = write_yaml(tmp_path, chain_data(*({**DAYLIGHT, "id": i} for i in ids)))
     with pytest.raises(ConfigError, match="id"):

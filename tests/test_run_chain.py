@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from _chain_scene import chain_scene, daylight_on_east, daylight_on_south, tilted_plane_on_east
-from urbansolarcarver import run_chain
+from urbansolarcarver import preprocessing, run_chain
 from urbansolarcarver.errors import StageChainError
 from urbansolarcarver.run_context import RunContext, report_issue, stage_context
 
@@ -131,3 +131,11 @@ def test_a_single_run_in_the_folder_of_a_chain_does_not_report_the_old_criteria(
 def test_re_thresholding_without_a_criterion_preprocessing_names_the_stage_to_rerun(tmp_path):
     with pytest.raises(StageChainError, match="preprocessing"):
         run_chain(_two_criteria(tmp_path), tmp_path / "run", produce=("thresholding",), start_from="thresholding")
+
+
+def test_a_criterions_scores_in_a_chain_equal_an_unchained_run_of_its_config(tmp_path):
+    chain = _two_criteria(tmp_path)
+    run_chain(chain, tmp_path / "run")
+    alone = preprocessing(chain.criteria[1].config, tmp_path / "alone")
+    in_chain = np.load(tmp_path / "run/criteria/2/preprocessing/scores.npy")
+    assert np.array_equal(in_chain, np.load(alone.out_dir / "scores.npy"))

@@ -29,7 +29,14 @@ CRITERION_KEYS = frozenset(
     | {"edge_taper"}
 )
 
-_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,40}$")
+_ID_PATTERN = re.compile(r"[A-Za-z0-9_-]{1,40}")
+
+# Names Windows reserves for devices: a folder cannot have one of them (ignoring case).
+_RESERVED_FOLDER_NAMES = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{n}" for n in range(1, 10)}
+    | {f"LPT{n}" for n in range(1, 10)}
+)
 
 
 @dataclass(frozen=True)
@@ -73,9 +80,12 @@ def _checked_criteria(raw: Any) -> List[Dict[str, Any]]:
 def _criterion_id(position: int, item: Mapping[str, Any]) -> str:
     given = item.get("id")
     value = str(position) if given is None else str(given)
-    if not _ID_PATTERN.match(value):
+    if not _ID_PATTERN.fullmatch(value):
         raise _fail(f"criterion {position}: id {value!r} must be 1 to 40 letters, digits, '_' or '-' "
                     "(it names the criterion's output folder)", "id")
+    if value.upper() in _RESERVED_FOLDER_NAMES:
+        raise _fail(f"criterion {position}: id {value!r} is a name Windows reserves for devices, so it cannot "
+                    "name the criterion's output folder; choose another id", "id")
     return value
 
 
@@ -90,6 +100,10 @@ def load_chain(
 ) -> ChainConfig:
     """Load the chain file at *path*, apply *overrides*, and validate each criterion.
 
+    Each criterion's config is the shared settings plus its own, without the weather file when its mode does not read
+    one. A criterion's ``id`` (default: its position from 1) names its output folder; its ``name`` (default: its mode)
+    is for display.
+
     Parameters
     ----------
     path : str
@@ -100,17 +114,13 @@ def load_chain(
         :func:`~urbansolarcarver.load_config.load_config`. Shared settings only: a criterion setting in the overrides
         is refused.
 
-    Each criterion's config is the shared settings plus its own, without the weather file when its mode does not read
-    one. A criterion's ``id`` (default: its position from 1) names its output folder; its ``name`` (default: its mode)
-    is for display.
-
     Raises
     ------
     FileNotFoundError
         If *path* does not exist.
     ConfigError
         On malformed YAML, a file without ``criteria``, a shared setting inside a criterion, a criterion setting at the
-        top level, a missing or repeated id, or an invalid criterion (the message starts ``criterion <id> (<name>): ``).
+        top level, an id that is repeated, unsafe as a folder name or reserved by Windows, or an invalid criterion (the message starts ``criterion <id> (<name>): ``).
     """
     raw = read_yaml_mapping(path)
     if "criteria" not in raw:

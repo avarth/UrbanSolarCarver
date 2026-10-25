@@ -16,7 +16,7 @@ from ..stage_settings import (
 )
 from ._util import _resolve_cfg, ensure_diag, load_occupancy
 from ._stage_io import (
-    LoadedManifest, begin_stage, commit_manifest, load_upstream, new_run_id, stored_path,
+    LoadedManifest, _manifest_path_of, begin_stage, commit_manifest, load_upstream, new_run_id, stored_path,
 )
 from ._diagnostics import (
     ThresholdingPlotInputs, score_statistics, warn_score_anomalies,
@@ -264,7 +264,8 @@ def thresholding(
     Raises
     ------
     StageChainError
-        If the preprocessing manifest cannot be read, the config's mode
+        If the preprocessing manifest cannot be read, *out_dir* is the previous
+        criterion's own thresholding folder (with ``after``), the config's mode
         differs from the preprocessing run's, the previous criterion (with
         ``after``) is missing, was built on another grid, or has itself been
         re-run since its own upstream, or the scores or the occupancy
@@ -275,6 +276,13 @@ def thresholding(
     """
     with stage_context("thresholding") as context:
         conf = _resolve_cfg(cfg)
+        # begin_stage deletes the manifest and mask in out_dir, so refuse before it when that folder is the
+        # previous criterion's own.
+        if after is not None and out_dir is not None:
+            if _manifest_path_of(after).parent.resolve() == Path(out_dir).resolve():
+                raise StageChainError(
+                    f"The output folder {Path(out_dir)} is the previous criterion's thresholding folder; "
+                    f"give this criterion its own output folder (--out). The previous output is untouched.")
         out_path = begin_stage(out_dir, _THRESHOLDING_OUTPUTS)
         pre = load_upstream(volume, "preprocessing")
         previous = None if after is None else load_upstream(after, "thresholding")
