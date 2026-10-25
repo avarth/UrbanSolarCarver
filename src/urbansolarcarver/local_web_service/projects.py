@@ -412,12 +412,7 @@ class ProjectStore:
             project_json = self.read_project_json(name)
             entry = self._criterion_for_settings(project_json, criterion_id)
             target_id = entry.id if entry is not None else str(project_json.next_criterion_id)
-            browser_values = {key: value for key, value in values.items()
-                              if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
-            service_paths = {**self._service_paths_for_mode(values.get("mode")), **self._optional_service_paths(project_folder),
-                             "test_surface_path": joined_test_surfaces_path(target_id)}
-            config = build_config_from_mode_starting_values(
-                {**browser_values, **service_paths, "device": self._device}, base_folder=project_folder)
+            config, service_paths = self._config_from_browser_values(project_folder, values, target_id)
             grid_plan = self._plan_and_check_grid(name, config)
             # Only the settings that were given: the engine warns when a config file sets a setting the mode does not
             # use, and loading it back sets exactly the stored ones, so a full dump would warn at every load.
@@ -445,7 +440,7 @@ class ProjectStore:
             project_json = self.read_project_json(name)
             settings = self._validated_criterion_settings(project_folder, name, {"mode": mode}, str(project_json.next_criterion_id))
             entry = append_criterion(project_json, settings, criterion_name)
-            self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
+            self._rewrite_chain(name, project_folder, project_json)
             return entry
 
     def update_criterion(self, project: str, criterion_id: str, /, *, name: str | None = None, colour: str | None = None,
@@ -473,7 +468,7 @@ class ProjectStore:
                 settings = self._validated_criterion_settings(
                     project_folder, project, {"mode": entry.settings.get("mode"), **values}, entry.id)
                 set_criterion_settings(entry, settings)
-            self._write_chain(project, project_folder, project_json, self._stored_shared_settings(project_folder, project))
+            self._rewrite_chain(project, project_folder, project_json)
             return entry
 
     def delete_criterion(self, name: str, criterion_id: str) -> None:
@@ -487,7 +482,7 @@ class ProjectStore:
             removed = find_criterion(project_json, criterion_id)
             project_json.criteria = [criterion for criterion in project_json.criteria if criterion.id != removed.id]
             project_json.criterion_records.pop(removed.id, None)
-            self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
+            self._rewrite_chain(name, project_folder, project_json)
             shutil.rmtree(project_folder / RUN_FOLDER / "criteria" / removed.id, ignore_errors=True)
             (project_folder / joined_test_surfaces_path(removed.id)).unlink(missing_ok=True)
 
@@ -499,7 +494,7 @@ class ProjectStore:
             source = find_criterion(project_json, criterion_id)
             copied = append_criterion(project_json, copy.deepcopy(source.settings), f"{source.name} copy")
             copied.test_surface_files = list(source.test_surface_files)
-            self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
+            self._rewrite_chain(name, project_folder, project_json)
             source_joined_path = project_folder / joined_test_surfaces_path(source.id)
             if source_joined_path.is_file():
                 shutil.copyfile(source_joined_path, project_folder / joined_test_surfaces_path(copied.id))
@@ -514,7 +509,7 @@ class ProjectStore:
             if len(ids) != len(by_id) or set(ids) != set(by_id):
                 raise ProjectError("The new order must list every criterion once.", status_code=422)
             project_json.criteria = [by_id[criterion_id] for criterion_id in ids]
-            self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
+            self._rewrite_chain(name, project_folder, project_json)
 
     def read_stored_config(self, name: str, criterion_id: str | None = None) -> dict:
         """The settings of one criterion as one flat mapping, service paths and device included (the single-criterion form of
@@ -558,20 +553,29 @@ class ProjectStore:
             return None
         return find_criterion(project_json, criterion_id)
 
+    def _config_from_browser_values(self, project_folder: Path, values: dict, criterion_id: str) -> tuple[UserConfig, dict]:
+        """The engine's config for settings from the browser on top of the starting values of their mode, and the service paths in it.
+
+        Paths, device and the settings left to the engine in *values* are dropped; the service's paths (the joined test surface
+        file of criterion *criterion_id* among them) and device are put in. ConfigError when the settings are not valid.
+        """
+        browser_values = {key: value for key, value in values.items()
+                          if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
+        service_paths = {**self._service_paths_for_mode(values.get("mode")), **self._optional_service_paths(project_folder),
+                         "test_surface_path": joined_test_surfaces_path(criterion_id)}
+        config = build_config_from_mode_starting_values(
+            {**browser_values, **service_paths, "device": self._device}, base_folder=project_folder)
+        return config, service_paths
+
     def _validated_criterion_settings(self, project_folder: Path, name: str, values: dict, criterion_id: str) -> dict:
         """The settings of a criterion that *values* make on top of the starting values of their mode, as they are stored.
 
         Validated together with the shared settings stored now and the service's paths; shared settings in *values* are ignored.
         ConfigError when they are not valid.
         """
-        browser_values = {key: value for key, value in values.items()
-                          if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
-        _shared_in_values, criterion_values = split_settings(browser_values)
-        service_paths = {**self._service_paths_for_mode(criterion_values.get("mode")), **self._optional_service_paths(project_folder),
-                         "test_surface_path": joined_test_surfaces_path(criterion_id)}
-        config = build_config_from_mode_starting_values(
-            {**self._stored_shared_settings(project_folder, name), **criterion_values, **service_paths, "device": self._device},
-            base_folder=project_folder)
+        _shared_in_values, criterion_values = split_settings(values)
+        config, _service_paths = self._config_from_browser_values(
+            project_folder, {**self._stored_shared_settings(project_folder, name), **criterion_values}, criterion_id)
         return split_settings(self._without_service_owned(config.model_dump(mode="json", exclude_unset=True)))[1]
 
     def _stored_shared_settings(self, project_folder: Path, name: str) -> dict:
@@ -579,13 +583,21 @@ class ProjectStore:
         config_path = project_folder / CONFIG_FILE_NAME
         if not config_path.is_file():
             return {}
-        stored_config = self._parse_config_file(config_path, name)
-        return split_settings(self._without_service_owned(
+        return self._shared_settings_of(self._parse_config_file(config_path, name))
+
+    @classmethod
+    def _shared_settings_of(cls, stored_config: dict) -> dict:
+        """The shared settings in the content of a config.yaml, without the service's paths and device."""
+        return split_settings(cls._without_service_owned(
             {key: value for key, value in stored_config.items() if key != "criteria" and key not in SETTINGS_LEFT_TO_THE_ENGINE}))[0]
 
     def _chain_config_text(self, project_folder: Path, project_json: ProjectJson, shared: dict) -> str:
         document = chain_config_document({**shared, "device": self._device}, project_json.criteria, project_folder)
         return chain_config_text(document)
+
+    def _rewrite_chain(self, name: str, project_folder: Path, project_json: ProjectJson) -> None:
+        """_write_chain with the shared settings config.yaml holds now."""
+        self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
 
     def _write_chain(self, name: str, project_folder: Path, project_json: ProjectJson, shared: dict) -> None:
         """Generate config.yaml from the criteria of *project_json* and the *shared* settings, check the engine's chain loader accepts
@@ -673,14 +685,13 @@ class ProjectStore:
         if not config_path.is_file():
             return
         try:
-            readable = isinstance(yaml.safe_load(config_path.read_text(encoding="utf-8")), dict)
+            stored_config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         except (OSError, UnicodeDecodeError, yaml.YAMLError):
-            readable = False
-        if not readable:
             return
-        stored_config = self._parse_config_file(config_path, name)
+        if not isinstance(stored_config, dict):
+            return
         if "criteria" in stored_config:
-            config_text = self._chain_config_text(project_folder, self.read_project_json(name), self._stored_shared_settings(project_folder, name))
+            config_text = self._chain_config_text(project_folder, self.read_project_json(name), self._shared_settings_of(stored_config))
             if config_text.encode("utf-8") != config_path.read_bytes():
                 self._write_bytes_atomically(config_path, config_text.encode("utf-8"))
             return

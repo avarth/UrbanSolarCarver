@@ -196,11 +196,31 @@ def _box_bytes() -> bytes:
     return box_bytes([30, 0, 5])
 
 
+def test_a_criterions_config_equals_the_one_the_engine_builds_from_config_yaml(tmp_path):
+    """The service builds each criterion's config from the flat mapping; the engine's loader reads the file: same result."""
+    store = ProjectStore(tmp_path, device="cpu")
+    store.create("p", "daylight")
+    store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 2.0, "north_deg": 10, "carve_fraction": 0.3,
+                                         "threshold": "carve_fraction"})
+    store.add_criterion("p", "time-based")
+    store.update_criterion("p", "2", values={"mode": "time-based", "start_month": 6, "end_month": 7})
+    store.add_criterion("p", "irradiance")
+    store.update_criterion("p", "3", bypassed=True)
+    store.add_input("p", "context", "ctx.ply", _box_bytes())
+    chain = load_chain(str(_config_path(store, "p")))
+    assert [criterion.id for criterion in chain.criteria] == ["1", "2"]
+    for criterion in chain.criteria:
+        assert store.load_project_config("p", criterion.id).model_dump() == criterion.config.model_dump()
+    assert chain.criteria[1].config.start_month == 6 and chain.criteria[0].config.voxel_size == 2.0
+
+
 def test_a_chain_with_every_criterion_bypassed_is_still_written(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("p", "daylight")
     store.update_criterion("p", "1", bypassed=True)
     assert _stored(store, "p")["criteria"] == []
+    with pytest.raises(ConfigError, match="criteria"):      # the engine wants a criterion: a run must say so in plain words (Task 5)
+        load_chain(str(_config_path(store, "p")))
     assert store.read_settings("p")["mode"] == "daylight"        # a bypassed criterion keeps its settings
     store.update_criterion("p", "1", bypassed=False)
     assert _ids_in_config(store, "p") == ["1"]
