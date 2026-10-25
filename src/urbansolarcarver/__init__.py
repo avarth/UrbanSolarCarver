@@ -21,6 +21,9 @@ __all__ = [
     "ExportingResult",
     "MassingResult",
     "load_config",
+    "load_chain",
+    "ChainConfig",
+    "Criterion",
     "build_config",
     "user_config",
 ]
@@ -33,6 +36,7 @@ except PackageNotFoundError:  # a source tree that was never installed
     __version__ = "0+unknown"
 
 # Light imports that don't touch torch/warp
+from .chain_config import ChainConfig, Criterion, load_chain  # noqa: E402,F401
 from .load_config import build_config, load_config, user_config  # noqa: E402,F401
 
 # Static-analysis-only imports: give IDEs/type checkers the lazy names

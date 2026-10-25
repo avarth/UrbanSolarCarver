@@ -188,6 +188,35 @@ def build_config_from_mode_starting_values(
     return build_config({**starting_values, **given, "mode": mode_name}, base_folder)
 
 
+def read_yaml_mapping(path: str) -> Dict[str, Any]:
+    """The top-level mapping of the YAML file at *path* (empty for an empty file).
+
+    Raises
+    ------
+    FileNotFoundError
+        If *path* does not exist.
+    ConfigError
+        On malformed YAML or a top level that is not a mapping.
+    """
+    if not os.path.isfile(path):
+        raise FileNotFoundError(
+            f"Configuration file not found at {path!r}. "
+            "Please check the file path and try again."
+        )
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+    except yaml.YAMLError as exc:
+        message = f"Malformed YAML in {path!r}: {exc}"
+        raise ConfigError(message, [ConfigFieldError(None, message)]) from exc
+    if raw is None:
+        raw = {}
+    elif not isinstance(raw, dict):
+        message = f"Expected a YAML mapping at the top level, got {type(raw).__name__}"
+        raise ConfigError(message, [ConfigFieldError(None, message)])
+    return raw
+
+
 def load_config(
     path: str,
     overrides: Optional[Union[List[str], Mapping[str, Any]]] = None,
@@ -211,26 +240,15 @@ def load_config(
     FileNotFoundError
         If *path* does not exist.
     ConfigError
-        On malformed YAML, an override string without ``=``, or invalid
-        values (a ``ValueError`` listing all validation errors in one
-        message).
+        On malformed YAML, a file that lists ``criteria:`` (use
+        :func:`~urbansolarcarver.chain_config.load_chain`), an override string
+        without ``=``, or invalid values (a ``ValueError`` listing all
+        validation errors in one message).
     """
-    if not os.path.isfile(path):
-        raise FileNotFoundError(
-            f"Configuration file not found at {path!r}. "
-            "Please check the file path and try again."
-        )
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            raw = yaml.safe_load(f)
-    except yaml.YAMLError as exc:
-        message = f"Malformed YAML in {path!r}: {exc}"
-        raise ConfigError(message, [ConfigFieldError(None, message)]) from exc
-    if raw is None:
-        raw = {}
-    elif not isinstance(raw, dict):
-        message = f"Expected a YAML mapping at the top level, got {type(raw).__name__}"
-        raise ConfigError(message, [ConfigFieldError(None, message)])
+    raw = read_yaml_mapping(path)
+    if "criteria" in raw:
+        message = f"{path} lists criteria; load it with load_chain() or run it with `usc run`"
+        raise ConfigError(message, [ConfigFieldError("criteria", message)])
     try:
         data = dict(expand_analysis_period(raw))
         # The YAML's own period block is expanded before the overrides are

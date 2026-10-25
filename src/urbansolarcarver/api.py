@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, Union
 
+from .chain_config import ChainConfig, Criterion, load_chain
 from .load_config import build_config, load_config, user_config
 from .api_core import (
     preprocessing, thresholding, exporting, massing,
