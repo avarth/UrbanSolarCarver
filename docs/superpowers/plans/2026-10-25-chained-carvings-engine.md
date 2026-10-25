@@ -369,3 +369,4 @@ git commit -m "docs: chained carvings in the engine (criteria, run_chain, --afte
 
 - Browser service and app (spec phases 2 and 3), the Grasshopper input on `USC_ThresholdStage` (it runs through `RunRequest`; added with the service phase), removing **Carve further**.
 - A separate chain-root stage folder or cache (spec 6.2, builder's call): each criterion voxelizes the same max volume; Task 1's grid check guarantees the grids agree.
+- Spec 6.3, second bullet (preprocessing manifests record the root they were traced on): not implemented in phase 1. Each criterion voxelizes the same max volume and thresholding's grid check stands in for a root, so phase 2 must not assume a root field in the manifests.

@@ -6,6 +6,7 @@ USC uses YAML files for all pipeline parameters. The configuration system provid
 - **YAML loading** of a flat mapping of settings; an `analysis_period:` mapping with Ladybug `AnalysisPeriod.to_dict()` keys is expanded into the six period fields. Relative paths are resolved against the YAML file's folder.
 - **Overrides** (`-o key=value` on the CLI, or a mapping in Python) that replace top-level values from the file.
 - **Pydantic v2 validation** with value ranges, type coercion, rejection of unknown keys, and one error message listing every problem. Both entry points raise `ConfigError`, whose `errors` list gives the field and message of each problem.
+- **Chain files**: a YAML with a `criteria:` list is loaded by `load_chain` into a `ChainConfig` (see [Criteria](../criteria.md)); `load_config` refuses it and `is_chain_file(path)` tells the two apart.
 - **Manifest schemas** for the preprocessing and thresholding stages, so a later stage can be re-run from an earlier run's output.
 
 See also: [Configuration guide](../getting-started/configuration.md) for the user-facing parameter reference.
@@ -15,6 +16,14 @@ See also: [Configuration guide](../getting-started/configuration.md) for the use
 ::: urbansolarcarver.load_config
 
 ::: urbansolarcarver.build_config
+
+## Chain config
+
+Shared settings are at the top level of a chain file and each criterion's own settings are listed under `criteria:`. `load_chain(path, overrides)` returns a `ChainConfig`: `criteria` is a tuple of `Criterion(id, name, config)` with one validated config per criterion, and `shared` is the last criterion's config. A criterion's `id` (default: its position from 1) names its output folder, so it is 1 to 40 letters, digits, `_` or `-`, unique ignoring case and not a Windows device name (`CON`, `NUL`, `COM1`, ...). A shared setting inside a criterion, or a criterion setting at the top level or in `-o` overrides, is an error that names the setting; `chain_config.CRITERION_KEYS` lists the criterion settings.
+
+::: urbansolarcarver.chain_config
+    options:
+      members: [load_chain, ChainConfig, Criterion, is_chain_file]
 
 ## Mode starting values
 

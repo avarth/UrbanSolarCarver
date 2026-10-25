@@ -42,6 +42,14 @@ The `PipelineResult` has one attribute per stage (`preprocessing`, `thresholding
     options:
       members: [run_pipeline, PipelineResult]
 
+## run_chain
+
+`run_chain(chain, out_dir=None, produce=("exporting",), start_from="preprocessing", context=None)` runs the criteria of a chain file in order on one voxel grid, then exporting and massing from the last (see [Criteria](../criteria.md)). *chain* is a path or a `ChainConfig` from `load_chain`. Each criterion's stages write to `<out_dir>/criteria/<id>/<stage>`, and a criterion's thresholding takes the previous criterion's as `after`. It returns a `ChainResult`: one `PipelineResult` per criterion in `criteria`, then `exporting`, `massing` and the `issues` of the call.
+
+::: urbansolarcarver.api_core.chain
+    options:
+      members: [run_chain, ChainResult]
+
 ## Deciding what to re-run
 
 `stages_to_rerun(previous_config, new_config, produce)` lists, in pipeline order, the stages that have to run to bring `produce` up to date after a config change. It compares the settings each stage reads (preprocessing, then thresholding, then each produced leaf stage) and does not look at input files or at which stages exist on disk; that is for the caller to decide. With no previous config it lists every stage `produce` needs.
@@ -93,6 +101,8 @@ Voxelizes the max volume, samples the test surfaces, generates rays toward sky p
 ## Thresholding
 
 Converts the score array into a binary carving mask: optional score smoothing, then `carve_fraction`, head/tail breaks, or a numeric cutoff over the occupied voxels, with `carve_above` applied through `column_postprocessing.carve_above_scores` (the cutoff at which carve_above removes each voxel, so that `carve_fraction` counts what carve_above removes), then the slope limit (`max_slope_deg`, 75 degrees for the weighted modes; `column_postprocessing.limit_column_slope`). Writes `mask.npy` and `scores_compared_with_cutoff.npy` (float32, the grid shape: the values the cutoff is applied to before the slope limit, which are the `carve_above` removal cutoffs when `carve_above` is on and the smoothed scores otherwise); the diagnostics record `max_slope_deg`, `slope_limit_extra_voxels_removed` and `obstruction_fraction_carved_by_slope_limit`.
+
+With `after=` (the previous criterion's `ThresholdingResult`, thresholding folder or `manifest.json`), the stage decides only among the voxels the previous criterion kept and never keeps a voxel it removed. The manifest records `after_manifest` and `after_run_id`, the diagnostics record `voxels_at_start`, and a previous criterion on another grid, one re-run since, or the previous criterion's own output folder as `out_dir` raises `StageChainError`.
 
 ::: urbansolarcarver.api_core.thresholding
     options:

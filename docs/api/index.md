@@ -4,11 +4,11 @@ Generated from the source docstrings: each documented public function and class 
 
 ## Pipeline
 
-The main entry points for running USC, in one call or stage by stage.
+The main entry points for running USC, in one call or stage by stage. Several criteria carved in sequence (`run_chain`, `thresholding(..., after=)`, `load_chain`) are described in [Criteria: chained carvings](../criteria.md).
 
 | Module | Contents |
 |--------|----------|
-| [Pipeline](pipeline.md) | `run_pipeline()` (`produce`, `start_from`, `context`), `PipelineResult`, `stages_to_rerun()`, `preprocessing()`, `thresholding()`, `exporting()`, `massing()`, result dataclasses, `RunContext` and issues, the error classes |
+| [Pipeline](pipeline.md) | `run_pipeline()` (`produce`, `start_from`, `context`), `PipelineResult`, `run_chain()`, `ChainResult`, `stages_to_rerun()`, `preprocessing()`, `thresholding()`, `exporting()`, `massing()`, result dataclasses, `RunContext` and issues, the error classes |
 
 ## Geometry & Ray Tracing
 
@@ -38,7 +38,7 @@ YAML loading, validation, and schema definitions.
 
 | Module | Contents |
 |--------|----------|
-| [Configuration](config.md) | `load_config()`, `build_config()`, `parse_override_value()`, `UserConfig` (Pydantic model), `ThresholdSpec`, manifest schemas, mode starting values |
+| [Configuration](config.md) | `load_config()`, `build_config()`, `parse_override_value()`, `load_chain()`, `ChainConfig`, `Criterion`, `is_chain_file()`, `UserConfig` (Pydantic model), `ThresholdSpec`, manifest schemas, mode starting values |
 
 ## Infrastructure
 

@@ -67,7 +67,7 @@ is a chain file, and `load_config` refuses it: use `load_chain`, or let `usc run
 | Belongs to | Settings |
 |---|---|
 | **Each criterion** | `id`, `name`, `mode`, `test_surface_path`; the carving rule (`threshold`, `carve_fraction`, `score_smoothing`, `carve_above`, `carve_above_min_consecutive`, `max_slope_deg`); the mode's own settings (the analysis period `start_month` .. `end_hour` or an `analysis_period:` mapping, `sun_steps_per_hour`, `min_altitude`, `time_basis`, `balance_temperature`, `balance_offset`, `simulated_weights_path`, `include_harm`, `tilted_plane_angle_deg`, `dew_point_celsius`, `bliss_k`, `min_sky_elevation_deg`); `rays_per_patch` and `edge_taper` |
-| **Shared by the chain** | `max_volume_path`, `context_path`, `terrain_path`, `context_blocks_rays`, `voxel_size`, `grid_step`, `ray_length`, `device`, `epw_path`, `out_dir`, and the exporting and massing settings (`min_voxels`, `apply_smoothing`, `final_mesh_format`, `ground_floor_height`, `floor_height`, `min_plate_dimension`, `plate_tolerance`, `plate_stacking`, `diagnostics`, `diagnostic_plots`) |
+| **Shared by the chain** | `max_volume_path`, `context_path`, `terrain_path`, `context_blocks_rays`, `voxel_size`, `grid_step`, `ray_length`, `device`, `epw_path`, `out_dir`, `north_deg`, `margin_frac`, and the exporting and massing settings (`min_voxels`, `apply_smoothing`, `final_mesh_format`, `ground_floor_height`, `floor_height`, `min_plate_dimension`, `plate_tolerance`, `plate_stacking`, `diagnostics`, `diagnostic_plots`) |
 
 In code the first row is `urbansolarcarver.chain_config.CRITERION_KEYS`; every other config key is shared.
 Putting a shared setting inside a criterion, or a criterion setting at the top level, is an error that names the
@@ -78,10 +78,14 @@ setting, so a file never means two things. `-o` overrides on the command line se
 setting.
 
 **Ids.** A criterion's `id` names its output folder, so it is 1 to 40 letters, digits, `_` or `-`, and ids are unique
-ignoring case (Windows and macOS ignore case in folder names). Without an `id` the criterion gets its position
+ignoring case (Windows and macOS ignore case in folder names). The names Windows reserves for devices (`CON`, `PRN`, `AUX`, `NUL`, `COM1` to `COM9`, `LPT1` to `LPT9`) cannot be folder names there and are refused. Without an `id` the criterion gets its position
 (`1`, `2`, ...). Without a `name` the display name is its mode.
 
-Every criterion is validated when the file is loaded, and an error message starts with `criterion <id> (<name>):`.
+Every criterion is validated when the file is loaded. An error in a criterion's settings starts with
+`criterion <id> (<name>):`; an error in an id or in where a setting is placed names the criterion's position.
+
+The preprocessing manifests do not record a chain root. Each criterion voxelizes the same maximum volume, and
+`thresholding` checks the grid (voxel size, origin, shape and occupancy) of the previous criterion instead.
 
 ## Running a chain
 
@@ -137,8 +141,14 @@ kept). Its Configuration, Preprocessing and Thresholding sections describe the l
 
 ```bash
 usc thresholding -c winter_sun.yaml --from outputs/criteria/winter-sun/preprocessing/manifest.json \
-    --after outputs/criteria/daylight/thresholding
+    --after outputs/criteria/daylight/thresholding --out outputs/criteria/winter-sun/thresholding
 ```
+
+This step needs a single-criterion config (`winter_sun.yaml` holds the settings of one criterion): `usc thresholding`
+reads it with `load_config`, which refuses a chain file. Give `--out` the criterion's own folder as above; without it
+the result goes to `<out_dir of the config>/thresholding`, and a later `usc run -c chain.yaml --start-from exporting`
+would build from the criterion that is in the chain's folder. The output folder may not be the previous criterion's own
+(`StageChainError`).
 
 ```python
 from urbansolarcarver import thresholding
@@ -152,7 +162,8 @@ function also takes its result). The mask of this run is never True where the pr
 - The manifest records `after_manifest` and `after_run_id`, and the diagnostics record `voxels_at_start`, the voxels
   this criterion decided about.
 - Both criteria must share the grid (maximum volume, context, terrain, voxel size and margin). Otherwise a
-  `StageChainError` says which differs.
+  `StageChainError` names the voxel size, origin, shape or a different maximum volume. A difference in the context
+  or the terrain shows up as a different maximum volume.
 - When the previous criterion re-runs later, the criteria after it are refused with `StageChainError` until they are
   thresholded again, as for any stage.
 - When the previous criterion kept no voxel, the mask is empty and the run reports the issue `nothing_left_to_carve`.
