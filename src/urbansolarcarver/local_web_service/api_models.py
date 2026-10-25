@@ -15,6 +15,7 @@ class StageRecord(BaseModel):
     config: dict                # the config.yaml content the stage ran with
     inputs_revision: int        # ProjectJson.inputs_revision at the time of the run
     manifest_run_id: str        # run_id of the manifest the stage wrote
+    test_surfaces_fingerprint: str | None = None     # of the criterion's joined test surface file at the time of the run
 
 
 class CarvingChainStep(BaseModel):
@@ -31,6 +32,17 @@ class CarvingChainStep(BaseModel):
     max_volume_file: str                # the envelope's file name among the maximum volume files
 
 
+class CriterionEntry(BaseModel):
+    """One criterion of a project's chain, as project.json keeps it. config.yaml is generated from these."""
+    id: str                             # assigned by the service from ProjectJson.next_criterion_id, never reused; names the run folder
+    name: str
+    named_by_user: bool = False         # False: the name follows the mode and the first test surface file (see criteria.py)
+    colour: str                         # "#RRGGBB", the criterion's colour in the 3D view
+    bypassed: bool = False              # left out of config.yaml, and so of every run, but kept in the list
+    test_surface_files: list[str] = Field(default_factory=list)     # file names in inputs/test_surfaces/
+    settings: dict = Field(default_factory=dict)    # the criterion's own settings as stored, without the paths the service owns
+
+
 class ProjectJson(BaseModel):
     """The content of a project's project.json."""
     name: str
@@ -40,6 +52,10 @@ class ProjectJson(BaseModel):
     stage_records: dict[str, StageRecord] = Field(default_factory=dict)   # stage name -> record
     example: str | None = None  # the example the project was made from (examples.json name); None for other projects and older ones
     carving_chain: list["CarvingChainStep"] = Field(default_factory=list)  # each "carve further", oldest first
+    criteria: list[CriterionEntry] = Field(default_factory=list)   # the chain, in carving order
+    next_criterion_id: int = 1  # the id the next criterion gets
+    # criterion id -> "preprocessing" / "thresholding" -> record; the stage records of the criteria
+    criterion_records: dict[str, dict[str, StageRecord]] = Field(default_factory=dict)
 
 
 StageState = Literal["current", "out_of_date", "missing"]

@@ -7,6 +7,7 @@ a validated name and checked to be a direct child of the projects folder.
 from __future__ import annotations
 
 import contextlib
+import copy
 import os
 import re
 import shutil
@@ -21,14 +22,21 @@ import trimesh
 import yaml
 from pydantic import ValidationError
 
+from ..chain_config import load_chain
 from ..cold_period import cold_period_from_weather_file
 from ..errors import ConfigError, InputError
 from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_budget, plan_voxel_grid
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
-from ..mode_registry import MODES, canonical_mode_name
 from ..pydantic_schemas import UserConfig
-from .api_models import CarvingChainStep, ColdPeriodDates, ColdPeriodReply, ConfigReply, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply, ProjectJson, ProjectSummary
+from .api_models import (
+    CarvingChainStep, ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply,
+    ProjectJson, ProjectSummary,
+)
+from .criteria import (
+    OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, append_criterion, chain_config_document, chain_config_text, checked_colour, checked_criterion_name,
+    find_criterion, flat_settings, joined_test_surfaces_path, reads_weather_file, set_criterion_settings, split_settings,
+)
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
 from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, move_to_recycle_bin
@@ -54,17 +62,8 @@ SERVICE_OWNED_SETTINGS = ("max_volume_path", "test_surface_path", "context_path"
 # size), and the score rule, which was removed (an earlier version stored "summed" when it was chosen; scores are always
 # summed). One stored by an earlier version, or sent by an older page, is left out when the settings are read and written.
 SETTINGS_LEFT_TO_THE_ENGINE = ("grid_step", "score_rule")
-SERVICE_PATHS = {
-    "max_volume_path": "inputs/joined/max_volume.ply",
-    "test_surface_path": "inputs/joined/test_surfaces.ply",
-    "epw_path": "inputs/weather.epw",
-    "out_dir": "run",
-}   # relative to the project folder; epw_path only for modes that read a weather file
-# The paths of the optional mesh roles, set in config.yaml exactly when the role's joined file exists.
-OPTIONAL_SERVICE_PATHS = {
-    "context": ("context_path", "inputs/joined/context.ply"),
-    "terrain": ("terrain_path", "inputs/joined/terrain.ply"),
-}
+# SERVICE_PATHS and OPTIONAL_SERVICE_PATHS (the shared paths of config.yaml) are in criteria.py; each criterion's test_surface_path is
+# the joined file of its own test surfaces.
 UNWANTED_FILE_NAME_CHARACTERS = re.compile(r"[^A-Za-z0-9_.-]")
 FILE_NAME_SEPARATORS = re.compile(r"[\\/]")
 
@@ -202,6 +201,8 @@ class ProjectStore:
     def create(self, name: str, mode: str, example: str | None = None) -> Path:
         """Make the project folder with its layout, project.json (recording the *example* it comes from) and the first config.yaml of the mode.
 
+        The project starts with one criterion, "1", in that mode (see write_config_from_values).
+
         Raises ConfigError, and leaves no folder behind, when the mode is not one the engine knows.
         """
         project_name = validate_project_name(name)
@@ -258,7 +259,7 @@ class ProjectStore:
                 name=project_json.name,
                 created=project_json.created,
                 modified=self._modified(project_folder),
-                mode=self._mode(project_folder),
+                mode=self._mode(project_folder, project_json),
                 example=example.name if example is not None else None,
             )
 
@@ -393,39 +394,149 @@ class ProjectStore:
             Path(temporary_path).unlink(missing_ok=True)
             raise
 
-    def write_config_from_values(self, name: str, values: dict) -> ConfigReply:
-        """Validate settings from the browser on top of the starting values of their mode and store them as config.yaml.
+    def write_config_from_values(self, name: str, values: dict, criterion_id: str | None = None) -> ConfigReply:
+        """Validate settings from the browser on top of the starting values of their mode and store them: the shared settings at the
+        top of config.yaml, the criterion settings in project.json (and config.yaml, which is generated from it).
+
+        The criterion settings go to the criterion *criterion_id*, or to the only criterion when there is one, or to a first
+        criterion that a project without any gets. With several criteria and no *criterion_id* the settings belong to none:
+        ProjectError(422); an unknown *criterion_id* is a 404.
 
         The paths and the device are the service's: any the browser sends are dropped and the
         project's own are put in. When the joined max volume exists, the voxel grid it and the
         voxel size give is planned, and a grid over the engine's budget raises GridOverBudget.
-        Nothing is stored unless the settings are valid. ConfigError propagates.
+        Nothing is stored unless the settings are valid, and the chain they make with the other criteria is. ConfigError propagates.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            entry = self._criterion_for_settings(project_json, criterion_id)
+            target_id = entry.id if entry is not None else str(project_json.next_criterion_id)
             browser_values = {key: value for key, value in values.items()
                               if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
-            service_paths = {**self._service_paths_for_mode(values.get("mode")), **self._optional_service_paths(project_folder)}
+            service_paths = {**self._service_paths_for_mode(values.get("mode")), **self._optional_service_paths(project_folder),
+                             "test_surface_path": joined_test_surfaces_path(target_id)}
             config = build_config_from_mode_starting_values(
                 {**browser_values, **service_paths, "device": self._device}, base_folder=project_folder)
             grid_plan = self._plan_and_check_grid(name, config)
             # Only the settings that were given: the engine warns when a config file sets a setting the mode does not
             # use, and loading it back sets exactly the stored ones, so a full dump would warn at every load.
             stored_config = {**config.model_dump(mode="json", exclude_unset=True), **service_paths}
-            self._write_bytes_atomically(
-                project_folder / CONFIG_FILE_NAME, yaml.safe_dump(stored_config, sort_keys=False).encode("utf-8"))
-            return ConfigReply(settings=self._without_service_owned(stored_config), grid_plan=grid_plan)
+            shared, criterion_settings = split_settings(self._without_service_owned(stored_config))
+            if entry is None:
+                entry = append_criterion(project_json, criterion_settings)
+            else:
+                set_criterion_settings(entry, criterion_settings)
+            self._write_chain(name, project_folder, project_json, shared)
+            return ConfigReply(settings={**shared, **entry.settings}, grid_plan=grid_plan)
 
-    def read_stored_config(self, name: str) -> dict:
-        """The content of config.yaml as stored, service paths and device included (see _parse_config_file), without the
-        settings left to the engine (SETTINGS_LEFT_TO_THE_ENGINE): the next save writes the file without them."""
+    def criteria(self, name: str) -> list[CriterionEntry]:
+        """The criteria of a project in carving order, bypassed ones included."""
+        return self.read_project_json(name).criteria
+
+    def add_criterion(self, name: str, mode: str, criterion_name: str | None = None) -> CriterionEntry:
+        """Add a criterion of *mode* at the end of the chain: the mode's starting values, no test surfaces.
+
+        It is named after its mode unless *criterion_name* is given (see default_criterion_name), and gets the next colour of
+        the palette. ConfigError, and nothing changes, when the mode is not one the engine knows or the chain becomes invalid.
+        """
         with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            settings = self._validated_criterion_settings(project_folder, name, {"mode": mode}, str(project_json.next_criterion_id))
+            entry = append_criterion(project_json, settings, criterion_name)
+            self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
+            return entry
+
+    def update_criterion(self, project: str, criterion_id: str, /, *, name: str | None = None, colour: str | None = None,
+                         bypassed: bool | None = None, values: dict | None = None) -> CriterionEntry:
+        """Change a criterion of the project *project*; what is not given stays.
+
+        *name* names it (it then keeps the name when its mode changes), *colour* is "#RRGGBB", *bypassed* leaves it out of the
+        chain, *values* are its settings from the browser, validated as write_config_from_values does: they replace its
+        settings, on top of the starting values of their mode (the current mode when they name none). Shared settings in
+        *values* are ignored. A criterion that is not named by the user is named after its new mode when the mode changes.
+        ProjectError 404 for an unknown criterion and 422 for a bad name or colour; ConfigError for settings that do not
+        validate. Nothing changes then.
+        """
+        with self.project_lock(project):
+            project_folder = self.open(project)
+            project_json = self.read_project_json(project)
+            entry = find_criterion(project_json, criterion_id)
+            if name is not None:
+                entry.name, entry.named_by_user = checked_criterion_name(name), True
+            if colour is not None:
+                entry.colour = checked_colour(colour)
+            if bypassed is not None:
+                entry.bypassed = bypassed
+            if values is not None:
+                settings = self._validated_criterion_settings(
+                    project_folder, project, {"mode": entry.settings.get("mode"), **values}, entry.id)
+                set_criterion_settings(entry, settings)
+            self._write_chain(project, project_folder, project_json, self._stored_shared_settings(project_folder, project))
+            return entry
+
+    def delete_criterion(self, name: str, criterion_id: str) -> None:
+        """Remove a criterion, its run folder (run/criteria/<id>/) and its joined test surface file; 404 for an unknown one.
+
+        Its id is not used again.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            removed = find_criterion(project_json, criterion_id)
+            project_json.criteria = [criterion for criterion in project_json.criteria if criterion.id != removed.id]
+            project_json.criterion_records.pop(removed.id, None)
+            self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
+            shutil.rmtree(project_folder / RUN_FOLDER / "criteria" / removed.id, ignore_errors=True)
+            (project_folder / joined_test_surfaces_path(removed.id)).unlink(missing_ok=True)
+
+    def duplicate_criterion(self, name: str, criterion_id: str) -> CriterionEntry:
+        """Add a copy of a criterion at the end of the chain: its settings and test surfaces, named "<name> copy"."""
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            source = find_criterion(project_json, criterion_id)
+            copied = append_criterion(project_json, copy.deepcopy(source.settings), f"{source.name} copy")
+            copied.test_surface_files = list(source.test_surface_files)
+            self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
+            source_joined_path = project_folder / joined_test_surfaces_path(source.id)
+            if source_joined_path.is_file():
+                shutil.copyfile(source_joined_path, project_folder / joined_test_surfaces_path(copied.id))
+            return copied
+
+    def reorder_criteria(self, name: str, ids: list[str]) -> None:
+        """Put the criteria in the order of *ids*, which names each criterion once; ProjectError 422 otherwise."""
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            by_id = {criterion.id: criterion for criterion in project_json.criteria}
+            if len(ids) != len(by_id) or set(ids) != set(by_id):
+                raise ProjectError("The new order must list every criterion once.", status_code=422)
+            project_json.criteria = [by_id[criterion_id] for criterion_id in ids]
+            self._write_chain(name, project_folder, project_json, self._stored_shared_settings(project_folder, name))
+
+    def read_stored_config(self, name: str, criterion_id: str | None = None) -> dict:
+        """The settings of one criterion as one flat mapping, service paths and device included (the single-criterion form of
+        config.yaml that the app and the stage records work with), without the settings left to the engine
+        (SETTINGS_LEFT_TO_THE_ENGINE): the next save writes the file without them.
+
+        It is the shared settings at the top of config.yaml plus the criterion's settings from project.json and its own
+        test_surface_path; *criterion_id* defaults to the first criterion (404 for an unknown one). A config.yaml that is not
+        a chain file (an earlier version's, or a hand edit that is not valid) is returned as it is, with no criterion.
+        """
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
             stored_config = self._parse_config_file(self.open(name) / CONFIG_FILE_NAME, name)
+            if "criteria" in stored_config:
+                shared_and_paths = {key: value for key, value in stored_config.items() if key != "criteria"}
+                entry = None if not project_json.criteria else find_criterion(project_json, criterion_id)
+                stored_config = flat_settings(shared_and_paths, entry)
             return {key: value for key, value in stored_config.items() if key not in SETTINGS_LEFT_TO_THE_ENGINE}
 
-    def read_settings(self, name: str) -> dict:
-        """The stored settings of a project without the paths and device the service owns."""
-        return self._without_service_owned(self.read_stored_config(name))
+    def read_settings(self, name: str, criterion_id: str | None = None) -> dict:
+        """The stored settings of a criterion (default: the first) with the shared ones, without the paths and device the service owns."""
+        return self._without_service_owned(self.read_stored_config(name, criterion_id))
 
     def config_from_settings(self, name: str, settings: dict) -> UserConfig:
         """The engine's validated config for a stored settings dict, with its paths resolved inside the project folder.
@@ -434,9 +545,79 @@ class ProjectStore:
         """
         return build_config(settings, base_folder=self.open(name))
 
-    def load_project_config(self, name: str) -> UserConfig:
-        """The stored config.yaml as the engine's validated config, with its paths resolved inside the project folder."""
-        return self.config_from_settings(name, self.read_stored_config(name))
+    def load_project_config(self, name: str, criterion_id: str | None = None) -> UserConfig:
+        """The stored settings of a criterion (default: the first) as the engine's validated config, with its paths resolved inside the project folder."""
+        return self.config_from_settings(name, self.read_stored_config(name, criterion_id))
+
+    @staticmethod
+    def _criterion_for_settings(project_json: ProjectJson, criterion_id: str | None) -> CriterionEntry | None:
+        """The criterion a settings save belongs to: the one named, the only one, None when there is none yet (a first one is made)."""
+        if criterion_id is None and len(project_json.criteria) > 1:
+            raise ProjectError("Say which criterion these settings belong to", status_code=422)
+        if criterion_id is None and not project_json.criteria:
+            return None
+        return find_criterion(project_json, criterion_id)
+
+    def _validated_criterion_settings(self, project_folder: Path, name: str, values: dict, criterion_id: str) -> dict:
+        """The settings of a criterion that *values* make on top of the starting values of their mode, as they are stored.
+
+        Validated together with the shared settings stored now and the service's paths; shared settings in *values* are ignored.
+        ConfigError when they are not valid.
+        """
+        browser_values = {key: value for key, value in values.items()
+                          if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
+        _shared_in_values, criterion_values = split_settings(browser_values)
+        service_paths = {**self._service_paths_for_mode(criterion_values.get("mode")), **self._optional_service_paths(project_folder),
+                         "test_surface_path": joined_test_surfaces_path(criterion_id)}
+        config = build_config_from_mode_starting_values(
+            {**self._stored_shared_settings(project_folder, name), **criterion_values, **service_paths, "device": self._device},
+            base_folder=project_folder)
+        return split_settings(self._without_service_owned(config.model_dump(mode="json", exclude_unset=True)))[1]
+
+    def _stored_shared_settings(self, project_folder: Path, name: str) -> dict:
+        """The shared settings config.yaml holds now, without the service's paths and device; none when it has no file."""
+        config_path = project_folder / CONFIG_FILE_NAME
+        if not config_path.is_file():
+            return {}
+        stored_config = self._parse_config_file(config_path, name)
+        return split_settings(self._without_service_owned(
+            {key: value for key, value in stored_config.items() if key != "criteria" and key not in SETTINGS_LEFT_TO_THE_ENGINE}))[0]
+
+    def _chain_config_text(self, project_folder: Path, project_json: ProjectJson, shared: dict) -> str:
+        document = chain_config_document({**shared, "device": self._device}, project_json.criteria, project_folder)
+        return chain_config_text(document)
+
+    def _write_chain(self, name: str, project_folder: Path, project_json: ProjectJson, shared: dict) -> None:
+        """Generate config.yaml from the criteria of *project_json* and the *shared* settings, check the engine's chain loader accepts
+        it, and write config.yaml and project.json. ConfigError, with nothing written, when it does not.
+
+        A chain with no criterion on is written without that check (the loader wants at least one); a run refuses it.
+        """
+        config_text = self._chain_config_text(project_folder, project_json, shared)
+        if any(not criterion.bypassed for criterion in project_json.criteria):
+            self._check_chain_loads(project_folder, config_text)
+        config_path = project_folder / CONFIG_FILE_NAME
+        earlier_config = config_path.read_bytes() if config_path.is_file() else None
+        self._write_bytes_atomically(config_path, config_text.encode("utf-8"))
+        try:
+            self.write_project_json(name, project_json)
+        except BaseException:
+            if earlier_config is None:
+                config_path.unlink(missing_ok=True)
+            else:
+                self._write_bytes_atomically(config_path, earlier_config)
+            raise
+
+    @staticmethod
+    def _check_chain_loads(project_folder: Path, config_text: str) -> None:
+        """Load *config_text* with the engine's chain loader (as a file next to config.yaml, so relative paths resolve alike)."""
+        descriptor, temporary_path = tempfile.mkstemp(dir=project_folder, prefix="config-check", suffix=".yaml")
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
+                temporary_file.write(config_text)
+            load_chain(temporary_path)
+        finally:
+            Path(temporary_path).unlink(missing_ok=True)
 
     def stored_grid_plan(self, name: str) -> GridPlanReply | None:
         """The grid the stored settings and the joined max volume give, None before a max volume exists.
@@ -471,8 +652,7 @@ class ProjectStore:
     @staticmethod
     def _service_paths_for_mode(mode) -> dict:
         """SERVICE_PATHS, without the weather file for a mode that does not read one (the engine warns about an unused epw_path)."""
-        mode_settings = MODES.get(canonical_mode_name(mode))
-        if mode_settings is not None and not mode_settings.needs_epw:
+        if not reads_weather_file(mode):
             return {key: path for key, path in SERVICE_PATHS.items() if key != "epw_path"}
         return dict(SERVICE_PATHS)
 
@@ -486,7 +666,8 @@ class ProjectStore:
 
         The rest of the stored config stays as it is; nothing is written when nothing changes. A config.yaml that does
         not hold a settings mapping (a hand edit with a YAML error, an empty file) is left as it is: the next settings
-        save replaces it, as it does without the optional inputs.
+        save replaces it, as it does without the optional inputs. A chain file is generated again from project.json,
+        without the check of its settings that a settings save makes: an upload does not change them.
         """
         config_path = project_folder / CONFIG_FILE_NAME
         if not config_path.is_file():
@@ -498,6 +679,11 @@ class ProjectStore:
         if not readable:
             return
         stored_config = self._parse_config_file(config_path, name)
+        if "criteria" in stored_config:
+            config_text = self._chain_config_text(project_folder, self.read_project_json(name), self._stored_shared_settings(project_folder, name))
+            if config_text.encode("utf-8") != config_path.read_bytes():
+                self._write_bytes_atomically(config_path, config_text.encode("utf-8"))
+            return
         updated = {key: value for key, value in stored_config.items()
                    if key not in {key for key, _path in OPTIONAL_SERVICE_PATHS.values()}}
         updated.update(self._optional_service_paths(project_folder))
@@ -855,11 +1041,15 @@ class ProjectStore:
         return _utc_iso(max(path.stat().st_mtime for path in file_paths if path.is_file()))
 
     @classmethod
-    def _mode(cls, project_folder: Path) -> str:
+    def _mode(cls, project_folder: Path, project_json: ProjectJson) -> str:
+        """The mode of the project's first criterion; "" without a config.yaml or one that sets no mode (a hand edit)."""
         config_path = project_folder / CONFIG_FILE_NAME
         if not config_path.is_file():
             return ""
-        return str(cls._parse_config_file(config_path, project_folder.name).get("mode", ""))
+        stored_config = cls._parse_config_file(config_path, project_folder.name)
+        if "criteria" in stored_config:
+            return str(project_json.criteria[0].settings.get("mode", "")) if project_json.criteria else ""
+        return str(stored_config.get("mode", ""))
 
     @staticmethod
     def _parse_config_file(config_path: Path, name: str) -> dict:

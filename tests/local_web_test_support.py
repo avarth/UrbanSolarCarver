@@ -133,10 +133,11 @@ def has_vertex_normals(ply_path: Path) -> bool:
 # ---- The fake engine and the run worker ----
 
 def _mode_of_the_project(run_folder: Path) -> str:
-    """The mode in the config.yaml of the project whose run folder this is; daylight, the test projects' mode, without one."""
+    """The mode of the first criterion in the config.yaml of the project whose run folder this is; daylight, the test projects' mode, without one."""
     config_path = run_folder.parent / "config.yaml"
-    stored = yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None
-    return (stored or {}).get("mode", "daylight")
+    stored = (yaml.safe_load(config_path.read_text(encoding="utf-8")) if config_path.is_file() else None) or {}
+    first_criterion = (stored.get("criteria") or [{}])[0]
+    return first_criterion.get("mode", stored.get("mode", "daylight"))
 
 
 def write_fake_stage_output(run_folder: Path, stage: str) -> None:

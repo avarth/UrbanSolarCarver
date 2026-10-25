@@ -23,7 +23,7 @@ from urbansolarcarver.surface_sampling import discretize_surface_with_normals
 from urbansolarcarver.local_web_service import project_removal, projects
 from urbansolarcarver.local_web_service.example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
 from urbansolarcarver.local_web_service.project_removal import ProjectRemovalRefused
-from urbansolarcarver.local_web_service.projects import SERVICE_PATHS, ProjectError, ProjectStore, sanitize_file_name
+from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore, sanitize_file_name
 from urbansolarcarver.local_web_service.server import _example_input_files
 
 GOLDEN_EPW = Path(__file__).resolve().parent.parent / "examples" / "weather" / "USA_CO_Golden-NREL.724666_TMY3.epw"
@@ -442,7 +442,7 @@ def example_project_to_read(tmp_path_factory, example_project_templates):
     def example_and_joined_panels(example_name):
         if example_name not in made:
             example = example_project_templates.copy_example_project(store, example_name, example_name)
-            joined_panels = _sampled_panels([store.open(example_name) / SERVICE_PATHS["test_surface_path"]])
+            joined_panels = _sampled_panels([store.open(example_name) / "inputs" / "joined" / "test_surfaces.ply"])
             made[example_name] = (example, joined_panels)
         return made[example_name]
 
