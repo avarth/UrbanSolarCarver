@@ -116,3 +116,17 @@ def test_a_default_voxel_size_over_the_grid_budget_keeps_the_voxel_size_the_enve
     carve_further(store, name)
     settings = store.read_settings(name)
     assert settings["mode"] == NEW_PROJECT_MODE and settings["voxel_size"] == 4.0
+
+
+def test_carve_further_returns_the_settings_of_a_criterion_whose_id_is_not_1(project_with_inputs):
+    store, name = project_with_inputs
+    entry = store.add_criterion(name, "daylight")
+    store.add_criterion_test_surface(name, entry.id, "surface_2.ply", box_bytes([2, 0, 0], extents=(6, 6, 0.1)))
+    store.delete_criterion(name, "1")
+    assert [criterion.id for criterion in store.criteria(name)] == ["2"]
+    write_fake_chain_run(store, name, ["2"])
+    write_envelope_as_exported(store.open(name))
+    carve_further(store, name)
+    assert [criterion.id for criterion in store.criteria(name)] == ["2"]
+    assert store.read_settings(name, "2")["mode"] == NEW_PROJECT_MODE
+    assert [file.name for file in store.input_files(name, "max_volume")] == ["carved_envelope_1.ply"]

@@ -83,6 +83,25 @@ def test_a_bypassed_criterion_is_left_out_of_the_summary(project_with_inputs):
     assert summary.carving.voxels_kept == 60 and summary.chain.volume_after_each_m3 == [480.0]
 
 
+def test_with_every_criterion_bypassed_the_summary_has_no_criteria(project_with_inputs):
+    store, name = project_with_inputs
+    write_chain_of_two_with_results(store, name)
+    store.update_criterion(name, "1", bypassed=True)
+    store.update_criterion(name, "2", bypassed=True)
+    summary = build_run_summary(store, name)
+    assert summary.criteria == [] and summary.carving is None and summary.chain is None
+
+
+def test_the_share_of_the_max_volume_is_none_when_it_has_no_filled_voxel(project_with_inputs):
+    store, name = project_with_inputs
+    run = write_fake_run(store.open(name))
+    write_diagnostic(run / "criteria" / "1" / "thresholding", {
+        **thresholding_diagnostic(voxels_at_start=100, voxels_kept=0), "voxels_at_start": 0, "voxels_occupied": 0,
+        "voxels_removed": 0, "retention_pct": 0.0})
+    chain = build_run_summary(store, name).chain
+    assert chain.volume_after_each_m3 == [0.0] and chain.share_of_max_volume_kept is None
+
+
 def test_a_criterion_without_results_is_listed_and_the_chain_waits_for_it(project_with_inputs):
     store, name = project_with_inputs
     run = write_chain_of_two_with_results(store, name)

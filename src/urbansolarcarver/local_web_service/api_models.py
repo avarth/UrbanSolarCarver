@@ -189,7 +189,8 @@ class CriterionCarvingSummary(BaseModel):
 class ChainSummary(BaseModel):
     """What the chain of criteria that are on kept, from the volumes of the criteria."""
     volume_after_each_m3: list[float]       # the volume each criterion kept, in chain order
-    share_of_max_volume_kept: float         # the last criterion's kept volume over the filled volume of the maximum volume
+    # the last criterion's kept volume over the filled volume of the maximum volume; None when that has no filled voxel
+    share_of_max_volume_kept: float | None
 
 
 class RunSummary(BaseModel):

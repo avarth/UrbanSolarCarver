@@ -63,10 +63,10 @@ def _read_json(path: Path) -> dict | None:
 def _criterion_results(run_folder: Path, criterion: CriterionEntry) -> tuple[CriterionCarvingSummary, float | None]:
     """The summary of one criterion from its folder, and the voxel size of its grid (None without its preprocessing manifest)."""
     criterion_folder = run_folder / CRITERIA_FOLDER / criterion.id
-    carving = _carving_summary(criterion_folder)
+    diagnostic = _read_json(criterion_folder / "thresholding" / DIAGNOSTIC_PATH)
+    carving = None if diagnostic is None else _carving_summary(diagnostic)
     preprocessing = read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest, criterion.id)
     voxel_size = None if preprocessing is None else preprocessing[0].voxel_size
-    diagnostic = _read_json(criterion_folder / "thresholding" / DIAGNOSTIC_PATH)
     # A diagnostic from before thresholding named them does not give the voxels it decided about; for the first criterion those are the occupied ones.
     voxels_at_start = None if diagnostic is None else diagnostic.get("voxels_at_start", diagnostic["voxels_occupied"])
     volume_kept = None if carving is None or voxel_size is None else carving.voxels_kept * voxel_size ** 3
@@ -82,13 +82,10 @@ def _chain_summary(results: list[tuple[CriterionCarvingSummary, float | None]]) 
     volumes = [summary.volume_kept_m3 for summary, _voxel_size in results]
     first, first_voxel_size = results[0]
     max_volume = first.voxels_at_start * first_voxel_size ** 3      # the filled voxels of the maximum volume
-    return ChainSummary(volume_after_each_m3=volumes, share_of_max_volume_kept=volumes[-1] / max_volume if max_volume else 0.0)
+    return ChainSummary(volume_after_each_m3=volumes, share_of_max_volume_kept=volumes[-1] / max_volume if max_volume else None)
 
 
-def _carving_summary(criterion_folder: Path) -> CarvingSummary | None:
-    diagnostic = _read_json(criterion_folder / "thresholding" / DIAGNOSTIC_PATH)
-    if diagnostic is None:
-        return None
+def _carving_summary(diagnostic: dict) -> CarvingSummary:
     return CarvingSummary(
         threshold_value=diagnostic["threshold_value"],
         voxels_occupied=diagnostic["voxels_occupied"],

@@ -208,3 +208,12 @@ def test_carved_by_criterion_is_not_available_when_the_criteria_have_other_grids
     with pytest.raises(ProjectError) as error:
         build_carved_by_criterion(store, name)
     assert error.value.status_code == 404
+
+
+def test_a_mask_that_cannot_be_read_is_not_available_like_a_missing_one(chain_of_two):
+    store, name = chain_of_two
+    (store.open(name) / "run" / "criteria" / "2" / "thresholding" / "mask.npy").write_bytes(b"not an array")
+    for build in (build_carved_by_criterion, build_score_points):
+        with pytest.raises(ProjectError) as error:
+            build(store, name)
+        assert error.value.status_code == 404

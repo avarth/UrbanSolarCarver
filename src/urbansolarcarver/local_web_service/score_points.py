@@ -110,8 +110,8 @@ def build_score_points(store: ProjectStore, name: str, criterion_id: str | None 
     if preprocessing is None:
         raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
     preprocessing_manifest, preprocessing_folder = preprocessing
-    voxel_grid = np.load(resolve_stored_path(preprocessing_folder, preprocessing_manifest.voxel_grid_path))
-    all_scores = np.load(resolve_stored_path(preprocessing_folder, preprocessing_manifest.scores_path)).ravel()
+    voxel_grid = _load_array(resolve_stored_path(preprocessing_folder, preprocessing_manifest.voxel_grid_path))
+    all_scores = _load_array(resolve_stored_path(preprocessing_folder, preprocessing_manifest.scores_path)).ravel()
 
     occupied_indices = np.flatnonzero(voxel_grid.ravel())
     occupied_count = len(occupied_indices)
@@ -163,9 +163,9 @@ def _thresholding_arrays(run_folder: Path, criterion_id: str,
     thresholding_manifest, thresholding_folder = thresholding
     if thresholding_manifest.upstream_run_id != preprocessing_run_id:
         return None, None       # thresholding ran on an earlier preprocessing run
-    kept_mask = np.load(resolve_stored_path(thresholding_folder, thresholding_manifest.mask_path)).ravel()
+    kept_mask = _load_array(resolve_stored_path(thresholding_folder, thresholding_manifest.mask_path)).ravel()
     compared_path = thresholding_manifest.scores_compared_with_cutoff_path
-    compared_scores = None if compared_path is None else np.load(resolve_stored_path(thresholding_folder, compared_path)).ravel()
+    compared_scores = None if compared_path is None else _load_array(resolve_stored_path(thresholding_folder, compared_path)).ravel()
     return kept_mask, compared_scores
 
 
@@ -183,7 +183,7 @@ def build_carved_by_criterion(store: ProjectStore, name: str) -> bytes:
     if preprocessing is None:
         raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
     preprocessing_manifest, preprocessing_folder = preprocessing
-    kept_before = np.load(resolve_stored_path(preprocessing_folder, preprocessing_manifest.voxel_grid_path)).astype(bool)
+    kept_before = _load_array(resolve_stored_path(preprocessing_folder, preprocessing_manifest.voxel_grid_path)).astype(bool)
     carved_by = np.zeros(kept_before.shape, dtype="u1")
     for position, criterion in enumerate(active, start=1):
         kept = _kept_mask(run_folder, criterion.id)
@@ -205,10 +205,15 @@ def build_carved_by_criterion(store: ProjectStore, name: str) -> bytes:
 def _kept_mask(run_folder: Path, criterion_id: str) -> np.ndarray:
     """The kept mask of a criterion's thresholding run; ProjectError 404 when it has none."""
     thresholding = read_stage_manifest(run_folder, "thresholding", ThresholdingManifest, criterion_id)
-    if thresholding is not None:
-        manifest, manifest_folder = thresholding
-        try:
-            return np.load(resolve_stored_path(manifest_folder, manifest.mask_path)).astype(bool)
-        except OSError:
-            pass
-    raise ProjectError(f"Criterion {criterion_id} has no results yet: run the analysis first.", status_code=404)
+    if thresholding is None:
+        raise ProjectError(f"Criterion {criterion_id} has no results yet: run the analysis first.", status_code=404)
+    manifest, manifest_folder = thresholding
+    return _load_array(resolve_stored_path(manifest_folder, manifest.mask_path)).astype(bool)
+
+
+def _load_array(path: Path) -> np.ndarray:
+    """An array a stage saved; ProjectError 404 when the file is missing or cannot be read (a run that was cut off, a damaged file)."""
+    try:
+        return np.load(path, allow_pickle=False)
+    except (OSError, ValueError):
+        raise ProjectError("The results of this run cannot be read: run the analysis again.", status_code=404) from None
