@@ -391,8 +391,11 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         store.open(name)    # 404 for an unknown project, before the repairs
         try:
             store.migrate_to_criteria(name)
-        except Exception:   # the project is as it was, and opens so; a run tries again and reports the error
-            _log.exception("Project '%s' could not be made a chain of one criterion, so it opens as it was", name)
+        except Exception as error:      # the project is as it was, and opens so; a run tries again and reports the error
+            if isinstance(error, ProjectError) and error.status_code == 409:    # a file of the new layout is in the way, named
+                _log.warning("Project '%s' opens as it was: %s", name, error)
+            else:
+                _log.exception("Project '%s' could not be made a chain of one criterion, so it opens as it was", name)
         try:
             store.rebuild_joined_test_surfaces_without_normals(name)
         except ProjectError:

@@ -17,13 +17,13 @@ with warnings.catch_warnings():     # newer Starlette versions announce that Tes
     from starlette.testclient import TestClient
 
 from local_web_test_support import (
-    ALL_CURRENT, EARLIER_JOINED_TEST_SURFACES, add_project_with_inputs, make_worker, write_earlier_version_project,
+    ALL_CURRENT, EARLIER_JOINED_TEST_SURFACES, add_project_with_inputs, make_worker, run_and_wait, write_earlier_version_project,
 )
 from urbansolarcarver.api_core._stage_io import load_upstream
 from urbansolarcarver.chain_config import CRITERION_KEYS, load_chain
-from urbansolarcarver.local_web_service import create_app, test_surfaces
+from urbansolarcarver.local_web_service import create_app, migration, test_surfaces
 from urbansolarcarver.local_web_service.criteria import CRITERION_COLOURS
-from urbansolarcarver.local_web_service.projects import ProjectStore
+from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
 from urbansolarcarver.local_web_service.stage_records import criterion_status, stage_status
 from urbansolarcarver.stage_settings import PIPELINE_STAGES
 
@@ -173,36 +173,78 @@ def test_the_moved_manifests_name_the_moved_runs_as_the_engine_reads_them(store,
     assert [_manifest(run / stage / "manifest.json")["run_id"] for stage in ("exporting", "massing")] == ["exp-run", "mas-run"]
 
 
-@pytest.mark.parametrize("failing", ["project_json", "config", "manifest"])
+def _fail(*_arguments, **_keywords):
+    raise OSError("the disk is full")
+
+
+def _make_the_first_write_of_a_file_fail(monkeypatch, file_name: str) -> None:
+    """The migration's first write of a file named *file_name* writes part of it, then fails (a full disk); later writes, the
+    undo's among them, work."""
+    write_atomically = migration._write_atomically
+    failed = []
+
+    def write_part_then_fail(path, data):
+        if path.name == file_name and not failed:
+            failed.append(path)
+            path.write_bytes(data[:10])
+            raise OSError("the disk is full")
+        write_atomically(path, data)
+    monkeypatch.setattr(migration, "_write_atomically", write_part_then_fail)
+
+
+@pytest.mark.parametrize("failing", ["project_json", "config", "manifest", "chain_file"])
 def test_a_migration_that_fails_leaves_the_project_as_it_was(store, monkeypatch, failing):
     write_earlier_version_project(store, "p")
     before = _snapshot(store.open("p"))
-
-    def fail(*_arguments, **_keywords):
-        raise OSError("the disk is full")
     if failing == "project_json":
-        monkeypatch.setattr(store, "write_project_json", fail)
+        monkeypatch.setattr(store, "write_project_json", _fail)
     elif failing == "config":
-        monkeypatch.setattr(store, "_write_bytes_atomically", fail)
+        monkeypatch.setattr(store, "_write_bytes_atomically", _fail)
     else:
-        monkeypatch.setattr("urbansolarcarver.local_web_service.migration._write_manifest", fail)
+        _make_the_first_write_of_a_file_fail(monkeypatch, "manifest.json" if failing == "manifest" else "chain.json")
     with pytest.raises(OSError):
         store.migrate_to_criteria("p")
     assert _snapshot(store.open("p")) == before
+    monkeypatch.undo()
+    assert store.migrate_to_criteria("p") is True       # nothing of the new layout is left in the way
 
 
 def test_a_project_that_fails_to_migrate_still_opens_as_it_was(store, monkeypatch, caplog):
     write_earlier_version_project(store, "p")
     before = _snapshot(store.open("p"))
-
-    def fail(*_arguments, **_keywords):
-        raise OSError("the disk is full")
-    monkeypatch.setattr("urbansolarcarver.local_web_service.migration._write_manifest", fail)
+    _make_the_first_write_of_a_file_fail(monkeypatch, "manifest.json")
     with caplog.at_level(logging.ERROR):
         reply = _client(store.projects_folder).get("/api/projects/p")
     assert reply.status_code == 200, reply.text
     assert _snapshot(store.open("p")) == before
     assert "the disk is full" in caplog.text
+
+
+def test_a_project_whose_new_layout_is_in_the_way_is_left_as_it_is(store, caplog):
+    write_earlier_version_project(store, "p")
+    (store.open("p") / "run" / "criteria").mkdir()
+    before = _snapshot(store.open("p"))
+    with pytest.raises(ProjectError) as refusal:
+        store.migrate_to_criteria("p")
+    assert refusal.value.status_code == 409 and "run/criteria exists already" in str(refusal.value)
+    with caplog.at_level(logging.WARNING):
+        reply = _client(store.projects_folder).get("/api/projects/p")
+    assert reply.status_code == 200, reply.text
+    assert _snapshot(store.open("p")) == before
+    [logged] = [record for record in caplog.records if "run/criteria exists already" in record.getMessage()]
+    assert logged.levelno == logging.WARNING and logged.exc_info is None and "Traceback" not in caplog.text
+
+
+def test_starting_a_run_migrates_an_earlier_project(store):
+    write_earlier_version_project(store, "p", stages=("preprocessing",))
+    worker = make_worker(store)
+    reply = run_and_wait(worker, "p", ["exporting", "massing"])
+    assert reply.stages == ["thresholding", "exporting", "massing"]
+    assert reply.criterion_stages == {"1": ["thresholding"]}
+    run = store.open("p") / "run"
+    assert _manifest(run / "criteria" / "1" / "preprocessing" / "manifest.json")["run_id"] == "pre-run"
+    assert not (run / "preprocessing").exists()
+    assert stage_status(store, "p") == ALL_CURRENT
 
 
 def test_saving_the_settings_of_an_earlier_project_migrates_it_first(store):
@@ -236,6 +278,8 @@ def test_a_config_file_with_a_yaml_error_stays_for_the_next_save(store):
     assert store.migrate_to_criteria("p") is True
     assert config_path.read_text(encoding="utf-8") == "mode: [daylight\n"
     assert store.criteria("p")[0].test_surface_files == ["surface.ply"]
+    [listed] = _manifest(store.open("p") / "run" / "criteria" / "chain.json")["criteria"]
+    assert (listed["name"], listed["mode"]) == ("daylight", "daylight")     # the mode the moved preprocessing manifest records
     store.write_config_from_values("p", {"mode": "daylight"})
     assert [criterion.id for criterion in load_chain(config_path).criteria] == ["1"]
 

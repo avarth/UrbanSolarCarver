@@ -19,7 +19,7 @@ from pathlib import Path
 from ..mode_registry import canonical_mode_name
 from . import test_surfaces
 from .api_models import ProjectJson, StageRecord
-from .criteria import append_criterion, joined_test_surfaces_path, split_settings
+from .criteria import append_criterion, default_criterion_name, joined_test_surfaces_path, split_settings
 from .project_names import ProjectError
 from .projects import CONFIG_FILE_NAME, RUN_FOLDER, SETTINGS_LEFT_TO_THE_ENGINE, ProjectStore
 
@@ -41,13 +41,13 @@ class _Undo:
         self._steps.append(step)
 
     def run(self) -> list[str]:
-        """Undo every change, newest first; the errors of the steps that could not be undone."""
+        """Undo every change, newest first, also past a step that fails; the errors of the steps that could not be undone."""
         errors = []
         for step in reversed(self._steps):
             try:
                 step()
-            except OSError as error:
-                errors.append(str(error))
+            except Exception as error:
+                errors.append(str(error) or type(error).__name__)
         return errors
 
 
@@ -83,13 +83,16 @@ def migrate_to_criteria(store: ProjectStore, name: str) -> bool:
             _move_joined_test_surfaces(project_folder, entry.test_surface_files, undo)
             moved = _move_criterion_stages(run_folder, undo)
             _name_the_moved_runs(run_folder, moved, undo)
-            _write_chain_file(run_folder, entry.name, criterion_settings.get("mode", ""), undo)
+            mode = criterion_settings.get("mode") or _mode_of_the_moved_preprocessing(run_folder)
+            if "mode" not in criterion_settings and mode is not None:
+                entry.name = default_criterion_name(mode, [])   # a config.yaml without settings: named after the mode the runs had
+            _write_chain_file(run_folder, entry.name, mode, undo)
             _move_records(project_json, project_folder)
             if stored_config:   # a config.yaml that holds no settings (a hand edit with a YAML error) stays for the next save to replace
                 config_text = store._chain_config_text(project_folder, project_json, shared)
                 earlier_config = config_path.read_bytes()
+                undo.add(lambda: _write_atomically(config_path, earlier_config))     # before the write
                 store._write_bytes_atomically(config_path, config_text.encode("utf-8"))
-                undo.add(lambda: store._write_bytes_atomically(config_path, earlier_config))
             store.write_project_json(name, project_json)
         except BaseException as error:
             undo_errors = undo.run()
@@ -159,19 +162,30 @@ def _name_the_moved_runs(run_folder: Path, moved: dict[Path, Path], undo: _Undo)
         if stored == manifest["upstream_manifest"]:
             continue
         earlier_bytes = manifest_path.read_bytes()
-        _write_manifest(manifest_path, {**manifest, "upstream_manifest": stored})
-        undo.add(lambda path=manifest_path, data=earlier_bytes: path.write_bytes(data))
+        undo.add(lambda path=manifest_path, data=earlier_bytes: _write_atomically(path, data))     # before the write: it may fail midway
+        _write_atomically(manifest_path, json.dumps({**manifest, "upstream_manifest": stored}, indent=2).encode("utf-8"))
 
 
-def _write_chain_file(run_folder: Path, criterion_name: str, mode: str, undo: _Undo) -> None:
-    """run/criteria/chain.json as run_chain writes it once the criteria are thresholded, when the moved thresholding has a run id."""
+def _mode_of_the_moved_preprocessing(run_folder: Path) -> str | None:
+    """The mode the moved preprocessing manifest records; None without one."""
+    preprocessing = _read_manifest(run_folder / "criteria" / CRITERION_ID / "preprocessing" / MANIFEST_FILE_NAME)
+    mode = preprocessing.get("mode") if preprocessing is not None else None
+    return mode if isinstance(mode, str) else None
+
+
+def _write_chain_file(run_folder: Path, criterion_name: str, mode: str | None, undo: _Undo) -> None:
+    """run/criteria/chain.json as run_chain writes it once the criteria are thresholded, when the moved thresholding has a run id.
+
+    Without a *mode* the entry has none (the run report shows a dash then).
+    """
     thresholding = _read_manifest(run_folder / "criteria" / CRITERION_ID / "thresholding" / MANIFEST_FILE_NAME)
     if thresholding is None or not isinstance(thresholding.get("run_id"), str):
         return
     chain_path = run_folder / CHAIN_FILE
-    listed = [{"id": CRITERION_ID, "name": criterion_name, "mode": canonical_mode_name(mode), "thresholding_run_id": thresholding["run_id"]}]
-    chain_path.write_text(json.dumps({"criteria": listed}, indent=2), encoding="utf-8")
-    undo.add(lambda: chain_path.unlink(missing_ok=True))
+    listed = [{"id": CRITERION_ID, "name": criterion_name, **({"mode": canonical_mode_name(mode)} if mode is not None else {}),
+               "thresholding_run_id": thresholding["run_id"]}]
+    undo.add(lambda: chain_path.unlink(missing_ok=True))       # before the write: it may fail midway
+    _write_atomically(chain_path, json.dumps({"criteria": listed}, indent=2).encode("utf-8"))
 
 
 def _move_records(project_json: ProjectJson, project_folder: Path) -> None:
@@ -217,8 +231,9 @@ def _read_manifest(manifest_path: Path) -> dict | None:
     return manifest if isinstance(manifest, dict) else None
 
 
-def _write_manifest(manifest_path: Path, manifest: dict) -> None:
-    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+def _write_atomically(target_path: Path, data: bytes) -> None:
+    """Write a file through a temporary file in the same folder, so it is either as it was or complete."""
+    ProjectStore._write_bytes_atomically(target_path, data)
 
 
 def _resolved(manifest_folder: Path, stored: str) -> Path:
