@@ -208,7 +208,9 @@ def test_cpu_cuda_parity(tmp_path, epw, mode):
     if mode in BINARY_MODES:
         assert np.array_equal(cpu.mask, gpu.mask)
     else:
-        np.testing.assert_allclose(gpu.scores, cpu.scores, rtol=1e-4, atol=1e-3)
+        # The kernels compute the jittered sky sub-ray directions in float32 with each device's sin and cos, which can
+        # differ in the last bit, so a sub-ray grazing a voxel edge may cross the neighbour (4 of 9261 voxels, 6e-4).
+        np.testing.assert_allclose(gpu.scores, cpu.scores, rtol=1e-3, atol=1e-3)
 
 
 @pytest.mark.parametrize("mode", ["daylight", "time-based"])
@@ -227,7 +229,9 @@ def test_threaded_cpu_accumulation_matches_sequential(tmp_path, epw, mode, monke
     if mode == "time-based":
         assert np.array_equal(threaded.scores, sequential.scores)
     else:
-        np.testing.assert_allclose(threaded.scores, sequential.scores, rtol=1e-5, atol=1e-6)
+        # float32 sums in another order: with 4 sky sub-rays per patch a voxel adds 4 times as many smaller weights, and
+        # its rounding reaches about 1e-5; a lost update would drop a whole sub-ray's weight from many voxels.
+        np.testing.assert_allclose(threaded.scores, sequential.scores, rtol=5e-5, atol=1e-6)
 
 
 # ----------------------------------------------------------------- diagnostics

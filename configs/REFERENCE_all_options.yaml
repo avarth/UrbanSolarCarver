@@ -62,6 +62,9 @@ edge_taper:     0.0    # design constraint (m): test-surface sample points withi
                        # test surfaces (already enforced by sampling).
 ray_length:     3000.0 # max ray cast distance (m); rays stop at the grid's edge, so a longer
                        # length costs nothing
+rays_per_patch: 4      # sky-patch modes: rays per Tregenza patch from each test point, 1, 4, 9 or 16.
+                       # 1 = the patch centre; more = spread over the patch (jittered, repeatable),
+                       # which closes the gaps between patch centres far from the test surfaces
 min_altitude:   5.0    # time-based only: ignore sun positions below this altitude (deg)
 margin_frac:    0.01   # empty margin around the mesh, as a fraction of its largest side
 ray_batch_size: 0  # 0 = auto-tune based on GPU VRAM

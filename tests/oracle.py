@@ -3,8 +3,10 @@
 Shares no tracing, ray-generation or sun-rotation code with USC: rays are
 marched in fixed sub-voxel steps on the CPU, sun positions come straight
 from Ladybug's Sunpath at 5-minute resolution, and model north is applied
-from first principles. Only the Tregenza patch directions and patch
-weights are reused, since those are inputs rather than the code under test.
+from first principles. Only the Tregenza patch directions, the patch
+weights and the NumPy definition of the jittered sky sub-ray directions
+(sky_patches.sub_ray_directions, which the kernels compute again in
+float32) are reused, since those are inputs rather than the code under test.
 
 A voxel counts as an obstruction of sample p when it lies entirely in
 front of p's surface plane (n . (c - p) greater than the voxel's half-extent
@@ -304,13 +306,35 @@ def tilted_hits(run: Run) -> np.ndarray:
     return column_above(follow_own_skin(column_above(hits > 0), own_skin))
 
 
+def sky_rays(run: Run, dirs: np.ndarray, pw: np.ndarray):
+    """The sky rays of a run: origins, normals, directions and weights.
+
+    With ``rays_per_patch`` 1, one ray per (point, patch centre) the surface
+    faces. Otherwise every (point, patch) pair becomes ``rays_per_patch``
+    sub-rays (sky_patches.sub_ray_directions, the NumPy definition the
+    kernels follow), each carrying that share of the patch weight, of which
+    those the surface faces are kept.
+    """
+    from urbansolarcarver.sky_patches import sub_ray_directions, tregenza_patch_cells
+    count = int(run.cfg.get("rays_per_patch", 4))
+    if count == 1:
+        o, n, d, _, di = pairs(run.points, run.normals, dirs)
+        return o, n, d, pw[di]
+    side = math.isqrt(count)
+    pi, di = (a.ravel() for a in np.meshgrid(np.arange(len(run.points)), np.arange(len(dirs)), indexing="ij"))
+    d = sub_ray_directions(pi, di, side, tregenza_patch_cells())
+    pi, di = np.repeat(pi, count), np.repeat(di, count)
+    facing = np.einsum("ij,ij->i", run.normals[pi], d) > 0
+    return run.points[pi][facing], run.normals[pi][facing], d[facing], pw[di][facing] / count
+
+
 def sky_scores(run: Run, substeps: int = 10) -> np.ndarray:
     import torch
     from urbansolarcarver.sky_patches import fetch_tregenza_patch_directions
     dirs = fetch_tregenza_patch_directions(torch.device("cpu")).numpy().astype(float)
     pw = np.load(run.pre / "patch_weights.npy").astype(float)
-    o, n, d, _, di = pairs(run.points, run.normals, dirs)
-    scores, own_skin = march(run, o, n, d, weights=pw[di],
+    o, n, d, w = sky_rays(run, dirs, pw)
+    scores, own_skin = march(run, o, n, d, weights=w,
                              ray_length=run.cfg.get("ray_length", DEFAULT_RAY_LENGTH), substeps=substeps)
     # Each sample point stands for grid_step² of protected surface (the spacing the run used, from its manifest).
     sample_area = float(json.loads((run.pre / "manifest.json").read_text())["grid_step"]) ** 2

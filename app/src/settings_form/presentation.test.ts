@@ -29,8 +29,9 @@ test("the Settings step groups, their folds and their fold labels", () => {
   expect(names(benefitModeGroup.essential)).toEqual(["balance_temperature"]);      // with its dead band, as one widget
   expect(names(benefitModeGroup.folded)).toEqual(["include_harm"]);
   expect(benefitModeGroup.foldLabel).toBe("More mode settings");
+  // The sky-patch modes add the rays per sky patch; time-based traces sun positions and has none.
   const irradianceDetail = settingsForStep("settings", "irradiance").find((group) => group.title === "Detail")!;
-  expect(names(irradianceDetail.folded)).toEqual(["ray_batch_size", "diagnostics"]);
+  expect(names(irradianceDetail.folded)).toEqual(["rays_per_patch", "ray_batch_size", "diagnostics"]);
   // Night cooling: the edge strip is a setting of its own, in its fold, so a cooling street or courtyard does not clear the mass
   // right beside it.
   const coolingModeGroup = settingsForStep("settings", "radiative_cooling").find((group) => group.title === "Mode specific")!;

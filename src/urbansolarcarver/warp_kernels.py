@@ -11,7 +11,9 @@ device (:func:`dda_backend_available`), precompiles the kernels
   every voxel the ray crosses exactly once, with fused kernels that add
   each ray's weight or a count of 1 directly into a per-voxel volume, the
   first-hit kernel of the test point access evaluation and the kernel of
-  the skin rule;
+  the skin rule; in the sky-patch modes a thread can trace one of several
+  jittered sub-rays of a sky patch, whose direction it computes itself
+  (see the note above ``_lowbias32``);
 * the parity voxelizer used by :func:`voxelization.voxelize_solid_warp`;
 * the ground heights of a terrain mesh and the voxel centres on the context's
   surface, used by :mod:`context_geometry`, and the any-hit test of rays
@@ -441,6 +443,89 @@ if _warp_available:
             return 1
         return 0
 
+    # ===================================================================
+    # Sky sub-rays
+    # With sub_side > 0, each (sample point, sky patch) ray of the sky-patch
+    # modes stands for sub = sub_side**2 sub-rays, one thread each: of a
+    # launch over n rays, thread tid traces sub-ray k = tid // n of ray
+    # r = tid % n, toward a place in cell k of the patch drawn from a hash of
+    # the point, the patch and k.  The rays are ordered by patch, so the
+    # threads of a warp trace one cell of one patch from neighbouring points
+    # and visit nearby voxels, which keeps the voxel arrays in the cache.  A
+    # per-sub-ray skip mask is laid out ray by ray (entry r * sub + k).  The
+    # weight of the patch is shared equally between its sub-rays, and a
+    # sub-ray the surface does not face is skipped.  With sub_side 0 a
+    # thread traces the ray's own direction, as the sun and plane rays do.
+    # sky_patches.sub_ray_directions is the NumPy reference of the
+    # directions; the hash constants are its SUB_RAY_SEED, _HASH_M1, _HASH_M2.
+    # ===================================================================
+
+    _SUB_RAY_SEED = wp.constant(wp.uint32(0x5EED1234))
+    _HASH_M1 = wp.constant(wp.uint32(0x7FEB352D))
+    _HASH_M2 = wp.constant(wp.uint32(0x846CA68B))
+
+    @wp.func
+    def _lowbias32(x: wp.uint32) -> wp.uint32:
+        """The lowbias32 integer hash (C. Wellons)."""
+        x = x ^ (x >> wp.uint32(16))
+        x = x * _HASH_M1
+        x = x ^ (x >> wp.uint32(15))
+        x = x * _HASH_M2
+        x = x ^ (x >> wp.uint32(16))
+        return x
+
+    @wp.func
+    def _sub_ray_count(sub_side: int) -> int:
+        """Threads per ray: sub_side**2, or 1 when rays are traced as given."""
+        if sub_side > 0:
+            return sub_side * sub_side
+        return 1
+
+    @wp.func
+    def _sky_sub_ray_direction(cell: wp.vec4, sub_side: int, point_id: int,
+                               patch_id: int, k: int) -> wp.vec3:
+        """Direction of sub-ray *k* of the ray from sample point *point_id*
+        toward patch *patch_id*, whose extent *cell* is (sin_alt_low,
+        sin_alt_high, az_low, az_high) as in sky_patches.tregenza_patch_cells.
+        """
+        h = _lowbias32(wp.uint32(point_id) ^ _SUB_RAY_SEED)
+        h = _lowbias32(h ^ wp.uint32(patch_id * 256 + k))
+        u = float(h >> wp.uint32(8)) * (1.0 / 16777216.0)
+        h = _lowbias32(h)
+        v = float(h >> wp.uint32(8)) * (1.0 / 16777216.0)
+        row = k // sub_side
+        col = k - row * sub_side
+        sin_alt = cell[0] + (float(row) + u) / float(sub_side) * (cell[1] - cell[0])
+        az = cell[2] + (float(col) + v) / float(sub_side) * (cell[3] - cell[2])
+        cos_alt = wp.sqrt(wp.max(1.0 - sin_alt * sin_alt, 0.0))
+        return wp.vec3(cos_alt * wp.sin(az), cos_alt * wp.cos(az), sin_alt)
+
+    @wp.func
+    def _traced_direction(ray_dirs: wp.array(dtype=wp.vec3), r: int, sub_side: int,
+                          patch_cells: wp.array(dtype=wp.vec4), point_id: int,
+                          patch_id: int, k: int) -> wp.vec3:
+        """The direction a thread traces: ray *r*'s own, or its sub-ray *k*."""
+        if sub_side > 0:
+            return _sky_sub_ray_direction(patch_cells[patch_id], sub_side, point_id, patch_id, k)
+        return ray_dirs[r]
+
+    @wp.kernel
+    def _sky_sub_ray_directions_kernel(
+        ray_point_ids: wp.array(dtype=int),
+        ray_patch_ids: wp.array(dtype=int),
+        sub_side: int,
+        patch_cells: wp.array(dtype=wp.vec4),
+        directions: wp.array(dtype=wp.vec3),   # out: [num_rays * sub_side**2]
+    ):
+        """The sub-ray directions the kernels trace, one thread per sub-ray
+        (for callers that want the rays themselves, and for tests)."""
+        tid = wp.tid()
+        sub = sub_side * sub_side
+        r = tid // sub
+        pid = ray_patch_ids[r]
+        directions[tid] = _sky_sub_ray_direction(patch_cells[pid], sub_side, ray_point_ids[r],
+                                                 pid, tid - r * sub)
+
     @wp.kernel
     def _dda_fused_score_kernel(
         # Ray data
@@ -452,6 +537,11 @@ if _warp_available:
         front_test: int,                        # 1 = skip voxels behind the source surface
         skin_rule: int,                         # 1 = count skin voxels with no mass behind them
         occupancy: wp.array(dtype=wp.uint8),    # max volume occupancy [res^3] (placeholder if skin_rule == 0)
+        # Sky sub-rays (see the note above _lowbias32)
+        sub_side: int,                          # sub-rays per ray = sub_side**2; 0 = trace ray_dirs
+        patch_cells: wp.array(dtype=wp.vec4),   # extent of each patch (placeholder if sub_side == 0)
+        use_skip: int,                          # 1 = skip the threads whose skip entry is nonzero
+        skip: wp.array(dtype=wp.uint8),         # per thread: blocked by context or facing away
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -461,22 +551,34 @@ if _warp_available:
         scores: wp.array(dtype=float),         # flat score volume [res^3]
         patch_weights: wp.array(dtype=float),   # weight per patch [num_patches]
     ):
-        """Trace one ray per thread and add its sky patch weight to every
-        voxel it visits.
+        """Trace one ray (or sky sub-ray) per thread and add its share of its
+        sky patch weight to every voxel it visits.
 
         The DDA visits each voxel at most once per ray, so a voxel's score
         is the sum of the weights of the rays that cross it.  See the note
         above _DDAState on atomic_add with the CPU backend.
         """
         tid = wp.tid()
-        pid = ray_patch_ids[tid]
-        w = patch_weights[pid]
-        o = ray_origins[tid]
+        sub = _sub_ray_count(sub_side)
+        # Sub-ray k of ray r: the threads of a warp trace the same cell of a patch from
+        # neighbouring points (rays are ordered by patch), so they visit nearby voxels.
+        k = tid // ray_origins.shape[0]
+        r = tid - k * ray_origins.shape[0]
+        if use_skip == 1:
+            if skip[r * sub + k] != wp.uint8(0):
+                return
+        pid = ray_patch_ids[r]
+        pt = ray_point_ids[r]
+        w = patch_weights[pid] / float(sub)
+        o = ray_origins[r]
         n = wp.vec3(0.0, 0.0, 0.0)
         if front_test == 1:  # the normals array is a 1-element placeholder otherwise
-            n = point_normals[ray_point_ids[tid]]
+            n = point_normals[pt]
+        d = _traced_direction(ray_dirs, r, sub_side, patch_cells, pt, pid, k)
+        if sub_side > 0 and wp.dot(n, d) <= 0.0:
+            return  # the surface does not face this part of the patch
         res_sq = resolution * resolution
-        s = _dda_init(o, ray_dirs[tid], grid_origin,
+        s = _dda_init(o, d, grid_origin,
                       cell_size, resolution, max_t)
 
         # --- Walk and score ---
@@ -507,6 +609,11 @@ if _warp_available:
         front_test: int,                        # 1 = skip voxels behind the source surface
         skin_rule: int,                         # 1 = count skin voxels with no mass behind them
         occupancy: wp.array(dtype=wp.uint8),    # max volume occupancy [res^3] (placeholder if skin_rule == 0)
+        # Sky sub-rays, as in _dda_fused_score_kernel
+        sub_side: int,
+        patch_cells: wp.array(dtype=wp.vec4),
+        use_skip: int,
+        skip: wp.array(dtype=wp.uint8),
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -525,14 +632,26 @@ if _warp_available:
         point weight for every ray.
         """
         tid = wp.tid()
-        pt = ray_point_ids[tid]
-        w = patch_weights[ray_patch_ids[tid]] * point_weights[pt]
-        o = ray_origins[tid]
+        sub = _sub_ray_count(sub_side)
+        # Sub-ray k of ray r: the threads of a warp trace the same cell of a patch from
+        # neighbouring points (rays are ordered by patch), so they visit nearby voxels.
+        k = tid // ray_origins.shape[0]
+        r = tid - k * ray_origins.shape[0]
+        if use_skip == 1:
+            if skip[r * sub + k] != wp.uint8(0):
+                return
+        pt = ray_point_ids[r]
+        pid = ray_patch_ids[r]
+        w = patch_weights[pid] * point_weights[pt] / float(sub)
+        o = ray_origins[r]
         n = wp.vec3(0.0, 0.0, 0.0)
         if front_test == 1:  # the normals array is a 1-element placeholder otherwise
             n = point_normals[pt]
+        d = _traced_direction(ray_dirs, r, sub_side, patch_cells, pt, pid, k)
+        if sub_side > 0 and wp.dot(n, d) <= 0.0:
+            return
         res_sq = resolution * resolution
-        s = _dda_init(o, ray_dirs[tid], grid_origin,
+        s = _dda_init(o, d, grid_origin,
                       cell_size, resolution, max_t)
 
         # --- Walk and score ---
@@ -608,6 +727,9 @@ if _warp_available:
         skin_rule: int,                         # 1 = count skin voxels with no mass behind them
         occupancy: wp.array(dtype=wp.uint8),    # occupancy grid to evaluate [res^3]
         skin_occupancy: wp.array(dtype=wp.uint8),  # max volume the skin rule reads [res^3]
+        # Sky sub-rays, as in _dda_fused_score_kernel (no skip mask)
+        sub_side: int,
+        patch_cells: wp.array(dtype=wp.vec4),
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -620,9 +742,9 @@ if _warp_available:
         use_point_weights: int,                 # 1 = multiply by point_weights (edge_taper)
         point_weights: wp.array(dtype=float),   # weight per sample point (placeholder otherwise)
     ):
-        """Trace one ray per thread until the first occupied voxel it visits
-        and add its weight to its point's blocked weight, or, when it visits
-        none, to its point's accessible weight.
+        """Trace one ray (or sky sub-ray) per thread until the first occupied
+        voxel it visits and add its weight to its point's blocked weight, or,
+        when it visits none, to its point's accessible weight.
 
         Voxels count under the same front-face and skin rules as in the
         scoring kernels, so a point's own skin does not block it.  The skin
@@ -633,16 +755,25 @@ if _warp_available:
         sums in varying order would differ by more than small carves change it.
         """
         tid = wp.tid()
-        pt = ray_point_ids[tid]
-        w = patch_weights[ray_patch_ids[tid]]
+        sub = _sub_ray_count(sub_side)
+        # Sub-ray k of ray r: the threads of a warp trace the same cell of a patch from
+        # neighbouring points (rays are ordered by patch), so they visit nearby voxels.
+        k = tid // ray_origins.shape[0]
+        r = tid - k * ray_origins.shape[0]
+        pt = ray_point_ids[r]
+        pid = ray_patch_ids[r]
+        w = patch_weights[pid] / float(sub)
         if use_point_weights == 1:
             w = w * point_weights[pt]
-        o = ray_origins[tid]
+        o = ray_origins[r]
         n = wp.vec3(0.0, 0.0, 0.0)
         if front_test == 1:  # the normals array is a 1-element placeholder otherwise
             n = point_normals[pt]
+        d = _traced_direction(ray_dirs, r, sub_side, patch_cells, pt, pid, k)
+        if sub_side > 0 and wp.dot(n, d) <= 0.0:
+            return  # not a ray of this point: it neither reaches the sky nor is blocked
         res_sq = resolution * resolution
-        s = _dda_init(o, ray_dirs[tid], grid_origin, cell_size, resolution, max_t)
+        s = _dda_init(o, d, grid_origin, cell_size, resolution, max_t)
         max_steps = 3 * resolution
         for _step in range(max_steps):
             if s.active == 0:
@@ -663,6 +794,12 @@ if _warp_available:
         ray_dirs: wp.array(dtype=wp.vec3),
         ray_point_ids: wp.array(dtype=int),
         point_normals: wp.array(dtype=wp.vec3),
+        # Sky sub-rays, as in _dda_fused_score_kernel
+        ray_patch_ids: wp.array(dtype=int),    # patch per ray (placeholder if sub_side == 0)
+        sub_side: int,
+        patch_cells: wp.array(dtype=wp.vec4),
+        use_skip: int,
+        skip: wp.array(dtype=wp.uint8),
         # Grid parameters
         grid_origin: wp.vec3,
         cell_size: float,
@@ -690,9 +827,23 @@ if _warp_available:
         later voxel beyond that bound.
         """
         tid = wp.tid()
-        o = ray_origins[tid]
-        d = ray_dirs[tid]
-        n = point_normals[ray_point_ids[tid]]
+        sub = _sub_ray_count(sub_side)
+        # Sub-ray k of ray r: the threads of a warp trace the same cell of a patch from
+        # neighbouring points (rays are ordered by patch), so they visit nearby voxels.
+        k = tid // ray_origins.shape[0]
+        r = tid - k * ray_origins.shape[0]
+        if use_skip == 1:
+            if skip[r * sub + k] != wp.uint8(0):
+                return
+        o = ray_origins[r]
+        pt = ray_point_ids[r]
+        n = point_normals[pt]
+        pid = int(0)
+        if sub_side > 0:  # the patch ids are a 1-element placeholder otherwise
+            pid = ray_patch_ids[r]
+        d = _traced_direction(ray_dirs, r, sub_side, patch_cells, pt, pid, k)
+        if sub_side > 0 and wp.dot(n, d) <= 0.0:
+            return
         res_sq = resolution * resolution
         half_extent = 0.5 * cell_size * (wp.abs(n[0]) + wp.abs(n[1]) + wp.abs(n[2]))
         rise_per_t = wp.dot(n, d)
@@ -857,6 +1008,25 @@ if _warp_available:
         else:
             heights[tid] = wp.nan
 
+    @wp.func
+    def _mesh_blocks_ray(mesh_id: wp.uint64, o: wp.vec3, d: wp.vec3,
+                         min_hit: float, max_t: float) -> wp.uint8:
+        """1 if the ray from *o* along *d* hits the mesh between *min_hit*
+        and *max_t*, else 0.  Hits closer than *min_hit* are skipped by
+        querying again from just beyond them."""
+        t_off = float(0.0)
+        for _skip in range(16):
+            if t_off >= max_t:
+                break
+            q = wp.mesh_query_ray(mesh_id, o + d * t_off, d, max_t - t_off)
+            if not q.result:
+                break
+            t_hit = t_off + q.t
+            if t_hit >= min_hit:
+                return wp.uint8(1)
+            t_off = t_hit + wp.max(1.0e-5, t_hit * 1.0e-6)
+        return wp.uint8(0)
+
     @wp.kernel
     def _mesh_any_hit_kernel(
         mesh_id: wp.uint64,                       # BVH of the context and terrain
@@ -872,27 +1042,58 @@ if _warp_available:
         """Whether each ray hits the mesh within *max_t*, one thread per ray.
 
         The ray starts *origin_offset* off its test surface along the
-        surface normal, and hits closer than *min_hit* are skipped by
-        querying again from just beyond them, so a test surface lying on a
-        context face is not blocked by that face.
+        surface normal, and hits closer than *min_hit* are ignored, so a
+        test surface lying on a context face is not blocked by that face.
         """
         i = wp.tid()
-        d = directions[i]
         o = origins[i] + normals[point_ids[i]] * origin_offset
-        t_off = float(0.0)
-        hit = wp.uint8(0)
-        for _skip in range(16):
-            if t_off >= max_t:
-                break
-            q = wp.mesh_query_ray(mesh_id, o + d * t_off, d, max_t - t_off)
-            if not q.result:
-                break
-            t_hit = t_off + q.t
-            if t_hit >= min_hit:
-                hit = wp.uint8(1)
-                break
-            t_off = t_hit + wp.max(1.0e-5, t_hit * 1.0e-6)
-        blocked[i] = hit
+        blocked[i] = _mesh_blocks_ray(mesh_id, o, directions[i], min_hit, max_t)
+
+    @wp.kernel
+    def _mesh_any_hit_sky_kernel(
+        mesh_id: wp.uint64,                       # BVH of the context and terrain
+        origins: wp.array(dtype=wp.vec3),         # (R,) ray origins (the test points)
+        patch_ids: wp.array(dtype=int),           # (R,) sky patch of each ray
+        point_ids: wp.array(dtype=int),           # (R,) test point of each ray
+        normals: wp.array(dtype=wp.vec3),         # (P,) outward unit normal of each test point
+        sub_side: int,                            # sub-rays per ray = sub_side**2 (> 0)
+        patch_cells: wp.array(dtype=wp.vec4),     # extent of each patch
+        patch_weights: wp.array(dtype=float),     # weight per patch
+        use_point_weights: int,                   # 1 = multiply by point_weights (edge_taper)
+        point_weights: wp.array(dtype=float),     # weight per test point (placeholder otherwise)
+        origin_offset: float,
+        min_hit: float,
+        max_t: float,
+        status: wp.array(dtype=wp.uint8),         # out per sub-ray: 0 free, 1 blocked, 2 faces away
+        rays_of_point: wp.array(dtype=wp.int32),          # (P,) sub-rays the point faces
+        blocked_of_point: wp.array(dtype=wp.int32),       # (P,) of them blocked
+        weight_of_point: wp.array(dtype=wp.float64),      # (P,) their weight
+        blocked_weight_of_point: wp.array(dtype=wp.float64),  # (P,) weight of the blocked ones
+    ):
+        """_mesh_any_hit_kernel for the sky sub-rays, one thread per sub-ray
+        (see the note above _lowbias32), adding up per test point what the
+        mesh blocks."""
+        tid = wp.tid()
+        sub = sub_side * sub_side
+        k = tid // origins.shape[0]   # sub-ray k of ray r, as in _dda_fused_score_kernel
+        r = tid - k * origins.shape[0]
+        pt = point_ids[r]
+        pid = patch_ids[r]
+        n = normals[pt]
+        d = _sky_sub_ray_direction(patch_cells[pid], sub_side, pt, pid, k)
+        if wp.dot(n, d) <= 0.0:
+            status[r * sub + k] = wp.uint8(2)
+            return
+        w = patch_weights[pid] / float(sub)
+        if use_point_weights == 1:
+            w = w * point_weights[pt]
+        hit = _mesh_blocks_ray(mesh_id, origins[r] + n * origin_offset, d, min_hit, max_t)
+        status[r * sub + k] = hit
+        wp.atomic_add(rays_of_point, pt, 1)
+        wp.atomic_add(weight_of_point, pt, wp.float64(w))
+        if hit == wp.uint8(1):
+            wp.atomic_add(blocked_of_point, pt, 1)
+            wp.atomic_add(blocked_weight_of_point, pt, wp.float64(w))
 
     @wp.kernel
     def _near_mesh_kernel(

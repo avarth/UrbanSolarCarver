@@ -30,14 +30,20 @@ def _evaluate(occ, points, normals, settings=None, point_weights=None):
 
 
 def _total_weights(points, normals, settings=None, point_weights=None):
-    """Each point's total ray weight, from the rays preprocessing would trace."""
+    """Each point's total ray weight, from the rays preprocessing would trace (its sky sub-rays the surface faces)."""
     from urbansolarcarver.carving import sky_patch_ray_set
+    from urbansolarcarver.ray_tracing import sky_sub_ray_directions
     rays = sky_patch_ray_set(torch.device("cpu"), np.asarray(points, np.float32),
                              np.asarray(normals, np.float32), settings or _settings(), [], point_weights)
-    w = rays.patch_weights[rays.patch_ids]
+    point_ids, w = rays.point_ids.long(), rays.patch_weights[rays.patch_ids]
+    if rays.sub_rays is not None:
+        count = rays.sub_rays.count
+        directions = sky_sub_ray_directions(rays.point_ids, rays.patch_ids, rays.sub_rays)
+        point_ids, w = point_ids.repeat_interleave(count), w.repeat_interleave(count) / count
+        w = w * ((directions * rays.surface_normals[point_ids]).sum(1) > 0)
     if point_weights is not None:
-        w = w * rays.point_weights[rays.point_ids.long()]
-    return np.bincount(rays.point_ids.numpy(), weights=w.numpy(), minlength=len(points))
+        w = w * rays.point_weights[point_ids]
+    return np.bincount(point_ids.numpy(), weights=w.numpy(), minlength=len(points))
 
 
 POINTS = [[20.0, 20.0, 0.0], [5.0, 31.0, 0.0], [39.0, 10.0, 12.0]]
@@ -58,6 +64,9 @@ def test_empty_grid_leaves_the_total_weight_accessible():
 def test_a_slab_over_a_point_blocks_it_fully():
     occ = np.zeros((RES,) * 3, bool)
     occ[:, :, 1] = True               # 2-4 m above the ground, over the whole grid
+    # Walls 0-4 m high around the grid's edge: rays under 6° pass below the slab's edge.
+    occ[[0, -1], :, :2] = True
+    occ[:, [0, -1], :2] = True
     result = _evaluate(occ, POINTS[:1], NORMALS[:1])
     assert result.test_point_accessible_weight[0] == 0.0
     assert result.test_point_blocked_weight[0] == pytest.approx(_total_weights(POINTS[:1], NORMALS[:1])[0], rel=1e-5)

@@ -13,6 +13,43 @@ USC supports six carving modes, each using a different strategy to determine whi
 | `tilted_plane` | Binary | Geometric fixed angle | Angle specification only |
 | `radiative_cooling` | Weighted | Martin-Berdahl + Bliss | Dew point temperature (no EPW) |
 
+## Sky patches and rays per patch (`rays_per_patch`)
+
+The four weighted modes divide the sky into the 145 Tregenza patches, give each patch a weight, and trace rays from
+every test point toward the patches its surface faces. A voxel's score is the weight of the rays that cross it.
+
+With `rays_per_patch: 1` each point sends one ray to each patch centre. The centres are 12° apart in altitude (12° to
+60° in azimuth), so the rays of one point reach a voxel layer at distance d about 0.21 × d apart. Rays from the other
+points of a test surface fill the space between them only up to the surface's own extent. Beyond about five times
+the height of the test surfaces, voxels between the rows of rays get no ray at all and score 0, and the scores show
+horizontal and diagonal bands. On the Allatini example (facades 8 to 24 m high, maximum volumes 30 to 190 m away),
+38 % of the maximum volume's voxels scored 0 and the tallest tower column scored 0 over four bands 4 to 12 m high.
+
+`rays_per_patch` 4 (the default), 9 or 16 trace that many rays per patch. The patch is cut into 2 × 2, 3 × 3 or
+4 × 4 cells of equal solid angle, and each ray points at a place in its cell drawn from a hash of the test point, the
+patch and the cell, carrying that share of the patch weight. Neighbouring points draw different places, so their
+rays no longer line up into rows. The places depend on nothing else, so a run gives the same scores every time and
+for any batch size; CPU and GPU agree to float32 rounding (their sine and cosine can differ in the last bit, so a ray
+grazing a voxel edge may cross the neighbour). Rays that the surface does not face are skipped, so a patch its plane cuts counts the part
+in front of it: a wall sees exactly half of the overcast sky.
+
+Measured in daylight mode on an RTX 3060. Allatini (19,193 test points), against 64 rays per patch; District of many
+buildings (527,000 test points, test surfaces beside the volumes, so little banding at 1 ray):
+
+| `rays_per_patch` | Allatini: voxels scoring 0 | Allatini: keep or carve decisions at 70 % that differ | Allatini: preprocessing | District: preprocessing |
+|---|---|---|---|---|
+| 1 | 38 % | 30 % | 1.15 s | 12.3 s |
+| 4 | 6 % | 6.4 % | 1.18 s | 13.9 s |
+| 9 | 5.5 % | 4.7 % | 1.20 s | 15.2 s |
+| 16 | 5 % | 3.8 % | 1.33 s | 17.0 s |
+
+The remaining zeros are voxels that no test point sees (behind context, or behind the surfaces). The sub-rays are
+generated inside the tracing kernels, so memory does not grow with them. The rays are ordered by patch, so the GPU
+threads that run together trace the same direction from neighbouring points and find the voxels they visit in its
+cache; this is what keeps the extra rays cheap.
+`rays_per_patch: 1` reproduces the scores of earlier versions. Time-based mode traces sun positions and `tilted_plane`
+its planes, so neither reads this setting.
+
 ## Context and terrain
 
 Two optional meshes describe what is around (or inside) the site and stays whatever is built: `context_path` for

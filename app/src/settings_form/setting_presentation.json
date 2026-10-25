@@ -104,6 +104,11 @@
       "step": "settings", "group": "Mode specific", "essential": false,
       "modes": ["radiative_cooling"], "slider": { "low": 0, "high": 5, "step": 0.1 }
     },
+    "rays_per_patch": {
+      "label": "Rays per sky patch", "unit": "choice",
+      "help": "Rays traced from each test point toward each of the 145 sky patches. With 1, one ray goes to the centre of the patch; the centres are 12° apart, so far from the test surfaces whole layers of voxels fall between the rays and the scores show bands. 4 spreads the rays over each patch and closes the gaps; 9 and 16 are finer and slower.",
+      "step": "settings", "group": "Detail", "essential": false, "modes": ["irradiance", "benefit", "daylight", "radiative_cooling"]
+    },
     "ray_batch_size": {
       "label": "Rays per batch", "unit": "rays",
       "help": "0 sizes batches from free GPU memory. Lower it if the computer runs out of memory.",

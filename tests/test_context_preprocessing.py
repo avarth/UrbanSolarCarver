@@ -250,6 +250,8 @@ def test_no_context_matches_the_outputs_recorded_before_context_existed(tmp_path
     import hashlib
     facade = _quad([(10, 18, 0), (10, 18, 10), (0, 18, 10), (0, 18, 0)])     # facing south, 8 m north of the volume
     over = {"epw_path": str(example_epw_path)} if mode == "time-based" else {}
+    if mode == "daylight":
+        over["rays_per_patch"] = 1   # the recording traced one ray per patch centre
     pre, summary, _ = _run(tmp_path, mode=mode, surface=facade, **over)
     assert "context" not in summary
     assert hashlib.sha1(_occupancy(pre).tobytes()).hexdigest() == PINNED_VOXEL_GRID_SHA1

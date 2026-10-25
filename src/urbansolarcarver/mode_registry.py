@@ -78,6 +78,9 @@ _PERIOD_FIELDS = frozenset({
 
 _EPW_AND_PERIOD = frozenset({"epw_path"}) | _PERIOD_FIELDS
 
+# Read by every mode that traces rays toward the Tregenza sky patches.
+_SKY_PATCH_RAYS = frozenset({"rays_per_patch"})
+
 
 def _period_values(start_month, start_day, start_hour, end_month, end_day, end_hour):
     """The six analysis-period fields as a starting-values mapping."""
@@ -110,7 +113,7 @@ MODES: Dict[str, ModeSpec] = {
         score_kind="weighted_sum",
         weight_unit="kWh/m²",
         score_unit="kWh",
-        extra_params=_EPW_AND_PERIOD,
+        extra_params=_EPW_AND_PERIOD | _SKY_PATCH_RAYS,
         description=(
             "Cumulative solar irradiation. Patches weighted by direct + diffuse "
             "radiation from EPW (kWh/m²); a voxel's score is the solar energy it "
@@ -126,7 +129,7 @@ MODES: Dict[str, ModeSpec] = {
         score_kind="weighted_sum",
         weight_unit="kWh/m² (heating benefit)",
         score_unit="kWh",
-        extra_params=_EPW_AND_PERIOD | {"balance_temperature",
+        extra_params=_EPW_AND_PERIOD | _SKY_PATCH_RAYS | {"balance_temperature",
                                         "balance_offset", "include_harm",
                                         "simulated_weights_path"},
         description=(
@@ -146,7 +149,7 @@ MODES: Dict[str, ModeSpec] = {
         score_kind="weighted_sum",
         weight_unit="share of the CIE overcast sky (sums to 1)",
         score_unit="m²",
-        extra_params=frozenset(),
+        extra_params=_SKY_PATCH_RAYS,
         description=(
             "CIE overcast sky obstruction. A voxel's score is the overcast sky it "
             "hides from the test surfaces, in m² of fully hidden sky. "
@@ -161,7 +164,7 @@ MODES: Dict[str, ModeSpec] = {
         score_kind="weighted_sum",
         weight_unit="share of the sky's cooling potential (sums to 1)",
         score_unit="m²",
-        extra_params=frozenset({"dew_point_celsius", "bliss_k", "min_sky_elevation_deg"}),
+        extra_params=_SKY_PATCH_RAYS | {"dew_point_celsius", "bliss_k", "min_sky_elevation_deg"},
         experimental=True,
         description=(
             "Long-wave radiative cooling potential. Patches weighted by sky "

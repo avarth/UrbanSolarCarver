@@ -5,13 +5,14 @@
 import { ANALYSIS_PERIOD_FIELDS } from "./presentation";
 
 const WEATHER_AND_PERIOD = ["epw_path", ...ANALYSIS_PERIOD_FIELDS];
+const SKY_PATCH_RAYS = ["rays_per_patch"];
 
 export const ENGINE_SETTINGS_OF_MODE: Readonly<Record<string, readonly string[]>> = {
   "time-based": [...WEATHER_AND_PERIOD, "min_altitude", "sun_steps_per_hour", "time_basis"],
-  irradiance: WEATHER_AND_PERIOD,
-  benefit: [...WEATHER_AND_PERIOD, "balance_temperature", "balance_offset", "include_harm", "simulated_weights_path"],
-  daylight: [],
-  radiative_cooling: ["dew_point_celsius", "bliss_k", "min_sky_elevation_deg"],
+  irradiance: [...WEATHER_AND_PERIOD, ...SKY_PATCH_RAYS],
+  benefit: [...WEATHER_AND_PERIOD, ...SKY_PATCH_RAYS, "balance_temperature", "balance_offset", "include_harm", "simulated_weights_path"],
+  daylight: SKY_PATCH_RAYS,
+  radiative_cooling: [...SKY_PATCH_RAYS, "dew_point_celsius", "bliss_k", "min_sky_elevation_deg"],
   tilted_plane: ["tilted_plane_angle_deg"],
 };
 

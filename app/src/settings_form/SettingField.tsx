@@ -42,7 +42,7 @@ export interface SettingFieldProps {
 
 // The words shown for the options of a choice the engine names in code.
 const CHOICE_NAMES: Record<string, Record<string, string>> = {
-  plate_stacking: messages.floorStackingChoices, time_basis: messages.timeBasisChoices,
+  plate_stacking: messages.floorStackingChoices, time_basis: messages.timeBasisChoices, rays_per_patch: messages.raysPerPatchChoices,
 };
 
 /** The messages of the last rejected save for the settings *view* draws (the six of the analysis period), or undefined. */
@@ -132,6 +132,7 @@ export function defaultTextOf(view: SettingView, form: FormState, isShadowTolera
   if (value === null) return messages.automatic;
   if (typeof value === "boolean") return value ? messages.switchedOn : messages.switchedOff;
   if (typeof value === "string") return CHOICE_NAMES[view.name]?.[value] ?? value;
+  if (typeof value === "number" && CHOICE_NAMES[view.name]?.[String(value)] !== undefined) return CHOICE_NAMES[view.name][String(value)];
   if (Array.isArray(value)) return withUnit(value.join(", "), unit);
   // A decimal setting reads like the engine's own default (1.0, not 1); a whole-number one stays whole.
   const isDecimalSetting = typesOf(form.schemaProperties[view.name]).includes("number") && view.display === undefined;
@@ -210,7 +211,8 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
       } else if (property?.enum) {
         controlElement = (
           <select id={inputId} className="setting-select" value={String(shown ?? "")} disabled={disabled} aria-invalid={control.invalid}
-                  aria-describedby={control.describedBy} onChange={(event) => changeTo(event.target.value)}>
+                  aria-describedby={control.describedBy}
+                  onChange={(event) => changeTo(property.enum?.find((option) => String(option) === event.target.value) ?? event.target.value)}>
             {property.enum.map((option) => (
               <option key={String(option)} value={String(option)}>{CHOICE_NAMES[view.name]?.[String(option)] ?? String(option)}</option>
             ))}

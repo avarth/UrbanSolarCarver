@@ -13,7 +13,11 @@ Warp's CPU backend.  The fused wrappers (:func:`trace_and_score_dda`,
 directly into a per-voxel volume, so no list of hits is stored;
 :func:`trace_point_access_dda` adds each ray's weight to its test point when
 it reaches no occupied voxel.  :func:`mesh_blocks_rays` tests rays against the
-context and terrain meshes (a Warp BVH) instead of the grid.  There is
+context and terrain meshes (a Warp BVH) instead of the grid.  In the sky-patch
+modes the wrappers can take a :class:`SkySubRays`: each ray then stands for
+several jittered sub-rays over its patch, whose directions the kernels compute,
+so the sub-rays are never stored (:func:`mesh_blocks_sky_sub_rays` is their
+context test).  There is
 no other tracer: when Warp cannot run, the carvers raise
 ``WarpBackendUnavailableError`` (see :func:`warp_kernels.require_dda_backend`).
 
@@ -21,7 +25,7 @@ The coordinate conventions are those of :mod:`warp_kernels`.
 """
 
 import logging
-from typing import Tuple
+from typing import NamedTuple, Optional, Tuple
 
 import numpy as np
 import torch
@@ -33,7 +37,8 @@ if _warp_available:
     import warp as wp
     from .warp_kernels import (
         _dda_first_hit_access_kernel, _dda_fused_count_kernel, _dda_fused_score_kernel,
-        _dda_fused_score_pw_kernel, _mesh_any_hit_kernel, _skin_follows_mass_behind_kernel,
+        _dda_fused_score_pw_kernel, _mesh_any_hit_kernel, _mesh_any_hit_sky_kernel,
+        _skin_follows_mass_behind_kernel, _sky_sub_ray_directions_kernel,
     )
 
 log = logging.getLogger(__name__)
@@ -72,6 +77,46 @@ def _occupancy_array(occupancy: torch.Tensor):
     return wp.from_torch(flat.contiguous(), dtype=wp.uint8)
 
 
+class SkySubRays(NamedTuple):
+    """How the kernels split each sky-patch ray into jittered sub-rays.
+
+    Ray ``r`` becomes the ``side**2`` threads ``r * side**2 + k``, each
+    tracing the direction :func:`sky_patches.sub_ray_directions` gives and
+    carrying ``1 / side**2`` of the patch weight; the sub-rays the surface
+    does not face are skipped.  Pass None instead to trace each ray's own
+    direction (the patch centre).
+    """
+    side: int                    # sub-rays per patch = side**2, at least 2 x 2
+    patch_cells: torch.Tensor    # (P, 4) float32 extent of each patch (sky_patches.tregenza_patch_cells)
+
+    @property
+    def count(self) -> int:
+        return self.side * self.side
+
+
+def _sub_ray_args(sub_rays: Optional[SkySubRays], skip, num_rays: int, surface_normals, device_str, who):
+    """Warp inputs for the sky sub-rays: ``(launch_dim, side, cells, use_skip, skip)``.
+
+    Without *sub_rays* the side is 0 (each thread traces its ray's own
+    direction) and the cells a 1-element placeholder.  *skip* (uint8, one
+    entry per thread, nonzero = do not trace) is optional either way.
+    """
+    if sub_rays is None:
+        side, cells, dim = 0, wp.zeros(1, dtype=wp.vec4, device=device_str), num_rays
+    else:
+        if sub_rays.side < 2:
+            raise ValueError(f"{who}: sub_rays.side must be at least 2, got {sub_rays.side}")
+        if surface_normals is None:
+            raise ValueError(f"{who}: sub_rays require surface_normals (sub-rays facing away are skipped)")
+        side, dim = int(sub_rays.side), num_rays * sub_rays.count
+        cells = wp.from_torch(sub_rays.patch_cells.contiguous().float(), dtype=wp.vec4)
+    if skip is None:
+        return dim, side, cells, 0, wp.zeros(1, dtype=wp.uint8, device=device_str)
+    if skip.dtype != torch.uint8 or skip.numel() != dim:
+        raise ValueError(f"{who}: skip must be a uint8 tensor of {dim} entries, one per traced ray")
+    return dim, side, cells, 1, wp.from_torch(skip.contiguous(), dtype=wp.uint8)
+
+
 def trace_and_score_dda(
     min_corner: Tuple[float, float, float],
     scale: float,
@@ -86,6 +131,8 @@ def trace_and_score_dda(
     point_weights: "torch.Tensor | None" = None,
     surface_normals: "torch.Tensor | None" = None,
     occupancy: "torch.Tensor | None" = None,
+    sub_rays: "SkySubRays | None" = None,
+    skip: "torch.Tensor | None" = None,
 ) -> None:
     """Trace rays with the Warp DDA kernel and add each ray's weight to every
     voxel it visits, directly into ``scores``.
@@ -130,6 +177,13 @@ def trace_and_score_dda(
         :func:`follow_mass_behind_skin_dda`) is empty or outside the grid:
         the surface's building is then not part of the max volume, so the
         voxel is not its skin.
+    sub_rays : SkySubRays, optional
+        Trace ``sub_rays.count`` jittered sub-rays per ray instead of its
+        direction, each with that share of the patch weight; requires
+        ``surface_normals``.  None (default) traces ``ray_dirs``.
+    skip : torch.Tensor, optional
+        uint8, one entry per traced ray (R, or R * sub_rays.count): rays
+        whose entry is nonzero are not traced (the context blocks them).
 
     Raises
     ------
@@ -138,7 +192,8 @@ def trace_and_score_dda(
         write into a copy), if ``point_ids`` is given with neither
         ``point_weights`` nor ``surface_normals``, or if either of those
         is given without ``point_ids``, or if ``occupancy`` is given
-        without ``surface_normals``.
+        without ``surface_normals``, or *sub_rays* without
+        ``surface_normals``, or *skip* of another length.
     """
     num_rays = origins.shape[0]
     if num_rays == 0:
@@ -170,15 +225,17 @@ def trace_and_score_dda(
     grid_origin_wp = wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2]))
     wp_point_ids, wp_normals, front, skin_rule, wp_occ = _surface_args(
         num_rays, point_ids, surface_normals, occupancy, device_str, "trace_and_score_dda")
+    dim, side, cells, use_skip, wp_skip = _sub_ray_args(
+        sub_rays, skip, num_rays, surface_normals, device_str, "trace_and_score_dda")
 
     if point_weights is not None:
         wp_point_weights = wp.from_torch(point_weights.contiguous().float())
         wp.launch(
             _dda_fused_score_pw_kernel,
-            dim=num_rays,
+            dim=dim,
             inputs=[
                 wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
-                skin_rule, wp_occ,
+                skin_rule, wp_occ, side, cells, use_skip, wp_skip,
                 grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
                 wp_scores, wp_weights, wp_point_weights,
             ],
@@ -188,10 +245,11 @@ def trace_and_score_dda(
 
     wp.launch(
         _dda_fused_score_kernel,
-        dim=num_rays,
+        dim=dim,
         inputs=[
             wp_origins, wp_dirs, wp_patch_ids, wp_point_ids, wp_normals, front,
-            skin_rule, wp_occ, grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
+            skin_rule, wp_occ, side, cells, use_skip, wp_skip,
+            grid_origin_wp, float(cell_size), int(resolution), float(ray_length),
             wp_scores, wp_weights,
         ],
         device=device_str,
@@ -213,6 +271,7 @@ def trace_point_access_dda(
     point_weights: "torch.Tensor | None" = None,
     surface_normals: "torch.Tensor | None" = None,
     skin_occupancy: "torch.Tensor | None" = None,
+    sub_rays: "SkySubRays | None" = None,
 ) -> None:
     """Trace rays until the first occupied voxel and add each ray's weight
     to its sample point's accessible or blocked weight in ``access``.
@@ -234,6 +293,9 @@ def trace_point_access_dda(
         The max volume the skin rule reads (whether a skin voxel has mass
         behind it), as in scoring; default *occupancy*.  Pass the max volume
         when *occupancy* is a carved envelope.
+    sub_rays : SkySubRays, optional
+        As in :func:`trace_and_score_dda`: a sub-ray the surface does not
+        face counts as neither accessible nor blocked.
 
     Raises
     ------
@@ -257,16 +319,19 @@ def trace_point_access_dda(
         use_pw, wp_point_weights = 1, wp.from_torch(point_weights.contiguous().float())
     else:
         use_pw, wp_point_weights = 0, wp.zeros(1, dtype=float, device=device_str)
+    dim, side, cells, _, _ = _sub_ray_args(
+        sub_rays, None, num_rays, surface_normals, device_str, "trace_point_access_dda")
 
     wp.launch(
         _dda_first_hit_access_kernel,
-        dim=num_rays,
+        dim=dim,
         inputs=[
             wp.from_torch(origins.contiguous().float(), dtype=wp.vec3),
             wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3),
             wp.from_torch(patch_ids.contiguous().int()), wp_point_ids, wp_normals, front, skin_rule,
             _occupancy_array(occupancy),
             _occupancy_array(occupancy if skin_occupancy is None else skin_occupancy),
+            side, cells,
             wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2])),
             float(scale / resolution), int(resolution), float(ray_length),
             wp.from_torch(access, dtype=wp.float64), int(access.numel() // 2),
@@ -355,6 +420,9 @@ def follow_mass_behind_skin_dda(
     occupancy: torch.Tensor,
     values: torch.Tensor,
     ray_length: float,
+    patch_ids: "torch.Tensor | None" = None,
+    sub_rays: "SkySubRays | None" = None,
+    skip: "torch.Tensor | None" = None,
 ) -> torch.Tensor:
     """Return *values* with every own-skin voxel raised to the value of the
     voxel behind it.
@@ -383,6 +451,9 @@ def follow_mass_behind_skin_dda(
         Max volume occupancy, resolution**3 voxels (nonzero = occupied).
     values : torch.Tensor, shape (resolution**3,)
         Finished int32 counts or float32 scores; not modified.
+    patch_ids, sub_rays, skip : optional
+        As in :func:`trace_and_score_dda`; pass the ones the scores were
+        traced with.  *patch_ids* is required with *sub_rays*.
 
     Returns
     -------
@@ -403,14 +474,21 @@ def follow_mass_behind_skin_dda(
         return values_out
     device_str = warp_device_name(origins.device)
     wp_dtype = wp.int32 if values.dtype == torch.int32 else wp.float32
+    if sub_rays is not None and patch_ids is None:
+        raise ValueError("follow_mass_behind_skin_dda: sub_rays require patch_ids")
+    dim, side, cells, use_skip, wp_skip = _sub_ray_args(
+        sub_rays, skip, num_rays, surface_normals, device_str, "follow_mass_behind_skin_dda")
+    wp_patch_ids = (wp.from_torch(patch_ids.contiguous().int()) if sub_rays is not None
+                    else wp.zeros(1, dtype=int, device=device_str))
     wp.launch(
         _skin_follows_mass_behind_kernel,
-        dim=num_rays,
+        dim=dim,
         inputs=[
             wp.from_torch(origins.contiguous().float(), dtype=wp.vec3),
             wp.from_torch(ray_dirs.contiguous().float(), dtype=wp.vec3),
             wp.from_torch(point_ids.contiguous().int()),
             wp.from_torch(surface_normals.contiguous().float(), dtype=wp.vec3),
+            wp_patch_ids, side, cells, use_skip, wp_skip,
             wp.vec3(float(min_corner[0]), float(min_corner[1]), float(min_corner[2])),
             float(scale / resolution), int(resolution), float(ray_length),
             _occupancy_array(occupancy),
@@ -478,15 +556,128 @@ def mesh_blocks_rays(
     return blocked.bool()
 
 
+# Sub-rays per launch of the context test, about: keeps each launch well under
+# the time limit of a GPU's display watchdog.
+_SUB_RAYS_PER_MESH_LAUNCH = 1 << 24
+
+
+class SkySubRayBlocking(NamedTuple):
+    """What the context and terrain block of the sky sub-rays (:func:`mesh_blocks_sky_sub_rays`)."""
+    status: torch.Tensor                   # (R * count,) uint8: 0 free, 1 blocked, 2 the surface faces away
+    rays_of_point: torch.Tensor            # (P,) int32 sub-rays each point faces
+    blocked_of_point: torch.Tensor         # (P,) int32 of them blocked
+    weight_of_point: torch.Tensor          # (P,) float64 their weight
+    blocked_weight_of_point: torch.Tensor  # (P,) float64 weight of the blocked ones
+
+
+def mesh_blocks_sky_sub_rays(
+    blocking,
+    origins: torch.Tensor,
+    patch_ids: torch.Tensor,
+    point_ids: torch.Tensor,
+    surface_normals: torch.Tensor,
+    sub_rays: SkySubRays,
+    patch_weights: torch.Tensor,
+    max_t: float,
+    point_weights: "torch.Tensor | None" = None,
+    origin_offset: float = 0.01,
+    min_hit: float = 1e-3,
+) -> SkySubRayBlocking:
+    """:func:`mesh_blocks_rays` for the sky sub-rays of *sub_rays*.
+
+    Each ray of *origins*, *patch_ids* and *point_ids* stands for
+    ``sub_rays.count`` sub-rays, tested one thread each in launches of
+    about 16 million.  Returns each sub-ray's status and, per test point,
+    how many sub-rays it faces and their weight (``patch_weights[patch] /
+    count``, times *point_weights* when given), and how much of that the
+    mesh blocks.
+    """
+    num_rays = origins.shape[0]
+    num_points = int(surface_normals.shape[0])
+    device = origins.device
+    count = sub_rays.count
+    status = torch.zeros(num_rays * count, dtype=torch.uint8, device=device)
+    per_point = [torch.zeros(num_points, dtype=dtype, device=device)
+                 for dtype in (torch.int32, torch.int32, torch.float64, torch.float64)]
+    if num_rays == 0:
+        return SkySubRayBlocking(status, *per_point)
+    device_str = warp_device_name(device)
+    if point_weights is not None:
+        use_pw, wp_point_weights = 1, wp.from_torch(point_weights.contiguous().float())
+    else:
+        use_pw, wp_point_weights = 0, wp.zeros(1, dtype=float, device=device_str)
+    normals = wp.from_torch(surface_normals.contiguous().float(), dtype=wp.vec3)
+    cells = wp.from_torch(sub_rays.patch_cells.contiguous().float(), dtype=wp.vec4)
+    weights = wp.from_torch(patch_weights.contiguous().float())
+    outputs = [wp.from_torch(per_point[0], dtype=wp.int32), wp.from_torch(per_point[1], dtype=wp.int32),
+               wp.from_torch(per_point[2], dtype=wp.float64), wp.from_torch(per_point[3], dtype=wp.float64)]
+    step = max(1, _SUB_RAYS_PER_MESH_LAUNCH // count)
+    for start in range(0, num_rays, step):
+        end = min(start + step, num_rays)
+        wp.launch(
+            _mesh_any_hit_sky_kernel,
+            dim=(end - start) * count,
+            inputs=[
+                blocking.mesh.id,
+                wp.from_torch(origins[start:end].contiguous().float(), dtype=wp.vec3),
+                wp.from_torch(patch_ids[start:end].contiguous().int()),
+                wp.from_torch(point_ids[start:end].contiguous().int()),
+                normals, int(sub_rays.side), cells, weights, use_pw, wp_point_weights,
+                float(origin_offset), float(min_hit), float(max_t),
+                wp.from_torch(status[start * count:end * count], dtype=wp.uint8),
+                *outputs,
+            ],
+            device=device_str,
+        )
+    wp.synchronize_device(device_str)
+    return SkySubRayBlocking(status, *per_point)
+
+
+def sky_sub_ray_directions(point_ids: torch.Tensor, patch_ids: torch.Tensor, sub_rays: SkySubRays) -> torch.Tensor:
+    """The (R * count, 3) float32 sub-ray directions the kernels trace for these rays, on their device.
+
+    The same directions as :func:`sky_patches.sub_ray_directions`, computed
+    by the kernels' own function (float32).  Includes the sub-rays the
+    surface does not face.
+    """
+    num_rays = point_ids.shape[0]
+    directions = torch.zeros((num_rays * sub_rays.count, 3), dtype=torch.float32, device=point_ids.device)
+    if num_rays == 0:
+        return directions
+    device_str = warp_device_name(point_ids.device)
+    wp.launch(
+        _sky_sub_ray_directions_kernel,
+        dim=num_rays * sub_rays.count,
+        inputs=[
+            wp.from_torch(point_ids.contiguous().int()), wp.from_torch(patch_ids.contiguous().int()),
+            int(sub_rays.side), wp.from_torch(sub_rays.patch_cells.contiguous().float(), dtype=wp.vec4),
+            wp.from_torch(directions, dtype=wp.vec3),
+        ],
+        device=device_str,
+    )
+    wp.synchronize_device(device_str)
+    return directions
+
+
 def generate_sky_patch_rays(
     pts: np.ndarray,
     norms: np.ndarray,
     patch_dirs: torch.Tensor,
     device: torch.device,
+    facing_margin: float = 0.0,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """One ray per (sample point, sky patch) pair whose patch the surface faces.
 
-    A ray is kept only where dot(normal, patch direction) > 0.
+    A ray is kept only where dot(normal, patch direction) > -facing_margin:
+    with the default 0, where the surface faces the patch centre; with sky
+    sub-rays, :func:`sky_patches.patch_facing_margin` keeps every patch the
+    surface faces in part.
+
+    The rays are ordered by patch, then by sample point, so the threads that
+    run together trace one direction from neighbouring points and visit
+    nearby voxels; on the GPU this keeps the voxel arrays in the cache (on
+    the District example, tracing took a quarter of the time it took with
+    the rays ordered by point).
 
     Parameters
     ----------
@@ -496,6 +687,8 @@ def generate_sky_patch_rays(
         Unit directions of the sky patches.
     device : torch.device
         Device for the returned tensors.
+    facing_margin : float
+        See above; 0 or more.
 
     Returns
     -------
@@ -513,7 +706,8 @@ def generate_sky_patch_rays(
     normal_vecs = torch.from_numpy(norms.astype(np.float32)).to(device)
     sky_vectors = patch_dirs.to(dtype=torch.float32, device=device)
 
-    point_idx, patch_ids = torch.nonzero(normal_vecs @ sky_vectors.t() > 0, as_tuple=True)
+    # (patch, point) pairs in patch-major order: see the docstring.
+    patch_ids, point_idx = torch.nonzero(sky_vectors @ normal_vecs.t() > -float(facing_margin), as_tuple=True)
     return point_coords[point_idx], sky_vectors[patch_ids], patch_ids, point_idx
 
 def generate_sun_rays(

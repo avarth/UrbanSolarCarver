@@ -116,6 +116,7 @@ class PreprocessingSettings(_StageSettings):
     margin_frac: float
     edge_taper: float
     ray_length: float
+    rays_per_patch: int
     min_altitude: float
     sun_steps_per_hour: int
     time_basis: str

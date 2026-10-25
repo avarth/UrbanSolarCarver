@@ -39,6 +39,8 @@ def _write_test_square_under_one_voxel(folder, sample_spacing):
 
 
 def _occupied_voxel_score_and_zenith_weight(tmp_path, mode, sample_spacing, **settings):
+    # One ray per patch centre: the voxel straight above the square takes exactly the zenith patch's ray.
+    settings.setdefault("rays_per_patch", 1)
     folder = tmp_path / f"{mode}_{sample_spacing}"
     folder.mkdir()
     max_volume_path, test_surface_path = _write_test_square_under_one_voxel(folder, sample_spacing)

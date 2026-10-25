@@ -7,6 +7,30 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (sky sampling)
+
+- **Rays per sky patch** (`rays_per_patch`: 1, 4, 9 or 16; default 4) in the weighted modes (irradiance, benefit,
+  daylight, radiative_cooling). One ray per Tregenza patch centre leaves gaps 12° wide between the rays of a test
+  point, so far from the test surfaces whole layers of voxels went unscored and the scores showed bands (Allatini
+  example, daylight: 38 % of the voxels scored 0). Now each patch is traced as that many rays, one at a hashed place
+  in each of its 2 × 2, 3 × 3 or 4 × 4 cells of equal solid angle, each with that share of the patch weight; the
+  places depend only on the test point, the patch and the cell, so runs repeat exactly. The tracing kernels compute
+  the directions themselves, so memory does not grow. Allatini (daylight, RTX 3060): voxels scoring 0 38 % to 6 %,
+  keep or carve decisions that differ from 64 rays per patch 30 % to 6.4 %, preprocessing 1.15 s to 1.18 s; District
+  example (527,000 test points): 12.3 s to 13.9 s. A patch a surface's plane cuts counts the part in front of it.
+  `rays_per_patch: 1` gives the scores of earlier versions. In the app's Settings step (Detail fold), on
+  USC_RaySettings in Grasshopper, and in the test point access evaluation. See
+  [Sky patches and rays per patch](docs/modes.md#sky-patches-and-rays-per-patch-rays_per_patch).
+
+### Changed (sky sampling)
+
+- Sky-patch rays are ordered by patch, then by test point, so the GPU threads that run together trace one direction
+  from neighbouring points and find their voxels in the cache: tracing the District example with one ray per patch
+  takes 0.19 s instead of 0.7 s.
+- The default of the weighted modes changes their scores: with 4 rays per patch a voxel's score is the weight it
+  blocks over the whole patch area rather than at its centre. Set `rays_per_patch: 1` to compare with runs of
+  earlier versions.
+
 ### Added (context geometry)
 
 - **Context and terrain as optional inputs** (`context_path`, `terrain_path`): opaque meshes of what stays around or

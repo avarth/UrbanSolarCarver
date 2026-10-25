@@ -13,6 +13,10 @@ Core Functions
 2. fetch_tregenza_patch_solid_angles(device) → torch.Tensor
    Returns a length-P tensor of solid angles (steradians) per patch.
 
+   tregenza_patch_cells() and sub_ray_directions(point_ids, patch_ids,
+   side, cells) define the jittered sub-rays that trace a patch as
+   side × side rays (``rays_per_patch``), which the Warp kernels compute.
+
 3. compute_EPW_based_weights(mode, epw_path, hoys, device, ...) → torch.Tensor
    Per-patch weights for the modes time-based (uniform), daylight (CIE
    overcast sky), irradiance and benefit (climate-based, from a Ladybug
@@ -141,6 +145,110 @@ def fetch_tregenza_patch_solid_angles(
     """
     arr = tregenza_solid_angles().astype(np.float32)
     return torch.from_numpy(arr).to(device)
+
+
+def tregenza_patch_cells() -> np.ndarray:
+    """The extent of each of the 145 Tregenza patches, (145, 4) float64.
+
+    Each row is ``(sin_alt_low, sin_alt_high, az_low, az_high)``: the patch
+    spans its band of altitude (12° per row, the zenith cap from 84° up) and
+    an equal share of azimuth around Ladybug's patch centre, azimuth in
+    radians clockwise from +Y like the centres themselves (a direction is
+    ``(cos alt sin az, cos alt cos az, sin alt)``).  The zenith cap spans
+    azimuth 0 to 2 pi.  Equal steps of sin(altitude) and of azimuth inside a
+    patch cut it into cells of equal solid angle (:func:`sub_ray_directions`).
+    """
+    from ladybug.viewsphere import ViewSphere
+    rows = ViewSphere.TREGENZA_PATCHES_PER_ROW
+    band = math.radians(90.0 / 7.5)
+    centres = np.asarray(fetch_tregenza_patch_directions(torch.device("cpu")), dtype=np.float64)
+    cells = np.empty((len(centres), 4), dtype=np.float64)
+    patch = 0
+    for row, count in enumerate(rows):
+        width = 2.0 * math.pi / count
+        az = np.arctan2(centres[patch:patch + count, 0], centres[patch:patch + count, 1])
+        cells[patch:patch + count] = np.stack([
+            np.full(count, math.sin(row * band)), np.full(count, math.sin((row + 1) * band)),
+            az - width / 2.0, az + width / 2.0], axis=1)
+        patch += count
+    cells[patch] = (math.sin(len(rows) * band), 1.0, 0.0, 2.0 * math.pi)
+    return cells
+
+
+@session_cache("{args[0]}")
+def fetch_tregenza_patch_cells(device: torch.device) -> torch.Tensor:
+    """:func:`tregenza_patch_cells` as a float32 (145, 4) tensor on *device*, cached for the session."""
+    return torch.from_numpy(tregenza_patch_cells().astype(np.float32)).to(device)
+
+
+def patch_facing_margin(cells: np.ndarray, centres: np.ndarray) -> float:
+    """sin of the largest angle between a patch's centre and any point of the patch.
+
+    A surface faces part of a patch only if dot(normal, centre) exceeds minus
+    this value, so the sky-patch rays split into sub-rays keep every such
+    patch (the sub-rays that face away are skipped in the kernels).  Measured
+    on 33 points along each edge of every patch.
+    """
+    t = np.linspace(0.0, 1.0, 33)
+    worst = 0.0
+    for (s0, s1, a0, a1), c in zip(cells, centres):
+        sin_alt = np.concatenate([np.full_like(t, s0), np.full_like(t, s1), s0 + t * (s1 - s0), s0 + t * (s1 - s0)])
+        az = np.concatenate([a0 + t * (a1 - a0), a0 + t * (a1 - a0), np.full_like(t, a0), np.full_like(t, a1)])
+        cos_alt = np.sqrt(np.clip(1.0 - sin_alt ** 2, 0.0, None))
+        edge = np.stack([cos_alt * np.sin(az), cos_alt * np.cos(az), sin_alt], axis=1)
+        cos_angle = np.clip(edge @ (c / np.linalg.norm(c)), -1.0, 1.0)
+        worst = max(worst, float(np.arccos(cos_angle.min())))
+    return math.sin(worst)
+
+
+# Mixing constants of the sub-ray hash; the Warp kernels use the same ones
+# (warp_kernels._sky_sub_ray_direction).
+SUB_RAY_SEED = 0x5EED1234
+_HASH_M1 = 0x7FEB352D
+_HASH_M2 = 0x846CA68B
+
+
+def _lowbias32(x: np.ndarray) -> np.ndarray:
+    """The lowbias32 integer hash (C. Wellons) on uint32 arrays, wrapping like C."""
+    x = np.asarray(x, dtype=np.uint32).copy()
+    x ^= x >> np.uint32(16)
+    x *= np.uint32(_HASH_M1)
+    x ^= x >> np.uint32(15)
+    x *= np.uint32(_HASH_M2)
+    x ^= x >> np.uint32(16)
+    return x
+
+
+def sub_ray_directions(point_ids, patch_ids, side: int, cells: np.ndarray) -> np.ndarray:
+    """The ``side**2`` sub-ray directions of each (sample point, sky patch) ray, (R * side**2, 3) float64.
+
+    The reference for the Warp kernels, which compute the same directions in
+    float32 (``warp_kernels._sky_sub_ray_direction``): ray ``r`` becomes
+    sub-rays ``r * side**2 + k``.  The patch is cut into side × side cells
+    of equal solid angle (equal steps of sin(altitude) and of azimuth, see
+    :func:`tregenza_patch_cells`), cell ``k`` being row ``k // side`` and
+    column ``k % side``, and each sub-ray points at a place in its cell
+    drawn from a hash of the sample point, the patch and ``k``: the same
+    point and patch give the same directions on every run, device and batch
+    size, and neighbouring points draw different ones, so their rays do not
+    line up into bands.
+    """
+    point_ids = np.asarray(point_ids, dtype=np.int64)
+    patch_ids = np.asarray(patch_ids, dtype=np.int64)
+    sub = side * side
+    k = np.tile(np.arange(sub, dtype=np.int64), len(point_ids))
+    pts = np.repeat(point_ids, sub)
+    pids = np.repeat(patch_ids, sub)
+    h = _lowbias32(pts.astype(np.uint32) ^ np.uint32(SUB_RAY_SEED))
+    h = _lowbias32(h ^ (pids * 256 + k).astype(np.uint32))
+    u = (h >> np.uint32(8)).astype(np.float64) / 16777216.0
+    h = _lowbias32(h)
+    v = (h >> np.uint32(8)).astype(np.float64) / 16777216.0
+    c = np.asarray(cells, dtype=np.float64)[pids]
+    sin_alt = c[:, 0] + (k // side + u) / side * (c[:, 1] - c[:, 0])
+    az = c[:, 2] + (k % side + v) / side * (c[:, 3] - c[:, 2])
+    cos_alt = np.sqrt(np.clip(1.0 - sin_alt ** 2, 0.0, None))
+    return np.stack([cos_alt * np.sin(az), cos_alt * np.cos(az), sin_alt], axis=1)
 
 def compute_radiative_cooling_weights(
     dewpoint_celsius: float,   # outdoor dew point in °C (input to Eq. 1)

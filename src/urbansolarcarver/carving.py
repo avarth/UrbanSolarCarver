@@ -56,6 +56,7 @@ the `ray_batch_size` run option (0 = sized from free GPU memory) on the device o
 input voxel grid.
 """
 
+import math
 import os
 import queue
 import threading
@@ -64,15 +65,15 @@ import numpy as np
 
 from .scoring import get_weights
 from .stage_settings import PreprocessingSettings
-from .sky_patches import fetch_tregenza_patch_directions
+from .sky_patches import fetch_tregenza_patch_cells, fetch_tregenza_patch_directions, patch_facing_margin
 from .sun import get_sun_vectors
 from .run_context import active_context, report_issue, report_progress
 from .ray_tracing import (
-    generate_sun_rays, generate_sky_patch_rays, trace_and_count_dda, trace_and_score_dda,
-    follow_mass_behind_skin_dda, auto_batch_size,
+    SkySubRays, generate_sun_rays, generate_sky_patch_rays, trace_and_count_dda, trace_and_score_dda,
+    follow_mass_behind_skin_dda, auto_batch_size, sky_sub_ray_directions,
 )
 from .warp_kernels import require_dda_backend
-from .context_geometry import BlockingMesh, RayDrop, drop_blocked_rays
+from .context_geometry import BlockingMesh, RayDrop, drop_blocked_rays, drop_blocked_sky_sub_rays
 from typing import NamedTuple, Sequence
 
 
@@ -136,18 +137,20 @@ def _validate_cubic_resolution(grid_resolution, func_name: str):
 
 def _follow_mass_behind_skin(values, min_corner, scale, res,
                              origins, directions, point_ids, surface_normals,
-                             occupancy, ray_length):
+                             occupancy, ray_length, patch_ids=None, sub_rays=None, skip=None):
     """Raise every own-skin voxel to the value of the voxel behind it.
 
     A voxel the source surface's plane passes through, with occupied max
     volume behind it, is the surface's own skin: the surface's rays do not
     count it, but it must not outlast the mass behind it.  *values* are the
-    finished flat counts or scores.  Runs the Warp pass over the rays and
+    finished flat counts or scores.  Runs the Warp pass over the rays (the
+    sky sub-rays of *sub_rays*, less those *skip* marks, when given) and
     returns a new tensor.
     """
     return follow_mass_behind_skin_dda(
         min_corner, scale, res, origins, directions, point_ids,
         surface_normals, occupancy, values, ray_length,
+        patch_ids=patch_ids, sub_rays=sub_rays, skip=skip,
     )
 
 
@@ -341,6 +344,7 @@ class SkyPatchRaySet(NamedTuple):
     surface_normals: torch.Tensor            # (P, 3) float32 normal per sample point
     point_weights: "torch.Tensor | None"     # (P,) edge_taper weight per sample point, or None
     patch_weights: torch.Tensor              # (145,) weight per sky patch for the mode
+    sub_rays: "SkySubRays | None" = None     # jittered sub-rays per ray, or None: trace the patch centres
 
 
 def sky_patch_ray_set(device, sample_points, sample_normals, settings: PreprocessingSettings,
@@ -352,6 +356,10 @@ def sky_patch_ray_set(device, sample_points, sample_normals, settings: Preproces
     (edge_taper) entry is 0 are dropped.  The patch weights are those of
     ``settings.mode`` over the hours *hoys*.
 
+    With ``settings.rays_per_patch`` above 1, the kernels trace each ray as
+    that many jittered sub-rays (``sub_rays``), and a ray is kept for every
+    patch the surface faces in part, not only those whose centre it faces.
+
     Raises
     ------
     ValueError
@@ -359,6 +367,12 @@ def sky_patch_ray_set(device, sample_points, sample_normals, settings: Preproces
     """
     # --- 1) Sky patch directions ------------------------------------------
     sky_dirs = fetch_tregenza_patch_directions(device)  # (P, 3) unit vectors to patch centres
+    sub_rays, facing_margin = None, 0.0
+    side = math.isqrt(int(settings.rays_per_patch))
+    if side > 1:
+        cells = fetch_tregenza_patch_cells(device)
+        sub_rays = SkySubRays(side, cells)
+        facing_margin = _tregenza_facing_margin()
 
     # --- 2) Ray generation ------------------------------------------------
     # point_idx maps each ray back to its source sample point, for the
@@ -368,7 +382,8 @@ def sky_patch_ray_set(device, sample_points, sample_normals, settings: Preproces
             sample_points,
             sample_normals,
             sky_dirs,
-            device=device
+            device=device,
+            facing_margin=facing_margin,
         )
     )
     surface_normals = torch.as_tensor(sample_normals, dtype=torch.float32, device=device)
@@ -408,7 +423,21 @@ def sky_patch_ray_set(device, sample_points, sample_normals, settings: Preproces
         simulated_weights_path=settings.simulated_weights_path,
     )
     return SkyPatchRaySet(ray_origins, ray_directions, patch_ids, point_idx.to(torch.int32),
-                          surface_normals, pw_t, patch_weights)
+                          surface_normals, pw_t, patch_weights, sub_rays)
+
+
+_facing_margin_cache: "float | None" = None
+
+
+def _tregenza_facing_margin() -> float:
+    """:func:`sky_patches.patch_facing_margin` of the Tregenza patches, computed once."""
+    global _facing_margin_cache
+    if _facing_margin_cache is None:
+        from .sky_patches import tregenza_patch_cells
+        cpu = torch.device("cpu")
+        _facing_margin_cache = patch_facing_margin(
+            tregenza_patch_cells(), fetch_tregenza_patch_directions(cpu).numpy().astype(np.float64))
+    return _facing_margin_cache
 
 
 def carve_with_sun_rays(
@@ -578,7 +607,10 @@ def carve_with_sky_patch_rays(
     Procedure:
       1. Take the 145 Tregenza patch directions.
       2. Cast a ray from each sample point toward every patch on the outward
-         side of its normal.
+         side of its normal: toward the patch centre with
+         ``settings.rays_per_patch`` 1, else ``rays_per_patch`` jittered
+         sub-rays spread over the patch (one per cell of equal solid angle),
+         each with that share of the patch weight.
       3. Trace the rays through the voxel volume and add each ray's patch
          weight (times its point weight, if given) to every voxel it visits
          in front of its source surface.
@@ -609,6 +641,7 @@ def carve_with_sky_patch_rays(
             simulated_weights_path: benefit.
           - north_deg: model north, degrees clockwise from +Y.
           - ray_length: maximum ray length.
+          - rays_per_patch: rays traced per sky patch (1, 4, 9 or 16).
     hoys : Sequence[int]
         Hour-of-year indices (0..8759) of the analysis period, used by the
         EPW-based modes.
@@ -656,8 +689,16 @@ def carve_with_sky_patch_rays(
     ray_origins, ray_directions, patch_ids, ray_point_ids = (
         rays.origins, rays.directions, rays.patch_ids, rays.point_ids)
     surface_normals, pw_t, patch_weights = rays.surface_normals, rays.point_weights, rays.patch_weights
-    ray_drop = None
-    if blocking_mesh is not None:
+    sub_rays = rays.sub_rays
+    per_ray = 1 if sub_rays is None else sub_rays.count  # traced rays (threads) per ray of the set
+    ray_drop, skip = None, None
+    if blocking_mesh is not None and sub_rays is not None:
+        # Each sub-ray has its own direction, so the context test runs per
+        # sub-ray and leaves a skip mask instead of shortening the ray set.
+        skip, ray_drop = drop_blocked_sky_sub_rays(
+            blocking_mesh, ray_origins, patch_ids, ray_point_ids, surface_normals, sub_rays,
+            patch_weights, float(settings.ray_length), point_weights=pw_t)
+    elif blocking_mesh is not None:
         ray_weights = patch_weights.to(torch.float64)[patch_ids.long()]
         if pw_t is not None:
             ray_weights = ray_weights * pw_t.to(torch.float64)[ray_point_ids.long()]
@@ -675,7 +716,8 @@ def carve_with_sky_patch_rays(
 
     # --- 5) Batch ray tracing & weighting ----------------------------------
     res = int(grid_resolution if isinstance(grid_resolution, int) else grid_resolution[0])
-    batch_size = _resolve_batch_size(device, ray_batch_size=ray_batch_size)
+    # The batch size counts traced rays, so a batch takes fewer rays with sub-rays.
+    batch_size = max(1, _resolve_batch_size(device, ray_batch_size=ray_batch_size) // per_ray)
 
     def _score_batch(start: int, end: int, buf) -> None:
         # Trace and accumulate in one Warp kernel, writing into buf.
@@ -687,6 +729,8 @@ def carve_with_sky_patch_rays(
             point_weights=pw_t,
             surface_normals=surface_normals,
             occupancy=occupancy,
+            sub_rays=sub_rays,
+            skip=None if skip is None else skip[start * per_ray:end * per_ray],
         )
 
     batch_ranges = [
@@ -707,9 +751,18 @@ def carve_with_sky_patch_rays(
         scores = _follow_mass_behind_skin(
             scores, grid_origin, grid_extent_m, res, ray_origins,
             ray_directions, ray_point_ids, surface_normals, occupancy,
-            float(settings.ray_length))
+            float(settings.ray_length), patch_ids=patch_ids, sub_rays=sub_rays, skip=skip)
 
     raw_voxel_scores = scores.cpu().numpy()
+    if return_rays and sub_rays is not None:
+        # The rays traced: the sub-rays the surfaces face and the context lets through.
+        traced = sky_sub_ray_directions(ray_point_ids, patch_ids, sub_rays)
+        normals_of_ray = surface_normals[ray_point_ids.long()].repeat_interleave(per_ray, dim=0)
+        traced_mask = (traced * normals_of_ray).sum(1) > 0
+        if skip is not None:
+            traced_mask &= skip == 0
+        ray_origins = ray_origins.repeat_interleave(per_ray, dim=0)[traced_mask]
+        ray_directions = traced[traced_mask]
 
     # Thresholding lives in api_core.thresholding, so users can re-threshold
     # without re-tracing rays.

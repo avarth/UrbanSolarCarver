@@ -54,7 +54,8 @@ def test_point_access_evaluation(
     The rays are those of preprocessing for ``settings.mode``:
 
     * the weighted modes: one ray per sample point and Tregenza patch it
-      faces, weighted by the mode's patch weight times the point's
+      faces (or ``rays_per_patch`` jittered sub-rays, each with that share),
+      weighted by the mode's patch weight times the point's
       *point_weights* entry (edge_taper); the weights are in the mode's
       ``weight_unit`` (kWh/m² for irradiance and benefit, a share of the
       sky that sums to 1 over the sphere for daylight and
@@ -134,16 +135,17 @@ def test_point_access_evaluation(
         origins, directions, point_ids, normals = rays
         patch_ids = torch.zeros(origins.shape[0], dtype=torch.int32, device=device)
         patch_weights = torch.tensor([1.0 / settings.sun_steps_per_hour], dtype=torch.float32, device=device)
-        pw, unit = None, "h"
+        pw, unit, sub_rays = None, "h", None
     else:
         rays = sky_patch_ray_set(device, sample_points, sample_normals, settings, hoys, point_weights)
         origins, directions, patch_ids, point_ids = rays.origins, rays.directions, rays.patch_ids, rays.point_ids
         normals, pw, patch_weights = rays.surface_normals, rays.point_weights, rays.patch_weights
-        unit = MODES[mode].weight_unit
+        unit, sub_rays = MODES[mode].weight_unit, rays.sub_rays
 
     min_corner = (float(grid_origin[0]), float(grid_origin[1]), float(grid_origin[2]))
     total_rays = origins.shape[0]
-    batch_size = _resolve_batch_size(device, ray_batch_size=ray_batch_size)
+    per_ray = 1 if sub_rays is None else sub_rays.count
+    batch_size = max(1, _resolve_batch_size(device, ray_batch_size=ray_batch_size) // per_ray)
     batch_ranges = [(start, min(start + batch_size, total_rays)) for start in range(0, total_rays, batch_size)]
 
     def _access_batch(start, end, buf):
@@ -151,6 +153,7 @@ def test_point_access_evaluation(
             min_corner, float(grid_extent), res, origins[start:end], directions[start:end],
             patch_ids[start:end], patch_weights, buf, float(settings.ray_length), occ,
             point_ids[start:end], point_weights=pw, surface_normals=normals, skin_occupancy=skin_occ,
+            sub_rays=sub_rays,
         )
 
     with torch.no_grad():

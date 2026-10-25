@@ -436,6 +436,7 @@ export const messages = {
   meshFormatNames: { ply: "PLY", obj: "OBJ", stl: "STL", glb: "GLB" },
   floorStackingChoices: { supported: "Supported", free: "Free" },
   timeBasisChoices: { standard: "Standard time", daylight_saving: "Daylight saving time", solar: "Solar time" },
+  raysPerPatchChoices: { "1": "1, at the patch centre", "4": "4, spread over the patch", "9": "9, spread over the patch", "16": "16, spread over the patch" },
   carvingRuleChoices: { carve_fraction: "Manual", headtail: "Automatic" },
   // Under the carving rule Automatic, which has no setting: the cut of the last carving.
   automaticCut: (cutoffText: string) =>

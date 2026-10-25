@@ -30,6 +30,8 @@ build_blocking_mesh(meshes, device) -> BlockingMesh | None
     :func:`ray_tracing.mesh_blocks_rays`.
 drop_blocked_rays(blocking, origins, directions, point_ids, surface_normals, max_t, ray_weights)
     The rays to keep and what the drop removed (RayDrop).
+drop_blocked_sky_sub_rays(blocking, origins, patch_ids, point_ids, surface_normals, sub_rays, ...)
+    The same for the jittered sky sub-rays: a skip mask per sub-ray and the RayDrop.
 subtract_columns(polygons, removed_columns, grid_origin_world, voxel_size)
     The max volume's footprint without the removed columns, for massing.
 """
@@ -277,6 +279,26 @@ def drop_blocked_rays(blocking: BlockingMesh, origins: torch.Tensor, directions:
                    weight_total=float(weights.sum()), weight_dropped=float(weights[blocked].sum()),
                    test_points_fully_blocked=fully_blocked)
     return ~blocked, drop
+
+
+def drop_blocked_sky_sub_rays(blocking: BlockingMesh, origins: torch.Tensor, patch_ids: torch.Tensor,
+                              point_ids: torch.Tensor, surface_normals: torch.Tensor, sub_rays, patch_weights,
+                              max_t: float, point_weights: "torch.Tensor | None" = None
+                              ) -> tuple[torch.Tensor, RayDrop]:
+    """:func:`drop_blocked_rays` for sky sub-rays: the uint8 skip mask (one entry per sub-ray) and the RayDrop.
+
+    A sub-ray is skipped when the mesh blocks it or the surface does not face
+    it; the RayDrop counts only the sub-rays the surfaces face, each with
+    its share of its patch weight (times its point's *point_weights*).
+    """
+    from .ray_tracing import mesh_blocks_sky_sub_rays
+    b = mesh_blocks_sky_sub_rays(blocking, origins, patch_ids, point_ids, surface_normals, sub_rays,
+                                 patch_weights, max_t, point_weights=point_weights)
+    fully_blocked = int(((b.rays_of_point > 0) & (b.blocked_of_point == b.rays_of_point)).sum())
+    drop = RayDrop(rays_total=int(b.rays_of_point.sum()), rays_dropped=int(b.blocked_of_point.sum()),
+                   weight_total=float(b.weight_of_point.sum()), weight_dropped=float(b.blocked_weight_of_point.sum()),
+                   test_points_fully_blocked=fully_blocked)
+    return b.status, drop
 
 
 def subtract_columns(polygons: list[Polygon], removed_columns: np.ndarray, grid_origin_world: np.ndarray,

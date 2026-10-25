@@ -384,6 +384,19 @@ class UserConfig(BaseModel):
             "any grid the voxel budget allows at 1 m voxels."
         ),
     )
+    rays_per_patch: Literal[1, 4, 9, 16] = Field(
+        4,
+        description=(
+            "Sky-patch modes (irradiance, benefit, daylight, radiative_cooling): rays traced "
+            "per Tregenza sky patch from each test point. 1 = one ray to the patch centre. "
+            "4 (default), 9 or 16 = that many rays spread over the patch, one at a random "
+            "place in each of its 2 × 2, 3 × 3 or 4 × 4 cells, each carrying that share of "
+            "the patch weight; the places are drawn from the test point and the patch, so a "
+            "run repeats exactly. Patch centres are 12° apart, so far from the test surfaces "
+            "one ray per patch leaves voxels between the rays unscored, which shows as bands; "
+            "more rays close the gaps. Tracing time grows about in proportion."
+        ),
+    )
     min_altitude:  float = Field(5.0, ge=0, le=90, description="Minimum sun altitude (°)")
     margin_frac:   float = Field(0.01, ge=0, le=1.0, description="Grid padding on each side, as a fraction of the max volume's largest bounding-box side")
     ray_batch_size: int   = Field(0, ge=0, description="Rays per batch. 0 = auto: sized from free GPU memory, 300000 on CPU")

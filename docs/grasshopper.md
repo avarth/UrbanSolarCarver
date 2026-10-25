@@ -74,7 +74,7 @@ The ribbon shows each component as `USC <Name>` (for example *USC Session*). Bel
 - **USC_EPW** (*USC EPW Path*): passes the EPW file path
 - **USC_AnalysisPeriod**: defines the analysis date/time range
 - **USC_GridSettings**: voxel size, surface sampling spacing (`grid_step`), grid padding (`margin_frac`)
-- **USC_RaySettings**: ray length, minimum sun altitude, north direction (`north_deg`), and `context_blocks_rays` (Account for context blocking: with context or terrain, whether the rays that hit them are dropped; default true)
+- **USC_RaySettings**: ray length, minimum sun altitude, north direction (`north_deg`), `context_blocks_rays` (Account for context blocking: with context or terrain, whether the rays that hit them are dropped; default true), and `rays_per_patch` (rays per sky patch in the weighted modes: 1, 4, 9 or 16; default 4)
 - **USC_BenefitParams**: benefit-mode hour weighting: balance temperature and offset (simple weights), or a `simulated_weights.json` artifact plus the experimental `include_harm` toggle (simulated weights)
 - **USC_TiltedPlane**: fixed-angle envelope parameters
 - **USC_RadCooling** (*USC Radiative Cooling*): radiative cooling parameters (dew point, Bliss constant)

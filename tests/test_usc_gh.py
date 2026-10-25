@@ -342,13 +342,21 @@ def _run_component(name, **inputs):
 
 @pytest.mark.parametrize("value, expected", [(False, "context_blocks_rays=false"), (True, "context_blocks_rays=true"), (None, None)])
 def test_ray_settings_pass_the_context_blocking_switch(value, expected):
-    out = _run_component("USC_RaySettings.py", ray_length=None, min_altitude=None, north_deg=None, context_blocks_rays=value)
+    out = _run_component("USC_RaySettings.py", ray_length=None, min_altitude=None, north_deg=None, context_blocks_rays=value,
+                         rays_per_patch=None)
     assert out["overrides"] == expected
 
 
 def test_ray_settings_keep_the_numbers_beside_the_switch():
-    out = _run_component("USC_RaySettings.py", ray_length=500, min_altitude=None, north_deg=10, context_blocks_rays=False)
+    out = _run_component("USC_RaySettings.py", ray_length=500, min_altitude=None, north_deg=10, context_blocks_rays=False,
+                         rays_per_patch=None)
     assert out["overrides"] == "ray_length=500.0;north_deg=10.0;context_blocks_rays=false"
+
+
+def test_ray_settings_pass_the_rays_per_patch_as_a_whole_number():
+    out = _run_component("USC_RaySettings.py", ray_length=None, min_altitude=None, north_deg=None, context_blocks_rays=None,
+                         rays_per_patch=16.0)
+    assert out["overrides"] == "rays_per_patch=16"
 
 
 @pytest.mark.parametrize("name", ["USC_Preprocess.py", "USC_RunPipeline.py"])

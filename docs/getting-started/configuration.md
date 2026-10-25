@@ -155,6 +155,7 @@ terrain_path: "path/to/terrain.ply"        # optional
 | `dew_point_celsius` | `radiative_cooling` | Night-time dew point (°C, default 14) |
 | `bliss_k` | `radiative_cooling` | Bliss angular-attenuation constant (default 1.8) |
 | `min_sky_elevation_deg` | `radiative_cooling` | Ignore sky patches below this elevation in degrees (default 0 = full hemisphere) |
+| `rays_per_patch` | weighted modes | Rays per Tregenza sky patch from each test point: 1 (the patch centre), 4 (default), 9 or 16 (spread over the patch, repeatable), which close the gaps between patch centres far from the test surfaces ([details](../modes.md#sky-patches-and-rays-per-patch-rays_per_patch)) |
 | `edge_taper` | weighted modes | Sample points closer than this (m) to their surface's edge count proportionally less (default 0 = off), so a cooling street or courtyard does not clear the mass right beside it. The browser UI shows it in Night cooling (`radiative_cooling`) only |
 
 ## Thresholding strategies
