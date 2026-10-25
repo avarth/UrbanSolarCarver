@@ -449,7 +449,7 @@ def test_grid_over_budget_reply_carries_the_plan(client_with_inputs):
 def test_missing_inputs_are_422_with_their_roles(client):
     create_project(client, "p", "time-based")
     reply = client.post("/api/projects/p/runs", json={"produce": ["thresholding"]})
-    assert reply.status_code == 422 and reply.json()["missing_inputs"] == ["max_volume", "test_surfaces", "weather"]
+    assert reply.status_code == 422 and reply.json()["missing_inputs"] == ["max_volume", "test_surfaces:1", "weather"]
     assert "max_volume" in reply.json()["detail"]
 
 

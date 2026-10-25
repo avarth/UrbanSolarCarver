@@ -131,10 +131,10 @@ def test_two_test_surface_files_join_and_removal_rebuilds(tmp_path):
     store.add_input("p", "test_surfaces", "a.ply", a.export(file_type="ply"))
     reply = store.add_input("p", "test_surfaces", "b.ply", b.export(file_type="ply"))
     assert [(f.name, f.triangle_count) for f in reply.files] == [("a.ply", len(a.faces)), ("b.ply", len(b.faces))]
-    joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces.ply", force="mesh")
+    joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces_1.ply", force="mesh")
     assert len(joined.faces) == len(a.faces) + len(b.faces)
     store.remove_input("p", "test_surfaces", "a.ply")
-    joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces.ply", force="mesh")
+    joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces_1.ply", force="mesh")
     assert len(joined.faces) == len(b.faces)
 
 
@@ -381,10 +381,10 @@ def test_uploads_from_two_threads_to_one_role_are_both_recorded(tmp_path):
         thread.join()
     assert failures == []
     assert [f.name for f in store.input_files("p", "test_surfaces")] == ["a.ply", "b.ply"]
-    assert store.read_project_json("p").inputs_revision == 3
-    joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces.ply", force="mesh")
+    assert store.read_project_json("p").inputs_revision == 1
+    joined = trimesh.load(tmp_path / "p/inputs/joined/test_surfaces_1.ply", force="mesh")
     assert len(joined.faces) == 24
-    assert [path.name for path in (tmp_path / "p/inputs/joined").iterdir()] == ["test_surfaces.ply"]
+    assert [path.name for path in (tmp_path / "p/inputs/joined").iterdir()] == ["test_surfaces_1.ply"]
 
 
 def _block_centres_x(joined_path):
@@ -395,7 +395,7 @@ def _block_centres_x(joined_path):
 
 def test_joined_file_follows_sorted_file_names_whatever_the_upload_order(tmp_path):
     store = ProjectStore(tmp_path); store.create("p", "time-based")
-    joined_path = tmp_path / "p/inputs/joined/test_surfaces.ply"
+    joined_path = tmp_path / "p/inputs/joined/test_surfaces_1.ply"
     store.add_input("p", "test_surfaces", "b.ply", _box_bytes([100, 0, 5]))
     store.add_input("p", "test_surfaces", "a.ply", _box_bytes([0, 0, 5]))
     store.add_input("p", "test_surfaces", "c.ply", _box_bytes([200, 0, 5]))
@@ -442,7 +442,7 @@ def example_project_to_read(tmp_path_factory, example_project_templates):
     def example_and_joined_panels(example_name):
         if example_name not in made:
             example = example_project_templates.copy_example_project(store, example_name, example_name)
-            joined_panels = _sampled_panels([store.open(example_name) / "inputs" / "joined" / "test_surfaces.ply"])
+            joined_panels = _sampled_panels([store.open(example_name) / "inputs" / "joined" / "test_surfaces_1.ply"])
             made[example_name] = (example, joined_panels)
         return made[example_name]
 

@@ -17,7 +17,6 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 
-import numpy as np
 import trimesh
 import yaml
 from pydantic import ValidationError
@@ -29,6 +28,7 @@ from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_bud
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..pydantic_schemas import UserConfig
+from . import test_surfaces
 from .api_models import (
     CarvingChainStep, ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply,
     ProjectJson, ProjectSummary,
@@ -44,9 +44,9 @@ from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_
 CONFIG_FILE_NAME = "config.yaml"
 INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/context", "inputs/terrain", "inputs/joined")
 RUN_FOLDER = "run"
-REQUIRED_MESH_ROLES = ("max_volume", "test_surfaces")
+REQUIRED_MESH_ROLES = ("max_volume",)       # the test surfaces are required per criterion (see missing_inputs)
 OPTIONAL_MESH_ROLES = ("context", "terrain")   # existing surroundings and terrain: a run without them is a run as before
-MESH_ROLES = REQUIRED_MESH_ROLES + OPTIONAL_MESH_ROLES
+MESH_ROLES = (*REQUIRED_MESH_ROLES, test_surfaces.ROLE, *OPTIONAL_MESH_ROLES)
 WEATHER_ROLE = "weather"
 MESH_EXTENSIONS = (".ply", ".obj", ".stl", ".glb")
 WEATHER_EXTENSION = ".epw"
@@ -111,48 +111,6 @@ def sanitize_file_name(name: str) -> str:
 
 def _utc_iso(timestamp_seconds: float) -> str:
     return datetime.fromtimestamp(timestamp_seconds, timezone.utc).isoformat(timespec="seconds")
-
-
-def _write_ply_with_vertex_normals(meshes: list[trimesh.Trimesh], path: Path) -> None:
-    """Write the meshes, concatenated, as one binary PLY with float64 positions and the vertex normals of each mesh.
-
-    The engine reads test surfaces with load_mesh, which merges coincident vertices only when their normals are
-    equal too (trimesh merges on position and, when the file has them, vertex normals). Test surface files keep
-    panels that share corners apart that way, and each panel is one connected component for the sampling. The
-    normals of a mesh as load_mesh returned it are those of its faces, so a vertex of one flat panel carries the
-    panel's normal, and panels that met at a corner in the uploaded file stay apart in the joined file. Without
-    normals they would merge into one component, which the sampling skips as degenerate or non-planar. Positions
-    are float64, as save_mesh writes georeferenced coordinates.
-    """
-    vertex_offsets = np.cumsum([0] + [len(mesh.vertices) for mesh in meshes[:-1]])
-    vertex_rows = np.empty(sum(len(mesh.vertices) for mesh in meshes), dtype=[("position", "<f8", (3,)), ("normal", "<f4", (3,))])
-    vertex_rows["position"] = np.vstack([mesh.vertices for mesh in meshes])
-    vertex_rows["normal"] = np.vstack([mesh.vertex_normals for mesh in meshes])
-    face_rows = np.empty(sum(len(mesh.faces) for mesh in meshes), dtype=[("count", "u1"), ("vertex_indices", "<i4", (3,))])
-    face_rows["count"] = 3
-    face_rows["vertex_indices"] = np.vstack([mesh.faces + offset for mesh, offset in zip(meshes, vertex_offsets)])
-    header = ("ply\nformat binary_little_endian 1.0\n"
-              f"element vertex {len(vertex_rows)}\n"
-              "property double x\nproperty double y\nproperty double z\n"
-              "property float nx\nproperty float ny\nproperty float nz\n"
-              f"element face {len(face_rows)}\n"
-              "property list uchar int vertex_indices\nend_header\n")
-    with open(path, "wb") as ply_file:
-        ply_file.write(header.encode("ascii"))
-        ply_file.write(vertex_rows.tobytes())
-        ply_file.write(face_rows.tobytes())
-
-
-def _ply_has_vertex_normals(path: Path) -> bool:
-    """Whether the header of a PLY file declares the vertex property nx (a PLY header is ASCII in every format)."""
-    with open(path, "rb") as ply_file:
-        for line in ply_file:
-            words = line.split()
-            if words == [b"end_header"]:
-                return False
-            if words[:1] == [b"property"] and words[-1:] == [b"nx"]:
-                return True
-    return False
 
 
 class ProjectStore:
@@ -474,7 +432,7 @@ class ProjectStore:
     def delete_criterion(self, name: str, criterion_id: str) -> None:
         """Remove a criterion, its run folder (run/criteria/<id>/) and its joined test surface file; 404 for an unknown one.
 
-        Its id is not used again.
+        The stored test surface files that no other criterion uses are deleted. Its id is not used again.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
@@ -482,9 +440,15 @@ class ProjectStore:
             removed = find_criterion(project_json, criterion_id)
             project_json.criteria = [criterion for criterion in project_json.criteria if criterion.id != removed.id]
             project_json.criterion_records.pop(removed.id, None)
+            unused_files = [file_name for file_name in removed.test_surface_files
+                            if not test_surfaces.criteria_using(project_json.criteria, file_name)]
+            for file_name in unused_files:
+                project_json.input_files.get(test_surfaces.ROLE, {}).pop(file_name, None)
             self._rewrite_chain(name, project_folder, project_json)
             shutil.rmtree(project_folder / RUN_FOLDER / "criteria" / removed.id, ignore_errors=True)
             (project_folder / joined_test_surfaces_path(removed.id)).unlink(missing_ok=True)
+            for file_name in unused_files:
+                test_surfaces.stored_path(project_folder, file_name).unlink(missing_ok=True)
 
     def duplicate_criterion(self, name: str, criterion_id: str) -> CriterionEntry:
         """Add a copy of a criterion at the end of the chain: its settings and test surfaces, named "<name> copy"."""
@@ -510,6 +474,109 @@ class ProjectStore:
                 raise ProjectError("The new order must list every criterion once.", status_code=422)
             project_json.criteria = [by_id[criterion_id] for criterion_id in ids]
             self._rewrite_chain(name, project_folder, project_json)
+
+    def add_criterion_test_surface(self, name: str, criterion_id: str, file_name: str, data: bytes) -> CriterionEntry:
+        """Add an uploaded test surface file to the criterion *criterion_id* (test_surfaces.accept_upload says which stored file it is).
+
+        A file with the content of a stored one is that one; a file with the name of a stored one and other content replaces
+        it in every criterion that uses it. The joined file of each criterion that gets another file is built again. A criterion
+        the user did not name takes its default name from its first file. inputs_revision does not change: what goes out of date
+        is told by the fingerprint of each joined file. ProjectError: 404 for an unknown criterion, 422 for a file that is not a
+        readable mesh. Nothing on disk or in project.json changes unless the whole upload succeeds.
+        """
+        clean_name = sanitize_file_name(file_name)
+        if Path(clean_name).suffix.lower() not in MESH_EXTENSIONS:
+            raise ProjectError(f"A mesh file must be one of {', '.join(MESH_EXTENSIONS)}.", status_code=422)
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            entry = find_criterion(project_json, criterion_id)
+            recorded_names = project_json.input_files.setdefault(test_surfaces.ROLE, {})
+            stored_name, upload_path, uploaded_mesh = test_surfaces.accept_upload(project_folder, recorded_names, clean_name, data)
+            try:
+                if uploaded_mesh is None and stored_name in entry.test_surface_files:
+                    return entry        # the criterion already uses a file with this content
+                replaced_for = test_surfaces.criteria_using(project_json.criteria, stored_name) if uploaded_mesh is not None else []
+                file_names = {criterion.id: criterion.test_surface_files for criterion in replaced_for}
+                file_names[entry.id] = sorted({*entry.test_surface_files, stored_name})
+                joined_files = test_surfaces.build_joined_files(
+                    project_folder, file_names, {stored_name: uploaded_mesh} if uploaded_mesh is not None else None)
+                try:
+                    if upload_path is not None:
+                        os.replace(upload_path, test_surfaces.stored_path(project_folder, stored_name))
+                    test_surfaces.install_joined_files(project_folder, joined_files)
+                finally:
+                    test_surfaces.remove_temporary_files(joined_files)
+            finally:
+                if upload_path is not None:
+                    upload_path.unlink(missing_ok=True)
+            if uploaded_mesh is not None:
+                recorded_names[stored_name] = len(uploaded_mesh.faces)
+            if stored_name not in entry.test_surface_files:
+                entry.test_surface_files.append(stored_name)
+            self._write_after_test_surface_change(name, project_folder, project_json, entry)
+            return entry
+
+    def use_test_surface(self, name: str, criterion_id: str, file_name: str) -> CriterionEntry:
+        """Add a stored test surface file (one that another criterion uses) to the criterion *criterion_id* and build its joined file.
+
+        ProjectError 404 for an unknown criterion or a file that is not stored. A file the criterion has already changes nothing.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            entry = find_criterion(project_json, criterion_id)
+            if file_name not in project_json.input_files.get(test_surfaces.ROLE, {}):
+                raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{file_name}'.", status_code=404)
+            if file_name in entry.test_surface_files:
+                return entry
+            joined_files = test_surfaces.build_joined_files(project_folder, {entry.id: sorted({*entry.test_surface_files, file_name})})
+            try:
+                test_surfaces.install_joined_files(project_folder, joined_files)
+            finally:
+                test_surfaces.remove_temporary_files(joined_files)
+            entry.test_surface_files.append(file_name)
+            self._write_after_test_surface_change(name, project_folder, project_json, entry)
+            return entry
+
+    def remove_criterion_test_surface(self, name: str, criterion_id: str, file_name: str) -> CriterionEntry:
+        """Take a test surface file out of the criterion *criterion_id* and build its joined file again (none when no file is left).
+
+        The stored file stays for the criteria that use it and is deleted when no criterion uses it any more. ProjectError 404
+        for an unknown criterion or a file the criterion does not use. Nothing is deleted unless the joined file could be built.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            entry = find_criterion(project_json, criterion_id)
+            if file_name not in entry.test_surface_files:
+                raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{file_name}' in the criterion '{entry.name}'.", status_code=404)
+            remaining_names = [other for other in entry.test_surface_files if other != file_name]
+            joined_files = test_surfaces.build_joined_files(project_folder, {entry.id: remaining_names})
+            try:
+                if len(test_surfaces.criteria_using(project_json.criteria, file_name)) == 1:
+                    test_surfaces.stored_path(project_folder, file_name).unlink(missing_ok=True)
+                    project_json.input_files[test_surfaces.ROLE].pop(file_name, None)
+                test_surfaces.install_joined_files(project_folder, joined_files)
+            finally:
+                test_surfaces.remove_temporary_files(joined_files)
+            entry.test_surface_files = remaining_names
+            self._write_after_test_surface_change(name, project_folder, project_json, entry)
+            return entry
+
+    def _write_after_test_surface_change(self, name: str, project_folder: Path, project_json: ProjectJson, entry: CriterionEntry) -> None:
+        """Write project.json after the test surfaces of *entry* changed, and config.yaml too when its default name followed them."""
+        if test_surfaces.follow_default_name(entry):
+            self._rewrite_chain(name, project_folder, project_json)
+        else:
+            self.write_project_json(name, project_json)
+
+    def _only_criterion(self, name: str) -> CriterionEntry:
+        """The criterion an upload or removal of the earlier app belongs to: the only one; ProjectError(422) with none or several."""
+        entry = self._criterion_for_settings(self.read_project_json(name), None)
+        if entry is None:
+            raise ProjectError("The project has no criterion for these test surfaces: add a criterion first.", status_code=422)
+        return entry
 
     def read_stored_config(self, name: str, criterion_id: str | None = None) -> dict:
         """The settings of one criterion as one flat mapping, service paths and device included (the single-criterion form of
@@ -717,11 +784,16 @@ class ProjectStore:
         before it is kept, so a file the run would refuse is refused at upload. A file with the name of an earlier upload
         replaces it, also when the names differ only in letter case (one name, one file on Windows).
         Nothing on disk or in project.json changes unless the whole upload, joined file included, succeeds.
+        Test surfaces go to the only criterion (ProjectError 422 with several, see add_criterion_test_surface), and an upload
+        of them does not raise inputs_revision.
         """
         self._check_role(role)
         clean_name = sanitize_file_name(file_name)
         extension = Path(clean_name).suffix.lower()
         with self.project_lock(name):
+            if role == test_surfaces.ROLE:
+                self.add_criterion_test_surface(name, self._only_criterion(name).id, file_name, data)
+                return self._reply(name, role, self.read_project_json(name))
             project_json = self.read_project_json(name)
             project_folder = self.open(name)
             if role == WEATHER_ROLE:
@@ -742,10 +814,14 @@ class ProjectStore:
     def remove_input(self, name: str, role: str, file_name: str) -> InputFilesReply:
         """Delete an uploaded file and rebuild the joined file of a mesh role; 404 when the file is not there.
 
-        Nothing is deleted unless the joined file of the remaining files could be built.
+        Nothing is deleted unless the joined file of the remaining files could be built. A test surface file is taken out of the
+        only criterion (ProjectError 422 with several), and deleted when no criterion uses it any more.
         """
         self._check_role(role)
         with self.project_lock(name):
+            if role == test_surfaces.ROLE:
+                self.remove_criterion_test_surface(name, self._only_criterion(name).id, file_name)
+                return self._reply(name, role, self.read_project_json(name))
             project_json = self.read_project_json(name)
             project_folder = self.open(name)
             if file_name not in project_json.input_files.get(role, {}):
@@ -809,27 +885,26 @@ class ProjectStore:
             return chain_step
 
     def rebuild_joined_test_surfaces_without_normals(self, name: str) -> bool:
-        """Rebuild the joined test surface file when it has no vertex normals and raise inputs_revision; whether it did.
+        """Rebuild the joined test surface files that have no vertex normals and raise inputs_revision; whether any was rebuilt.
 
         The service wrote that file with positions only before it kept the vertex normals, so the engine welded
-        panels that share corners (see _write_ply_with_vertex_normals). Rebuilt from the uploaded files, with
+        panels that share corners (see test_surfaces.write_joined_ply). Rebuilt from the criterion's files, with
         inputs_revision raised, every stage built on the old file is out of date. Called when a project is opened
-        and when a run starts; raises ProjectError when an uploaded file cannot be read.
+        and when a run starts; raises ProjectError when a stored file cannot be read.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
-            joined_path = project_folder / JOINED_FOLDER / "test_surfaces.ply"
-            if not joined_path.is_file() or _ply_has_vertex_normals(joined_path):
-                return False
             project_json = self.read_project_json(name)
-            file_names = list(project_json.input_files.get("test_surfaces", {}))
-            joined_temporary_path = self._write_joined_temporary_file(
-                project_folder, "test_surfaces", list(self._load_stored_meshes(project_folder, "test_surfaces", file_names).values()))
+            stale_file_names = {criterion.id: sorted(criterion.test_surface_files) for criterion in project_json.criteria
+                         if test_surfaces.joined_path(project_folder, criterion.id).is_file()
+                         and not test_surfaces.has_vertex_normals(test_surfaces.joined_path(project_folder, criterion.id))}
+            if not stale_file_names:
+                return False
+            joined_files = test_surfaces.build_joined_files(project_folder, stale_file_names)
             try:
-                self._replace_joined_file(project_folder, "test_surfaces", joined_temporary_path)
+                test_surfaces.install_joined_files(project_folder, joined_files)
             finally:
-                if joined_temporary_path is not None:
-                    joined_temporary_path.unlink(missing_ok=True)
+                test_surfaces.remove_temporary_files(joined_files)
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
             return True
@@ -1015,9 +1090,8 @@ class ProjectStore:
     def _write_joined_temporary_file(project_folder: Path, role: str, meshes: list[trimesh.Trimesh]) -> Path | None:
         """Join the meshes of a role as the Grasshopper components do (spec 5.3) into a new temporary file.
 
-        Max volume, context and terrain meshes are concatenated and their coincident vertices
-        merged; test surface meshes are only concatenated, and written with their vertex normals
-        (see _write_ply_with_vertex_normals). Returns None for no meshes (the joined file is then removed).
+        Max volume, context and terrain meshes are concatenated and their coincident vertices merged (the joined test surface
+        files of the criteria are built in test_surfaces.py). Returns None for no meshes (the joined file is then removed).
         The temporary name is unique, so concurrent builds never share a file.
         """
         if not meshes:
@@ -1026,12 +1100,9 @@ class ProjectStore:
         os.close(descriptor)
         temporary_path = Path(temporary_name)
         try:
-            if role != "test_surfaces":
-                joined_mesh = trimesh.util.concatenate(meshes)
-                joined_mesh.merge_vertices()
-                save_mesh(joined_mesh, str(temporary_path))
-            else:
-                _write_ply_with_vertex_normals(meshes, temporary_path)
+            joined_mesh = trimesh.util.concatenate(meshes)
+            joined_mesh.merge_vertices()
+            save_mesh(joined_mesh, str(temporary_path))
         except Exception as error:
             temporary_path.unlink(missing_ok=True)
             raise ProjectError(f"The joined {role} file could not be built: {error}", status_code=500) from error

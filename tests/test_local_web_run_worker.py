@@ -77,7 +77,7 @@ def test_missing_inputs_are_named(tmp_path):
     worker = make_worker(store)
     with pytest.raises(MissingInputs) as missing:
         worker.start("p", ["thresholding"])
-    assert missing.value.roles == ["max_volume", "test_surfaces", "weather"]
+    assert missing.value.roles == ["max_volume", "test_surfaces:1", "weather"]
     assert missing.value.status_code == 422
     assert worker.active_project() is None
     assert store.read_project_json("p").stage_records == {}

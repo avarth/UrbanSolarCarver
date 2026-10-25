@@ -113,12 +113,12 @@ def change_settings(store: ProjectStore, name: str, **changes) -> None:
     store.write_config_from_values(name, {**store.read_settings(name), **changes})
 
 
-def write_joined_test_surfaces_without_normals(store: ProjectStore, name: str) -> Path:
-    """The joined test surface file as the service wrote it before it kept vertex normals: positions only; its path."""
+def write_joined_test_surfaces_without_normals(store: ProjectStore, name: str, criterion_id: str = "1") -> Path:
+    """The joined test surface file of a criterion as the service wrote it before it kept vertex normals: positions only; its path."""
     project_folder = store.open(name)
-    file_names = sorted(store.read_project_json(name).input_files["test_surfaces"])
+    file_names = sorted(next(entry for entry in store.criteria(name) if entry.id == criterion_id).test_surface_files)
     meshes = [load_mesh(str(project_folder / INPUTS_FOLDER / "test_surfaces" / file_name)) for file_name in file_names]
-    joined_path = project_folder / JOINED_FOLDER / "test_surfaces.ply"
+    joined_path = project_folder / JOINED_FOLDER / f"test_surfaces_{criterion_id}.ply"
     save_mesh(trimesh.util.concatenate(meshes), str(joined_path))
     assert not has_vertex_normals(joined_path)
     return joined_path
