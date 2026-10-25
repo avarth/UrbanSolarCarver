@@ -5,6 +5,7 @@ runs, as the real stages do, in the chain layout of run_chain (run/criteria/<id>
 The run folders of finished runs are written without computing anything. The fixture
 ``project_with_inputs`` is in conftest.py and builds its project with ``add_project_with_inputs``.
 """
+import dataclasses
 import json
 import os
 import shutil
@@ -77,7 +78,8 @@ def box_bytes(center, extents=(10, 10, 10)) -> bytes:
 
 
 def add_project_with_inputs(tmp_path: Path) -> tuple[ProjectStore, str]:
-    """A daylight project (no weather file needed) with a max volume and a test surface: the store and the project name."""
+    """A daylight project (no weather file needed) with a max volume and a test surface, which criterion "1" protects: the store and
+    the project name."""
     store = ProjectStore(tmp_path / "projects")
     store.create("p", "daylight")
     store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
@@ -150,14 +152,23 @@ def run_id_in(manifest_folder: Path) -> str:
     return json.loads((manifest_folder / "manifest.json").read_text(encoding="utf-8"))["run_id"]
 
 
+def write_fake_chain_file(run_folder: Path, criteria: list[tuple[str, str]]) -> None:
+    """criteria/chain.json as run_chain writes it once the criteria are thresholded: each criterion and its thresholding run."""
+    listed = [{"id": criterion_id, "name": criterion_id, "mode": mode,
+               "thresholding_run_id": run_id_in(run_folder / "criteria" / criterion_id / "thresholding")}
+              for criterion_id, mode in criteria]
+    (run_folder / "criteria" / "chain.json").write_text(json.dumps({"criteria": listed}), encoding="utf-8")
+
+
 def write_fake_stage_output(run_folder: Path, stage: str, criteria: list[tuple[str, str]] | None = None,
                             criterion_ids: Collection[str] | None = None) -> None:
     """What a finished stage leaves in the chain layout of run_chain: a manifest with a new run_id and the run_ids it read.
 
     *criteria* is the chain as (id, mode) pairs (default: config.yaml's). Preprocessing and thresholding write the folder of each
     criterion in *criterion_ids* (default: every one); a thresholding names its criterion's preprocessing as upstream and the
-    previous criterion's thresholding as after (none for the first), and thresholding writes criteria/chain.json. Exporting and
-    massing name the last criterion's thresholding as upstream.
+    previous criterion's thresholding as after (none for the first). Thresholding of every criterion (no *criterion_ids*) writes
+    criteria/chain.json too; a caller that thresholds one criterion at a time writes it with write_fake_chain_file when done.
+    Exporting and massing name the last criterion's thresholding as upstream.
     """
     criteria = criteria_in_config(run_folder) if criteria is None else criteria
     if stage in ("preprocessing", "thresholding"):
@@ -178,11 +189,8 @@ def write_fake_stage_output(run_folder: Path, stage: str, criteria: list[tuple[s
                 folder.mkdir(parents=True, exist_ok=True)
                 (folder / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
             previous_thresholding = run_folder / "criteria" / criterion_id / "thresholding"
-        if stage == "thresholding":
-            listed = [{"id": criterion_id, "name": criterion_id, "mode": mode,
-                       "thresholding_run_id": run_id_in(run_folder / "criteria" / criterion_id / "thresholding")}
-                      for criterion_id, mode in criteria]
-            (run_folder / "criteria" / "chain.json").write_text(json.dumps({"criteria": listed}), encoding="utf-8")
+        if stage == "thresholding" and criterion_ids is None:
+            write_fake_chain_file(run_folder, criteria)
         return
     last_id = criteria[-1][0]
     folder = run_folder / stage
@@ -246,17 +254,25 @@ def stages_the_engine_runs(request) -> list[str]:
 
 def criteria_the_engine_runs(request, stage: str, criterion_ids: list[str]) -> list[str]:
     """The criteria whose *stage* folder run_chain writes for *request*: preprocessing traces the criteria in trace_criteria (every
-    one without it), and thresholding starts at the first traced one, or at the first criterion when preprocessing does not run."""
+    one without it), and thresholding starts at the first traced one or at threshold_from_criterion, whichever comes first, or at
+    the first criterion when preprocessing does not run."""
     traces = request.start_from == "preprocessing"
     traced = [criterion_id for criterion_id in criterion_ids
               if not traces or request.trace_criteria is None or criterion_id in request.trace_criteria]
     if stage == "preprocessing":
         return traced
-    return criterion_ids[criterion_ids.index(traced[0]):] if traces and traced else list(criterion_ids)
+    if not (traces and traced):
+        return list(criterion_ids)
+    starts = [criterion_ids.index(traced[0])]
+    if request.threshold_from_criterion is not None:
+        starts.append(criterion_ids.index(request.threshold_from_criterion))
+    return criterion_ids[min(starts):]
 
 
 class FakeEngine:
-    """Stands in for ``handle_engine_request``; keeps the requests it received. It writes the chain layout as run_chain does."""
+    """Stands in for ``handle_engine_request``; keeps the requests it received. It writes the chain layout and reports progress
+    as run_chain does: each criterion's stages inside ``criterion <id>``, its issues named ``criterion <id> (<stage>)``, then
+    exporting and massing."""
 
     def __init__(self):
         self.requests = []
@@ -266,15 +282,42 @@ class FakeEngine:
         run_folder = Path(request.run_folder)
         criteria = criteria_in_config(run_folder)
         criterion_ids = [criterion_id for criterion_id, _mode in criteria]
+        stages = stages_the_engine_runs(request)
+        analysis_stages = [stage for stage in ("preprocessing", "thresholding") if stage in stages]
         with run_context(context):
-            for stage in stages_the_engine_runs(request):
-                with stage_context(stage):
-                    report_progress(0, 1)
+            if "thresholding" in analysis_stages:
+                (run_folder / "criteria" / "chain.json").unlink(missing_ok=True)
+            for position, criterion_id in enumerate(criterion_ids, start=1):
+                with stage_context(f"criterion {criterion_id}"):
                     context.raise_if_cancelled()
-                    if stage == "preprocessing":
-                        report_issue("fake_issue", "preprocessing noticed something")
-                    write_fake_stage_output(run_folder, stage, criteria, criteria_the_engine_runs(request, stage, criterion_ids))
-                    report_progress(1, 1)
+                    report_progress(position - 1, len(criteria))
+                    first_new_issue = len(context.issues)
+                    for stage in analysis_stages:
+                        if criterion_id in criteria_the_engine_runs(request, stage, criterion_ids):
+                            self._run_criterion_stage(run_folder, stage, criteria, criterion_id, context)
+                    for index in range(first_new_issue, len(context.issues)):
+                        issue = context.issues[index]
+                        context.issues[index] = dataclasses.replace(issue, stage=f"criterion {criterion_id} ({issue.stage})")
+                    report_progress(position, len(criteria))
+            if "thresholding" in analysis_stages:
+                write_fake_chain_file(run_folder, criteria)
+            for stage in stages:
+                if stage in ("exporting", "massing"):
+                    with stage_context(stage):
+                        report_progress(0, 1)
+                        context.raise_if_cancelled()
+                        write_fake_stage_output(run_folder, stage, criteria)
+                        report_progress(1, 1)
+
+    @staticmethod
+    def _run_criterion_stage(run_folder, stage, criteria, criterion_id, context) -> None:
+        with stage_context(stage):
+            report_progress(0, 1)
+            context.raise_if_cancelled()
+            if stage == "preprocessing":
+                report_issue("fake_issue", "preprocessing noticed something")
+            write_fake_stage_output(run_folder, stage, criteria, [criterion_id])
+            report_progress(1, 1)
 
 
 class FakeSession:

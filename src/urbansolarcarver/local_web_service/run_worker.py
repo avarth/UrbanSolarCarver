@@ -8,6 +8,7 @@ Importing this module does not import torch: the engine and the compute session 
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import uuid
 from dataclasses import dataclass
@@ -17,9 +18,10 @@ from typing import Callable
 from ..errors import ConfigError, RunCancelled, StageChainError
 from ..run_context import RunContext
 from ..stage_settings import PIPELINE_STAGES
+from . import test_surfaces
 from .api_models import StartRunReply
 from .projects import RUN_FOLDER, ProjectError, ProjectStore
-from .stage_records import RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_stages, run_settings
+from .stage_records import ANALYSIS_STAGES, RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_stages, run_settings
 
 _log = logging.getLogger(__name__)
 
@@ -27,6 +29,9 @@ STAGE_CHAIN_MESSAGE = "Results are out of date; run again from the start."
 EXPORTED_MESH_PATTERN = "export.*"      # the exporting stage writes one mesh, named for its format
 MASSING_RESULT_PATTERN = "plates.*"     # plates.json, plates.obj, and the plates in the chosen format when it is not OBJ
 RESULT_FILES = ("run_report.md",)
+# How the engine's run_chain labels what it reports: the progress of criterion <id>, and an issue noticed by a stage of a criterion.
+CRITERION_PROGRESS_LABEL = re.compile(r"criterion ([^\s()]+)")
+CRITERION_ISSUE_LABEL = re.compile(r"criterion ([^\s()]+) \((\w+)\)")
 
 
 class RunConflict(ProjectError):
@@ -37,11 +42,25 @@ class RunConflict(ProjectError):
 
 
 class MissingInputs(ProjectError):
-    """The project lacks files its mode needs; ``roles`` names them."""
+    """The project lacks what a run needs; ``roles`` names it (see missing_inputs) and the message says what to do about each."""
 
-    def __init__(self, roles: list[str]):
-        super().__init__(f"Upload the missing input files first: {', '.join(roles)}.", status_code=422)
+    def __init__(self, roles: list[str], criterion_names: dict[str, str] | None = None):
+        super().__init__(_missing_inputs_message(roles, criterion_names or {}), status_code=422)
         self.roles = roles
+
+
+def _missing_inputs_message(roles: list[str], criterion_names: dict[str, str]) -> str:
+    """A sentence for the input files to upload, one when no criterion is on, and one for each criterion without test surfaces."""
+    test_surfaces_prefix = f"{test_surfaces.ROLE}:"
+    files = [role for role in roles if role != "criteria" and not role.startswith(test_surfaces_prefix)]
+    sentences = [f"Upload the missing input files first: {', '.join(files)}."] if files else []
+    if "criteria" in roles:
+        sentences.append("Turn on a criterion to run.")
+    for role in roles:
+        if role.startswith(test_surfaces_prefix):
+            criterion_id = role.removeprefix(test_surfaces_prefix)
+            sentences.append(f"Add test surfaces to {criterion_names.get(criterion_id, criterion_id)}.")
+    return " ".join(sentences)
 
 
 class RunState:
@@ -142,10 +161,10 @@ class RunWorker:
             config = self._store.load_project_config(name)
             absent_roles = missing_inputs(self._store, name, config)
             if absent_roles:
-                raise MissingInputs(absent_roles)
+                raise MissingInputs(absent_roles, {criterion.id: criterion.name for criterion in self._store.criteria(name)})
             choice = choose_stages(self._store, name, produce)
             if not choice.stages:
-                return StartRunReply(status="up_to_date", run_id=None, stages=[])
+                return StartRunReply(status="up_to_date", run_id=None, stages=[], criterion_stages={})
             settings = run_settings(self._store, name)
             # Removed before the engine starts: a run that stops without finishing (a crash, a closed service)
             # leaves these stages missing, so the next run completes them.
@@ -158,7 +177,7 @@ class RunWorker:
             self._run_states[state.run_id] = state
             self._active = _ActiveRun(state, context, thread)
             thread.start()
-            return StartRunReply(status="started", run_id=state.run_id, stages=choice.stages)
+            return StartRunReply(status="started", run_id=state.run_id, stages=choice.stages, criterion_stages=choice.criterion_stages)
 
     def _run(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> None:
         """The thread body: run the engine, record the stages on success, and end the event log with one final event.
@@ -219,6 +238,7 @@ class RunWorker:
             cmd="run", produce=choice.produce_for_engine, run_folder=str(self._store.open(state.project) / RUN_FOLDER),
             start_from=choice.start_from, config=str(self._store.open(state.project) / "config.yaml"),
             trace_criteria=choice.trace_criteria or None,       # traced again; the others keep their preprocessing
+            threshold_from_criterion=choice.threshold_from,     # thresholded again although it comes before the first traced one
             overrides={"device": self._device})     # the device of this service, not the one stored at the last save
         self._handler()(request, self._session, context)
 
@@ -236,18 +256,31 @@ class RunWorker:
 
 
 class _IssuesForwarder:
-    """Turns progress callbacks and new run issues into events, issues first."""
+    """Turns progress callbacks and new run issues into events, issues first.
+
+    The engine reports a chain's progress as ``criterion <id>`` and the issues of a criterion's stage as ``criterion <id> (<stage>)``.
+    The first is not forwarded: it sets the criterion that the events of the stages after it name (exporting and massing are built
+    from the whole chain and name none). The second becomes the stage and the criterion; an issue of preprocessing or thresholding
+    that is not named that way (the engine names a criterion's issues when the criterion is done, and some are sent before) names
+    the criterion being run. Any other label is forwarded as it is, with no criterion.
+    """
 
     def __init__(self, state: RunState, context: RunContext):
         self._state = state
         self._context = context
         self._issues_sent = 0
+        self._criterion: str | None = None      # the criterion the engine reported progress for last
         self._lock = threading.Lock()   # progress can be reported from the engine's own threads
 
     def forward_progress(self, stage: str | None, done: int, total: int) -> None:
         with self._lock:
             self._send_new_issues()
-            self._state.emit({"type": "stage_progress", "stage": stage, "done": done, "total": total})
+            criterion_label = CRITERION_PROGRESS_LABEL.fullmatch(stage) if stage is not None else None
+            if criterion_label is not None:
+                self._criterion = criterion_label.group(1)
+                return
+            criterion = self._criterion if stage in ANALYSIS_STAGES else None
+            self._state.emit({"type": "stage_progress", "stage": stage, "criterion": criterion, "done": done, "total": total})
 
     def forward_new_issues(self) -> None:
         with self._lock:
@@ -255,7 +288,13 @@ class _IssuesForwarder:
 
     def _send_new_issues(self) -> None:
         for issue in self._context.issues[self._issues_sent:]:
-            self._state.emit({"type": "issue", "stage": issue.stage, "code": issue.code, "message": issue.message})
+            stage = issue.stage
+            criterion_label = CRITERION_ISSUE_LABEL.fullmatch(stage) if stage is not None else None
+            if criterion_label is not None:
+                criterion, stage = criterion_label.groups()
+            else:   # not named by the engine yet (it names a criterion's issues when the criterion is done): the criterion running
+                criterion = self._criterion if stage in ANALYSIS_STAGES else None
+            self._state.emit({"type": "issue", "stage": stage, "criterion": criterion, "code": issue.code, "message": issue.message})
         self._issues_sent = len(self._context.issues)
 
 

@@ -454,6 +454,17 @@ def test_choose_stages_traces_only_the_changed_criteria(chain_of_three):
     assert (choice.stages, choice.start_from, choice.trace_criteria) == (list(PIPELINE_STAGES), "preprocessing", ["2"])
     assert choice.criterion_stages == {"1": [], "2": ["preprocessing", "thresholding"], "3": ["thresholding"]}
     assert choice.produce_for_engine == ["exporting", "massing"]
+    assert choice.threshold_from is None        # thresholding starts at the first traced criterion anyway
+
+
+def test_choose_stages_rethresholds_an_earlier_criterion_while_tracing_a_later_one(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "1", values={"carve_fraction": 0.3})       # its thresholding, then the ones after it
+    store.add_criterion_test_surface(name, "3", "surface_3.ply", box_bytes([3, 1, 0], extents=(4, 4, 0.1)))     # its preprocessing
+    choice = choose_stages(store, name, ["thresholding"])
+    assert (choice.stages, choice.start_from, choice.trace_criteria, choice.threshold_from) == (
+        ["preprocessing", "thresholding"], "preprocessing", ["3"], "1")
+    assert choice.criterion_stages == {"1": ["thresholding"], "2": ["thresholding"], "3": ["preprocessing", "thresholding"]}
 
 
 def test_choose_stages_rethresholds_the_chain_when_only_a_carving_rule_changed(chain_of_three):
@@ -463,6 +474,7 @@ def test_choose_stages_rethresholds_the_chain_when_only_a_carving_rule_changed(c
     assert (choice.stages, choice.start_from, choice.trace_criteria) == (["thresholding"], "thresholding", [])
     assert choice.criterion_stages == {"1": ["thresholding"], "2": ["thresholding"], "3": ["thresholding"]}
     assert choose_stages(store, name, ["preprocessing"]).stages == []
+    assert choose_stages(store, name, ["thresholding"]).threshold_from is None      # starting at thresholding thresholds everything
 
 
 def test_a_run_of_the_chosen_stages_brings_every_criterion_back(chain_of_three):

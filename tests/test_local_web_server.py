@@ -279,7 +279,7 @@ def test_project_inputs_config_run_and_files(client):
     started = start_run(client)
     assert started["status"] == "started" and started["stages"] == list(PIPELINE_STAGES)
     events = read_events(client, started["run_id"])
-    assert events[0] == {"type": "stage_progress", "stage": "preprocessing", "done": 0, "total": 1}
+    assert events[0] == {"type": "stage_progress", "stage": "preprocessing", "criterion": "1", "done": 0, "total": 1}
     assert events[-1]["type"] == "run_finished" and "run_report.md" in events[-1]["files"]
     assert read_events(client, started["run_id"]) == events                  # a later connection gets them all again
     assert client.get("/api/projects/p/run/files/run_report.md").text == "report"

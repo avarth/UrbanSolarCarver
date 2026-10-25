@@ -74,6 +74,8 @@ class StartRunReply(BaseModel):
     status: Literal["started", "up_to_date"]
     run_id: str | None              # None when up to date
     stages: list[str]               # the stages the run executes, in pipeline order; empty when up to date
+    # every criterion that is on -> the stages the run executes for it (empty for one the run leaves as it is); empty when up to date
+    criterion_stages: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class InputFileInfo(BaseModel):
