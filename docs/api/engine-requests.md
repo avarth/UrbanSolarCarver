@@ -18,8 +18,9 @@
 | `start_from` | First stage to run (default `preprocessing`); earlier stages are read from `run_folder` |
 | `config` | Optional path of a YAML config |
 | `overrides` | Optional list of `key=value` strings, or a mapping |
+| `trace_criteria` | Chain files only: list of criterion ids to trace again when starting from `preprocessing`; the others reuse their existing preprocessing. Default: all |
 
-When `config` is a chain file (a `criteria:` list), `run` runs the chain through `run_chain` and `overrides` set the shared settings only; `run_folder` then holds `criteria/<id>/...`, `exporting` and `massing` (see [Criteria](../criteria.md)). The reply's `stage_folders` and `manifest` point at the last criterion's folders and at the chain's exporting and massing.
+When `config` is a chain file (a `criteria:` list), `run` runs the chain through `run_chain` and `overrides` set the shared settings only; `run_folder` then holds `criteria/<id>/...`, `exporting` and `massing` (see [Criteria](../criteria.md)). The reply's `stage_folders` and `manifest` point at the last criterion's folders and at the chain's exporting and massing. With `trace_criteria`, every criterion from the first traced one on is thresholded again; the ones before it keep their thresholding.
 
 Without `config`, the config is built in memory from the starting values of the mode named in the overrides (`mode` is required) with the overrides on top; no file is written.
 

@@ -4,11 +4,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Optional, Union
+from typing import TYPE_CHECKING, Collection, Iterable, Optional, Union
 
 from ..chain_config import ChainConfig, load_chain
 from ..run_context import Issue, RunContext, report_progress, run_context, stage_context
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for
+from ._stage_io import load_upstream
 from .exporting import ExportingResult, exporting
 from .massing import MassingResult, massing
 from .preprocessing import preprocessing
@@ -58,6 +59,7 @@ def run_chain(
     produce: Iterable[str] = ("exporting",),
     start_from: str = "preprocessing",
     context: Optional[RunContext] = None,
+    trace: Optional[Collection[str]] = None,
 ) -> ChainResult:
     """Carve the criteria of *chain* one after the other on one voxel grid, then build from the last.
 
@@ -83,6 +85,11 @@ def run_chain(
         Progress callback and cancel flag for the run. Progress is reported under ``criterion <id>`` for the
         criteria, and the issues of a criterion's stages are named ``criterion <id> (<stage>)``. Without a context,
         one that also forwards issues to ``warnings`` is created.
+    trace : collection of str | None
+        With ``start_from="preprocessing"``: the ids of the criteria to trace again. The others read their existing
+        ``criteria/<id>/preprocessing`` folder, and every criterion from the first traced one on is thresholded
+        again (the ones before it keep their thresholding, which the first thresholded one decides after).
+        Default: trace every criterion. Ignored for the other values of *start_from*.
 
     Returns
     -------
@@ -92,9 +99,11 @@ def run_chain(
     Raises
     ------
     ValueError
-        If *produce* is empty or names an unknown stage, or *start_from* is not on the path to a produced stage.
+        If *produce* is empty or names an unknown stage, *start_from* is not on the path to a produced stage, or
+        *trace* names no criterion of the chain.
     StageChainError
-        If a folder to read before ``start_from`` has no usable output; the message names the stage to re-run.
+        If a folder to read before ``start_from`` (or the preprocessing folder of a criterion that *trace* leaves
+        out) has no usable output; the message names the stage to re-run.
     RunCancelled
         If the context is cancelled; stages that finished keep their output.
     """
@@ -123,24 +132,34 @@ def run_chain(
         criteria = chain.criteria
         stages_to_run = path[path.index(start_from):]
         ran = [stage for stage in _CRITERION_STAGES if stage in stages_to_run]
+        if trace is not None and start_from == "preprocessing" and not {c.id for c in criteria} & set(trace):
+            raise ValueError(f"trace names no criterion of the chain (ids {[c.id for c in criteria]}): {sorted(trace)}")
         if "thresholding" in ran:
             # A run that stops before the last criterion must not leave a list that names the earlier run.
             (run_folder / CRITERIA_FOLDER / CHAIN_FILE).unlink(missing_ok=True)
 
         previous = None
+        thresholding_run_ids = []
+        thresholding_started = False
         for position, criterion in enumerate(criteria, start=1):
             with stage_context(f"criterion {criterion.id}"):
                 context.raise_if_cancelled()
                 report_progress(position - 1, len(criteria))
                 first_new_issue = len(context.issues)
                 pre = thr = None
-                if "preprocessing" in ran:
-                    pre = preprocessing(criterion.config, criterion_folder(run_folder, criterion.id, "preprocessing"))
+                pre_folder = criterion_folder(run_folder, criterion.id, "preprocessing")
+                thr_folder = criterion_folder(run_folder, criterion.id, "thresholding")
+                if "preprocessing" in ran and (trace is None or criterion.id in trace):
+                    pre = preprocessing(criterion.config, pre_folder)
+                    thresholding_started = True
+                if "thresholding" in ran and (thresholding_started or "preprocessing" not in ran):
+                    thr = thresholding(pre if pre is not None else pre_folder, criterion.config, thr_folder,
+                                       after=previous)
+                # A criterion that is not thresholded keeps its thresholding folder, which the next one reads.
+                previous = thr if thr is not None else thr_folder
                 if "thresholding" in ran:
-                    pre_input = pre if pre is not None else criterion_folder(run_folder, criterion.id, "preprocessing")
-                    thr = thresholding(pre_input, criterion.config,
-                                       criterion_folder(run_folder, criterion.id, "thresholding"), after=previous)
-                    previous = thr
+                    thresholding_run_ids.append(
+                        thr.run_id if thr is not None else load_upstream(thr_folder, "thresholding").manifest.run_id)
                 _name_the_criterion(context, first_new_issue, criterion.id)
                 report_progress(position, len(criteria))
             criteria_results.append(PipelineResult(
@@ -148,9 +167,9 @@ def run_chain(
                 issues=tuple(context.issues[first_new_issue:])))
 
         if "thresholding" in ran:
-            _write_chain_file(run_folder, chain, criteria_results)
+            _write_chain_file(run_folder, chain, thresholding_run_ids)
 
-        last = previous if previous is not None else criterion_folder(run_folder, criteria[-1].id, "thresholding")
+        last = previous
         for stage, function in (("exporting", exporting), ("massing", massing)):
             if stage not in stages_to_run:
                 continue
@@ -171,11 +190,11 @@ def run_chain(
     )
 
 
-def _write_chain_file(run_folder: Path, chain: ChainConfig, results) -> None:
+def _write_chain_file(run_folder: Path, chain: ChainConfig, thresholding_run_ids) -> None:
     """``criteria/chain.json``: each criterion's id, display name, mode and thresholding run, for the run report."""
     listed = [{"id": criterion.id, "name": criterion.name, "mode": criterion.config.mode,
-               "thresholding_run_id": result.thresholding.run_id}
-              for criterion, result in zip(chain.criteria, results)]
+               "thresholding_run_id": run_id}
+              for criterion, run_id in zip(chain.criteria, thresholding_run_ids)]
     folder = run_folder / CRITERIA_FOLDER
     folder.mkdir(parents=True, exist_ok=True)
     (folder / CHAIN_FILE).write_text(json.dumps({"criteria": listed}, indent=2), encoding="utf-8")

@@ -1,6 +1,7 @@
 """run_chain: criteria carved in sequence on one voxel grid, then exporting and massing from the last (daylight and
 tilted plane on a box with two facades, CPU, no EPW needed). Each test runs preprocessing several times."""
 import json
+import shutil
 
 import numpy as np
 import pytest
@@ -139,3 +140,65 @@ def test_a_criterions_scores_in_a_chain_equal_an_unchained_run_of_its_config(tmp
     alone = preprocessing(chain.criteria[1].config, tmp_path / "alone")
     in_chain = np.load(tmp_path / "run/criteria/2/preprocessing/scores.npy")
     assert np.array_equal(in_chain, np.load(alone.out_dir / "scores.npy"))
+
+
+def _run_id(folder):
+    """The run id in the manifest of a stage folder."""
+    return json.loads((folder / "manifest.json").read_text())["run_id"]
+
+
+def test_tracing_one_criterion_reuses_the_rays_of_the_others(tmp_path):
+    out = tmp_path / "run"
+    chain = _two_criteria(tmp_path)
+    run_chain(chain, out)
+    scores_1 = out / "criteria/1/preprocessing/scores.npy"
+    mtime_1 = scores_1.stat().st_mtime_ns
+    old = {name: _run_id(out / folder) for name, folder in (
+        ("thr_1", "criteria/1/thresholding"), ("pre_2", "criteria/2/preprocessing"),
+        ("thr_2", "criteria/2/thresholding"), ("export", "exporting"))}
+    again = run_chain(chain, out, trace={"2"})
+    assert scores_1.stat().st_mtime_ns == mtime_1
+    assert _run_id(out / "criteria/1/thresholding") == old["thr_1"]
+    assert _run_id(out / "criteria/2/preprocessing") != old["pre_2"]
+    assert _run_id(out / "criteria/2/thresholding") != old["thr_2"]
+    assert _run_id(out / "exporting") != old["export"]
+    first, second = again.criteria
+    assert first.preprocessing is None and first.thresholding is None
+    assert second.preprocessing is not None and second.thresholding is not None and again.exporting is not None
+    # Criterion 2 decided among the voxels criterion 1 kept before, and the chain list still names that run.
+    manifest_2 = json.loads((out / "criteria/2/thresholding/manifest.json").read_text())
+    assert manifest_2["after_run_id"] == old["thr_1"]
+    listed = json.loads((out / "criteria/chain.json").read_text())["criteria"]
+    assert [row["thresholding_run_id"] for row in listed] == [old["thr_1"], second.thresholding.run_id]
+
+
+def test_tracing_the_first_rethresholds_the_ones_after(tmp_path):
+    out = tmp_path / "run"
+    chain = _two_criteria(tmp_path)
+    run_chain(chain, out)
+    scores_2 = out / "criteria/2/preprocessing/scores.npy"
+    mtime_2 = scores_2.stat().st_mtime_ns
+    old_pre_2 = _run_id(out / "criteria/2/preprocessing")
+    old_thr_2 = _run_id(out / "criteria/2/thresholding")
+    again = run_chain(chain, out, trace={"1"})
+    assert scores_2.stat().st_mtime_ns == mtime_2 and _run_id(out / "criteria/2/preprocessing") == old_pre_2
+    first, second = again.criteria
+    assert first.preprocessing is not None and first.thresholding is not None
+    assert second.preprocessing is None and second.thresholding is not None
+    assert second.thresholding.run_id != old_thr_2
+    manifest_2 = json.loads((out / "criteria/2/thresholding/manifest.json").read_text())
+    assert manifest_2["after_run_id"] == first.thresholding.run_id
+
+
+def test_tracing_no_criterion_of_the_chain_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="trace"):
+        run_chain(_two_criteria(tmp_path), tmp_path / "run", trace={"7"})
+
+
+def test_tracing_a_criterion_without_the_preprocessing_of_a_later_one_names_the_folder(tmp_path):
+    out = tmp_path / "run"
+    chain = _two_criteria(tmp_path)
+    run_chain(chain, out, produce=("thresholding",))
+    shutil.rmtree(out / "criteria/2/preprocessing")
+    with pytest.raises(StageChainError, match=r"criteria.2.preprocessing"):
+        run_chain(chain, out, produce=("thresholding",), trace={"1"})

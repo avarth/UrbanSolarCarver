@@ -44,7 +44,7 @@ The `PipelineResult` has one attribute per stage (`preprocessing`, `thresholding
 
 ## run_chain
 
-`run_chain(chain, out_dir=None, produce=("exporting",), start_from="preprocessing", context=None)` runs the criteria of a chain file in order on one voxel grid, then exporting and massing from the last (see [Criteria](../criteria.md)). *chain* is a path or a `ChainConfig` from `load_chain`. Each criterion's stages write to `<out_dir>/criteria/<id>/<stage>`, and a criterion's thresholding takes the previous criterion's as `after`. It returns a `ChainResult`: one `PipelineResult` per criterion in `criteria`, then `exporting`, `massing` and the `issues` of the call.
+`run_chain(chain, out_dir=None, produce=("exporting",), start_from="preprocessing", context=None, trace=None)` runs the criteria of a chain file in order on one voxel grid, then exporting and massing from the last (see [Criteria](../criteria.md)). *chain* is a path or a `ChainConfig` from `load_chain`. Each criterion's stages write to `<out_dir>/criteria/<id>/<stage>`, and a criterion's thresholding takes the previous criterion's as `after`. It returns a `ChainResult`: one `PipelineResult` per criterion in `criteria`, then `exporting`, `massing` and the `issues` of the call. With `trace` (ids of criteria), only those criteria run preprocessing again and the others read their existing preprocessing folder; every criterion from the first traced one on is thresholded again.
 
 ::: urbansolarcarver.api_core.chain
     options:

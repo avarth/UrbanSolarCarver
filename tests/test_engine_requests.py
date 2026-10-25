@@ -343,6 +343,28 @@ def test_after_is_a_key_of_the_stage_request():
     assert parse_engine_request({"cmd": "thresholding", "config": "c.yaml", "from": "p"}).after is None
 
 
+def test_a_chain_run_request_passes_trace_criteria(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+    from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
+    from urbansolarcarver import api
+    chain_scene(tmp_path).chain_config(tmp_path / "chain", [daylight_on_south(0.3), daylight_on_east(0.3)])
+    config = str(tmp_path / "chain" / "chain.yaml")
+    seen = []
+
+    def fake_run_chain(chain, out_dir, produce, start_from, context, trace=None):
+        seen.append(trace)
+        stage = SimpleNamespace(run_id="r")
+        return SimpleNamespace(criteria=(SimpleNamespace(preprocessing=stage, thresholding=stage),),
+                               exporting=None, massing=None)
+
+    monkeypatch.setattr(api, "run_chain", fake_run_chain)
+    for extra, expected in (({"trace_criteria": ["2"]}, ["2"]), ({}, None)):
+        reply = answer_engine_message({"cmd": "run", "produce": ["thresholding"], "config": config,
+                                       "run_folder": str(tmp_path / "run"), **extra}, _CountingSession())
+        assert reply["status"] == "ok", reply
+        assert seen[-1] == expected
+
+
 @pytest.mark.slow
 def test_a_run_request_on_a_chain_file_replies_from_the_last_criterion(tmp_path):
     from _chain_scene import chain_scene, daylight_on_east, daylight_on_south
