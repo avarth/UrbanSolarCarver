@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import logging
 import os
 import tempfile
 import threading
@@ -49,6 +50,7 @@ from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_score_points
 from .stage_records import envelope_voxel_size, stage_status_reply
 
+_log = logging.getLogger(__name__)
 API_PREFIX = "/api"
 TOKEN_HEADER = "X-USC-Token"
 TOKEN_QUERY_PARAMETER = "token"
@@ -386,6 +388,11 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     @router.get("/projects/{name}")
     def open_project(name: str) -> ProjectDetail:
         store = folder_in_use.store
+        store.open(name)    # 404 for an unknown project, before the repairs
+        try:
+            store.migrate_to_criteria(name)
+        except Exception:   # the project is as it was, and opens so; a run tries again and reports the error
+            _log.exception("Project '%s' could not be made a chain of one criterion, so it opens as it was", name)
         try:
             store.rebuild_joined_test_surfaces_without_normals(name)
         except ProjectError:

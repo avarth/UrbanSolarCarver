@@ -157,6 +157,7 @@ class RunWorker:
         with self._store.project_lock(name), self._start_lock:
             if self._active is not None:
                 raise RunConflict(self._active.state.project)
+            self._store.migrate_to_criteria(name)
             self._store.rebuild_joined_test_surfaces_without_normals(name)
             config = self._store.load_project_config(name)
             absent_roles = missing_inputs(self._store, name, config)

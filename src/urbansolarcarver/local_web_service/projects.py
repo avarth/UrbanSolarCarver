@@ -364,10 +364,14 @@ class ProjectStore:
         project's own are put in. When the joined max volume exists, the voxel grid it and the
         voxel size give is planned, and a grid over the engine's budget raises GridOverBudget.
         Nothing is stored unless the settings are valid, and the chain they make with the other criteria is. ConfigError propagates.
+        A project of an earlier version is made a chain of one first (migrate_to_criteria), so its first criterion keeps its run
+        folders and test surfaces; an error of that migration propagates, and nothing is stored.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
+            if not project_json.criteria and self.migrate_to_criteria(name):
+                project_json = self.read_project_json(name)
             entry = self._criterion_for_settings(project_json, criterion_id)
             target_id = entry.id if entry is not None else str(project_json.next_criterion_id)
             config, service_paths = self._config_from_browser_values(project_folder, values, target_id)
@@ -884,6 +888,13 @@ class ProjectStore:
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
             return chain_step
+
+    def migrate_to_criteria(self, name: str) -> bool:
+        """Make a project of an earlier version a chain of one criterion, its results kept current (migration.py); whether it was
+        one. A project that has criteria is left as it is (False). Called when a project is opened, when a run starts and before
+        a settings save; on an error the project is as it was."""
+        from .migration import migrate_to_criteria     # migration.py builds on this module
+        return migrate_to_criteria(self, name)
 
     def rebuild_joined_test_surfaces_without_normals(self, name: str) -> bool:
         """Rebuild the joined test surface files that have no vertex normals and raise inputs_revision; whether any was rebuilt.

@@ -423,6 +423,73 @@ def write_fake_finished_run(tmp_path, obstruction_fraction_carved=None):
     return run
 
 
+EARLIER_JOINED_TEST_SURFACES = "inputs/joined/test_surfaces.ply"     # the one joined test surface file of an earlier version
+
+
+def write_earlier_version_project(store: ProjectStore, name: str, stages: Collection[str] = PIPELINE_STAGES,
+                                  carved_further: bool = False) -> None:
+    """A daylight project as an earlier version of the service left it: project.json without criteria, a config.yaml of one
+    criterion (the flat form), its test surface file joined in inputs/joined/test_surfaces.ply, and for each of *stages* the
+    folder of the single-criterion run layout (run/<stage>, manifests as the engine writes them, after write_fake_finished_run)
+    with the stage's record in stage_records. The stages written are current as that version told it: each record holds the
+    config.yaml content, the inputs revision and the run id of its manifest, and each manifest names its upstream's run id.
+
+    *carved_further*: the project was carved further once (the Allatini form), so its maximum volume is carved_envelope_1.ply,
+    the uploaded one is in inputs/earlier_max_volumes/1/ and project.json has a carving_chain step.
+    """
+    store.create(name, "daylight")
+    store.add_input(name, "max_volume", "volume.ply", box_bytes([0, 0, 5]))
+    store.add_input(name, "test_surfaces", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
+    project_folder = store.open(name)
+    if carved_further:
+        envelope_path = project_folder / "envelope.ply"
+        envelope_path.write_bytes(box_bytes([0, 0, 3], extents=(8, 8, 6)))
+        store.replace_max_volume_with_envelope(name, envelope_path, "daylight", store.read_settings(name))
+        envelope_path.unlink()
+    config = {**store.read_stored_config(name), "test_surface_path": EARLIER_JOINED_TEST_SURFACES}
+    os.replace(test_surfaces.joined_path(project_folder, "1"), project_folder / EARLIER_JOINED_TEST_SURFACES)
+    (project_folder / "config.yaml").write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    run = project_folder / "run"
+    run_ids = {"preprocessing": "pre-run", "thresholding": "thr-run", "exporting": "exp-run", "massing": "mas-run"}
+    if "preprocessing" in stages:
+        (run / "preprocessing").mkdir(parents=True)
+        np.save(run / "preprocessing" / "voxel_grid.npy", np.ones((4, 3, 2), dtype=bool))
+        np.save(run / "preprocessing" / "scores.npy", np.arange(24, dtype=np.float32).reshape(4, 3, 2))
+        (run / "preprocessing" / "manifest.json").write_text(schema_to_json(PreprocessingManifest(
+            run_id="pre-run", scores_path="scores.npy", scores_kind="weighted_sum", shape=(4, 3, 2), origin=(-5.0, -5.0, 0.0),
+            voxel_size=2.0, mode="daylight", voxel_grid_path="voxel_grid.npy", sample_point_count=5, grid_step=0.5,
+            score_unit=MODES["daylight"].score_unit, footprint_path="footprint.json", max_volume_lowest_z=0.0,
+            max_volume_highest_z=10.0)), encoding="utf-8")
+    if "thresholding" in stages:
+        (run / "thresholding").mkdir(parents=True)
+        np.save(run / "thresholding" / "mask.npy", np.arange(24).reshape(4, 3, 2) % 2 == 0)
+        write_diagnostic(run / "thresholding", {"threshold_value": 3.5, "voxels_occupied": 24, "voxels_kept": 12})
+        (run / "thresholding" / "manifest.json").write_text(schema_to_json(ThresholdingManifest(
+            run_id="thr-run", mask_path="mask.npy", upstream_manifest="../preprocessing/manifest.json", upstream_run_id="pre-run",
+            resolved_threshold=ThresholdSpec(method="cutoff", value=1.0), score_smoothing_m=0.0, max_slope_deg=None)), encoding="utf-8")
+    if "exporting" in stages:
+        (run / "exporting").mkdir(parents=True)
+        (run / "exporting" / "export.ply").write_bytes(box_bytes([0, 0, 3], extents=(8, 8, 6)))
+        (run / "exporting" / "manifest.json").write_text(schema_to_json(ExportingManifest(
+            run_id="exp-run", mesh_path="export.ply", upstream_manifest="../thresholding/manifest.json", upstream_run_id="thr-run")),
+            encoding="utf-8")
+    if "massing" in stages:
+        (run / "massing").mkdir(parents=True)
+        (run / "massing" / "plates.json").write_text(
+            json.dumps({"plates": [], "floor_area_m2_per_floor": [120.0, 80.0], "total_floor_area_m2": 200.0}), encoding="utf-8")
+        (run / "massing" / "plates.obj").write_text("", encoding="utf-8")
+        (run / "massing" / "manifest.json").write_text(schema_to_json(MassingManifest(
+            run_id="mas-run", plates_path="plates.json", mesh_path="plates.obj", export_mesh_path="plates.obj",
+            upstream_manifest="../thresholding/manifest.json", upstream_run_id="thr-run")), encoding="utf-8")
+        (run / "run_report.md").write_text("report", encoding="utf-8")
+    with store.project_lock(name):
+        project_json = store.read_project_json(name)
+        records = {stage: StageRecord(config=config, inputs_revision=project_json.inputs_revision, manifest_run_id=run_ids[stage])
+                   for stage in PIPELINE_STAGES if stage in stages}
+        store.write_project_json(name, project_json.model_copy(update={
+            "criteria": [], "next_criterion_id": 1, "criterion_records": {}, "stage_records": records}))
+
+
 def write_fake_finished_run_with_envelope(tmp_path, obstruction_fraction_carved=None):
     """A finished run whose exporting, built on its thresholding run, left 50 voxels of 2 m after its cleanup."""
     run = write_fake_finished_run(tmp_path, obstruction_fraction_carved)
