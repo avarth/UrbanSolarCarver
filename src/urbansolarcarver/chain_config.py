@@ -138,9 +138,12 @@ def load_chain(
                     f"not at the top level", misplaced[0])
 
     ids = [_criterion_id(position, item) for position, item in enumerate(criteria, start=1)]
+    first_use: Dict[str, int] = {}  # by lower-cased id: the id names a folder, and Windows and macOS ignore case there
     for position, value in enumerate(ids, start=1):
-        if ids.index(value) + 1 != position:
-            raise _fail(f"criterion {position}: id {value!r} is already used by criterion {ids.index(value) + 1}", "id")
+        earlier = first_use.setdefault(value.casefold(), position)
+        if earlier != position:
+            raise _fail(f"criterion {position}: id {value!r} is the same as the id {ids[earlier - 1]!r} of criterion "
+                        f"{earlier}, ignoring case (the id names the criterion's output folder)", "id")
 
     built = []
     for item, criterion_id in zip(criteria, ids):
