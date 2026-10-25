@@ -48,7 +48,7 @@ from .projects import (
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_score_points
-from .stage_records import envelope_voxel_size, stage_status_reply
+from .stage_records import stage_status_reply
 
 _log = logging.getLogger(__name__)
 API_PREFIX = "/api"
@@ -492,21 +492,15 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
 
     @router.get("/projects/{name}/run/summary")
     def run_summary(name: str) -> RunSummary:
-        return build_run_summary(run_folder_of(name), envelope_voxel_size=envelope_voxel_size(folder_in_use.store, name))
+        return build_run_summary(folder_in_use.store, name)
 
     @router.get("/projects/{name}/run/sky-patches")
     def run_sky_patches(name: str) -> SkyDome:
-        sky_dome = build_sky_dome(run_folder_of(name))
-        if sky_dome is None:
-            raise ProjectError("This run has no sky patch weights (time-based and tilted plane runs have none).", status_code=404)
-        return sky_dome
+        return build_sky_dome(folder_in_use.store, name)
 
     @router.get("/projects/{name}/run/score-points", response_class=Response, responses={200: {"content": {"application/octet-stream": {}}}})
     def run_score_points(name: str) -> Response:
-        score_points = build_score_points(run_folder_of(name))
-        if score_points is None:
-            raise ProjectError("This project has no scores yet: run the analysis first.", status_code=404)
-        return Response(score_points, media_type="application/octet-stream", headers=NO_CACHE)
+        return Response(build_score_points(folder_in_use.store, name), media_type="application/octet-stream", headers=NO_CACHE)
 
     @router.get("/projects/{name}/run/files/{path:path}")
     def run_file(name: str, path: str) -> FileResponse:

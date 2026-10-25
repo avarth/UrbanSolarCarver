@@ -5,7 +5,7 @@ tests replace by a real mesh before carving further. The fixture project_with_in
 """
 import pytest
 
-from local_web_test_support import change_settings, make_worker, run_and_wait, write_envelope_as_exported
+from local_web_test_support import box_bytes, change_settings, make_worker, run_and_wait, write_envelope_as_exported, write_fake_chain_run
 from urbansolarcarver.local_web_service.carve_further import NEW_PROJECT_MODE, carve_further
 from urbansolarcarver.local_web_service.project_names import ProjectError
 from urbansolarcarver.local_web_service.stage_records import stage_status
@@ -30,6 +30,35 @@ def test_the_envelope_becomes_the_max_volume_and_the_replaced_file_is_kept(built
     assert (store.open(name) / "inputs" / "earlier_max_volumes" / "1" / "volume.ply").read_bytes() == original_volume
     assert store.joined_bounds(name) == [[-4.0, -4.0, 0.0], [4.0, 4.0, 6.0]]
     assert [file.name for file in store.input_files(name, "test_surfaces")] == ["surface.ply"]
+
+
+def test_carve_further_still_works_on_a_chain_of_one(built_project):
+    """The settings of the only criterion return to a new project's and it stays the project's criterion "1"."""
+    store, name, _ = built_project
+    [entry] = store.criteria(name)
+    carve_further(store, name)
+    assert [criterion.id for criterion in store.criteria(name)] == ["1"]
+    assert store.criteria(name)[0].colour == entry.colour and store.criteria(name)[0].test_surface_files == entry.test_surface_files
+    assert store.read_settings(name, "1")["mode"] == NEW_PROJECT_MODE
+    assert [file.name for file in store.input_files(name, "max_volume")] == ["carved_envelope_1.ply"]
+
+
+def test_a_project_with_several_criteria_refuses_before_any_change(project_with_inputs):
+    """Its settings belong to no single criterion, so it has none to return to a new project's: refused with the max volume,
+    the project and the settings as they were."""
+    store, name = project_with_inputs
+    entry = store.add_criterion(name, "daylight")
+    store.add_criterion_test_surface(name, entry.id, "surface_2.ply", box_bytes([2, 0, 0], extents=(6, 6, 0.1)))
+    write_fake_chain_run(store, name, ["1", "2"])
+    write_envelope_as_exported(store.open(name))
+    before = store.read_project_json(name)
+    settings_before = store.read_settings(name, "1")
+    with pytest.raises(ProjectError) as error:
+        carve_further(store, name)
+    assert error.value.status_code == 409 and str(error.value) == "Carve further works on a project with one criterion."
+    assert store.read_project_json(name) == before and store.read_settings(name, "1") == settings_before
+    assert [file.name for file in store.input_files(name, "max_volume")] == ["volume.ply"]
+    assert not (store.open(name) / "inputs" / "earlier_max_volumes").exists()
 
 
 def test_the_chain_records_the_mode_and_settings_the_envelope_was_carved_with(built_project):

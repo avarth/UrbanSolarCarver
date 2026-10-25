@@ -524,9 +524,7 @@ def test_stage_status_summary_and_sky_dome_routes(projects_folder):
 
 def test_results_of_a_finished_run_are_served(client_with_inputs, tmp_path):
     client = client_with_inputs
-    project_run_folder = ProjectStore(tmp_path / "projects").open("p") / "run"
-    shutil.copytree(write_fake_finished_run_with_envelope(tmp_path / "scratch", obstruction_fraction_carved=0.35), project_run_folder,
-                    dirs_exist_ok=True)
+    write_fake_finished_run_with_envelope(ProjectStore(tmp_path / "projects").open("p"), obstruction_fraction_carved=0.35)
     summary = client.get("/api/projects/p/run/summary").json()
     assert summary["carving"]["voxels_kept"] == 61 and summary["carving"]["obstruction_fraction_carved"] == 0.35
     assert summary["massing"]["total_floor_area_m2"] == 200.0
@@ -539,8 +537,7 @@ def test_results_of_a_finished_run_are_served(client_with_inputs, tmp_path):
 
 def test_sky_dome_of_a_weighted_run(client_with_inputs, tmp_path):
     client = client_with_inputs
-    shutil.copytree(write_fake_run(tmp_path / "scratch", with_patch_weights=True),
-                    ProjectStore(tmp_path / "projects").open("p") / "run", dirs_exist_ok=True)
+    write_fake_run(ProjectStore(tmp_path / "projects").open("p"), with_patch_weights=True)
     dome = client.get("/api/projects/p/run/sky-patches")
     assert dome.status_code == 200
     assert len(dome.json()["directions"]) == len(dome.json()["weights"]) == len(dome.json()["solid_angles"]) == 145

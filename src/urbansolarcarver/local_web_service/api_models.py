@@ -172,11 +172,36 @@ class MassingSummary(BaseModel):
     storeys_built: int
 
 
+class CriterionCarvingSummary(BaseModel):
+    """What one criterion that is on reports for the run summary: its carving, and the volume it started with and kept.
+
+    A criterion whose thresholding has no output is listed too, with its numbers None, so the app can say it has not run yet.
+    """
+    id: str
+    name: str
+    colour: str                         # "#RRGGBB"
+    mode: str
+    carving: CarvingSummary | None      # None without thresholding output
+    voxels_at_start: int | None         # the voxels it could carve: the previous criterion's kept voxels, the max volume's filled ones for the first
+    volume_kept_m3: float | None        # its kept voxels times the voxel size cubed; None without a thresholding and a preprocessing manifest
+
+
+class ChainSummary(BaseModel):
+    """What the chain of criteria that are on kept, from the volumes of the criteria."""
+    volume_after_each_m3: list[float]       # the volume each criterion kept, in chain order
+    share_of_max_volume_kept: float         # the last criterion's kept volume over the filled volume of the maximum volume
+
+
 class RunSummary(BaseModel):
-    """What the finished stages of a run report; a part is None when its stage has no output."""
+    """What the finished stages of a run report; a part is None when its stage has no output.
+
+    ``carving`` describes the last criterion that is on; ``criteria`` has every criterion that is on, in chain order.
+    """
     carving: CarvingSummary | None
     envelope: EnvelopeSummary | None
     massing: MassingSummary | None
+    criteria: list[CriterionCarvingSummary] = Field(default_factory=list)
+    chain: ChainSummary | None = None   # None until every criterion that is on has thresholding output
 
 
 class SkyDome(BaseModel):

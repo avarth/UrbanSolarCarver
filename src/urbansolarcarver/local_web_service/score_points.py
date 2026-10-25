@@ -1,7 +1,8 @@
 """The score layer of the carving screen as one binary blob.
 
 The browser draws the occupied voxels of the grid as points coloured by their score. This
-module reads them from the preprocessing and thresholding outputs of a run and packs them,
+module reads them from the preprocessing and thresholding outputs of one criterion of a run
+(run/criteria/<id>/, by default the last criterion that is on) and packs them,
 thinned to a point budget, in the layout below (all numbers little-endian):
 
 * ``uint32`` length n of the header in bytes;
@@ -18,6 +19,13 @@ Header keys: ``origin``, ``shape``, ``voxel_size``, ``mode`` (of the analysis), 
 null when there are none), ``compared_score_max`` (the same for the compared scores: the highest cutoff that still carves;
 null without compared scores), ``occupied_count``, ``point_count``, ``thinning_step``, ``has_mask``,
 ``has_compared_scores``.
+
+``build_carved_by_criterion`` packs which criterion removed each voxel, in a blob with the same first two parts (length and
+padded JSON header) followed by one ``uint8`` per voxel of the grid in C order: 0 for a voxel the last criterion that is on kept or
+that was never occupied, *k* for a voxel removed by the *k*-th criterion that is on (1-based, in chain order). Header keys:
+``origin``, ``shape``, ``voxel_size``, ``criterion_ids`` (the criteria that are on, in chain order).
+
+The builders raise ProjectError 404 when what they pack is not there: a criterion without output has no results to show.
 """
 from __future__ import annotations
 
@@ -34,17 +42,46 @@ from pydantic import BaseModel
 from ..mode_registry import MODES
 from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest
 from ..stage_settings import stage_folder
+from .api_models import CriterionEntry
+from .criteria import find_criterion
+from .project_names import ProjectError
+from .projects import RUN_FOLDER, ProjectStore
+from .stage_records import CRITERIA_FOLDER
 
 SCORE_POINTS_CAP = 1_000_000
 MANIFEST_FILE_NAME = "manifest.json"
 HEADER_ALIGNMENT_BYTES = 4
 
+NO_SCORES_MESSAGE = "This project has no scores yet: run the analysis first."
+
 StageManifest = TypeVar("StageManifest", bound=BaseModel)
 
 
-def read_stage_manifest(run_folder: Path, stage: str, manifest_class: type[StageManifest]) -> tuple[StageManifest, Path] | None:
-    """The manifest of a stage of the run and the folder it lives in; None when the stage has no readable manifest."""
-    stage_folder_path = stage_folder(run_folder, stage)
+def active_criteria(store: ProjectStore, name: str) -> list[CriterionEntry]:
+    """The criteria that are on, in chain order; a bypassed criterion is not one of them."""
+    return [criterion for criterion in store.criteria(name) if not criterion.bypassed]
+
+
+def chosen_criterion_id(store: ProjectStore, name: str, criterion_id: str | None) -> str:
+    """*criterion_id* (ProjectError 404 when the project has no such criterion), or the last criterion that is on for None
+    (ProjectError 404 when none is on)."""
+    if criterion_id is not None:
+        return find_criterion(store.read_project_json(name), criterion_id).id
+    active = active_criteria(store, name)
+    if not active:
+        raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
+    return active[-1].id
+
+
+def read_stage_manifest(run_folder: Path, stage: str, manifest_class: type[StageManifest],
+                        criterion_id: str | None = None) -> tuple[StageManifest, Path] | None:
+    """The manifest of a stage of the run and the folder it lives in; None when the stage has no readable manifest.
+
+    Preprocessing and thresholding are read from the folder of the criterion *criterion_id* (run/criteria/<id>/<stage>);
+    without one, from run/<stage> (exporting and massing).
+    """
+    stage_folder_path = (stage_folder(run_folder, stage) if criterion_id is None
+                         else Path(run_folder) / CRITERIA_FOLDER / criterion_id / stage)
     try:
         manifest = manifest_class.model_validate_json((stage_folder_path / MANIFEST_FILE_NAME).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -58,17 +95,20 @@ def resolve_stored_path(manifest_folder: Path, stored_path: str) -> Path:
     return path if path.is_absolute() else Path(os.path.normpath(manifest_folder / path))
 
 
-def build_score_points(run_folder: Path, cap: int = SCORE_POINTS_CAP) -> bytes | None:
-    """The score layer of a run (layout in the module description); None without preprocessing output.
+def build_score_points(store: ProjectStore, name: str, criterion_id: str | None = None, cap: int = SCORE_POINTS_CAP) -> bytes:
+    """The score layer of a criterion of the project's run (layout in the module description); the last criterion that is on
+    unless *criterion_id* names one.
 
+    ProjectError 404 without preprocessing output of the criterion (or an unknown criterion, or none that is on).
     More than ``cap`` occupied voxels are thinned to every ``thinning_step``-th one in grid order.
     The kept mask and the compared scores come from thresholding and are left out when thresholding
     has not run on this preprocessing output.
     """
-    run_folder = Path(run_folder)
-    preprocessing = read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest)
+    run_folder = store.open(name) / RUN_FOLDER
+    criterion_id = chosen_criterion_id(store, name, criterion_id)
+    preprocessing = read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest, criterion_id)
     if preprocessing is None:
-        return None
+        raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
     preprocessing_manifest, preprocessing_folder = preprocessing
     voxel_grid = np.load(resolve_stored_path(preprocessing_folder, preprocessing_manifest.voxel_grid_path))
     all_scores = np.load(resolve_stored_path(preprocessing_folder, preprocessing_manifest.scores_path)).ravel()
@@ -81,7 +121,7 @@ def build_score_points(run_folder: Path, cap: int = SCORE_POINTS_CAP) -> bytes |
     occupied_scores = all_scores[occupied_indices]
     finite_occupied_scores = occupied_scores[np.isfinite(occupied_scores)]     # the engine warns about NaN scores, so they occur
 
-    kept_mask, compared_scores = _thresholding_arrays(run_folder, preprocessing_manifest.run_id)
+    kept_mask, compared_scores = _thresholding_arrays(run_folder, criterion_id, preprocessing_manifest.run_id)
     finite_occupied_compared = (None if compared_scores is None
                                 else compared_scores[occupied_indices][np.isfinite(compared_scores[occupied_indices])])
     header = {
@@ -114,9 +154,10 @@ def build_score_points(run_folder: Path, cap: int = SCORE_POINTS_CAP) -> bytes |
     return b"".join(blob_parts)
 
 
-def _thresholding_arrays(run_folder: Path, preprocessing_run_id: str) -> tuple[np.ndarray | None, np.ndarray | None]:
-    """The flat kept mask and compared scores of the thresholding run built on this preprocessing run; None for a missing one."""
-    thresholding = read_stage_manifest(run_folder, "thresholding", ThresholdingManifest)
+def _thresholding_arrays(run_folder: Path, criterion_id: str,
+                         preprocessing_run_id: str) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """The flat kept mask and compared scores of the criterion's thresholding run built on this preprocessing run; None for a missing one."""
+    thresholding = read_stage_manifest(run_folder, "thresholding", ThresholdingManifest, criterion_id)
     if thresholding is None:
         return None, None
     thresholding_manifest, thresholding_folder = thresholding
@@ -126,3 +167,48 @@ def _thresholding_arrays(run_folder: Path, preprocessing_run_id: str) -> tuple[n
     compared_path = thresholding_manifest.scores_compared_with_cutoff_path
     compared_scores = None if compared_path is None else np.load(resolve_stored_path(thresholding_folder, compared_path)).ravel()
     return kept_mask, compared_scores
+
+
+def build_carved_by_criterion(store: ProjectStore, name: str) -> bytes:
+    """Which criterion removed each voxel of the grid (layout in the module description).
+
+    A voxel removed by criterion *k* was kept before it (in the mask of the criterion before it that is on, or occupied in the
+    maximum volume's voxel grid for the first) and is not kept in its own mask. ProjectError 404 when no criterion is on, a
+    criterion that is on has no thresholding output, or the outputs of the criteria are on grids of different shapes.
+    """
+    run_folder = store.open(name) / RUN_FOLDER
+    active = active_criteria(store, name)
+    preprocessing = (None if not active
+                     else read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest, active[0].id))
+    if preprocessing is None:
+        raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
+    preprocessing_manifest, preprocessing_folder = preprocessing
+    kept_before = np.load(resolve_stored_path(preprocessing_folder, preprocessing_manifest.voxel_grid_path)).astype(bool)
+    carved_by = np.zeros(kept_before.shape, dtype="u1")
+    for position, criterion in enumerate(active, start=1):
+        kept = _kept_mask(run_folder, criterion.id)
+        if kept.shape != kept_before.shape:
+            raise ProjectError("The results of the criteria are on different grids: run the analysis again.", status_code=404)
+        carved_by[kept_before & ~kept] = position
+        kept_before = kept
+    header = {
+        "origin": list(preprocessing_manifest.origin),
+        "shape": list(preprocessing_manifest.shape),
+        "voxel_size": preprocessing_manifest.voxel_size,
+        "criterion_ids": [criterion.id for criterion in active],
+    }
+    header_bytes = json.dumps(header, allow_nan=False).encode("utf-8")
+    header_bytes += b" " * (-len(header_bytes) % HEADER_ALIGNMENT_BYTES)
+    return b"".join([struct.pack("<I", len(header_bytes)), header_bytes, carved_by.tobytes()])
+
+
+def _kept_mask(run_folder: Path, criterion_id: str) -> np.ndarray:
+    """The kept mask of a criterion's thresholding run; ProjectError 404 when it has none."""
+    thresholding = read_stage_manifest(run_folder, "thresholding", ThresholdingManifest, criterion_id)
+    if thresholding is not None:
+        manifest, manifest_folder = thresholding
+        try:
+            return np.load(resolve_stored_path(manifest_folder, manifest.mask_path)).astype(bool)
+        except OSError:
+            pass
+    raise ProjectError(f"Criterion {criterion_id} has no results yet: run the analysis first.", status_code=404)

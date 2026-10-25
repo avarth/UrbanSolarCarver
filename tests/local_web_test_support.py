@@ -365,11 +365,23 @@ def run_and_wait(worker: RunWorker, name: str, produce: list[str]):
 
 # ---- Run folders of finished runs ----
 
+def fake_run_id(stage: str, criterion_id: str) -> str:
+    """The run_id the fake run folders give a criterion's stage: "pre-run" and "thr-run" for criterion "1", then with the id."""
+    return f"{stage}-run" if criterion_id == "1" else f"{stage}-run-{criterion_id}"
+
+
 def write_fake_run(tmp_path, shape=(4, 3, 2), with_mask=True, with_compared_scores=False, with_patch_weights=False,
-                   thresholding_upstream_run_id="pre-run"):
-    """Write the preprocessing (and thresholding) outputs of a run; every voxel with i < 3 is occupied."""
+                   thresholding_upstream_run_id=None, criterion_id="1", mask=None, after_criterion_id=None):
+    """Write the preprocessing (and thresholding) outputs of one criterion of a run, in the chain layout
+    (run/criteria/<criterion_id>/{preprocessing,thresholding}); every voxel with i < 3 is occupied. Returns the run folder,
+    which a second call with another *criterion_id* adds a criterion to.
+
+    *mask* is the kept mask (default: the voxels with an even flat index); *after_criterion_id* names the criterion whose
+    thresholding this one was decided after (its manifest's after_manifest and after_run_id); *thresholding_upstream_run_id*
+    is the preprocessing run the thresholding read (default: the one written here).
+    """
     run = tmp_path / "run"
-    preprocessing = run / "preprocessing"
+    preprocessing = run / "criteria" / criterion_id / "preprocessing"
     preprocessing.mkdir(parents=True)
     voxel_grid = np.zeros(shape, dtype=bool)
     voxel_grid[:3] = True
@@ -379,23 +391,27 @@ def write_fake_run(tmp_path, shape=(4, 3, 2), with_mask=True, with_compared_scor
     if with_patch_weights:
         np.save(preprocessing / "patch_weights.npy", np.linspace(0.0, 1.0, 145, dtype=np.float32))
     (preprocessing / "manifest.json").write_text(schema_to_json(PreprocessingManifest(
-        run_id="pre-run", scores_path="scores.npy", scores_kind="violation_count", shape=shape, origin=(10.0, 20.0, 30.0),
-        voxel_size=2.0, mode="time-based", voxel_grid_path="voxel_grid.npy",
+        run_id=fake_run_id("pre", criterion_id), scores_path="scores.npy", scores_kind="violation_count", shape=shape,
+        origin=(10.0, 20.0, 30.0), voxel_size=2.0, mode="time-based", voxel_grid_path="voxel_grid.npy",
         patch_weights_path="patch_weights.npy" if with_patch_weights else None,
         sample_point_count=5, footprint_path="footprint.json", max_volume_lowest_z=30.0, max_volume_highest_z=34.0)),
         encoding="utf-8")
     if with_mask:
-        thresholding = run / "thresholding"
+        thresholding = run / "criteria" / criterion_id / "thresholding"
         thresholding.mkdir()
-        np.save(thresholding / "mask.npy", raw_scores % 2 == 0)
+        np.save(thresholding / "mask.npy", raw_scores % 2 == 0 if mask is None else mask)
         compared_path = None
         if with_compared_scores:
             np.save(thresholding / "scores_compared_with_cutoff.npy", raw_scores + 100)
             compared_path = "scores_compared_with_cutoff.npy"
+        after = {} if after_criterion_id is None else {
+            "after_manifest": f"../../{after_criterion_id}/thresholding/manifest.json",
+            "after_run_id": fake_run_id("thr", after_criterion_id)}
         (thresholding / "manifest.json").write_text(schema_to_json(ThresholdingManifest(
-            run_id="thr-run", mask_path="mask.npy", scores_compared_with_cutoff_path=compared_path,
-            upstream_manifest="../preprocessing/manifest.json", upstream_run_id=thresholding_upstream_run_id,
-            resolved_threshold=ThresholdSpec(method="cutoff", value=1.0), score_smoothing_m=0.0, max_slope_deg=None)),
+            run_id=fake_run_id("thr", criterion_id), mask_path="mask.npy", scores_compared_with_cutoff_path=compared_path,
+            upstream_manifest="../preprocessing/manifest.json",
+            upstream_run_id=fake_run_id("pre", criterion_id) if thresholding_upstream_run_id is None else thresholding_upstream_run_id,
+            resolved_threshold=ThresholdSpec(method="cutoff", value=1.0), score_smoothing_m=0.0, max_slope_deg=None, **after)),
             encoding="utf-8")
     return run
 
@@ -405,21 +421,30 @@ def write_diagnostic(stage_folder: Path, content: dict) -> None:
     (stage_folder / "diagnostics" / "diagnostic.json").write_text(json.dumps(content), encoding="utf-8")
 
 
-def write_fake_finished_run(tmp_path, obstruction_fraction_carved=None):
-    run = write_fake_run(tmp_path)
-    thresholding_diagnostic = {
-        "threshold_value": 3.5, "voxels_occupied": 100, "voxels_kept": 61, "voxels_removed": 39, "retention_pct": 61.0,
+def thresholding_diagnostic(voxels_at_start=100, voxels_kept=61, obstruction_fraction_carved=None) -> dict:
+    """The diagnostic.json content of a thresholding run that decided among *voxels_at_start* voxels and kept *voxels_kept*."""
+    diagnostic = {
+        "threshold_value": 3.5, "voxels_occupied": voxels_at_start, "voxels_kept": voxels_kept,
+        "voxels_removed": voxels_at_start - voxels_kept, "voxels_at_start": voxels_at_start,
+        "retention_pct": round(100.0 * voxels_kept / voxels_at_start, 2),
         "carve_above_extra_voxels_removed": 4, "slope_limit_extra_voxels_removed": 2, "threshold_method": "cutoff"}
     if obstruction_fraction_carved is not None:
-        thresholding_diagnostic["obstruction_fraction_carved"] = obstruction_fraction_carved
-    write_diagnostic(run / "thresholding", thresholding_diagnostic)
+        diagnostic["obstruction_fraction_carved"] = obstruction_fraction_carved
+    return diagnostic
+
+
+def write_fake_finished_run(tmp_path, obstruction_fraction_carved=None):
+    """write_fake_run of criterion "1" with its thresholding diagnostic (100 voxels decided about, 61 kept) and massing."""
+    run = write_fake_run(tmp_path)
+    write_diagnostic(run / "criteria" / "1" / "thresholding", thresholding_diagnostic(
+        voxels_at_start=100, voxels_kept=61, obstruction_fraction_carved=obstruction_fraction_carved))
     (run / "massing").mkdir()
     (run / "massing" / "plates.json").write_text(
         json.dumps({"plates": [], "floor_area_m2_per_floor": [120.0, 80.0], "total_floor_area_m2": 200.0}), encoding="utf-8")
     write_diagnostic(run / "massing", {"floors": 3, "floors_built": 2, "envelope_volume_m3": 4321.5})
     (run / "massing" / "manifest.json").write_text(schema_to_json(MassingManifest(
         run_id="mas-run", plates_path="plates.json", mesh_path="plates.obj", export_mesh_path="plates.stl",
-        upstream_manifest="../thresholding/manifest.json", upstream_run_id="thr-run")), encoding="utf-8")
+        upstream_manifest="../criteria/1/thresholding/manifest.json", upstream_run_id="thr-run")), encoding="utf-8")
     return run
 
 
@@ -495,6 +520,6 @@ def write_fake_finished_run_with_envelope(tmp_path, obstruction_fraction_carved=
     run = write_fake_finished_run(tmp_path, obstruction_fraction_carved)
     write_diagnostic(run / "exporting", {"voxels_original": 100, "voxels_retained": 50})
     (run / "exporting" / "manifest.json").write_text(schema_to_json(ExportingManifest(
-        run_id="exp-run", mesh_path="export.ply", upstream_manifest="../thresholding/manifest.json", upstream_run_id="thr-run")),
-        encoding="utf-8")
+        run_id="exp-run", mesh_path="export.ply", upstream_manifest="../criteria/1/thresholding/manifest.json",
+        upstream_run_id="thr-run")), encoding="utf-8")
     return run

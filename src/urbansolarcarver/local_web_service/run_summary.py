@@ -1,7 +1,8 @@
 """What a run reports to the browser besides its meshes: the summary numbers, the sky dome and the sun path.
 
-The numbers come from the diagnostics the stages wrote, the sky dome from the patch weights of
-preprocessing, and the sun path from the stored settings alone (it needs no run).
+The numbers come from the diagnostics the stages wrote (the carving numbers of each criterion that is on from its own
+folder, run/criteria/<id>/), the sky dome from the patch weights of a criterion's preprocessing, and the sun path from the
+stored settings alone (it needs no run).
 """
 from __future__ import annotations
 
@@ -13,8 +14,16 @@ import numpy as np
 from ..mode_registry import canonical_mode_name
 from ..pydantic_schemas import ExportingManifest, MassingManifest, PreprocessingManifest, UserConfig
 from ..stage_settings import stage_folder
-from .api_models import CarvingSummary, EnvelopeSummary, MassingSummary, RunSummary, SkyDome, SunMarker, SunPath, SunPathDay
-from .score_points import read_stage_manifest, resolve_stored_path
+from .api_models import (
+    CarvingSummary, ChainSummary, CriterionCarvingSummary, CriterionEntry, EnvelopeSummary, MassingSummary, RunSummary, SkyDome,
+    SunMarker, SunPath, SunPathDay,
+)
+from .project_names import ProjectError
+from .projects import RUN_FOLDER, ProjectStore
+from .score_points import (
+    CRITERIA_FOLDER, NO_SCORES_MESSAGE, active_criteria, chosen_criterion_id, read_stage_manifest, resolve_stored_path,
+)
+from .stage_records import envelope_voxel_size
 
 DIAGNOSTIC_PATH = Path("diagnostics") / "diagnostic.json"
 PLATES_FILE_NAME = "plates.json"
@@ -28,15 +37,20 @@ HORIZON_SEARCH_MINUTES = 5      # sunrise and sunset are rounded to a minute, wh
 SUN_PATH_MODE = "time-based"
 
 
-def build_run_summary(run_folder: Path, envelope_voxel_size: float | None = None) -> RunSummary:
-    """The numbers of the thresholding, exporting and massing stages; each part is None when its stage has no output.
+def build_run_summary(store: ProjectStore, name: str) -> RunSummary:
+    """The numbers of the criteria that are on and of the exporting and massing stages; each part is None when its stage has no output.
 
-    *envelope_voxel_size* is the voxel size of the grid exporting meshed (stage_records.envelope_voxel_size); without it the
-    envelope part is None, since the exporting diagnostic counts voxels only.
+    ``criteria`` lists every criterion that is on, in chain order, with what its files give (a criterion without thresholding
+    output has its numbers None); ``carving`` is the last one's. ``chain`` sums up the volumes of the criteria and is None until
+    every criterion that is on has them. The envelope's volume needs the voxel size of the grid exporting meshed
+    (stage_records.envelope_voxel_size); without it the envelope part has no volume, since the exporting diagnostic counts voxels only.
     """
-    run_folder = Path(run_folder)
-    return RunSummary(carving=_carving_summary(run_folder), envelope=_envelope_summary(run_folder, envelope_voxel_size),
-                      massing=_massing_summary(run_folder))
+    run_folder = store.open(name) / RUN_FOLDER
+    results = [_criterion_results(run_folder, criterion) for criterion in active_criteria(store, name)]
+    criteria = [summary for summary, _voxel_size in results]
+    return RunSummary(carving=criteria[-1].carving if criteria else None,
+                      envelope=_envelope_summary(run_folder, envelope_voxel_size(store, name)),
+                      massing=_massing_summary(run_folder), criteria=criteria, chain=_chain_summary(results))
 
 
 def _read_json(path: Path) -> dict | None:
@@ -46,8 +60,33 @@ def _read_json(path: Path) -> dict | None:
         return None
 
 
-def _carving_summary(run_folder: Path) -> CarvingSummary | None:
-    diagnostic = _read_json(stage_folder(run_folder, "thresholding") / DIAGNOSTIC_PATH)
+def _criterion_results(run_folder: Path, criterion: CriterionEntry) -> tuple[CriterionCarvingSummary, float | None]:
+    """The summary of one criterion from its folder, and the voxel size of its grid (None without its preprocessing manifest)."""
+    criterion_folder = run_folder / CRITERIA_FOLDER / criterion.id
+    carving = _carving_summary(criterion_folder)
+    preprocessing = read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest, criterion.id)
+    voxel_size = None if preprocessing is None else preprocessing[0].voxel_size
+    diagnostic = _read_json(criterion_folder / "thresholding" / DIAGNOSTIC_PATH)
+    # A diagnostic from before thresholding named them does not give the voxels it decided about; for the first criterion those are the occupied ones.
+    voxels_at_start = None if diagnostic is None else diagnostic.get("voxels_at_start", diagnostic["voxels_occupied"])
+    volume_kept = None if carving is None or voxel_size is None else carving.voxels_kept * voxel_size ** 3
+    return CriterionCarvingSummary(
+        id=criterion.id, name=criterion.name, colour=criterion.colour, mode=canonical_mode_name(criterion.settings.get("mode")),
+        carving=carving, voxels_at_start=voxels_at_start, volume_kept_m3=volume_kept), voxel_size
+
+
+def _chain_summary(results: list[tuple[CriterionCarvingSummary, float | None]]) -> ChainSummary | None:
+    """The volume each criterion kept and the share of the maximum volume the last one kept; None when a criterion lacks its volume."""
+    if not results or any(summary.volume_kept_m3 is None for summary, _voxel_size in results):
+        return None
+    volumes = [summary.volume_kept_m3 for summary, _voxel_size in results]
+    first, first_voxel_size = results[0]
+    max_volume = first.voxels_at_start * first_voxel_size ** 3      # the filled voxels of the maximum volume
+    return ChainSummary(volume_after_each_m3=volumes, share_of_max_volume_kept=volumes[-1] / max_volume if max_volume else 0.0)
+
+
+def _carving_summary(criterion_folder: Path) -> CarvingSummary | None:
+    diagnostic = _read_json(criterion_folder / "thresholding" / DIAGNOSTIC_PATH)
     if diagnostic is None:
         return None
     return CarvingSummary(
@@ -89,11 +128,15 @@ def _massing_summary(run_folder: Path) -> MassingSummary | None:
     )
 
 
-def build_sky_dome(run_folder: Path) -> SkyDome | None:
-    """The 145 Tregenza patches with the weights of preprocessing; None for a run without patch weights."""
-    preprocessing = read_stage_manifest(Path(run_folder), "preprocessing", PreprocessingManifest)
-    if preprocessing is None or preprocessing[0].patch_weights_path is None:
-        return None
+def build_sky_dome(store: ProjectStore, name: str, criterion_id: str | None = None) -> SkyDome:
+    """The 145 Tregenza patches with the weights of a criterion's preprocessing; the last criterion that is on unless *criterion_id*
+    names one. ProjectError 404 for a criterion without patch weights (or without preprocessing output, or an unknown one)."""
+    criterion_id = chosen_criterion_id(store, name, criterion_id)
+    preprocessing = read_stage_manifest(store.open(name) / RUN_FOLDER, "preprocessing", PreprocessingManifest, criterion_id)
+    if preprocessing is None:
+        raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
+    if preprocessing[0].patch_weights_path is None:
+        raise ProjectError("This run has no sky patch weights (time-based and tilted plane runs have none).", status_code=404)
     manifest, manifest_folder = preprocessing
     import torch
     from ..sky_patches import fetch_tregenza_patch_directions, tregenza_solid_angles
