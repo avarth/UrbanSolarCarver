@@ -92,7 +92,7 @@ def test_an_earlier_project_keeps_its_results_current(store):
     assert [_manifest(run / "criteria" / "1" / stage / "manifest.json")["run_id"] for stage in ("preprocessing", "thresholding")] \
         == ["pre-run", "thr-run"]
     assert _manifest(run / "criteria" / "chain.json") == {
-        "criteria": [{"id": "1", "name": "daylight", "mode": "daylight", "thresholding_run_id": "thr-run"}]}
+        "criteria": [{"id": "1", "name": "Daylight", "mode": "daylight", "thresholding_run_id": "thr-run"}]}
     assert make_worker(store).start("p", ["exporting", "massing"]).status == "up_to_date"
 
 
@@ -104,7 +104,7 @@ def test_its_test_surfaces_belong_to_criterion_1(store):
     settings_before = store.read_settings("p")
     store.migrate_to_criteria("p")
     [criterion] = store.criteria("p")
-    assert (criterion.id, criterion.name, criterion.colour, criterion.test_surface_files) == ("1", "daylight", CRITERION_COLOURS[0], ["surface.ply"])
+    assert (criterion.id, criterion.name, criterion.colour, criterion.test_surface_files) == ("1", "Daylight", CRITERION_COLOURS[0], ["surface.ply"])
     assert criterion.settings == {key: value for key, value in stored_config.items() if key in CRITERION_KEYS and key != "test_surface_path"}
     assert store.read_project_json("p").next_criterion_id == 2
     assert test_surfaces.joined_path(project_folder, "1").read_bytes() == joined_before
@@ -279,7 +279,7 @@ def test_a_config_file_with_a_yaml_error_stays_for_the_next_save(store):
     assert config_path.read_text(encoding="utf-8") == "mode: [daylight\n"
     assert store.criteria("p")[0].test_surface_files == ["surface.ply"]
     [listed] = _manifest(store.open("p") / "run" / "criteria" / "chain.json")["criteria"]
-    assert (listed["name"], listed["mode"]) == ("daylight", "daylight")     # the mode the moved preprocessing manifest records
+    assert (listed["name"], listed["mode"]) == ("Daylight", "daylight")     # the mode the moved preprocessing manifest records
     store.write_config_from_values("p", {"mode": "daylight"})
     assert [criterion.id for criterion in load_chain(config_path).criteria] == ["1"]
 

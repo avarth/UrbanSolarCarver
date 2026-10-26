@@ -167,16 +167,16 @@ def test_a_criterion_named_by_default_is_named_after_its_first_test_surface(tmp_
     store = _store_with_criteria(tmp_path)
     store.add_criterion_test_surface("p", "1", "windows.ply", _panel(0))
     store.add_criterion_test_surface("p", "1", "doors.ply", _panel(50))
-    assert store.criteria("p")[0].name == "daylight on windows"
+    assert store.criteria("p")[0].name == "Daylight on windows"
     store.use_test_surface("p", "2", "doors.ply")
-    assert store.criteria("p")[1].name == "daylight on doors"
+    assert store.criteria("p")[1].name == "Daylight on doors"
     store.update_criterion("p", "1", name="Windows of the block")
     store.remove_criterion_test_surface("p", "1", "windows.ply")
     store.remove_criterion_test_surface("p", "1", "doors.ply")
     assert store.criteria("p")[0].name == "Windows of the block"
     store.remove_criterion_test_surface("p", "2", "doors.ply")
-    assert store.criteria("p")[1].name == "daylight"
-    assert "daylight on" not in store.open("p").joinpath("config.yaml").read_text(encoding="utf-8")
+    assert store.criteria("p")[1].name == "Daylight"
+    assert "Daylight on" not in store.open("p").joinpath("config.yaml").read_text(encoding="utf-8")
 
 
 def test_the_joined_file_and_fingerprint_helpers(tmp_path):

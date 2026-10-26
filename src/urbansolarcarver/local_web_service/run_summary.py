@@ -20,9 +20,8 @@ from .api_models import (
 )
 from .project_names import ProjectError
 from .projects import RUN_FOLDER, ProjectStore
-from .score_points import (
-    CRITERIA_FOLDER, NO_SCORES_MESSAGE, active_criteria, chosen_criterion_id, read_stage_manifest, resolve_stored_path,
-)
+from .criteria import active_criteria, criterion_run_folder
+from .score_points import NO_SCORES_MESSAGE, chosen_criterion_id, read_stage_manifest, resolve_stored_path
 from .stage_records import envelope_voxel_size
 
 DIAGNOSTIC_PATH = Path("diagnostics") / "diagnostic.json"
@@ -46,7 +45,7 @@ def build_run_summary(store: ProjectStore, name: str) -> RunSummary:
     (stage_records.envelope_voxel_size); without it the envelope part has no volume, since the exporting diagnostic counts voxels only.
     """
     run_folder = store.open(name) / RUN_FOLDER
-    results = [_criterion_results(run_folder, criterion) for criterion in active_criteria(store, name)]
+    results = [_criterion_results(run_folder, criterion) for criterion in active_criteria(store.criteria(name))]
     criteria = [summary for summary, _voxel_size in results]
     return RunSummary(carving=criteria[-1].carving if criteria else None,
                       envelope=_envelope_summary(run_folder, envelope_voxel_size(store, name)),
@@ -62,8 +61,7 @@ def _read_json(path: Path) -> dict | None:
 
 def _criterion_results(run_folder: Path, criterion: CriterionEntry) -> tuple[CriterionCarvingSummary, float | None]:
     """The summary of one criterion from its folder, and the voxel size of its grid (None without its preprocessing manifest)."""
-    criterion_folder = run_folder / CRITERIA_FOLDER / criterion.id
-    diagnostic = _read_json(criterion_folder / "thresholding" / DIAGNOSTIC_PATH)
+    diagnostic = _read_json(criterion_run_folder(run_folder, criterion.id, "thresholding") / DIAGNOSTIC_PATH)
     carving = None if diagnostic is None else _carving_summary(diagnostic)
     preprocessing = read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest, criterion.id)
     voxel_size = None if preprocessing is None else preprocessing[0].voxel_size

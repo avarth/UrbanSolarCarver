@@ -42,11 +42,9 @@ from pydantic import BaseModel
 from ..mode_registry import MODES
 from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest
 from ..stage_settings import stage_folder
-from .api_models import CriterionEntry
-from .criteria import find_criterion
+from .criteria import active_criteria, criterion_run_folder, find_criterion
 from .project_names import ProjectError
 from .projects import RUN_FOLDER, ProjectStore
-from .stage_records import CRITERIA_FOLDER
 
 SCORE_POINTS_CAP = 1_000_000
 MANIFEST_FILE_NAME = "manifest.json"
@@ -57,17 +55,12 @@ NO_SCORES_MESSAGE = "This project has no scores yet: run the analysis first."
 StageManifest = TypeVar("StageManifest", bound=BaseModel)
 
 
-def active_criteria(store: ProjectStore, name: str) -> list[CriterionEntry]:
-    """The criteria that are on, in chain order; a bypassed criterion is not one of them."""
-    return [criterion for criterion in store.criteria(name) if not criterion.bypassed]
-
-
 def chosen_criterion_id(store: ProjectStore, name: str, criterion_id: str | None) -> str:
     """*criterion_id* (ProjectError 404 when the project has no such criterion), or the last criterion that is on for None
     (ProjectError 404 when none is on)."""
     if criterion_id is not None:
         return find_criterion(store.read_project_json(name), criterion_id).id
-    active = active_criteria(store, name)
+    active = active_criteria(store.criteria(name))
     if not active:
         raise ProjectError(NO_SCORES_MESSAGE, status_code=404)
     return active[-1].id
@@ -81,7 +74,7 @@ def read_stage_manifest(run_folder: Path, stage: str, manifest_class: type[Stage
     without one, from run/<stage> (exporting and massing).
     """
     stage_folder_path = (stage_folder(run_folder, stage) if criterion_id is None
-                         else Path(run_folder) / CRITERIA_FOLDER / criterion_id / stage)
+                         else criterion_run_folder(run_folder, criterion_id, stage))
     try:
         manifest = manifest_class.model_validate_json((stage_folder_path / MANIFEST_FILE_NAME).read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -177,7 +170,7 @@ def build_carved_by_criterion(store: ProjectStore, name: str) -> bytes:
     criterion that is on has no thresholding output, or the outputs of the criteria are on grids of different shapes.
     """
     run_folder = store.open(name) / RUN_FOLDER
-    active = active_criteria(store, name)
+    active = active_criteria(store.criteria(name))
     preprocessing = (None if not active
                      else read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest, active[0].id))
     if preprocessing is None:

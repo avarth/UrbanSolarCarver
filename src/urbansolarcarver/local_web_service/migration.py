@@ -19,7 +19,7 @@ from pathlib import Path
 from ..mode_registry import canonical_mode_name
 from . import test_surfaces
 from .api_models import ProjectJson, StageRecord
-from .criteria import append_criterion, default_criterion_name, joined_test_surfaces_path, split_settings
+from .criteria import CRITERIA_FOLDER, append_criterion, criterion_run_folder, default_criterion_name, joined_test_surfaces_path, split_settings
 from .project_names import ProjectError
 from .projects import CONFIG_FILE_NAME, RUN_FOLDER, SETTINGS_LEFT_TO_THE_ENGINE, ProjectStore
 
@@ -28,7 +28,7 @@ CRITERION_ID = "1"
 MOVED_STAGES = ("preprocessing", "thresholding")      # run once per criterion, so they move to run/criteria/1/
 LEAF_STAGES = ("exporting", "massing")                # stay where they are; their manifests name the moved thresholding
 MANIFEST_FILE_NAME = "manifest.json"
-CHAIN_FILE = "criteria/chain.json"                    # as run_chain writes it, under the run folder
+CHAIN_FILE = f"{CRITERIA_FOLDER}/chain.json"          # as run_chain writes it, under the run folder
 
 
 class _Undo:
@@ -60,8 +60,8 @@ def is_earlier_version_project(project_json: ProjectJson, stored_config: dict | 
 def migrate_to_criteria(store: ProjectStore, name: str) -> bool:
     """Make an earlier version's project a chain of one criterion (see the module docstring); whether it was one.
 
-    Criterion "1" gets the criterion settings of config.yaml, the plain mode name, the first palette colour and every stored test
-    surface file. Raises when a file cannot be moved or written (ProjectError when the new layout is in the way); the project is
+    Criterion "1" gets the criterion settings of config.yaml, the mode's label as its name (criteria.mode_label), the first palette
+    colour and every stored test surface file. Raises when a file cannot be moved or written (ProjectError when the new layout is in the way); the project is
     then as it was.
     """
     with store.project_lock(name):
@@ -105,7 +105,7 @@ def migrate_to_criteria(store: ProjectStore, name: str) -> bool:
 
 def _check_the_new_layout_is_free(project_folder: Path) -> None:
     """ProjectError(409) when a file of the new layout exists already: the migration moves nothing over another file."""
-    for relative_path in (joined_test_surfaces_path(CRITERION_ID), f"{RUN_FOLDER}/criteria"):
+    for relative_path in (joined_test_surfaces_path(CRITERION_ID), f"{RUN_FOLDER}/{CRITERIA_FOLDER}"):
         if (project_folder / relative_path).exists():
             raise ProjectError(f"The project cannot be opened as a chain of one criterion: {relative_path} exists already.",
                                status_code=409)
@@ -135,7 +135,7 @@ def _move_criterion_stages(run_folder: Path, undo: _Undo) -> dict[Path, Path]:
     for stage in MOVED_STAGES:
         earlier_folder = run_folder / stage
         if earlier_folder.is_dir():
-            new_folder = run_folder / "criteria" / CRITERION_ID / stage
+            new_folder = criterion_run_folder(run_folder, CRITERION_ID, stage)
             _make_folders(new_folder.parent, undo)
             _move(earlier_folder, new_folder, undo)
             moved[earlier_folder] = new_folder
@@ -168,7 +168,7 @@ def _name_the_moved_runs(run_folder: Path, moved: dict[Path, Path], undo: _Undo)
 
 def _mode_of_the_moved_preprocessing(run_folder: Path) -> str | None:
     """The mode the moved preprocessing manifest records; None without one."""
-    preprocessing = _read_manifest(run_folder / "criteria" / CRITERION_ID / "preprocessing" / MANIFEST_FILE_NAME)
+    preprocessing = _read_manifest(criterion_run_folder(run_folder, CRITERION_ID, "preprocessing") / MANIFEST_FILE_NAME)
     mode = preprocessing.get("mode") if preprocessing is not None else None
     return mode if isinstance(mode, str) else None
 
@@ -178,7 +178,7 @@ def _write_chain_file(run_folder: Path, criterion_name: str, mode: str | None, u
 
     Without a *mode* the entry has none (the run report shows a dash then).
     """
-    thresholding = _read_manifest(run_folder / "criteria" / CRITERION_ID / "thresholding" / MANIFEST_FILE_NAME)
+    thresholding = _read_manifest(criterion_run_folder(run_folder, CRITERION_ID, "thresholding") / MANIFEST_FILE_NAME)
     if thresholding is None or not isinstance(thresholding.get("run_id"), str):
         return
     chain_path = run_folder / CHAIN_FILE

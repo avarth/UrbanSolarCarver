@@ -34,8 +34,9 @@ from .api_models import (
     ProjectJson, ProjectSummary,
 )
 from .criteria import (
-    OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, append_criterion, chain_config_document, chain_config_text, checked_colour, checked_criterion_name,
-    find_criterion, flat_settings, joined_test_surfaces_path, reads_weather_file, set_criterion_settings, split_settings,
+    OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria, append_criterion, chain_config_document, chain_config_text, checked_colour,
+    checked_criterion_name, criterion_run_folder, find_criterion, flat_settings, joined_test_surfaces_path, reads_weather_file,
+    set_criterion_settings, split_settings,
 )
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
@@ -452,7 +453,7 @@ class ProjectStore:
             for file_name in unused_files:
                 project_json.input_files.get(test_surfaces.ROLE, {}).pop(file_name, None)
             self._rewrite_chain(name, project_folder, project_json)
-            shutil.rmtree(project_folder / RUN_FOLDER / "criteria" / removed.id, ignore_errors=True)
+            shutil.rmtree(criterion_run_folder(project_folder / RUN_FOLDER, removed.id), ignore_errors=True)
             (project_folder / joined_test_surfaces_path(removed.id)).unlink(missing_ok=True)
             for file_name in unused_files:
                 with contextlib.suppress(OSError):      # a program has the file open: it stays, project.json no longer lists it
@@ -681,7 +682,7 @@ class ProjectStore:
         A chain with no criterion on is written without that check (the loader wants at least one); a run refuses it.
         """
         config_text = self._chain_config_text(project_folder, project_json, shared)
-        if any(not criterion.bypassed for criterion in project_json.criteria):
+        if active_criteria(project_json.criteria):
             self._check_chain_loads(project_folder, config_text)
         config_path = project_folder / CONFIG_FILE_NAME
         earlier_config = config_path.read_bytes() if config_path.is_file() else None

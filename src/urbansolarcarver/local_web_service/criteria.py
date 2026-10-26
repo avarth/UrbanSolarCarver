@@ -36,11 +36,35 @@ OPTIONAL_SERVICE_PATHS = {
     "terrain": ("terrain_path", "inputs/joined/terrain.ply"),
 }
 JOINED_TEST_SURFACES_PATH = "inputs/joined/test_surfaces_{id}.ply"     # the joined test surfaces of one criterion
+# The folder of the criteria's stage folders in a run folder: run/criteria/<id>/<stage>, the layout of the engine's run_chain
+# (api_core/chain.py, which the service does not import: it pulls in torch).
+CRITERIA_FOLDER = "criteria"
+# The names the app shows for the modes (app/src/steps/mode_tiles.json, which a test compares with this table): a criterion that
+# the user did not name is named after them.
+MODE_LABELS = {
+    "tilted_plane": "Angle rule",
+    "time-based": "Solar time-based",
+    "irradiance": "Solar energy",
+    "benefit": "Solar usefulness",
+    "daylight": "Daylight",
+    "radiative_cooling": "Night cooling",
+}
 
 
 def colour_of_criterion(position: int) -> str:
     """The palette colour for the criterion with the *position*-th id (1 for the first), cycling."""
     return CRITERION_COLOURS[(position - 1) % len(CRITERION_COLOURS)]
+
+
+def active_criteria(criteria: list[CriterionEntry]) -> list[CriterionEntry]:
+    """The criteria that are on, in chain order: the chain a run carves; a bypassed criterion is not one of them."""
+    return [criterion for criterion in criteria if not criterion.bypassed]
+
+
+def criterion_run_folder(run_folder: Path, criterion_id: str, stage: str | None = None) -> Path:
+    """The folder of a criterion's results in a run folder, run/criteria/<id>, or of one of its stages, run/criteria/<id>/<stage>."""
+    folder = Path(run_folder) / CRITERIA_FOLDER / criterion_id
+    return folder if stage is None else folder / stage
 
 
 def joined_test_surfaces_path(criterion_id: str) -> str:
@@ -55,9 +79,16 @@ def reads_weather_file(mode) -> bool:
     return mode_settings is None or mode_settings.needs_epw
 
 
-def default_criterion_name(mode, test_surface_files) -> str:
-    """The name a criterion has until the user names it: its mode, or "<mode> on <first file name without extension>"."""
+def mode_label(mode) -> str:
+    """The name the app shows for a mode (MODE_LABELS); a mode the engine does not know is named as it is."""
     mode_name = canonical_mode_name(mode)
+    return MODE_LABELS.get(mode_name, str(mode_name))
+
+
+def default_criterion_name(mode, test_surface_files) -> str:
+    """The name a criterion has until the user names it: the mode's label (mode_label), or "<label> on <first file name without
+    extension>"."""
+    mode_name = mode_label(mode)
     if not test_surface_files:
         return mode_name
     return f"{mode_name} on {Path(test_surface_files[0]).stem}"
@@ -142,7 +173,7 @@ def chain_config_document(shared: dict, criteria: list[CriterionEntry], project_
     weather file is named at the top when a criterion that is on reads one, and an optional mesh path when its joined file
     exists in *project_folder*. A criterion entry is its id, name and settings, and the joined file of its test surfaces.
     """
-    active = [criterion for criterion in criteria if not criterion.bypassed]
+    active = active_criteria(criteria)
     paths = {key: path for key, path in SERVICE_PATHS.items()
              if key != "epw_path" or any(reads_weather_file(criterion.settings.get("mode")) for criterion in active)}
     paths.update({key: path for key, path in OPTIONAL_SERVICE_PATHS.values() if (project_folder / path).is_file()})

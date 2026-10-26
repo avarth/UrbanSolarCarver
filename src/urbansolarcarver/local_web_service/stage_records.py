@@ -26,13 +26,10 @@ from ..pydantic_schemas import UserConfig, resolve_grid_step
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 from . import test_surfaces
 from .api_models import ProjectJson, StageRecord, StageState, StageStatusReply
-from .criteria import reads_weather_file
+from .criteria import active_criteria, criterion_run_folder, reads_weather_file
 from .projects import INPUTS_FOLDER, JOINED_FOLDER, REQUIRED_MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
 
 MANIFEST_FILE_NAME = "manifest.json"
-# The folder of the criteria's stage folders in a run folder: run/criteria/<id>/<stage>, the layout of the engine's run_chain
-# (api_core/chain.py, which this module does not import: it pulls in torch).
-CRITERIA_FOLDER = "criteria"
 ANALYSIS_STAGES = ("preprocessing", "thresholding")     # the stages every criterion runs, and every result is built on
 LEAF_STAGES = ("exporting", "massing")                  # built once, from the last criterion's thresholding
 # Preprocessing manifest fields that massing reads; a manifest without them is from before preprocessing recorded
@@ -93,18 +90,9 @@ def _read_manifest(run_folder: Path, stage: str) -> dict | None:
     return _read_manifest_file(stage_folder(run_folder, stage) / MANIFEST_FILE_NAME)
 
 
-def _criterion_stage_folder(run_folder: Path, criterion_id: str, stage: str) -> Path:
-    return run_folder / CRITERIA_FOLDER / criterion_id / stage
-
-
 def _read_criterion_manifest(run_folder: Path, criterion_id: str, stage: str) -> dict | None:
     """The manifest of a criterion's preprocessing or thresholding; None when it has none or it cannot be read."""
-    return _read_manifest_file(_criterion_stage_folder(run_folder, criterion_id, stage) / MANIFEST_FILE_NAME)
-
-
-def _active_criterion_ids(project_json: ProjectJson) -> list[str]:
-    """The ids of the criteria that are on, in chain order: the chain a run carves."""
-    return [criterion.id for criterion in project_json.criteria if not criterion.bypassed]
+    return _read_manifest_file(criterion_run_folder(run_folder, criterion_id, stage) / MANIFEST_FILE_NAME)
 
 
 def criterion_status(store: ProjectStore, name: str) -> dict[str, dict[str, StageState]]:
@@ -144,7 +132,7 @@ def _project_status(store: ProjectStore, name: str) -> _ProjectStatus:
     criteria: dict[str, dict[str, StageState]] = {}
     last_config = None
     previous_thresholding: tuple[StageState, StageRecord | None] | None = None   # of the previous criterion that is on
-    for criterion_id in _active_criterion_ids(project_json):
+    for criterion_id in [criterion.id for criterion in active_criteria(project_json.criteria)]:
         last_config = _criterion_config(store, name, criterion_id)
         records = project_json.criterion_records.get(criterion_id, {})
         preprocessing = _preprocessing_state(
@@ -386,7 +374,7 @@ def run_settings(store: ProjectStore, name: str) -> RunSettings:
     with store.project_lock(name):
         project_json = store.read_project_json(name)
         project_folder = store.open(name)
-        active_ids = _active_criterion_ids(project_json)
+        active_ids = [criterion.id for criterion in active_criteria(project_json.criteria)]
         criteria = {criterion_id: store.read_stored_config(name, criterion_id) for criterion_id in active_ids}
         return RunSettings(
             inputs_revision=project_json.inputs_revision, criteria=criteria,
@@ -421,7 +409,7 @@ def missing_inputs(store: ProjectStore, name: str) -> list[str]:
     that is on reads one. Context and terrain are optional; a bypassed criterion needs nothing."""
     project_folder = store.open(name)
     absent = [role for role in REQUIRED_MESH_ROLES if not (project_folder / JOINED_FOLDER / f"{role}.ply").is_file()]
-    active = [criterion for criterion in store.criteria(name) if not criterion.bypassed]
+    active = active_criteria(store.criteria(name))
     if not active:
         absent.append("criteria")
     absent += [f"{test_surfaces.ROLE}:{criterion.id}" for criterion in active
