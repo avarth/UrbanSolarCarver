@@ -488,6 +488,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../massing/" class="md-nav__link">
         
   
@@ -672,7 +699,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -694,14 +721,14 @@
             </a>
             
               
-              <label class="md-nav__link md-nav__link--active" for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link md-nav__link--active" for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1216,7 +1243,7 @@
 <h1 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h1>
 <p>Generated from the source docstrings: each documented public function and class is shown with its signature, parameters, return type, and description.</p>
 <h2 id="pipeline">Pipeline<a class="headerlink" href="#pipeline" title="Permanent link">&para;</a></h2>
-<p>The main entry points for running USC, in one call or stage by stage.</p>
+<p>The main entry points for running USC, in one call or stage by stage. Several criteria carved in sequence (<code>run_chain</code>, <code>thresholding(..., after=)</code>, <code>load_chain</code>) are described in <a href="../criteria/">Criteria: chained carvings</a>.</p>
 <table>
 <thead>
 <tr>
@@ -1227,7 +1254,7 @@
 <tbody>
 <tr>
 <td><a href="pipeline/">Pipeline</a></td>
-<td><code>run_pipeline()</code> (<code>produce</code>, <code>start_from</code>, <code>context</code>), <code>PipelineResult</code>, <code>stages_to_rerun()</code>, <code>preprocessing()</code>, <code>thresholding()</code>, <code>exporting()</code>, <code>massing()</code>, result dataclasses, <code>RunContext</code> and issues, the error classes</td>
+<td><code>run_pipeline()</code> (<code>produce</code>, <code>start_from</code>, <code>context</code>), <code>PipelineResult</code>, <code>run_chain()</code>, <code>ChainResult</code>, <code>stages_to_rerun()</code>, <code>preprocessing()</code>, <code>thresholding()</code>, <code>exporting()</code>, <code>massing()</code>, result dataclasses, <code>RunContext</code> and issues, the error classes</td>
 </tr>
 </tbody>
 </table>
@@ -1299,7 +1326,7 @@
 <tbody>
 <tr>
 <td><a href="config/">Configuration</a></td>
-<td><code>load_config()</code>, <code>build_config()</code>, <code>parse_override_value()</code>, <code>UserConfig</code> (Pydantic model), <code>ThresholdSpec</code>, manifest schemas, mode starting values</td>
+<td><code>load_config()</code>, <code>build_config()</code>, <code>parse_override_value()</code>, <code>load_chain()</code>, <code>ChainConfig</code>, <code>Criterion</code>, <code>is_chain_file()</code>, <code>UserConfig</code> (Pydantic model), <code>ThresholdSpec</code>, manifest schemas, mode starting values</td>
 </tr>
 </tbody>
 </table>

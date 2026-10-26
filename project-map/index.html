@@ -488,6 +488,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../massing/" class="md-nav__link">
         
   
@@ -857,7 +884,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -879,14 +906,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1519,7 +1546,7 @@
 </tr>
 <tr>
 <td><code>api.py</code></td>
-<td>Public facade. Defines <code>run_pipeline(config, out_dir, produce, start_from, context)</code>, the sequencer: it runs the stages needed for <code>produce</code>, each writing into <code>&lt;out_dir&gt;/&lt;stage&gt;</code>, and returns a <code>PipelineResult</code> (one Result per stage that ran, plus the run's issues). Re-exports <code>stages_to_rerun()</code>, <code>preprocessing()</code>, <code>thresholding()</code>, <code>exporting()</code>, <code>massing()</code>, their result types, <code>load_config()</code> and <code>build_config()</code>.</td>
+<td>Public facade. Defines <code>run_pipeline(config, out_dir, produce, start_from, context, after)</code>, the sequencer (<code>after</code> is the previous criterion's thresholding, passed to the thresholding stage): it runs the stages needed for <code>produce</code>, each writing into <code>&lt;out_dir&gt;/&lt;stage&gt;</code>, and returns a <code>PipelineResult</code> (one Result per stage that ran, plus the run's issues). Also re-exports <code>run_chain()</code> and <code>ChainResult</code> (chained carvings, <code>api_core/chain.py</code>), <code>stages_to_rerun()</code>, <code>preprocessing()</code>, <code>thresholding()</code>, <code>exporting()</code>, <code>massing()</code>, their result types, <code>load_config()</code> and <code>build_config()</code>.</td>
 </tr>
 <tr>
 <td><code>api_core/__init__.py</code></td>
@@ -1531,7 +1558,11 @@
 </tr>
 <tr>
 <td><code>api_core/thresholding.py</code></td>
-<td><strong>Stage 2.</strong> Loads <code>scores.npy</code> from Stage 1, optionally applies Gaussian score smoothing (weighted modes), applies the selected thresholding strategy (<code>carve_fraction</code>, <code>headtail</code>, or a numeric cutoff) to the raw scores of the occupied voxels together with <code>carve_above</code> (<code>column_postprocessing.carve_above_scores</code>, so <code>carve_fraction</code> counts what carve_above removes), applies the slope limit (<code>column_postprocessing.limit_column_slope</code>; 75 degrees by default for the weighted modes), and writes the binary mask <code>mask.npy</code> and <code>scores_compared_with_cutoff.npy</code> (the values the cutoff was applied to, which the browser UI draws its histogram from). Can be re-run with different threshold parameters without re-computing scores.</td>
+<td><strong>Stage 2.</strong> Loads <code>scores.npy</code> from Stage 1, optionally applies Gaussian score smoothing (weighted modes), applies the selected thresholding strategy (<code>carve_fraction</code>, <code>headtail</code>, or a numeric cutoff) to the raw scores of the occupied voxels together with <code>carve_above</code> (<code>column_postprocessing.carve_above_scores</code>, so <code>carve_fraction</code> counts what carve_above removes), applies the slope limit (<code>column_postprocessing.limit_column_slope</code>; 75 degrees by default for the weighted modes), and writes the binary mask <code>mask.npy</code> and <code>scores_compared_with_cutoff.npy</code> (the values the cutoff was applied to, which the browser UI draws its histogram from). Can be re-run with different threshold parameters without re-computing scores. With the optional <code>after</code> input (the previous criterion's thresholding result, folder or manifest) it decides only among the voxels that criterion kept: the manifest records <code>after_manifest</code> and <code>after_run_id</code>, the diagnostics <code>voxels_at_start</code>, and an empty start gives the issue <code>nothing_left_to_carve</code>.</td>
+</tr>
+<tr>
+<td><code>api_core/chain.py</code></td>
+<td><strong>Chained carvings.</strong> <code>run_chain(chain, out_dir, produce, start_from, context, trace, threshold_from)</code> runs preprocessing and thresholding of each criterion of a chain in order into <code>&lt;out_dir&gt;/criteria/&lt;id&gt;/&lt;stage&gt;</code> (each thresholding gets the previous one as its <code>after</code> input), writes <code>criteria/chain.json</code>, then exporting and massing from the last criterion. <code>trace</code> limits the criteria that trace their rays again, and <code>threshold_from</code> starts thresholding at an earlier criterion than the first traced one, or, with <code>start_from="thresholding"</code>, at that criterion instead of the first. Returns a <code>ChainResult</code>. See <a href="../criteria/">Criteria</a>.</td>
 </tr>
 <tr>
 <td><code>api_core/massing.py</code></td>
@@ -1686,6 +1717,10 @@
 <td>Reads a YAML configuration file and returns a validated <code>UserConfig</code> object. <strong><code>load_config</code></strong>: loads the YAML, expands an <code>analysis_period:</code> mapping, resolves relative paths against the YAML's folder, applies flat <code>key=value</code> overrides, and validates with Pydantic (all errors reported in one message). <strong><code>build_config</code></strong>: validates typed values (what a client holds) into a <code>UserConfig</code> and raises <code>ConfigError</code> with a <code>ConfigFieldError</code> per problem; <code>load_config</code> calls it. <strong><code>parse_override_value</code></strong>: converts override strings into Python values (booleans, None, JSON lists and objects, numbers).</td>
 </tr>
 <tr>
+<td><code>chain_config.py</code></td>
+<td>The <code>criteria:</code> form of a config. <strong><code>load_chain</code></strong> validates a chain file into a <code>ChainConfig</code>: one <code>Criterion</code> (id, name, validated config) per criterion, built from the shared top-level settings plus the criterion's own. <strong><code>CRITERION_KEYS</code></strong> lists the per-criterion settings; every other key is shared. <strong><code>is_chain_file</code></strong> tells a chain file from an ordinary config; <code>load_config</code> refuses a chain file. See <a href="../criteria/">Criteria</a>.</td>
+</tr>
+<tr>
 <td><code>pydantic_schemas.py</code></td>
 <td>Data schemas. <strong><code>UserConfig</code></strong>: the Pydantic v2 model defining every pipeline parameter with types, defaults and value ranges (e.g. <code>voxel_size</code> must be 0.01-100); unknown keys are rejected. It normalizes <code>threshold</code> into a <strong><code>ThresholdSpec</code></strong>, checks mode requirements, and emits <code>UrbanSolarCarverWarning</code> for settings the mode ignores and when <code>ray_batch_size</code> is clamped. <strong><code>PreprocessingManifest</code></strong> / <strong><code>ThresholdingManifest</code></strong>: schemas for the JSON manifests written by the first two stages, so a later stage can be re-run from an earlier run's output.</td>
 </tr>
@@ -1710,7 +1745,7 @@
 </tr>
 <tr>
 <td><code>engine_requests.py</code></td>
-<td>The request core every transport uses. <strong><code>parse_engine_request</code></strong> validates a message into a typed request (<code>run</code>, the stage commands, <code>run_pipeline</code>, <code>simulate_weights</code>, <code>ping</code>); <strong><code>config_for_engine_request</code></strong> builds its config from a YAML path or from the mode's starting values plus overrides; <strong><code>handle_engine_request</code></strong> runs it in a run context and returns a typed reply with the run's <code>issues</code>; <strong><code>answer_engine_message</code></strong> does all of this for dict transports and turns any failure into an error reply with <code>error_type</code> and, for config errors, <code>config_errors</code>. Does not import torch until a request runs.</td>
+<td>The request core every transport uses. <strong><code>parse_engine_request</code></strong> validates a message into a typed request (<code>run</code>, the stage commands, <code>run_pipeline</code>, <code>simulate_weights</code>, <code>ping</code>); <strong><code>config_for_engine_request</code></strong> builds its config from a YAML path or from the mode's starting values plus overrides; A <code>run</code> request also carries <code>trace_criteria</code> and <code>threshold_from_criterion</code> (chain files) and <code>after</code> (one criterion, started at thresholding), and the <code>ping</code> reply lists the engine's <code>features</code> (<code>run_after</code>). <strong><code>handle_engine_request</code></strong> runs it in a run context and returns a typed reply with the run's <code>issues</code>; <strong><code>answer_engine_message</code></strong> does all of this for dict transports and turns any failure into an error reply with <code>error_type</code> and, for config errors, <code>config_errors</code>. Does not import torch until a request runs.</td>
 </tr>
 <tr>
 <td><code>daemon.py</code></td>
@@ -1722,7 +1757,7 @@
 </tr>
 <tr>
 <td><code>carver_cli.py</code></td>
-<td>Command-line interface built with Typer, registered in <code>pyproject.toml</code> as both <code>urbansolarcarver</code> and <code>usc</code>. Commands: <code>run</code> (the sequencer, with <code>--produce</code> and <code>--start-from</code>), <code>preprocessing</code>, <code>thresholding</code>, <code>exporting</code>, <code>massing</code> (each with a config file <code>-c</code>, overrides <code>-o</code>, and optional <code>--daemon</code>), <code>validate</code>, <code>schema</code> (prints the config parameter table, filterable by <code>--mode</code> or <code>--search</code>), <code>warmup</code>, <code>simulate-weights</code>, <code>archetype</code>, <code>ui</code> (the browser interface) and <code>daemon start/stop/status</code>.</td>
+<td>Command-line interface built with Typer, registered in <code>pyproject.toml</code> as both <code>urbansolarcarver</code> and <code>usc</code>. Commands: <code>run</code> (the sequencer, with <code>--produce</code> and <code>--start-from</code>; it runs a chain file's criteria in order), <code>preprocessing</code>, <code>thresholding</code> (with <code>--after</code> for one step of a chain), <code>exporting</code>, <code>massing</code> (each with a config file <code>-c</code>, overrides <code>-o</code>, and optional <code>--daemon</code>), <code>validate</code> (lists a chain's criteria), <code>schema</code> (prints the config parameter table, filterable by <code>--mode</code> or <code>--search</code>), <code>warmup</code>, <code>simulate-weights</code>, <code>archetype</code>, <code>ui</code> (the browser interface) and <code>daemon start/stop/status</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -1737,27 +1772,43 @@
 <tbody>
 <tr>
 <td><code>local_web_service/server.py</code></td>
-<td>The FastAPI application behind <code>usc ui</code>. <code>create_app</code> builds it; <code>SecurityMiddleware</code> refuses a <code>Host</code> header that is not the service's address and an API call or WebSocket without the launch token. Routes for projects, input files, settings, modes, examples, stage status, run summaries, result files, downloads and run events; serves the built front-end. Does not import torch.</td>
+<td>The FastAPI application behind <code>usc ui</code>. <code>create_app</code> builds it; <code>SecurityMiddleware</code> refuses a <code>Host</code> header that is not the service's address and an API call or WebSocket without the launch token. Routes for projects, input files, settings, criteria, modes, examples, stage status, run summaries, result files, downloads and run events (see the routes below); serves the built front-end. Does not import torch.</td>
 </tr>
 <tr>
 <td><code>local_web_service/api_models.py</code></td>
-<td>The Pydantic models of the requests and replies; the front-end's types are generated from them.</td>
+<td>The Pydantic models of the requests and replies; the front-end's types are generated from them. <code>ProjectJson</code> holds the project's <code>criteria</code> (<code>CriterionEntry</code>), <code>next_criterion_id</code> and the stage records, with the records of each criterion's preprocessing and thresholding in <code>criterion_records</code>.</td>
 </tr>
 <tr>
 <td><code>local_web_service/projects.py</code></td>
-<td>Project folders: name validation, the folder layout, <code>project.json</code>, uploads (several mesh files of a role are joined into one), <code>config.yaml</code> built from the settings the browser sends on top of the mode's starting values, and the voxel grid check.</td>
+<td>Project folders: name validation, the folder layout, <code>project.json</code>, uploads (several mesh files of a role are joined into one), the methods for criteria (add, update, delete, duplicate, reorder), <code>config.yaml</code> built from the settings the browser sends on top of the mode's starting values, and the voxel grid check. Every change that writes <code>config.yaml</code> checks it with <code>load_chain</code> first and writes nothing when the check fails.</td>
+</tr>
+<tr>
+<td><code>local_web_service/criteria.py</code></td>
+<td>The criterion model helpers: the colour palette, <code>config.yaml</code> generated from <code>project.json</code> (shared settings, then the criteria that are on), and the split of the app's settings into shared and criterion keys (<code>split_settings</code>).</td>
+</tr>
+<tr>
+<td><code>local_web_service/test_surfaces.py</code></td>
+<td>Test surface files stored once in <code>inputs/test_surfaces/</code> and compared by content, the joined file of each criterion (<code>inputs/joined/test_surfaces_&lt;id&gt;.ply</code>), and the fingerprint of a joined file that the stage records use.</td>
+</tr>
+<tr>
+<td><code>local_web_service/migration.py</code></td>
+<td><code>migrate_to_criteria</code>: a project of an earlier version becomes a chain of one criterion with its results kept (run folders moved to <code>run/criteria/1/</code>, manifests that name them rewritten, records moved). It runs when a project opens, when a run starts and at a first settings save, and undoes its steps when one fails.</td>
 </tr>
 <tr>
 <td><code>local_web_service/stage_records.py</code></td>
-<td>Which stages of a project are current, out of date or missing, and which stages a run has to execute.</td>
+<td>Which stages of a project are current, out of date or missing, for each criterion (<code>criterion_status</code>) and summed up (<code>stage_status</code>), and which stages a run has to execute: <code>choose_stages</code> returns the criteria to trace (<code>trace_criteria</code>), the criterion to threshold from and what the run does for each criterion.</td>
 </tr>
 <tr>
 <td><code>local_web_service/run_worker.py</code></td>
-<td>Runs a project in a background thread in two phases (analysis, then envelope and massing), publishes progress events and handles cancel.</td>
+<td>Runs a project in a background thread in two phases (analysis, then envelope and massing), publishes progress events that name their criterion, refuses a run without test surfaces in a criterion that is on, and handles cancel.</td>
 </tr>
 <tr>
 <td><code>local_web_service/run_summary.py</code>, <code>score_points.py</code></td>
-<td>What the app shows of a run: the numbers of the carving and massing, the sun path and sky dome, and the scored voxels.</td>
+<td>What the app shows of a run: the numbers of the carving and massing for each criterion and for the chain, the sun path and sky dome, the scored voxels of a criterion, and which criterion carved each voxel.</td>
+</tr>
+<tr>
+<td><code>local_web_service/carve_further.py</code></td>
+<td><strong>Carve further</strong> for a project with one criterion; refused with several. The browser app no longer offers it; the route stays for other clients.</td>
 </tr>
 <tr>
 <td><code>local_web_service/gpu_warm_up.py</code></td>
@@ -1773,7 +1824,79 @@
 </tr>
 </tbody>
 </table>
-<p><code>app/</code> holds the front-end source (<code>src/steps/</code> the six steps, <code>src/settings_form/</code> the settings, <code>src/viewer/</code> and <code>src/viewer_overlays/</code> the 3D view, <code>src/api_client/</code> the typed client). See <a href="../ui/#rebuilding-the-front-end-after-changing-app">Browser UI</a> for building it.</p>
+<p><strong>Routes for criteria</strong> (all under <code>/api</code>; the writes hold the project's lock and answer 409 while a run of the project is active; an unknown criterion id is a 404 that names the id):</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /criterion-keys</code></td>
+<td>The settings that belong to a criterion (<code>CRITERION_KEYS</code>); every other setting is shared</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/criteria</code></td>
+<td>Add a criterion at the end; body <code>mode</code> and optional <code>name</code>. Returns the <code>CriterionEntry</code></td>
+</tr>
+<tr>
+<td><code>PATCH /projects/{name}/criteria/{id}</code></td>
+<td>Change <code>name</code>, <code>colour</code>, <code>bypassed</code> or <code>values</code> (the criterion's own settings; shared keys in <code>values</code> are ignored and belong to <code>PUT /projects/{name}/shared-settings</code>)</td>
+</tr>
+<tr>
+<td><code>DELETE /projects/{name}/criteria/{id}</code></td>
+<td>Delete a criterion (204) and the stored test surface files no other criterion uses</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/criteria/{id}/duplicate</code></td>
+<td>Copy the settings and the test surface files into a new criterion at the end</td>
+</tr>
+<tr>
+<td><code>PUT /projects/{name}/criteria/order</code></td>
+<td>Reorder; body <code>ids</code>, every id once. A bad list is a 422 and changes nothing</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/criteria/{id}/test-surfaces</code></td>
+<td>Upload a test surface file to a criterion (multipart <code>file</code>)</td>
+</tr>
+<tr>
+<td><code>PUT /projects/{name}/criteria/{id}/test-surfaces/{file}</code></td>
+<td>Use a stored file of another criterion</td>
+</tr>
+<tr>
+<td><code>DELETE /projects/{name}/criteria/{id}/test-surfaces/{file}</code></td>
+<td>Remove a file from a criterion</td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}</code>, <code>PUT /projects/{name}/config</code></td>
+<td>Take an optional <code>criterion</code> (default: the first for a read, the only one for a save; a save with several criteria and none named is a 422). <code>ProjectDetail</code> gains <code>criteria</code> and <code>criterion_status</code></td>
+</tr>
+<tr>
+<td><code>PUT /projects/{name}/shared-settings</code></td>
+<td>Save the settings the criteria share (body <code>values</code>, no mode); a criterion's own key is a 422 that names it, and so is a value that makes a criterion that is on invalid. Returns the shared settings as stored and the <code>grid_plan</code></td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}/criteria/{id}/settings</code></td>
+<td>The settings of one criterion with the shared ones (<code>criterion_id</code>, <code>settings</code>), read without looking at the test surface files</td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}/sun-path</code></td>
+<td>Takes an optional <code>criterion</code> (default: the first criterion that is on)</td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}/run/score-points</code>, <code>.../run/sky-patches</code></td>
+<td>Take an optional <code>criterion</code> (default: the last criterion that is on)</td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}/run/carved-by-criterion</code></td>
+<td>One byte per voxel: the criterion that removed it (format in <a href="../ui/#criteria-in-a-project">Browser UI</a>)</td>
+</tr>
+</tbody>
+</table>
+<p><code>POST /projects/{name}/runs</code> answers with <code>criterion_stages</code> besides <code>stages</code>, and refuses with a 422 (<code>missing_inputs</code>) when no criterion is on or a criterion that is on has no test surfaces.</p>
+<p><code>app/</code> holds the front-end source (<code>src/steps/</code> the five steps: <code>InputsStep.tsx</code>, <code>SiteAndGridStep.tsx</code>, the result steps and the export, with <code>ActionMenu.tsx</code>, the menu of a project and of a criterion row, <code>menu_popup.ts</code>, the placement and keys of a popup menu that <code>ActionMenu.tsx</code> and the mode menu share, and <code>CriteriaRunBar.tsx</code>, the Run analysis and Build buttons pinned under the Criteria step; <code>src/criteria/</code> the criteria hook and its helpers (<code>use_criteria.ts</code>, <code>criteria_state.ts</code>), the Criteria step, the criterion list and its rows (<code>CriterionList.tsx</code>, <code>CriterionCard.tsx</code>) and their dialogs, <code>ModeMenu.tsx</code>, the short menu of modes behind Add criterion, the criterion panel with <code>PanelSection.tsx</code>, its folded sections, and <code>section_summaries.ts</code>, the one-line summary of each section, and its Test surfaces box; <code>src/settings_form/</code> the settings, with <code>two_forms.ts</code> for the shared and the criterion settings held side by side; <code>src/viewer/</code> and <code>src/viewer_overlays/</code> the 3D view, with <code>carved_by_criterion_decoder.ts</code> for the carved-by-criterion layer; <code>src/api_client/</code> the typed client). See <a href="../ui/#rebuilding-the-front-end-after-changing-app">Browser UI</a> for building it.</p>
 <h2 id="grasshopper-plugin-grasshopper">Grasshopper plugin (<code>grasshopper/</code>)<a class="headerlink" href="#grasshopper-plugin-grasshopper" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>grasshopper/
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── USC_GHplugin/       27 .ghuser components (copy into the GH User Objects folder)
@@ -1806,47 +1929,51 @@ tuned defaults commented at the bottom.</p>
 <a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>├── typologies.py            Procedural urban-block scenes for end-to-end checks
 <a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>├── oracle.py                Independent CPU reference implementation of the carving
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>├── cases.py                 Runs USC end-to-end on a typology scene and loads the results
-<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>├── montecarlo.py            Random scenes x random settings from a seed, checked against oracle.py
-<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>├── data/                    5R1C oracle reference data and its capture script
-<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>├── test_carve_above.py      carve_above_columns, carve_above_scores, limit_column_slope
-<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>├── test_cli.py              CLI commands and the schema table
-<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>├── test_compute_device.py   The device rule: auto, explicit choices, CUDA missing, Warp device names
-<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>├── test_context_*.py        Context and terrain: config keys, voxels on the lattice and the column rule, ground heights, the ray mask, preprocessing, typology scenes
-<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>├── test_daemon.py           Daemon survives misbehaving clients and failing requests
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>├── test_engine_requests.py  Request parsing, configs from starting values, replies and real runs through the request core
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>├── test_exporting.py        Exporting stage: mesh placement, diagnostics, run report
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>├── test_local_web_*.py      The browser UI service: packaging and build hash, projects, stage records, run worker, run summaries, score points, HTTP routes and security
-<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>├── test_floor_plates.py     Floor-plate geometry: facades, faces, bays, floors, outlines, prisms
-<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>├── test_massing_stage.py    Massing stage end to end on synthetic scenes
-<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>├── test_meshing.py          Cubic and smoothed meshing, pruning, diffusion, Taubin polish, cleanup
-<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>├── test_gh_components.py    Grasshopper sources stay buildable into .ghuser files
-<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>├── test_modes.py            End-to-end smoke tests per mode, benefit weight formula
-<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>├── test_montecarlo.py       Fixed Monte Carlo seeds in the regular suite
-<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>├── test_north.py            north_deg convention (clockwise from +Y) at every Ladybug boundary
-<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>├── test_package_imports.py  Every public name resolves; importing the package and `usc daemon status` do not load torch
-<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>├── test_pipeline.py         Full runs, stage-boundary validation, overrides, simulated weights
-<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>├── test_preprocessing.py    Preprocessing helpers and manifest keys
-<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>├── test_ray_tracing.py      Warp DDA kernel launches, ray generation, batch size
-<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>├── test_schemas.py          Config schema validation, grid resolution cap, overrides, relative paths
-<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a>├── test_run_context.py      RunContext: issues, progress, cancel, and the error classes
-<a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a>├── test_scoring.py          Head/tail and carve-fraction thresholds
-<a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a>├── test_sequencer.py        run_pipeline: produce, start_from, collected issues, progress, cancel
-<a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a>├── test_setup_env.py        setup_env.py: choosing the PyTorch wheel index for the driver
-<a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a>├── test_session.py          CarverSession caching and the session_cache decorator
-<a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a>├── test_sky_matrix_folder.py  Sky matrices in their own temporary folder: concurrent runs, nothing left behind
-<a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
-<a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>│                            steady-state closure, attribution, shoebox expansion, artifact I/O
-<a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>├── test_stage_chain.py      Run IDs, upstream checks, relative manifest paths
-<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>├── test_stage_outputs.py    Outputs cleared before a stage, manifest written last, run report sections
-<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>├── test_stage_settings.py   Per-stage settings models and stages_to_rerun
-<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>├── test_surface_sampling.py  Test-surface sampling: coplanarity, boundary samples, edge taper, degenerate faces
-<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>├── test_typologies.py       End-to-end carving checks on procedural urban typologies
-<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
-<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a>├── test_util.py             Diagnostics helpers and the grid memory estimate
-<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>├── test_version.py          The version in pyproject.toml, the package, the CLI and CITATION.cff
-<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
-<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>├── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
-<a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a>└── test_weather_file.py     The cached EPW reader: re-read on a changed file, copies for each caller
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>├── _chain_scene.py          A box with two facades to protect, the smallest scene on which two criteria decide about different voxels, for the chain tests
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>├── montecarlo.py            Random scenes x random settings from a seed, checked against oracle.py (single criteria and chains: `run_chain_case`)
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>├── data/                    5R1C oracle reference data and its capture script
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>├── test_chain_config.py     load_chain: shared and criterion keys, ids, defaults, the weather file rule, errors
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>├── test_chained_thresholding.py  thresholding with `after`: the base of the second criterion, manifest links, stale chains, empty start
+<a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>├── test_run_chain.py        run_chain: folders, chain.json, start_from, issues, the report&#39;s Criteria section
+<a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>├── test_carve_above.py      carve_above_columns, carve_above_scores, limit_column_slope
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>├── test_cli.py              CLI commands and the schema table
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>├── test_compute_device.py   The device rule: auto, explicit choices, CUDA missing, Warp device names
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>├── test_context_*.py        Context and terrain: config keys, voxels on the lattice and the column rule, ground heights, the ray mask, preprocessing, typology scenes
+<a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>├── test_daemon.py           Daemon survives misbehaving clients and failing requests
+<a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>├── test_engine_requests.py  Request parsing, configs from starting values, replies and real runs through the request core
+<a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>├── test_exporting.py        Exporting stage: mesh placement, diagnostics, run report
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>├── test_local_web_*.py      The browser UI service: packaging and build hash, projects, criteria, test surfaces, stage records, run worker, earlier-project migration, run summaries, score points, HTTP routes and security
+<a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>├── test_floor_plates.py     Floor-plate geometry: facades, faces, bays, floors, outlines, prisms
+<a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>├── test_massing_stage.py    Massing stage end to end on synthetic scenes
+<a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>├── test_meshing.py          Cubic and smoothed meshing, pruning, diffusion, Taubin polish, cleanup
+<a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a>├── test_gh_components.py    Grasshopper sources stay buildable into .ghuser files
+<a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a>├── test_modes.py            End-to-end smoke tests per mode, benefit weight formula
+<a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>├── test_montecarlo.py       Fixed Monte Carlo seeds in the regular suite
+<a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a>├── test_north.py            north_deg convention (clockwise from +Y) at every Ladybug boundary
+<a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>├── test_package_imports.py  Every public name resolves; importing the package and `usc daemon status` do not load torch
+<a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a>├── test_pipeline.py         Full runs, stage-boundary validation, overrides, simulated weights
+<a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a>├── test_preprocessing.py    Preprocessing helpers and manifest keys
+<a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a>├── test_ray_tracing.py      Warp DDA kernel launches, ray generation, batch size
+<a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a>├── test_schemas.py          Config schema validation, grid resolution cap, overrides, relative paths
+<a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a>├── test_run_context.py      RunContext: issues, progress, cancel, and the error classes
+<a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a>├── test_scoring.py          Head/tail and carve-fraction thresholds
+<a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>├── test_sequencer.py        run_pipeline: produce, start_from, collected issues, progress, cancel
+<a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>├── test_setup_env.py        setup_env.py: choosing the PyTorch wheel index for the driver
+<a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>├── test_session.py          CarverSession caching and the session_cache decorator
+<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>├── test_sky_matrix_folder.py  Sky matrices in their own temporary folder: concurrent runs, nothing left behind
+<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
+<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>│                            steady-state closure, attribution, shoebox expansion, artifact I/O
+<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>├── test_stage_chain.py      Run IDs, upstream checks, relative manifest paths
+<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>├── test_stage_outputs.py    Outputs cleared before a stage, manifest written last, run report sections
+<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a>├── test_stage_settings.py   Per-stage settings models and stages_to_rerun
+<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>├── test_surface_sampling.py  Test-surface sampling: coplanarity, boundary samples, edge taper, degenerate faces
+<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>├── test_typologies.py       End-to-end carving checks on procedural urban typologies
+<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
+<a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a>├── test_util.py             Diagnostics helpers and the grid memory estimate
+<a id="__codelineno-3-49" name="__codelineno-3-49" href="#__codelineno-3-49"></a>├── test_version.py          The version in pyproject.toml, the package, the CLI and CITATION.cff
+<a id="__codelineno-3-50" name="__codelineno-3-50" href="#__codelineno-3-50"></a>├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
+<a id="__codelineno-3-51" name="__codelineno-3-51" href="#__codelineno-3-51"></a>├── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
+<a id="__codelineno-3-52" name="__codelineno-3-52" href="#__codelineno-3-52"></a>└── test_weather_file.py     The cached EPW reader: re-read on a changed file, copies for each caller
 </code></pre></div>
 
 

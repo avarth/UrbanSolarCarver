@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/massing/">
       
       
-        <link rel="prev" href="../modes/">
+        <link rel="prev" href="../criteria/">
       
       
         <link rel="next" href="../simulated-weights/">
@@ -485,6 +485,33 @@
       
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
     
   
   
@@ -774,7 +801,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -796,14 +823,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1372,7 +1399,10 @@ simulation input (one closed prism per floor and plate).</p>
    the carved envelope, and (with <code>plate_stacking: supported</code>) it is built on
    the floor below. A column along a facade not aligned with the voxel grid
    counts only for its share inside the footprint, so whether a module is
-   built does not depend on the angle of the footprint to the grid. A module
+   built does not depend on the angle of the footprint to the grid; a column
+   less than half inside the footprint need not be filled by the maximum
+   volume at all (along a wall the voxels can reach up to a voxel past the
+   footprint, as the re-voxelized envelope of an earlier carving does). A module
    over the tolerance is not built even when built modules enclose it, so a
    local dip in the envelope can leave a hole of one or two modules in a
    floor; holes are not filled. Parts narrower than <code>min_plate_dimension</code> are dropped

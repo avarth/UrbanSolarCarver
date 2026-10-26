@@ -612,6 +612,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../massing/" class="md-nav__link">
         
   
@@ -796,7 +823,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -818,14 +845,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1465,6 +1492,11 @@
 </thead>
 <tbody>
 <tr>
+<td><code>criteria</code></td>
+<td><code>null</code></td>
+<td>A list of criteria carved in sequence on one voxel grid, each deciding among the voxels the one before it kept. With <code>criteria:</code> present, <code>mode</code>, <code>test_surface_path</code>, the carving rule and the mode settings (the list is in <a href="../../criteria/#shared-settings-and-criterion-settings">Criteria</a>) go inside each criterion, and every other key stays at the top level, shared by the chain. Run it with <code>usc run</code>; <code>load_config</code> refuses a chain file</td>
+</tr>
+<tr>
 <td><code>mode</code></td>
 <td><code>"time-based"</code></td>
 <td>Carving mode (see <a href="../../modes/">Modes</a>)</td>
@@ -1711,6 +1743,9 @@
 </code></pre></div>
 <p>Every manifest carries a <code>run_id</code>, new on each run of its stage, and the manifests after preprocessing record the <code>run_id</code> they were built from. A stage refuses an upstream that was re-run since (<code>StageChainError</code>, naming the stage to re-run), so re-run preprocessing once for a run folder written by an earlier version.</p>
 <p>Weighted modes also write <code>preprocessing/patch_weights.npy</code>.</p>
+<p>A chain (<code>criteria:</code>) writes each criterion's <code>preprocessing</code> and <code>thresholding</code> folders to
+<code>&lt;out_dir&gt;/criteria/&lt;id&gt;/</code>, with <code>criteria/chain.json</code> beside them; <code>exporting</code>, <code>massing</code> and <code>run_report.md</code> stay
+in <code>&lt;out_dir&gt;</code> (<a href="../../criteria/#output-folders">details</a>).</p>
 <h2 id="full-reference">Full reference<a class="headerlink" href="#full-reference" title="Permanent link">&para;</a></h2>
 <p>See <code>configs/REFERENCE_all_options.yaml</code> for every parameter with descriptions, or run:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>urbansolarcarver<span class="w"> </span>schema

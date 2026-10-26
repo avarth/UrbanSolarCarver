@@ -488,6 +488,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../massing/" class="md-nav__link">
         
   
@@ -672,7 +699,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -694,14 +721,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1629,12 +1656,25 @@
 <td><code>overrides</code></td>
 <td>Optional list of <code>key=value</code> strings, or a mapping</td>
 </tr>
+<tr>
+<td><code>trace_criteria</code></td>
+<td>Chain files only: list of criterion ids to trace again when starting from <code>preprocessing</code>; the others reuse their existing preprocessing. Default: all</td>
+</tr>
+<tr>
+<td><code>threshold_from_criterion</code></td>
+<td>Chain files only: the id of the criterion thresholding starts at. With <code>trace_criteria</code> it applies when that criterion comes before the first traced one (its preprocessing is read as it is); with <code>start_from: "thresholding"</code> the criteria before it keep their thresholding folders. Default: thresholding starts at the first traced criterion, or at the first criterion when nothing is traced</td>
+</tr>
+<tr>
+<td><code>after</code></td>
+<td>Configs without <code>criteria:</code> only, with <code>start_from</code> <code>thresholding</code>: the previous criterion's thresholding folder or <code>manifest.json</code>, passed to thresholding as <code>after</code>. A chain file, or a run that starts anywhere else, gets a <code>ConfigError</code> reply. Default: none</td>
+</tr>
 </tbody>
 </table>
+<p>When <code>config</code> is a chain file (a <code>criteria:</code> list), <code>run</code> runs the chain through <code>run_chain</code> and <code>overrides</code> set the shared settings only; <code>run_folder</code> then holds <code>criteria/&lt;id&gt;/...</code>, <code>exporting</code> and <code>massing</code> (see <a href="../../criteria/">Criteria</a>). The reply's <code>stage_folders</code> and <code>manifest</code> point at the last criterion's folders and at the chain's exporting and massing. With <code>trace_criteria</code>, every criterion from the first traced one on is thresholded again; the ones before it keep their thresholding, unless <code>threshold_from_criterion</code> names an earlier one, from which thresholding then starts. With <code>start_from: "thresholding"</code>, every criterion is thresholded again unless <code>threshold_from_criterion</code> names one; thresholding then starts there and reads the earlier criteria's thresholding folders (a missing one is a <code>StageChainError</code> naming it).</p>
 <p>Without <code>config</code>, the config is built in memory from the starting values of the mode named in the overrides (<code>mode</code> is required) with the overrides on top; no file is written.</p>
 <p>The reply holds <code>stage_folders</code> (stage name to folder, only for the stages that ran in this call), <code>manifest</code> (the manifest of the last of them), <code>issues</code>, and <code>export_path</code> (exporting), <code>plates_path</code>, <code>mesh_path</code> (the OBJ) and <code>export_mesh_path</code> (the plates in <code>final_mesh_format</code>) (massing) for the stages that produced them.</p>
-<p><strong><code>preprocessing</code>, <code>thresholding</code>, <code>exporting</code>, <code>massing</code></strong> run one stage. They need <code>config</code>; every stage but preprocessing also needs <code>from</code>, the upstream stage's folder or manifest. <code>out_dir</code> defaults to <code>&lt;config out_dir&gt;/&lt;stage&gt;</code>. The reply has <code>issues</code> and <code>manifest</code>, <code>export_path</code> (exporting) or <code>plates_path</code>, <code>mesh_path</code> and <code>export_mesh_path</code> (massing).</p>
-<p><strong><code>run_pipeline</code></strong> runs preprocessing, thresholding and exporting into <code>out_dir</code> (default: the config's <code>out_dir</code>); Grasshopper definitions saved before <code>run</code> existed still send it. <strong><code>simulate_weights</code></strong> writes a simulated-weights file (<code>epw</code>, <code>archetype</code>, <code>out</code>, optional <code>internal_gains_w_m2</code> and <code>eps</code>) and replies with <code>artifact</code> and <code>preview</code>. <strong><code>ping</code></strong> replies with the process id (<code>pid</code>).</p>
+<p><strong><code>preprocessing</code>, <code>thresholding</code>, <code>exporting</code>, <code>massing</code></strong> run one stage. They need <code>config</code>; every stage but preprocessing also needs <code>from</code>, the upstream stage's folder or manifest. <code>out_dir</code> defaults to <code>&lt;config out_dir&gt;/&lt;stage&gt;</code>. <code>thresholding</code> also takes <code>after</code>, the previous criterion's thresholding folder or <code>manifest.json</code> (<code>StageRequest.after</code>): the stage then decides only among the voxels that criterion kept, and <code>out_dir</code> may not be that criterion's own folder. The reply has <code>issues</code> and <code>manifest</code>, <code>export_path</code> (exporting) or <code>plates_path</code>, <code>mesh_path</code> and <code>export_mesh_path</code> (massing).</p>
+<p><strong><code>run_pipeline</code></strong> runs preprocessing, thresholding and exporting into <code>out_dir</code> (default: the config's <code>out_dir</code>); Grasshopper definitions saved before <code>run</code> existed still send it. <strong><code>simulate_weights</code></strong> writes a simulated-weights file (<code>epw</code>, <code>archetype</code>, <code>out</code>, optional <code>internal_gains_w_m2</code> and <code>eps</code>) and replies with <code>artifact</code> and <code>preview</code>. <strong><code>ping</code></strong> replies with the process id (<code>pid</code>) and <code>features</code>, a list of what this engine supports beyond the first version (<code>run_after</code>: the <code>after</code> key of <code>run</code>), so a client can tell an older engine.</p>
 <p>Keys a command does not use are ignored. Reply fields that are None are left out.</p>
 <h2 id="replies">Replies<a class="headerlink" href="#replies" title="Permanent link">&para;</a></h2>
 <p>Every reply to a run or stage command has <code>issues</code>, a list of <code>{stage, code, message}</code>. An error reply has <code>error</code> (the text), <code>error_type</code> (the exception class name; <code>MalformedEngineRequest</code> for a malformed request) and, for a <code>ConfigError</code>, <code>config_errors</code>, a list of <code>{field, message}</code>.</p>
@@ -1757,7 +1797,18 @@ imported when a request runs.</p>
 
         <p>Run the stages needed to produce <em>produce</em> in <em>run_folder</em>
 (:func:<code>urbansolarcarver.api.run_pipeline</code>).  Without <em>config</em> (a YAML
-path) the overrides must name the mode.</p>
+path) the overrides must name the mode.  When <em>config</em> is a chain file
+(a <code>criteria:</code> list) the request runs :func:<code>urbansolarcarver.api.run_chain</code>
+and the overrides set shared settings only.  <em>trace_criteria</em> (chain only,
+ignored otherwise) lists the criterion ids to trace again when starting
+from preprocessing; the others reuse their existing preprocessing.
+<em>threshold_from_criterion</em> (chain only) names the criterion thresholding starts at:
+with <em>trace_criteria</em>, one that comes before the first traced one; when starting
+from thresholding, any one, the criteria before it keeping their thresholding.
+<em>after</em> (a config without <code>criteria:</code>, a run that starts at thresholding) is the
+previous criterion's thresholding folder or manifest: thresholding then decides only
+among the voxels that criterion kept.  A chain file or an earlier <code>start_from</code>
+refuses it.</p>
 
 
 
@@ -1807,7 +1858,10 @@ path) the overrides must name the mode.</p>
 
         <p>Run one stage.  Every stage except preprocessing reads
 <em>upstream_output</em>, the upstream stage's folder or manifest, sent under
-the key <code>from</code>.  <em>out_dir</em> defaults to <code>&lt;config out_dir&gt;/&lt;stage&gt;</code>.</p>
+the key <code>from</code>.  <em>out_dir</em> defaults to <code>&lt;config out_dir&gt;/&lt;stage&gt;</code>.
+<em>after</em> (thresholding only) is the previous criterion's thresholding
+folder or manifest: the stage then decides only among the voxels that
+criterion kept.</p>
 
 
 

@@ -488,6 +488,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../massing/" class="md-nav__link">
         
   
@@ -807,7 +834,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_10" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -829,14 +856,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1447,10 +1474,11 @@
 <p>Both take the geometry: <code>max_volume</code>, <code>test_surfaces</code>, and the optional <code>context</code> (existing buildings and large trees that stay) and <code>terrain</code> (the ground), each a list of Meshes or Breps. Context removes every voxel column of the max volume it overlaps and, with <code>context_blocks_rays</code> on, drops the rays that hit it; terrain removes only the voxels below the ground and drops the rays that hit it. See <a href="../modes/#context-and-terrain">Context and terrain</a>. Leave them unconnected for a run without them.</p>
 <ul>
 <li><strong>USC_ThresholdStage</strong>: runs thresholding only. Accepts <code>threshold_overrides</code> directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.</li>
-<li><strong>USC_Export</strong>: runs exporting only. Accepts <code>postprocess_overrides</code> directly. Errors turn the component red.</li>
-<li><strong>USC_Massing</strong>: stage 4, builds floor plates from the carving mask (inputs <code>config</code>, <code>thr_result</code>, <code>massing_overrides</code>, <code>run</code>; outputs closed Breps, floor areas per floor and in total, and the <code>plates.json</code> path). See <a href="../massing/">Floor-plate massing</a>.</li>
-<li><strong>USC_MassingSettings</strong>: floor heights, module size, tolerance and stacking for USC_Massing. Connect its output to USC_Massing's <code>massing_overrides</code> input so changes re-run only massing.</li>
 </ul>
+<p>To chain two criteria, give the second one its own Config (a different <code>out_dir</code>), Preprocess and ThresholdStage, and wire the first ThresholdStage's <code>thr_result</code> into the second one's <code>after</code> input (the last input; empty = a single criterion as before). The second stage then decides only among the voxels the first kept and never keeps one it removed. A daemon started before the update cannot chain; the component then says so and asks for a restart from USC_Session.
+- <strong>USC_Export</strong>: runs exporting only. Accepts <code>postprocess_overrides</code> directly. Errors turn the component red.
+- <strong>USC_Massing</strong>: stage 4, builds floor plates from the carving mask (inputs <code>config</code>, <code>thr_result</code>, <code>massing_overrides</code>, <code>run</code>; outputs closed Breps, floor areas per floor and in total, and the <code>plates.json</code> path). See <a href="../massing/">Floor-plate massing</a>.
+- <strong>USC_MassingSettings</strong>: floor heights, module size, tolerance and stacking for USC_Massing. Connect its output to USC_Massing's <code>massing_overrides</code> input so changes re-run only massing.</p>
 <p>The stage components send the daemon's <code>run</code> command, each producing its own stage, and read the stage folders from the reply. A stage reads the output of the stage before it from <code>&lt;out_dir&gt;/&lt;stage&gt;</code> of its Config, so Preprocess and the stages after it need the same Config <code>out_dir</code>; the <code>pre_result</code> and <code>thr_result</code> inputs order the solve and still have to be connected. Conditions the engine reports (a setting the mode ignores, nothing carved, a footprint that could not be read, ...) appear as warnings on the component, one per issue, as <code>&lt;stage&gt;: &lt;message&gt;</code>. Re-running preprocessing makes the stages after it refuse their old output until they run again (the error names the stage to re-run).</p>
 <p><strong>Simulated weights</strong> (<code>3::Weights</code>)</p>
 <ul>

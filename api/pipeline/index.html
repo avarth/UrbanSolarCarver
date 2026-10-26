@@ -488,6 +488,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../massing/" class="md-nav__link">
         
   
@@ -672,7 +699,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -694,14 +721,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -818,6 +845,56 @@
     <span class="md-ellipsis">
       
         run_pipeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run_chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_chain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        chain
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="chain">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.chain.ChainResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChainResult
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.chain.run_chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_chain
       
     </span>
   </a>
@@ -1785,6 +1862,56 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#run_chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_chain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        chain
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="chain">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.chain.ChainResult" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        ChainResult
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.api_core.chain.run_chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        run_chain
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#deciding-what-to-re-run" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2322,7 +2449,7 @@
 <a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">exp</span>  <span class="o">=</span> <span class="n">exporting</span><span class="p">(</span><span class="n">thr</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;outputs/exporting&quot;</span><span class="p">))</span>
 </code></pre></div>
 <h2 id="run_pipeline">run_pipeline<a class="headerlink" href="#run_pipeline" title="Permanent link">&para;</a></h2>
-<p><code>run_pipeline(config, out_dir, produce=("exporting",), start_from="preprocessing", context=None)</code> runs <code>start_from</code> and every later stage on the path to the stages in <code>produce</code>. Each stage writes into <code>&lt;out_dir&gt;/&lt;stage&gt;</code>; a stage before <code>start_from</code> is not run, and the next stage reads its output from its folder in <code>out_dir</code>.</p>
+<p><code>run_pipeline(config, out_dir, produce=("exporting",), start_from="preprocessing", context=None, after=None)</code> runs <code>start_from</code> and every later stage on the path to the stages in <code>produce</code>. Each stage writes into <code>&lt;out_dir&gt;/&lt;stage&gt;</code>; a stage before <code>start_from</code> is not run, and the next stage reads its output from its folder in <code>out_dir</code>.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># Floor plates as well as the mesh: preprocessing and thresholding run once</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">result</span> <span class="o">=</span> <span class="n">run_pipeline</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="n">produce</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;exporting&quot;</span><span class="p">,</span> <span class="s2">&quot;massing&quot;</span><span class="p">])</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nb">print</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">exporting</span><span class="o">.</span><span class="n">export_path</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">massing</span><span class="o">.</span><span class="n">plates_path</span><span class="p">)</span>
@@ -2332,7 +2459,7 @@
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="n">result</span> <span class="o">=</span> <span class="n">run_pipeline</span><span class="p">(</span><span class="n">cfg</span><span class="p">,</span> <span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="n">start_from</span><span class="o">=</span><span class="s2">&quot;thresholding&quot;</span><span class="p">)</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="k">assert</span> <span class="n">result</span><span class="o">.</span><span class="n">preprocessing</span> <span class="ow">is</span> <span class="kc">None</span>   <span class="c1"># it did not run in this call</span>
 </code></pre></div>
-<p>The <code>PipelineResult</code> has one attribute per stage (<code>preprocessing</code>, <code>thresholding</code>, <code>exporting</code>, <code>massing</code>): the Result of a stage that ran in this call, None for the others. Its <code>issues</code> are the conditions noticed during the call (see <a href="#issues-and-run-context">Issues and run context</a>). A <code>start_from</code> stage that is not on the path to a produced stage raises <code>ValueError</code>; a missing or stale upstream output raises <code>StageChainError</code>.</p>
+<p>The <code>PipelineResult</code> has one attribute per stage (<code>preprocessing</code>, <code>thresholding</code>, <code>exporting</code>, <code>massing</code>): the Result of a stage that ran in this call, None for the others. Its <code>issues</code> are the conditions noticed during the call (see <a href="#issues-and-run-context">Issues and run context</a>). A <code>start_from</code> stage that is not on the path to a produced stage raises <code>ValueError</code>; a missing or stale upstream output raises <code>StageChainError</code>. <code>after</code> is given to the thresholding stage as its <code>after</code> (see <a href="#thresholding">Thresholding</a>).</p>
 
 
 <div class="doc doc-object doc-module">
@@ -2347,7 +2474,7 @@
 
     <div class="doc doc-contents first">
 
-        <p>Public API: the pipeline stages, the <code>run_pipeline</code> sequencer, and config helpers.</p>
+        <p>Public API: the pipeline stages, the <code>run_pipeline</code> and <code>run_chain</code> sequencers, and config helpers.</p>
 <p>Importing this module imports torch, and Warp if it is installed, through
 <code>api_core</code>.</p>
 
@@ -2427,7 +2554,7 @@ during the call, from all stages, in the order they were noticed.</p>
 
 
 <h3 id="urbansolarcarver.api.run_pipeline" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">run_pipeline</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">,</span> <span class="n">produce</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;exporting&#39;</span><span class="p">,),</span> <span class="n">start_from</span><span class="o">=</span><span class="s1">&#39;preprocessing&#39;</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">run_pipeline</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">,</span> <span class="n">produce</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;exporting&#39;</span><span class="p">,),</span> <span class="n">start_from</span><span class="o">=</span><span class="s1">&#39;preprocessing&#39;</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">after</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.api.run_pipeline" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -2536,6 +2663,28 @@ that also forwards issues to <code>warnings</code> is created.</p>
                   <code>None</code>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>after</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="              ThresholdingResult(out_dir, mask_path, run_id, upstream_run_id, upstream_manifest, threshold_method='', threshold_value=0.0, voxels_kept=0, voxels_removed=0, retention_pct=0.0, issues=())
+
+  
+      dataclass
+   (urbansolarcarver.api_core.ThresholdingResult)" href="#urbansolarcarver.api_core.thresholding.ThresholdingResult">ThresholdingResult</a> | <span title="str">str</span> | <span title="pathlib.Path">Path</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The previous criterion's thresholding result, folder or manifest,
+given to the thresholding stage as its <code>after</code> (see
+:func:<code>thresholding</code>).</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -2595,6 +2744,342 @@ not on the path to a produced stage.</p>
             <td>
               <div class="doc-md-description">
                 <p>If the stage before <code>start_from</code> has no usable output in <code>out_dir</code>.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="RunCancelled">RunCancelled</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If the context is cancelled; stages that finished keep their output.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    </div>
+
+</div>
+
+
+
+  </div>
+
+    </div>
+
+</div><h2 id="run_chain">run_chain<a class="headerlink" href="#run_chain" title="Permanent link">&para;</a></h2>
+<p><code>run_chain(chain, out_dir=None, produce=("exporting",), start_from="preprocessing", context=None, trace=None, threshold_from=None)</code> runs the criteria of a chain file in order on one voxel grid, then exporting and massing from the last (see <a href="../../criteria/">Criteria</a>). <em>chain</em> is a path or a <code>ChainConfig</code> from <code>load_chain</code>. Each criterion's stages write to <code>&lt;out_dir&gt;/criteria/&lt;id&gt;/&lt;stage&gt;</code>, and a criterion's thresholding takes the previous criterion's as <code>after</code>. It returns a <code>ChainResult</code>: one <code>PipelineResult</code> per criterion in <code>criteria</code>, then <code>exporting</code>, <code>massing</code> and the <code>issues</code> of the call. With <code>trace</code> (ids of criteria), only those criteria run preprocessing again and the others read their existing preprocessing folder; every criterion from the first traced one on is thresholded again. With <code>threshold_from</code> (an id of the chain), thresholding starts at the earlier of that criterion and the first traced one; the earlier criterion's preprocessing is read as it is. With <code>start_from="thresholding"</code>, every criterion is thresholded again unless <code>threshold_from</code> is given: thresholding then starts at that criterion, and the criteria before it keep their thresholding folders, which the criterion decides after (<code>StageChainError</code> naming the folder when one is missing).</p>
+
+
+<div class="doc doc-object doc-module">
+
+
+
+<h2 id="urbansolarcarver.api_core.chain" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-module"></code>            <code>urbansolarcarver.api_core.chain</code>
+
+
+<a href="#urbansolarcarver.api_core.chain" class="headerlink" title="Permanent link">&para;</a></h2>
+
+    <div class="doc doc-contents first">
+
+        <p><code>run_chain</code>: criteria carved in sequence on one voxel grid, then exporting and massing from the last.</p>
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="urbansolarcarver.api_core.chain.ChainResult" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>              <code class="highlight language-python"><span class="n">ChainResult</span><span class="p">(</span><span class="n">criteria</span><span class="p">,</span> <span class="n">exporting</span><span class="p">,</span> <span class="n">massing</span><span class="p">,</span> <span class="n">issues</span><span class="p">)</span></code>
+
+  <span class="doc doc-labels">
+      <small class="doc doc-label doc-label-dataclass"><code>dataclass</code></small>
+  </span>
+
+<a href="#urbansolarcarver.api_core.chain.ChainResult" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+
+
+        <p>What one :func:<code>run_chain</code> call produced.</p>
+<p><code>criteria</code> has one :class:<code>~urbansolarcarver.PipelineResult</code> per criterion, in order, holding the
+preprocessing and thresholding Results of the stages that ran in this call (None for a stage that did not) and the
+issues reported while that criterion ran. <code>exporting</code> and <code>massing</code> are built from the last criterion and are
+None when they were not produced. <code>issues</code> are all the issues of the call, in the order they were noticed.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.api_core.chain.run_chain" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">run_chain</span><span class="p">(</span><span class="n">chain</span><span class="p">,</span> <span class="n">out_dir</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">produce</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;exporting&#39;</span><span class="p">,),</span> <span class="n">start_from</span><span class="o">=</span><span class="s1">&#39;preprocessing&#39;</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">trace</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">threshold_from</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.api_core.chain.run_chain" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Carve the criteria of <em>chain</em> one after the other on one voxel grid, then build from the last.</p>
+<p>Criterion <code>&lt;id&gt;</code> runs preprocessing into <code>out_dir/criteria/&lt;id&gt;/preprocessing</code> and thresholding into
+<code>out_dir/criteria/&lt;id&gt;/thresholding</code>, deciding only among the voxels the previous criterion kept. Exporting and
+massing read the last criterion's thresholding and write <code>out_dir/exporting</code> and <code>out_dir/massing</code>, with the
+settings the criteria share. <code>out_dir/criteria/chain.json</code> lists the criteria and the thresholding run of each,
+and the run report has a "Criteria" section.</p>
+
+
+<p><span class="doc-section-title">Parameters:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Type</th>
+          <th>Description</th>
+          <th>Default</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                <code>chain</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="              ChainConfig(criteria, shared)
+
+  
+      dataclass
+   (urbansolarcarver.chain_config.ChainConfig)" href="../config/#urbansolarcarver.chain_config.ChainConfig">ChainConfig</a> | <span title="str">str</span> | <span title="pathlib.Path">Path</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>A loaded chain, or the path of a YAML file with a <code>criteria:</code> list.</p>
+              </div>
+            </td>
+            <td>
+                <em>required</em>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>out_dir</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | <span title="pathlib.Path">Path</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The run folder. Default: the <code>out_dir</code> of the chain's shared settings.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>produce</code>
+            </td>
+            <td>
+                  <code>iterable of str</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Stages wanted, as for :func:<code>~urbansolarcarver.run_pipeline</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>(&#39;exporting&#39;,)</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>start_from</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p><code>"preprocessing"</code> traces every criterion. <code>"thresholding"</code> reads each criterion's existing preprocessing
+folder and thresholds the chain again (from <code>threshold_from</code> on, when given). <code>"exporting"</code> and <code>"massing"</code> read the last criterion's existing
+thresholding folder.</p>
+              </div>
+            </td>
+            <td>
+                  <code>&#39;preprocessing&#39;</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>context</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="              RunContext(on_progress=None, forward_issues_to_warnings=False) (urbansolarcarver.run_context.RunContext)" href="#urbansolarcarver.run_context.RunContext">RunContext</a> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Progress callback and cancel flag for the run. Progress is reported under <code>criterion &lt;id&gt;</code> for the
+criteria, and the issues of a criterion's stages are named <code>criterion &lt;id&gt; (&lt;stage&gt;)</code>. Without a context,
+one that also forwards issues to <code>warnings</code> is created.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>trace</code>
+            </td>
+            <td>
+                  <code>collection of str | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>With <code>start_from="preprocessing"</code>: the ids of the criteria to trace again. The others read their existing
+<code>criteria/&lt;id&gt;/preprocessing</code> folder, and every criterion from the first traced one on is thresholded
+again (the ones before it keep their thresholding, which the first thresholded one decides after).
+Default: trace every criterion. Ignored for the other values of <em>start_from</em>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>threshold_from</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>With <code>start_from="preprocessing"</code>: the id of a criterion to threshold again even when it comes before the first
+traced one (its preprocessing, which was not traced, is read as it is). Thresholding then starts at the earlier of
+this criterion and the first traced one. Default: start at the first traced criterion.
+With <code>start_from="thresholding"</code>: thresholding starts at this criterion; the criteria before it keep their
+thresholding, which the first one thresholded decides after. Default: threshold every criterion.
+Ignored for the other values of <em>start_from</em>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+    <p><span class="doc-section-title">Returns:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="              ChainResult(criteria, exporting, massing, issues)
+
+  
+      dataclass
+   (urbansolarcarver.api_core.chain.ChainResult)" href="#urbansolarcarver.api_core.chain.ChainResult">ChainResult</a></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The Results of each stage that ran (None for the others) and the issues of the call.</p>
+              </div>
+            </td>
+          </tr>
+      </tbody>
+    </table>
+
+
+<p><span class="doc-section-title">Raises:</span></p>
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="ValueError">ValueError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If <em>produce</em> is empty or names an unknown stage, <em>start_from</em> is not on the path to a produced stage, or
+<em>trace</em> names no criterion of the chain, or <em>threshold_from</em> names none.</p>
+              </div>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                  <code><span title="StageChainError">StageChainError</span></code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>If a folder to read before <code>start_from</code> (or the preprocessing folder of a criterion that <em>trace</em> leaves
+out, or of a criterion before <em>threshold_from</em> with <code>start_from="thresholding"</code>) has no usable output; the
+message names the stage to re-run.</p>
               </div>
             </td>
           </tr>
@@ -3670,6 +4155,7 @@ allocated).</p>
 
 </div><h2 id="thresholding">Thresholding<a class="headerlink" href="#thresholding" title="Permanent link">&para;</a></h2>
 <p>Converts the score array into a binary carving mask: optional score smoothing, then <code>carve_fraction</code>, head/tail breaks, or a numeric cutoff over the occupied voxels, with <code>carve_above</code> applied through <code>column_postprocessing.carve_above_scores</code> (the cutoff at which carve_above removes each voxel, so that <code>carve_fraction</code> counts what carve_above removes), then the slope limit (<code>max_slope_deg</code>, 75 degrees for the weighted modes; <code>column_postprocessing.limit_column_slope</code>). Writes <code>mask.npy</code> and <code>scores_compared_with_cutoff.npy</code> (float32, the grid shape: the values the cutoff is applied to before the slope limit, which are the <code>carve_above</code> removal cutoffs when <code>carve_above</code> is on and the smoothed scores otherwise); the diagnostics record <code>max_slope_deg</code>, <code>slope_limit_extra_voxels_removed</code> and <code>obstruction_fraction_carved_by_slope_limit</code>.</p>
+<p>With <code>after=</code> (the previous criterion's <code>ThresholdingResult</code>, thresholding folder or <code>manifest.json</code>), the stage decides only among the voxels the previous criterion kept and never keeps a voxel it removed. The manifest records <code>after_manifest</code> and <code>after_run_id</code>, the diagnostics record <code>voxels_at_start</code>, and a previous criterion on another grid, one re-run since, or the previous criterion's own output folder as <code>out_dir</code> raises <code>StageChainError</code>.</p>
 
 
 <div class="doc doc-object doc-module">
@@ -3762,12 +4248,12 @@ passed directly as a path-like to :func:<code>exporting</code>.</p>
 
 
 <h3 id="urbansolarcarver.api_core.thresholding.thresholding" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">thresholding</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">)</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">thresholding</span><span class="p">(</span><span class="n">volume</span><span class="p">,</span> <span class="n">cfg</span><span class="p">,</span> <span class="n">out_dir</span><span class="p">,</span> <span class="n">after</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#urbansolarcarver.api_core.thresholding.thresholding" class="headerlink" title="Permanent link">&para;</a></h3>
           <div class="doc-overloads">
-<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">thresholding</span><span class="p">(</span><span class="n">volume</span><span class="p">:</span> <span class="s1">&#39;PreprocessingResult&#39;</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">user_config</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">out_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ThresholdingResult</span>
-</code></pre></div><div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">thresholding</span><span class="p">(</span><span class="n">volume</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">user_config</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">out_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">ThresholdingResult</span>
+<div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">thresholding</span><span class="p">(</span><span class="n">volume</span><span class="p">:</span> <span class="s1">&#39;PreprocessingResult&#39;</span><span class="p">,</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">user_config</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">out_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">after</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">ThresholdingResult</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ThresholdingResult</span>
+</code></pre></div><div class="doc-signature highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nf">thresholding</span><span class="p">(</span><span class="n">volume</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">cfg</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">user_config</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">out_dir</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">],</span> <span class="n">after</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">ThresholdingResult</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="n">Path</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ThresholdingResult</span>
 </code></pre></div>          </div>
 
 
@@ -3807,6 +4293,19 @@ steeply than <code>max_slope_deg</code> above their surroundings are cut down
 some score beyond the fraction, reported as
 <code>obstruction_fraction_carved_by_slope_limit</code>.  <code>mask.npy</code> is the
 final mask that gets exported.</p>
+<p>After a previous criterion (<code>after</code>): in a chain of criteria on one
+voxel grid, each criterion decides only among the voxels the previous
+one kept.  The base of this run is then the occupied voxels that the
+previous criterion's <code>mask.npy</code> keeps, instead of all occupied voxels:
+smoothing, the threshold statistics, <code>carve_fraction</code>, <code>carve_above</code>
+and the slope limit all act on those voxels, and the mask is never True
+where the previous mask is False.  Both runs must share the grid (max
+volume, context, terrain, voxel size and margin); otherwise a
+StageChainError is raised.  When the previous criterion kept no voxel,
+the mask is empty and the issue <code>nothing_left_to_carve</code> is reported.
+The manifest then records <code>after_manifest</code> and <code>after_run_id</code>, and
+the diagnostics <code>after_run_id</code> and <code>voxels_at_start</code> (the voxels this
+criterion decides about).</p>
 <p>Score smoothing (<code>cfg.score_smoothing</code>):</p>
 <p>Before thresholding, a Gaussian blur can be applied to the continuous
 score volume to smooth resolution-dependent noise.  This produces a
@@ -3891,6 +4390,28 @@ All artifacts are written directly into it.</p>
                 <em>required</em>
             </td>
           </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>after</code>
+            </td>
+            <td>
+                  <code><a class="autorefs autorefs-internal" title="              ThresholdingResult(out_dir, mask_path, run_id, upstream_run_id, upstream_manifest, threshold_method='', threshold_value=0.0, voxels_kept=0, voxels_removed=0, retention_pct=0.0, issues=())
+
+  
+      dataclass
+   (urbansolarcarver.api_core.thresholding.ThresholdingResult)" href="#urbansolarcarver.api_core.thresholding.ThresholdingResult">ThresholdingResult</a> | <span title="str">str</span> | <span title="pathlib.Path">Path</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>The previous criterion's :class:<code>ThresholdingResult</code>, or a path to
+its thresholding folder / <code>manifest.json</code>; None (default) for a
+first or only criterion, which decides among all occupied voxels.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
       </tbody>
     </table>
 
@@ -3938,7 +4459,9 @@ All artifacts are written directly into it.</p>
     <code>ThresholdingManifest</code> recording a random <code>run_id</code> (new on every
     run), the mask path, the path of <code>scores_compared_with_cutoff.npy</code>,
     the path and <code>run_id</code> of the upstream
-    preprocessing manifest (paths relative to the manifest's folder), and
+    preprocessing manifest and, with <code>after</code>, of the previous
+    criterion's thresholding manifest (paths relative to the manifest's
+    folder), and
     the resolved threshold strategy, score smoothing radius (m) and slope
     limit this run applied.  The
     outputs of an earlier run in <em>out_dir</em> are deleted first and the
@@ -3964,8 +4487,11 @@ All artifacts are written directly into it.</p>
             </td>
             <td>
               <div class="doc-md-description">
-                <p>If the preprocessing manifest cannot be read, the config's mode
-differs from the preprocessing run's, or the scores or the occupancy
+                <p>If the preprocessing manifest cannot be read, <em>out_dir</em> is the previous
+criterion's own thresholding folder (with <code>after</code>), the config's mode
+differs from the preprocessing run's, the previous criterion (with
+<code>after</code>) is missing, was built on another grid, or has itself been
+re-run since its own upstream, or the scores or the occupancy
 grid it names are missing or do not match its grid shape (a
 ValueError; the message names the stage to re-run).</p>
               </div>

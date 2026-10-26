@@ -486,6 +486,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../massing/" class="md-nav__link">
         
   
@@ -670,7 +697,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_10" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -692,14 +719,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_10" id="__nav_10_label" tabindex="">
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_10_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_10">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_11">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1703,6 +1730,12 @@ thresholding and massing; both together threshold once.  With
 <code>--start-from thresholding</code> the scores already in <code>&lt;out&gt;/preprocessing</code>
 are reused, which is the way to iterate on threshold parameters without
 recomputing them.</p>
+<p>A config with a <code>criteria:</code> list is a chain: the criteria are carved one
+after the other on one voxel grid, each deciding only among the voxels the
+one before kept, and exporting and massing build from the last. Each
+criterion's stages go to <code>&lt;out&gt;/criteria/&lt;id&gt;/preprocessing</code> and
+<code>&lt;out&gt;/criteria/&lt;id&gt;/thresholding</code>. <code>--override</code> then sets shared
+settings only (meshes, voxel size, out_dir, exporting, massing).</p>
 
 
     </div>
@@ -1733,7 +1766,7 @@ the output directory.  The manifest is consumed by the thresholding stage.</p>
 
 
 <h3 id="urbansolarcarver.carver_cli.cmd_thresholding" class="doc doc-heading">
-<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">cmd_thresholding</span><span class="p">(</span><span class="n">from_manifest</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;-f&#39;</span><span class="p">,</span> <span class="s1">&#39;--from&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Path to preprocessing manifest.json (auto-detected if omitted)&#39;</span><span class="p">),</span> <span class="n">config</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s1">&#39;-c&#39;</span><span class="p">,</span> <span class="s1">&#39;--config&#39;</span><span class="p">,</span> <span class="n">exists</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">readable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;YAML config path&#39;</span><span class="p">),</span> <span class="n">override</span><span class="o">=</span><span class="n">Option</span><span class="p">([],</span> <span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="s1">&#39;--override&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Override config fields&#39;</span><span class="p">),</span> <span class="n">out_dir</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--out&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Output directory&#39;</span><span class="p">),</span> <span class="n">daemon</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;--daemon&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Send to running daemon&#39;</span><span class="p">),</span> <span class="n">quiet</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;-q&#39;</span><span class="p">,</span> <span class="s1">&#39;--quiet&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Minimal output&#39;</span><span class="p">))</span></code>
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">cmd_thresholding</span><span class="p">(</span><span class="n">from_manifest</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;-f&#39;</span><span class="p">,</span> <span class="s1">&#39;--from&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Path to preprocessing manifest.json (auto-detected if omitted)&#39;</span><span class="p">),</span> <span class="n">config</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="s1">&#39;-c&#39;</span><span class="p">,</span> <span class="s1">&#39;--config&#39;</span><span class="p">,</span> <span class="n">exists</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">readable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;YAML config path&#39;</span><span class="p">),</span> <span class="n">override</span><span class="o">=</span><span class="n">Option</span><span class="p">([],</span> <span class="s1">&#39;-o&#39;</span><span class="p">,</span> <span class="s1">&#39;--override&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Override config fields&#39;</span><span class="p">),</span> <span class="n">after</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--after&#39;</span><span class="p">,</span> <span class="n">exists</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">readable</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Thresholding folder or manifest.json of the previous criterion: decide only among the voxels it kept&#39;</span><span class="p">),</span> <span class="n">out_dir</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;--out&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Output directory&#39;</span><span class="p">),</span> <span class="n">daemon</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;--daemon&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Send to running daemon&#39;</span><span class="p">),</span> <span class="n">quiet</span><span class="o">=</span><span class="n">Option</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="s1">&#39;-q&#39;</span><span class="p">,</span> <span class="s1">&#39;--quiet&#39;</span><span class="p">,</span> <span class="n">help</span><span class="o">=</span><span class="s1">&#39;Minimal output&#39;</span><span class="p">))</span></code>
 
 <a href="#urbansolarcarver.carver_cli.cmd_thresholding" class="headerlink" title="Permanent link">&para;</a></h3>
 
@@ -1747,6 +1780,9 @@ applies the threshold from the config to the occupied voxels, and writes
 <p>This is the cheapest stage and is meant for quick iteration.  Re-run with
 different <code>-o threshold=...</code> or <code>-o carve_fraction=...</code> values without
 recomputing scores.</p>
+<p>With <code>--after</code> the threshold applies only to the voxels the previous
+criterion's thresholding kept (one step of a chain; <code>run</code> does the whole
+chain from a config with <code>criteria:</code>).</p>
 
 
     </div>
@@ -1887,6 +1923,9 @@ are edited directly in YAML (see configs/archetype_example.yaml).</p>
 mesh (context and terrain included), EPW and simulated-weights files, and a simulated-weights file that
 cannot be read, are printed as warnings only (exit code 0).  Does not
 initialise CUDA or import torch.</p>
+<p>A config with a <code>criteria:</code> list is a chain: every criterion is
+validated and listed on a line of its own, with the settings the
+criteria share printed once.</p>
 
 
     </div>

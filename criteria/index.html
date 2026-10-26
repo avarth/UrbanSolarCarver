@@ -1,0 +1,1690 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="GPU-accelerated solar envelope generation for urban design">
+      
+      
+      
+        <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/criteria/">
+      
+      
+        <link rel="prev" href="../modes/">
+      
+      
+        <link rel="next" href="../massing/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Chained carvings - Urban Solar Carver</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#criteria-chained-carvings" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Urban Solar Carver" class="md-header__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Urban Solar Carver
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Chained carvings
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Urban Solar Carver" class="md-nav__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Urban Solar Carver
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-a-chain-is" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a chain is
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-config-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The config file
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The config file">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shared-settings-and-criterion-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared settings and criterion settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-a-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running a chain
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running a chain">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#output-folders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output folders
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#one-step-of-a-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One step of a chain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changing-a-criterion-is-cheap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing a criterion is cheap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-the-browser-apps-service" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In the browser app's service
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-grasshopper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Grasshopper
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../grasshopper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grasshopper Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-map/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Map
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_11">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/carving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/ray-tracing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ray Tracing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/geometry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sky-patches/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sky Patches
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sun Vectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/daemon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Daemon
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#what-a-chain-is" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a chain is
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-config-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The config file
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The config file">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shared-settings-and-criterion-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shared settings and criterion settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-a-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running a chain
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running a chain">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#output-folders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Output folders
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#one-step-of-a-chain" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        One step of a chain
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#changing-a-criterion-is-cheap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changing a criterion is cheap
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-the-browser-apps-service" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In the browser app's service
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-grasshopper" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Grasshopper
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="criteria-chained-carvings">Criteria: chained carvings<a class="headerlink" href="#criteria-chained-carvings" title="Permanent link">&para;</a></h1>
+<p>A designer often protects different things with different criteria: the daylight of the neighbours' windows, the
+winter sun on a school yard, the PV potential of roofs. Each has its own test surfaces, its own sky or sun model and its
+own threshold. A <strong>chain</strong> carves them one after the other on one voxel grid, from a single config file.</p>
+<div class="admonition note">
+<p class="admonition-title">Where this works today</p>
+<p>Chains run from the CLI (<code>usc run</code>), the Python API (<code>run_chain</code>) and the daemon. The local service behind the
+browser app stores and runs projects with several criteria (see <a href="#in-the-browser-apps-service">In the browser app's service</a>),
+and Grasshopper chains two criteria through the <code>after</code> input of USC_ThresholdStage (see
+<a href="#in-grasshopper">In Grasshopper</a>). The browser app shows a project's criteria in the Criteria step, each with a
+switch, a menu and a panel (see <a href="../ui/#several-criteria">Several criteria</a>).</p>
+</div>
+<h2 id="what-a-chain-is">What a chain is<a class="headerlink" href="#what-a-chain-is" title="Permanent link">&para;</a></h2>
+<p>A chain is an ordered list of <strong>criteria</strong>. Each criterion is one carving pass with its own mode, test surfaces,
+mode settings and carving rule (<code>carve_fraction</code>, <code>threshold</code>, smoothing, <code>carve_above</code>, <code>max_slope_deg</code>).</p>
+<ul>
+<li><strong>The maximum volume stays as drawn.</strong> Every criterion traces its rays over the same voxel grid, built once from the
+  maximum volume, context and terrain. No mesh is made between criteria, so nothing is voxelized twice.</li>
+<li><strong>Each criterion decides among what the one before it kept.</strong> Its carve amount refers to the voxels still there when
+  it starts: <code>carve_fraction: 0.8</code> in the second criterion removes 80 % of the score over the voxels the first one
+  kept, not 80 % of the whole volume. Its histogram, <code>carve_above</code> and slope limit act on those voxels too, and it
+  never brings back a voxel an earlier criterion removed. The order therefore matters.</li>
+<li><strong>Exporting and massing build once, from the last criterion.</strong> Massing measures its floor plates against the
+  maximum volume as drawn and its saved footprint, so the facades follow the drawn outline instead of the voxel
+  staircase of the envelope.</li>
+</ul>
+<p>A voxel's score is the weight of the rays that cross it, and it does not depend on which other voxels remain. So a
+criterion's scores are the same as in a run of its settings alone on the drawn maximum volume. Only thresholding
+depends on the criterion before it.</p>
+<h2 id="the-config-file">The config file<a class="headerlink" href="#the-config-file" title="Permanent link">&para;</a></h2>
+<p>Settings shared by the whole chain are at the top level, and the criteria are listed under <code>criteria:</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Shared by the whole chain</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">max_volume_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;site/maxVolume.ply&quot;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nt">context_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;site/surroundings.ply&quot;</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="nt">epw_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;weather/athens.epw&quot;</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">voxel_size</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">out_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;outputs&quot;</span>
+<a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="nt">criteria</span><span class="p">:</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daylight</span>
+<a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Daylight on neighbours&#39; windows</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daylight</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;protect/windows.ply&quot;</span>
+<a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">    </span><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.7</span>
+<a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">winter-sun</span>
+<a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="w">    </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Winter sun on the yard</span>
+<a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a><span class="w">    </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">benefit</span>
+<a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a><span class="w">    </span><span class="nt">test_surface_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;protect/yard.ply&quot;</span>
+<a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="w">    </span><span class="nt">start_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11</span>
+<a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a><span class="w">    </span><span class="nt">start_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<a id="__codelineno-0-20" name="__codelineno-0-20" href="#__codelineno-0-20"></a><span class="w">    </span><span class="nt">start_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<a id="__codelineno-0-21" name="__codelineno-0-21" href="#__codelineno-0-21"></a><span class="w">    </span><span class="nt">end_month</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<a id="__codelineno-0-22" name="__codelineno-0-22" href="#__codelineno-0-22"></a><span class="w">    </span><span class="nt">end_day</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">28</span>
+<a id="__codelineno-0-23" name="__codelineno-0-23" href="#__codelineno-0-23"></a><span class="w">    </span><span class="nt">end_hour</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">16</span>
+<a id="__codelineno-0-24" name="__codelineno-0-24" href="#__codelineno-0-24"></a><span class="w">    </span><span class="nt">carve_fraction</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span>
+</code></pre></div>
+<p>Relative paths are resolved against the folder of the YAML file, as in any config. A file with a <code>criteria:</code> list
+is a chain file, and <code>load_config</code> refuses it: use <code>load_chain</code>, or let <code>usc run</code> choose.</p>
+<h3 id="shared-settings-and-criterion-settings">Shared settings and criterion settings<a class="headerlink" href="#shared-settings-and-criterion-settings" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Belongs to</th>
+<th>Settings</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Each criterion</strong></td>
+<td><code>id</code>, <code>name</code>, <code>mode</code>, <code>test_surface_path</code>; the carving rule (<code>threshold</code>, <code>carve_fraction</code>, <code>score_smoothing</code>, <code>carve_above</code>, <code>carve_above_min_consecutive</code>, <code>max_slope_deg</code>); the mode's own settings (the analysis period <code>start_month</code> .. <code>end_hour</code> or an <code>analysis_period:</code> mapping, <code>sun_steps_per_hour</code>, <code>min_altitude</code>, <code>time_basis</code>, <code>balance_temperature</code>, <code>balance_offset</code>, <code>simulated_weights_path</code>, <code>include_harm</code>, <code>tilted_plane_angle_deg</code>, <code>dew_point_celsius</code>, <code>bliss_k</code>, <code>min_sky_elevation_deg</code>); <code>rays_per_patch</code> and <code>edge_taper</code></td>
+</tr>
+<tr>
+<td><strong>Shared by the chain</strong></td>
+<td><code>max_volume_path</code>, <code>context_path</code>, <code>terrain_path</code>, <code>context_blocks_rays</code>, <code>voxel_size</code>, <code>grid_step</code>, <code>ray_length</code>, <code>device</code>, <code>epw_path</code>, <code>out_dir</code>, <code>north_deg</code>, <code>margin_frac</code>, and the exporting and massing settings (<code>min_voxels</code>, <code>apply_smoothing</code>, <code>final_mesh_format</code>, <code>ground_floor_height</code>, <code>floor_height</code>, <code>min_plate_dimension</code>, <code>plate_tolerance</code>, <code>plate_stacking</code>, <code>diagnostics</code>, <code>diagnostic_plots</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>In code the first row is <code>urbansolarcarver.chain_config.CRITERION_KEYS</code>; every other config key is shared.
+Putting a shared setting inside a criterion, or a criterion setting at the top level, is an error that names the
+setting, so a file never means two things. <code>-o</code> overrides on the command line set shared settings only.</p>
+<p><code>epw_path</code> is shared but only reaches the criteria whose mode reads a weather file (<code>time-based</code>, <code>irradiance</code>,
+<code>benefit</code>). A <code>daylight</code> criterion in the same chain does not receive it, so it raises no warning about an unused
+setting.</p>
+<p><strong>Ids.</strong> A criterion's <code>id</code> names its output folder, so it is 1 to 40 letters, digits, <code>_</code> or <code>-</code>, and ids are unique
+ignoring case (Windows and macOS ignore case in folder names). The names Windows reserves for devices (<code>CON</code>, <code>PRN</code>, <code>AUX</code>, <code>NUL</code>, <code>COM1</code> to <code>COM9</code>, <code>LPT1</code> to <code>LPT9</code>) cannot be folder names there and are refused. Without an <code>id</code> the criterion gets its position
+(<code>1</code>, <code>2</code>, ...). Without a <code>name</code> the display name is its mode.</p>
+<p>Every criterion is validated when the file is loaded. An error in a criterion's settings starts with
+<code>criterion &lt;id&gt; (&lt;name&gt;):</code>; an error in an id or in where a setting is placed names the criterion's position.</p>
+<p>The preprocessing manifests do not record a chain root. Each criterion voxelizes the same maximum volume, and
+<code>thresholding</code> checks the grid (voxel size, origin, shape and occupancy) of the previous criterion instead.</p>
+<h2 id="running-a-chain">Running a chain<a class="headerlink" href="#running-a-chain" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>usc<span class="w"> </span>validate<span class="w"> </span>-c<span class="w"> </span>chain.yaml<span class="w">          </span><span class="c1"># lists the criteria and the shared settings</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>usc<span class="w"> </span>run<span class="w"> </span>-c<span class="w"> </span>chain.yaml<span class="w">               </span><span class="c1"># criteria in order, then exporting</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>usc<span class="w"> </span>run<span class="w"> </span>-c<span class="w"> </span>chain.yaml<span class="w"> </span>--produce<span class="w"> </span>massing
+</code></pre></div>
+<p><code>usc run</code> runs preprocessing and thresholding of each criterion in order, then exporting (or massing) from the last.
+<code>--start-from thresholding</code> reuses every criterion's existing scores and thresholds the chain again.</p>
+<p>From Python:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">urbansolarcarver</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_chain</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">result</span> <span class="o">=</span> <span class="n">run_chain</span><span class="p">(</span><span class="s2">&quot;chain.yaml&quot;</span><span class="p">,</span> <span class="n">out_dir</span><span class="o">=</span><span class="s2">&quot;outputs&quot;</span><span class="p">,</span> <span class="n">produce</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;exporting&quot;</span><span class="p">,</span> <span class="s2">&quot;massing&quot;</span><span class="p">))</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">result</span><span class="o">.</span><span class="n">criteria</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">thresholding</span><span class="o">.</span><span class="n">retention_pct</span>   <span class="c1"># what the first criterion kept</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">result</span><span class="o">.</span><span class="n">exporting</span><span class="o">.</span><span class="n">export_path</span>
+</code></pre></div>
+<p><code>run_chain(chain, out_dir=None, produce=("exporting",), start_from="preprocessing", context=None, trace=None,
+threshold_from=None)</code> accepts a path or a <code>ChainConfig</code> from <code>load_chain</code>, and returns a <code>ChainResult</code>: one
+<code>PipelineResult</code> per criterion, then <code>exporting</code> and <code>massing</code> (None when not produced) and the issues of the call. An
+issue of a criterion's stage is named <code>criterion &lt;id&gt; (&lt;stage&gt;)</code>.</p>
+<p>With <code>start_from="preprocessing"</code>, <code>trace</code> is a collection of criterion ids: only those criteria trace their rays
+again, and the others keep their existing preprocessing folder (<code>StageChainError</code> when it is missing). Thresholding
+runs for every criterion from the first one that traced on, so a criterion decides after the existing run of the one
+before it. <code>threshold_from</code> names a criterion, earlier in the chain than the first traced one, whose thresholding is run
+again as well. With <code>start_from="thresholding"</code>, every criterion is thresholded again, or, with <code>threshold_from</code>, only that
+criterion and the ones after it; the ones before it keep their thresholding folders (<code>StageChainError</code> when one is
+missing). A <code>trace</code> that names no criterion of the chain (an empty one too, with <code>start_from="preprocessing"</code>) and
+a <code>threshold_from</code> that is not in the chain (with either start) raise <code>ValueError</code> before anything is touched. The default of both is the
+behaviour without them: every criterion traces and thresholds.</p>
+<p>The daemon runs a chain when a <code>run</code> request names a chain file; its overrides set shared settings only, and its
+<code>trace_criteria</code> and <code>threshold_from_criterion</code> keys are these two arguments (see
+<a href="../api/engine-requests/">Engine requests</a>).</p>
+<h3 id="output-folders">Output folders<a class="headerlink" href="#output-folders" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>outputs/
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>  criteria/
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    daylight/
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>      preprocessing/   scores.npy, voxel_grid.npy, footprint.json, manifest.json, diagnostics/
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>      thresholding/    mask.npy, manifest.json, diagnostics/
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    winter-sun/
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>      preprocessing/
+<a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>      thresholding/
+<a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>    chain.json         the criteria in order, with the thresholding run of each
+<a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>  exporting/
+<a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>  massing/             (when produced)
+<a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>  run_report.md
+</code></pre></div>
+<p>The run report has a "Criteria" section with one row per criterion (name, mode, rule, cutoff with its unit, voxels at
+start, voxels kept). With two or more criteria a "Chain" section follows: the maximum volume (the filled voxels the
+first criterion started with), the volume left after each criterion in m³ and its share of the maximum volume, and the
+total time covers every criterion's analysis and carving. Its Configuration, Preprocessing and Thresholding sections
+describe the last criterion.</p>
+<h2 id="one-step-of-a-chain">One step of a chain<a class="headerlink" href="#one-step-of-a-chain" title="Permanent link">&para;</a></h2>
+<p><code>thresholding</code> takes the previous criterion's result as an optional input, <code>after</code>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>usc<span class="w"> </span>thresholding<span class="w"> </span>-c<span class="w"> </span>winter_sun.yaml<span class="w"> </span>--from<span class="w"> </span>outputs/criteria/winter-sun/preprocessing/manifest.json<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">    </span>--after<span class="w"> </span>outputs/criteria/daylight/thresholding<span class="w"> </span>--out<span class="w"> </span>outputs/criteria/winter-sun/thresholding
+</code></pre></div>
+<p>This step needs a single-criterion config (<code>winter_sun.yaml</code> holds the settings of one criterion): <code>usc thresholding</code>
+reads it with <code>load_config</code>, which refuses a chain file. Give <code>--out</code> the criterion's own folder as above; without it
+the result goes to <code>&lt;out_dir of the config&gt;/thresholding</code>, and a later <code>usc run -c chain.yaml --start-from exporting</code>
+would build from the criterion that is in the chain's folder. The output folder may not be the previous criterion's own
+(<code>StageChainError</code>).</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">urbansolarcarver</span><span class="w"> </span><span class="kn">import</span> <span class="n">thresholding</span>
+<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
+<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">thr2</span> <span class="o">=</span> <span class="n">thresholding</span><span class="p">(</span><span class="n">pre2</span><span class="p">,</span> <span class="n">cfg2</span><span class="p">,</span> <span class="s2">&quot;outputs/criteria/winter-sun/thresholding&quot;</span><span class="p">,</span> <span class="n">after</span><span class="o">=</span><span class="n">thr1</span><span class="p">)</span>
+</code></pre></div>
+<p><code>--after</code> and <code>after</code> take the folder or the <code>manifest.json</code> of the previous criterion's thresholding (the Python
+function also takes its result). The mask of this run is never True where the previous mask is False.</p>
+<ul>
+<li>The manifest records <code>after_manifest</code> and <code>after_run_id</code>, and the diagnostics record <code>voxels_at_start</code>, the voxels
+  this criterion decided about.</li>
+<li>Both criteria must share the grid (maximum volume, context, terrain, voxel size and margin). Otherwise a
+  <code>StageChainError</code> names the voxel size, origin, shape or a different maximum volume. A difference in the context
+  or the terrain shows up as a different maximum volume.</li>
+<li>When the previous criterion re-runs later, the criteria after it are refused with <code>StageChainError</code> until they are
+  thresholded again, as for any stage.</li>
+<li>When the previous criterion kept no voxel, the mask is empty and the run reports the issue <code>nothing_left_to_carve</code>.</li>
+</ul>
+<h2 id="changing-a-criterion-is-cheap">Changing a criterion is cheap<a class="headerlink" href="#changing-a-criterion-is-cheap" title="Permanent link">&para;</a></h2>
+<p>Scores do not depend on the other criteria, so an earlier criterion's settings change only the thresholding of the
+criteria after it, which takes seconds. Only a change to a criterion's own mode settings or test surfaces, or to a
+shared setting such as the voxel size, needs its rays traced again. To change the carve amount of the first criterion
+and see the effect on the whole chain, edit it and run <code>usc run -c chain.yaml --start-from thresholding</code>.</p>
+<h2 id="in-the-browser-apps-service">In the browser app's service<a class="headerlink" href="#in-the-browser-apps-service" title="Permanent link">&para;</a></h2>
+<p>The local service behind <code>usc ui</code> keeps the criteria of a project in <code>project.json</code> and writes the project's <code>config.yaml</code> as a chain file from them, so a project folder also runs with <code>usc run -c &lt;folder&gt;/config.yaml</code>. Each criterion has its own test surface files: a file is stored once in the project, several criteria can use it, and the engine reads one joined file per criterion. A criterion's id is a number the service assigns (<code>1</code>, <code>2</code>, ...); it names the criterion's output folder and stays the same when the criteria are reordered.</p>
+<p>A run does only what changed. The service compares each criterion's settings and test surfaces with the ones its results were made from, and asks the engine to trace only the criteria whose rays changed (<code>trace_criteria</code>), then to threshold the chain from the first traced criterion on. When a criterion earlier in the chain needs thresholding again while a later one is traced, it also sends <code>threshold_from_criterion</code>; when no criterion needs tracing, it thresholds the chain from the first criterion whose thresholding is out of date on (<code>threshold_from_criterion</code>), so the ones before it keep their results. The result of each criterion, the volume each one kept and the criterion that removed each voxel are served per criterion.</p>
+<p>On the packaged Perimeter block example (Solar time-based, then Daylight on the same test surfaces; NVIDIA RTX 3060), the first analysis took 2.4 s and kept 187,743 m³. After adding the Daylight criterion, the next analysis traced only that criterion and took 2.7 s; the chain then kept 187,743 m³ after the first criterion and 119,848 m³ after the second. The app shows a row for each criterion, runs only the ones that changed and shows the carved voxels by criterion in 3D (see <a href="../ui/#several-criteria">Several criteria</a>). Projects made with an earlier version open as a chain of one criterion with their results still current. The routes, the files and the rules for what goes out of date are in <a href="../ui/#criteria-in-a-project">Criteria in a project</a>.</p>
+<h2 id="in-grasshopper">In Grasshopper<a class="headerlink" href="#in-grasshopper" title="Permanent link">&para;</a></h2>
+<p><strong>USC_ThresholdStage</strong> has an <code>after</code> input, the last one: the <code>thr_result</code> of the thresholding stage of the criterion before. Empty, it behaves as before. To chain two criteria, give the second one its own Config (a different <code>out_dir</code>), Preprocess and ThresholdStage, and connect the first ThresholdStage's <code>thr_result</code> to the second one's <code>after</code>. The second stage decides only among the voxels the first one kept and never keeps one it removed. USC_Export and USC_Massing connected to the second criterion's Config and results then build from what both criteria kept. See <a href="../grasshopper/#components">Grasshopper</a>.</p>
+<p>The daemon request behind it is a <code>run</code> that starts at <code>thresholding</code> with the <code>after</code> key (<code>RunRequest.after</code>; <code>run_pipeline(..., after=...)</code> in Python). A request with <code>after</code> and a chain file, or with <code>after</code> and a <code>start_from</code> other than <code>thresholding</code>, gets a <code>ConfigError</code> reply: a chain file links its criteria itself, and a stage that does not run thresholding would ignore <code>after</code> without a message. An engine older than this feature would ignore the key and run the second criterion on its own, so the ping reply lists the engine's <code>features</code>, and <code>usc_gh.run_stages</code> pings first when <code>after</code> is given. For an engine without <code>run_after</code> it raises "The UrbanSolarCarver engine running now is older than this definition and cannot chain criteria. Restart it from USC_Session." and sends no run request.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>
