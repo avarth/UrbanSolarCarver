@@ -56,7 +56,7 @@ def test_the_report_of_a_chain_run_gives_the_volumes_and_the_total_time(tmp_path
     for result_thr in (first, second):
         assert f"{result_thr.voxels_kept * voxel_size ** 3:,.1f}" in chain
     share = 100 * second.voxels_kept / (first.voxels_kept + first.voxels_removed)
-    assert f"{share:.1f}% of the maximum volume" in chain
+    assert chain.rstrip().endswith(f"| {second.voxels_kept * voxel_size ** 3:,.1f} | {share:.1f} |")
     assert "| # | Name | Mode | Rule | Cutoff |" in report
     assert "**Total time:**" in report.split("## Total")[1]
 

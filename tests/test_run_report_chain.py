@@ -51,7 +51,7 @@ def test_the_run_report_ends_the_criteria_with_the_chain_summary(tmp_path):
     assert "8,000.0 m³" in chain
     assert "| 1 | South daylight | 6,400.0 | 80.0 |" in chain
     assert "| 2 | East daylight | 3,200.0 | 40.0 |" in chain
-    assert "After the last criterion 3,200.0 m³ is kept, 40.0% of the maximum volume." in chain
+    assert chain.rstrip().endswith("| 2 | East daylight | 3,200.0 | 40.0 |")      # the last row is what the chain kept
 
 
 def test_the_chain_summary_is_left_out_when_a_criterion_has_no_voxel_size(tmp_path):
@@ -59,6 +59,37 @@ def test_the_chain_summary_is_left_out_when_a_criterion_has_no_voxel_size(tmp_pa
     (run / "criteria/2/preprocessing/manifest.json").unlink()
     report = generate_run_report(run, run / "criteria/2/preprocessing", run / "criteria/2/thresholding").read_text(encoding="utf-8")
     assert "## Criteria" in report and "## Chain" not in report
+
+
+def test_the_report_of_a_one_criterion_chain_has_no_chain_section_or_note(tmp_path):
+    report = _report(tmp_path, criteria=CRITERIA[:1])
+    assert "## Criteria" in report and "## Chain" not in report and "Over the" not in report
+    # 11 s for the criterion, 3 for exporting, 4 for massing.
+    assert "**Total time:** 18.0s" in report
+
+
+def test_the_total_time_note_names_the_stages_that_were_added(tmp_path):
+    run = _report_folder(tmp_path)
+    last = run / "criteria/2"
+    both = generate_run_report(run, last / "preprocessing", last / "thresholding", exporting_dir=run / "exporting",
+                               massing_dir=run / "massing").read_text(encoding="utf-8")
+    exporting_only = generate_run_report(run, last / "preprocessing", last / "thresholding",
+                                         exporting_dir=run / "exporting").read_text(encoding="utf-8")
+    neither = generate_run_report(run, last / "preprocessing", last / "thresholding").read_text(encoding="utf-8")
+    assert "- Over the 2 criteria (preprocessing and thresholding of each), exporting and massing" in both
+    assert "- Over the 2 criteria (preprocessing and thresholding of each), exporting\n" in exporting_only + "\n"
+    assert "**Total time:** 36.0s" in exporting_only
+    assert "- Over the 2 criteria (preprocessing and thresholding of each)\n" in neither + "\n"
+    assert "**Total time:** 33.0s" in neither
+
+
+def test_a_missing_value_in_the_criteria_table_is_a_hyphen(tmp_path):
+    run = _report_folder(tmp_path)
+    (run / "criteria/2/thresholding/diagnostics/diagnostic.json").unlink()
+    last = run / "criteria/2"
+    report = generate_run_report(run, last / "preprocessing", last / "thresholding").read_text(encoding="utf-8")
+    assert "| 2 | East daylight | daylight | - | - | - | - |" in report
+    assert "—" not in report.split("## Preprocessing")[0]
 
 
 def test_the_run_report_total_time_covers_the_chain(tmp_path):

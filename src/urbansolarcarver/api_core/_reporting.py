@@ -75,7 +75,7 @@ def _leaf_stage_dir(stage_dir: Path, thresholding_run_id: str):
     return stage_dir if upstream_run_id == thresholding_run_id else None
 
 
-_DASH = "—"
+_DASH = "-"
 
 
 def _read_json(path: Path) -> dict:
@@ -134,9 +134,10 @@ def _criteria_lines(rows: list) -> list:
 
 def _chain_lines(rows: list) -> list:
     """The "Chain" section: the volume after each criterion and its share of the maximum volume (the filled voxels the
-    first criterion started with). Empty when a criterion has no kept voxels or no voxel size, as in the service's chain
+    first criterion started with); the last row is what the chain kept. Empty for a single criterion (its Thresholding
+    section gives the same numbers) and when a criterion has no kept voxels or no voxel size, as in the service's chain
     summary."""
-    if not rows or any(row["diag"].get("voxels_kept") is None or not row["voxel_size"] for row in rows):
+    if len(rows) < 2 or any(row["diag"].get("voxels_kept") is None or not row["voxel_size"] for row in rows):
         return []
     first = rows[0]
     started = first["diag"].get("voxels_at_start", first["diag"].get("voxels_occupied"))
@@ -147,13 +148,10 @@ def _chain_lines(rows: list) -> list:
              f"- **Maximum volume:** {max_volume:,.1f} m³ (the filled voxels the first criterion started with)\n",
              "| # | Name | Volume after it (m³) | Share of the maximum volume (%) |",
              "|---|------|----------------------|---------------------------------|"]
-    volume = 0.0
     for position, row in enumerate(rows, start=1):
         volume = row["diag"]["voxels_kept"] * row["voxel_size"] ** 3
         share = f"{100 * volume / max_volume:.1f}" if max_volume else _DASH
         lines.append(f"| {position} | {row['name']} | {volume:,.1f} | {share} |")
-    if max_volume:
-        lines.append(f"\nAfter the last criterion {volume:,.1f} m³ is kept, {100 * volume / max_volume:.1f}% of the maximum volume.")
     lines.append("")
     return lines
 
@@ -360,8 +358,10 @@ def generate_run_report(
         total_wall = sum(t.get("wall_seconds", 0) for t in [pre_timing, thr_timing, exp_timing, m_timing])
     lines.append("## Total\n")
     lines.append(f"- **Total time:** {total_wall:.1f}s")
-    if chain_rows:
-        lines.append(f"- Over the {len(chain_rows)} criteria (preprocessing and thresholding of each), exporting and massing")
+    if len(chain_rows) > 1:
+        built = [name for name, stage_dir in (("exporting", exporting_dir), ("massing", massing_dir)) if stage_dir is not None]
+        lines.append(f"- Over the {len(chain_rows)} criteria (preprocessing and thresholding of each)"
+                     + (f", {' and '.join(built)}" if built else ""))
 
     report_path = Path(out_dir) / "run_report.md"
     report_path.write_text("\n".join(lines), encoding="utf-8")
