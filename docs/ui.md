@@ -60,25 +60,29 @@ A project opens as a list of five steps on the left, with the 3D view on the rig
 
 1. **Inputs.** The site: drop or choose the maximum volume (the largest building you would allow) and, for the modes that need one, a weather file (`.epw`). The test surfaces belong to each criterion (step 3). Two boxes are optional: **Existing surroundings** (buildings and large trees that stay, `context_path`; not balconies or shading devices) and **Terrain** (the ground, `terrain_path`). Both block sun and sky; nothing is built in the columns the surroundings take, and the site stays buildable above the terrain (see [Context and terrain](modes.md#context-and-terrain)). Removing their files makes the analysis out of date, and the next run goes without them. With either of them, Site and grid shows **Account for context blocking** (on by default; not in the Angle rule, which traces no rays to the sky): off, they still take their voxels but block no sun or sky, to compare the two carvings. Meshes may be PLY, OBJ, STL or GLB; several files for one role are joined into one. The step lists each file with its triangle count and the size of all inputs together, and warns when the model looks as if it is not in meters.
 2. **Site and grid.** The analysis settings every criterion shares, with plain labels, units and a help text for each: north, the surroundings switch and the detail (voxel size, then, folded, the rays per batch and the detailed statistics, which only change the run report). The sample spacing on the test surfaces, the grid margin and the ray length have no field: the engine's values apply (see below). The step shows the size of the voxel grid and refuses a grid larger than the analysis can handle, naming the smallest voxel size that fits. **Run analysis** is pinned under the steps while it is open. Its summary reads "North 10°, 0.5 m voxels". See [Entering values](#entering-values).
-3. **Criteria.** A criterion is one carving pass with its own test surfaces, mode and carving rule. With one criterion, the usual case, the step opens straight on its panel, with no list and no cards, in this order (**Add another criterion**, a quiet link at the end, starts a chain; see [Several criteria](#several-criteria)):
-    - **Test surfaces**: the criterion's test surfaces (the surfaces whose sun or sky the carving protects), a drop box like the Inputs boxes. While it has none, the box says **Add test surfaces** with a hint of what its mode may protect (Daylight: windows or facades; Solar energy: roofs or facades), and Run analysis waits for them.
-    - **Mode**: six tiles in a grid of three by two, each with a coloured symbol and a plain name. The tile's tooltip holds a one-line description, what the mode needs and the engine name, for people who use the CLI.
+3. **Criteria.** A criterion is one carving pass with its own test surfaces, mode and carving rule. The step always shows the list of criteria, also with one criterion (a new project starts with one), then the panel of the selected criterion, and keeps **Run analysis** and **Build envelope and massing** pinned under the steps while it is open. In this order (the rows, **Add criterion** and the pinned bar are described under [Several criteria](#several-criteria)):
+    - **The list**: one row per criterion in carving order, each with a colour swatch, its name, the symbol of its mode, its result or state, a switch that is on and a menu. **Add criterion**, under the list, opens a short menu of the six modes.
+    - **The panel of the selected criterion**, in four sections, each a button with the section's title and, while it is closed, a one-line summary of what it holds. **Test surfaces** and **Carving rule** start open, **Mode** and **Settings** closed; the sections you open or close stay as you left them when you select another criterion.
+        - **Test surfaces** (summary: the file name, two file names, "3 files" or "None yet"): the criterion's test surfaces (the surfaces whose sun or sky the carving protects), a drop box like the Inputs boxes. While it has none, the box says **Add test surfaces** with a hint of what its mode may protect (Daylight: windows or facades; Solar energy: roofs or facades), and Run analysis waits for them.
+        - **Mode** (summary: the mode's plain name): six tiles in a grid of three by two, each with a coloured symbol and a plain name. The tile's tooltip holds a one-line description, what the mode needs and the engine name, for people who use the CLI.
 
-    | Tile | Engine name | What it does |
-    |------|-------------|-------|
-    | Angle rule | `tilted_plane` | Removes everything above a plane at a fixed angle from each facade |
-    | Solar time-based | `time-based` | Keeps direct sun on the test surfaces during the hours you choose |
-    | Solar energy | `irradiance` | Keeps sun and sky energy over the period |
-    | Solar usefulness | `benefit` | Keeps sun in the hours that need heating |
-    | Daylight | `daylight` | Keeps the view of an overcast sky |
-    | Night cooling | `radiative_cooling` | Keeps a flat roof's view of the cold night sky. Experimental, and it assumes horizontal test surfaces |
+        | Tile | Engine name | What it does |
+        |------|-------------|-------|
+        | Angle rule | `tilted_plane` | Removes everything above a plane at a fixed angle from each facade |
+        | Solar time-based | `time-based` | Keeps direct sun on the test surfaces during the hours you choose |
+        | Solar energy | `irradiance` | Keeps sun and sky energy over the period |
+        | Solar usefulness | `benefit` | Keeps sun in the hours that need heating |
+        | Daylight | `daylight` | Keeps the view of an overcast sky |
+        | Night cooling | `radiative_cooling` | Keeps a flat roof's view of the cold night sky. Experimental, and it assumes horizontal test surfaces |
 
-    Choosing a mode fills its starting values in the settings below the tiles. [Carving Modes](modes.md) explains the methods.
-    - **The criterion's settings**: the analysis period, the mode's own settings and, folded, the rays per sky patch in the four sky-patch modes.
-    - **The carving rule**: how much to carve, with a histogram of the scores of the voxels (a log or linear scale) and the numbers of the last carving. In the weighted modes the *Carving rule* comes first: *Manual* (the *Carve amount* slider, in percent of the total score) or *Automatic* (no setting: the cut is found from the spread of the scores, and the step says where it fell). A cutoff on the scores that a config holds (from the command line or an earlier version) shows as Manual, at the carve amount it stands for. Solar time-based has a *Shadow tolerated* slider in m²·h; the Angle rule has no threshold. The histogram follows the control in both rules; the other carving settings (score smoothing, the cut above a carved voxel, the steepest step between columns) are folded at the end. Scores are in physical units: m²·h of shade (Solar time-based), kWh of solar energy or of useful solar heat a voxel blocks (Solar energy, Solar usefulness), and m² of fully hidden sky (Daylight, Night cooling); the histogram axis, the cutoff, the 3D legend and the slider ends say which. Before the first analysis it says to run the analysis.
-    - **Run analysis**, with the progress of its run. Once the carving of every criterion that is on is current, **Build envelope and massing** is pinned under the steps.
+        Choosing a mode fills its starting values in the Settings section. [Carving Modes](modes.md) explains the methods.
+        - **Settings** (summary: the analysis period in words, "21 Dec, 7 to 19 h", in the modes that have one; otherwise "Starting values" or "2 settings changed"): the analysis period, the mode's own settings and, folded, the rays per sky patch in the four sky-patch modes.
+        - **Carving rule** (summary: "Carve 70 %", "Cutoff 1.5 m²·h", "Automatic", or "Everything above the planes" in the Angle rule): how much to carve, with a histogram of the scores of the voxels (a log or linear scale) and the numbers of the last carving. In the weighted modes the *Carving rule* comes first: *Manual* (the *Carve amount* slider, in percent of the total score) or *Automatic* (no setting: the cut is found from the spread of the scores, and the step says where it fell). A cutoff on the scores that a config holds (from the command line or an earlier version) shows as Manual, at the carve amount it stands for. Solar time-based has a *Shadow tolerated* slider in m²·h; the Angle rule has no threshold. The histogram follows the control in both rules; the other carving settings (score smoothing, the cut above a carved voxel, the steepest step between columns) are folded at the end. Scores are in physical units: m²·h of shade (Solar time-based), kWh of solar energy or of useful solar heat a voxel blocks (Solar energy, Solar usefulness), and m² of fully hidden sky (Daylight, Night cooling); the histogram axis, the cutoff, the 3D legend and the slider ends say which. Before the first analysis it says to run the analysis.
+    - **The pinned bar**: **Run analysis** and **Build envelope and massing** side by side, with the progress of the run and its messages under them, whichever section is open.
 
-    The step's summary joins the mode and the carving: "Solar usefulness, 56 % kept". With several criteria it lists each one with the share it kept: "Daylight on windows 70 %, then Solar usefulness 80 %".
+    A section with a problem opens by itself and its summary turns to the warning colour: no test surfaces; a weather file the mode needs and the project lacks (Mode); settings the last save refused (Settings or Carving rule, where a closed section says "2 settings to fix" in place of its summary). A **Go to** *setting* link in a refused run opens the section that holds the setting and focuses the field.
+
+    The step's summary joins the mode and the carving: "Solar usefulness, 56 % kept". With several criteria it lists each one with the share it kept: "Daylight on windows 70 %, then Solar usefulness 80 %". A criterion that is off reads "Solar usefulness, Off", and with every criterion off the summary is "All off".
 4. **Envelope and massing.** Two parts that are built on their own, since the massing reads the carving and not the envelope.
     - **Envelope**: its settings (smooth surface, smoothing passes, the smallest pieces and fragments kept), **Build envelope**, and its result, the envelope volume (counted on the kept voxels the mesh was built from, after small pieces are dropped, not on the smoothed surface).
     - **Building massing**: its settings (ground floor and upper floor heights, grid module, permitted volume exceedance, whether floors rest on the floors below), **Build massing**, and its results: the gross floor area, the number of storeys and a table with the bottom, top and floor area of each storey.
@@ -88,11 +92,11 @@ A project opens as a list of five steps on the left, with the 3D view on the rig
 
 ## Several criteria
 
-A project can carve with several criteria in turn, for example the daylight of the neighbours' windows first and then the winter sun on a yard. Each criterion has its own test surfaces, mode, mode settings and carving rule, and decides among the voxels the criterion before it kept ([Criteria: chained carvings](criteria.md) explains the method). The app shows nothing of this until you ask for it: a project with one criterion has no list, no cards and no new words.
+A project can carve with several criteria in turn, for example the daylight of the neighbours' windows first and then the winter sun on a yard. Each criterion has its own test surfaces, mode, mode settings and carving rule, and decides among the voxels the criterion before it kept ([Criteria: chained carvings](criteria.md) explains the method). The Criteria step is built for this from the start: the list is there with one criterion, and **Add criterion** under it starts a chain.
 
-### The cards
+### The list
 
-**Add another criterion**, at the end of the Criteria step, opens the six mode tiles under "Mode of the new criterion". A tile adds the criterion at the end of the chain, named after its mode, and selects it. From two criteria on, the step shows one card per criterion in carving order, with **Add criterion** after the last card and the panel of the selected criterion below. A card shows:
+The list has one row per criterion, in carving order. A row shows:
 
 - a colour swatch, the criterion's colour in the 3D view's by-criterion layer;
 - the criterion's name and the symbol of its mode;
@@ -103,19 +107,21 @@ A project can carve with several criteria in turn, for example the daylight of t
 | Out of date | Its test surfaces or settings changed after its last run, or a shared setting did |
 | Updates from *name* | A criterion before it is out of date or running, so this carving will change when that one finishes |
 | Running | The run is tracing or carving it now |
-| Bypassed | Turned off: the chain skips it |
+| Off | Switched off: the chain skips it |
 | Add test surfaces | It protects nothing yet, and a run waits for its files |
 | Not run yet | It has test surfaces and no result |
 
-Pressing a card selects it, and the panel, the histogram, the carving numbers and the 3D view then follow that criterion: the kept voxels are the ones left after it. A card also has:
+Pressing a row selects it, and the panel, the histogram, the carving numbers and the 3D view then follow that criterion: the kept voxels are the ones left after it. A row also has:
 
-- a drag handle: drag the card to reorder, or focus the handle and press the up or down arrow key. Reordering puts out of date the carving of the criteria from the first changed position on;
-- a switch, **Bypass**, to leave the criterion out of the chain without deleting it. The panel of a bypassed criterion says "Bypassed: the chain skips this criterion." in place of its carving rule;
-- a menu with **Rename**, **Duplicate** and **Delete**. Duplicate copies the settings and the test surface files into a new criterion at the end and selects it. Delete asks first: the criterion's settings and results go, and the test surface files no other criterion uses go to the recycle bin. The only criterion cannot be deleted ("A project needs at least one criterion.").
+- a switch that means on, **Use** *name*. It is on by default, and a new criterion is on. Switching it off leaves the criterion out of the chain without deleting it: the row reads "Off" and the panel says "Off: the chain skips this criterion" in place of its carving rule. Switching it on again brings the panel back;
+- a menu with **Rename**, **Duplicate** and **Delete**. Duplicate copies the settings and the test surface files into a new criterion at the end and selects it. Delete asks first: the criterion's settings and results go, and the test surface files no other criterion uses go to the recycle bin. The only criterion cannot be deleted (the item waits with "A project needs at least one criterion.");
+- with two or more criteria, a drag handle: drag the row to reorder, or focus the handle and press the up or down arrow key. Reordering puts out of date the carving of the criteria from the first changed position on. A single criterion has no handle.
 
-When the selected criterion is deleted or bypassed, the selection moves to the next card, or to the previous one when it was the last. While a run is active the cards, the switch and the menu wait.
+When the selected criterion is deleted or switched off, the selection moves to the next row, or to the previous one when it was the last. While a run is active the rows, the switches and the menus wait.
 
-Under the cards, with two or more criteria on, a line gives what the chain kept: "Kept 480 m³, 48 % of the maximum volume". It is the volume left after the last criterion that is on, against the maximum volume as drawn.
+**Add criterion**, under the last row, opens a short menu of the six modes, each with its symbol, its plain name and its one-line description under "Mode of the new criterion". Choosing a mode adds the criterion at the end of the chain, named after its mode, and selects it; its Test surfaces section is open, since it has none yet. The arrow keys, Home and End move in the menu, and Escape closes it and returns to the button. While a run is active the items wait with the reason.
+
+Under the list, with two or more criteria on, a line gives what the chain kept: "Kept 480 m³, 48 % of the maximum volume". It is the volume left after the last criterion that is on, against the maximum volume as drawn.
 
 ### The panel of a criterion
 
@@ -123,7 +129,11 @@ The panel is the one described under [Criteria](#the-steps), for the selected cr
 
 - Under the **Test surfaces** box, **Use a file from another criterion** lists the files the other criteria hold, each with a **Use** button. Using a file adds no copy, and removing a file from one criterion leaves it in the others.
 - The carve amount and the histogram of the second criterion on refer to the voxels the criteria before it kept, so 80 % in the second criterion is 80 % of the score of what is left.
-- **Run analysis** traces the rays of the criteria that changed only (see [Runs](#runs)). **Update carving** and **Update when I change the threshold** carve again from the selected criterion on, without tracing: moving the cutoff of criterion 1 thresholds criteria 1 and 2 again in one run, criterion 2's card reads "Updates from *name*" (the name of criterion 1) until it finishes, and criterion 1's histogram keeps its own scores. When another criterion has an analysis that is out of date, the change is saved and nothing runs; the step says "Run the analysis for *name* first", and Run analysis traces that criterion first.
+- **Update carving** and **Update when I change the threshold** carve again from the selected criterion on, without tracing: moving the cutoff of criterion 1 thresholds criteria 1 and 2 again in one run, criterion 2's row reads "Updates from *name*" (the name of criterion 1) until it finishes, and criterion 1's histogram keeps its own scores. When another criterion has an analysis that is out of date, the change is saved and nothing runs; the step says "Run the analysis for *name* first", and Run analysis traces that criterion first.
+
+### The pinned bar
+
+**Run analysis** and **Build envelope and massing** sit side by side in the bar pinned under the steps while the Criteria step is open, so they are in view with any section of the panel open or closed. The progress of a run, its refusals and the failure of a carving update are under them. When the progress is long and the window short, the bar scrolls within its height and the step above stays reachable. **Build envelope and massing** waits, with its reason under it, while the analysis is missing ("Run the analysis before building"), out of date, or current with a carving that is not ("Update the carving before building"), and while a run is active.
 
 ### What the criteria share
 
@@ -131,13 +141,13 @@ The maximum volume, the surroundings, the terrain and the weather file are set o
 
 ### Runs
 
-**Run analysis**, in the criterion's panel and in Site and grid, traces the rays of the criteria whose test surfaces, mode settings or a shared setting changed, then carves the chain from the first of them on. After adding a second criterion to a finished project, the next run traces only the new one. The progress lists the stages of each criterion, "Daylight on windows: Sun analysis" and "Daylight on windows: Carving", then the envelope and the massing; with one criterion the rows keep their plain names.
+**Run analysis**, in the Criteria step's pinned bar and in Site and grid, traces the rays of the criteria whose test surfaces, mode settings or a shared setting changed, then carves the chain from the first of them on. There is one Run analysis for the whole chain and no button per row. After adding a second criterion to a finished project, the next run traces only the new one. The progress lists the stages of each criterion, "Daylight on windows: Sun analysis" and "Daylight on windows: Carving", then the envelope and the massing; with one criterion the rows keep their plain names.
 
-A refused run points at the criterion that caused it:
+A refused run points at the criterion that caused it, in the pinned bar:
 
-- A setting of one criterion that the engine refuses selects that criterion's card, shows the message in its panel and marks the field.
-- A criterion that protects nothing selects its card and says "Add test surfaces to *name*." above its panel. **Run analysis** waits with "Add test surfaces to *name* to run the analysis" while any criterion that is on has none.
-- With every criterion bypassed, the run says "Turn on a criterion to run."
+- A setting of one criterion that the engine refuses selects that criterion's row, says so in the bar with a **Go to** *setting* link, and marks the field. The link opens the section of the panel that holds the setting (Mode, Settings or Carving rule) and focuses the field.
+- A criterion that protects nothing selects its row and opens its Test surfaces section; the bar says "Add test surfaces to *name*." **Run analysis** waits with "Add test surfaces to *name* to run the analysis" while any criterion that is on has none.
+- With every criterion off, the run waits with "Turn on a criterion to run".
 
 **Build envelope and massing** waits until every criterion that is on is carved, and builds once, from the last criterion.
 
@@ -152,7 +162,7 @@ With several criteria the run report's Criteria section has one row per criterio
 
 ### Earlier projects
 
-A project made with an earlier version opens as a chain of one criterion: no list, its results still current, and the test surfaces it protected in the Test surfaces box of its only criterion. A project that was carved further with an earlier version keeps its maximum volume (the last envelope) and the note under it in Inputs, "Carved by Daylight, then Solar time-based. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes." **Carve further** is no longer in the app: add a criterion to carve what the first one kept, which also leaves no mesh between the criteria to voxelize again.
+A project made with an earlier version opens as a chain of one criterion: one row in the list, its results still current, and the test surfaces it protected in the Test surfaces box of its only criterion. A project that was carved further with an earlier version keeps its maximum volume (the last envelope) and the note under it in Inputs, "Carved by Daylight, then Solar time-based. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes." **Carve further** is no longer in the app: add a criterion to carve what the first one kept, which also leaves no mesh between the criteria to voxelize again.
 
 ## Criteria in a project
 
@@ -162,7 +172,7 @@ The app asks for a criterion's settings and results by its id. A client that doe
 
 **Where a criterion's data lives**
 
-- `project.json` lists the criteria: id, name, colour, whether it is bypassed, the names of its test surface files and its own settings. A criterion's id is `"1"`, `"2"`, and so on, assigned by the service, kept when the criteria are reordered and never used again in the project. Run folders and joined test surface files are named by id.
+- `project.json` lists the criteria: id, name, colour, whether it is bypassed (the field the app's on switch sets, the other way round), the names of its test surface files and its own settings. A criterion's id is `"1"`, `"2"`, and so on, assigned by the service, kept when the criteria are reordered and never used again in the project. Run folders and joined test surface files are named by id.
 - `config.yaml` is generated from `project.json` at every change: the settings shared by the whole chain at the top, then the criteria that are on under `criteria:`. A bypassed criterion is left out, and so is left out of every run. A project folder is still valid input for `usc run -c <folder>/config.yaml`. Change settings in the app, because the next save writes the file again.
 - `inputs/test_surfaces/` stores each test surface file once, named as uploaded. `inputs/joined/test_surfaces_<id>.ply` is the joined file the engine reads for criterion `<id>`.
 - `run/criteria/<id>/preprocessing` and `run/criteria/<id>/thresholding` hold each criterion's results, with `run/criteria/chain.json` listing them in order. Exporting and massing stay in `run/exporting` and `run/massing` and are built once, from the last criterion that is on.

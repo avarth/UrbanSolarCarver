@@ -30,7 +30,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   are folder names (letters, digits, `_`, `-`; unique ignoring case; default: the position), and the weather file is
   shared but reaches only the criteria whose mode reads one. `load_config` refuses a chain file.
 - Monte Carlo oracle: chained cases (daylight then benefit, time-based then daylight) in `tests/montecarlo.py`.
-- The browser app shows the criteria of a project as cards (see Added (chained carvings, app) below). See
+- The browser app shows the criteria of a project as a list (see Added (chained carvings, app) below). See
   [Chained carvings](docs/criteria.md).
 
 ### Added (chained carvings, service)
@@ -72,22 +72,26 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ### Added (chained carvings, app)
 
 - **Criteria in the browser app.** The steps are now Inputs, Site and grid, Criteria, Envelope and massing, and Export.
-  A project with one criterion looks as before: the Criteria step opens straight on the criterion's panel, with no list
-  and no cards, and a quiet **Add another criterion** link at the end starts a chain. From the second criterion on the
-  step shows one card per criterion (colour swatch, name, mode symbol, and either its result, "70 % of the score
-  carved, 813 m³ removed", or its state: Out of date, Updates from *name*, Running, Bypassed, Add test surfaces, Not run
-  yet), reordered by dragging or with the arrow keys, with a bypass switch and a menu (Rename, Duplicate, Delete; the
-  only criterion cannot be deleted), and a line under the cards with the volume the chain kept and its share of the
-  maximum volume. Earlier projects open as a chain of one criterion; a project carved further keeps its note on the
-  maximum volume.
+  The Criteria step always shows the list of criteria, also with one: a row per criterion (colour swatch, name, mode
+  symbol, and either its result, "70 % of the score carved, 813 m³ removed", or its state: Out of date, Updates from
+  *name*, Running, Off, Add test surfaces, Not run yet) with a switch that is on by default (off: the chain skips the
+  criterion), a menu (Rename, Duplicate, Delete; the only criterion cannot be deleted) and, from two criteria on,
+  reordering by dragging or with the arrow keys; **Add criterion** under the list opens a short menu of the modes; and a
+  line under the list gives the volume the chain kept and its share of the maximum volume. Earlier projects open as a chain of one criterion; a project carved further keeps its
+  note on the maximum volume.
+- **The criterion panel, folded.** The selected criterion's panel has four sections, Test surfaces, Mode, Settings and
+  Carving rule, each with a one-line summary while it is closed. Test surfaces and Carving rule start open; a section
+  with a problem opens, and **Go to** *setting* in a refused run opens the section of the setting. **Run analysis** and
+  **Build envelope and massing** are pinned under the steps while the Criteria step is open, with the progress and the
+  messages of the run under them.
 - **Site and grid and the criterion panel.** The settings every criterion shares (north, voxel size, the surroundings
   switch, rays per batch, detailed statistics) are in Site and grid and are saved through the shared-settings route; the
   criterion's own settings, its mode and its carving rule are in its panel, split by the service's list of criterion
   keys. The test surfaces belong to the criterion (the **Test surfaces** box, with **Use a file from another
   criterion**), and no longer to the Inputs step.
 - **Runs per criterion.** Run analysis traces only the criteria that changed. The progress names the criterion of each
-  stage, and a run the service refuses for one criterion (a setting, or no test surfaces) selects that criterion's card
-  and shows the message in its panel. Moving a criterion's cutoff with **Update when I change the threshold** on carves
+  stage, and a run the service refuses for one criterion (a setting, or no test surfaces) selects that criterion's row
+  and shows the message in the pinned bar. Moving a criterion's cutoff with **Update when I change the threshold** on carves
   again from that criterion on in one run, with no ray tracing; the later criteria read "Updates from *name*" until it
   ends. A carving change while another criterion's analysis is out of date is saved and waits for Run analysis.
 - **3D view.** The layer **Carved voxels, by criterion** draws each carved voxel in the colour of the criterion that
