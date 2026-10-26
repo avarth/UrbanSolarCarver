@@ -28,21 +28,26 @@ const PANEL = <div className="criterion-panel">Daylight on windows.ply</div>;
 const step = () => rendered!.container.querySelector<HTMLElement>(".criteria-step")!;
 const buttonNamed = (label: string) => [...step().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === label);
 
-test("one criterion shows no list chrome, only a quiet Add another criterion link after its panel", () => {
+test("one criterion shows its row in the list, then Add criterion under it, then its panel", () => {
   rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps([entry("1", "Daylight on windows")])} />);
-  expect(step().querySelector(".criterion-panel")!.textContent).toBe("Daylight on windows.ply");      // the panel open at once
-  expect(step().querySelector(".criterion-list, .criterion-card, [role='list'], [role='listitem']")).toBeNull();
-  expect(step().querySelector("[role='switch'], [draggable='true']")).toBeNull();                      // no bypass toggle, no drag handle
-  expect(step().textContent).not.toContain("Add criterion");
-  const link = buttonNamed("Add another criterion")!;
-  expect(link.classList.contains("link-button")).toBe(true);
-  expect(step().querySelector(".criterion-panel")!.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const list = step().querySelector(".criterion-list")!;
+  const cards = list.querySelectorAll(".criterion-card");
+  expect(cards).toHaveLength(1);
+  expect(cards[0].querySelector(".criterion-card-name")!.textContent).toBe("Daylight on windows");
+  expect(cards[0].querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
+  expect(step().querySelector("[draggable='true']")).toBeNull();                                       // one card: no drag handle
+  const add = buttonNamed("Add criterion")!;
+  expect(add.classList.contains("link-button")).toBe(true);
+  expect(list.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(add.compareDocumentPosition(step().querySelector(".criterion-panel")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(step().textContent).not.toContain("Add another criterion");
+  expect(step().querySelector(".chain-summary")).toBeNull();
 });
 
-test("Add another criterion opens the mode tiles; a tile adds a criterion of that mode", async () => {
+test("Add criterion opens the mode tiles; a tile adds a criterion of that mode", async () => {
   const onAdd = vi.fn(async (_mode: string) => null as string | null);
   rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps([entry("1", "Daylight on windows")], { onAdd })} />);
-  click(buttonNamed("Add another criterion")!);
+  click(buttonNamed("Add criterion")!);
   const tiles = [...step().querySelectorAll<HTMLElement>(".add-criterion [role='radio']")];
   await act(async () => tiles.find((tile) => tile.textContent === "Solar usefulness")!.click());
   expect(onAdd).toHaveBeenCalledExactlyOnceWith("benefit");
@@ -50,7 +55,7 @@ test("Add another criterion opens the mode tiles; a tile adds a criterion of tha
 
 test("the mode tiles of a new criterion take the focus, are named for it, and close with Cancel, which gives the focus back to the link", () => {
   rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps([entry("1", "Daylight on windows")])} />);
-  click(buttonNamed("Add another criterion")!);
+  click(buttonNamed("Add criterion")!);
   const chooser = step().querySelector<HTMLElement>(".add-criterion-open")!;
   expect(document.activeElement).toBe(chooser);
   expect(document.getElementById(chooser.getAttribute("aria-labelledby")!)!.textContent).toBe("Mode of the new criterion");
@@ -58,7 +63,15 @@ test("the mode tiles of a new criterion take the focus, are named for it, and cl
   expect(document.getElementById(group.getAttribute("aria-labelledby")!)!.textContent).toBe("Mode of the new criterion");
   click(buttonNamed("Cancel")!);
   expect(step().querySelector(".add-criterion [role='radio']")).toBeNull();
-  expect(document.activeElement).toBe(buttonNamed("Add another criterion"));
+  expect(document.activeElement).toBe(buttonNamed("Add criterion"));
+});
+
+test("after a duplicate with one card, the focus goes to the card selected then", async () => {
+  rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps([entry("1", "Daylight on windows")])} />);
+  const select = () => step().querySelector<HTMLElement>('.criterion-card[aria-current="true"] .criterion-card-select')!;
+  click(step().querySelector(".action-menu-button")!);
+  await act(async () => click([...step().querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "Duplicate")!));
+  expect(document.activeElement).toBe(select());
 });
 
 test("while the selected criterion's settings are on their way the panel waits; a refusal is said there", () => {

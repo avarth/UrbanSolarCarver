@@ -31,27 +31,48 @@ test("the steps are Inputs, Site and grid, Criteria, Envelope and massing and Ex
   expect(stepTitles()).toEqual(["Inputs", "Site and grid", "Criteria", "Envelope and massing", "Export"]);
 });
 
-test("one criterion shows no list chrome", async () => {
+test("one criterion shows its row in the list, with the switch on and no drag handle", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
   openStep("Criteria");
   const step = stepRow("Criteria");
   expect(panel()).not.toBeNull();                                                      // the criterion open at once
-  expect(step.querySelector(".criterion-list, .criterion-card, [role='list'], [role='listitem']")).toBeNull();
-  // No bypass toggle and no drag handle: the only switch is the carving rule's "Update when I change the threshold".
-  expect([...step.querySelectorAll("[role='switch']")].map((toggle) => toggle.closest("label")?.textContent)).toEqual(["Update when I change the threshold"]);
-  expect(step.querySelector("[draggable='true']")).toBeNull();
-  // The one new thing: a quiet link at the end of the step.
-  const addLink = buttonIn(step, "Add another criterion");
+  const rows = [...step.querySelectorAll(".criterion-list .criterion-card")];
+  expect(rows).toHaveLength(1);
+  expect(rows[0].querySelector(".criterion-card-swatch")).not.toBeNull();
+  expect(rows[0].querySelector(".criterion-card-name")!.textContent).not.toBe("");
+  expect(rows[0].querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
+  expect(rows[0].querySelector('[role="switch"]')!.getAttribute("aria-label")).toMatch(/^Use /);
+  expect(step.querySelector("[draggable='true'], .criterion-card-handle")).toBeNull();
+  // Delete waits on the only criterion.
+  act(() => rows[0].querySelector<HTMLButtonElement>(".action-menu-button")!.click());
+  const deleteItem = [...step.querySelectorAll<HTMLElement>('[role="menuitem"]')].find((item) => item.textContent === "Delete")!;
+  expect(deleteItem.getAttribute("aria-disabled")).toBe("true");
+  expect(document.getElementById(deleteItem.getAttribute("aria-describedby")!)!.textContent).toBe("A project needs at least one criterion.");
+  act(() => deleteItem.click());
+  // Add criterion sits under the list, with no chain line (a chain is of two or more).
+  const addLink = buttonIn(step, "Add criterion");
   expect(addLink.classList.contains("link-button")).toBe(true);
-  expect(panel()!.compareDocumentPosition(addLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  expect(step.textContent).not.toContain("Add criterion");
+  expect(rows[0].closest(".criterion-list")!.compareDocumentPosition(addLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(addLink.compareDocumentPosition(panel()!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(step.textContent).not.toContain("Add another criterion");
+  expect(step.querySelector(".chain-summary")).toBeNull();
   expect(protectedFiles()).toEqual(["surfaces.obj"]);
   expect(buttonIn(panel()!, "Run analysis")).toBeDefined();
   expect(buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing")).toBeDefined();
   expect(stepRow("Criteria").querySelector(".step-summary")).toBeNull();               // open, no setting to fix
   openStep("Inputs");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61 % kept");
+});
+
+test("a new project opens with one criterion in the list, its switch on", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  const rows = [...stepRow("Criteria").querySelectorAll(".criterion-list .criterion-card")];
+  expect(rows).toHaveLength(1);
+  expect(rows[0].querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
+  expect(rows[0].querySelector(".criterion-card-line")!.textContent).not.toBe("Off");
 });
 
 test("during a run the criterion's controls are disabled and the panel says why once, at Run analysis", async () => {

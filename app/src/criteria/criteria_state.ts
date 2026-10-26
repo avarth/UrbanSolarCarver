@@ -92,7 +92,7 @@ export function cardStatusText(status: CardStatus): string | null {
     case "running":
       return messages.criterionRunning;
     case "bypassed":
-      return messages.criterionBypassed;
+      return messages.criterionOff;
     case "no_test_surfaces":
       return messages.criterionNeedsTestSurfaces;
     case "not_run":

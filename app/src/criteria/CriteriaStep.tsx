@@ -1,12 +1,11 @@
-// The Criteria step (spec 7.1, 7.2). With one criterion it opens straight on that criterion's panel (CriterionPanel), with no list
-// around it, so a one-criterion project reads as the Mode and Carving steps did, in one step; the only new thing is a quiet "Add
-// another criterion" link at its end. With two or more, the cards come first (CriterionList, with Add criterion under the last
-// one), then what the chain kept (one line), then the selected criterion's panel. While a card just selected waits for its settings the panel says so (or why they
-// could not be read) instead of showing another criterion's; a run refused because it protects nothing is said over its panel.
-// After a delete, a duplicate or an add the focus goes to the card selected then, or to the panel when no cards are left.
+// The Criteria step (spec 7.1, 7.2). The cards come first, also with one criterion (CriterionList, with Add criterion under the
+// last one), then, with two or more criteria, what the chain kept (one line), then the selected criterion's panel. While a card
+// just selected waits for its settings the panel says so (or why they could not be read) instead of showing another criterion's;
+// a run refused because it protects nothing is said over its panel. After a delete, a duplicate or an add the focus goes to the
+// card selected then, or to the panel when no cards are left.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { messages } from "../messages";
-import { AddCriterion, CriterionList, type CriterionListProps } from "./CriterionList";
+import { CriterionList, type CriterionListProps } from "./CriterionList";
 import type { SelectionLoad } from "./use_criterion_selection";
 import "../steps/steps.css";
 
@@ -19,7 +18,7 @@ interface CriteriaStepProps {
   load?: SelectionLoad;
   /** What keeps a run from starting that is the selected criterion's to fix (it protects nothing), said over its panel; absent: none. */
   panelProblem?: string | null;
-  /** What the chain kept (chainSummaryLine), under the cards of two or more criteria; absent or null: no line. */
+  /** What the chain kept (chainSummaryLine), under the cards, of two or more criteria; absent or null: no line. */
   chainLine?: string | null;
 }
 
@@ -52,14 +51,6 @@ export function CriteriaStep({ panel, list, load = { state: "ready" }, panelProb
         : <p className="setting-error criterion-panel-waits" role="alert">{load.problem}</p>}
     </div>
   );
-  if (list.criteria.length < 2) {
-    return (
-      <div ref={step} className="criteria-step">
-        {panelFrame}
-        <AddCriterion label={messages.addAnotherCriterion} onAdd={shownList.onAdd} disabledReason={list.disabledReason} />
-      </div>
-    );
-  }
   return (
     <div ref={step} className="criteria-step">
       <CriterionList {...shownList} />

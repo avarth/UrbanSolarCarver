@@ -578,11 +578,11 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 /* The criterion a run works on: its line in the accent colour. */
 .criterion-card-running .criterion-card-line { color: var(--colour-accent); font-weight: 600; }
 .criterion-card .mode-tile-symbol { flex: none; width: 22px; height: 22px; }
-.criterion-card-bypass { flex: none; }
+.criterion-card-switch { flex: none; }
 .criterion-card-menu-button { padding: var(--space-unit) calc(var(--space-unit) * 1.5); font-size: var(--text-step-title); line-height: 1; }
 .criterion-list-problem { margin: 0; }
 
-/* Add criterion and the one-criterion step's Add another criterion: a link, then the mode tiles of the new criterion. */
+/* Add criterion: a link, then the mode tiles of the new criterion. */
 .add-criterion { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
 .add-criterion-open { align-items: stretch; padding: calc(var(--space-unit) * 3); border: 1px solid var(--colour-line); border-radius: var(--radius-large); }
 .add-criterion-open > .link-button { align-self: flex-start; }

@@ -87,6 +87,22 @@ test("a card dragged by its handle and dropped on another takes its place", asyn
   expect(onReorder).toHaveBeenCalledExactlyOnceWith(["4", "2", "1"]);
 });
 
+test("one criterion shows its row with the switch on and no drag handle; Add criterion sits under it", () => {
+  rendered = renderForTest(<CriterionList {...listProps({ criteria: [THREE_CRITERIA[0]] })} />);
+  expect(cards()).toHaveLength(1);
+  const only = card("Daylight on windows");
+  expect(only.querySelector(".criterion-card-swatch")).not.toBeNull();
+  expect(only.querySelector(".criterion-card-line")!.textContent).toBe("line of 1");
+  expect(only.querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
+  expect(only.querySelector(".criterion-card-handle, [draggable='true']")).toBeNull();
+  expect(only.compareDocumentPosition(buttonNamed(rendered.container, "Add criterion")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("two or more criteria each have a drag handle", () => {
+  rendered = renderForTest(<CriterionList {...listProps()} />);
+  expect(rendered.container.querySelectorAll(".criterion-card-handle")).toHaveLength(3);
+});
+
 test("the only criterion cannot be deleted", () => {
   rendered = renderForTest(<CriterionList {...listProps({ criteria: [THREE_CRITERIA[0]] })} />);
   click(card("Daylight on windows").querySelector(".action-menu-button")!);

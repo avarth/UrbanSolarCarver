@@ -18,7 +18,7 @@ const DAYLIGHT: CriterionEntry = {
 
 function cardProps(overrides: Partial<CriterionCardProps> = {}): CriterionCardProps {
   return {
-    entry: DAYLIGHT, line: "70 % of the score carved, 18 400 m³ removed", selected: false, deleteDisabledReason: null, disabledReason: null,
+    entry: DAYLIGHT, line: "70 % of the score carved, 18 400 m³ removed", selected: false, reorderable: true, deleteDisabledReason: null, disabledReason: null,
     onSelect: () => {}, onMove: () => {}, onSetBypassed: () => {}, onChoose: () => {}, ...overrides,
   };
 }
@@ -81,19 +81,31 @@ test("the handle is dragged, and the arrow keys on it move the card one place", 
   expect(onMove.mock.calls).toEqual([[-1], [1]]);
 });
 
-test("the bypass switch is named after the criterion; a bypassed card is greyed and reads Bypassed", () => {
+test("the switch is named after the criterion and is on for a criterion the chain uses", () => {
   const onSetBypassed = vi.fn();
   renderCard({ onSetBypassed });
   const toggle = card().querySelector<HTMLInputElement>('[role="switch"]')!;
-  expect(toggle.getAttribute("aria-label")).toBe("Bypass Daylight on windows");
-  expect(toggle.checked).toBe(false);
+  expect(toggle.getAttribute("aria-label")).toBe("Use Daylight on windows");
+  expect(toggle.checked).toBe(true);
   click(toggle);
   expect(onSetBypassed).toHaveBeenCalledExactlyOnceWith(true);
-  rendered!.unmount();
-  renderCard({ entry: { ...DAYLIGHT, bypassed: true }, line: "Bypassed" });
+});
+
+test("a criterion switched off is greyed, its switch is off and its line reads Off; switching it on asks for it to be used", () => {
+  const onSetBypassed = vi.fn();
+  renderCard({ entry: { ...DAYLIGHT, bypassed: true }, line: "Off", onSetBypassed });
   expect(card().classList.contains("criterion-card-bypassed")).toBe(true);
-  expect(card().querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
-  expect(card().querySelector(".criterion-card-line")!.textContent).toBe("Bypassed");
+  const toggle = card().querySelector<HTMLInputElement>('[role="switch"]')!;
+  expect(toggle.checked).toBe(false);
+  expect(card().querySelector(".criterion-card-line")!.textContent).toBe("Off");
+  click(toggle);
+  expect(onSetBypassed).toHaveBeenCalledExactlyOnceWith(false);
+});
+
+test("a card that cannot be reordered has no drag handle", () => {
+  renderCard({ reorderable: false });
+  expect(card().querySelector(".criterion-card-handle")).toBeNull();
+  expect(card().querySelector("[draggable='true']")).toBeNull();
 });
 
 test("the card's menu offers Rename, Duplicate and Delete, Delete waiting with its reason on the only criterion", () => {

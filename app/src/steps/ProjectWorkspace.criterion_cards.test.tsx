@@ -3,7 +3,7 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
-  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, cardNames, cards, chooseFromMenu, criteriaSummary, deleteCriterion, expectNoProblemShown,
+  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, cardNames, chooseFromMenu, criteriaSummary, deleteCriterion, expectNoProblemShown,
   expectResultsOfCriterion, keptTile, openChain, panel, panelFrame, periodFieldText, protectedFiles, select, selectButtonOf, selectedCardName, service,
   settingsSaves,
 } from "./chain_service_for_test";
@@ -65,20 +65,20 @@ test("a pending save goes to the criterion it was typed in", async () => {
   expect(periodFieldText()).toContain("21 Mar");
 });
 
-test("bypassing a card greys it and reads Bypassed", async () => {
+test("switching a card off greys it and reads Off", async () => {
   await openChain([FACADES, WINDOWS]);
   await act(async () => card("Spring sun on windows").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
   expect(service.patches).toEqual([{ id: "2", body: { bypassed: true } }]);
   expect(card("Spring sun on windows").classList.contains("criterion-card-bypassed")).toBe(true);
-  expect(cardLine("Spring sun on windows")).toBe("Bypassed");
+  expect(cardLine("Spring sun on windows")).toBe("Off");
   expect(selectedCardName()).toBe("Winter sun on facades");
   expect(service.count("GET /stage-status")).toBeGreaterThan(0);
   openStep("Inputs");
-  expect(criteriaSummary()).toBe("Winter sun on facades 61 %");       // the bypassed criterion is left out
+  expect(criteriaSummary()).toBe("Winter sun on facades 61 %");       // the criterion that is off is left out
 });
 
-test("bypassing the selected card selects the next one", async () => {
+test("switching off the selected card selects the next one", async () => {
   await openChain([FACADES, WINDOWS]);
   await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
@@ -88,7 +88,7 @@ test("bypassing the selected card selects the next one", async () => {
   expectNoProblemShown();
 });
 
-test("a bypass whose reply comes after another card was pressed moves the selection from the card pressed", async () => {
+test("a switch-off whose reply comes after another card was pressed moves the selection from the card pressed", async () => {
   await openChain([FACADES, WINDOWS, ROOFS]);
   let answerPatches = () => {};
   service.patchesAnswerWhen = new Promise((resolve) => { answerPatches = resolve; });
@@ -115,44 +115,53 @@ test("deleting the selected criterion selects the next one, and the last one the
   await select("Daylight on roofs");
   await deleteCriterion("Daylight on roofs");
   expect(service.requests).toContain("DELETE /criteria/3");
-  // One criterion left: no cards, its panel at once (with the focus), and Add another criterion.
-  expect(cards()).toEqual([]);
-  expect(document.activeElement).toBe(panelFrame());
+  // One criterion left: its row stays in the list (with the focus), with its switch on and Delete waiting, and Add criterion.
+  expect(cardNames()).toEqual(["Spring sun on windows"]);
+  expect(selectedCardName()).toBe("Spring sun on windows");
+  expect(document.activeElement).toBe(selectButtonOf("Spring sun on windows"));
+  expect(card("Spring sun on windows").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
+  expect(card("Spring sun on windows").querySelector(".criterion-card-handle")).toBeNull();
   expectNoProblemShown();
   expect(periodFieldText()).toContain("21 Mar");
   expect(protectedFiles()).toEqual(["windows.obj"]);
-  expect(buttonIn(stepRow("Criteria"), "Add another criterion")).toBeDefined();
+  expect(buttonIn(stepRow("Criteria"), "Add criterion")).toBeDefined();
 });
 
-test("a project left with one bypassed criterion offers Turn on in its panel, which turns it on", async () => {
-  await openChain([{ ...FACADES, bypassed: true }], { 1: CURRENT });
-  expect(cards()).toEqual([]);
-  expect(panel().textContent).not.toContain("Bypassed: the chain skips this criterion.");
-  expect(reasonOf(buttonIn(panel(), "Run analysis"))).toContain("Turn on a criterion");
-  await act(async () => buttonIn(panel(), "Turn on").click());
+test("turning the only criterion off and on again: Run analysis waits while it is off, the carving rule comes back when it is on", async () => {
+  await openChain([FACADES], { 1: CURRENT });
+  expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
+  await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
-  expect(service.patches).toEqual([{ id: "1", body: { bypassed: false } }]);
-  expect(buttonIn(panel(), "Turn on")).toBeUndefined();
+  expect(service.patches).toEqual([{ id: "1", body: { bypassed: true } }]);
+  expect(cardLine("Winter sun on facades")).toBe("Off");
+  expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);
+  expect(panel().textContent).toContain("Off: the chain skips this criterion");
+  expect(reasonOf(buttonIn(container().querySelector(".step-pinned-action") ?? panel(), "Run analysis"))).toContain("Turn on a criterion to run");
+  await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
+  await settle();
+  expect(service.patches[1]).toEqual({ id: "1", body: { bypassed: false } });
+  expect(panel().textContent).not.toContain("Off: the chain skips this criterion");
   expect(container().textContent).not.toContain("Turn on a criterion");
   expectNoProblemShown();
 });
 
-test("bypass the first of two criteria, delete the second: the one left is on, with no Turn on, and Run analysis can start", async () => {
+test("switch off the first of two criteria, delete the second: the one left is on, and Run analysis can start", async () => {
   await openChain([FACADES, WINDOWS]);
   await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
   await deleteCriterion("Spring sun on windows");
-  expect(cards()).toEqual([]);
+  expect(cardNames()).toEqual(["Winter sun on facades"]);
+  expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
   expect(service.entries.map((entry) => [entry.id, entry.bypassed])).toEqual([["1", false]]);     // as the service stores it
   expect(buttonIn(panel(), "Turn on")).toBeUndefined();
   expect(container().textContent).not.toContain("Turn on a criterion");
   expect(buttonIn(panel(), "Run analysis").disabled).toBe(false);
 });
 
-test("Add another criterion adds one of the chosen mode and selects it", async () => {
+test("Add criterion with one criterion adds one of the chosen mode and selects it", async () => {
   await openChain([FACADES]);
-  expect(cards()).toEqual([]);
-  act(() => buttonIn(stepRow("Criteria"), "Add another criterion").click());
+  expect(cardNames()).toEqual(["Winter sun on facades"]);
+  act(() => buttonIn(stepRow("Criteria"), "Add criterion").click());
   await act(async () => [...container().querySelectorAll<HTMLElement>(".add-criterion [role='radio']")].find((tile) => tile.textContent === "Daylight")!.click());
   await settle();
   expect(service.requests).toContain("POST /criteria");
@@ -220,7 +229,7 @@ test("turning a selected criterion that has results back on fetches its score po
   service.criterionStages["2"] = CURRENT;                          // its results from before it was bypassed
   await select("Spring sun on windows");
   expect(service.requests.filter((request) => request.includes("/run/") && request.includes("criterion=2"))).toEqual([]);
-  expect(panel().textContent).toContain("Bypassed: the chain skips this criterion.");        // not that it needs an analysis
+  expect(panel().textContent).toContain("Off: the chain skips this criterion");        // not that it needs an analysis
   expect(panel().textContent).not.toContain("Run the analysis to see the carving");
   await act(async () => card("Spring sun on windows").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();

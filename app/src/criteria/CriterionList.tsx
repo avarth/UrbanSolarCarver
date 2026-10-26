@@ -1,7 +1,7 @@
-// The criteria of a project with several (spec 7.2): their cards in carving order, the selected one marked, then Add criterion,
-// which opens the mode tiles. A card moves by dragging its handle onto another card, or with the arrow keys on its handle; its
-// menu renames (in a dialog), duplicates, or deletes (after a confirmation; never the only criterion). A change the service
-// refuses is said under the cards. AddCriterion is also the one-criterion step's quiet "Add another criterion" (CriteriaStep).
+// The criteria of a project (spec 7.2), also one: their cards in carving order, the selected one marked, then Add criterion, which
+// opens the mode tiles. With several cards, a card moves by dragging its handle onto another card, or with the arrow keys on its
+// handle; its menu renames (in a dialog), duplicates, or deletes (after a confirmation; never the only criterion). A change the
+// service refuses is said under the cards.
 import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
@@ -35,8 +35,6 @@ export interface CriterionListProps {
 type OpenDialog = { kind: "rename" | "delete"; criterion: CriterionEntry };
 
 interface AddCriterionProps {
-  /** "Add criterion" under the cards, "Add another criterion" at the end of a one-criterion step. */
-  label: string;
   onAdd: (mode: string) => Promise<string | null>;
   disabledReason: string | null;
 }
@@ -45,7 +43,7 @@ interface AddCriterionProps {
  * A link that opens the mode tiles; choosing one adds a criterion of that mode, and the tiles close once it is added. The open tiles
  * take the focus; Cancel gives it back to the link.
  */
-export function AddCriterion({ label, onAdd, disabledReason }: AddCriterionProps) {
+export function AddCriterion({ onAdd, disabledReason }: AddCriterionProps) {
   const [choosing, setChoosing] = useState(false);
   const { problem, setProblem, busy, send } = useDialogRequest(() => setChoosing(false));
   const [focusLink, setFocusLink] = useState(false);
@@ -67,7 +65,7 @@ export function AddCriterion({ label, onAdd, disabledReason }: AddCriterionProps
   if (!choosing) {
     return (
       <div className="add-criterion">
-        <button ref={link} type="button" className="link-button" disabled={disabledReason !== null} onClick={() => setChoosing(true)}>{label}</button>
+        <button ref={link} type="button" className="link-button" disabled={disabledReason !== null} onClick={() => setChoosing(true)}>{messages.addCriterion}</button>
       </div>
     );
   }
@@ -165,6 +163,7 @@ export function CriterionList(props: CriterionListProps) {
       <ol ref={list} className="criterion-list" aria-label={messages.criteriaListLabel}>
         {criteria.map((criterion) => (
           <CriterionCard key={criterion.id} entry={criterion} line={props.lineOf(criterion)} selected={criterion.id === selectedId}
+                         reorderable={criteria.length > 1}
                          running={props.runningId === criterion.id}
                          deleteDisabledReason={criteria.length === 1 ? messages.onlyCriterionStays : null} disabledReason={disabledReason}
                          onSelect={() => props.onSelect(criterion.id)}
@@ -174,7 +173,7 @@ export function CriterionList(props: CriterionListProps) {
         ))}
       </ol>
       {problem !== null && <p className="setting-error criterion-list-problem" role="alert">{problem}</p>}
-      <AddCriterion label={messages.addCriterion} onAdd={props.onAdd} disabledReason={disabledReason} />
+      <AddCriterion onAdd={props.onAdd} disabledReason={disabledReason} />
       {dialog?.kind === "rename" && (
         <RenameCriterionDialog name={dialog.criterion.name} onRename={(name) => props.onRename(dialog.criterion.id, name)} onClose={closeDialog} />
       )}

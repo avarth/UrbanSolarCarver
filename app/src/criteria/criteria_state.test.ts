@@ -108,7 +108,7 @@ test("the words of each status; a current criterion has none because its result 
   expect(cardStatusText({ kind: "out_of_date" })).toBe("Out of date");
   expect(cardStatusText({ kind: "updates_from", from: "Daylight" })).toBe("Updates from Daylight");
   expect(cardStatusText({ kind: "running" })).toBe("Running");
-  expect(cardStatusText({ kind: "bypassed" })).toBe("Bypassed");
+  expect(cardStatusText({ kind: "bypassed" })).toBe("Off");
   expect(cardStatusText({ kind: "no_test_surfaces" })).toBe("Add test surfaces");
   expect(cardStatusText({ kind: "not_run" })).toBe("Not run yet");
 });
@@ -180,6 +180,6 @@ test("the files of other criteria are those they use and this one does not, each
 test("a card's line is its result while current, else its status", () => {
   expect(cardLineOf({ kind: "current" }, summary(CARVING, 1250.4))).toBe(cardResultLine(summary(CARVING, 1250.4)));
   expect(cardLineOf({ kind: "current" }, undefined)).toBe("");
-  expect(cardLineOf({ kind: "bypassed" }, summary(CARVING, 1250.4))).toBe("Bypassed");
+  expect(cardLineOf({ kind: "bypassed" }, summary(CARVING, 1250.4))).toBe("Off");
   expect(cardLineOf({ kind: "updates_from", from: "Daylight on windows" }, undefined)).toBe("Updates from Daylight on windows");
 });

@@ -72,7 +72,7 @@ export function useCriteria(token: string, project: ProjectDetail): CriteriaHook
       await deleteCriterion(token, project.name, id);
       const { criteria, selectedId } = latest.current;
       const left = criteria.filter((criterion) => criterion.id !== id);
-      // The service turns on the one criterion left (a project of one criterion has no bypass switch).
+      // The service turns on the one criterion left (a project keeps one criterion on).
       commit({ criteria: left.length === 1 ? [{ ...left[0], bypassed: false }] : left, selectedId: selectionAfterRemoving(criteria, id, selectedId) });
     },
     reorder: async (ids) => {

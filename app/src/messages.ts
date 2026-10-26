@@ -149,7 +149,7 @@ export const messages = {
   criterionOutOfDate: "Out of date",
   criterionUpdatesFrom: (criterionName: string) => `Updates from ${criterionName}`,
   criterionRunning: "Running",
-  criterionBypassed: "Bypassed",
+  criterionOff: "Off",
   criterionNeedsTestSurfaces: "Add test surfaces",
   criterionNotRunYet: "Not run yet",
   // Criteria with several criteria: the ones that are on in order, each with the share it kept, "Daylight on windows 70 %, then
@@ -159,7 +159,6 @@ export const messages = {
   // The cards of several criteria (7.2), their menu and dialogs
   criteriaListLabel: "Criteria in carving order",
   addCriterion: "Add criterion",
-  addAnotherCriterion: "Add another criterion",
   newCriterionModeTitle: "Mode of the new criterion",
   addingCriterion: "Adding the criterion",
   // The panel of a card just selected, until its settings are in
@@ -170,7 +169,7 @@ export const messages = {
   criterionStage: (criterionName: string, stageName: string) => `${criterionName}: ${stageName}`,
   moveCriterion: (criterionName: string) => `Move ${criterionName}`,
   moveCriterionHint: "Drag to reorder, or press the up and down arrow keys",
-  bypassCriterion: (criterionName: string) => `Bypass ${criterionName}`,
+  criterionSwitchLabel: (criterionName: string) => `Use ${criterionName}`,
   criterionMenuOf: (criterionName: string) => `Actions for ${criterionName}`,
   renameCriterion: "Rename",
   duplicateCriterion: "Duplicate",
@@ -250,7 +249,7 @@ export const messages = {
   addMaxVolumeAndTestSurfacesToRun: "Add a maximum volume and test surfaces to run the analysis",
   // Another criterion that is on protects nothing (7.2: the run refuses to start until every one protects something)
   addTestSurfacesOfCriterionToRun: (criterionName: string) => `Add test surfaces to ${criterionName} to run the analysis`,
-  // Every criterion is bypassed (the service's words for the refusal)
+  // Every criterion is off (the service's words for the refusal)
   turnOnCriterionToRun: "Turn on a criterion to run",
   fixSettingsToRun: "Fix the settings above to run the analysis",
   fixSettingsInStepToRun: (stepTitle: string) => `Fix the settings in ${stepTitle} to run the analysis`,
@@ -336,10 +335,8 @@ export const messages = {
   // run would trace that criterion first, which only Run analysis starts (M10). The same while that criterion protects nothing.
   carvingWaitsForAnalysisOf: (criterionName: string) => `Run the analysis for ${criterionName} first`,
   addTestSurfacesFirst: (criterionName: string) => `Add test surfaces to ${criterionName} first`,
-  // The panel of a bypassed criterion, in place of its carving rule
-  criterionBypassedNote: "Bypassed: the chain skips this criterion.",
-  // In place of that note when the project has one criterion, which has no card and so no bypass switch (a hand edit of project.json)
-  turnOnCriterion: "Turn on",
+  // The panel of a criterion that is off, in place of its carving rule
+  criterionOffNote: "Off: the chain skips this criterion",
   histogramTitle: "Scores of the voxels",
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",

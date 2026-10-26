@@ -1,7 +1,7 @@
-// One criterion's card in the list of several (spec 7.2): a drag handle (the arrow keys on it move the card one place), the colour
-// swatch of the criterion in the 3D view, its name, its mode's symbol and one line (its result while current, else its status), a
-// bypass switch and a menu with Rename, Duplicate and Delete. A press on the card selects it. The list (CriterionList) does the
-// dragging and the requests.
+// One criterion's card in the list (spec 7.2): a drag handle when the list has several cards (the arrow keys on it move the card
+// one place), the colour swatch of the criterion in the 3D view, its name, its mode's symbol and one line (its result while
+// current, else its status), a switch that is on while the chain uses the criterion, and a menu with Rename, Duplicate and
+// Delete. A press on the card selects it. The list (CriterionList) does the dragging and the requests.
 import { useId, type DragEvent, type KeyboardEvent } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
@@ -17,6 +17,8 @@ export interface CriterionCardProps {
   /** Its result while current, else the words of its status. */
   line: string;
   selected: boolean;
+  /** The list has several cards: the card has a drag handle. */
+  reorderable: boolean;
   /** A run is working on this criterion's stages: the card is marked busy. */
   running?: boolean;
   /** Why Delete waits (the only criterion); null when it can be chosen. */
@@ -26,6 +28,7 @@ export interface CriterionCardProps {
   onSelect: () => void;
   /** Moves the card one place up (-1) or down (1). */
   onMove: (step: -1 | 1) => void;
+  /** The switch was turned: *on* true skips the criterion in the chain (the switch was turned off). */
   onSetBypassed: (on: boolean) => void;
   onChoose: (item: CriterionMenuItem) => void;
   /** The drag of the card by its handle, and drops of another card onto it. */
@@ -65,12 +68,14 @@ export function CriterionCard(props: CriterionCardProps) {
   return (
     <li className={classes.filter(Boolean).join(" ")} aria-current={selected || undefined} aria-busy={props.running || undefined} data-criterion-id={entry.id}
         onDragOver={props.onDragOver} onDragLeave={props.onDragLeave} onDrop={props.onDrop}>
-      <span className="criterion-card-handle" role="button" tabIndex={0} draggable={!disabled} aria-disabled={disabled || undefined}
-            aria-label={messages.moveCriterion(entry.name)} aria-describedby={hintId} title={messages.moveCriterionHint} onKeyDown={moveWithKeys}
-            onDragStart={props.onDragStart} onDragEnd={props.onDragEnd}>
-        <GripIcon />
-        <span id={hintId} className="visually-hidden">{messages.moveCriterionHint}</span>
-      </span>
+      {props.reorderable && (
+        <span className="criterion-card-handle" role="button" tabIndex={0} draggable={!disabled} aria-disabled={disabled || undefined}
+              aria-label={messages.moveCriterion(entry.name)} aria-describedby={hintId} title={messages.moveCriterionHint} onKeyDown={moveWithKeys}
+              onDragStart={props.onDragStart} onDragEnd={props.onDragEnd}>
+          <GripIcon />
+          <span id={hintId} className="visually-hidden">{messages.moveCriterionHint}</span>
+        </span>
+      )}
       <button type="button" className="criterion-card-select" onClick={props.onSelect}>
         <span className="criterion-card-swatch" style={{ background: entry.colour }} aria-hidden="true" />
         <span className="criterion-card-text">
@@ -79,8 +84,8 @@ export function CriterionCard(props: CriterionCardProps) {
         </span>
         {symbol !== undefined && <ModeTileSymbol symbol={symbol} />}
       </button>
-      <input type="checkbox" role="switch" className="setting-switch criterion-card-bypass" checked={entry.bypassed} disabled={disabled}
-             aria-label={messages.bypassCriterion(entry.name)} onChange={(event) => props.onSetBypassed(event.target.checked)} />
+      <input type="checkbox" role="switch" className="setting-switch criterion-card-switch" checked={!entry.bypassed} disabled={disabled}
+             aria-label={messages.criterionSwitchLabel(entry.name)} onChange={(event) => props.onSetBypassed(!event.target.checked)} />
       <ActionMenu label={messages.criterionMenuOf(entry.name)} symbol={<span aria-hidden="true">{messages.projectMenuSymbol}</span>}
                   buttonClassName="criterion-card-menu-button" onChoose={(key) => props.onChoose(key as CriterionMenuItem)}
                   items={[

@@ -80,8 +80,6 @@ export interface WorkspaceCriteria {
   selection: CriterionSelection;
   /** The criteria that are on, in chain order. */
   active: CriterionEntry[];
-  /** The only criterion is bypassed (project.json edited by hand): it has no card, so its panel offers to turn it on. */
-  onlyCriterionBypassed: boolean;
   /** Why Run analysis cannot start, as Criteria says it and as Site and grid does; null when it can. */
   runBlocker: string | null;
   siteAndGridRunBlocker: string | null;
@@ -230,7 +228,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   };
 
   return {
-    selection, active, onlyCriterionBypassed: criteria.criteria.length === 1 && criteria.criteria[0].bypassed, runBlocker, siteAndGridRunBlocker, ownStages,
+    selection, active, runBlocker, siteAndGridRunBlocker, ownStages,
     ofResults, goToSetting, panelProblem, cardsOf,
   };
 }

@@ -12,7 +12,7 @@ import {
 } from "../api_client/client";
 import { activeCriteria, filesOfOtherCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
 import { CriteriaStep } from "../criteria/CriteriaStep";
-import { CriterionPanel, TurnOnCriterion } from "../criteria/CriterionPanel";
+import { CriterionPanel } from "../criteria/CriterionPanel";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
@@ -424,9 +424,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                         weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
-                        carvingRule={workspaceCriteria.onlyCriterionBypassed
-                          ? <TurnOnCriterion onTurnOn={() => selection.requests.onSetBypassed(criterionId, false)} disabledReason={inputsDisabledReason} />
-                          : resultSteps.carvingRule}
+                        carvingRule={resultSteps.carvingRule}
                         runAnalysis={resultSteps.criterionRunAnalysis} />
       } />
     ),

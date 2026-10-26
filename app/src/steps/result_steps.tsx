@@ -162,7 +162,7 @@ export interface ResultStepsContext {
    * analysis for {name} first", "Add test surfaces to {name} first". Absent or null: the settings changed since the analysis.
    */
   buildWaitReason?: string | null;
-  /** The selected criterion is bypassed: its panel says so in place of a carving rule. */
+  /** The selected criterion is off: its panel says so in place of a carving rule. */
   criterionBypassed?: boolean;
   /**
    * Saves threshold values to a criterion that is not the one shown (a value of the threshold queue whose turn came after another
@@ -403,8 +403,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     : waitsFor.protectsNothing ? messages.addTestSurfacesFirst(waitsFor.name) : messages.carvingWaitsForAnalysisOf(waitsFor.name);
   const carvingUpdatesOnItsOwn = autoUpdate && thresholdView !== null;
   // Before the selected criterion's first analysis there is no carving to show: the reason, how the last carving update ended,
-  // and the carving settings a refused save marked, so they can be fixed. A bypassed criterion has no carving in the chain.
-  const carvingRule = context.criterionBypassed === true ? <p className="step-reason">{messages.criterionBypassedNote}</p>
+  // and the carving settings a refused save marked, so they can be fixed. A criterion that is off has no carving in the chain.
+  const carvingRule = context.criterionBypassed === true ? <p className="step-reason">{messages.criterionOffNote}</p>
     : ownStages.thresholding === "missing" ? (
     <>
       <p className="step-not-usable">{messages.carvingNeedsAnalysis}</p>
