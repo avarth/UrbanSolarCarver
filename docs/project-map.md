@@ -111,7 +111,7 @@ UrbanSolarCarver/
 | `local_web_service/stage_records.py` | Which stages of a project are current, out of date or missing, for each criterion (`criterion_status`) and summed up (`stage_status`), and which stages a run has to execute: `choose_stages` returns the criteria to trace (`trace_criteria`), the criterion to threshold from and what the run does for each criterion. |
 | `local_web_service/run_worker.py` | Runs a project in a background thread in two phases (analysis, then envelope and massing), publishes progress events that name their criterion, refuses a run without test surfaces in a criterion that is on, and handles cancel. |
 | `local_web_service/run_summary.py`, `score_points.py` | What the app shows of a run: the numbers of the carving and massing for each criterion and for the chain, the sun path and sky dome, the scored voxels of a criterion, and which criterion carved each voxel. |
-| `local_web_service/carve_further.py` | **Carve further** for a project with one criterion; refused with several. |
+| `local_web_service/carve_further.py` | **Carve further** for a project with one criterion; refused with several. The browser app no longer offers it; the route stays for other clients. |
 | `local_web_service/gpu_warm_up.py` | Compiles the GPU kernels in the background at launch and reports the device or why the CPU is used. |
 | `example_projects/` | The three packaged examples (`examples.json`, mesh files and one weather file). |
 | `ui_static/` | The built front-end, committed. `build_info.json` holds a hash of the sources in `app/`. |
@@ -138,7 +138,7 @@ UrbanSolarCarver/
 
 `POST /projects/{name}/runs` answers with `criterion_stages` besides `stages`, and refuses with a 422 (`missing_inputs`) when no criterion is on or a criterion that is on has no test surfaces.
 
-`app/` holds the front-end source (`src/steps/` the six steps, `src/settings_form/` the settings, `src/viewer/` and `src/viewer_overlays/` the 3D view, `src/api_client/` the typed client). See [Browser UI](ui.md#rebuilding-the-front-end-after-changing-app) for building it.
+`app/` holds the front-end source (`src/steps/` the five steps: `InputsStep.tsx`, `SiteAndGridStep.tsx`, the result steps and the export, with `ActionMenu.tsx`, the menu of a project and of a criterion card; `src/criteria/` the criteria hook and its helpers (`use_criteria.ts`, `criteria_state.ts`), the Criteria step, the cards and their dialogs, the criterion panel and its Test surfaces box; `src/settings_form/` the settings, with `two_forms.ts` for the shared and the criterion settings held side by side; `src/viewer/` and `src/viewer_overlays/` the 3D view, with `carved_by_criterion_decoder.ts` for the carved-by-criterion layer; `src/api_client/` the typed client). See [Browser UI](ui.md#rebuilding-the-front-end-after-changing-app) for building it.
 
 ## Grasshopper plugin (`grasshopper/`)
 

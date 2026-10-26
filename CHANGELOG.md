@@ -30,7 +30,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   are folder names (letters, digits, `_`, `-`; unique ignoring case; default: the position), and the weather file is
   shared but reaches only the criteria whose mode reads one. `load_config` refuses a chain file.
 - Monte Carlo oracle: chained cases (daylight then benefit, time-based then daylight) in `tests/montecarlo.py`.
-- The browser app's list of criteria follows in a later phase; **Carve further** stays in the app until then. See
+- The browser app shows the criteria of a project as cards (see Added (chained carvings, app) below). See
   [Chained carvings](docs/criteria.md).
 
 ### Added (chained carvings, service)
@@ -58,16 +58,54 @@ versioning follows [Semantic Versioning](https://semver.org/).
 - **Results per criterion.** The run summary gains `criteria` (carving numbers, voxels at start and kept volume of each
   criterion) and `chain` (volume after each criterion, share of the maximum volume kept); `score-points` and
   `sky-patches` take a `criterion`; the new `run/carved-by-criterion` route says which criterion removed each voxel.
-  **Carve further** is refused on a project with several criteria.
+  The `carve-further` route is refused on a project with several criteria.
 - **Routes** `GET /criterion-keys`, `POST|PATCH|DELETE /projects/{name}/criteria[/{id}]`, `.../duplicate`,
   `PUT .../criteria/order`, and `.../criteria/{id}/test-surfaces[/{file}]` (upload, use a stored file, remove);
   `PUT /config` and `GET /projects/{name}` take an optional `criterion`. The routes the current app uses keep their
-  meaning for a project with one criterion; the app's list of criteria follows in a later phase.
+  meaning for a project with one criterion.
 - **Grasshopper: `after` input on USC_ThresholdStage** (the last input). Wiring the first criterion's `thr_result` into
   it makes the second criterion decide only among the voxels the first one kept (`RunRequest.after`,
   `run_pipeline(after=)`). A request with `after` and a chain file, or a start before thresholding, is refused. The
   `ping` reply lists the engine's `features` (`run_after`), and a definition that chains on an older engine reports
   that the engine must be restarted instead of running the criterion unchained.
+
+### Added (chained carvings, app)
+
+- **Criteria in the browser app.** The steps are now Inputs, Site and grid, Criteria, Envelope and massing, and Export.
+  A project with one criterion looks as before: the Criteria step opens straight on the criterion's panel, with no list
+  and no cards, and a quiet **Add another criterion** link at the end starts a chain. From the second criterion on the
+  step shows one card per criterion (colour swatch, name, mode symbol, and either its result, "70 % of the score
+  carved, 813 m³ removed", or its state: Out of date, Updates from *name*, Running, Bypassed, Add test surfaces, Not run
+  yet), reordered by dragging or with the arrow keys, with a bypass switch and a menu (Rename, Duplicate, Delete; the
+  only criterion cannot be deleted), and a line under the cards with the volume the chain kept and its share of the
+  maximum volume. Earlier projects open as a chain of one criterion; a project carved further keeps its note on the
+  maximum volume.
+- **Site and grid and the criterion panel.** The settings every criterion shares (north, voxel size, the surroundings
+  switch, rays per batch, detailed statistics) are in Site and grid and are saved through the shared-settings route; the
+  criterion's own settings, its mode and its carving rule are in its panel, split by the service's list of criterion
+  keys. The test surfaces belong to the criterion (the **Test surfaces** box, with **Use a file from another
+  criterion**), and no longer to the Inputs step.
+- **Runs per criterion.** Run analysis traces only the criteria that changed. The progress names the criterion of each
+  stage, and a run the service refuses for one criterion (a setting, or no test surfaces) selects that criterion's card
+  and shows the message in its panel. Moving a criterion's cutoff with **Update when I change the threshold** on carves
+  again from that criterion on in one run, with no ray tracing; the later criteria read "Updates from *name*" until it
+  ends. A carving change while another criterion's analysis is out of date is saved and waits for Run analysis.
+- **3D view.** The layer **Carved voxels, by criterion** draws each carved voxel in the colour of the criterion that
+  removed it, with a legend; the test surfaces of the selected criterion are drawn at full strength and those of the
+  other criteria dimmed; the kept voxels, the sun path and the sky dome follow the selected criterion.
+- **Service and engine, for the app.** `PUT /projects/{name}/shared-settings` saves the shared settings; `GET
+  /projects/{name}/criteria/{id}/settings` reads a criterion's settings; `sun-path` takes a `criterion`; the run
+  summary's `criteria` gain `volume_removed_m3`; a refused run carries `criterion` in its 422. A run that starts at
+  `thresholding` with `threshold_from_criterion` (`run_chain(start_from="thresholding", threshold_from=)`) thresholds
+  from that criterion on and reads the earlier thresholding folders, which is how a changed cutoff reaches the later
+  criteria without tracing. The run report of a chain with two or more criteria gets a **Chain** section (the volume
+  after each criterion and its share of the maximum volume), a Rule and a Cutoff column in the Criteria table, and a
+  total time that covers every criterion.
+
+### Removed
+
+- **Carve further** is no longer in the browser app (Export step). Adding a criterion does the same without voxelizing
+  an envelope again. The service route `POST /projects/{name}/carve-further` stays for other clients.
 
 ### Fixed (massing)
 

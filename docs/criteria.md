@@ -8,9 +8,8 @@ own threshold. A **chain** carves them one after the other on one voxel grid, fr
     Chains run from the CLI (`usc run`), the Python API (`run_chain`) and the daemon. The local service behind the
     browser app stores and runs projects with several criteria (see [In the browser app's service](#in-the-browser-apps-service)),
     and Grasshopper chains two criteria through the `after` input of USC_ThresholdStage (see
-    [In Grasshopper](#in-grasshopper)). The browser app has no list of criteria yet; it follows in a later phase. Until
-    then the app keeps **Carve further** in its Export step, which makes the exported envelope the maximum volume of a
-    new project (see [Browser UI](ui.md)).
+    [In Grasshopper](#in-grasshopper)). The browser app lists a project's criteria as cards from the second one on (see
+    [Several criteria](ui.md#several-criteria)).
 
 ## What a chain is
 
@@ -147,8 +146,11 @@ outputs/
   run_report.md
 ```
 
-The run report has a "Criteria" section with one row per criterion (name, mode, threshold, voxels at start, voxels
-kept). Its Configuration, Preprocessing and Thresholding sections describe the last criterion.
+The run report has a "Criteria" section with one row per criterion (name, mode, rule, cutoff with its unit, voxels at
+start, voxels kept). With two or more criteria a "Chain" section follows: the maximum volume (the filled voxels the
+first criterion started with), the volume left after each criterion in m³ and its share of the maximum volume, and the
+total time covers every criterion's analysis and carving. Its Configuration, Preprocessing and Thresholding sections
+describe the last criterion.
 
 ## One step of a chain
 
@@ -196,7 +198,7 @@ The local service behind `usc ui` keeps the criteria of a project in `project.js
 
 A run does only what changed. The service compares each criterion's settings and test surfaces with the ones its results were made from, and asks the engine to trace only the criteria whose rays changed (`trace_criteria`), then to threshold the chain from the first traced criterion on. When a criterion earlier in the chain needs thresholding again while a later one is traced, it also sends `threshold_from_criterion`; when no criterion needs tracing, it thresholds the chain from the first criterion whose thresholding is out of date on (`threshold_from_criterion`), so the ones before it keep their results. The result of each criterion, the volume each one kept and the criterion that removed each voxel are served per criterion.
 
-On the packaged Perimeter block example (Solar time-based, then Daylight on the same test surfaces; NVIDIA RTX 3060), the first analysis took 2.4 s and kept 187,743 m³. After adding the Daylight criterion, the next analysis traced only that criterion and took 2.7 s; the chain then kept 187,743 m³ after the first criterion and 119,848 m³ after the second. Projects made with an earlier version open as a chain of one criterion with their results still current. The routes, the files and the rules for what goes out of date are in [Criteria in a project](ui.md#criteria-in-a-project).
+On the packaged Perimeter block example (Solar time-based, then Daylight on the same test surfaces; NVIDIA RTX 3060), the first analysis took 2.4 s and kept 187,743 m³. After adding the Daylight criterion, the next analysis traced only that criterion and took 2.7 s; the chain then kept 187,743 m³ after the first criterion and 119,848 m³ after the second. The app lists the criteria as cards, runs only the ones that changed and shows the carved voxels by criterion in 3D (see [Several criteria](ui.md#several-criteria)). Projects made with an earlier version open as a chain of one criterion with their results still current. The routes, the files and the rules for what goes out of date are in [Criteria in a project](ui.md#criteria-in-a-project).
 
 ## In Grasshopper
 
