@@ -10,6 +10,15 @@ export interface LayersMenuEntry {
   name: LayerName;
   available: boolean;       // false: the layer belongs to this mode, but the last run stopped before its stage
   visible: boolean;
+  /** Entries under this one, each with its own check box and swatch (the test surfaces of each criterion). */
+  parts?: LayersMenuPart[];
+}
+
+export interface LayersMenuPart {
+  id: string;
+  label: string;
+  colour: string | null;     // "#RRGGBB" of the swatch
+  visible: boolean;
 }
 
 interface LayersMenuProps {
@@ -17,10 +26,11 @@ interface LayersMenuProps {
   skyDomeOpacity: number;
   theme: ViewportTheme;
   onVisibleChange: (name: LayerName, visible: boolean) => void;
+  onPartVisibleChange?: (name: LayerName, partId: string, visible: boolean) => void;
   onSkyDomeOpacityChange: (opacity: number) => void;
 }
 
-export function LayersMenu({ entries, skyDomeOpacity, theme, onVisibleChange, onSkyDomeOpacityChange }: LayersMenuProps) {
+export function LayersMenu({ entries, skyDomeOpacity, theme, onVisibleChange, onPartVisibleChange, onSkyDomeOpacityChange }: LayersMenuProps) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const button = useRef<HTMLButtonElement>(null);
@@ -41,6 +51,19 @@ export function LayersMenu({ entries, skyDomeOpacity, theme, onVisibleChange, on
                        onChange={(event) => onVisibleChange(entry.name, event.target.checked)} />
                 {messages.layerNames[entry.name]}
               </label>
+              {entry.parts && entry.parts.length > 0 && (
+                <ul className="viewer-layer-parts" aria-label={messages.layerNames[entry.name]}>
+                  {entry.parts.map((part) => (
+                    <li key={part.id}>
+                      <label>
+                        <input type="checkbox" checked={part.visible} onChange={(event) => onPartVisibleChange?.(entry.name, part.id, event.target.checked)} />
+                        {part.colour !== null && <span className="viewer-criterion-swatch" style={{ background: part.colour }} aria-hidden="true" />}
+                        {part.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {!entry.available && <p className="viewer-layer-note viewer-muted">{entry.name === "carved_by_criterion" ? messages.carvedByCriterionMissing : messages.noResultForStage}</p>}
               {entry.available && entry.name === "sky_dome" && (
                 <label className="viewer-sky-dome-slider">

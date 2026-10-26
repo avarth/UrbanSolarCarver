@@ -549,6 +549,8 @@ export const messages = {
     envelope: "Carved envelope",
     building_massing: "Building massing",
   },
+  // The entry of a criterion under "Test surfaces" in the layers menu (two or more criteria): its name, marked when it is switched off.
+  testSurfacesOfCriterion: (criterionName: string, off: boolean) => (off ? `${criterionName} (off)` : criterionName),
   carvedByCriterionMissing: "Shows once every criterion that is on has run.",
   noResultForStage: "No result for this stage: the last run stopped before it",
   viewerNeedsWebGl: "The 3D view cannot start because this browser cannot use WebGL here, for example over a remote desktop, or when " +

@@ -47,12 +47,22 @@ export interface CriterionSwatch {
   colour: string;       // "#RRGGBB"
 }
 
+/** The test surfaces of one criterion: drawn in its colour, listed under "Test surfaces" in the layers menu when there are two or more. */
+export interface TestSurfaceGroup {
+  id: string;
+  name: string;
+  colour: string | null;        // "#RRGGBB"; null: the accent colour (a project that lists no criteria)
+  off: boolean;                 // the criterion is switched off: its entry says so
+  shown: boolean;               // its entry is checked
+  geometry: THREE.BufferGeometry | null;      // the files drawn in its colour; null when it has none, or is not shown
+}
+
 export interface ViewerPaneProps {
   maxVolume: THREE.BufferGeometry | null;
-  /** The test surfaces drawn at full strength: the selected criterion's files (all of them with one criterion). */
-  testSurfaces: THREE.BufferGeometry | null;
-  /** The test surfaces drawn dimmed: the files only the criteria that are not selected use. */
-  dimmedTestSurfaces?: THREE.BufferGeometry | null;
+  /** The test surfaces by criterion, in chain order; a project without criteria has one group without a colour. */
+  testSurfaces: readonly TestSurfaceGroup[];
+  /** The groups whose entries were checked or unchecked in the layers menu (the pane does not keep which are shown). */
+  onTestSurfacesShownChange?: (groupIds: readonly string[], shown: boolean) => void;
   /** The criteria that are on, for the colours and names of the carved-by-criterion layer. */
   criteria?: readonly CriterionSwatch[];
   /** The existing surroundings and the terrain, when the project has them. */
@@ -119,7 +129,7 @@ function storeyCountOf(massing: THREE.BufferGeometry): number {
   return partNames.reduce((count, name) => Math.max(count, (storeyOfPart(name) ?? 0) + 1), 0);
 }
 
-export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null, criteria = NO_CRITERIA, context = null, terrain = null, sunPath, hemisphere,
+export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange, criteria = NO_CRITERIA, context = null, terrain = null, sunPath, hemisphere,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
@@ -168,9 +178,9 @@ export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null,
   // Every layer gets its own copy of the geometry: the scene disposes a layer's geometry when the layer is replaced.
   useEffect(() => scene?.setLayer("max_volume", maxVolume && maxVolumeLayer(maxVolume.clone(), maxVolumeAppearance)), [scene, maxVolume, maxVolumeAppearance]);
   useEffect(() => {
-    const drawn = testSurfaces !== null || dimmedTestSurfaces !== null;
-    scene?.setLayer("test_surfaces", drawn ? testSurfacesLayer(testSurfaces?.clone() ?? null, dimmedTestSurfaces?.clone() ?? null) : null);
-  }, [scene, testSurfaces, dimmedTestSurfaces]);
+    const parts = testSurfaces.flatMap(({ id, colour, shown, geometry }) => (shown && geometry !== null ? [{ name: id, colour, geometry: geometry.clone() }] : []));
+    scene?.setLayer("test_surfaces", parts.length > 0 ? testSurfacesLayer(parts) : null);
+  }, [scene, testSurfaces]);
   useEffect(() => scene?.setLayer("context", context && contextLayer(context.clone())), [scene, context]);
   useEffect(() => scene?.setLayer("terrain", terrain && terrainLayer(terrain.clone())), [scene, terrain]);
   useEffect(() => {
@@ -214,7 +224,8 @@ export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null,
 
   const present: LayerName[] = [];
   if (maxVolume) present.push("max_volume");
-  if (testSurfaces || dimmedTestSurfaces) present.push("test_surfaces");
+  // A layer whose criteria are all hidden stays listed, so they can be shown again.
+  if (testSurfaces.some(({ geometry, shown }) => geometry !== null || !shown)) present.push("test_surfaces");
   if (context) present.push("context");
   if (terrain) present.push("terrain");
   if (voxels) present.push("kept_voxels", "carved_voxels");
@@ -239,10 +250,27 @@ export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null,
     if (framingRequest > 0) scene?.frameAll();
   }, [scene, framingRequest]);
 
+  // With two or more criteria the test surfaces have an entry for each; the layer's own check box then stands for all of them: it is
+  // checked while any is shown, and changes all. A criterion is shown when the layer is and its own entry is checked.
+  const testSurfaceParts = testSurfaces.length < 2 ? undefined : testSurfaces.map(({ id, name, colour, off, shown }) =>
+    ({ id, label: messages.testSurfacesOfCriterion(name, off), colour, visible: isVisible("test_surfaces") && shown }));
   const entries: LayersMenuEntry[] = [
-    ...present.map((name) => ({ name, available: true, visible: isVisible(name) })),
+    ...present.map((name) => (name === "test_surfaces" && testSurfaceParts
+      ? { name, available: true, visible: testSurfaceParts.some((part) => part.visible), parts: testSurfaceParts }
+      : { name, available: true, visible: isVisible(name) })),
     ...missingLayers.filter((name) => !present.includes(name)).map((name) => ({ name, available: false, visible: false })),
   ];
+  const changeVisible = (name: LayerName, visible: boolean) => {
+    setVisibleByChoice((choices) => ({ ...choices, [name]: visible }));
+    if (name === "test_surfaces" && testSurfaceParts) onTestSurfacesShownChange?.(testSurfaces.map(({ id }) => id), visible);
+  };
+  const changePartVisible = (_name: LayerName, id: string, visible: boolean) => {
+    if (visible && !isVisible("test_surfaces")) {          // the whole layer is hidden: showing one criterion shows that one alone
+      setVisibleByChoice((choices) => ({ ...choices, test_surfaces: true }));
+      onTestSurfacesShownChange?.(testSurfaces.filter((group) => group.id !== id).map((group) => group.id), false);
+    }
+    onTestSurfacesShownChange?.([id], visible);
+  };
   const shown = (name: LayerName) => present.includes(name) && isVisible(name);
   const legend: LegendContent = {
     sunPath: shown("sun_path") && sunPath ? sunPathLegend(sunPath.path) : undefined,
@@ -290,7 +318,7 @@ export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null,
                    onGroundAidChange={setGroundAid} />
       {entries.length > 0 && (
         <LayersMenu entries={entries} skyDomeOpacity={skyDomeOpacity} theme={theme} onSkyDomeOpacityChange={setSkyDomeOpacity}
-                    onVisibleChange={(name, visible) => setVisibleByChoice((choices) => ({ ...choices, [name]: visible }))} />
+                    onVisibleChange={changeVisible} onPartVisibleChange={changePartVisible} />
       )}
       <AxisGizmo yawDegrees={camera.yawDegrees} elevationDegrees={camera.elevationDegrees} theme={theme} />
       <ScaleBar metresPerPixel={camera.metresPerPixel} theme={theme} />

@@ -154,7 +154,7 @@ A refused run points at the criterion that caused it, in the pinned bar:
 ### The 3D view with several criteria
 
 - The layer **Carved voxels, by criterion** (Layers menu, hidden until you turn it on) draws each carved voxel in the colour of the criterion that removed it, and the legend, "Carved voxels, by the criterion that removed them", names each colour. The layer appears once every criterion that is on has run; the menu says so until then. It is dimmed with the other results while any criterion is out of date. Beyond 1,000,000 carved voxels it draws a regular share of them, and the legend says which ("Showing 1 of every 2 voxels").
-- The test surfaces of the selected criterion are drawn at full strength and those of the other criteria dimmed. The sun path and the sky dome follow the selected criterion.
+- The layer **Test surfaces** draws each criterion's files in the colour of that criterion, all at full strength. With two or more criteria its entry in the Layers menu has a check box and a colour swatch for each criterion, in chain order (a criterion that is switched off reads "name (off)"), all checked until you change them; the **Test surfaces** check box shows or hides all of them. A file that several criteria use is drawn once, in the colour of the selected criterion when it uses the file and is shown, else in the colour of the first shown criterion that uses it. Which criteria are shown stays as you set it when you select another criterion or open another step, and is not saved with the project. The sun path and the sky dome follow the selected criterion.
 
 ### The run report
 

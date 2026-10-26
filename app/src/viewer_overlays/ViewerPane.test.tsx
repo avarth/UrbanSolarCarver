@@ -7,7 +7,7 @@ import type { ScorePoints } from "../viewer/score_points_decoder";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
 import { Legend } from "./Legend";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
-import { NO_VIEWER_RESULTS, ViewerPane, type ViewerPaneProps } from "./ViewerPane";
+import { NO_VIEWER_RESULTS, ViewerPane, type TestSurfaceGroup, type ViewerPaneProps } from "./ViewerPane";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene,
@@ -28,7 +28,7 @@ const SKY_DOME: SkyDome = { directions: [[0, 0, 1], [0, 1, 0.2]], solid_angles: 
 
 function viewWithSkyDome(mode: string): ViewerPaneProps {
   return {
-    maxVolume: null, testSurfaces: null, sunPath: null, hemisphere: { centre: [0, 0, 0], radius: 30 }, maxVolumeAppearance: "ghost",
+    maxVolume: null, testSurfaces: [], sunPath: null, hemisphere: { centre: [0, 0, 0], radius: 30 }, maxVolumeAppearance: "ghost",
     shownByDefault: ["sky_dome"], northDegrees: 0, framingRequest: 0, centreContent: null, mode, analysisCurrent: true,
     results: { ...NO_VIEWER_RESULTS, skyDome: SKY_DOME },       // the score points have not loaded (yet)
   };
@@ -111,7 +111,7 @@ test("while a dimmed result is shown, a stamp at the top of the view says it is 
 test("with surroundings and terrain, the layers menu lists them after the test surfaces, shown as the step asks", async () => {
   const { BoxGeometry } = await import("three");
   const { LAYERS_SHOWN_IN_STEP } = await import("../steps/ProjectWorkspace");
-  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} testSurfaces={new BoxGeometry(1, 1, 0.1)} context={new BoxGeometry(2, 2, 2)}
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} testSurfaces={[group("1", "#4477aa", new BoxGeometry(1, 1, 0.1))]} context={new BoxGeometry(2, 2, 2)}
                                        terrain={new BoxGeometry(50, 50, 0.1)} shownByDefault={LAYERS_SHOWN_IN_STEP.inputs} />);
   expect(FakeViewerScene.latest!.layersWithObjects()).toEqual(expect.arrayContaining(["context", "terrain"]));
   expect(FakeViewerScene.latest!.visibleLayers.has("context")).toBe(true);
@@ -172,22 +172,100 @@ test("test the legend names each criterion", () => {
   expect(items.map((item) => item.querySelector<HTMLElement>(".viewer-criterion-swatch")!.style.backgroundColor)).toEqual(["rgb(68, 119, 170)", "rgb(34, 136, 51)"]);
 });
 
-test("test the other criteria's test surfaces are dimmed", () => {
-  const selected = new THREE.BoxGeometry(1, 1, 0.1), others = new THREE.BoxGeometry(2, 2, 0.1);
-  rendered = renderForTest(<ViewerPane {...viewCarvedBy([])} testSurfaces={selected} dimmedTestSurfaces={others} />);
-  const layer = FakeViewerScene.latest!.layers.get("test_surfaces")!;
-  const opacityOf = (name: string) => ((layer.getObjectByName(name) as THREE.Mesh).material as THREE.Material).opacity;
-  expect(opacityOf("highlighted")).toBe(1);
-  expect(opacityOf("dimmed")).toBeLessThan(1);
-  rendered.rerender(<ViewerPane {...viewCarvedBy([])} testSurfaces={selected} />);          // one criterion: nothing is dimmed
-  expect(FakeViewerScene.latest!.layers.get("test_surfaces")!.getObjectByName("dimmed")).toBeUndefined();
-  expect(FakeViewerScene.latest!.layersWithObjects()).toContain("test_surfaces");
+const BOX = () => new THREE.BoxGeometry(1, 1, 0.1);
+const group = (id: string, colour: string | null, geometry: THREE.BufferGeometry | null, extra: Partial<TestSurfaceGroup> = {}): TestSurfaceGroup =>
+  ({ id, name: `Criterion ${id}`, colour, off: false, shown: true, geometry, ...extra });
+const TWO_GROUPS = () => [group("1", "#4477aa", BOX()), group("2", "#ee6677", BOX())];
+const menuEntries = () => [...rendered!.container.querySelectorAll<HTMLLIElement>(".viewer-layers-panel li")];
+const openLayersMenu = () => click(rendered!.container.querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!);
+const testSurfacesView = (testSurfaces: TestSurfaceGroup[], onChange = vi.fn()): ViewerPaneProps =>
+  ({ ...viewWithSkyDome("daylight"), results: NO_VIEWER_RESULTS, shownByDefault: ["test_surfaces"], testSurfaces, onTestSurfacesShownChange: onChange });
+const materialOf = (object: THREE.Object3D) => (object as THREE.Mesh).material as THREE.MeshLambertMaterial;
+
+test("each criterion's test surfaces are one mesh in its colour, all at full strength; a criterion that is hidden draws nothing", () => {
+  rendered = renderForTest(<ViewerPane {...testSurfacesView(TWO_GROUPS())} />);
+  const layer = () => FakeViewerScene.latest!.layers.get("test_surfaces")!;
+  const meshes = () => layer().children.map((child) => ({ name: child.name, colour: materialOf(child).color.getHexString(), opacity: materialOf(child).opacity }));
+  expect(meshes()).toEqual([{ name: "1", colour: hexOf("#4477aa"), opacity: 1 }, { name: "2", colour: hexOf("#ee6677"), opacity: 1 }]);
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  rendered.rerender(<ViewerPane {...testSurfacesView([group("1", "#4477aa", BOX()), group("2", "#ee6677", null, { shown: false })])} />);
+  expect(meshes().map(({ name }) => name)).toEqual(["1"]);
+  rendered.rerender(<ViewerPane {...testSurfacesView([group("1", "#4477aa", null, { shown: false }), group("2", "#ee6677", null, { shown: false })])} />);
+  expect(FakeViewerScene.latest!.layers.get("test_surfaces") ?? null).toBeNull();
 });
 
-test("a criterion's test surfaces alone, dimmed ones only, still make the test surfaces layer", () => {
-  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} dimmedTestSurfaces={new THREE.BoxGeometry(1, 1, 0.1)} shownByDefault={["test_surfaces"]} />);
+test("a criterion's test surfaces, with no maximum volume, still make the test surfaces layer", () => {
+  rendered = renderForTest(<ViewerPane {...testSurfacesView([group("1", "#4477aa", BOX())])} />);
   expect(FakeViewerScene.latest!.layersWithObjects()).toContain("test_surfaces");
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+});
+
+test("without test surfaces there is no Test surfaces entry; with every criterion hidden there still is, so they can be shown again", () => {
+  rendered = renderForTest(<ViewerPane {...testSurfacesView([group("1", "#4477aa", null), group("2", "#ee6677", null)])} />);
+  expect(FakeViewerScene.latest!.layersWithObjects()).not.toContain("test_surfaces");
+  rendered.rerender(<ViewerPane {...testSurfacesView([group("1", "#4477aa", null, { shown: false }), group("2", "#ee6677", null, { shown: false })])} />);
+  openLayersMenu();
+  expect(menuEntries().map((item) => item.querySelector("label")!.textContent)).toEqual(["Test surfaces", "Criterion 1", "Criterion 2"]);
+  expect(menuEntries().map((item) => item.querySelector("input")!.checked)).toEqual([false, false, false]);
+});
+
+test("with two or more criteria the Test surfaces entry has a sub-entry for each, in chain order, with its swatch; a criterion that is off says so", () => {
+  rendered = renderForTest(<ViewerPane {...testSurfacesView([group("1", "#4477aa", BOX()), group("2", "#ee6677", BOX(), { off: true })])} />);
+  openLayersMenu();
+  const [parent, ...subs] = menuEntries();
+  expect(parent.querySelector("label")!.textContent).toBe("Test surfaces");
+  expect(parent.querySelector("input")!.checked).toBe(true);
+  expect(subs.map((item) => item.textContent)).toEqual(["Criterion 1", "Criterion 2 (off)"]);
+  expect(subs.map((item) => item.querySelector<HTMLElement>(".viewer-criterion-swatch")!.style.backgroundColor)).toEqual(["rgb(68, 119, 170)", "rgb(238, 102, 119)"]);
+  expect(subs.map((item) => item.querySelector("input")!.checked)).toEqual([true, true]);
+});
+
+test("a sub-entry's check box shows or hides that criterion's test surfaces only", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<ViewerPane {...testSurfacesView(TWO_GROUPS(), onChange)} />);
+  openLayersMenu();
+  click(menuEntries()[2].querySelector("input")!);
+  expect(onChange).toHaveBeenLastCalledWith(["2"], false);
+  rendered.rerender(<ViewerPane {...testSurfacesView([group("1", "#4477aa", BOX()), group("2", "#ee6677", null, { shown: false })], onChange)} />);
+  expect(menuEntries().map((item) => item.querySelector("input")!.checked)).toEqual([true, true, false]);       // the entry stays checked while one is shown
+  click(menuEntries()[2].querySelector("input")!);
+  expect(onChange).toHaveBeenLastCalledWith(["2"], true);
+});
+
+test("the Test surfaces check box shows or hides all the criteria's test surfaces; it is unchecked when none is shown", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<ViewerPane {...testSurfacesView(TWO_GROUPS(), onChange)} />);
+  openLayersMenu();
+  click(menuEntries()[0].querySelector("input")!);
+  expect(onChange).toHaveBeenLastCalledWith(["1", "2"], false);
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(false);
+  expect(menuEntries().map((item) => item.querySelector("input")!.checked)).toEqual([false, false, false]);
+  click(menuEntries()[0].querySelector("input")!);
+  expect(onChange).toHaveBeenLastCalledWith(["1", "2"], true);
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  rendered.rerender(<ViewerPane {...testSurfacesView([group("1", "#4477aa", null, { shown: false }), group("2", "#ee6677", null, { shown: false })], onChange)} />);
+  expect(menuEntries().map((item) => item.querySelector("input")!.checked)).toEqual([false, false, false]);       // all hidden by their own check boxes
+});
+
+test("checking a sub-entry while the whole layer is hidden shows that criterion alone", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<ViewerPane {...testSurfacesView(TWO_GROUPS(), onChange)} shownByDefault={[]} />);
+  openLayersMenu();
+  expect(menuEntries().map((item) => item.querySelector("input")!.checked)).toEqual([false, false, false]);       // the layer is not shown in this step
+  click(menuEntries()[1].querySelector("input")!);
+  expect(onChange.mock.calls).toEqual([[["2"], false], [["1"], true]]);
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+});
+
+test("with one criterion the menu keeps a single Test surfaces entry, drawn in that criterion's colour", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<ViewerPane {...testSurfacesView([group("1", "#4477aa", BOX())], onChange)} />);
+  openLayersMenu();
+  expect(menuEntries().map((item) => item.querySelector("label")!.textContent)).toEqual(["Test surfaces"]);
+  expect(materialOf(FakeViewerScene.latest!.layers.get("test_surfaces")!.children[0]).color.getHexString()).toBe(hexOf("#4477aa"));
+  click(menuEntries()[0].querySelector("input")!);
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(false);
+  expect(onChange).not.toHaveBeenCalled();           // the one criterion has no entry of its own: the layer is what is hidden
 });
 
 test("a layer listed as missing says no result for it, and cannot be turned on", () => {

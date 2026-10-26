@@ -33,7 +33,6 @@ const GHOST_EDGE_OPACITY = 0.3;
 const SEE_THROUGH_ENVELOPE_OPACITY = 0.3;
 const SEE_THROUGH_EDGE_OPACITY = 0.2;
 const CARVED_VOXEL_OPACITY = 0.1;
-const DIMMED_TEST_SURFACE_OPACITY = 0.2;     // the test surfaces of the criteria that are not selected
 const CARVED_OUTLINE_OPACITY = 0.6;
 const MASSING_EDGE_OPACITY = 0.25;
 const FEATURE_EDGE_DEGREES = 20;
@@ -138,22 +137,28 @@ export function maxVolumeLayer(geometry: THREE.BufferGeometry, appearance: MaxVo
   return solidWithEdges(geometry, ghost ? GHOST_OPACITY : 1, ghost ? GHOST_EDGE_OPACITY : SOFT_EDGE_OPACITY).group;
 }
 
+/** The test surfaces of one criterion (*name* is its id): their *colour* ("#RRGGBB"), or null for the accent colour. */
+export interface TestSurfacesPart {
+  name: string;
+  colour: string | null;
+  geometry: THREE.BufferGeometry;
+}
+
 /**
- * The test surfaces in the accent colour, a lighter blue on the dark viewport: the *highlighted* ones at full strength and the
- * *dimmed* ones (the files only the criteria that are not selected use) faded. Either may be null.
+ * The test surfaces, one mesh per part at full strength in the part's colour. A part without a colour takes the accent colour, a
+ * lighter blue on the dark viewport; a criterion's colour does not change with the theme.
  */
-export function testSurfacesLayer(highlighted: THREE.BufferGeometry | null, dimmed: THREE.BufferGeometry | null = null): THREE.Object3D {
+export function testSurfacesLayer(parts: readonly TestSurfacesPart[]): THREE.Object3D {
   const layer = new THREE.Group();
-  const materials: THREE.MeshLambertMaterial[] = [];
-  for (const [name, geometry, opacity] of [["highlighted", highlighted, 1], ["dimmed", dimmed, DIMMED_TEST_SURFACE_OPACITY]] as const) {
-    if (geometry === null) continue;
-    const material = solidMaterial(colourToken("accent"), opacity, THREE.DoubleSide);
+  const accentMaterials: THREE.MeshLambertMaterial[] = [];
+  for (const { name, colour, geometry } of parts) {
+    const material = solidMaterial(colour ?? colourToken("accent"), 1, THREE.DoubleSide);
     const surfaces = new THREE.Mesh(geometry, material);
     surfaces.name = name;
-    materials.push(material);
+    if (colour === null) accentMaterials.push(material);
     layer.add(surfaces);
   }
-  layer.userData.applyTheme = (theme: ViewportTheme) => materials.forEach((material) => material.color.set(colourToken(theme === "dark" ? "test-surface-on-dark" : "accent")));
+  layer.userData.applyTheme = (theme: ViewportTheme) => accentMaterials.forEach((material) => material.color.set(colourToken(theme === "dark" ? "test-surface-on-dark" : "accent")));
   return layer;
 }
 

@@ -30,13 +30,14 @@ import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
-import { boundsOf, joinedGeometryOf, useInputGeometry, type MeshRole } from "./input_meshes";
+import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { carvedByNote, InputBox, inputProblemText, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import type { RunLoop } from "./run_state";
 import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep, stepOfSetting } from "./SettingsStep";
 import { SiteAndGridStep } from "./SiteAndGridStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
+import { testSurfaceGroupsOf } from "./test_surface_groups";
 import {
   plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName,
 } from "./step_summaries";
@@ -195,16 +196,27 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
   // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
   const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
-  // With several criteria the shown criterion's test surfaces are drawn at full strength and every other stored file dimmed (a file both
-  // use is highlighted; a criterion with no files highlights nothing and dims them all); with one criterion, all of them at full strength.
-  const shownCriterionFiles = criteria.criteria.length < 2 || criterion === null ? undefined : criterion.test_surface_files ?? [];
-  const shownCriterionFilesKey = shownCriterionFiles?.join("\n");
-  const testSurfaceDrawing = useMemo(() => {
-    if (shownCriterionFiles === undefined) return { highlighted: testSurfaces, dimmed: null };
-    const others = Object.keys(testSurfacesMesh.byFile).filter((name) => !shownCriterionFiles.includes(name));
-    if (others.length === 0) return { highlighted: testSurfaces, dimmed: null };
-    return { highlighted: joinedGeometryOf(testSurfacesMesh.byFile, shownCriterionFiles), dimmed: joinedGeometryOf(testSurfacesMesh.byFile, others) };
-  }, [testSurfaces, testSurfacesMesh.byFile, shownCriterionFilesKey]);
+  // Each criterion's test surfaces are drawn in its colour; the layers menu has a toggle for each (kept here, so a change of criterion or
+  // of step leaves it as it is; a new criterion starts with its toggle on).
+  const [hiddenTestSurfaceCriteria, setHiddenTestSurfaceCriteria] = useState<ReadonlySet<string>>(new Set());
+  const setTestSurfacesShown = (ids: readonly string[], shown: boolean) => setHiddenTestSurfaceCriteria((hidden) => {
+    const next = new Set(hidden);
+    for (const id of ids) {
+      if (shown) next.delete(id);
+      else next.add(id);
+    }
+    return next;
+  });
+  const criterionIdsKey = criteria.criteria.map((entry) => entry.id).join("\n");
+  useEffect(() => setHiddenTestSurfaceCriteria((hidden) => {
+    const kept = new Set([...hidden].filter((id) => criteria.criteria.some((entry) => entry.id === id)));
+    return kept.size === hidden.size ? hidden : kept;
+  }), [criterionIdsKey]);
+  const testSurfaceDrawingKey = JSON.stringify([criteria.criteria.map((entry) => [entry.id, entry.name, entry.colour, entry.bypassed, entry.test_surface_files]),
+                                                criterion?.id, [...hiddenTestSurfaceCriteria].sort()]);
+  const testSurfaceGroups = useMemo(
+    () => testSurfaceGroupsOf(criteria.criteria, criterion?.id ?? null, hiddenTestSurfaceCriteria, testSurfacesMesh.byFile, testSurfaces),
+    [testSurfaces, testSurfacesMesh.byFile, testSurfaceDrawingKey]);
   const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
@@ -500,7 +512,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        pinnedAction={saveFailureNotice === null && openStepAction === null ? null : <>{saveFailureNotice}{openStepAction}</>} />
       </aside>
       <section className="workspace-view">
-        <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceDrawing.highlighted} dimmedTestSurfaces={testSurfaceDrawing.dimmed}
+        <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
                     criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}

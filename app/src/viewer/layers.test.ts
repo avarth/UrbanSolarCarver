@@ -135,17 +135,19 @@ test("the carved-by-criterion layer of a grid where nothing was carved is empty"
   expect(layer.children).toHaveLength(0);
 });
 
-test("the test surfaces layer draws the highlighted surfaces at full strength and the dimmed ones faded; without dimmed ones there is nothing faded", () => {
+test("the test surfaces layer has one mesh per part in the part's colour, all at full strength; a part without a colour takes the accent, which follows the theme", () => {
   const surfaces = () => new THREE.BoxGeometry(1, 1, 0.1);
-  const opacityOf = (layer: THREE.Object3D, name: string) => ((layer.getObjectByName(name) as THREE.Mesh | undefined)?.material as THREE.Material | undefined)?.opacity;
-  const layer = testSurfacesLayer(surfaces(), surfaces());
-  expect(opacityOf(layer, "highlighted")).toBe(1);
-  expect(opacityOf(layer, "dimmed")).toBeLessThan(0.5);
-  expect(opacityOf(layer, "dimmed")).toBeGreaterThan(0);
-  const alone = testSurfacesLayer(surfaces());
-  expect(opacityOf(alone, "highlighted")).toBe(1);
-  expect(alone.getObjectByName("dimmed")).toBeUndefined();
-  const onlyDimmed = testSurfacesLayer(null, surfaces());
-  expect(onlyDimmed.getObjectByName("highlighted")).toBeUndefined();
-  expect(opacityOf(onlyDimmed, "dimmed")).toBeLessThan(0.5);
+  document.documentElement.style.setProperty("--colour-accent", "#0000ff");        // jsdom has no theme tokens
+  document.documentElement.style.setProperty("--colour-test-surface-on-dark", "#00ffff");
+  const layer = testSurfacesLayer([{ name: "1", colour: "#4477aa", geometry: surfaces() }, { name: "2", colour: "#228833", geometry: surfaces() },
+                                   { name: "3", colour: null, geometry: surfaces() }]);
+  const materialOf = (name: string) => (layer.getObjectByName(name) as THREE.Mesh).material as THREE.MeshLambertMaterial;
+  expect(layer.children.map((child) => child.name)).toEqual(["1", "2", "3"]);
+  expect(["1", "2", "3"].map((name) => materialOf(name).opacity)).toEqual([1, 1, 1]);
+  expect(["1", "2"].map((name) => materialOf(name).color.getHexString())).toEqual(["4477aa", "228833"]);
+  expect(materialOf("3").color.getHexString()).toBe("0000ff");
+  layer.userData.applyTheme("dark");
+  expect(["1", "2"].map((name) => materialOf(name).color.getHexString())).toEqual(["4477aa", "228833"]);      // a criterion's colour stays
+  expect(materialOf("3").color.getHexString()).toBe("00ffff");
+  expect(testSurfacesLayer([]).children).toHaveLength(0);
 });

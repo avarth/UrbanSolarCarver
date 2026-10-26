@@ -95,6 +95,8 @@
 .viewer-layers-panel li { padding-top: 8px; }
 .viewer-layers-panel label { display: flex; gap: 8px; align-items: center; font-size: var(--text-body); }
 .viewer-layers-panel .viewer-layer-note { margin: 2px 0 0 24px; }
+.viewer-layers-panel .viewer-layer-parts { margin: 0; padding: 0 0 0 24px; list-style: none; }
+.viewer-layers-panel .viewer-layer-parts li { padding-top: 6px; }
 .viewer-layers-panel .viewer-sky-dome-slider { display: flex; gap: 8px; align-items: center; margin: 4px 0 0 24px; font-size: var(--text-secondary); }
 .viewer-layers-panel input[type="range"] { flex: 1; accent-color: var(--colour-accent); }
 

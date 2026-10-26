@@ -1,5 +1,5 @@
 // The 3D view of a project with several criteria, against a fake service of a chain: the carved-by-criterion layer (asked for only
-// when every criterion that is on has run), the state after the selected criterion, and the test surfaces of the selected criterion.
+// when every criterion that is on has run), the state after the selected criterion, and the test surfaces of each criterion.
 import { act } from "react";
 import * as THREE from "three";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -10,7 +10,7 @@ import {
   CURRENT, FACADES, ROOFS, WINDOWS, card, deleteCriterion, openChain, select, service, type ChainService, type CriterionStages,
 } from "./chain_service_for_test";
 import {
-  CARVED, TRIANGLE_OBJ, container, endWorkspaceTest, pressRunAnalysis, settle, startWorkspaceTest, thresholdField, typeAndLeave,
+  CARVED, TRIANGLE_OBJ, container, endWorkspaceTest, openStep, pressRunAnalysis, settle, startWorkspaceTest, thresholdField, typeAndLeave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -200,51 +200,146 @@ test("selecting a card shows the state after that criterion in the kept voxels, 
   expect([countOf("kept_voxels"), carvedOf().count]).toEqual([3, 1]);
 });
 
-const verticesOf = (name: string) => {
-  const part = (layer("test_surfaces") as THREE.Group).getObjectByName(name) as THREE.Mesh | undefined;
-  return part === undefined ? null : part.geometry.getAttribute("position").count;
-};
+// The mesh of the test surfaces layer that draws criterion *id*'s files (the layer has one per criterion, named by its id).
+const partOf = (id: string) => (layer("test_surfaces") as THREE.Group | null)?.children.find((child) => child.name === id) as THREE.Mesh | undefined;
+const verticesOf = (id: string) => partOf(id)?.geometry.getAttribute("position").count ?? null;
+const colourOf = (id: string) => (partOf(id)!.material as THREE.MeshLambertMaterial).color.getHexString();
+const opacityOf = (id: string) => (partOf(id)!.material as THREE.Material).opacity;
+const hex = (colour: string) => new THREE.Color(colour).getHexString();
+
+/** The Test surfaces entry of the Layers menu and the entries under it, as the open menu shows them. */
+function testSurfaceEntries() {
+  act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
+  const items = [...container().querySelectorAll<HTMLElement>(".viewer-layers-panel li")];
+  const parent = items.find((item) => item.querySelector("label")!.textContent!.startsWith("Test surfaces"))!;
+  const parts = items.filter((item) => item !== parent && parent.contains(item));
+  const read = (item: HTMLElement) => ({ label: item.querySelector("label")!.textContent, checked: item.querySelector("input")!.checked,
+                                         swatch: item.querySelector("label")!.querySelector<HTMLElement>(".viewer-criterion-swatch")?.style.backgroundColor ?? null });
+  const entries = { parent: read(parent), parts: parts.map(read) };
+  act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
+  return entries;
+}
+
+/** Clicks the check box of the entry with this label (the Test surfaces entry or one under it) in the Layers menu. */
+function clickTestSurfaceEntry(label: string) {
+  act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
+  const input = [...container().querySelectorAll<HTMLLabelElement>(".viewer-layers-panel label")].find((candidate) => candidate.textContent === label)!.querySelector("input")!;
+  act(() => input.click());
+  act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
+}
 
 function twoFiles(chain: ChainService) {
   chain.inputFileContents["/inputs/test_surfaces/facades.obj"] = TRIANGLE_OBJ;
   chain.inputFileContents["/inputs/test_surfaces/windows.obj"] = TWO_TRIANGLES_OBJ;
 }
 
-test("test the other criteria's test surfaces are dimmed: the selected criterion's files at full strength, a shared file highlighted", async () => {
-  await openChain([FACADES, { ...WINDOWS, test_surface_files: ["windows.obj", "facades.obj"] }], undefined, twoFiles);
-  expect(verticesOf("highlighted")).toBe(3);                              // facades.obj
-  expect(verticesOf("dimmed")).toBe(6);                                   // windows.obj, which only criterion 2 uses
+test("each criterion's test surfaces are drawn in its colour, all at full strength, whichever criterion is selected", async () => {
+  await openChain([FACADES, WINDOWS], undefined, twoFiles);
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);
+  expect([colourOf("1"), colourOf("2")]).toEqual([hex("#4477aa"), hex("#ee6677")]);
+  expect([opacityOf("1"), opacityOf("2")]).toEqual([1, 1]);
+  expect((layer("test_surfaces") as THREE.Group).children).toHaveLength(2);       // nothing else: no faded copy of the criteria that are not selected
   await select("Spring sun on windows");
-  expect(verticesOf("highlighted")).toBe(9);                              // windows.obj and the shared facades.obj
-  expect(verticesOf("dimmed")).toBeNull();                                // nothing else is left to dim
-  await select("Winter sun on facades");
-  expect(verticesOf("highlighted")).toBe(3);
-  expect(verticesOf("dimmed")).toBe(6);
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);
+  expect([colourOf("1"), colourOf("2")]).toEqual([hex("#4477aa"), hex("#ee6677")]);
   expect(service.count("GET /inputs/test_surfaces/facades.obj")).toBe(1);   // each file is loaded once, however the selection moves
   expect(service.count("GET /inputs/test_surfaces/windows.obj")).toBe(1);
 });
 
-test("with one criterion nothing is dimmed, even when a stored file is not one the criterion lists", async () => {
-  await openChain([FACADES], undefined, twoFiles, ["windows.obj"]);
-  expect(verticesOf("highlighted")).toBe(9);                              // facades.obj and windows.obj, all at full strength
-  expect(verticesOf("dimmed")).toBeNull();
+test("the Layers menu has a Test surfaces entry with one check box and swatch per criterion, in chain order, all checked", async () => {
+  await openChain([FACADES, WINDOWS, ROOFS], undefined, twoFiles);
+  const { parent, parts } = testSurfaceEntries();
+  expect(parent).toEqual({ label: "Test surfaces", checked: true, swatch: null });
+  expect(parts).toEqual([
+    { label: "Winter sun on facades", checked: true, swatch: "rgb(68, 119, 170)" },
+    { label: "Spring sun on windows", checked: true, swatch: "rgb(238, 102, 119)" },
+    { label: "Daylight on roofs", checked: true, swatch: "rgb(34, 136, 51)" },
+  ]);
 });
 
-test("a criterion that lists no files highlights nothing and dims every stored file", async () => {
-  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], undefined, twoFiles);
+test("unchecking a criterion's entry hides only its test surfaces, and selecting another criterion changes nothing about what is shown", async () => {
+  await openChain([FACADES, WINDOWS], undefined, twoFiles);
+  clickTestSurfaceEntry("Spring sun on windows");
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
+  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, false]);
+  expect(testSurfaceEntries().parent.checked).toBe(true);
   await select("Spring sun on windows");
-  expect(verticesOf("highlighted")).toBeNull();
-  expect(verticesOf("dimmed")).toBe(3);                                   // facades.obj
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
+  await select("Winter sun on facades");
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
+  clickTestSurfaceEntry("Spring sun on windows");
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);
+  clickTestSurfaceEntry("Winter sun on facades");
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([null, 6]);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
 });
 
-test("deleting a criterion takes the files only it used out of the 3D view", async () => {
+test("the Test surfaces check box hides all the criteria's test surfaces and shows them all again", async () => {
+  await openChain([FACADES, WINDOWS], undefined, twoFiles);
+  clickTestSurfaceEntry("Spring sun on windows");
+  clickTestSurfaceEntry("Test surfaces");
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(false);
+  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([false, false]);
+  clickTestSurfaceEntry("Test surfaces");
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, true]);
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);
+});
+
+test("the choice of criteria shown is kept when another step opens", async () => {
+  await openChain([FACADES, WINDOWS], undefined, twoFiles);
+  clickTestSurfaceEntry("Spring sun on windows");
+  openStep("Inputs");
+  await settle();
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
+  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, false]);
+});
+
+test("a file that several criteria list is drawn once: in the selected criterion's colour, else in the first visible owner's", async () => {
+  await openChain([FACADES, { ...WINDOWS, test_surface_files: ["windows.obj", "facades.obj"] }], undefined, twoFiles);
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);             // criterion 1 is selected: facades.obj is its
+  await select("Spring sun on windows");
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([null, 9]);          // criterion 2 takes the shared facades.obj
+  clickTestSurfaceEntry("Spring sun on windows");
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);          // hidden: the file is the first other owner's
+  clickTestSurfaceEntry("Winter sun on facades");
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([null, null]);       // every owner hidden: not drawn
+  expect(testSurfaceEntries().parent.checked).toBe(false);
+  expect(FakeViewerScene.latest!.layers.get("test_surfaces") ?? null).toBeNull();
+});
+
+test("with one criterion the menu has a single Test surfaces entry, drawn in that criterion's colour; a stored file it does not list is not drawn", async () => {
+  await openChain([FACADES], undefined, twoFiles, ["windows.obj"]);
+  expect(verticesOf("1")).toBe(3);
+  expect((layer("test_surfaces") as THREE.Group).children).toHaveLength(1);
+  expect(colourOf("1")).toBe(hex("#4477aa"));
+  const { parent, parts } = testSurfaceEntries();
+  expect([parent.label, parent.checked, parts]).toEqual(["Test surfaces", true, []]);
+});
+
+test("a criterion that is switched off keeps its entry, marked as off, and its test surfaces stay", async () => {
+  await openChain([FACADES, WINDOWS], undefined, twoFiles);
+  await bypass("Spring sun on windows");
+  expect(testSurfaceEntries().parts.map((part) => part.label)).toEqual(["Winter sun on facades", "Spring sun on windows (off)"]);
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);
+});
+
+test("a criterion that lists no files has an entry and draws nothing; the other criterion's files are still shown", async () => {
+  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], undefined, twoFiles);
+  await select("Spring sun on windows");
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  expect(testSurfaceEntries().parts.map((part) => part.label)).toEqual(["Winter sun on facades", "Spring sun on windows"]);
+});
+
+test("deleting a criterion takes it from the menu and the files only it used out of the 3D view", async () => {
   await openChain([FACADES, WINDOWS, { ...ROOFS, test_surface_files: ["facades.obj"] }], undefined, twoFiles);
-  expect(verticesOf("dimmed")).toBe(6);                                   // windows.obj, criterion 2's
+  expect([verticesOf("1"), verticesOf("2"), verticesOf("3")]).toEqual([3, 6, null]);
   await deleteCriterion("Spring sun on windows");
   expect(service.storedTestSurfaces.map((file) => file.name)).toEqual(["facades.obj"]);
-  expect(verticesOf("highlighted")).toBe(3);                              // facades.obj, which criteria 1 and 3 use
-  expect(verticesOf("dimmed")).toBeNull();                                // windows.obj is gone, not dimmed
+  expect([verticesOf("1"), verticesOf("2"), verticesOf("3")]).toEqual([3, null, null]);       // facades.obj, which criteria 1 and 3 use, is drawn once
+  expect(testSurfaceEntries().parts.map((part) => part.label)).toEqual(["Winter sun on facades", "Daylight on roofs"]);
   await deleteCriterion("Daylight on roofs");
-  expect(verticesOf("highlighted")).toBe(3);                              // one criterion: every stored file, here facades.obj alone
+  expect(verticesOf("1")).toBe(3);                                         // one criterion: a single entry
+  expect(testSurfaceEntries().parts).toEqual([]);
 });

@@ -170,6 +170,24 @@ test("the layers menu lists the layers that exist, with the missing-result note 
   expect(onVisibleChange).toHaveBeenCalledWith("kept_voxels", false);
 });
 
+test("a layers menu entry with parts lists a check box and a swatch for each, and reports a part's change with its id", () => {
+  const onVisibleChange = vi.fn(), onPartVisibleChange = vi.fn();
+  rendered = renderForTest(
+    <LayersMenu theme="light" skyDomeOpacity={0.6} onVisibleChange={onVisibleChange} onPartVisibleChange={onPartVisibleChange} onSkyDomeOpacityChange={() => {}}
+                entries={[{ name: "test_surfaces", available: true, visible: true,
+                            parts: [{ id: "a", label: "Winter sun", colour: "#4477aa", visible: true }, { id: "b", label: "Spring sun (off)", colour: "#ee6677", visible: false }] }]} />);
+  click(rendered.container.querySelector("button")!);
+  const [parent, first, second] = [...rendered.container.querySelectorAll<HTMLLIElement>(".viewer-layers-panel li")];
+  expect([first.textContent, second.textContent]).toEqual(["Winter sun", "Spring sun (off)"]);
+  expect([first, second].map((item) => item.querySelector<HTMLElement>(".viewer-criterion-swatch")!.style.backgroundColor)).toEqual(["rgb(68, 119, 170)", "rgb(238, 102, 119)"]);
+  expect([first, second].map((item) => item.querySelector("input")!.checked)).toEqual([true, false]);
+  expect(parent.contains(first)).toBe(true);          // the parts are a list inside the entry
+  click(second.querySelector("input")!);
+  expect(onPartVisibleChange).toHaveBeenCalledWith("test_surfaces", "b", true);
+  click(parent.querySelector("input")!);
+  expect(onVisibleChange).toHaveBeenCalledWith("test_surfaces", false);
+});
+
 test("the overlay styles take every colour from the tokens and keep the toolbar focus outline visible", () => {
   const overlaysCss = readFileSync("src/viewer_overlays/overlays.css", "utf8");
   expect(overlaysCss).not.toMatch(/#[0-9a-f]{3,6}|rgb\(/i);
@@ -177,7 +195,7 @@ test("the overlay styles take every colour from the tokens and keep the toolbar 
 });
 
 const EMPTY_VIEW: ViewerPaneProps = {
-  maxVolume: null, testSurfaces: null, sunPath: null, hemisphere: null, maxVolumeAppearance: "solid", shownByDefault: [], northDegrees: 0,
+  maxVolume: null, testSurfaces: [], sunPath: null, hemisphere: null, maxVolumeAppearance: "solid", shownByDefault: [], northDegrees: 0,
   framingRequest: 0, centreContent: null,
 };
 

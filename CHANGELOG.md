@@ -98,8 +98,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
   until it ends. A carving change while another criterion's analysis is out of date is saved and waits for Run
   analysis.
 - **3D view.** The layer **Carved voxels, by criterion** draws each carved voxel in the colour of the criterion that
-  removed it, with a legend; the test surfaces of the selected criterion are drawn at full strength and those of the
-  other criteria dimmed; the kept voxels, the sun path and the sky dome follow the selected criterion.
+  removed it, with a legend; the kept voxels, the sun path and the sky dome follow the selected criterion.
+- **Test surfaces in the colour of their criterion.** The 3D view draws each criterion's test surfaces in its colour, all
+  at full strength (they no longer fade when another criterion is selected), and the Layers menu has one check box
+  and swatch per criterion under **Test surfaces**. A file several criteria use is drawn once.
 - **Service and engine, for the app.** `PUT /projects/{name}/shared-settings` saves the shared settings; `GET
   /projects/{name}/criteria/{id}/settings` reads a criterion's settings; `sun-path` takes a `criterion`; the run
   summary's `criteria` gain `volume_removed_m3`; a refused run carries `criterion` in its 422. A run that starts at
