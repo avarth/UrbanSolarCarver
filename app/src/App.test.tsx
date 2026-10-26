@@ -170,6 +170,8 @@ class FakeService {
   ];
   /** The reply to Open folder; null: the request does not reach the engine. */
   openFolderReply: (() => Response) | null = null;
+  /** The reply to the criterion keys; null: the keys are answered. */
+  criterionKeysReply: (() => Response) | null = null;
 
   answer = async (address: string, init?: RequestInit): Promise<Response> => {
     const method = init?.method ?? "GET";
@@ -178,7 +180,7 @@ class FakeService {
     if (path === "/api/health") return json({ version: "1.4.0", warm_up: { state: "ready", device_name: "GPU" } });
     if (path === "/api/schema") return json({ properties: {} });
     if (path === "/api/modes") return json([]);
-    if (path === "/api/criterion-keys") return json(["mode", "threshold"]);
+    if (path === "/api/criterion-keys") return this.criterionKeysReply?.() ?? json(["mode", "threshold"]);
     if (path === "/api/examples") {
       await this.examplesAnswerWhen;
       return json(this.examples);
@@ -257,6 +259,13 @@ async function openPlot7() {
   await settle();
   expect(topBarMenuButton()!.textContent).toContain("Plot 7");
 }
+
+test("a criterion keys request that fails goes the way a failed schema or modes request does", async () => {
+  const service = new FakeService();
+  service.criterionKeysReply = () => json({ detail: "The access token is missing or wrong." }, 401);
+  await renderApp(service);
+  expect(page().querySelector(".service-problem-overlay")!.textContent).toContain("This page has lost its access to the engine.");
+});
 
 test("the one-time setup loads the criterion keys and passes them to the open project", async () => {
   const service = new FakeService();

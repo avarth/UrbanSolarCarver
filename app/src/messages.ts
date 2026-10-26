@@ -140,7 +140,8 @@ export const messages = {
   // A criterion's card (7.2): the result line of one that is current, else its status
   criterionResultOfScore: (percentText: string, volumeText: string) => `${percentText} of the score carved, ${volumeText} removed`,
   criterionResultOfVolume: (percentText: string, volumeText: string) => `${percentText} of the volume carved, ${volumeText} removed`,
-  criterionPercentOnly: (percentText: string, whatIsCarved: "score" | "volume") => `${percentText} of the ${whatIsCarved} carved`,
+  criterionScoreCarved: (percentText: string) => `${percentText} of the score carved`,
+  criterionVolumeCarved: (percentText: string) => `${percentText} of the volume carved`,
   criterionOutOfDate: "Out of date",
   criterionUpdatesFrom: (criterionName: string) => `Updates from ${criterionName}`,
   criterionRunning: "Running",

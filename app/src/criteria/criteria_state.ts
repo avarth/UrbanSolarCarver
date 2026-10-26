@@ -69,8 +69,9 @@ export function cardResultLine(summary: CriterionCarvingSummary): string | null 
   if (carving === null) return null;
   const isWeighted = carving.obstruction_fraction_carved !== null;
   const percentText = formatPercent(isWeighted ? carving.obstruction_fraction_carved! * 100 : 100 - carving.retention_pct);
-  const whatIsCarved = isWeighted ? "score" : "volume";
-  if (summary.volume_removed_m3 === null || summary.volume_removed_m3 === undefined) return messages.criterionPercentOnly(percentText, whatIsCarved);
+  if (summary.volume_removed_m3 === null || summary.volume_removed_m3 === undefined) {
+    return isWeighted ? messages.criterionScoreCarved(percentText) : messages.criterionVolumeCarved(percentText);
+  }
   const volumeText = formatNumber(summary.volume_removed_m3, "m³");
   return isWeighted ? messages.criterionResultOfScore(percentText, volumeText) : messages.criterionResultOfVolume(percentText, volumeText);
 }

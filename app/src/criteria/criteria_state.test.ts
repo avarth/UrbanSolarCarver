@@ -102,6 +102,11 @@ test("the result line of an unweighted mode gives the share of the volume carved
   expect(cardResultLine(summary(CARVING, 1250.4))).toBe("39 % of the volume carved, 1 250 m³ removed");
 });
 
+test("without the removed volume the result line gives the share alone", () => {
+  expect(cardResultLine(summary({ ...CARVING, obstruction_fraction_carved: 0.7 }, null))).toBe("70 % of the score carved");
+  expect(cardResultLine(summary(CARVING, null))).toBe("39 % of the volume carved");
+});
+
 test("a criterion without numbers has no result line", () => {
   expect(cardResultLine(summary(null, null))).toBeNull();
 });

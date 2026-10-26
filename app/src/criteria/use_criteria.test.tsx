@@ -144,6 +144,23 @@ test("applyReply replaces the entry that has the reply's id", () => {
   unmount();
 });
 
+test("calls that overlap keep each other's changes: a rename lands while an upload is under way, and two adds in a row", async () => {
+  let finishUpload: (reply: Response) => void = () => {};
+  const { hook, unmount } = renderedHook(projectWith([entry("1"), entry("2")]), (method, address, body) => {
+    if (method === "POST" && address.endsWith("/test-surfaces")) return new Promise<Response>((resolve) => { finishUpload = resolve; }) as unknown as Response;
+    if (method === "PATCH") return json(entry("2", { name: (body as { name: string }).name }));
+    return json(entry(`new${(body as { mode: string }).mode}`));
+  });
+  let upload: Promise<void> = Promise.resolve();
+  act(() => { upload = hook().addTestSurfaces("1", [new File(["o"], "f1.obj")]); });
+  await act(async () => { await hook().rename("2", "Roofs"); });
+  await act(async () => { finishUpload(json(entry("1", { test_surface_files: ["f1.obj"] }))); await upload; });
+  expect(hook().criteria.map((criterion) => `${criterion.id}:${criterion.name}:${criterion.test_surface_files?.length}`)).toEqual(["1:Criterion 1:1", "2:Roofs:0"]);
+  await act(async () => { await Promise.all([hook().add("a"), hook().add("b")]); });
+  expect(hook().criteria.map((criterion) => criterion.id)).toEqual(["1", "2", "newa", "newb"]);
+  unmount();
+});
+
 test("a refused call rejects with the ApiError and leaves the list as it was", async () => {
   const { hook, unmount } = renderedHook(projectWith([entry("1")]), () => json({ detail: "A run of this project is active." }, 409));
   let failure: unknown = null;
