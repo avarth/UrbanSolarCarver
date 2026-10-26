@@ -3,6 +3,7 @@
 import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { formatNumber, formatPercent } from "../steps/format_numbers";
+import type { StageRunState } from "../steps/run_state";
 import type { StageState } from "../steps/step_summaries";
 
 export type CardStatus =
@@ -31,7 +32,8 @@ export function activeCriteria(criteria: CriterionEntry[]): CriterionEntry[] {
  * What a card says about its criterion. Bypassed, running and without test surfaces come first. Then, from its stages: current;
  * not run yet when either stage is missing; out of date when its preprocessing is, or when its thresholding is and every earlier
  * criterion that is on is current; "updates from" the first earlier criterion that is on and not current when its thresholding
- * is out of date only because that one will change the voxels it decides among.
+ * is out of date only because that one will change the voxels it decides among (out of date while an earlier one protects
+ * nothing, since no run starts then). During a run, *stagesByCriterion* are those stagesDuringRun gives.
  */
 export function criterionStatus(entry: CriterionEntry, criteria: CriterionEntry[], stagesByCriterion: StagesByCriterion, runningId: string | null): CardStatus {
   if (entry.bypassed) return { kind: "bypassed" };
@@ -42,12 +44,34 @@ export function criterionStatus(entry: CriterionEntry, criteria: CriterionEntry[
   if (stages.preprocessing === "out_of_date") return { kind: "out_of_date" };
   if (stages.thresholding === "current") return { kind: "current" };
   const active = activeCriteria(criteria);
-  const earlierNotCurrent = active.slice(0, active.findIndex((criterion) => criterion.id === entry.id)).find((earlier) => !isCurrent(stagesByCriterion[earlier.id]));
-  return earlierNotCurrent === undefined ? { kind: "out_of_date" } : { kind: "updates_from", from: earlierNotCurrent.name };
+  const earlier = active.slice(0, active.findIndex((criterion) => criterion.id === entry.id));
+  const earlierNotCurrent = earlier.find((criterion) => !isCurrent(stagesByCriterion[criterion.id]));
+  // "Updates from" names only a criterion a run brings up to date first: while an earlier one protects nothing, the run is refused.
+  const runRefused = earlier.some((criterion) => (criterion.test_surface_files ?? []).length === 0);
+  return earlierNotCurrent === undefined || runRefused ? { kind: "out_of_date" } : { kind: "updates_from", from: earlierNotCurrent.name };
 }
 
 function isCurrent(stages: StagesByCriterion[string] | undefined): boolean {
   return stages !== undefined && stages.preprocessing === "current" && stages.thresholding === "current";
+}
+
+/**
+ * The stages of each criterion while a run goes on (*progress*: the state of each criterion's stages in it, run_state's
+ * criterionProgressOf): a stage the run has done is current, one it has still to do is out of date (the status read before the
+ * run may call it current), a missing one stays missing until done. The cards read their status from these.
+ */
+export function stagesDuringRun(stagesByCriterion: StagesByCriterion, progress: Record<string, Record<string, StageRunState>>): StagesByCriterion {
+  const during: StagesByCriterion = { ...stagesByCriterion };
+  for (const [id, stages] of Object.entries(progress)) {
+    const ofCriterion = { ...(during[id] ?? { preprocessing: "missing", thresholding: "missing" }) };
+    for (const stage of ["preprocessing", "thresholding"] as const) {
+      const runState = stages[stage];
+      if (runState === "done") ofCriterion[stage] = "current";
+      else if (runState !== undefined && ofCriterion[stage] === "current") ofCriterion[stage] = "out_of_date";
+    }
+    during[id] = ofCriterion;
+  }
+  return during;
 }
 
 /** The words of a card's status; null for a current criterion, whose card shows its result line instead. */

@@ -2,8 +2,8 @@
 // around it, so a one-criterion project reads as the Mode and Carving steps did, in one step; the only new thing is a quiet "Add
 // another criterion" link at its end. With two or more, the cards come first (CriterionList, with Add criterion under the last
 // one), then the selected criterion's panel. While a card just selected waits for its settings the panel says so (or why they
-// could not be read) instead of showing another criterion's. After a delete, a duplicate or an add the focus goes to the card
-// selected then, or to the panel when no cards are left.
+// could not be read) instead of showing another criterion's; a run refused because it protects nothing is said over its panel.
+// After a delete, a duplicate or an add the focus goes to the card selected then, or to the panel when no cards are left.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { messages } from "../messages";
 import { AddCriterion, CriterionList, type CriterionListProps } from "./CriterionList";
@@ -17,9 +17,11 @@ interface CriteriaStepProps {
   list: CriterionListProps;
   /** Whether the selected criterion's settings are in; absent: they are. */
   load?: SelectionLoad;
+  /** What keeps a run from starting that is the selected criterion's to fix (it protects nothing), said over its panel; absent: none. */
+  panelProblem?: string | null;
 }
 
-export function CriteriaStep({ panel, list, load = { state: "ready" } }: CriteriaStepProps) {
+export function CriteriaStep({ panel, list, load = { state: "ready" }, panelProblem = null }: CriteriaStepProps) {
   const step = useRef<HTMLDivElement>(null);
   const [focusRequest, setFocusRequest] = useState(0);
   const selectedName = list.criteria.find((criterion) => criterion.id === list.selectedId)?.name ?? "";
@@ -43,7 +45,7 @@ export function CriteriaStep({ panel, list, load = { state: "ready" } }: Criteri
 
   const panelFrame = (
     <div className="criterion-panel-frame" tabIndex={-1} role="group" aria-label={selectedName || undefined}>
-      {load.state === "ready" ? panel
+      {load.state === "ready" ? <>{panelProblem !== null && <p className="setting-error criterion-panel-problem" role="alert">{panelProblem}</p>}{panel}</>
         : load.state === "loading" ? <p className="step-reason criterion-panel-waits" role="status">{messages.loadingCriterion(selectedName)}</p>
         : <p className="setting-error criterion-panel-waits" role="alert">{load.problem}</p>}
     </div>

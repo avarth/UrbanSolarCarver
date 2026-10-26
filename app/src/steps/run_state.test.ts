@@ -1,5 +1,30 @@
 import { expect, test } from "vitest";
-import { initialRunState, runProgressShare, runReducer, stageDisplayName } from "./run_state";
+import {
+  criterionProgressOf, initialRunState, progressKey, runningCriterion, runProgressShare, runReducer, runStages, stageDisplayName, stageRunState, stagesDone,
+} from "./run_state";
+
+test("a stage of several criteria is done once each criterion's is; a criterion's own stage is read on its own", () => {
+  let s = initialRunState([progressKey("1", "preprocessing"), progressKey("1", "thresholding"), progressKey("2", "thresholding"), progressKey(null, "exporting")]);
+  expect(s.order).toEqual(["1:preprocessing", "1:thresholding", "2:thresholding", "exporting"]);
+  expect(runStages(s)).toEqual(["preprocessing", "thresholding", "exporting"]);
+  s = runReducer(s, { type: "stage_progress", stage: "thresholding", criterion: "1", done: 0, total: 1 });
+  expect(stageRunState(s, "preprocessing")).toBe("done");
+  expect(stageRunState(s, "thresholding")).toBe("running");
+  expect(stageRunState(s, "thresholding", "2")).toBe("waiting");
+  expect(stageRunState(s, "preprocessing", "2")).toBeNull();       // not in this run for criterion 2
+  expect(stageRunState(s, "massing")).toBeNull();
+  expect(stagesDone(s)).toEqual(["preprocessing"]);
+  expect(criterionProgressOf(s)).toEqual({ 1: { preprocessing: "done", thresholding: "running" }, 2: { thresholding: "waiting" } });
+  s = runReducer(s, { type: "stage_progress", stage: "exporting", criterion: null, done: 0, total: 1 });
+  expect(stagesDone(s)).toEqual(["preprocessing", "thresholding"]);
+});
+
+test("the events of a run whose reply named no criterion stages go to the stage alone", () => {
+  let s = initialRunState(["preprocessing", "thresholding"]);
+  s = runReducer(s, { type: "stage_progress", stage: "preprocessing", criterion: "1", done: 2, total: 5 });
+  expect(s.stages.preprocessing).toEqual({ state: "running", done: 2, total: 5 });
+  expect(runningCriterion(s)).toBeNull();
+});
 
 test("run events build per-stage progress, issues and the final state", () => {
   let s = initialRunState(["preprocessing", "thresholding"]);

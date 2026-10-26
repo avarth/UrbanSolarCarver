@@ -161,6 +161,10 @@ export const messages = {
   addingCriterion: "Adding the criterion",
   // The panel of a card just selected, until its settings are in
   loadingCriterion: (criterionName: string) => `Loading the settings of ${criterionName}`,
+  // A run refused because a criterion that is on protects nothing: said in that criterion's panel (7.3)
+  addTestSurfacesTo: (criterionName: string) => `Add test surfaces to ${criterionName}.`,
+  // A run's stage of one criterion, with several criteria (7.3): "Daylight on windows: Carving"
+  criterionStage: (criterionName: string, stageName: string) => `${criterionName}: ${stageName}`,
   moveCriterion: (criterionName: string) => `Move ${criterionName}`,
   moveCriterionHint: "Drag to reorder, or press the up and down arrow keys",
   bypassCriterion: (criterionName: string) => `Bypass ${criterionName}`,
@@ -240,6 +244,8 @@ export const messages = {
   addMaxVolumeToRun: "Add a maximum volume to run the analysis",
   addTestSurfacesToRun: "Add test surfaces to run the analysis",
   addMaxVolumeAndTestSurfacesToRun: "Add a maximum volume and test surfaces to run the analysis",
+  // Another criterion that is on protects nothing (7.2: the run refuses to start until every one protects something)
+  addTestSurfacesOfCriterionToRun: (criterionName: string) => `Add test surfaces to ${criterionName} to run the analysis`,
   fixSettingsToRun: "Fix the settings above to run the analysis.",
   fixSettingsInStepToRun: (stepTitle: string) => `Fix the settings in ${stepTitle} to run the analysis.`,
 
@@ -314,6 +320,9 @@ export const messages = {
   buildEnvelopeAndMassing: "Build envelope and massing",
   // Why the build buttons wait while Carving is locked: a build would run the analysis first (M10).
   buildWaitsForAnalysis: "Settings changed since the analysis. Run the analysis again before building.",
+  // Why a carving change of the selected criterion runs nothing while another criterion's analysis is out of date: the carving
+  // run would trace that criterion first, which only Run analysis starts (M10).
+  carvingWaitsForAnalysisOf: (criterionName: string) => `Run the analysis for ${criterionName} first`,
   histogramTitle: "Scores of the voxels",
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",

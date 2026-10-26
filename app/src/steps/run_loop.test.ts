@@ -2,7 +2,7 @@ import { act, createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { ApiError, serviceProblemOf } from "../api_client/client";
 import { renderForTest } from "../viewer_overlays/render_for_test";
-import { NOTICE_MILLISECONDS, useRunLoop, type RunLoop, type RunOutcome } from "./run_state";
+import { NOTICE_MILLISECONDS, runningCriterion, useRunLoop, type RunLoop, type RunOutcome } from "./run_state";
 
 class FakeWebSocket {
   static opened: FakeWebSocket[] = [];
@@ -141,5 +141,39 @@ test("forget drops the record of a project renamed, reset or deleted, and only t
   await act(async () => { void loop().start("Plot 7", ["thresholding"], "carving_update"); });
   act(() => loop().forget("Plot 7"));
   expect(loop().current).toMatchObject({ project: "Plot 7", runId: "r1" });
+  unmount();
+});
+
+test("progress of two criteria is kept apart, in the order of the chain, then the stages of the whole chain", async () => {
+  // The reply's criteria come as an object, whose number-like keys read in ascending order: the chain order is the app's.
+  vi.stubGlobal("fetch", replyWith({ status: "started", run_id: "r1", stages: ["preprocessing", "thresholding", "exporting"],
+                                     criterion_stages: { 1: ["thresholding"], 2: ["preprocessing", "thresholding"], 3: [] } }));
+  const { loop, unmount } = renderedLoop();
+  await act(async () => { void loop().start("p", ["exporting"], "build", { chainOrder: ["2", "3", "1"] }); });
+  const progress = () => loop().current!.state;
+  expect(progress().order).toEqual(["2:preprocessing", "2:thresholding", "1:thresholding", "exporting"]);
+  expect(runningCriterion(progress())).toBe("2");
+  const socket = FakeWebSocket.opened[0];
+  socket.send({ type: "stage_progress", stage: "preprocessing", criterion: "2", done: 3, total: 10 });
+  socket.send({ type: "stage_progress", stage: "thresholding", criterion: "2", done: 0, total: 1 });
+  socket.send({ type: "stage_progress", stage: "thresholding", criterion: "1", done: 0, total: 1 });
+  expect(progress().stages["2:preprocessing"]).toEqual({ state: "done", done: 3, total: 10 });
+  expect(progress().stages["2:thresholding"].state).toBe("done");
+  expect(progress().stages["1:thresholding"]).toEqual({ state: "running", done: 0, total: 1 });
+  expect(runningCriterion(progress())).toBe("1");
+  socket.send({ type: "stage_progress", stage: "exporting", criterion: null, done: 0, total: 1 });
+  expect(runningCriterion(progress())).toBeNull();          // exporting reads the whole chain
+  unmount();
+});
+
+test("a start refused for a criterion's settings names the criterion; one refused for missing inputs keeps their roles", async () => {
+  vi.stubGlobal("fetch", replyWith({ field_errors: [{ field: "max_slope_deg", message: "too steep" }], grid_plan: null, criterion: "2" }, 422));
+  const { loop, unmount } = renderedLoop();
+  await act(async () => { await loop().start("p", ["thresholding"], "carving_run_analysis"); });
+  expect(loop().current!.state.failure).toMatchObject({ criterion: "2", field_errors: [{ field: "max_slope_deg", message: "too steep" }] });
+  vi.stubGlobal("fetch", replyWith({ detail: "Add test surfaces to Daylight.", missing_inputs: ["test_surfaces:3"] }, 422));
+  await act(async () => { await loop().start("p", ["thresholding"], "carving_run_analysis"); });
+  expect(loop().current!.refusal).toBe("Add test surfaces to Daylight.");
+  expect(loop().current!.missingInputs).toEqual(["test_surfaces:3"]);
   unmount();
 });

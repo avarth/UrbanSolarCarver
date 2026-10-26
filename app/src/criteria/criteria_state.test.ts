@@ -3,7 +3,7 @@ import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/clie
 import type { StageState } from "../steps/step_summaries";
 import {
   activeCriteria, cardLineOf, cardResultLine, cardStatusText, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving, selectionAfterRemoving,
-  stagesByCriterionOf,
+  stagesByCriterionOf, stagesDuringRun,
 } from "./criteria_state";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
@@ -69,6 +69,23 @@ test("a criterion that waits for an earlier one updates from the first earlier o
   expect(criterionStatus(criteria[2], criteria, stages, null)).toEqual({ kind: "updates_from", from: "Daylight" });
   const bothEarlier = { ...stages, "1": THRESHOLD_OUT_OF_DATE };
   expect(criterionStatus(criteria[2], criteria, bothEarlier, null)).toEqual({ kind: "updates_from", from: "Criterion 1" });
+});
+
+test("updates from names only a criterion a run brings up to date first: not while an earlier one protects nothing", () => {
+  const criteria = [entry("1", { name: "Facades", test_surface_files: [] }), entry("2", { name: "Daylight" }), entry("3")];
+  const stages = { "1": NOTHING, "2": CURRENT, "3": THRESHOLD_OUT_OF_DATE };
+  expect(criterionStatus(criteria[2], criteria, stages, null)).toEqual({ kind: "out_of_date" });
+  // Never run but with test surfaces, it does run first.
+  const withSurfaces = [{ ...criteria[0], test_surface_files: ["facades.obj"] }, criteria[1], criteria[2]];
+  expect(criterionStatus(withSurfaces[2], withSurfaces, stages, null)).toEqual({ kind: "updates_from", from: "Facades" });
+});
+
+test("during a run a criterion's stages are current once the run has done them and out of date while it still has to", () => {
+  const stages = { "1": CURRENT, "2": CURRENT, "3": NOTHING };
+  const progress = { 1: { thresholding: "done" as const }, 2: { thresholding: "running" as const }, 3: { preprocessing: "waiting" as const, thresholding: "waiting" as const } };
+  expect(stagesDuringRun(stages, progress)).toEqual({ "1": CURRENT, "2": THRESHOLD_OUT_OF_DATE, "3": NOTHING });
+  expect(stagesDuringRun({ "1": THRESHOLD_OUT_OF_DATE }, { 1: { thresholding: "done" } })).toEqual({ "1": CURRENT });
+  expect(stagesDuringRun({}, { 4: { preprocessing: "done", thresholding: "running" } })).toEqual({ "4": { preprocessing: "current", thresholding: "missing" } });
 });
 
 test("a bypassed criterion is skipped when looking back for the earlier one", () => {

@@ -1,4 +1,5 @@
-// What a run shows under the button that started it (UX 6.3, 11): while it runs, each stage in plain words with its state,
+// What a run shows under the button that started it (UX 6.3, 11): while it runs, each stage in plain words with its state (a
+// criterion's stages named with the criterion when the project has several, spec 7.3),
 // the batch count during the ray tracing, the elapsed time and Cancel; once it ended, how it ended (a failure with a Details
 // fold and a link to the setting it names, "Cancelled.") and the warnings it reported. A notice of the run loop shows for three
 // seconds: "Results are up to date" when the service had nothing to run, "A run is in progress" for a press during a run.
@@ -6,7 +7,7 @@ import { useEffect, useState } from "react";
 import { messages } from "../messages";
 import { presentedSettingOf, settingView } from "../settings_form/presentation";
 import { formatNumber } from "./format_numbers";
-import { stageDisplayName, type RunLoop, type RunOrigin, type RunRecord, type RunState } from "./run_state";
+import { criterionOfKey, stageDisplayName, stageOfKey, type RunLoop, type RunOrigin, type RunRecord, type RunState } from "./run_state";
 import "./steps.css";
 
 const ELAPSED_TICK_MILLISECONDS = 100;
@@ -28,17 +29,25 @@ export function secondsText(seconds: number): string {
   return formatNumber(seconds, messages.units.seconds, 1);
 }
 
-function StageList({ state, onCancel }: { state: RunState; onCancel: () => void }) {
+/** The name of a criterion's stage in the list: "Daylight on windows: Carving" with several criteria, "Carving" with one. */
+function stageLabel(key: string, criterionNameOf: (id: string) => string | null): string {
+  const criterion = criterionOfKey(key);
+  const stageName = stageDisplayName(stageOfKey(key));
+  const criterionName = criterion === null ? null : criterionNameOf(criterion);
+  return criterionName === null ? stageName : messages.criterionStage(criterionName, stageName);
+}
+
+function StageList({ state, onCancel, criterionNameOf }: { state: RunState; onCancel: () => void; criterionNameOf: (id: string) => string | null }) {
   const elapsedSeconds = useElapsedSeconds(state);
   return (
     <div className="run-progress-stages">
       <ol aria-label={messages.runProgress}>
-        {state.order.map((stage) => {
-          const progress = state.stages[stage];
+        {state.order.map((key) => {
+          const progress = state.stages[key];
           const isRayTracing = progress.state === "running" && progress.total > 1;
           return (
-            <li key={stage} className={`run-stage run-stage-${progress.state}`}>
-              <span className="run-stage-name">{stageDisplayName(stage)}</span>
+            <li key={key} className={`run-stage run-stage-${progress.state}`}>
+              <span className="run-stage-name">{stageLabel(key, criterionNameOf)}</span>
               <span className="run-stage-state">{isRayTracing ? messages.rayBatches(progress.done, progress.total) : messages.stageStates[progress.state]}</span>
             </li>
           );
@@ -96,9 +105,14 @@ interface RunProgressProps {
   mode: string;
   /** Opens the step that holds a setting a failed run names and moves the focus to it. */
   onGoToSetting: (settingName: string) => void;
+  /**
+   * The names of the criteria, by id, which label each criterion's stages; absent with one criterion, whose stages keep their
+   * names alone.
+   */
+  criterionNames?: Readonly<Record<string, string>>;
 }
 
-export function RunProgress({ runs, project, origin, mode, onGoToSetting }: RunProgressProps) {
+export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames }: RunProgressProps) {
   const record = runs.current;
   const isThisButton = record !== null && record.project === project && record.origin === origin;
   const notice = runs.notice !== null && runs.notice.project === project && runs.notice.origin === origin ? runs.notice.message : null;
@@ -108,7 +122,8 @@ export function RunProgress({ runs, project, origin, mode, onGoToSetting }: RunP
       {notice !== null && <p className="run-outcome">{notice}</p>}
       {isThisButton && notice === null && (
         <>
-          {record.state.final === null && record.refusal === null ? <StageList state={record.state} onCancel={runs.cancel} />
+          {record.state.final === null && record.refusal === null
+            ? <StageList state={record.state} onCancel={runs.cancel} criterionNameOf={(id) => criterionNames?.[id] ?? null} />
             : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} />}
           {record.state.issues.length > 0 && (
             <div className="run-issues">

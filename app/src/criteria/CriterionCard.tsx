@@ -17,6 +17,8 @@ export interface CriterionCardProps {
   /** Its result while current, else the words of its status. */
   line: string;
   selected: boolean;
+  /** A run is working on this criterion's stages: the card is marked busy. */
+  running?: boolean;
   /** Why Delete waits (the only criterion); null when it can be chosen. */
   deleteDisabledReason: string | null;
   /** Why the card cannot be changed now (a run is in progress); null when it can. */
@@ -58,9 +60,10 @@ export function CriterionCard(props: CriterionCardProps) {
     event.preventDefault();
     props.onMove(step);
   };
-  const classes = ["criterion-card", selected && "criterion-card-selected", entry.bypassed && "criterion-card-bypassed", props.dropTarget && "criterion-card-drop-target"];
+  const classes = ["criterion-card", selected && "criterion-card-selected", entry.bypassed && "criterion-card-bypassed", props.dropTarget && "criterion-card-drop-target",
+                   props.running && "criterion-card-running"];
   return (
-    <li className={classes.filter(Boolean).join(" ")} aria-current={selected || undefined} data-criterion-id={entry.id}
+    <li className={classes.filter(Boolean).join(" ")} aria-current={selected || undefined} aria-busy={props.running || undefined} data-criterion-id={entry.id}
         onDragOver={props.onDragOver} onDragLeave={props.onDragLeave} onDrop={props.onDrop}>
       <span className="criterion-card-handle" role="button" tabIndex={0} draggable={!disabled} aria-disabled={disabled || undefined}
             aria-label={messages.moveCriterion(entry.name)} aria-describedby={hintId} title={messages.moveCriterionHint} onKeyDown={moveWithKeys}

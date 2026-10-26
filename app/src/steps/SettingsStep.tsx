@@ -21,7 +21,10 @@ import "./steps.css";
 export interface RunAnalysisConditions {
   runActive: boolean;
   maxVolumeFiles: number;
+  /** The test surface files of the criterion shown. */
   testSurfaceFiles: number;
+  /** The name of another criterion that is on and protects nothing (the run refuses to start then); absent or null: none. */
+  otherCriterionWithoutTestSurfaces?: string | null;
   modeNeedsWeatherFile: boolean;
   hasWeatherFile: boolean;
   form: Pick<FormState, "mode" | "fieldErrors">;
@@ -59,6 +62,7 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
   if (!hasMaxVolume && !hasTestSurfaces) return messages.addMaxVolumeAndTestSurfacesToRun;
   if (!hasMaxVolume) return messages.addMaxVolumeToRun;
   if (!hasTestSurfaces) return messages.addTestSurfacesToRun;
+  if (conditions.otherCriterionWithoutTestSurfaces != null) return messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces);
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) return messages.weatherFileNeeded;
   const firstFieldWithError = Object.keys(form.fieldErrors)[0];
   if (firstFieldWithError !== undefined) {

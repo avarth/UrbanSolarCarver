@@ -10,7 +10,7 @@ import {
   type CriterionEntry, type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import {
-  activeCriteria, cardLineOf, criterionStatus, filesOfOtherCriteria, stagesByCriterionOf, type StagesByCriterion,
+  activeCriteria, cardLineOf, criterionStatus, filesOfOtherCriteria, stagesByCriterionOf, stagesDuringRun, type StagesByCriterion,
 } from "../criteria/criteria_state";
 import type { CriterionListProps } from "../criteria/CriterionList";
 import { CriteriaStep } from "../criteria/CriteriaStep";
@@ -34,7 +34,7 @@ import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, inputProblemText, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { carvedByNote } from "./CarveFurther";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
-import type { RunLoop } from "./run_state";
+import { criterionProgressOf, runningCriterion, type RunFailure, type RunLoop } from "./run_state";
 import {
   RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep, stepOfSetting,
 } from "./SettingsStep";
@@ -54,6 +54,13 @@ function stagesWithOutputOf(stages: StagesByCriterion[string] | undefined): stri
 }
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
+// A refused start's missing input for a criterion that is on and protects nothing: "test_surfaces:<criterion id>".
+const TEST_SURFACES_ROLE_PREFIX = "test_surfaces:";
+
+/** A criterion's test surface files as one string, to tell whether they changed. */
+function testSurfaceFilesKey(criteria: CriterionEntry[], id: string): string {
+  return (criteria.find((entry) => entry.id === id)?.test_surface_files ?? []).join("\n");
+}
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "site_and_grid"];
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
 // they cover the kept ones; the Layers menu shows them. Criteria shows what the Mode and Carving steps showed together, the maximum
@@ -228,9 +235,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // settings shown: every stage counts as out of date, so the carving rule is locked and its results are dimmed (UX 5.5), and no
   // carving change can start the analysis of a mode the form does not show.
   const analysisOfOtherSettings = analysisDiffersFromStored(form) || revisionOfStageStatus < form.storedAnalysisRevision;
-  const shownStages: Record<PipelineStage, StageState> = analysisOfOtherSettings
-    ? Object.fromEntries(Object.entries(stages).map(([stage, state]) => [stage, state === "current" ? "out_of_date" : state])) as Record<PipelineStage, StageState>
-    : stages;
+  const shownAs = <Stage extends string>(stagesOf: Record<Stage, StageState>): Record<Stage, StageState> => (analysisOfOtherSettings
+    ? Object.fromEntries(Object.entries(stagesOf).map(([stage, state]) => [stage, state === "current" ? "out_of_date" : state])) as Record<Stage, StageState>
+    : stagesOf);
+  const shownStages = shownAs(stages);
   // Criteria pins Build envelope and massing once every criterion that is on has a current carving (disabled, with the reason,
   // while the settings shown differ from those it was made with).
   const everyCriterionCarved = activeCriteria(criteria.criteria).length > 0
@@ -364,37 +372,76 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     setSettingToFocus({ name: fieldSettingOf(ANALYSIS_PERIOD_FIELDS[0]) });
   };
 
-  // Run analysis is in Criteria and pinned in Site and grid: each names a setting to fix in another step with that step.
+  // The selection of a card and the requests that change the criteria (use_criterion_selection.ts).
+  const selection = useCriterionSelection({
+    token, project: project.name, criteria, shownCriterionId, setShownCriterionId, criterionForm, sharedForm, refreshStageStatus, onServiceProblem,
+    criterionStartOf: (settings) => ({ schema: props.schema, modes, settings: splitSettings(settings, criterionKeys).criterion, gridPlan: null }),
+  });
+  // A start refused for another criterion's settings marks them once that criterion's panel shows them, with the forms then.
+  const latestForms = useRef({ dispatch, currentForm });
+  latestForms.current = { dispatch, currentForm };
+  const showRefusalOfCriterion = (id: string, fieldErrors: RunFailure["field_errors"]) => selection.showCriterion(id, () => {
+    latestForms.current.dispatch({ type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: latestForms.current.currentForm().gridPlan } });
+  });
+
+  // Run analysis is in Criteria and pinned in Site and grid: each names a setting to fix in another step with that step. Every
+  // criterion that is on needs test surfaces (a bypassed one needs none).
+  const active = activeCriteria(criteria.criteria);
+  const withoutTestSurfaces = active.filter((entry) => (entry.test_surface_files ?? []).length === 0);
   const runConditions = {
     runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length,
-    testSurfaceFiles: criterion === null ? files.test_surfaces.length : (criterion.test_surface_files ?? []).length, modeNeedsWeatherFile,
-    hasWeatherFile, form, warmUpState, criterionKeys,
+    testSurfaceFiles: criterion === null ? files.test_surfaces.length : criterion.bypassed ? 1 : (criterion.test_surface_files ?? []).length,
+    otherCriterionWithoutTestSurfaces: withoutTestSurfaces.find((entry) => entry.id !== criterion?.id)?.name ?? null,
+    modeNeedsWeatherFile, hasWeatherFile, form, warmUpState, criterionKeys,
     stepErrorsByStep: { site_and_grid: sharedForm.form.stepErrors, criteria: criterionForm.form.stepErrors },
   };
   const runBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "criteria" });
   const siteAndGridRunBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "site_and_grid" });
+  // The shown criterion's own analysis and carving: its carving rule locks while its analysis is out of date; another criterion's
+  // analysis out of date keeps a carving change from running (result_steps.tsx).
+  const ownStages = resultsCriterionId === undefined ? undefined
+    : shownAs(criterionStages[resultsCriterionId] ?? { preprocessing: "missing", thresholding: "missing" });
+  const analysisWaitsFor = active.find((entry) => entry.id !== resultsCriterionId && criterionStages[entry.id]?.preprocessing !== "current")?.name ?? null;
   const resultSteps = useResultSteps({
     token, project: project.name, criterionId: resultsCriterionId, criterionStagesWithResults: resultsCriterionId === undefined ? undefined : stagesWithOutputOf(criterionStages[resultsCriterionId]),
+    criterionStages: ownStages, chainOrder: criteria.criteria.map((entry) => entry.id), analysisWaitsFor, showRefusalOfCriterion,
+    criterionNames: criteria.criteria.length < 2 ? undefined : Object.fromEntries(criteria.criteria.map((entry) => [entry.id, entry.name])),
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
     onCarveFurther: props.onCarveFurther,
   });
 
-  // The cards (CriteriaStep): their lines from the criteria's stages and the run summary, and the requests that change the criteria
-  // and the selection (use_criterion_selection.ts).
+  // The cards (CriteriaStep): their lines from the criteria's stages and the run summary. While a run of the project goes on, the
+  // criterion it works on says Running and the stages it has done or still has to do count as current or out of date.
+  const record = runs.current?.project === project.name ? runs.current : null;
+  const runUnderWay = record !== null && record.state.final === null && record.refusal === null;
+  const runningId = runUnderWay ? runningCriterion(record.state) : null;
+  const cardStages = runUnderWay ? stagesDuringRun(criterionStages, criterionProgressOf(record.state)) : criterionStages;
   const summaryCriteria = resultSteps.results.summary?.criteria ?? [];
   const carvingSummaryOf = (entry: CriterionEntry) => summaryCriteria.find((summary) => summary.id === entry.id);
-  const selection = useCriterionSelection({
-    token, project: project.name, criteria, shownCriterionId, setShownCriterionId, criterionForm, sharedForm, refreshStageStatus, onServiceProblem,
-    criterionStartOf: (settings) => ({ schema: props.schema, modes, settings: splitSettings(settings, criterionKeys).criterion, gridPlan: null }),
-  });
   const criterionList: CriterionListProps = {
     criteria: criteria.criteria,
     selectedId: criteria.selectedId,
-    lineOf: (entry) => cardLineOf(criterionStatus(entry, criteria.criteria, criterionStages, null), carvingSummaryOf(entry)),
+    lineOf: (entry) => cardLineOf(criterionStatus(entry, criteria.criteria, cardStages, runningId), carvingSummaryOf(entry)),
+    runningId,
     disabledReason: inputsDisabledReason,
     ...selection.requests,
   };
+
+  // A start refused because criteria that are on protect nothing selects the first of them (unless one is selected), whose panel
+  // asks for test surfaces until its files change or another run is asked for.
+  const testSurfacesAskedFor = record?.missingInputs?.filter((role) => role.startsWith(TEST_SURFACES_ROLE_PREFIX))
+    .map((role) => role.slice(TEST_SURFACES_ROLE_PREFIX.length)) ?? [];
+  const filesWhenRefused = useMemo(() => Object.fromEntries(testSurfacesAskedFor.map((id) => [id, testSurfaceFilesKey(criteria.criteria, id)])),
+                                   [record?.serial]);
+  const refusalSeen = useRef(record?.serial ?? null);
+  useEffect(() => {
+    if (record === null || record.serial === refusalSeen.current) return;
+    refusalSeen.current = record.serial;
+    if (testSurfacesAskedFor.length > 0 && !testSurfacesAskedFor.includes(criteria.selectedId)) selection.showCriterion(testSurfacesAskedFor[0]);
+  }, [record?.serial]);
+  const shownAskedForTestSurfaces = criterion !== null && testSurfacesAskedFor.includes(criterion.id)
+    && filesWhenRefused[criterion.id] === testSurfaceFilesKey(criteria.criteria, criterion.id);
 
   const viewState: ProjectViewState = {
     maxVolumeFiles: files.max_volume.length,
@@ -430,7 +477,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={criterionList} load={selection.load} panel={
+      <CriteriaStep list={criterionList} load={selection.load}
+                    panelProblem={shownAskedForTestSurfaces ? messages.addTestSurfacesTo(criterion.name) : null} panel={
         <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
@@ -506,7 +554,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={emptyViewContent} localOrigin={origin} mode={form.mode}
-                    analysisCurrent={shownStages.preprocessing === "current"} {...resultSteps.viewer} />
+                    analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer} />
       </section>
     </div>
   );

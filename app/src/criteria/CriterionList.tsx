@@ -18,6 +18,8 @@ export interface CriterionListProps {
   selectedId: string;
   /** A card's line: its result while current, else its status. */
   lineOf: (criterion: CriterionEntry) => string;
+  /** The criterion a run is working on (run_state's runningCriterion); absent or null: none. */
+  runningId?: string | null;
   /** Why the criteria cannot be changed now (a run is in progress); null when they can. */
   disabledReason: string | null;
   onSelect: (id: string) => void;
@@ -163,6 +165,7 @@ export function CriterionList(props: CriterionListProps) {
       <ol ref={list} className="criterion-list" aria-label={messages.criteriaListLabel}>
         {criteria.map((criterion) => (
           <CriterionCard key={criterion.id} entry={criterion} line={props.lineOf(criterion)} selected={criterion.id === selectedId}
+                         running={props.runningId === criterion.id}
                          deleteDisabledReason={criteria.length === 1 ? messages.onlyCriterionStays : null} disabledReason={disabledReason}
                          onSelect={() => props.onSelect(criterion.id)}
                          onMove={(step) => moveWithKeys(criterion.id, step)}

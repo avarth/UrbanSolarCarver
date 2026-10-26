@@ -45,6 +45,17 @@ test("a card shows the criterion's colour, name, mode symbol and its line", () =
   expect(card().getAttribute("aria-current")).toBeNull();
 });
 
+test("the running criterion's card says Running and is marked busy; the others are not", () => {
+  renderCard({ line: "Running", running: true });
+  expect(card().querySelector(".criterion-card-line")!.textContent).toBe("Running");
+  expect(card().classList.contains("criterion-card-running")).toBe(true);
+  expect(card().getAttribute("aria-busy")).toBe("true");
+  rendered!.unmount();
+  renderCard();
+  expect(card().classList.contains("criterion-card-running")).toBe(false);
+  expect(card().getAttribute("aria-busy")).toBeNull();
+});
+
 test("the selected card is marked", () => {
   renderCard({ selected: true });
   expect(card().getAttribute("aria-current")).toBe("true");

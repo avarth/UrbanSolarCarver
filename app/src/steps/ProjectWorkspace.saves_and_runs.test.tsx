@@ -8,6 +8,10 @@ import type { ModeInfo } from "../api_client/client";
 import { LAYERS_SHOWN_IN_STEP, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "./step_summaries";
 import {
+  CURRENT, FACADES, OUT_OF_DATE, WINDOWS, card, cardLine, openChain, panel, panelFrame, select, selectedCardName, service as chainService,
+  type CriterionStages,
+} from "./chain_service_for_test";
+import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, MODES, NOTHING_RUN, SCHEMA, TRIANGLE_OBJ, buildPart, buttonIn, container,
   dimmedCarvingLayers, endWorkspaceTest, openStep, openWorkspace, pressRunAnalysis, project, reasonOf, settle,
   startWorkspaceTest, stepRow, thresholdField, thresholdOf, type, typeAndLeave, unmountWorkspace, voxelSizeField,
@@ -625,4 +629,126 @@ test("once the period is changed by hand the notice is gone, also when the perio
   await waitForTheSave();
   await settle();
   expect(weatherNotice()).toBeNull();
+});
+
+// ---- Several criteria (spec 7.3): progress per criterion and on the cards, refusals at their card, the carving lock per
+// criterion and the live rethreshold from an earlier criterion ----
+
+const THRESHOLD_OUT_OF_DATE: CriterionStages = { preprocessing: "current", thresholding: "out_of_date" };
+const NOT_RUN: CriterionStages = { preprocessing: "missing", thresholding: "missing" };
+/** The stages of the run shown in the criterion's panel: each one's name and state. */
+const stageRows = () => [...panel().querySelectorAll(".run-stage")]
+  .map((row) => `${row.querySelector(".run-stage-name")!.textContent} | ${row.querySelector(".run-stage-state")!.textContent}`);
+
+test("a run of two criteria shows each one's stages by name; its card says Running, and a later one updates from it until its thresholding finishes", async () => {
+  await openChain([FACADES, WINDOWS], { 1: OUT_OF_DATE, 2: THRESHOLD_OUT_OF_DATE });
+  expect(cardLine("Winter sun on facades")).toBe("Out of date");
+  expect(cardLine("Spring sun on windows")).toBe("Updates from Winter sun on facades");
+  chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"], 2: ["thresholding"] };
+  await pressRunAnalysis();
+  expect(chainService.runsStarted).toEqual([["thresholding"]]);
+  expect(stageRows()).toEqual([
+    "Winter sun on facades: Sun analysis | running", "Winter sun on facades: Carving | waiting", "Spring sun on windows: Carving | waiting",
+  ]);
+  expect(cardLine("Winter sun on facades")).toBe("Running");
+  expect(card("Winter sun on facades").getAttribute("aria-busy")).toBe("true");
+  expect(cardLine("Spring sun on windows")).toBe("Updates from Winter sun on facades");
+
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "preprocessing", criterion: "1", done: 2, total: 4 });
+  expect(stageRows()[0]).toBe("Winter sun on facades: Sun analysis | 2 of 4 batches");
+  run.send({ type: "stage_progress", stage: "thresholding", criterion: "1", done: 0, total: 1 });
+  expect(cardLine("Winter sun on facades")).toBe("Running");
+  expect(cardLine("Spring sun on windows")).toBe("Updates from Winter sun on facades");
+  run.send({ type: "stage_progress", stage: "thresholding", criterion: "2", done: 0, total: 1 });
+  expect(stageRows()).toEqual([
+    "Winter sun on facades: Sun analysis | done", "Winter sun on facades: Carving | done", "Spring sun on windows: Carving | running",
+  ]);
+  expect(cardLine("Winter sun on facades")).toBe("39 % of the volume carved, 390 m³ removed");
+  expect(cardLine("Spring sun on windows")).toBe("Running");
+  expect(card("Winter sun on facades").getAttribute("aria-busy")).toBeNull();
+
+  chainService.criterionStages = { 1: CURRENT, 2: CURRENT };
+  run.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
+  await settle();
+  expect(cardLine("Spring sun on windows")).toBe("20 % of the volume carved, 200 m³ removed");
+});
+
+test("with one criterion a run's stages keep their names, with no criterion's", async () => {
+  await openChain([FACADES], { 1: OUT_OF_DATE });
+  chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"] };
+  await pressRunAnalysis();
+  expect(stageRows()).toEqual(["Sun analysis | running", "Carving | waiting"]);
+});
+
+test("a run refused for criterion 2's settings selects its card, says so in its panel and marks the field", async () => {
+  await openChain([FACADES, WINDOWS]);
+  chainService.runRefusal = {
+    status: 422, body: { field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }], grid_plan: null, criterion: "2" },
+  };
+  await pressRunAnalysis();
+  expect(selectedCardName()).toBe("Spring sun on windows");
+  expect(chainService.requests).toContain("GET /criteria/2/settings");
+  expect(panel().textContent).toContain("The run stopped on an error.");
+  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("Input should be less than 90");
+  await select("Winter sun on facades");
+  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')).toBeNull();      // criterion 1's settings are fine
+});
+
+test("a run refused for missing test surfaces selects that criterion and asks for them in its panel", async () => {
+  await openChain([FACADES, WINDOWS]);
+  // The service found criterion 2's test surfaces gone (removed in another tab, say).
+  chainService.runRefusal = { status: 422, body: { detail: "Add test surfaces to Spring sun on windows.", missing_inputs: ["test_surfaces:2"] } };
+  await pressRunAnalysis();
+  expect(selectedCardName()).toBe("Spring sun on windows");
+  expect(panelFrame().querySelector(".criterion-panel-problem")!.textContent).toBe("Add test surfaces to Spring sun on windows.");
+  await select("Winter sun on facades");
+  expect(panelFrame().querySelector(".criterion-panel-problem")).toBeNull();
+});
+
+test("Run analysis waits for the test surfaces of every criterion that is on, and names the one without", async () => {
+  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
+  const runButton = () => buttonIn(panel(), "Run analysis");
+  expect(runButton().disabled).toBe(true);
+  expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
+  await act(async () => card("Spring sun on windows").querySelector<HTMLInputElement>('[role="switch"]')!.click());       // bypassed
+  await settle();
+  expect(runButton().disabled).toBe(false);
+});
+
+test("moving an earlier cutoff with auto update runs once, rethresholds the later criterion, and keeps that criterion's histogram", async () => {
+  await openChain([FACADES, WINDOWS]);
+  chainService.runCriterionStages = { 1: ["thresholding"], 2: ["thresholding"] };
+  typeAndLeave(thresholdField(), "1");
+  await settle();
+  expect(chainService.patches.map((patch) => patch.id)).toEqual(["1"]);
+  expect(chainService.runsStarted).toEqual([["thresholding"]]);
+  expect(cardLine("Winter sun on facades")).toBe("Running");
+  expect(cardLine("Spring sun on windows")).toBe("Updates from Winter sun on facades");
+  const run = FakeWebSocket.opened[0];
+  run.send({ type: "stage_progress", stage: "thresholding", criterion: "1", done: 0, total: 1 });
+  run.send({ type: "stage_progress", stage: "thresholding", criterion: "2", done: 0, total: 1 });
+  expect(cardLine("Spring sun on windows")).toBe("Running");
+  run.send({ type: "run_finished", stages: ["thresholding"], files: [] });
+  await settle();
+  expect(chainService.runsStarted).toHaveLength(1);
+  const scorePointRequests = chainService.requests.filter((request) => request.startsWith("GET /run/score-points"));
+  expect(scorePointRequests).toEqual(["GET /run/score-points?criterion=1", "GET /run/score-points?criterion=1"]);     // at open, after the run
+  expect(selectedCardName()).toBe("Winter sun on facades");
+  expect(thresholdField().value).toBe("1");
+});
+
+test("the selected criterion's carving locks only while its own analysis is out of date; another's keeps a carving change from running", async () => {
+  await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: OUT_OF_DATE });
+  expect(thresholdField().disabled).toBe(false);
+  expect(panel().textContent).not.toContain("Settings changed since the analysis.");
+  typeAndLeave(thresholdField(), "1");
+  await waitForTheSave();
+  await settle();
+  expect(chainService.patches.map((patch) => patch.id)).toEqual(["1"]);
+  expect(chainService.count("POST /runs")).toBe(0);          // tracing criterion 2 is for Run analysis to start (M10)
+  expect(panel().textContent).toContain("Run the analysis for Spring sun on windows first");
+  await select("Spring sun on windows");
+  expect(thresholdField().disabled).toBe(true);
+  expect(panel().textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
 });

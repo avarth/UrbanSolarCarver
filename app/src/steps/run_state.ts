@@ -3,6 +3,9 @@
 // batches of the ray tracing in between; a stage counts as done when a later stage starts or the run finishes, since the
 // last batch of the ray tracing is not the end of its stage.
 //
+// A run of a chain (spec 7.3) runs each criterion's preprocessing and thresholding in the chain's order, then exporting and
+// massing: the progress of each is kept under its own key (progressKey), so two criteria's stages do not overwrite each other.
+//
 // useRunLoop runs one pipeline at a time, as the engine does: it starts a run, follows its events and keeps the last run's
 // state, for any project, so a run goes on being followed while another project is open.
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -31,10 +34,12 @@ export interface RunFailure {
   error_type: string;
   message: string;
   field_errors: { field: string | null; message: string }[];
+  /** The criterion whose settings a refused start found invalid (ConfigErrorReply.criterion); absent or null: none named. */
+  criterion?: string | null;
 }
 
 export interface RunState {
-  /** The stages the run brings up to date, in pipeline order. */
+  /** The progress keys (progressKey) of the stages the run brings up to date, in the order it runs them. */
   order: string[];
   stages: Record<string, StageProgress>;
   issues: RunIssue[];
@@ -57,7 +62,43 @@ export function stageDisplayName(stage: string): string {
   return STAGE_DISPLAY_NAMES[stage as PipelineStage] ?? stage;
 }
 
-/** A run that has just started: its first stage running, the others waiting. */
+const CRITERION_STAGES: readonly string[] = ["preprocessing", "thresholding"];
+const KEY_SEPARATOR = ":";
+
+/**
+ * Where a stage's progress is kept in a run: "<criterion id>:<stage>" for a criterion's preprocessing or thresholding, the stage
+ * alone for exporting and massing, which read the whole chain (and for any stage of a run whose reply named no criterion).
+ */
+export function progressKey(criterion: string | null, stage: string): string {
+  return criterion === null ? stage : `${criterion}${KEY_SEPARATOR}${stage}`;
+}
+
+export function stageOfKey(key: string): string {
+  return key.slice(key.lastIndexOf(KEY_SEPARATOR) + 1);
+}
+
+/** The criterion of a progress key; null for a stage of the whole chain. */
+export function criterionOfKey(key: string): string | null {
+  const separator = key.lastIndexOf(KEY_SEPARATOR);
+  return separator < 0 ? null : key.slice(0, separator);
+}
+
+/**
+ * The progress keys of a run, in the order it runs them: each criterion's stages (StartRunReply.criterion_stages) in the chain's
+ * order (*chainOrder*, the ids of the cards; the reply's object reads number-like ids in ascending order), then exporting and
+ * massing. A reply that names no criterion stages keeps the stages as they are.
+ */
+export function runOrderOf(stages: readonly string[], criterionStages?: Record<string, string[]>, chainOrder: readonly string[] = []): string[] {
+  const running = Object.keys(criterionStages ?? {}).filter((id) => criterionStages![id].length > 0);
+  if (running.length === 0) return [...stages];
+  const inChainOrder = [...chainOrder.filter((id) => running.includes(id)), ...running.filter((id) => !chainOrder.includes(id))];
+  return [
+    ...inChainOrder.flatMap((id) => criterionStages![id].map((stage) => progressKey(id, stage))),
+    ...stages.filter((stage) => !CRITERION_STAGES.includes(stage)),
+  ];
+}
+
+/** A run that has just started: its first stage running, the others waiting. *stages*: its progress keys (runOrderOf). */
 export function initialRunState(stages: string[], startedAt = Date.now()): RunState {
   return {
     order: stages,
@@ -79,13 +120,16 @@ export function runReducer(state: RunState, event: RunEvent, now = Date.now()): 
   if (state.final !== null) return state;
   switch (event.type) {
     case "stage_progress": {
-      const position = event.stage === null ? -1 : state.order.indexOf(event.stage);
+      if (event.stage === null) return state;
+      const ownKey = progressKey(event.criterion, event.stage);
+      const key = state.order.includes(ownKey) ? ownKey : event.stage;
+      const position = state.order.indexOf(key);
       if (position < 0) return state;
       const stages = { ...state.stages };
-      state.order.forEach((stage, index) => {
-        if (index < position) stages[stage] = { ...stages[stage], state: "done" };
+      state.order.forEach((earlier, index) => {
+        if (index < position) stages[earlier] = { ...stages[earlier], state: "done" };
       });
-      stages[event.stage!] = { state: "running", done: event.done, total: event.total };
+      stages[key] = { state: "running", done: event.done, total: event.total };
       return { ...state, stages };
     }
     case "issue":
@@ -102,9 +146,45 @@ export function runReducer(state: RunState, event: RunEvent, now = Date.now()): 
   }
 }
 
-/** The stages of the run that are done so far. */
+/** The pipeline stages of the run, each once, in the order it runs them. */
+export function runStages(state: RunState): string[] {
+  return [...new Set(state.order.map(stageOfKey))];
+}
+
+/**
+ * How far the run is with a pipeline stage: done once every criterion's is, waiting while none has started, running in between;
+ * null when the run does not bring it up to date. With *criterion*: that criterion's own stage only (and a stage of a run that
+ * named no criterion).
+ */
+export function stageRunState(state: RunState, stage: string, criterion?: string): StageRunState | null {
+  const keys = state.order.filter((key) => stageOfKey(key) === stage
+    && (criterion === undefined || criterionOfKey(key) === null || criterionOfKey(key) === criterion));
+  if (keys.length === 0) return null;
+  const states = keys.map((key) => state.stages[key].state);
+  if (states.every((progress) => progress === "done")) return "done";
+  return states.every((progress) => progress === "waiting") ? "waiting" : "running";
+}
+
+/** The pipeline stages of the run that are done so far (for every criterion). */
 export function stagesDone(state: RunState): string[] {
-  return state.order.filter((stage) => state.stages[stage].state === "done");
+  return runStages(state).filter((stage) => stageRunState(state, stage) === "done");
+}
+
+/** The criterion whose stage the run is working on; null when it is on exporting or massing, or not running. */
+export function runningCriterion(state: RunState): string | null {
+  if (state.final !== null) return null;
+  const running = state.order.find((key) => state.stages[key].state === "running");
+  return running === undefined ? null : criterionOfKey(running);
+}
+
+/** The state of each criterion's stages in the run, by criterion id (the cards' status while it runs). */
+export function criterionProgressOf(state: RunState): Record<string, Record<string, StageRunState>> {
+  const progress: Record<string, Record<string, StageRunState>> = {};
+  for (const key of state.order) {
+    const criterion = criterionOfKey(key);
+    if (criterion !== null) progress[criterion] = { ...progress[criterion], [stageOfKey(key)]: state.stages[key].state };
+  }
+  return progress;
 }
 
 /** How far the run is, 0 to 1, for the progress bar: the finished stages and the batch fraction of the running one. */
@@ -138,6 +218,11 @@ export interface RunRecord {
   /** The service's reason when it refused to start the run (a run already active, inputs missing); null otherwise. */
   refusal: string | null;
   /**
+   * The inputs a refused start lacked (MissingInputsReply.missing_inputs: "max_volume", "test_surfaces:<criterion id>", ...);
+   * absent for any other record.
+   */
+  missingInputs?: string[];
+  /**
    * Whether the user has left the value the run was started for (a threshold moved again while it ran): its results are then
    * neither fetched nor shown as current, since the run that follows brings the value the user is at. Absent: never.
    */
@@ -146,6 +231,13 @@ export interface RunRecord {
 
 /** How a request to run ended: as the run ended, with nothing to run, or with no run started (refused, or a run active). */
 export type RunOutcome = RunEnding | "up_to_date" | "not_started";
+
+export interface RunStartOptions {
+  /** Goes into the run's record (RunRecord.isSuperseded). */
+  isSuperseded?: () => boolean;
+  /** The ids of the project's criteria in chain order: the order of their stages in the run (runOrderOf). */
+  chainOrder?: readonly string[];
+}
 
 export interface RunLoop {
   /** The run in progress, or the last one, of any project. */
@@ -157,8 +249,8 @@ export interface RunLoop {
    * progress" when the button was pressed while a run was starting or under way.
    */
   notice: RunNotice | null;
-  /** Brings *produce* up to date; resolves at the run's last event. *isSuperseded* goes into the run's record. */
-  start: (project: string, produce: string[], origin: RunOrigin, isSuperseded?: () => boolean) => Promise<RunOutcome>;
+  /** Brings *produce* up to date; resolves at the run's last event. */
+  start: (project: string, produce: string[], origin: RunOrigin, options?: RunStartOptions) => Promise<RunOutcome>;
   cancel: () => void;
   /**
    * Made before a request about *project* (its stage status), it tells when the reply comes whether the reply still holds: not
@@ -186,9 +278,17 @@ const WEBSOCKET_CLOSE_UNAUTHORIZED = 4401;
 /** A refused start whose settings the service found invalid (ConfigError), as a failed run that names its fields. */
 function refusedSettingsFailure(error: unknown): RunFailure | null {
   if (!(error instanceof ApiError) || error.status !== 422 || typeof error.body !== "object" || error.body === null) return null;
-  const fieldErrors = (error.body as { field_errors?: RunFailure["field_errors"] }).field_errors;
+  const { field_errors: fieldErrors, criterion } = error.body as { field_errors?: RunFailure["field_errors"]; criterion?: string | null };
   if (!Array.isArray(fieldErrors)) return null;
-  return { error_type: "ConfigError", message: fieldErrors.map((fieldError) => fieldError.message).join(" "), field_errors: fieldErrors };
+  return { error_type: "ConfigError", message: fieldErrors.map((fieldError) => fieldError.message).join(" "), field_errors: fieldErrors,
+           criterion: criterion ?? null };
+}
+
+/** The inputs a refused start lacked (MissingInputsReply), or undefined for another refusal. */
+function missingInputsOf(error: unknown): string[] | undefined {
+  if (!(error instanceof ApiError) || typeof error.body !== "object" || error.body === null) return undefined;
+  const missing = (error.body as { missing_inputs?: unknown }).missing_inputs;
+  return Array.isArray(missing) ? missing.map(String) : undefined;
 }
 
 /** What a connection that ended before the run's last event says about the service, as a failed request would say it. */
@@ -230,7 +330,8 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
     noticeTimer.current = setTimeout(() => setNotice(null), NOTICE_MILLISECONDS);
   };
 
-  const start = useCallback(async (project: string, produce: string[], origin: RunOrigin, isSuperseded?: () => boolean): Promise<RunOutcome> => {
+  const start = useCallback(async (project: string, produce: string[], origin: RunOrigin, options: RunStartOptions = {}): Promise<RunOutcome> => {
+    const { isSuperseded } = options;
     if (busy.current) {
       showNotice(project, origin, messages.runInProgress);
       return "not_started";
@@ -254,7 +355,8 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
         show({ serial, project, origin, runId: null, refusal: null, isSuperseded,
                state: { ...initialRunState([]), final: "failed", failure: settingsFailure, endedAt: Date.now() } });
       } else {
-        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: failureTextOf(error), isSuperseded });
+        show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: failureTextOf(error), missingInputs: missingInputsOf(error),
+               isSuperseded });
       }
       return "not_started";
     }
@@ -264,7 +366,8 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
       return "up_to_date";
     }
     const runId = reply.run_id;
-    show({ serial, project, origin, runId, state: initialRunState(reply.stages), refusal: null, isSuperseded });
+    show({ serial, project, origin, runId, state: initialRunState(runOrderOf(reply.stages, reply.criterion_stages, options.chainOrder)), refusal: null,
+           isSuperseded });
     return new Promise<RunOutcome>((resolve) => {
       stopEvents.current = subscribeToRunEvents(runId, token, (event) => {
         const record = latestRecord.current!;

@@ -26,6 +26,20 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
+test("the selected criterion's carving is dimmed while the run thresholds it, until the stage is done for every criterion; not when the run leaves it out", () => {
+  let state = initialRunState(["2:thresholding", "3:thresholding", "exporting"]);
+  expect(isStageDimmed("thresholding", record(state), ALL_CURRENT, [], "1")).toBe(false);      // criterion 1 keeps its carving
+  expect(isStageDimmed("thresholding", record(state), ALL_CURRENT, [], "2")).toBe(true);
+  expect(dimmedLayersOf(record(state), ALL_CURRENT, [], "1")).toEqual(["envelope"]);
+  state = runReducer(state, { type: "stage_progress", stage: "thresholding", criterion: "3", done: 0, total: 1 });
+  // Criterion 2 is done, but the carving's results are fetched once criterion 3's is too.
+  expect(isStageDimmed("thresholding", record(state), ALL_CURRENT, [], "2")).toBe(true);
+  expect(isStageDimmed("thresholding", record(state), ALL_CURRENT)).toBe(true);
+  state = runReducer(state, { type: "stage_progress", stage: "exporting", criterion: null, done: 0, total: 1 });
+  expect(isStageDimmed("thresholding", record(state), ALL_CURRENT, [], "2")).toBe(false);
+  expect(dimmedLayersOf(record(state), ALL_CURRENT, [], "2")).toEqual(["envelope"]);
+});
+
 test("a stage of the run under way is dimmed until the run has done it; other stages follow their status", () => {
   let state = initialRunState(["exporting", "massing"]);
   state = runReducer(state, { type: "stage_progress", stage: "massing", criterion: null, done: 0, total: 1 });

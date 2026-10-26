@@ -1,7 +1,8 @@
 // The results of the project's runs that the steps and the 3D view show: the run summary, the score points, the sky dome, the
 // envelope and building massing meshes and plates.json. Each is fetched again when a stage that writes it has run (UX 6.3:
 // results arrive stage by stage), and the result of the last request wins. A result a stage has not written (yet) is null. The
-// score points and the sky dome are those of the selected criterion: another criterion selected fetches them again.
+// score points and the sky dome are those of the selected criterion: another criterion selected fetches them again, and so does
+// the selected one gaining results in its stage status (turned back on after a bypass).
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import {
@@ -12,7 +13,7 @@ import type { Point3 } from "../viewer/local_origin";
 import { decodeScorePoints, type ScorePoints } from "../viewer/score_points_decoder";
 import type { PlatesFile } from "./EnvelopeAndMassingStep";
 import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH, meshFormatOf } from "./ExportStep";
-import { stagesDone, type RunRecord } from "./run_state";
+import { runStages, stagesDone, type RunRecord } from "./run_state";
 import type { PipelineStage } from "./step_summaries";
 
 export interface RunResults {
@@ -101,7 +102,11 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
     }
   };
 
+  // The score points and sky dome asked for since the criterion shown was selected (or the project opened).
+  const askedOfCriterion = useRef(new Set<ResultName>());
+
   const fetchResults = useCallback((names: readonly ResultName[]): Promise<void> => {
+    names.filter((name) => CRITERION_RESULTS.includes(name)).forEach((name) => askedOfCriterion.current.add(name));
     let summaryRequest: Promise<RunSummary> | null = null;
     const summary = () => (summaryRequest ??= getRunSummary(source.current.token, project));
     const fetches = names.map((name) => {
@@ -128,17 +133,29 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
   }, []);
 
   // Another criterion selected: its score points and sky dome replace the last one's, which are not shown meanwhile.
+  const writtenOfCriterion = criterionStagesWithResults === undefined ? CRITERION_RESULTS
+    : resultsOfStages(criterionStagesWithResults).filter((name) => CRITERION_RESULTS.includes(name));
   const firstCriterion = useRef(criterionId);
   useEffect(() => {
     if (criterionId === firstCriterion.current) return;
     firstCriterion.current = criterionId;
     setResults((current) => ({ ...current, scorePoints: null, skyDome: null }));
-    const written = criterionStagesWithResults === undefined ? CRITERION_RESULTS
-      : resultsOfStages(criterionStagesWithResults).filter((name) => CRITERION_RESULTS.includes(name));
     // A request still out for the criterion before is not kept.
     for (const name of CRITERION_RESULTS) latestRequest.current[name] = (latestRequest.current[name] ?? 0) + 1;
-    fetchResults(written);
+    askedOfCriterion.current = new Set();
+    fetchResults(writtenOfCriterion);
   }, [criterionId]);
+
+  // The criterion shown gains results it had not (it is turned back on after a bypass, and its stage status lists its stages
+  // again): they are fetched, unless already asked for (a run that wrote them fetched them as it ended).
+  const writtenKey = writtenOfCriterion.join(",");
+  const lastWrittenKey = useRef(writtenKey);
+  useEffect(() => {
+    if (writtenKey === lastWrittenKey.current) return;          // unchanged, or at open, where resultsAtOpen decides
+    lastWrittenKey.current = writtenKey;
+    const notAskedFor = writtenOfCriterion.filter((name) => !askedOfCriterion.current.has(name));
+    if (criterionId === firstCriterion.current && notAskedFor.length > 0) fetchResults(notAskedFor);
+  }, [writtenKey]);
 
   // The meshes are drawn in the local origin of the inputs; new inputs can move it.
   const originKey = origin.join(",");
@@ -173,7 +190,7 @@ export function useResultsFollowingRun(record: RunRecord | null, reload: (stages
     if (followed.current.serial !== record.serial) followed.current = { serial: record.serial, reloadedStages: new Set(), ended: false };
     const run = followed.current;
     if (run.ended) return;
-    const stagesToReload = (record.state.final === null ? doneStages : record.state.order).filter((stage) => !run.reloadedStages.has(stage));
+    const stagesToReload = (record.state.final === null ? doneStages : runStages(record.state)).filter((stage) => !run.reloadedStages.has(stage));
     stagesToReload.forEach((stage) => run.reloadedStages.add(stage));
     if (stagesToReload.length > 0 && !(record.isSuperseded?.() ?? false)) reload(stagesToReload);
     if (record.state.final !== null) {
