@@ -189,6 +189,30 @@ test("Escape closes the menu and the focus goes back to Add criterion", () => {
   press(document.activeElement!, "Escape");
   expect(menuItems()).toEqual([]);
   expect(document.activeElement).toBe(buttonNamed(rendered.container, "Add criterion"));
+  expect(buttonNamed(rendered.container, "Add criterion").getAttribute("aria-expanded")).toBe("false");
+});
+
+test("Escape while Add criterion waits for a run puts the focus on the selected card, not on the page", () => {
+  rendered = renderForTest(<CriterionList {...listProps()} />);
+  click(buttonNamed(rendered.container, "Add criterion"));
+  rendered.rerender(<CriterionList {...listProps({ disabledReason: "A run is in progress." })} />);
+  press(document.activeElement!, "Escape");
+  expect(menuItems()).toEqual([]);
+  expect(document.activeElement).toBe(card("Daylight on windows").querySelector(".criterion-card-select"));
+});
+
+test("a refused add does not take the focus back when the user has moved on", async () => {
+  let refuse = (_reason: string) => {};
+  const onAdd = vi.fn(() => new Promise<string | null>((resolve) => { refuse = resolve; }));
+  rendered = renderForTest(<CriterionList {...listProps({ onAdd })} />);
+  click(buttonNamed(rendered.container, "Add criterion"));
+  await act(async () => itemNamed("Daylight").click());
+  const elsewhere = card("Night cooling").querySelector<HTMLElement>(".criterion-card-select")!;
+  elsewhere.focus();
+  await act(async () => refuse("A run of this project is in progress."));
+  expect(menuItems()).toEqual([]);
+  expect(rendered.container.querySelector('.add-criterion [role="alert"]')).not.toBeNull();
+  expect(document.activeElement).toBe(elsewhere);
 });
 
 test("the menu waits while a run is in progress: its items are disabled with the run's reason", async () => {

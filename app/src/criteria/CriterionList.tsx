@@ -42,26 +42,32 @@ interface AddCriterionProps {
 /**
  * A link that opens the short menu of the modes (ModeMenu); choosing one adds a criterion of that mode, and the menu closes once it
  * is added. Escape gives the focus back to the link. A request the service refuses closes the menu too: the reason is said under the
- * link, which takes the focus.
+ * link, which takes the focus if it was in the menu or on the link (not when the user has moved on). A link that waits (a run
+ * started meanwhile) cannot take the focus: it goes to the card selected, so it is not lost to the page.
  */
 export function AddCriterion({ onAdd, disabledReason }: AddCriterionProps) {
   const [choosing, setChoosing] = useState(false);
   const { problem, setProblem, busy, send } = useDialogRequest(() => setChoosing(false));
   const link = useRef<HTMLButtonElement>(null);
+  const block = useRef<HTMLDivElement>(null);
+  const focusLinkOrSelectedCard = () => {
+    if (link.current?.disabled) block.current?.closest(".criteria-list-block")?.querySelector<HTMLElement>('.criterion-card[aria-current="true"] .criterion-card-select')?.focus();
+    else link.current?.focus();
+  };
   useEffect(() => {
     if (problem === null) return;
     setChoosing(false);
-    link.current?.focus();
+    if (block.current?.contains(document.activeElement)) focusLinkOrSelectedCard();
   }, [problem]);
   return (
-    <div className="add-criterion">
+    <div ref={block} className="add-criterion">
       <button ref={link} type="button" className="link-button" disabled={disabledReason !== null} aria-haspopup="menu" aria-expanded={choosing}
               onClick={() => { setProblem(null); setChoosing(!choosing); }}>
         {messages.addCriterion}
       </button>
       {problem !== null && <p className="setting-error" role="alert">{problem}</p>}
       {choosing && (
-        <ModeMenu anchor={link} onChoose={(mode) => void send(() => onAdd(mode))} onClose={() => setChoosing(false)}
+        <ModeMenu anchor={link} onChoose={(mode) => void send(() => onAdd(mode))} onClose={(focusedAnchor) => { setChoosing(false); if (focusedAnchor && link.current?.disabled) focusLinkOrSelectedCard(); }}
                   disabledReason={busy ? messages.addingCriterion : disabledReason} />
       )}
     </div>

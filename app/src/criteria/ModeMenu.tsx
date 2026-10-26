@@ -14,14 +14,17 @@ interface ModeMenuProps {
   anchor: RefObject<HTMLElement | null>;
   /** The engine name of the mode chosen. */
   onChoose: (mode: string) => void;
-  /** Told when the menu closes by itself (Escape, Tab, a press elsewhere, a scroll, a resize); Escape has given the focus back to the anchor. */
-  onClose: () => void;
+  /**
+   * Told when the menu closes by itself (Escape, Tab, a press elsewhere, a scroll, a resize); true when it was Escape, which has tried
+   * to give the focus back to the anchor (it cannot while the anchor is disabled).
+   */
+  onClose: (focusedAnchor: boolean) => void;
   /** Why the modes cannot be chosen now; null when they can. */
   disabledReason: string | null;
 }
 
 export function ModeMenu({ anchor, onChoose, onClose, disabledReason }: ModeMenuProps) {
-  const { place, popup, onMenuKeyDown } = useMenuPopup(anchor, "start", { startOpen: true, onHide: () => onClose() });
+  const { place, popup, onMenuKeyDown } = useMenuPopup(anchor, "start", { startOpen: true, onHide: onClose });
   const reasonId = useId();
   return (
     <div ref={popup} className="action-menu-popup mode-menu" style={place ?? undefined}>
