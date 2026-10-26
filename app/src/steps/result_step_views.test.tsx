@@ -383,6 +383,29 @@ test("a failed run: the message, a link to the setting it names, and the Details
   expect(rendered.container.querySelector("details")!.textContent).toContain("Error type: ConfigError");
 });
 
+test("a failed run of another criterion names it for its own settings, not for a shared one", () => {
+  const failed = runReducer(initialRunState(["preprocessing"]), {
+    type: "run_failed", error_type: "ConfigError", message: "invalid", field_errors: [{ field: "voxel_size", message: "too small" }],
+  });
+  const ofCriterion2 = (field: string) => ({ ...failed, failure: { ...failed.failure!, criterion: "2", field_errors: [{ field, message: "too small" }] } });
+  const onGoToSetting = vi.fn();
+  const view = (field: string) => (
+    <RunProgress runs={runs({ serial: 1, project: "p", origin: "carving_run_analysis", runId: "r", state: ofCriterion2(field), refusal: null })}
+                 project="p" origin="carving_run_analysis" mode="time-based" onGoToSetting={onGoToSetting} shownCriterionId="1"
+                 criterionNames={{ 1: "Facades", 2: "Windows" }} criterionKeys={new Set(["max_slope_deg"])} />
+  );
+  const linkText = () => [...rendered!.container.querySelectorAll("button")].map((button) => button.textContent).find((text) => text!.startsWith("Go to"));
+  rendered = renderForTest(view("voxel_size"));                   // a shared setting: the project's, not criterion 2's
+  expect(rendered.container.textContent).toContain("The run stopped on an error.");
+  expect(rendered.container.textContent).not.toContain("Windows");
+  expect(linkText()).toBe("Go to voxel size");
+  click([...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Go to voxel size")!);
+  expect(onGoToSetting).toHaveBeenCalledWith("voxel_size", null);
+  rendered.rerender(view("max_slope_deg"));
+  expect(rendered.container.textContent).toContain("The run stopped on an error in the settings of Windows.");
+  expect(linkText()).toBe("Go to steepest step between columns of Windows");
+});
+
 test("Cancelled, a stage chain error, the warnings of a run and Results are up to date", () => {
   const cancelled = runReducer(runReducer(initialRunState(["preprocessing"]), { type: "issue", stage: "preprocessing", criterion: null, code: "w", message: "1 panel skipped" }),
     { type: "run_cancelled" });

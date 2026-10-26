@@ -70,24 +70,32 @@ interface EndedRunContext {
   onGoToSetting: GoToSetting;
   shownCriterionId?: string;
   criterionNames?: Readonly<Record<string, string>>;
+  criterionKeys?: ReadonlySet<string>;
 }
 
-function RunFailure({ record, mode, onGoToSetting, shownCriterionId, criterionNames }: EndedRunContext & { record: RunRecord }) {
+function RunFailure({ record, mode, onGoToSetting, shownCriterionId, criterionNames, criterionKeys }: EndedRunContext & { record: RunRecord }) {
   const failure = record.state.failure!;
   if (failure.error_type === STAGE_CHAIN_ERROR) return <p className="run-outcome run-outcome-error">{messages.resultsOutOfDate}</p>;
   const namedSettings = [...new Set(failure.field_errors.map((fieldError) => (fieldError.field === null ? null : presentedSettingOf(fieldError.field)))
     .filter((name): name is string => name !== null))];
-  // The settings of a criterion other than the one shown are said with its name, so they are not taken for the shown one's.
+  // The settings of a criterion other than the one shown are said with its name, so they are not taken for the shown one's; a
+  // shared setting (not a criterion key) is the project's, and is said without it.
   const criterion = failure.criterion ?? null;
-  const otherName = criterion !== null && criterion !== shownCriterionId ? criterionNames?.[criterion] ?? null : null;
+  const isCriterionSetting = (name: string) => criterionKeys?.has(name) ?? true;
+  const aboutCriterion = namedSettings.length === 0 || namedSettings.some(isCriterionSetting);
+  const otherName = criterion !== null && criterion !== shownCriterionId && aboutCriterion ? criterionNames?.[criterion] ?? null : null;
   return (
     <div className="run-outcome run-outcome-error">
       <p>{otherName === null ? messages.runFailed : messages.runFailedForCriterion(otherName)}</p>
-      {namedSettings.map((name) => (
-        <button key={name} type="button" className="link-button" onClick={() => onGoToSetting(name, criterion)}>
-          {otherName === null ? messages.goToSetting(settingView(name, mode).label) : messages.goToSettingOf(settingView(name, mode).label, otherName)}
-        </button>
-      ))}
+      {namedSettings.map((name) => {
+        const label = settingView(name, mode).label;
+        const ofCriterion = isCriterionSetting(name);
+        return (
+          <button key={name} type="button" className="link-button" onClick={() => onGoToSetting(name, ofCriterion ? criterion : null)}>
+            {otherName === null || !ofCriterion ? messages.goToSetting(label) : messages.goToSettingOf(label, otherName)}
+          </button>
+        );
+      })}
       <details className="run-failure-details">
         <summary>{messages.details}</summary>
         <p>{messages.errorType(failure.error_type)}</p>
@@ -124,6 +132,8 @@ interface RunProgressProps {
   onGoToSetting: GoToSetting;
   /** The criterion whose panel is shown: a failure of another criterion's settings is said with that one's name. */
   shownCriterionId?: string;
+  /** The settings that belong to a criterion: a failure on any other setting (a shared one) names no criterion; absent: every one does. */
+  criterionKeys?: ReadonlySet<string>;
   /**
    * The names of the criteria, by id, which label each criterion's stages; absent with one criterion, whose stages keep their
    * names alone.
@@ -131,7 +141,7 @@ interface RunProgressProps {
   criterionNames?: Readonly<Record<string, string>>;
 }
 
-export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames, shownCriterionId }: RunProgressProps) {
+export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames, shownCriterionId, criterionKeys }: RunProgressProps) {
   const record = runs.current;
   const isThisButton = record !== null && record.project === project && record.origin === origin;
   const notice = runs.notice !== null && runs.notice.project === project && runs.notice.origin === origin ? runs.notice.message : null;
@@ -143,7 +153,8 @@ export function RunProgress({ runs, project, origin, mode, onGoToSetting, criter
         <>
           {record.state.final === null && record.refusal === null
             ? <StageList state={record.state} onCancel={runs.cancel} criterionNameOf={(id) => criterionNames?.[id] ?? null} />
-            : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId} criterionNames={criterionNames} />}
+            : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId} criterionNames={criterionNames}
+                        criterionKeys={criterionKeys} />}
           {record.state.issues.length > 0 && (
             <div className="run-issues">
               <p className="run-issues-title">{messages.warningsTitle}</p>

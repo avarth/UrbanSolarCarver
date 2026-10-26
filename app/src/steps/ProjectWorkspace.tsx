@@ -373,7 +373,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { selection, active, ownStages } = workspaceCriteria;
   const resultSteps = useResultSteps({
     ...workspaceCriteria.ofResults,
-    token, project: project.name, criterionId: resultsCriterionId,
+    token, project: project.name, criterionId: resultsCriterionId, criterionKeys,
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker: workspaceCriteria.runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep,
     goToSetting: workspaceCriteria.goToSetting, onServiceProblem,

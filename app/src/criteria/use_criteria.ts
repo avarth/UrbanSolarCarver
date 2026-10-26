@@ -21,7 +21,7 @@ export interface CriteriaHook {
   setBypassed: (id: string, on: boolean) => Promise<CriterionEntry>;
   /** Adds a copy at the end and selects it. */
   duplicate: (id: string) => Promise<CriterionEntry>;
-  /** Removes the criterion; when it was selected, the next card (else the previous one) is selected. */
+  /** Removes the criterion; when it was selected, the next card (else the previous one) is selected. The one left is on, as stored. */
   remove: (id: string) => Promise<void>;
   /** Puts the criteria in the order of *ids* (every id once). */
   reorder: (ids: string[]) => Promise<void>;
@@ -71,7 +71,9 @@ export function useCriteria(token: string, project: ProjectDetail): CriteriaHook
     remove: async (id) => {
       await deleteCriterion(token, project.name, id);
       const { criteria, selectedId } = latest.current;
-      commit({ criteria: criteria.filter((criterion) => criterion.id !== id), selectedId: selectionAfterRemoving(criteria, id, selectedId) });
+      const left = criteria.filter((criterion) => criterion.id !== id);
+      // The service turns on the one criterion left (a project of one criterion has no bypass switch).
+      commit({ criteria: left.length === 1 ? [{ ...left[0], bypassed: false }] : left, selectedId: selectionAfterRemoving(criteria, id, selectedId) });
     },
     reorder: async (ids) => {
       commit({ ...latest.current, criteria: await reorderCriteria(token, project.name, ids) });

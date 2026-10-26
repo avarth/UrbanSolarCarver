@@ -149,6 +149,8 @@ export interface ResultStepsContext {
   chainOrder?: readonly string[];
   /** The criteria's names by id, which label their stages in a run's progress; absent with one criterion. */
   criterionNames?: Readonly<Record<string, string>>;
+  /** The settings that belong to a criterion (GET criterion-keys): a run failing on another, a shared one, names no criterion. */
+  criterionKeys?: ReadonlySet<string>;
   /**
    * Another criterion that is on and whose analysis is not current (and whether it protects nothing): a carving change of the
    * selected one is then saved but runs nothing, since the run would trace that criterion first, which only Run analysis starts
@@ -345,7 +347,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
 
   const feedback = (origin: RunOrigin) => (
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} criterionNames={context.criterionNames}
-                 shownCriterionId={context.criterionId} />
+                 shownCriterionId={context.criterionId} criterionKeys={context.criterionKeys} />
   );
 
   const carvingUpdateRunning = runs.activeRun?.project === project && runs.activeRun.origin === "carving_update";

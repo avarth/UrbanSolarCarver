@@ -137,6 +137,18 @@ test("a project left with one bypassed criterion offers Turn on in its panel, wh
   expectNoProblemShown();
 });
 
+test("bypass the first of two criteria, delete the second: the one left is on, with no Turn on, and Run analysis can start", async () => {
+  await openChain([FACADES, WINDOWS]);
+  await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
+  await settle();
+  await deleteCriterion("Spring sun on windows");
+  expect(cards()).toEqual([]);
+  expect(service.entries.map((entry) => [entry.id, entry.bypassed])).toEqual([["1", false]]);     // as the service stores it
+  expect(buttonIn(panel(), "Turn on")).toBeUndefined();
+  expect(container().textContent).not.toContain("Turn on a criterion");
+  expect(buttonIn(panel(), "Run analysis").disabled).toBe(false);
+});
+
 test("Add another criterion adds one of the chosen mode and selects it", async () => {
   await openChain([FACADES]);
   expect(cards()).toEqual([]);
