@@ -9,6 +9,7 @@ Importing this module does not import torch (the engine is imported when the fir
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import logging
 import os
@@ -17,7 +18,7 @@ import threading
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, get_args
+from typing import Callable, Union, get_args
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, FastAPI, File, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
@@ -72,7 +73,12 @@ _CRITERION_RESPONSES = {
     404: {"model": ErrorDetailReply, "description": "There is no such criterion."},
     **_ERROR_RESPONSES,
 }
+_CONFIG_OR_MESSAGE_ERROR = {
+    "model": Union[ConfigErrorReply, ErrorDetailReply],
+    "description": "Settings that do not validate (the fields), or a request that cannot be served as sent (a message).",
+}
 CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first one when omitted."
+RESULTS_CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the last criterion that is on when omitted."
 
 
 class SecurityMiddleware:
@@ -267,6 +273,14 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         if active_project is not None and _same_project(active_project, name):
             raise RunConflict(active_project)
 
+    @contextlib.contextmanager
+    def writable_project(name: str):
+        """Hold the project's lock and refuse (409) while a run of it is active; yields the store the change goes through."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            refuse_while_running(name)
+            yield store
+
     def project_detail(store: ProjectStore, name: str, criterion_id: str | None = None) -> ProjectDetail:
         """The project as the browser opens it, with the settings of the criterion *criterion_id* (default: the first); 404 for an unknown one."""
         with store.project_lock(name):
@@ -458,13 +472,11 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             carve_further(store, name)
             return project_detail(store, name)
 
-    @router.put("/projects/{name}/config", responses={404: _CRITERION_RESPONSES[404], 409: _ERROR_RESPONSES[409], 422: {"model": ConfigErrorReply}})
+    @router.put("/projects/{name}/config", responses={404: _CRITERION_RESPONSES[404], 409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
     def save_config(name: str, request: ConfigValuesRequest,
                     criterion: str | None = Query(None, description=CRITERION_QUERY_DESCRIPTION)) -> ConfigReply:
         """Save the settings: the shared ones, and the criterion ones to the criterion *criterion* (the only criterion when there is one)."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             return store.write_config_from_values(name, request.values, criterion)
 
     @router.get("/criterion-keys")
@@ -472,15 +484,13 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """The names of the settings that belong to a criterion; every other setting is shared by the criteria."""
         return sorted(CRITERION_KEYS)
 
-    @router.post("/projects/{name}/criteria", responses={409: _ERROR_RESPONSES[409], 422: {"model": ConfigErrorReply}})
+    @router.post("/projects/{name}/criteria", responses={409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
     def add_criterion(name: str, request: CreateCriterionRequest) -> CriterionEntry:
         """Add a criterion of a mode at the end of the chain, with the mode's starting values and no test surfaces."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             return store.add_criterion(name, request.mode, request.name)
 
-    @router.patch("/projects/{name}/criteria/{criterion_id}", responses={**_CRITERION_RESPONSES, 422: {"model": ConfigErrorReply}})
+    @router.patch("/projects/{name}/criteria/{criterion_id}", responses={**_CRITERION_RESPONSES, 422: _CONFIG_OR_MESSAGE_ERROR})
     def update_criterion(name: str, criterion_id: str, request: UpdateCriterionRequest) -> CriterionEntry:
         """Change the name, colour, bypass or settings of a criterion; what is not sent stays.
 
@@ -488,9 +498,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         among them are ignored: they are saved with PUT /config. A bad name or colour is 422 with a message; settings
         that do not validate are 422 with the fields. Nothing changes then.
         """
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             return store.update_criterion(name, criterion_id, name=request.name, colour=request.colour,
                                           bypassed=request.bypassed, values=request.values)
 
@@ -498,52 +506,40 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                    responses={404: _CRITERION_RESPONSES[404], 409: _ERROR_RESPONSES[409]})
     def delete_criterion(name: str, criterion_id: str) -> Response:
         """Remove a criterion with its results and its joined test surface file; its id is not used again."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             store.delete_criterion(name, criterion_id)
         return Response(status_code=204)
 
     @router.post("/projects/{name}/criteria/{criterion_id}/duplicate", responses=_CRITERION_RESPONSES)
     def duplicate_criterion(name: str, criterion_id: str) -> CriterionEntry:
         """Add a copy of a criterion, with its settings and test surfaces, at the end of the chain."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             return store.duplicate_criterion(name, criterion_id)
 
     @router.put("/projects/{name}/criteria/order", responses={409: _ERROR_RESPONSES[409], 422: _ERROR_RESPONSES[422]})
     def reorder_criteria(name: str, request: CriterionOrderRequest) -> list[CriterionEntry]:
         """Put the criteria in the order of *ids*, which names each criterion once (else 422)."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             store.reorder_criteria(name, request.ids)
             return store.criteria(name)
 
     @router.post("/projects/{name}/criteria/{criterion_id}/test-surfaces", responses=_CRITERION_RESPONSES)
     def add_criterion_test_surface(name: str, criterion_id: str, file: UploadFile = File(...)) -> CriterionEntry:
         """Add an uploaded test surface file to a criterion (multipart, as the inputs upload)."""
-        store = folder_in_use.store
         data = file.file.read()
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             return store.add_criterion_test_surface(name, criterion_id, file.filename or "", data)
 
     @router.put("/projects/{name}/criteria/{criterion_id}/test-surfaces/{file_name}", responses=_CRITERION_RESPONSES)
     def use_test_surface(name: str, criterion_id: str, file_name: str) -> CriterionEntry:
         """Let a criterion use a test surface file that is stored already (404 when it is not)."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             return store.use_test_surface(name, criterion_id, file_name)
 
     @router.delete("/projects/{name}/criteria/{criterion_id}/test-surfaces/{file_name}", responses=_CRITERION_RESPONSES)
     def remove_criterion_test_surface(name: str, criterion_id: str, file_name: str) -> CriterionEntry:
         """Take a test surface file out of a criterion; the stored file is deleted when no criterion uses it any more."""
-        store = folder_in_use.store
-        with store.project_lock(name):
-            refuse_while_running(name)
+        with writable_project(name) as store:
             return store.remove_criterion_test_surface(name, criterion_id, file_name)
 
     @router.post("/projects/{name}/runs", responses={409: _ERROR_RESPONSES[409], 422: {"model": MissingInputsReply}})
@@ -587,12 +583,12 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         return build_run_summary(folder_in_use.store, name)
 
     @router.get("/projects/{name}/run/sky-patches")
-    def run_sky_patches(name: str, criterion: str | None = Query(None, description=CRITERION_QUERY_DESCRIPTION)) -> SkyDome:
+    def run_sky_patches(name: str, criterion: str | None = Query(None, description=RESULTS_CRITERION_QUERY_DESCRIPTION)) -> SkyDome:
         """The sky patches of a criterion's run (default: the last criterion that is on)."""
         return build_sky_dome(folder_in_use.store, name, criterion)
 
     @router.get("/projects/{name}/run/score-points", response_class=Response, responses={200: {"content": {"application/octet-stream": {}}}})
-    def run_score_points(name: str, criterion: str | None = Query(None, description=CRITERION_QUERY_DESCRIPTION)) -> Response:
+    def run_score_points(name: str, criterion: str | None = Query(None, description=RESULTS_CRITERION_QUERY_DESCRIPTION)) -> Response:
         """The score layer of a criterion's run (default: the last criterion that is on)."""
         return Response(build_score_points(folder_in_use.store, name, criterion), media_type="application/octet-stream", headers=NO_CACHE)
 

@@ -1463,6 +1463,8 @@ def test_a_criterion_is_added_changed_duplicated_ordered_and_deleted(client_with
     assert added["id"] == "2" and added["name"] == "Winter sun" and added["settings"]["mode"] == "time-based" and added["test_surface_files"] == []
     patched = client.patch("/api/projects/p/criteria/2", json={"name": "Second", "colour": "#112233", "bypassed": True})
     assert patched.status_code == 200 and (patched.json()["name"], patched.json()["colour"], patched.json()["bypassed"]) == ("Second", "#112233", True)
+    stored = {entry["id"]: entry for entry in criteria_of(client)}["2"]
+    assert (stored["name"], stored["colour"], stored["bypassed"]) == ("Second", "#112233", True)
     patched = client.patch("/api/projects/p/criteria/2", json={"values": {"mode": "daylight"}})
     assert patched.status_code == 200 and patched.json()["settings"]["mode"] == "daylight" and patched.json()["name"] == "Second"
     duplicated = client.post("/api/projects/p/criteria/2/duplicate")
@@ -1506,6 +1508,22 @@ def test_test_surfaces_of_a_criterion_are_uploaded_used_and_removed(client_with_
     assert client.delete("/api/projects/p/criteria/2/test-surfaces/other.ply").status_code == 404
     assert [entry["test_surface_files"] for entry in criteria_of(client)] == [["surface.ply"], ["surface.ply"]]
     assert upload_to_criterion(client, "2", ("notes.txt", b"hello")).status_code == 422
+
+
+def test_test_surface_names_are_cleaned_and_a_name_with_a_path_part_reaches_no_other_file(client_with_two_criteria, projects_folder):
+    client = client_with_two_criteria
+    spaced = upload_to_criterion(client, "2", ("my surface.ply", OTHER_SURFACE[1]))
+    assert spaced.status_code == 200 and spaced.json()["test_surface_files"] == ["mysurface.ply"]    # letters, digits, - _ . are kept
+    path_part = upload_to_criterion(client, "2", ("../..\\sneaky.ply", box_bytes([0, 0, 0], extents=(7, 7, 0.1))))
+    assert path_part.status_code == 200 and "sneaky.ply" in path_part.json()["test_surface_files"]
+    assert sorted(path.name for path in (projects_folder / "p" / "inputs" / "test_surfaces").iterdir()) == ["mysurface.ply", "sneaky.ply", "surface.ply"]
+    assert upload_to_criterion(client, "2", ("...", SURFACE[1])).status_code == 422
+    unknown = client.put("/api/projects/p/criteria/1/test-surfaces/my%20surface.ply")      # the stored name has no space
+    assert unknown.status_code == 404 and "my surface.ply" in unknown.json()["detail"]
+    assert client.put("/api/projects/p/criteria/1/test-surfaces/mysurface.ply").status_code == 200
+    project_json = (projects_folder / "p" / "project.json").read_text(encoding="utf-8")
+    assert client.delete("/api/projects/p/criteria/2/test-surfaces/..%2Fproject.json").status_code in (404, 405)
+    assert (projects_folder / "p" / "project.json").read_text(encoding="utf-8") == project_json
 
 
 def test_the_settings_of_a_criterion_are_saved_and_opened_by_the_criterion_parameter(client_with_two_criteria):
@@ -1573,7 +1591,8 @@ def test_criteria_routes_are_409_during_a_run_of_the_project(client_with_blockin
     ]
     for method, url, arguments in requests:
         reply = getattr(client, method)(url, **arguments)
-        assert reply.status_code == 409 and "p" in reply.json()["detail"], (method, url, reply.text)
+        assert reply.status_code == 409, (method, url, reply.text)
+        assert reply.json()["detail"] == "A run of project 'p' is active. Wait for it to finish or cancel it.", (method, url)
     create_project_with_inputs(client, "other")         # another project is free to change
     assert client.post("/api/projects/other/criteria", json={"mode": "daylight"}).status_code == 200
 
@@ -1594,3 +1613,8 @@ def test_the_criteria_routes_need_the_token_and_the_openapi_document_describes_t
     assert "get" in paths["/api/projects/{name}/run/carved-by-criterion"]
     assert "criterion" in {parameter["name"] for parameter in paths["/api/projects/{name}/config"]["put"]["parameters"]}
     assert {"criteria", "criterion_status"} <= set(document["components"]["schemas"]["ProjectDetail"]["properties"])
+    for path, method in (("/api/projects/{name}/criteria", "post"), ("/api/projects/{name}/criteria/{criterion_id}", "patch")):
+        refused = paths[path][method]["responses"]["422"]["content"]["application/json"]["schema"]
+        assert {option["$ref"].rsplit("/", 1)[-1] for option in refused["anyOf"]} == {"ConfigErrorReply", "ErrorDetailReply"}
+    score_points = next(parameter for parameter in paths["/api/projects/{name}/run/score-points"]["get"]["parameters"] if parameter["name"] == "criterion")
+    assert "last criterion that is on" in score_points["description"]

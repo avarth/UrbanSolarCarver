@@ -2117,13 +2117,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
-            /** @description Unprocessable Entity */
+            /** @description Settings that do not validate (the fields), or a request that cannot be served as sent (a message). */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigErrorReply"];
+                    "application/json": components["schemas"]["ConfigErrorReply"] | components["schemas"]["ErrorDetailReply"];
                 };
             };
         };
@@ -2181,13 +2181,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
-            /** @description Unprocessable Entity */
+            /** @description Settings that do not validate (the fields), or a request that cannot be served as sent (a message). */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigErrorReply"];
+                    "application/json": components["schemas"]["ConfigErrorReply"] | components["schemas"]["ErrorDetailReply"];
                 };
             };
         };
@@ -2283,13 +2283,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
-            /** @description Unprocessable Entity */
+            /** @description Settings that do not validate (the fields), or a request that cannot be served as sent (a message). */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ConfigErrorReply"];
+                    "application/json": components["schemas"]["ConfigErrorReply"] | components["schemas"]["ErrorDetailReply"];
                 };
             };
         };
@@ -2653,7 +2653,7 @@ export interface operations {
     run_sky_patches: {
         parameters: {
             query?: {
-                /** @description The id of a criterion; the first one when omitted. */
+                /** @description The id of a criterion; the last criterion that is on when omitted. */
                 criterion?: string | null;
             };
             header?: never;
@@ -2687,7 +2687,7 @@ export interface operations {
     run_score_points: {
         parameters: {
             query?: {
-                /** @description The id of a criterion; the first one when omitted. */
+                /** @description The id of a criterion; the last criterion that is on when omitted. */
                 criterion?: string | null;
             };
             header?: never;
