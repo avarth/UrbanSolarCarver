@@ -23,7 +23,7 @@ exp  = exporting(thr, cfg, Path("outputs/exporting"))
 
 ## run_pipeline
 
-`run_pipeline(config, out_dir, produce=("exporting",), start_from="preprocessing", context=None)` runs `start_from` and every later stage on the path to the stages in `produce`. Each stage writes into `<out_dir>/<stage>`; a stage before `start_from` is not run, and the next stage reads its output from its folder in `out_dir`.
+`run_pipeline(config, out_dir, produce=("exporting",), start_from="preprocessing", context=None, after=None)` runs `start_from` and every later stage on the path to the stages in `produce`. Each stage writes into `<out_dir>/<stage>`; a stage before `start_from` is not run, and the next stage reads its output from its folder in `out_dir`.
 
 ```python
 # Floor plates as well as the mesh: preprocessing and thresholding run once
@@ -36,7 +36,7 @@ result = run_pipeline(cfg, "outputs", start_from="thresholding")
 assert result.preprocessing is None   # it did not run in this call
 ```
 
-The `PipelineResult` has one attribute per stage (`preprocessing`, `thresholding`, `exporting`, `massing`): the Result of a stage that ran in this call, None for the others. Its `issues` are the conditions noticed during the call (see [Issues and run context](#issues-and-run-context)). A `start_from` stage that is not on the path to a produced stage raises `ValueError`; a missing or stale upstream output raises `StageChainError`.
+The `PipelineResult` has one attribute per stage (`preprocessing`, `thresholding`, `exporting`, `massing`): the Result of a stage that ran in this call, None for the others. Its `issues` are the conditions noticed during the call (see [Issues and run context](#issues-and-run-context)). A `start_from` stage that is not on the path to a produced stage raises `ValueError`; a missing or stale upstream output raises `StageChainError`. `after` is given to the thresholding stage as its `after` (see [Thresholding](#thresholding)).
 
 ::: urbansolarcarver.api
     options:

@@ -29,7 +29,7 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError
 
 from .chain_config import ChainConfig, is_chain_file, load_chain
-from .errors import ConfigError, MalformedEngineRequest
+from .errors import ConfigError, ConfigFieldError, MalformedEngineRequest
 from .load_config import (
     build_config_from_mode_starting_values, load_config, parse_overrides, user_config,
 )
@@ -64,7 +64,11 @@ class RunRequest(_EngineRequest):
     ignored otherwise) lists the criterion ids to trace again when starting
     from preprocessing; the others reuse their existing preprocessing.
     *threshold_from_criterion* (chain only, with *trace_criteria*) names a criterion
-    to threshold again even though it comes before the first traced one."""
+    to threshold again even though it comes before the first traced one.
+    *after* (a config without ``criteria:``, a run that starts at thresholding) is the
+    previous criterion's thresholding folder or manifest: thresholding then decides only
+    among the voxels that criterion kept.  A chain file or an earlier ``start_from``
+    refuses it."""
     cmd: Literal["run"]
     produce: List[str]
     run_folder: str
@@ -73,6 +77,7 @@ class RunRequest(_EngineRequest):
     overrides: Overrides = Field(default_factory=list)
     trace_criteria: Optional[List[str]] = None
     threshold_from_criterion: Optional[str] = None
+    after: Optional[str] = None
 
 
 class StageRequest(_EngineRequest):
@@ -248,9 +253,12 @@ def handle_engine_request(request: EngineRequest, session, context: Optional[Run
             # The config is built inside the run context, so the issues its
             # validators report reach the reply.
             if isinstance(request, RunRequest) and request.config is not None and is_chain_file(request.config):
+                _refuse_after(request, "after cannot be used with a config that has criteria: the chain links its criteria itself.")
                 return _run_chain(request, load_chain(request.config, request.overrides), context)
             config = config_for_engine_request(request)
             if isinstance(request, RunRequest):
+                if request.start_from != "thresholding":
+                    _refuse_after(request, f"after needs a run that starts at thresholding, but this run starts at {request.start_from}.")
                 return _run(request, config, context)
             if isinstance(request, RunPipelineRequest):
                 return _run_pipeline(request, config, context)
@@ -264,10 +272,16 @@ def _issue_replies(context: RunContext) -> List[IssueReply]:
             for issue in context.issues]
 
 
+def _refuse_after(request: RunRequest, message: str) -> None:
+    """Raise ConfigError with *message* when *request* carries ``after``."""
+    if request.after is not None:
+        raise ConfigError(message, [ConfigFieldError("after", message)])
+
+
 def _run(request: RunRequest, config: user_config, context: RunContext) -> RunReply:
     from . import api
     result = api.run_pipeline(config, request.run_folder, produce=request.produce,
-                              start_from=request.start_from, context=context)
+                              start_from=request.start_from, context=context, after=request.after)
     ran = [stage for stage in PIPELINE_STAGES if getattr(result, stage) is not None]
     return _run_reply({stage: stage_folder(request.run_folder, stage) for stage in ran}, result, context)
 

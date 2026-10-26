@@ -343,6 +343,52 @@ def test_after_is_a_key_of_the_stage_request():
     assert parse_engine_request({"cmd": "thresholding", "config": "c.yaml", "from": "p"}).after is None
 
 
+def test_a_run_request_thresholds_after_a_previous_run(tmp_path, tmp_mesh_files, monkeypatch):
+    from types import SimpleNamespace
+    from urbansolarcarver import api
+    cfg_path = _write_daylight_yaml(tmp_path, *tmp_mesh_files)
+    seen = []
+
+    def fake_thresholding(upstream, config, out_dir, after=None):
+        seen.append((upstream, after))
+        return SimpleNamespace(out_dir=Path(out_dir))
+
+    monkeypatch.setattr(api, "thresholding", fake_thresholding)
+    for after in ("earlier/thresholding", None):
+        message = {"cmd": "run", "produce": ["thresholding"], "start_from": "thresholding", "config": str(cfg_path),
+                   "run_folder": str(tmp_path / "run")}
+        if after is not None:
+            message["after"] = after
+        reply = answer_engine_message(message, _CountingSession())
+        assert reply["status"] == "ok", reply
+        assert seen[-1] == (tmp_path / "run" / "preprocessing", after)
+
+
+@pytest.mark.parametrize("start_from", ["preprocessing", "exporting"])
+def test_a_run_request_with_after_refuses_to_start_before_thresholding(tmp_path, tmp_mesh_files, start_from):
+    cfg_path = _write_daylight_yaml(tmp_path, *tmp_mesh_files)
+    reply = answer_engine_message({"cmd": "run", "produce": ["exporting"], "start_from": start_from, "after": "earlier/thresholding",
+                                   "config": str(cfg_path), "run_folder": str(tmp_path / "run")}, _CountingSession())
+    assert reply["status"] == "error" and reply["error_type"] == "ConfigError", reply
+    assert "after" in reply["error"] and "thresholding" in reply["error"]
+    assert not (tmp_path / "run").exists()
+
+
+def test_a_run_request_with_after_refuses_a_chain_file(tmp_path):
+    chain = tmp_path / "chain.yaml"
+    chain.write_text(yaml.safe_dump({"criteria": [{}]}))
+    reply = answer_engine_message({"cmd": "run", "produce": ["thresholding"], "start_from": "thresholding", "after": "earlier/thresholding",
+                                   "config": str(chain), "run_folder": str(tmp_path / "run")}, _CountingSession())
+    assert reply["status"] == "error" and reply["error_type"] == "ConfigError", reply
+    assert "after" in reply["error"] and "criteria" in reply["error"]
+
+
+def test_after_is_a_key_of_the_run_request():
+    message = {"cmd": "run", "produce": ["thresholding"], "run_folder": "r", "start_from": "thresholding"}
+    assert parse_engine_request({**message, "after": "a"}).after == "a"
+    assert parse_engine_request(message).after is None
+
+
 @pytest.mark.slow
 def test_a_run_request_tracing_no_criterion_of_the_chain_gets_an_error_reply(tmp_path):
     from _chain_scene import chain_scene, daylight_on_east, daylight_on_south

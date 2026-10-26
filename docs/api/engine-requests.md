@@ -20,6 +20,7 @@
 | `overrides` | Optional list of `key=value` strings, or a mapping |
 | `trace_criteria` | Chain files only: list of criterion ids to trace again when starting from `preprocessing`; the others reuse their existing preprocessing. Default: all |
 | `threshold_from_criterion` | Chain files only, with `trace_criteria`: the id of a criterion to threshold again although it comes before the first traced one; its preprocessing is read as it is. Default: thresholding starts at the first traced criterion |
+| `after` | Configs without `criteria:` only, with `start_from` `thresholding`: the previous criterion's thresholding folder or `manifest.json`, passed to thresholding as `after`. A chain file, or a run that starts anywhere else, gets a `ConfigError` reply. Default: none |
 
 When `config` is a chain file (a `criteria:` list), `run` runs the chain through `run_chain` and `overrides` set the shared settings only; `run_folder` then holds `criteria/<id>/...`, `exporting` and `massing` (see [Criteria](../criteria.md)). The reply's `stage_folders` and `manifest` point at the last criterion's folders and at the chain's exporting and massing. With `trace_criteria`, every criterion from the first traced one on is thresholded again; the ones before it keep their thresholding, unless `threshold_from_criterion` names an earlier one, from which thresholding then starts.
 

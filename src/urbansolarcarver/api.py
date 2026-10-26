@@ -47,6 +47,7 @@ def run_pipeline(
     produce: Iterable[str] = ("exporting",),
     start_from: str = "preprocessing",
     context: Optional[RunContext] = None,
+    after: Union[ThresholdingResult, str, Path, None] = None,
 ) -> PipelineResult:
     """Run the stages needed to produce *produce*, one after the other.
 
@@ -71,6 +72,10 @@ def run_pipeline(
     context : RunContext | None
         Progress callback and cancel flag for the run.  Without one, a context
         that also forwards issues to ``warnings`` is created.
+    after : ThresholdingResult | str | Path | None
+        The previous criterion's thresholding result, folder or manifest,
+        given to the thresholding stage as its ``after`` (see
+        :func:`thresholding`).
 
     Returns
     -------
@@ -102,7 +107,7 @@ def run_pipeline(
 
     stage_functions = {
         "preprocessing": lambda upstream, folder: preprocessing(config, folder),
-        "thresholding": lambda upstream, folder: thresholding(upstream, config, folder),
+        "thresholding": lambda upstream, folder: thresholding(upstream, config, folder, after=after),
         "exporting": lambda upstream, folder: exporting(upstream, config, folder),
         "massing": lambda upstream, folder: massing(upstream, config, folder),
     }

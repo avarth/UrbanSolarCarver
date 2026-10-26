@@ -5,6 +5,7 @@ exercised inside Rhino; see docs/grasshopper.md.
 """
 import ast
 import importlib.util
+import json
 import re
 import socket
 import subprocess
@@ -377,3 +378,60 @@ def test_write_optional_geometry_without_input_writes_nothing(gh, tmp_path):
     assert gh.write_optional_geometry(None, tmp_path, "context") is None
     assert gh.write_optional_geometry([], tmp_path, "context") is None
     assert not any(tmp_path.iterdir())
+
+
+def test_run_stages_sends_after_only_when_given(gh, monkeypatch):
+    sent = []
+    monkeypatch.setattr(gh, "call_daemon",
+                        lambda session, cmd, payload=None, timeout=None: sent.append(payload) or {"status": "ok"})
+    gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None, after="C:/other/thresholding/manifest.json")
+    gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None)
+    gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None, after="")
+    with_after, without, empty = sent
+    assert with_after["after"] == "C:/other/thresholding/manifest.json"
+    assert "after" not in without and "after" not in empty
+
+
+_STUB_GH = """
+from pathlib import Path
+calls = []
+def stage_folder_mismatch(config, manifest_path, stage):
+    return None
+def parse_overrides(value):
+    return {}
+def run_stages(session, config, produce, start_from, extra_overrides=None, after=None):
+    calls.append(after)
+    manifest = Path(config.out_dir) / "manifest.json"
+    manifest.parent.mkdir(parents=True, exist_ok=True)
+    manifest.write_text("{}")
+    return {"stage_folders": {"thresholding": str(config.out_dir)}, "manifest": str(manifest)}
+def show_issues(component, reply):
+    return []
+def read_diagnostics(folder):
+    return {}
+def existing_files(value):
+    return []
+"""
+
+
+@pytest.mark.parametrize("after, expected", [("D:/first/thresholding/manifest.json", "D:/first/thresholding/manifest.json"),
+                                              (None, None), ("", None)])
+def test_threshold_stage_passes_after(tmp_path, monkeypatch, after, expected):
+    (tmp_path / "grasshopper").mkdir()
+    (tmp_path / "grasshopper" / "usc_gh.py").write_text(_STUB_GH, encoding="utf-8")
+    monkeypatch.setitem(sys.modules, "usc_gh", types.ModuleType("usc_gh"))     # restored afterwards; the component loads the stub
+    config = types.SimpleNamespace(session=types.SimpleNamespace(root=str(tmp_path)), out_dir=str(tmp_path / "run"))
+    out = _run_component("USC_ThresholdStage.py", config=config, pre_result=str(tmp_path / "run" / "preprocessing" / "manifest.json"),
+                         threshold_overrides=None, run=True, after=after,
+                         ghenv=types.SimpleNamespace(Component=None))
+    assert sys.modules["usc_gh"].calls == [expected]
+    assert out["thr_result"] == str(tmp_path / "run" / "manifest.json")
+
+
+def test_threshold_stage_after_is_its_last_input():
+    spec = importlib.util.spec_from_file_location("build_ghuser", GH_DIR / "build_ghuser.py")
+    build_ghuser = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(build_ghuser)
+    manifest = json.loads((GH_DIR / "components.json").read_text(encoding="utf-8"))["components"]
+    comp = build_ghuser.describe(GH_DIR / "components" / "USC_ThresholdStage.py", manifest["USC_ThresholdStage.py"])
+    assert [port["name"] for port in comp["inputs"]] == ["config", "pre_result", "threshold_overrides", "run", "after"]

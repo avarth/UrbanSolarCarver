@@ -20,6 +20,10 @@ threshold_overrides : str, optional
     Preprocessing re-run.
 run : bool
     True to execute. False to idle.
+after : str, optional
+    thr_result of the previous criterion's USC Threshold Stage. Chains
+    this criterion after that one: only voxels it kept are decided here.
+    Leave empty for a single criterion.
 
 Outputs
 -------
@@ -49,6 +53,7 @@ try:
     ii[1].Name, ii[1].Description = "pre_result", "Preprocessing manifest path from USC_Preprocess. Contains the score volume and grid metadata."
     ii[2].Name, ii[2].Description = "threshold_overrides", "Override string from USC_Threshold component. Connect it here, not through Config, so that changing the threshold re-runs only this stage and Export, not the slower Preprocessing step."
     ii[3].Name, ii[3].Description = "run", "Boolean toggle. True to execute thresholding."
+    ii[4].Name, ii[4].Description = "after", "Optional. The thr_result of the previous criterion's USC_ThresholdStage. This criterion then decides only among the voxels that one kept, so the two carvings chain. Leave empty for a single criterion."
     oo[0].Name, oo[0].Description = "thr_result", "Path to the thresholding manifest file. Connect to USC_Export's 'thr_result' input."
     oo[1].Name, oo[1].Description = "threshold_value", "The numeric threshold that was actually applied. Useful for understanding what the algorithm chose (especially with 'headtail' or 'carve_fraction')."
     oo[2].Name, oo[2].Description = "diagnostics", "Text summary: threshold method, value, voxel retention percentage and counts, timing."
@@ -104,7 +109,7 @@ else:
         if mismatch:
             raise ValueError(mismatch)
         reply = gh.run_stages(config.session, config, ["thresholding"], "thresholding",
-                              gh.parse_overrides(threshold_overrides))
+                              gh.parse_overrides(threshold_overrides), after=after or None)
         gh.show_issues(ghenv.Component, reply)
         thr_out = Path(reply["stage_folders"]["thresholding"])
         thr_result = reply["manifest"]

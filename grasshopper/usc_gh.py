@@ -94,7 +94,7 @@ def ping(session, timeout=PING_TIMEOUT_S):
         return False
 
 
-def run_stages(session, config, produce, start_from, extra_overrides=None):
+def run_stages(session, config, produce, start_from, extra_overrides=None, after=None):
     """Run pipeline stages through the daemon's ``run`` command and return its reply.
 
     *config* is a USCConfig.  The run folder is ``config.out_dir``; the YAML
@@ -104,7 +104,9 @@ def run_stages(session, config, produce, start_from, extra_overrides=None):
     dict, or None) on top.  *produce* is a list of stage names and
     *start_from* the first stage to run.  The reply's ``stage_folders`` names
     the folder of each stage that ran, and its ``issues`` go to
-    :func:`show_issues`.
+    :func:`show_issues`.  *after* (the thresholding manifest of the previous
+    criterion, or None) is sent when given: thresholding then keeps only
+    voxels that criterion kept.
 
     Without a YAML the configuration needs ``max_volume_path`` and
     ``test_surface_path``.  When the overrides lack them, they default to the
@@ -124,6 +126,8 @@ def run_stages(session, config, produce, start_from, extra_overrides=None):
     }
     if config.yaml_path:
         payload["config"] = str(config.yaml_path)
+    if after:
+        payload["after"] = str(after)
     return call_daemon(session, "run", payload)
 
 
