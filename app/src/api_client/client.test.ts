@@ -1,5 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
+  addCriterion, addCriterionTestSurface, deleteCriterion, duplicateCriterion, getCarvedByCriterion, getCriterionKeys, getCriterionSettings, getSkyPatches,
+  getSunPath, putSharedSettings, removeCriterionTestSurface, reorderCriteria, reuseTestSurface, updateCriterion,
   ApiError, addInput, chooseProjectsFolder, deleteProject, failureTextOf, getHealth, getProjectsFolder, getScorePoints, openProjectFolder, projectDownloadUrl, putConfig,
   readTokenFromLaunchUrl, renameProject, resetProjectToExample, runFileUrl, serviceProblemOf, startRun,
 } from "./client";
@@ -147,4 +149,75 @@ test("the projects folder and the project management requests go to their routes
     "POST /api/projects/Plot%207/open-folder",
   ]);
   expect(JSON.parse(fetchStub.mock.calls[2][1]!.body as string)).toEqual({ new_name: "Plot 8" });
+});
+
+test("the criteria calls go to their routes with their bodies", async () => {
+  const fetchStub = vi.fn(async (_address: string, options?: RequestInit) =>
+    options?.method === "DELETE" && _address.endsWith("/criteria/2") ? new Response(null, { status: 204 }) : new Response("{}"));
+  vi.stubGlobal("fetch", fetchStub);
+  await getCriterionKeys("secret");
+  await addCriterion("secret", "Plot 7", "daylight");
+  await addCriterion("secret", "Plot 7", "daylight", "Facade");
+  await updateCriterion("secret", "Plot 7", "2", { name: "Roofs", bypassed: true });
+  await deleteCriterion("secret", "Plot 7", "2");
+  await duplicateCriterion("secret", "Plot 7", "2");
+  await reorderCriteria("secret", "Plot 7", ["2", "1"]);
+  await reuseTestSurface("secret", "Plot 7", "2", "roofs 1.obj");
+  await removeCriterionTestSurface("secret", "Plot 7", "2", "roofs 1.obj");
+  await putSharedSettings("secret", "Plot 7", { voxel_size: 2 });
+  await getCriterionSettings("secret", "Plot 7", "2");
+  expect(fetchStub.mock.calls.map(([address, options]) => `${options?.method ?? "GET"} ${address}`)).toEqual([
+    "GET /api/criterion-keys",
+    "POST /api/projects/Plot%207/criteria",
+    "POST /api/projects/Plot%207/criteria",
+    "PATCH /api/projects/Plot%207/criteria/2",
+    "DELETE /api/projects/Plot%207/criteria/2",
+    "POST /api/projects/Plot%207/criteria/2/duplicate",
+    "PUT /api/projects/Plot%207/criteria/order",
+    "PUT /api/projects/Plot%207/criteria/2/test-surfaces/roofs%201.obj",
+    "DELETE /api/projects/Plot%207/criteria/2/test-surfaces/roofs%201.obj",
+    "PUT /api/projects/Plot%207/shared-settings",
+    "GET /api/projects/Plot%207/criteria/2/settings",
+  ]);
+  const bodyOf = (index: number) => JSON.parse(fetchStub.mock.calls[index][1]!.body as string);
+  expect(bodyOf(1)).toEqual({ mode: "daylight" });
+  expect(bodyOf(2)).toEqual({ mode: "daylight", name: "Facade" });
+  expect(bodyOf(3)).toEqual({ name: "Roofs", bypassed: true });
+  expect(bodyOf(6)).toEqual({ ids: ["2", "1"] });
+  expect(bodyOf(9)).toEqual({ values: { voxel_size: 2 } });
+});
+
+test("a test surface goes up to a criterion as multipart form data in the field named file", async () => {
+  const fetchStub = answerWith(JSON.stringify({ id: "2" }));
+  await addCriterionTestSurface("secret", "demo", "2", new File(["o"], "roofs.obj"));
+  const [address, options] = fetchStub.mock.calls[0];
+  expect(address).toBe("/api/projects/demo/criteria/2/test-surfaces");
+  expect(options!.method).toBe("POST");
+  expect(((options!.body as FormData).get("file") as File).name).toBe("roofs.obj");
+  expect(new Headers(options!.headers).has("Content-Type")).toBe(false);
+});
+
+test("the results of one criterion are asked for with the criterion query", async () => {
+  const fetchStub = vi.fn(async (_address: string, _options?: RequestInit) => new Response("{}"));
+  vi.stubGlobal("fetch", fetchStub);
+  await getScorePoints("secret", "demo", "2");
+  await getSkyPatches("secret", "demo", "2");
+  await getSunPath("secret", "demo", "2");
+  await getScorePoints("secret", "demo");
+  await getSkyPatches("secret", "demo");
+  await getSunPath("secret", "demo");
+  expect(fetchStub.mock.calls.map(([address]) => address)).toEqual([
+    "/api/projects/demo/run/score-points?criterion=2",
+    "/api/projects/demo/run/sky-patches?criterion=2",
+    "/api/projects/demo/sun-path?criterion=2",
+    "/api/projects/demo/run/score-points",
+    "/api/projects/demo/run/sky-patches",
+    "/api/projects/demo/sun-path",
+  ]);
+});
+
+test("which criterion removed each voxel arrives as bytes", async () => {
+  const fetchStub = answerWith(new Uint8Array([0, 1, 2]));
+  expect(new Uint8Array(await getCarvedByCriterion("secret", "demo"))).toEqual(new Uint8Array([0, 1, 2]));
+  expect(fetchStub.mock.calls[0][0]).toBe("/api/projects/demo/run/carved-by-criterion");
 });

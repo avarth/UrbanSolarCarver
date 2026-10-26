@@ -23,6 +23,10 @@ export type RunSummary = Schemas["RunSummary"];
 export type SkyDome = Schemas["SkyDome"];
 export type ProjectsFolderReply = Schemas["ProjectsFolderReply"];
 export type ProjectsFolderChoiceReply = Schemas["ProjectsFolderChoiceReply"];
+export type CriterionEntry = Schemas["CriterionEntry"];
+export type CriterionCarvingSummary = Schemas["CriterionCarvingSummary"];
+export type ChainSummary = Schemas["ChainSummary"];
+export type CriterionSettingsReply = Schemas["CriterionSettingsReply"];
 
 export const TOKEN_HEADER = "X-USC-Token";
 const TOKEN_QUERY_PARAMETER = "token";
@@ -200,7 +204,62 @@ export const putConfig = (token: string, project: string, values: Record<string,
 export const getStageStatus = (token: string, project: string) =>
   requestJson<StageStatusReply>(token, `${projectPath(project)}/stage-status`);
 
-export const getSunPath = (token: string, project: string) => requestJson<SunPath>(token, `${projectPath(project)}/sun-path`);
+/** The settings that belong to a criterion; every other setting is shared by the criteria. */
+export const getCriterionKeys = (token: string) => requestJson<string[]>(token, "/api/criterion-keys");
+
+/** Saves the settings the criteria share (no mode); the reply holds them as stored. */
+export const putSharedSettings = (token: string, project: string, values: Record<string, unknown>) =>
+  requestJson<ConfigReply>(token, `${projectPath(project)}/shared-settings`, "PUT", { values });
+
+/** The settings of one criterion with the shared ones. */
+export const getCriterionSettings = (token: string, project: string, criterionId: string) =>
+  requestJson<CriterionSettingsReply>(token, `${criterionPath(project, criterionId)}/settings`);
+
+function criterionPath(project: string, criterionId: string): string {
+  return `${projectPath(project)}/criteria/${encodeURIComponent(criterionId)}`;
+}
+
+/** *address* with the query of the criterion whose results are wanted; without one the service picks its default criterion. */
+function forCriterion(address: string, criterionId?: string): string {
+  return criterionId === undefined ? address : `${address}?criterion=${encodeURIComponent(criterionId)}`;
+}
+
+/** Adds a criterion of *mode* at the end of the chain; without a *name* the service names it from the mode. */
+export const addCriterion = (token: string, project: string, mode: string, name?: string) =>
+  requestJson<CriterionEntry>(token, `${projectPath(project)}/criteria`, "POST", name === undefined ? { mode } : { mode, name });
+
+/** Changes what is given of a criterion's name, colour, bypass and settings; what is not given stays. */
+export const updateCriterion = (token: string, project: string, criterionId: string,
+                                changes: { name?: string; colour?: string; bypassed?: boolean; values?: Record<string, unknown> }) =>
+  requestJson<CriterionEntry>(token, criterionPath(project, criterionId), "PATCH", changes);
+
+export async function deleteCriterion(token: string, project: string, criterionId: string): Promise<void> {
+  await send(token, criterionPath(project, criterionId), "DELETE");
+}
+
+export const duplicateCriterion = (token: string, project: string, criterionId: string) =>
+  requestJson<CriterionEntry>(token, `${criterionPath(project, criterionId)}/duplicate`, "POST");
+
+/** Puts the criteria in the order of *ids*, which has each criterion once; the reply is the list in that order. */
+export const reorderCriteria = (token: string, project: string, ids: string[]) =>
+  requestJson<CriterionEntry[]>(token, `${projectPath(project)}/criteria/order`, "PUT", { ids });
+
+export async function addCriterionTestSurface(token: string, project: string, criterionId: string, file: File): Promise<CriterionEntry> {
+  const form = new FormData();
+  form.append("file", file);
+  const reply = await send(token, `${criterionPath(project, criterionId)}/test-surfaces`, "POST", form);    // the browser sets the multipart boundary
+  return reply.json();
+}
+
+/** Lets the criterion use a test surface file that is stored already (not a React hook, whatever the name says). */
+export const reuseTestSurface = (token: string, project: string, criterionId: string, fileName: string) =>
+  requestJson<CriterionEntry>(token, `${criterionPath(project, criterionId)}/test-surfaces/${encodeURIComponent(fileName)}`, "PUT");
+
+export const removeCriterionTestSurface = (token: string, project: string, criterionId: string, fileName: string) =>
+  requestJson<CriterionEntry>(token, `${criterionPath(project, criterionId)}/test-surfaces/${encodeURIComponent(fileName)}`, "DELETE");
+
+export const getSunPath = (token: string, project: string, criterionId?: string) =>
+  requestJson<SunPath>(token, forCriterion(`${projectPath(project)}/sun-path`, criterionId));
 export const getColdPeriod = (token: string, project: string, baseTemperature: number) =>
   requestJson<ColdPeriodReply>(token, `${projectPath(project)}/cold-period?base_temperature=${encodeURIComponent(String(baseTemperature))}`);
 
@@ -212,11 +271,17 @@ export const cancelRun = (token: string, runId: string) =>
   requestJson<CancelRunReply>(token, `/api/runs/${encodeURIComponent(runId)}/cancel`, "POST");
 
 export const getRunSummary = (token: string, project: string) => requestJson<RunSummary>(token, `${projectPath(project)}/run/summary`);
-export const getSkyPatches = (token: string, project: string) => requestJson<SkyDome>(token, `${projectPath(project)}/run/sky-patches`);
+export const getSkyPatches = (token: string, project: string, criterionId?: string) =>
+  requestJson<SkyDome>(token, forCriterion(`${projectPath(project)}/run/sky-patches`, criterionId));
 
-/** The score points of the last run as the service packs them (binary). */
-export async function getScorePoints(token: string, project: string): Promise<ArrayBuffer> {
-  return (await send(token, `${projectPath(project)}/run/score-points`)).arrayBuffer();
+/** The score points of the last run as the service packs them (binary); of the criterion given, else of the last criterion that is on. */
+export async function getScorePoints(token: string, project: string, criterionId?: string): Promise<ArrayBuffer> {
+  return (await send(token, forCriterion(`${projectPath(project)}/run/score-points`, criterionId))).arrayBuffer();
+}
+
+/** Which criterion removed each voxel of the grid, as the service packs it (binary). */
+export async function getCarvedByCriterion(token: string, project: string): Promise<ArrayBuffer> {
+  return (await send(token, `${projectPath(project)}/run/carved-by-criterion`)).arrayBuffer();
 }
 
 /** A result file of the last run as text (the run report). */

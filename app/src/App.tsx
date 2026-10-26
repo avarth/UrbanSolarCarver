@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, failureTextOf, getExamples, getHealth, getModes, getProject, getProjectsFolder,
-  carveFurther, getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, renameProject, resetProjectToExample, serviceProblemOf,
+  carveFurther, getCriterionKeys, getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, renameProject, resetProjectToExample, serviceProblemOf,
   type ExampleInfo, type HealthReply, type ModeInfo, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
 import { messages, type MessagePart } from "./messages";
@@ -107,7 +107,7 @@ export function DeviceStatus({ warmUp }: { warmUp: HealthReply["warm_up"] }) {
 export function App() {
   const [health, setHealth] = useState<HealthReply | null>(null);
   const [problem, setProblem] = useState<ServiceProblem | null>(null);
-  const [setup, setSetup] = useState<{ schema: Record<string, unknown>; modes: ModeInfo[] } | null>(null);
+  const [setup, setSetup] = useState<{ schema: Record<string, unknown>; modes: ModeInfo[]; criterionKeys: ReadonlySet<string> } | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[] | null>(null);
   const [examples, setExamples] = useState<ExampleInfo[] | null>(null);
   // Whether the examples were read since the start screen last showed: the project made from each changes while a project is
@@ -146,7 +146,8 @@ export function App() {
     const stopPolling = pollHealth({
       ask: () => getHealth(accessToken), onReply: setHealth, onProblem: setProblem, askAgainAfter: (reply) => isWarmingUp(reply.warm_up),
     });
-    Promise.all([getSchema(accessToken), getModes(accessToken)]).then(([schema, modes]) => setSetup({ schema, modes })).catch(handleServiceProblem);
+    Promise.all([getSchema(accessToken), getModes(accessToken), getCriterionKeys(accessToken)])
+      .then(([schema, modes, criterionKeys]) => setSetup({ schema, modes, criterionKeys: new Set(criterionKeys) })).catch(handleServiceProblem);
     return () => {
       stopPolling();
       engineCheck.current?.();
@@ -325,7 +326,7 @@ export function App() {
                      onChangeProjectsFolder={changeProjectsFolder} />
       )}
       {openProject !== null && setup !== null && (
-        <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes}
+        <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes} criterionKeys={setup.criterionKeys}
                           warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
                           onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
                           startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}

@@ -137,6 +137,16 @@ export const messages = {
   keptShare: (percentText: string) => `${percentText} kept`,
   notRunYet: "Not run yet",
   outOfDateSummary: "Out of date",
+  // A criterion's card (7.2): the result line of one that is current, else its status
+  criterionResultOfScore: (percentText: string, volumeText: string) => `${percentText} of the score carved, ${volumeText} removed`,
+  criterionResultOfVolume: (percentText: string, volumeText: string) => `${percentText} of the volume carved, ${volumeText} removed`,
+  criterionPercentOnly: (percentText: string, whatIsCarved: "score" | "volume") => `${percentText} of the ${whatIsCarved} carved`,
+  criterionOutOfDate: "Out of date",
+  criterionUpdatesFrom: (criterionName: string) => `Updates from ${criterionName}`,
+  criterionRunning: "Running",
+  criterionBypassed: "Bypassed",
+  criterionNeedsTestSurfaces: "Add test surfaces",
+  criterionNotRunYet: "Not run yet",
   massingSummary: (floorAreaText: string, storeysText: string) => `${floorAreaText}, ${storeysText}`,
   notBuiltYet: "Not built yet",
   // What exists of the two parts of Envelope and massing (R2 5): "Envelope built, massing not built".

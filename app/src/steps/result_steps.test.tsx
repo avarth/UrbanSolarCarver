@@ -28,7 +28,7 @@ afterEach(() => {
 
 test("a stage of the run under way is dimmed until the run has done it; other stages follow their status", () => {
   let state = initialRunState(["exporting", "massing"]);
-  state = runReducer(state, { type: "stage_progress", stage: "massing", done: 0, total: 1 });
+  state = runReducer(state, { type: "stage_progress", stage: "massing", criterion: null, done: 0, total: 1 });
   const stages: Record<PipelineStage, StageState> = { ...ALL_CURRENT, thresholding: "out_of_date", exporting: "missing", massing: "missing" };
   expect(isStageDimmed("exporting", record(state), stages)).toBe(false);       // done in this run, though its status still says missing
   expect(isStageDimmed("massing", record(state), stages)).toBe(true);
@@ -73,7 +73,7 @@ test("results are fetched again stage by stage as a run does them, the rest at i
   let state = initialRunState(["preprocessing", "thresholding"]);
   show(record(state));
   expect(reload).not.toHaveBeenCalled();
-  state = runReducer(state, { type: "stage_progress", stage: "thresholding", done: 0, total: 1 });
+  state = runReducer(state, { type: "stage_progress", stage: "thresholding", criterion: null, done: 0, total: 1 });
   show(record(state));
   expect(reload.mock.calls).toEqual([[["preprocessing"]]]);
   state = runReducer(state, { type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });

@@ -359,7 +359,7 @@ function runs(record: RunRecord | null, notice: RunLoop["notice"] = null) {
 
 test("under the button that started it: the stages with their states, the batches, the elapsed time and Cancel", () => {
   let state = initialRunState(["preprocessing", "thresholding"]);
-  state = runReducer(state, { type: "stage_progress", stage: "preprocessing", done: 3, total: 10 });
+  state = runReducer(state, { type: "stage_progress", stage: "preprocessing", criterion: null, done: 3, total: 10 });
   const loop = runs({ serial: 1, project: "p", origin: "settings_run_analysis", runId: "r", state, refusal: null });
   rendered = renderForTest(<RunProgress runs={loop} project="p" origin="settings_run_analysis" mode="time-based" onGoToSetting={vi.fn()} />);
   expect([...rendered.container.querySelectorAll(".run-stage")].map((row) => row.textContent)).toEqual(["Sun analysis3 of 10 batches", "Carvingwaiting"]);
@@ -386,7 +386,7 @@ test("a failed run: the message, a link to the setting it names, and the Details
 });
 
 test("Cancelled, a stage chain error, the warnings of a run and Results are up to date", () => {
-  const cancelled = runReducer(runReducer(initialRunState(["preprocessing"]), { type: "issue", stage: "preprocessing", code: "w", message: "1 panel skipped" }),
+  const cancelled = runReducer(runReducer(initialRunState(["preprocessing"]), { type: "issue", stage: "preprocessing", criterion: null, code: "w", message: "1 panel skipped" }),
     { type: "run_cancelled" });
   rendered = renderForTest(<RunProgress runs={runs({ serial: 1, project: "p", origin: "build", runId: "r", state: cancelled, refusal: null })} project="p"
                                         origin="build" mode="time-based" onGoToSetting={vi.fn()} />);

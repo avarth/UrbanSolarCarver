@@ -26,8 +26,8 @@ vi.mock("./steps/ProjectWorkspace", async () => {
   const { createConfigSaver } = await import("./settings_form/form_state");
   const { putConfig } = await import("./api_client/client");
   return {
-    ProjectWorkspace: ({ token, project, runs, startSteps, onStepsChange, onSettingsSaverReady }: {
-      token: string; project: ProjectDetail; runs: RunLoop; startSteps?: WorkspaceSteps; onStepsChange?: (steps: WorkspaceSteps) => void;
+    ProjectWorkspace: ({ token, project, runs, criterionKeys, startSteps, onStepsChange, onSettingsSaverReady }: {
+      token: string; project: ProjectDetail; runs: RunLoop; criterionKeys: ReadonlySet<string>; startSteps?: WorkspaceSteps; onStepsChange?: (steps: WorkspaceSteps) => void;
       onSettingsSaverReady?: (saver: { flush: () => Promise<string>; cancel: () => void; waitForInputChanges: () => Promise<void> } | null) => void;
     }) => {
       workspaceSteps.runs = runs;
@@ -43,7 +43,7 @@ vi.mock("./steps/ProjectWorkspace", async () => {
           void saver.flush();
         };
       }, []);
-      return <div className="fake-workspace" data-run-refusal={runs.current?.refusal ?? ""}>{project.modified}</div>;
+      return <div className="fake-workspace" data-run-refusal={runs.current?.refusal ?? ""} data-criterion-keys={[...criterionKeys].join(",")}>{project.modified}</div>;
     },
   };
 });
@@ -178,6 +178,7 @@ class FakeService {
     if (path === "/api/health") return json({ version: "1.4.0", warm_up: { state: "ready", device_name: "GPU" } });
     if (path === "/api/schema") return json({ properties: {} });
     if (path === "/api/modes") return json([]);
+    if (path === "/api/criterion-keys") return json(["mode", "threshold"]);
     if (path === "/api/examples") {
       await this.examplesAnswerWhen;
       return json(this.examples);
@@ -256,6 +257,14 @@ async function openPlot7() {
   await settle();
   expect(topBarMenuButton()!.textContent).toContain("Plot 7");
 }
+
+test("the one-time setup loads the criterion keys and passes them to the open project", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  expect(service.requests).toContain("GET /api/criterion-keys");
+  await openPlot7();
+  expect(page().querySelector(".fake-workspace")!.getAttribute("data-criterion-keys")).toBe("mode,threshold");
+});
 
 test("Try an example opens the project made from that example, and creates none", async () => {
   const service = new FakeService();

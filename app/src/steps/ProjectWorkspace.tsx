@@ -51,6 +51,8 @@ interface ProjectWorkspaceProps {
   project: ProjectDetail;
   schema: Record<string, unknown>;
   modes: ModeInfo[];
+  /** The names of the settings that belong to a criterion (GET criterion-keys); every other setting is shared by the criteria. */
+  criterionKeys: ReadonlySet<string>;
   warmUpState: HealthReply["warm_up"]["state"] | null;
   /** The app's runs, one at a time: while one of this project is active the service refuses uploads, removals and saves. */
   runs: RunLoop;

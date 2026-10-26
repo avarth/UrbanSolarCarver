@@ -35,6 +35,10 @@ export const MODES: ModeInfo[] = [
   { name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum", weight_unit: "", score_unit: "",
     starting_values: {} },
 ];
+/** The settings of SCHEMA that belong to a criterion, as GET criterion-keys names them. */
+export const CRITERION_KEYS: ReadonlySet<string> = new Set([
+  "mode", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "threshold", "carve_above", "carve_above_min_consecutive", "max_slope_deg",
+]);
 export const TRIANGLE_OBJ = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
 export const CARVING = {
   threshold_value: 1.5, voxels_occupied: 1000, voxels_kept: 610, voxels_removed: 390, retention_pct: 61, obstruction_fraction_carved: null,
@@ -176,7 +180,7 @@ export async function openWorkspace(
   vi.stubGlobal("fetch", vi.fn(service.answer));
   function Page() {
     const runs = useRunLoop("token", () => {});
-    return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} warmUpState="ready" runs={runs}
+    return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}
                              onServiceProblem={() => {}} onShowProjects={() => {}} onCarveFurther={async () => null} {...steps} />;
   }
   rendered = renderForTest(<Page />);
