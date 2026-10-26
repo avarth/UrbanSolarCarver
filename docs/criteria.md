@@ -5,9 +5,12 @@ winter sun on a school yard, the PV potential of roofs. Each has its own test su
 own threshold. A **chain** carves them one after the other on one voxel grid, from a single config file.
 
 !!! note "Where this works today"
-    Chains run from the CLI (`usc run`), the Python API (`run_chain`) and the daemon. The browser app and the
-    Grasshopper components follow in later phases. Until then the app keeps **Carve further** in its Export step, which
-    makes the exported envelope the maximum volume of a new project (see [Browser UI](ui.md)).
+    Chains run from the CLI (`usc run`), the Python API (`run_chain`) and the daemon. The local service behind the
+    browser app stores and runs projects with several criteria (see [In the browser app's service](#in-the-browser-apps-service)),
+    and Grasshopper chains two criteria through the `after` input of USC_ThresholdStage (see
+    [In Grasshopper](#in-grasshopper)). The browser app has no list of criteria yet; it follows in a later phase. Until
+    then the app keeps **Carve further** in its Export step, which makes the exported envelope the maximum volume of a
+    new project (see [Browser UI](ui.md)).
 
 ## What a chain is
 
@@ -108,12 +111,22 @@ result.criteria[0].thresholding.retention_pct   # what the first criterion kept
 result.exporting.export_path
 ```
 
-`run_chain(chain, out_dir=None, produce=("exporting",), start_from="preprocessing", context=None)` accepts a path or
-a `ChainConfig` from `load_chain`, and returns a `ChainResult`: one `PipelineResult` per criterion, then `exporting`
-and `massing` (None when not produced) and the issues of the call. An issue of a criterion's stage is named
-`criterion <id> (<stage>)`.
+`run_chain(chain, out_dir=None, produce=("exporting",), start_from="preprocessing", context=None, trace=None,
+threshold_from=None)` accepts a path or a `ChainConfig` from `load_chain`, and returns a `ChainResult`: one
+`PipelineResult` per criterion, then `exporting` and `massing` (None when not produced) and the issues of the call. An
+issue of a criterion's stage is named `criterion <id> (<stage>)`.
 
-The daemon runs a chain when a `run` request names a chain file; its overrides set shared settings only.
+With `start_from="preprocessing"`, `trace` is a collection of criterion ids: only those criteria trace their rays
+again, and the others keep their existing preprocessing folder (`StageChainError` when it is missing). Thresholding
+runs for every criterion from the first one that traced on, so a criterion decides after the existing run of the one
+before it. `threshold_from` names a criterion, earlier in the chain than the first traced one, whose thresholding is run
+again as well. With `start_from="preprocessing"`, a `trace` that names no criterion of the chain (an empty one too) and
+a `threshold_from` that is not in the chain raise `ValueError` before anything is touched. The default of both is the
+behaviour without them: every criterion traces and thresholds.
+
+The daemon runs a chain when a `run` request names a chain file; its overrides set shared settings only, and its
+`trace_criteria` and `threshold_from_criterion` keys are these two arguments (see
+[Engine requests](api/engine-requests.md)).
 
 ### Output folders
 
@@ -174,3 +187,17 @@ Scores do not depend on the other criteria, so an earlier criterion's settings c
 criteria after it, which takes seconds. Only a change to a criterion's own mode settings or test surfaces, or to a
 shared setting such as the voxel size, needs its rays traced again. To change the carve amount of the first criterion
 and see the effect on the whole chain, edit it and run `usc run -c chain.yaml --start-from thresholding`.
+
+## In the browser app's service
+
+The local service behind `usc ui` keeps the criteria of a project in `project.json` and writes the project's `config.yaml` as a chain file from them, so a project folder also runs with `usc run -c <folder>/config.yaml`. Each criterion has its own test surface files: a file is stored once in the project, several criteria can use it, and the engine reads one joined file per criterion. A criterion's id is a number the service assigns (`1`, `2`, ...); it names the criterion's output folder and stays the same when the criteria are reordered.
+
+A run does only what changed. The service compares each criterion's settings and test surfaces with the ones its results were made from, and asks the engine to trace only the criteria whose rays changed (`trace_criteria`), then to threshold the chain from the first criterion that changed. When a criterion earlier in the chain needs thresholding again while a later one is traced, it also sends `threshold_from_criterion`. The result of each criterion, the volume each one kept and the criterion that removed each voxel are served per criterion.
+
+On the packaged Perimeter block example (Solar time-based, then Daylight on the same test surfaces; NVIDIA RTX 3060), the first analysis took 2.4 s and kept 187,743 m³. After adding the Daylight criterion, the next analysis traced only that criterion and took 2.7 s; the chain then kept 187,743 m³ after the first criterion and 119,848 m³ after the second. Projects made with an earlier version open as a chain of one criterion with their results still current. The routes, the files and the rules for what goes out of date are in [Criteria in a project](ui.md#criteria-in-a-project).
+
+## In Grasshopper
+
+**USC_ThresholdStage** has an `after` input, the last one: the `thr_result` of the thresholding stage of the criterion before. Empty, it behaves as before. To chain two criteria, give the second one its own Config (a different `out_dir`), Preprocess and ThresholdStage, and connect the first ThresholdStage's `thr_result` to the second one's `after`. The second stage decides only among the voxels the first one kept and never keeps one it removed. USC_Export and USC_Massing connected to the second criterion's Config and results then build from what both criteria kept. See [Grasshopper](grasshopper.md#components).
+
+The daemon request behind it is a `run` that starts at `thresholding` with the `after` key (`RunRequest.after`; `run_pipeline(..., after=...)` in Python). A request with `after` and a chain file, or with `after` and a `start_from` other than `thresholding`, gets a `ConfigError` reply: a chain file links its criteria itself, and a stage that does not run thresholding would ignore `after` without a message. An engine older than this feature would ignore the key and run the second criterion on its own, so the ping reply lists the engine's `features`, and `usc_gh.run_stages` pings first when `after` is given. For an engine without `run_after` it raises "The UrbanSolarCarver engine running now is older than this definition and cannot chain criteria. Restart it from USC_Session." and sends no run request.

@@ -80,9 +80,61 @@ A project opens as a list of six steps on the left, with the 3D view on the righ
     Each part has its own out-of-date mark, "Out of date for the current settings". The step's summary says what exists, for example "Envelope built, massing not built". A link at the bottom opens the run report. The *grid module* is the square module the storeys are built from and the narrowest piece of floor allowed. The *permitted volume exceedance* is the share of a module on a storey that may lie outside the carved envelope; the massing never leaves the maximum volume. [Floor-plate massing](massing.md) describes the method.
 6. **Export.** The mesh format of the carved envelope and the building massing, and the downloads: the carved envelope, the building massing, the building massing data (JSON), the settings (`config.yaml`) and the whole project as a zip. Each file is offered once it exists. The envelope and the massing are the files that were built, in the format they were built in. A change of format rebuilds the parts that exist (the envelope, the massing or both); while Carving is locked (see below), the format is stored without a build, Export says so, and the next build of each part writes the chosen format.
 
+## Criteria in a project
+
+A project holds an ordered list of **criteria**, the carving passes of a chain (see [Criteria: chained carvings](criteria.md)). Each has its own mode, test surfaces, mode settings and carving rule, and decides among the voxels the criteria before it kept. Every project holds at least one.
+
+!!! note "What the app shows today"
+    The steps above show and edit one criterion. The service already stores and runs several, but the app has no list of criteria yet; it follows in a later phase. The routes the app uses keep their meaning for a project with one criterion. For a project with several, a request without a `criterion` reads the settings of the first criterion and the results of the last one that is on (the score colours, the sky dome and the run summary's top-level carving), while a settings save and the app's test surface upload and removal are refused with a 422 that says which criterion they belong to.
+
+**Where a criterion's data lives**
+
+- `project.json` lists the criteria: id, name, colour, whether it is bypassed, the names of its test surface files and its own settings. A criterion's id is `"1"`, `"2"`, and so on, assigned by the service, kept when the criteria are reordered and never used again in the project. Run folders and joined test surface files are named by id.
+- `config.yaml` is generated from `project.json` at every change: the settings shared by the whole chain at the top, then the criteria that are on under `criteria:`. A bypassed criterion is left out, and so is left out of every run. A project folder is still valid input for `usc run -c <folder>/config.yaml`. Change settings in the app, because the next save writes the file again.
+- `inputs/test_surfaces/` stores each test surface file once, named as uploaded. `inputs/joined/test_surfaces_<id>.ply` is the joined file the engine reads for criterion `<id>`.
+- `run/criteria/<id>/preprocessing` and `run/criteria/<id>/thresholding` hold each criterion's results, with `run/criteria/chain.json` listing them in order. Exporting and massing stay in `run/exporting` and `run/massing` and are built once, from the last criterion that is on.
+
+**Test surface files**
+
+- An upload with the content of a stored file reuses that file. An upload with the name of a stored file and other content replaces it in every criterion that uses it, and puts out of date only those criteria. A file that no criterion uses any more is deleted.
+- A criterion uses a stored file of another criterion through the *use* route, which adds no copy. Removing a file from one criterion leaves it in the others.
+- A new criterion has no test surfaces. A run refuses to start while no criterion is on (*Turn on a criterion to run.*) or while one that is on protects nothing (*Add test surfaces to <name>.*). A criterion that gets its first file and has not been renamed is named "<mode> on <file name>".
+- The Inputs step's upload and removal of test surfaces go to the only criterion; with several they are refused with a 422.
+
+**What goes out of date**
+
+| Change | Out of date |
+|---|---|
+| Maximum volume, context, terrain, weather file or a shared setting | Everything |
+| A criterion's test surfaces (a file added, removed or replaced) | Its preprocessing, then the thresholding of every criterion that is on from it on |
+| A criterion's own mode settings | The same |
+| A criterion's carving rule (carve amount, threshold, smoothing, `carve_above`, slope limit) | Its thresholding, then the thresholding of every criterion after it |
+| Order, bypass or deleting a criterion | The thresholding of every criterion that is on from the first changed position on |
+
+Exporting and massing are compared with the settings of the last criterion that is on and with its thresholding. When the last criterion is deleted, the one before it becomes the last, and exporting and massing are out of date.
+
+`GET /api/projects/<name>/stage-status` answers with `stages`, as before (preprocessing and thresholding sum up the criteria: missing when any is missing, else out of date when any is, else current), and `criteria`, the state of both analysis stages of each criterion that is on, in chain order. The project detail repeats it as `criterion_status`.
+
+**Running**
+
+A run traces the rays only of the criteria whose preprocessing is missing or out of date, then thresholds the chain from the first criterion whose thresholding is out of date. A criterion that only needs thresholding again does not trace. `StartRunReply.criterion_stages` says what the run does for each criterion that is on, for example `{"1": [], "2": ["preprocessing", "thresholding"]}` after a second criterion was added to a finished project. The service sends the engine `trace_criteria` for this, and `threshold_from_criterion` when an earlier criterion needs thresholding again while only a later one is traced (see [Engine requests](api/engine-requests.md)). The progress and issue events of a run carry `criterion`, the id of the criterion the stage belongs to, or null for exporting and massing.
+
+**Results**
+
+- `GET /api/projects/<name>/run/summary` keeps its fields (`carving` describes the last criterion that is on) and adds `criteria`, one entry per criterion that is on with its id, name, colour, mode, carving numbers, voxels at start and kept volume, and `chain`, the volume each criterion kept and the share of the maximum volume the last one kept. A criterion without results is listed with empty numbers, and `chain` is null until every criterion has results.
+- `.../run/score-points` and `.../run/sky-patches` take an optional `criterion` and default to the last criterion that is on.
+- `.../run/carved-by-criterion` serves which criterion removed each voxel: a 4-byte little-endian header length, a JSON header (`origin`, `shape`, `voxel_size`, `criterion_ids`, padded with spaces to a multiple of 4 bytes), then one byte per voxel of the grid in C order, 0 for a voxel the last criterion kept or one that is empty, and *k* for a voxel removed by the *k*-th criterion that is on. It answers 404 until every criterion that is on has thresholding results on the same grid.
+- The run report has a Criteria section with one row per criterion (see [Criteria](criteria.md#output-folders)).
+
+**Earlier projects**
+
+A project made with an earlier version opens as a chain of one criterion, and its results stay current. Opening it moves `inputs/joined/test_surfaces.ply` to `test_surfaces_1.ply`, `run/preprocessing` and `run/thresholding` to `run/criteria/1/`, rewrites the manifests of thresholding, exporting and massing that name a moved folder, writes `criteria/chain.json`, and lists its test surface files under criterion 1, so what they protect does not change. Run ids are not touched. The migration runs once, undoes every step when one fails and leaves the project as it was (the project then opens as before and the error goes to the service's log); `project.json` is written last, and its `criteria` tell that the project is migrated.
+
+A project carved further with an earlier version (its `carving_chain` is set) opens the same way: a chain of one criterion whose maximum volume is the last envelope. `carving_chain` and `inputs/earlier_max_volumes/` stay as they are, as a record. **Carve further** still works on a project with one criterion and is refused on one with several (409, "Carve further works on a project with one criterion.", before anything changes). A project whose test surface files were removed after its last run opens with criterion 1 holding none: its results show as out of date, as they did before, and a run asks for test surfaces.
+
 ## Carving further with another criterion
 
-The Export step's **Carve further with another criterion** makes the built envelope the project's maximum volume, so a second criterion carves what the first one kept. The result keeps only what every criterion in the chain keeps (the intersection of their envelopes). Each step voxelizes the envelope again on the new run's grid, so surfaces can move by up to about half a voxel per step. The order matters for settings that are a share of the current volume, such as `carve_fraction`.
+The Export step's **Carve further with another criterion** makes the built envelope the project's maximum volume, so a second criterion carves what the first one kept. It works on a project with one criterion; chains of criteria (above) do the same without making a mesh between the criteria, and the app stops offering it when it shows the list of criteria. The result keeps only what every criterion in the chain keeps (the intersection of their envelopes). Each step voxelizes the envelope again on the new run's grid, so surfaces can move by up to about half a voxel per step. The order matters for settings that are a share of the current volume, such as `carve_fraction`.
 
 The button asks once before it acts, and works only when the envelope is up to date with the settings. Then:
 
@@ -139,15 +191,16 @@ Each project is a folder in the projects folder:
 ```
 <projects folder>/<project name>/
 ├── inputs/        The files you added (max_volume/, test_surfaces/, context/, terrain/, weather.epw)
-│                  and the joined meshes the engine reads (joined/)
-├── config.yaml    The settings, a normal USC configuration file
+│                  and the joined meshes the engine reads (joined/, one test_surfaces_<id>.ply per criterion)
+├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
 ├── project.json   The project's record: the files you added with their triangle counts, the input revision,
-│                  the example it came from (if any)
+│                  the example it came from (if any), the criteria with their own settings and test surface files,
 │                  and one record per completed stage (with the settings that stage ran with)
-└── run/           The engine's output: preprocessing/, thresholding/, exporting/ and massing/
+└── run/           The engine's output: criteria/<id>/preprocessing and thresholding, criteria/chain.json,
+                   exporting/ and massing/
 ```
 
-`config.yaml` works outside the interface: its paths are relative to the project folder, so `usc run -c <project folder>/config.yaml` runs the same analysis from the command line. Thresholding also writes `scores_compared_with_cutoff.npy` in its folder (the values the cutoff is applied to, which the histogram draws). To delete a project, use Delete in its menu (see [Managing a project](#managing-a-project)), or delete its folder in the file manager.
+`config.yaml` works outside the interface: its paths are relative to the project folder, so `usc run -c <project folder>/config.yaml` runs the same analysis from the command line (see [Criteria in a project](#criteria-in-a-project)). Thresholding also writes `scores_compared_with_cutoff.npy` in its folder (the values the cutoff is applied to, which the histogram draws). To delete a project, use Delete in its menu (see [Managing a project](#managing-a-project)), or delete its folder in the file manager.
 
 ## Security
 

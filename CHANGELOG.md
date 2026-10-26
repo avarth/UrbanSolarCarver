@@ -30,8 +30,44 @@ versioning follows [Semantic Versioning](https://semver.org/).
   are folder names (letters, digits, `_`, `-`; unique ignoring case; default: the position), and the weather file is
   shared but reaches only the criteria whose mode reads one. `load_config` refuses a chain file.
 - Monte Carlo oracle: chained cases (daylight then benefit, time-based then daylight) in `tests/montecarlo.py`.
-- The browser app and Grasshopper follow in later phases; **Carve further** stays in the app until then. See
+- The browser app's list of criteria follows in a later phase; **Carve further** stays in the app until then. See
   [Chained carvings](docs/criteria.md).
+
+### Added (chained carvings, service)
+
+- **Criteria in projects.** A project of the local service (`usc ui`) holds an ordered list of criteria in
+  `project.json` (id, name, colour, bypassed, test surface files, own settings); `config.yaml` is generated from it as a
+  chain file, so a project folder runs with `usc run -c`. Criterion ids are `"1"`, `"2"`, ..., assigned by the
+  service, stable when criteria are reordered, never reused in a project, and name the run folder
+  (`run/criteria/<id>/`) and the joined test surface file (`inputs/joined/test_surfaces_<id>.ply`).
+- **Test surfaces per criterion.** Files are stored once in `inputs/test_surfaces/`; an upload with the content of a
+  stored file reuses it, an upload with a stored name and other content replaces it in every criterion that uses it,
+  and a file no criterion uses is deleted. A run refuses to start while no criterion is on or while one that is on
+  protects nothing.
+- **Status and runs per criterion.** `stage-status` gains `criteria` (preprocessing and thresholding of each criterion
+  that is on; the flat `stages` sums them up, exporting and massing follow the last criterion). A change to a
+  criterion's test surfaces or mode settings puts out of date its preprocessing and the thresholding from it on, a
+  change to its carving rule the thresholding from it on, and a shared setting everything. A run traces only the
+  criteria whose rays changed: `StartRunReply.criterion_stages` says what it does for each criterion, and the engine
+  request carries `trace_criteria` and `threshold_from_criterion` (new keys of `RunRequest`, backed by
+  `run_chain(trace=, threshold_from=)`). Progress and issue events name their criterion.
+- **Earlier projects open as a chain of one criterion.** The first opening moves `run/preprocessing` and
+  `run/thresholding` to `run/criteria/1/`, joins the test surfaces as criterion 1's and rewrites the manifests that name
+  the moved folders; results that were current stay current. A project carved further keeps its `carving_chain` and
+  `inputs/earlier_max_volumes/` untouched. A step that fails is undone and the project opens as it was.
+- **Results per criterion.** The run summary gains `criteria` (carving numbers, voxels at start and kept volume of each
+  criterion) and `chain` (volume after each criterion, share of the maximum volume kept); `score-points` and
+  `sky-patches` take a `criterion`; the new `run/carved-by-criterion` route says which criterion removed each voxel.
+  **Carve further** is refused on a project with several criteria.
+- **Routes** `GET /criterion-keys`, `POST|PATCH|DELETE /projects/{name}/criteria[/{id}]`, `.../duplicate`,
+  `PUT .../criteria/order`, and `.../criteria/{id}/test-surfaces[/{file}]` (upload, use a stored file, remove);
+  `PUT /config` and `GET /projects/{name}` take an optional `criterion`. The routes the current app uses keep their
+  meaning for a project with one criterion; the app's list of criteria follows in a later phase.
+- **Grasshopper: `after` input on USC_ThresholdStage** (the last input). Wiring the first criterion's `thr_result` into
+  it makes the second criterion decide only among the voxels the first one kept (`RunRequest.after`,
+  `run_pipeline(after=)`). A request with `after` and a chain file, or a start before thresholding, is refused. The
+  `ping` reply lists the engine's `features` (`run_after`), and a definition that chains on an older engine reports
+  that the engine must be restarted instead of running the criterion unchained.
 
 ### Fixed (massing)
 
