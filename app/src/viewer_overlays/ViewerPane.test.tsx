@@ -232,29 +232,59 @@ test("a sub-entry's check box shows or hides that criterion's test surfaces only
   expect(onChange).toHaveBeenLastCalledWith(["2"], true);
 });
 
-test("the Test surfaces check box shows or hides all the criteria's test surfaces; it is unchecked when none is shown", () => {
+const hidden = (id: string) => group(id, id === "1" ? "#4477aa" : "#ee6677", null, { shown: false });
+const inputsChecked = () => menuEntries().map((item) => item.querySelector("input")!.checked);
+
+test("the Test surfaces check box hides and shows the layer like the others', and leaves which criteria are shown to their own entries", () => {
   const onChange = vi.fn();
-  rendered = renderForTest(<ViewerPane {...testSurfacesView(TWO_GROUPS(), onChange)} />);
+  rendered = renderForTest(<ViewerPane {...testSurfacesView([group("1", "#4477aa", BOX()), hidden("2")], onChange)} />);
   openLayersMenu();
   click(menuEntries()[0].querySelector("input")!);
-  expect(onChange).toHaveBeenLastCalledWith(["1", "2"], false);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(false);
-  expect(menuEntries().map((item) => item.querySelector("input")!.checked)).toEqual([false, false, false]);
+  expect(inputsChecked()).toEqual([false, false, false]);
   click(menuEntries()[0].querySelector("input")!);
-  expect(onChange).toHaveBeenLastCalledWith(["1", "2"], true);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
-  rendered.rerender(<ViewerPane {...testSurfacesView([group("1", "#4477aa", null, { shown: false }), group("2", "#ee6677", null, { shown: false })], onChange)} />);
-  expect(menuEntries().map((item) => item.querySelector("input")!.checked)).toEqual([false, false, false]);       // all hidden by their own check boxes
+  expect(inputsChecked()).toEqual([true, true, false]);          // criterion 2 stays hidden by its own entry
+  expect(onChange).not.toHaveBeenCalled();                       // the criteria's own choices were not written
 });
 
-test("checking a sub-entry while the whole layer is hidden shows that criterion alone", () => {
+test("the Test surfaces check box is half checked while some criteria are shown and not all, unchecked when none is shown", () => {
+  const indeterminate = () => menuEntries()[0].querySelector("input")!.indeterminate;
+  rendered = renderForTest(<ViewerPane {...testSurfacesView(TWO_GROUPS())} />);
+  openLayersMenu();
+  expect([inputsChecked()[0], indeterminate()]).toEqual([true, false]);
+  rendered.rerender(<ViewerPane {...testSurfacesView([group("1", "#4477aa", BOX()), hidden("2")])} />);
+  expect([inputsChecked()[0], indeterminate()]).toEqual([true, true]);
+  rendered.rerender(<ViewerPane {...testSurfacesView([hidden("1"), hidden("2")])} />);
+  expect([inputsChecked()[0], indeterminate()]).toEqual([false, false]);
+});
+
+test("checking the Test surfaces box while every criterion is hidden by its own entry shows them all", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<ViewerPane {...testSurfacesView([hidden("1"), hidden("2")], onChange)} />);
+  openLayersMenu();
+  click(menuEntries()[0].querySelector("input")!);
+  expect(onChange).toHaveBeenCalledWith(["1", "2"], true);
+});
+
+test("checking a sub-entry while the layer is hidden and no criterion was hidden by choice shows that criterion alone", () => {
   const onChange = vi.fn();
   rendered = renderForTest(<ViewerPane {...testSurfacesView(TWO_GROUPS(), onChange)} shownByDefault={[]} />);
   openLayersMenu();
-  expect(menuEntries().map((item) => item.querySelector("input")!.checked)).toEqual([false, false, false]);       // the layer is not shown in this step
+  expect(inputsChecked()).toEqual([false, false, false]);       // the layer is not shown in this step
   click(menuEntries()[1].querySelector("input")!);
   expect(onChange.mock.calls).toEqual([[["2"], false], [["1"], true]]);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+});
+
+test("checking a sub-entry while the layer is hidden and a criterion was hidden by choice just shows the layer with the choices as they were", () => {
+  const onChange = vi.fn();
+  rendered = renderForTest(<ViewerPane {...testSurfacesView([group("1", "#4477aa", BOX()), hidden("2"), group("3", "#228833", BOX())], onChange)} shownByDefault={[]} />);
+  openLayersMenu();
+  click(menuEntries()[3].querySelector("input")!);              // criterion 3, already shown by choice
+  expect(onChange.mock.calls).toEqual([[["3"], true]]);
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  expect(inputsChecked()).toEqual([true, true, false, true]);
 });
 
 test("with one criterion the menu keeps a single Test surfaces entry, drawn in that criterion's colour", () => {

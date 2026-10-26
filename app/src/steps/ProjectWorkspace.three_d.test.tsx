@@ -10,7 +10,7 @@ import {
   CURRENT, FACADES, ROOFS, WINDOWS, card, deleteCriterion, openChain, select, service, type ChainService, type CriterionStages,
 } from "./chain_service_for_test";
 import {
-  CARVED, TRIANGLE_OBJ, container, endWorkspaceTest, openStep, pressRunAnalysis, settle, startWorkspaceTest, thresholdField, typeAndLeave,
+  CARVED, TRIANGLE_OBJ, buttonIn, container, endWorkspaceTest, openStep, pressRunAnalysis, settle, startWorkspaceTest, stepRow, thresholdField, typeAndLeave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -215,7 +215,7 @@ function testSurfaceEntries() {
   const parts = items.filter((item) => item !== parent && parent.contains(item));
   const read = (item: HTMLElement) => ({ label: item.querySelector("label")!.textContent, checked: item.querySelector("input")!.checked,
                                          swatch: item.querySelector("label")!.querySelector<HTMLElement>(".viewer-criterion-swatch")?.style.backgroundColor ?? null });
-  const entries = { parent: read(parent), parts: parts.map(read) };
+  const entries = { parent: read(parent), parts: parts.map(read), mixed: parent.querySelector("input")!.indeterminate };
   act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
   return entries;
 }
@@ -274,7 +274,7 @@ test("unchecking a criterion's entry hides only its test surfaces, and selecting
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
 });
 
-test("the Test surfaces check box hides all the criteria's test surfaces and shows them all again", async () => {
+test("the Test surfaces check box hides the layer and shows it again with the criteria the user had not hidden", async () => {
   await openChain([FACADES, WINDOWS], undefined, twoFiles);
   clickTestSurfaceEntry("Spring sun on windows");
   clickTestSurfaceEntry("Test surfaces");
@@ -282,8 +282,42 @@ test("the Test surfaces check box hides all the criteria's test surfaces and sho
   expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([false, false]);
   clickTestSurfaceEntry("Test surfaces");
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
-  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, true]);
-  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);
+  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, false]);       // windows stays hidden by its own entry
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
+});
+
+test("the Test surfaces check box is half checked while one of the criteria is hidden", async () => {
+  await openChain([FACADES, WINDOWS], undefined, twoFiles);
+  expect(testSurfaceEntries().mixed).toBe(false);
+  clickTestSurfaceEntry("Spring sun on windows");
+  expect([testSurfaceEntries().parent.checked, testSurfaceEntries().mixed]).toEqual([true, true]);
+  clickTestSurfaceEntry("Spring sun on windows");
+  expect(testSurfaceEntries().mixed).toBe(false);
+});
+
+test("hiding the layer is the step's choice, not the criteria's: another step brings back the layer with the criteria not hidden by choice", async () => {
+  await openChain([FACADES, WINDOWS], undefined, twoFiles);
+  clickTestSurfaceEntry("Spring sun on windows");
+  clickTestSurfaceEntry("Test surfaces");
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(false);
+  openStep("Inputs");
+  await settle();
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
+  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, false]);
+});
+
+test("checking a criterion's entry while the layer is hidden shows it alone when none was hidden by choice, else the layer as the choices stand", async () => {
+  await openChain([FACADES, WINDOWS, { ...ROOFS, test_surface_files: [] }], undefined, twoFiles);
+  clickTestSurfaceEntry("Test surfaces");
+  clickTestSurfaceEntry("Spring sun on windows");
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([false, true, false]);
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([null, 6]);
+  clickTestSurfaceEntry("Test surfaces");                                  // hides the layer; the entries of the criteria stay as they are
+  clickTestSurfaceEntry("Winter sun on facades");
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+  expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, true, false]);        // windows stays shown and roofs hidden: the layer is shown as the choices stand
 });
 
 test("the choice of criteria shown is kept when another step opens", async () => {
@@ -295,10 +329,21 @@ test("the choice of criteria shown is kept when another step opens", async () =>
   expect(testSurfaceEntries().parts.map((part) => part.checked)).toEqual([true, false]);
 });
 
+test("selecting a criterion that moves no file to another criterion does not draw the test surfaces again", async () => {
+  await openChain([FACADES, WINDOWS], undefined, twoFiles);
+  const setLayer = vi.spyOn(FakeViewerScene.latest!, "setLayer");
+  await select("Spring sun on windows");
+  await select("Winter sun on facades");
+  expect(setLayer.mock.calls.filter(([name]) => name === "test_surfaces")).toHaveLength(0);
+  expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);
+});
+
 test("a file that several criteria list is drawn once: in the selected criterion's colour, else in the first visible owner's", async () => {
   await openChain([FACADES, { ...WINDOWS, test_surface_files: ["windows.obj", "facades.obj"] }], undefined, twoFiles);
   expect([verticesOf("1"), verticesOf("2")]).toEqual([3, 6]);             // criterion 1 is selected: facades.obj is its
+  const setLayer = vi.spyOn(FakeViewerScene.latest!, "setLayer");
   await select("Spring sun on windows");
+  expect(setLayer.mock.calls.filter(([name]) => name === "test_surfaces")).toHaveLength(1);       // the shared file moves: drawn again
   expect([verticesOf("1"), verticesOf("2")]).toEqual([null, 9]);          // criterion 2 takes the shared facades.obj
   clickTestSurfaceEntry("Spring sun on windows");
   expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);          // hidden: the file is the first other owner's
@@ -330,6 +375,22 @@ test("a criterion that lists no files has an entry and draws nothing; the other 
   expect([verticesOf("1"), verticesOf("2")]).toEqual([3, null]);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
   expect(testSurfaceEntries().parts.map((part) => part.label)).toEqual(["Winter sun on facades", "Spring sun on windows"]);
+});
+
+test("a criterion that was hidden and then deleted leaves nothing behind: one added afterwards (the service numbers it again) is shown", async () => {
+  await openChain([FACADES, WINDOWS, { ...ROOFS, test_surface_files: [] }], undefined, twoFiles);
+  clickTestSurfaceEntry("Daylight on roofs");
+  await deleteCriterion("Daylight on roofs");
+  act(() => buttonIn(stepRow("Criteria"), "Add criterion").click());
+  await act(async () => [...container().querySelectorAll<HTMLElement>('.add-criterion [role="menuitem"]')]
+    .find((item) => item.querySelector(".mode-menu-name")!.textContent === "Daylight")!.click());
+  await settle();
+  expect(service.entries.map((entry) => entry.id)).toEqual(["1", "2", "3"]);       // the id of the deleted criterion again
+  expect(testSurfaceEntries().parts).toEqual([
+    { label: "Winter sun on facades", checked: true, swatch: "rgb(68, 119, 170)" },
+    { label: "Spring sun on windows", checked: true, swatch: "rgb(238, 102, 119)" },
+    { label: "Daylight", checked: true, swatch: "rgb(34, 136, 51)" },
+  ]);
 });
 
 test("deleting a criterion takes it from the menu and the files only it used out of the 3D view", async () => {

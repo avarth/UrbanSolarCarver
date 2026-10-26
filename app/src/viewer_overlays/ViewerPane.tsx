@@ -250,24 +250,28 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     if (framingRequest > 0) scene?.frameAll();
   }, [scene, framingRequest]);
 
-  // With two or more criteria the test surfaces have an entry for each; the layer's own check box then stands for all of them: it is
-  // checked while any is shown, and changes all. A criterion is shown when the layer is and its own entry is checked.
+  // With two or more criteria the test surfaces have an entry for each. The layer's own check box works as the others' do (a change of
+  // step brings back the step's choice) and is checked while the layer is shown with any criterion, half checked while some are not;
+  // which criteria are shown is kept apart (*testSurfaces*), so hiding the layer does not change it.
   const testSurfaceParts = testSurfaces.length < 2 ? undefined : testSurfaces.map(({ id, name, colour, off, shown }) =>
     ({ id, label: messages.testSurfacesOfCriterion(name, off), colour, visible: isVisible("test_surfaces") && shown }));
   const entries: LayersMenuEntry[] = [
     ...present.map((name) => (name === "test_surfaces" && testSurfaceParts
-      ? { name, available: true, visible: testSurfaceParts.some((part) => part.visible), parts: testSurfaceParts }
+      ? { name, available: true, visible: testSurfaceParts.some((part) => part.visible), partlyVisible: testSurfaceParts.some((part) => part.visible)
+          && !testSurfaceParts.every((part) => part.visible), parts: testSurfaceParts }
       : { name, available: true, visible: isVisible(name) })),
     ...missingLayers.filter((name) => !present.includes(name)).map((name) => ({ name, available: false, visible: false })),
   ];
   const changeVisible = (name: LayerName, visible: boolean) => {
     setVisibleByChoice((choices) => ({ ...choices, [name]: visible }));
-    if (name === "test_surfaces" && testSurfaceParts) onTestSurfacesShownChange?.(testSurfaces.map(({ id }) => id), visible);
+    // Shown again with every criterion hidden by its own entry: nothing would appear, so they are all shown
+    if (visible && name === "test_surfaces" && testSurfaceParts && !testSurfaces.some((group) => group.shown)) onTestSurfacesShownChange?.(testSurfaces.map(({ id }) => id), true);
   };
   const changePartVisible = (_name: LayerName, id: string, visible: boolean) => {
-    if (visible && !isVisible("test_surfaces")) {          // the whole layer is hidden: showing one criterion shows that one alone
+    if (visible && !isVisible("test_surfaces")) {
       setVisibleByChoice((choices) => ({ ...choices, test_surfaces: true }));
-      onTestSurfacesShownChange?.(testSurfaces.filter((group) => group.id !== id).map((group) => group.id), false);
+      // Every entry showed as unchecked and none was hidden by choice: showing one criterion shows that one alone
+      if (testSurfaces.every((group) => group.shown)) onTestSurfacesShownChange?.(testSurfaces.filter((group) => group.id !== id).map((group) => group.id), false);
     }
     onTestSurfacesShownChange?.([id], visible);
   };

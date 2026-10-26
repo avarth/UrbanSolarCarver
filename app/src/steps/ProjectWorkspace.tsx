@@ -37,7 +37,7 @@ import type { RunLoop } from "./run_state";
 import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep, stepOfSetting } from "./SettingsStep";
 import { SiteAndGridStep } from "./SiteAndGridStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
-import { testSurfaceGroupsOf } from "./test_surface_groups";
+import { testSurfaceGroupsOf, testSurfaceOwners } from "./test_surface_groups";
 import {
   plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName,
 } from "./step_summaries";
@@ -212,8 +212,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     const kept = new Set([...hidden].filter((id) => criteria.criteria.some((entry) => entry.id === id)));
     return kept.size === hidden.size ? hidden : kept;
   }), [criterionIdsKey]);
-  const testSurfaceDrawingKey = JSON.stringify([criteria.criteria.map((entry) => [entry.id, entry.name, entry.colour, entry.bypassed, entry.test_surface_files]),
-                                                criterion?.id, [...hiddenTestSurfaceCriteria].sort()]);
+  // What the groups hold, not which criterion is selected: a selection that moves no file to another criterion draws nothing again.
+  const testSurfaceDrawingKey = JSON.stringify([criteria.criteria.map((entry) => [entry.id, entry.name, entry.colour, entry.bypassed]),
+                                                [...testSurfaceOwners(criteria.criteria, criterion?.id ?? null, hiddenTestSurfaceCriteria)].sort(),
+                                                [...hiddenTestSurfaceCriteria].sort()]);
   const testSurfaceGroups = useMemo(
     () => testSurfaceGroupsOf(criteria.criteria, criterion?.id ?? null, hiddenTestSurfaceCriteria, testSurfacesMesh.byFile, testSurfaces),
     [testSurfaces, testSurfacesMesh.byFile, testSurfaceDrawingKey]);

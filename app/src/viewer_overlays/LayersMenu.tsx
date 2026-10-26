@@ -10,6 +10,8 @@ export interface LayersMenuEntry {
   name: LayerName;
   available: boolean;       // false: the layer belongs to this mode, but the last run stopped before its stage
   visible: boolean;
+  /** Some but not all of the parts are shown: the check box is half checked. */
+  partlyVisible?: boolean;
   /** Entries under this one, each with its own check box and swatch (the test surfaces of each criterion). */
   parts?: LayersMenuPart[];
 }
@@ -48,6 +50,7 @@ export function LayersMenu({ entries, skyDomeOpacity, theme, onVisibleChange, on
             <li key={entry.name}>
               <label>
                 <input type="checkbox" checked={entry.available && entry.visible} disabled={!entry.available}
+                       ref={(input) => { if (input) input.indeterminate = entry.partlyVisible === true; }}
                        onChange={(event) => onVisibleChange(entry.name, event.target.checked)} />
                 {messages.layerNames[entry.name]}
               </label>
