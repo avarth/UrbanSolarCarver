@@ -42,10 +42,10 @@ from .api_models import (
     UpdateCriterionRequest,
 )
 from .carve_further import carve_further
+from .criteria import active_criteria, find_criterion
 from .example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
 from .folder_picker import FolderPickerUnavailable
 from .gpu_warm_up import GpuWarmUp
-from .criteria import active_criteria, find_criterion
 from .projects import (
     CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, CriterionConfigError, GridOverBudget, ProjectError, ProjectStore, example_of_project,
     validate_project_name,
@@ -81,7 +81,7 @@ _CONFIG_OR_MESSAGE_ERROR = {
 }
 CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first one when omitted."
 SUN_PATH_CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first criterion that is on when omitted (the first one when none is)."
-RESULTS_CRITERION_QUERY_DESCRIPTION ="The id of a criterion; the last criterion that is on when omitted."
+RESULTS_CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the last criterion that is on when omitted."
 
 
 class SecurityMiddleware:

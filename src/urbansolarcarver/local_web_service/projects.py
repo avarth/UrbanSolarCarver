@@ -436,6 +436,8 @@ class ProjectStore:
             configs = [self._config_from_browser_values(project_folder, {**shared, **criterion.settings}, criterion.id)[0]
                        for criterion in checked]
             grid_plan = self._plan_and_check_grid(name, configs[0])
+            # Stored as the engine's config reads them ("2" is 2.0, "yes" is True), as write_config_from_values stores them.
+            shared = split_settings(self._without_service_owned(configs[0].model_dump(mode="json", exclude_unset=True)))[0]
             self._write_chain(name, project_folder, project_json, shared)
             return ConfigReply(settings=shared, grid_plan=grid_plan)
 

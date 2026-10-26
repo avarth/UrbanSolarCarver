@@ -363,6 +363,16 @@ def test_shared_settings_save_without_a_mode(tmp_path):
     assert "grid_step" not in stored and "score_rule" not in stored
 
 
+def test_shared_settings_are_stored_and_returned_as_the_engine_reads_them(tmp_path):
+    store = _chain_of_two_with_a_max_volume(tmp_path)
+    reply = store.write_shared_settings("p", {"voxel_size": "2", "context_blocks_rays": "yes"})
+    assert reply.settings["voxel_size"] == 2.0 and reply.settings["context_blocks_rays"] is True
+    assert isinstance(reply.settings["voxel_size"], float)
+    stored = _stored(store, "p")
+    assert stored["voxel_size"] == 2.0 and isinstance(stored["voxel_size"], float) and stored["context_blocks_rays"] is True
+    assert store.read_settings("p")["voxel_size"] == 2.0 and store.read_settings("p")["context_blocks_rays"] is True
+
+
 def test_shared_settings_save_before_a_max_volume_has_no_grid_plan(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("p", "daylight")
@@ -390,6 +400,7 @@ def test_a_shared_setting_that_breaks_a_criterion_is_refused(tmp_path, monkeypat
     assert [error.field for error in refused.value.errors] == ["voxel_size"]
     assert project_json_path.read_bytes() == json_before and config_path.read_bytes() == config_before
     # every criterion that is on is checked, not only the first: a config that fails for the second one alone refuses the save
+    # (monkeypatched, since no real shared value breaks only one criterion)
     original = ProjectStore._config_from_browser_values
 
     def fails_for_the_second(self, project_folder, values, criterion_id):
