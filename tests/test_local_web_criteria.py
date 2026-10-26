@@ -165,6 +165,24 @@ def test_the_only_criterion_cannot_be_deleted(tmp_path):
     assert [c.id for c in store.criteria("p")] == ["2"]
 
 
+def test_the_criterion_left_after_a_delete_is_turned_on(tmp_path):
+    # A project of one criterion has no bypass switch: the one left is never bypassed, so a run can start.
+    store = ProjectStore(tmp_path)
+    store.create("p", "daylight")
+    store.add_criterion("p", "time-based")
+    store.update_criterion("p", "1", bypassed=True)
+    store.delete_criterion("p", "2")
+    [left] = store.criteria("p")
+    assert (left.id, left.bypassed) == ("1", False)
+    assert _ids_in_config(store, "p") == ["1"]
+    # with two or more left, a bypassed one stays bypassed
+    store.add_criterion("p", "time-based")
+    store.add_criterion("p", "daylight")
+    store.update_criterion("p", "1", bypassed=True)
+    store.delete_criterion("p", "3")
+    assert [(c.id, c.bypassed) for c in store.criteria("p")] == [("1", True), ("4", False)]
+
+
 @pytest.mark.parametrize("bad_id", ["..", "../..", "1/2", "a", "", " 1"])
 def test_a_criterion_id_is_digits_only(tmp_path, bad_id):
     with pytest.raises(ValidationError):

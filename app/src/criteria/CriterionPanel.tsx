@@ -1,8 +1,9 @@
 // A criterion's panel (spec 7.1, 7.2): what it protects (ProtectsBox), its mode (the tiles of ModeStep), its own settings (the
 // analysis settings that are criterion keys, SettingsStep), its carving rule (CarvingStep, put together in result_steps.tsx) and
 // Run analysis, in that order. The shared settings are in Site and grid.
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
+import { messages } from "../messages";
 import type { ColdPeriodState, Hemisphere } from "../settings_form/analysis_period";
 import type { FormState } from "../settings_form/form_state";
 import { ModeStep } from "../steps/ModeStep";
@@ -39,6 +40,22 @@ export interface CriterionPanelProps {
   carvingRule: ReactNode;
   /** Run analysis, with the progress of its run. */
   runAnalysis: ReactNode;
+}
+
+/**
+ * The carving rule of the only criterion when it is bypassed (a project.json edited by hand): with no card there is no bypass switch,
+ * so the panel turns it on. *onTurnOn* resolves with why it could not, or null.
+ */
+export function TurnOnCriterion({ onTurnOn, disabledReason }: { onTurnOn: () => Promise<string | null>; disabledReason: string | null }) {
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <div className="criterion-turn-on">
+      <button type="button" className="secondary-button" disabled={disabledReason !== null} onClick={async () => setProblem(await onTurnOn())}>
+        {messages.turnOnCriterion}
+      </button>
+      {problem !== null && <p className="setting-error" role="alert">{problem}</p>}
+    </div>
+  );
 }
 
 export function CriterionPanel(props: CriterionPanelProps) {

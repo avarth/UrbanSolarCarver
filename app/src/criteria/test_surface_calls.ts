@@ -26,17 +26,22 @@ export interface TestSurfaceCalls {
   remove: (fileName: string) => Promise<string | null>;
   /** Lets the criterion use a file another criterion uses (stored already); resolves with the reason it could not, or null. */
   use: (fileName: string) => Promise<string | null>;
+  /** Asks for the stored files again (after a criterion is deleted, its files no other criterion uses are gone). */
+  reloadStoredFiles: () => Promise<void>;
 }
 
 export function testSurfaceCallsOf(context: TestSurfaceContext): TestSurfaceCalls {
   const { token, project, criteria, criterionId, onServiceProblem } = context;
-  const afterChange = async () => {
-    context.refreshStageStatus();
+  const reloadStoredFiles = async () => {
     try {
       context.onStoredFiles(await getInputFiles(token, project, "test_surfaces"));
     } catch (error) {
       onServiceProblem(error);
     }
+  };
+  const afterChange = async () => {
+    context.refreshStageStatus();
+    await reloadStoredFiles();
   };
   const addOneByOne = async (files: File[]): Promise<string[]> => {
     const problems: string[] = [];
@@ -79,5 +84,6 @@ export function testSurfaceCallsOf(context: TestSurfaceContext): TestSurfaceCall
     add: (files) => context.followed(addOneByOne(files)),
     remove: (fileName) => context.followed(removeAndApply(fileName)),
     use: (fileName) => context.followed(useStoredFile(fileName)),
+    reloadStoredFiles,
   };
 }

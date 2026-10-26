@@ -28,6 +28,8 @@ interface CriterionSelectionSource {
   /** The criterion form's start from a criterion's settings as GET criteria/{id}/settings gives them (the shared ones with them). */
   criterionStartOf: (settings: Record<string, unknown>) => FormStart;
   refreshStageStatus: () => void;
+  /** After a criterion is deleted: the stored test surface files are asked for again, as the files only it used are gone. */
+  afterDelete?: () => Promise<void>;
   onServiceProblem: (error: unknown) => void;
 }
 
@@ -130,7 +132,10 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
     },
     onDelete: (id) => {
       saveTheShownCriterion();
-      return change(() => criteria.remove(id));
+      return change(async () => {
+        await criteria.remove(id);
+        await source.afterDelete?.();
+      });
     },
     onAdd: (mode) => {
       saveTheShownCriterion();

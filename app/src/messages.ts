@@ -330,6 +330,8 @@ export const messages = {
   carvingWaitsForAnalysisOf: (criterionName: string) => `Run the analysis for ${criterionName} first`,
   // The panel of a bypassed criterion, in place of its carving rule
   criterionBypassedNote: "Bypassed: the chain skips this criterion.",
+  // In place of that note when the project has one criterion, which has no card and so no bypass switch (a hand edit of project.json)
+  turnOnCriterion: "Turn on",
   histogramTitle: "Scores of the voxels",
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",

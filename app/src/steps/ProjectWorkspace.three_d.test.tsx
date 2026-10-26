@@ -237,3 +237,14 @@ test("a criterion that lists no files highlights nothing and dims every stored f
   expect(verticesOf("dimmed")).toBe(3);                                   // facades.obj
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
 });
+
+test("deleting a criterion takes the files only it used out of the 3D view", async () => {
+  await openChain([FACADES, WINDOWS, { ...ROOFS, test_surface_files: ["facades.obj"] }], undefined, twoFiles);
+  expect(verticesOf("dimmed")).toBe(6);                                   // windows.obj, criterion 2's
+  await deleteCriterion("Spring sun on windows");
+  expect(service.storedTestSurfaces.map((file) => file.name)).toEqual(["facades.obj"]);
+  expect(verticesOf("highlighted")).toBe(3);                              // facades.obj, which criteria 1 and 3 use
+  expect(verticesOf("dimmed")).toBeNull();                                // windows.obj is gone, not dimmed
+  await deleteCriterion("Daylight on roofs");
+  expect(verticesOf("highlighted")).toBe(3);                              // one criterion: every stored file, here facades.obj alone
+});

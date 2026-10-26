@@ -8,7 +8,7 @@ import {
   settingsSaves,
 } from "./chain_service_for_test";
 import {
-  buttonIn, container, endWorkspaceTest, openStep, settle, startWorkspaceTest, stepRow, thresholdField, unmountWorkspace, waitForTheSave,
+  buttonIn, container, endWorkspaceTest, openStep, reasonOf, settle, startWorkspaceTest, stepRow, thresholdField, unmountWorkspace, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -122,6 +122,19 @@ test("deleting the selected criterion selects the next one, and the last one the
   expect(periodFieldText()).toContain("21 Mar");
   expect(protectedFiles()).toEqual(["windows.obj"]);
   expect(buttonIn(stepRow("Criteria"), "Add another criterion")).toBeDefined();
+});
+
+test("a project left with one bypassed criterion offers Turn on in its panel, which turns it on", async () => {
+  await openChain([{ ...FACADES, bypassed: true }], { 1: CURRENT });
+  expect(cards()).toEqual([]);
+  expect(panel().textContent).not.toContain("Bypassed: the chain skips this criterion.");
+  expect(reasonOf(buttonIn(panel(), "Run analysis"))).toContain("Turn on a criterion");
+  await act(async () => buttonIn(panel(), "Turn on").click());
+  await settle();
+  expect(service.patches).toEqual([{ id: "1", body: { bypassed: false } }]);
+  expect(buttonIn(panel(), "Turn on")).toBeUndefined();
+  expect(container().textContent).not.toContain("Turn on a criterion");
+  expectNoProblemShown();
 });
 
 test("Add another criterion adds one of the chosen mode and selects it", async () => {

@@ -123,6 +123,9 @@ export class ChainService extends FakeService {
     if (method === "DELETE" && part === undefined) {
       if (this.entries.length === 1) return json({ detail: "A project needs at least one criterion." }, 422);
       this.entries = this.entries.filter((candidate) => candidate.id !== id);
+      // The stored files no criterion left uses go, as the service discards them.
+      this.storedTestSurfaces = this.storedTestSurfaces.filter((file) => !(entry.test_surface_files ?? []).includes(file.name)
+        || this.entries.some((candidate) => candidate.test_surface_files?.includes(file.name)));
       return new Response(null, { status: 204 });
     }
     if (method === "POST" && part === "duplicate") {

@@ -14,7 +14,7 @@ import {
 } from "../criteria/criteria_state";
 import type { CriterionListProps } from "../criteria/CriterionList";
 import { CriteriaStep } from "../criteria/CriteriaStep";
-import { CriterionPanel } from "../criteria/CriterionPanel";
+import { CriterionPanel, TurnOnCriterion } from "../criteria/CriterionPanel";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
 import { useCriterionSelection } from "../criteria/use_criterion_selection";
@@ -376,6 +376,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // The selection of a card and the requests that change the criteria (use_criterion_selection.ts).
   const selection = useCriterionSelection({
     token, project: project.name, criteria, shownCriterionId, setShownCriterionId, criterionForm, sharedForm, refreshStageStatus, onServiceProblem,
+    afterDelete: testSurfaceCalls.reloadStoredFiles,
     criterionStartOf: (settings) => ({ schema: props.schema, modes, settings: splitSettings(settings, criterionKeys).criterion, gridPlan: null }),
   });
   // A start refused for another criterion's settings marks them once that criterion's panel shows them, with the forms then.
@@ -389,6 +390,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // criterion that is on needs test surfaces (a bypassed one needs none).
   const active = activeCriteria(criteria.criteria);
   const protectingNothing = criteriaProtectingNothing(criteria.criteria);
+  // The only criterion, bypassed (project.json edited by hand): it has no card, so its panel offers to turn it on.
+  const onlyCriterionBypassed = criteria.criteria.length === 1 && criteria.criteria[0].bypassed;
   const runConditions = {
     runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length,
     testSurfaceFiles: criterion === null ? files.test_surfaces.length : criterion.bypassed ? 1 : (criterion.test_surface_files ?? []).length,
@@ -501,7 +504,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                         weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
-                        carvingRule={resultSteps.carvingRule} runAnalysis={resultSteps.criterionRunAnalysis} />
+                        carvingRule={onlyCriterionBypassed
+                          ? <TurnOnCriterion onTurnOn={() => selection.requests.onSetBypassed(criterionId, false)} disabledReason={inputsDisabledReason} />
+                          : resultSteps.carvingRule}
+                        runAnalysis={resultSteps.criterionRunAnalysis} />
       } />
     ),
     ...resultSteps.content,
