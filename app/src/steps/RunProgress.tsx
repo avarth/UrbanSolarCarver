@@ -10,6 +10,9 @@ import { formatNumber } from "./format_numbers";
 import { criterionOfKey, stageDisplayName, stageOfKey, type RunLoop, type RunOrigin, type RunRecord, type RunState } from "./run_state";
 import "./steps.css";
 
+/** Goes to a setting a failed run names; *criterion*: the criterion whose settings the run found it in, null when it named none. */
+export type GoToSetting = (settingName: string, criterion?: string | null) => void;
+
 const ELAPSED_TICK_MILLISECONDS = 100;
 const STAGE_CHAIN_ERROR = "StageChainError";
 
@@ -61,16 +64,29 @@ function StageList({ state, onCancel, criterionNameOf }: { state: RunState; onCa
   );
 }
 
-function RunFailure({ record, mode, onGoToSetting }: { record: RunRecord; mode: string; onGoToSetting: (settingName: string) => void }) {
+/** What a run's end is said with: the shown mode, the link to a setting, the criterion shown and the criteria's names. */
+interface EndedRunContext {
+  mode: string;
+  onGoToSetting: GoToSetting;
+  shownCriterionId?: string;
+  criterionNames?: Readonly<Record<string, string>>;
+}
+
+function RunFailure({ record, mode, onGoToSetting, shownCriterionId, criterionNames }: EndedRunContext & { record: RunRecord }) {
   const failure = record.state.failure!;
   if (failure.error_type === STAGE_CHAIN_ERROR) return <p className="run-outcome run-outcome-error">{messages.resultsOutOfDate}</p>;
   const namedSettings = [...new Set(failure.field_errors.map((fieldError) => (fieldError.field === null ? null : presentedSettingOf(fieldError.field)))
     .filter((name): name is string => name !== null))];
+  // The settings of a criterion other than the one shown are said with its name, so they are not taken for the shown one's.
+  const criterion = failure.criterion ?? null;
+  const otherName = criterion !== null && criterion !== shownCriterionId ? criterionNames?.[criterion] ?? null : null;
   return (
     <div className="run-outcome run-outcome-error">
-      <p>{messages.runFailed}</p>
+      <p>{otherName === null ? messages.runFailed : messages.runFailedForCriterion(otherName)}</p>
       {namedSettings.map((name) => (
-        <button key={name} type="button" className="link-button" onClick={() => onGoToSetting(name)}>{messages.goToSetting(settingView(name, mode).label)}</button>
+        <button key={name} type="button" className="link-button" onClick={() => onGoToSetting(name, criterion)}>
+          {otherName === null ? messages.goToSetting(settingView(name, mode).label) : messages.goToSettingOf(settingView(name, mode).label, otherName)}
+        </button>
       ))}
       <details className="run-failure-details">
         <summary>{messages.details}</summary>
@@ -84,11 +100,12 @@ function RunFailure({ record, mode, onGoToSetting }: { record: RunRecord; mode: 
   );
 }
 
-function RunEnded({ record, mode, onGoToSetting }: { record: RunRecord; mode: string; onGoToSetting: (settingName: string) => void }) {
+function RunEnded(props: EndedRunContext & { record: RunRecord }) {
+  const { record } = props;
   if (record.refusal !== null) return <p className="run-outcome run-outcome-error">{record.refusal}</p>;
   switch (record.state.final) {
     case "failed":
-      return <RunFailure record={record} mode={mode} onGoToSetting={onGoToSetting} />;
+      return <RunFailure {...props} />;
     case "cancelled":
       return <p className="run-outcome">{messages.runCancelled}</p>;
     case "connection_lost":
@@ -103,8 +120,10 @@ interface RunProgressProps {
   project: string;
   origin: RunOrigin;
   mode: string;
-  /** Opens the step that holds a setting a failed run names and moves the focus to it. */
-  onGoToSetting: (settingName: string) => void;
+  /** Opens the step that holds a setting a failed run names (selecting the criterion the run named) and moves the focus to it. */
+  onGoToSetting: GoToSetting;
+  /** The criterion whose panel is shown: a failure of another criterion's settings is said with that one's name. */
+  shownCriterionId?: string;
   /**
    * The names of the criteria, by id, which label each criterion's stages; absent with one criterion, whose stages keep their
    * names alone.
@@ -112,7 +131,7 @@ interface RunProgressProps {
   criterionNames?: Readonly<Record<string, string>>;
 }
 
-export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames }: RunProgressProps) {
+export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames, shownCriterionId }: RunProgressProps) {
   const record = runs.current;
   const isThisButton = record !== null && record.project === project && record.origin === origin;
   const notice = runs.notice !== null && runs.notice.project === project && runs.notice.origin === origin ? runs.notice.message : null;
@@ -124,7 +143,7 @@ export function RunProgress({ runs, project, origin, mode, onGoToSetting, criter
         <>
           {record.state.final === null && record.refusal === null
             ? <StageList state={record.state} onCancel={runs.cancel} criterionNameOf={(id) => criterionNames?.[id] ?? null} />
-            : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} />}
+            : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId} criterionNames={criterionNames} />}
           {record.state.issues.length > 0 && (
             <div className="run-issues">
               <p className="run-issues-title">{messages.warningsTitle}</p>

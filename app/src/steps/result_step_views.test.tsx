@@ -378,7 +378,7 @@ test("a failed run: the message, a link to the setting it names, and the Details
                                         origin="build" mode="time-based" onGoToSetting={onGoToSetting} />);
   expect(rendered.container.textContent).toContain("The run stopped on an error.");
   click([...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Go to voxel size")!);
-  expect(onGoToSetting).toHaveBeenCalledWith("voxel_size");
+  expect(onGoToSetting).toHaveBeenCalledWith("voxel_size", null);         // the run named no criterion
   expect(rendered.container.querySelector("summary")!.textContent).toBe("Details");
   expect(rendered.container.querySelector("details")!.textContent).toContain("Error type: ConfigError");
 });

@@ -25,7 +25,7 @@ import {
   analysisDiffersFromStored, shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend,
 } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf } from "../settings_form/presentation";
-import { splitSettings, useBothForms } from "../settings_form/two_forms";
+import { sharedRefusalShown, splitSettings, useBothForms } from "../settings_form/two_forms";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
@@ -134,7 +134,12 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     criteria.applyReply(entry);
     return entry;
   };
-  const sharedForm = useSettingsForm(token, project.name, formStarts.shared, putSharedSettings);
+  // A shared value refused by a criterion's own setting is said in Site and grid, with that criterion's name (sharedRefusalShown).
+  const saveSharedSettings: SettingsSend = (formToken, projectName, values) => putSharedSettings(formToken, projectName, values).catch((error: unknown) => {
+    const now = criteria.current().criteria;
+    throw sharedRefusalShown(error, criterionKeys, (id) => now.find((entry) => entry.id === id) ?? null, now.length >= 2);
+  });
+  const sharedForm = useSettingsForm(token, project.name, formStarts.shared, saveSharedSettings);
   const criterionForm = useSettingsForm(token, project.name, formStarts.criterion, saveCriterionSettings);
   // The steps show the settings of both forms as one; each change goes to the form of its settings.
   const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useBothForms(sharedForm, criterionForm, criterionKeys);
@@ -352,13 +357,6 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     if (step !== null) setViewStep(step);
   };
 
-  // A failed run's link to the setting it names: the step that holds the setting opens and the focus goes to its field.
-  const goToSetting = (settingName: string) => {
-    const step = stepOfSetting(settingName, criterionKeys);
-    if (step === null) return;
-    openTheStep(step);
-    setSettingToFocus({ name: fieldSettingOf(settingName) });
-  };
   useEffect(() => {
     if (settingToFocus === null) return;
     // The input the field's label targets: the number field of a slider, the balance temperature's number of the balance widget.
@@ -382,9 +380,27 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // A start refused for another criterion's settings marks them once that criterion's panel shows them, with the forms then.
   const latestForms = useRef({ dispatch, currentForm });
   latestForms.current = { dispatch, currentForm };
-  const showRefusalOfCriterion = (id: string, fieldErrors: RunFailure["field_errors"]) => selection.showCriterion(id, () => {
+  const markRunErrors = (fieldErrors: RunFailure["field_errors"]) => {
     latestForms.current.dispatch({ type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: latestForms.current.currentForm().gridPlan } });
-  });
+  };
+  const showRefusalOfCriterion = (id: string, fieldErrors: RunFailure["field_errors"]) => selection.showCriterion(id, () => markRunErrors(fieldErrors));
+  // A failed run's link to the setting it names: the step that holds the setting opens and the focus goes to its field. A setting
+  // of the criterion the run named is focused in that criterion's panel, selected first, with the run's errors marked there again.
+  const goToSetting = (settingName: string, criterionId: string | null = null) => {
+    const step = stepOfSetting(settingName, criterionKeys);
+    if (step === null) return;
+    openTheStep(step);
+    const focusField = () => setSettingToFocus({ name: fieldSettingOf(settingName) });
+    if (step !== "criteria" || criterionId === null || criterionId === shownCriterionId || !criteria.criteria.some((entry) => entry.id === criterionId)) {
+      focusField();
+      return;
+    }
+    const failure = runs.current?.project === project.name ? runs.current.state.failure : null;
+    selection.showCriterion(criterionId, () => {
+      if (failure?.criterion === criterionId) markRunErrors(failure.field_errors);
+      focusField();
+    });
+  };
 
   // Run analysis is in Criteria and pinned in Site and grid: each names a setting to fix in another step with that step. Every
   // criterion that is on needs test surfaces (a bypassed one needs none).
@@ -392,22 +408,35 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const protectingNothing = criteriaProtectingNothing(criteria.criteria);
   // The only criterion, bypassed (project.json edited by hand): it has no card, so its panel offers to turn it on.
   const onlyCriterionBypassed = criteria.criteria.length === 1 && criteria.criteria[0].bypassed;
+  const severalCriteria = criteria.criteria.length >= 2;
+  // The criteria that are on whose mode needs a weather file (the shown one by the mode its form shows): the run needs it for each.
+  const needingWeatherFile = active.filter((entry) => modes.find((mode) => mode.name === (entry.id === criterion?.id ? form.mode : entry.settings?.mode))?.needs_epw);
   const runConditions = {
     runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length,
     testSurfaceFiles: criterion === null ? files.test_surfaces.length : criterion.bypassed ? 1 : (criterion.test_surface_files ?? []).length,
     otherCriterionWithoutTestSurfaces: protectingNothing.find((entry) => entry.id !== criterion?.id)?.name ?? null,
     noCriterionOn: criteria.criteria.length > 0 && active.length === 0,
-    modeNeedsWeatherFile, hasWeatherFile, form, warmUpState, criterionKeys,
+    modeNeedsWeatherFile: modeNeedsWeatherFile && !(criterion?.bypassed ?? false),
+    otherCriterionNeedingWeatherFile: needingWeatherFile.find((entry) => entry.id !== criterion?.id)?.name ?? null,
+    hasWeatherFile, form, warmUpState, criterionKeys,
     stepErrorsByStep: { site_and_grid: sharedForm.form.stepErrors, criteria: criterionForm.form.stepErrors },
   };
   const runBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "criteria" });
-  const siteAndGridRunBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "site_and_grid" });
+  // Site and grid shows no criterion: with several, the one without test surfaces or that needs a weather file is named, the shown one too.
+  const siteAndGridRunBlocker = runAnalysisBlocker(severalCriteria
+    ? { ...runConditions, shownIn: "site_and_grid", testSurfaceFiles: 1, otherCriterionWithoutTestSurfaces: protectingNothing[0]?.name ?? null,
+        modeNeedsWeatherFile: false, otherCriterionNeedingWeatherFile: needingWeatherFile[0]?.name ?? null }
+    : { ...runConditions, shownIn: "site_and_grid" });
   // The shown criterion's own analysis and carving: its carving rule locks while its analysis is out of date; another criterion's
   // analysis out of date keeps a carving change from running (result_steps.tsx).
   const ownStages = resultsCriterionId === undefined ? undefined
     : shownAs(criterionStages[resultsCriterionId] ?? { preprocessing: "missing", thresholding: "missing" });
   const waitedFor = active.find((entry) => entry.id !== resultsCriterionId && criterionStages[entry.id]?.preprocessing !== "current");
   const analysisWaitsFor = waitedFor === undefined ? null : { name: waitedFor.name, protectsNothing: protectingNothing.includes(waitedFor) };
+  // With several criteria the builds name the first criterion that is on whose analysis is not current (the shown one as shown).
+  const notAnalysed = active.find((entry) => (entry.id === resultsCriterionId ? ownStages : criterionStages[entry.id])?.preprocessing !== "current");
+  const buildWaitReason = !severalCriteria || notAnalysed === undefined ? null
+    : protectingNothing.includes(notAnalysed) ? messages.addTestSurfacesFirst(notAnalysed.name) : messages.carvingWaitsForAnalysisOf(notAnalysed.name);
   // A threshold value of another criterion, whose turn in the threshold queue came after this one was selected: its settings with
   // the value, while it is there with the mode the value was given in.
   const saveToCriterion = async (id: string, mode: string, values: Record<string, unknown>): Promise<boolean> => {
@@ -431,7 +460,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     token, project: project.name, criterionId: resultsCriterionId, criterionStagesWithResults: resultsCriterionId === undefined ? undefined : stagesWithOutputOf(criterionStages[resultsCriterionId]),
     carvedByCriterionIds, carvedByCriterionWanted,
     carvedByCriterionOutOfDate: active.some((entry) => shownAs(criterionStages[entry.id] ?? { preprocessing: "missing", thresholding: "missing" }).thresholding !== "current"),
-    criterionStages: ownStages, chainOrder: criteria.criteria.map((entry) => entry.id), analysisWaitsFor, showRefusalOfCriterion, saveToCriterion,
+    criterionStages: ownStages, chainOrder: criteria.criteria.map((entry) => entry.id), analysisWaitsFor, buildWaitReason, showRefusalOfCriterion, saveToCriterion,
     criterionBypassed: criterion?.bypassed ?? false,
     criterionNames: criteria.criteria.length < 2 ? undefined : Object.fromEntries(criteria.criteria.map((entry) => [entry.id, entry.name])),
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
@@ -446,6 +475,11 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const cardStages = runUnderWay ? stagesDuringRun(criterionStages, criterionProgressOf(record.state)) : criterionStages;
   const summaryCriteria = resultSteps.results.summary?.criteria ?? [];
   const carvingSummaryOf = (entry: CriterionEntry) => summaryCriteria.find((summary) => summary.id === entry.id);
+  // What the chain kept, under the cards, only while every card that is on shows its current result: otherwise its numbers are those
+  // of the run before.
+  const chainCurrent = active.every((entry) => !resultSteps.criteriaAwaitingNumbers.has(entry.id)
+    && criterionStatus(entry, criteria.criteria, cardStages, runningId).kind === "current");
+  const chainLine = chainCurrent ? chainSummaryLine(resultSteps.results.summary?.chain, active.length) : null;
   const criterionList: CriterionListProps = {
     criteria: criteria.criteria,
     selectedId: criteria.selectedId,
@@ -495,7 +529,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={criterionList} load={selection.load} chainLine={chainSummaryLine(resultSteps.results.summary?.chain, active.length)}
+      <CriteriaStep list={criterionList} load={selection.load} chainLine={chainLine}
                     panelProblem={panelProblem} panel={
         <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}

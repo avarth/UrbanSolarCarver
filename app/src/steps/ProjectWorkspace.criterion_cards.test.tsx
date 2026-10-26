@@ -3,7 +3,7 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
-  CURRENT, FACADES, ROOFS, WINDOWS, card, cardLine, cardNames, cards, chooseFromMenu, criteriaSummary, deleteCriterion, expectNoProblemShown,
+  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, cardNames, cards, chooseFromMenu, criteriaSummary, deleteCriterion, expectNoProblemShown,
   expectResultsOfCriterion, keptTile, openChain, panel, panelFrame, periodFieldText, protectedFiles, select, selectButtonOf, selectedCardName, service,
   settingsSaves,
 } from "./chain_service_for_test";
@@ -299,6 +299,13 @@ test("the chain summary line says the volume alone when there is no share, and i
   expect(chainLine()).toBe("Kept 1 234 m³");
   unmountWorkspace();
   await openChain([FACADES, WINDOWS]);
+  expect(chainLine()).toBeNull();
+});
+
+test("the chain summary line is hidden while a criterion that is on is not current: its numbers are from the run before", async () => {
+  const chain = { volume_after_each_m3: [610, 480], share_of_max_volume_kept: 0.4813 };
+  await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: OUT_OF_DATE }, (service) => { service.summaryChain = chain; });
+  expect(cardLine("Spring sun on windows")).toBe("Out of date");
   expect(chainLine()).toBeNull();
 });
 

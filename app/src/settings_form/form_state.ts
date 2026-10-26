@@ -255,7 +255,8 @@ export function storedValue(state: FormState, name: string): unknown {
   return name in state.stored.values ? state.stored.values[name] : defaultValue({ ...state, mode: state.stored.mode }, name);
 }
 
-function isConfigErrorReply(body: unknown): body is ConfigErrorReply {
+/** Whether a 422 body is a refused save's field errors (ConfigErrorReply), not a message alone. */
+export function isConfigErrorReply(body: unknown): body is ConfigErrorReply {
   return typeof body === "object" && body !== null && Array.isArray((body as ConfigErrorReply).field_errors);
 }
 

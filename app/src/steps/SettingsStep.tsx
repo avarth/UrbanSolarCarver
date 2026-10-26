@@ -28,6 +28,8 @@ export interface RunAnalysisConditions {
   /** Every criterion is bypassed: the run refuses to start. */
   noCriterionOn?: boolean;
   modeNeedsWeatherFile: boolean;
+  /** The name of another criterion that is on whose mode needs a weather file (the run refuses without one); absent or null: none. */
+  otherCriterionNeedingWeatherFile?: string | null;
   hasWeatherFile: boolean;
   form: Pick<FormState, "mode" | "fieldErrors">;
   /** The messages that name no setting, by the step that shows them (the shared form's in Site and grid, the criterion's in Criteria). */
@@ -67,6 +69,7 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
   if (!hasTestSurfaces) return messages.addTestSurfacesToRun;
   if (conditions.otherCriterionWithoutTestSurfaces != null) return messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces);
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) return messages.weatherFileNeeded;
+  if (conditions.otherCriterionNeedingWeatherFile != null && !conditions.hasWeatherFile) return messages.weatherFileNeededFor(conditions.otherCriterionNeedingWeatherFile);
   const firstFieldWithError = Object.keys(form.fieldErrors)[0];
   if (firstFieldWithError !== undefined) {
     // A setting of another step is named with its step, so the user knows where to find it.

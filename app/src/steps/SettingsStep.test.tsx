@@ -63,13 +63,13 @@ test("Run analysis says what blocks it, in order: a run, the inputs, the weather
   expect(runAnalysisBlocker(conditions({ hasWeatherFile: false, warmUpState: "running" }))).toBe("Add a weather file to run this mode");
   expect(runAnalysisBlocker(conditions({ hasWeatherFile: false, modeNeedsWeatherFile: false }))).toBeNull();
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET) })))
-    .toBe("Fix the voxel size to run the analysis.");
+    .toBe("Fix the voxel size to run the analysis");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "end_day", message: "no such day" }]) })))
-    .toBe("Fix the analysis period in Criteria to run the analysis.");
+    .toBe("Fix the analysis period in Criteria to run the analysis");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, ray_batch_size must be larger than voxel_size" }]) })))
-    .toBe("Fix the rays per batch to run the analysis.");
+    .toBe("Fix the rays per batch to run the analysis");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, the settings do not fit together" }]) })))
-    .toBe("Fix the settings above to run the analysis.");
+    .toBe("Fix the settings above to run the analysis");
   expect(runAnalysisBlocker(conditions({ warmUpState: "running" }))).toBe("Waiting for the GPU to be ready");
   expect(runAnalysisBlocker(conditions({ warmUpState: null }))).toBe("Waiting for the GPU to be ready");
 });
@@ -109,7 +109,7 @@ test("a message that names no setting is shown for the step; during a run the fi
 test("a project whose stored grid is over the budget opens with Voxel size to fix and Run analysis blocked", () => {
   const opened = form(PLAN_OVER_BUDGET);
   expect(settingsToFixCount(opened)).toBe(1);
-  expect(runAnalysisBlocker(conditions({ form: opened }))).toBe("Fix the voxel size to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: opened }))).toBe("Fix the voxel size to run the analysis");
   rendered = renderForTest(<SettingsStep form={opened} onChange={() => {}} disabledReason={null} />);
   expect(rendered.container.querySelector(".setting-error strong")!.textContent).toBe("Use 0.07\u00a0m or more.");
 });
@@ -183,18 +183,18 @@ test("a step that cannot be used yet still shows its settings to fix, so they ca
 
 test("a setting to fix in another step is named with that step under the run button", () => {
   const slopeRefused = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
-  expect(runAnalysisBlocker(conditions({ form: slopeRefused }))).toBe("Fix the steepest step between columns in Criteria to run the analysis.");
-  expect(runAnalysisBlocker(conditions({ form: slopeRefused, shownIn: "criteria" }))).toBe("Fix the steepest step between columns to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: slopeRefused }))).toBe("Fix the steepest step between columns in Criteria to run the analysis");
+  expect(runAnalysisBlocker(conditions({ form: slopeRefused, shownIn: "criteria" }))).toBe("Fix the steepest step between columns to run the analysis");
   const voxelSizeRefused = rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET);
-  expect(runAnalysisBlocker(conditions({ form: voxelSizeRefused, shownIn: "criteria" }))).toBe("Fix the voxel size in Site and grid to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: voxelSizeRefused, shownIn: "criteria" }))).toBe("Fix the voxel size in Site and grid to run the analysis");
   const marginRefused = rejected([{ field: "min_plate_dimension", message: "Input should be greater than 0" }]);
-  expect(runAnalysisBlocker(conditions({ form: marginRefused, shownIn: "criteria" }))).toBe("Fix the grid module in Envelope and massing to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: marginRefused, shownIn: "criteria" }))).toBe("Fix the grid module in Envelope and massing to run the analysis");
 });
 
 test("a message for no field is told as above in its own step, and with the step's name in the other", () => {
   const criterionMessage = { stepErrorsByStep: { site_and_grid: [], criteria: ["Value error, the settings do not fit together"] } };
-  expect(runAnalysisBlocker(conditions(criterionMessage))).toBe("Fix the settings in Criteria to run the analysis.");
-  expect(runAnalysisBlocker(conditions({ ...criterionMessage, shownIn: "criteria" }))).toBe("Fix the settings above to run the analysis.");
+  expect(runAnalysisBlocker(conditions(criterionMessage))).toBe("Fix the settings in Criteria to run the analysis");
+  expect(runAnalysisBlocker(conditions({ ...criterionMessage, shownIn: "criteria" }))).toBe("Fix the settings above to run the analysis");
 });
 
 test("Site and grid draws the shared settings and a criterion's panel its own, by the criterion keys", () => {

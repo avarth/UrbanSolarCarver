@@ -75,6 +75,8 @@ export class FakeService {
   everythingUpToDate = false;
   /** The field errors a save of these values is refused with (422), or null when it is stored. */
   configErrorsOf: (values: Record<string, unknown>) => { field: string | null; message: string }[] | null = () => null;
+  /** The criterion a refused shared settings save names (the one whose settings refused the shared values); null: none. */
+  sharedRefusalCriterion: string | null = null;
   /** The massing's plates.obj is on disk (a run wrote it), whether or not its stage is recorded. */
   massingOnDisk = false;
   /** The contents of input files by path (for example "/inputs/test_surfaces/surfaces.obj"); one triangle for any other. */
@@ -115,7 +117,7 @@ export class FakeService {
       const criterionSettings = Object.keys(values).filter((name) => CRITERION_KEYS.has(name));
       const fieldErrors = criterionSettings.length > 0
         ? criterionSettings.map((field) => ({ field, message: "A setting of one criterion, not shared by the criteria." })) : this.configErrorsOf(values);
-      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null }, 422);
+      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null, criterion: this.sharedRefusalCriterion }, 422);
       this.savedValues.push(values);
       this.sharedSettings = { ...this.sharedSettings, ...values };       // merged into the stored shared settings
       return json({ settings: this.sharedSettings, grid_plan: null });

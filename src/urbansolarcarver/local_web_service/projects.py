@@ -413,7 +413,8 @@ class ProjectStore:
         *values* are merged into the shared settings stored now. The paths, the device and the settings left to the engine in
         *values* are dropped, as write_config_from_values drops them; a key that is a criterion's setting (CRITERION_KEYS, the mode
         among them) is refused with a ConfigError naming each. Every criterion that is on (all of them when none is) is built with
-        the new shared settings, and the chain they make must load; the grid of the joined max volume is planned and a grid over the
+        the new shared settings (a criterion that refuses them raises a CriterionConfigError naming it), and the chain they make
+        must load; the grid of the joined max volume is planned and a grid over the
         engine's budget raises GridOverBudget. Nothing is stored then. The reply holds the shared settings as stored.
         A project of an earlier version is made a chain of one first (migrate_to_criteria).
         """
@@ -433,8 +434,10 @@ class ProjectStore:
             checked = active_criteria(project_json.criteria) or project_json.criteria
             if not checked:
                 raise ProjectError("The project has no criterion to check the shared settings with: add a criterion first.", status_code=422)
-            configs = [self._config_from_browser_values(project_folder, {**shared, **criterion.settings}, criterion.id)[0]
-                       for criterion in checked]
+            configs = []
+            for criterion in checked:
+                with naming_criterion(criterion.id):          # the app says which criterion the shared value does not suit
+                    configs.append(self._config_from_browser_values(project_folder, {**shared, **criterion.settings}, criterion.id)[0])
             grid_plan = self._plan_and_check_grid(name, configs[0])
             # Stored as the engine's config reads them ("2" is 2.0, "yes" is True), as write_config_from_values stores them.
             shared = split_settings(self._without_service_owned(configs[0].model_dump(mode="json", exclude_unset=True)))[0]

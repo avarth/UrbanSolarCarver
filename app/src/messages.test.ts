@@ -5,7 +5,19 @@ test("interface messages follow the copy rules", () => {
   const text = JSON.stringify(Object.values(messages).map(m => typeof m === "function" ? (m as (...values: number[]) => unknown)(1, 2, 3, 4) : m));
   expect(text).not.toMatch(/plates?\b|floor plate|—|NVIDIA/i);
   expect(text).toContain("No CUDA-enabled GPU found. USC runs on the CPU, which is slower.");
-  expect(messages.fixSettingToRun("Voxel size")).toBe("Fix the voxel size to run the analysis.");
+  expect(messages.fixSettingToRun("Voxel size")).toBe("Fix the voxel size to run the analysis");
+});
+
+test("the reasons a run button or a carving change waits, which fill the same slots, end alike: one sentence has no final period", () => {
+  const oneSentence = [
+    messages.runInProgress, messages.addMaxVolumeToRun, messages.addTestSurfacesToRun, messages.addMaxVolumeAndTestSurfacesToRun,
+    messages.addTestSurfacesOfCriterionToRun("Daylight"), messages.turnOnCriterionToRun, messages.fixSettingsToRun,
+    messages.fixSettingsInStepToRun("Criteria"), messages.fixSettingToRun("Voxel size"), messages.fixSettingInStepToRun("Voxel size", "Site and grid"),
+    messages.weatherFileNeeded, messages.weatherFileNeededFor("Daylight"), messages.runButtonWaitsForGpu, messages.carvingWaitsForAnalysisOf("Daylight"),
+    messages.addTestSurfacesFirst("Daylight"),
+  ];
+  for (const reason of oneSentence) expect(reason).toMatch(/^[^.]+[^.]$/);
+  expect(messages.buildWaitsForAnalysis).toMatch(/^[^.]+\. [^.]+\.$/);            // two sentences, each with its period
 });
 
 test("the engine stopped and access lost messages show the command as code, without markdown backticks", () => {

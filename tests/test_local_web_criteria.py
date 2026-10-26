@@ -10,7 +10,7 @@ from urbansolarcarver.chain_config import CRITERION_KEYS, is_chain_file, load_ch
 from urbansolarcarver.errors import ConfigError
 from urbansolarcarver.local_web_service.api_models import CriterionEntry
 from urbansolarcarver.local_web_service.criteria import CRITERION_COLOURS, MODE_LABELS, chain_config_document, default_criterion_name, split_settings
-from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
+from urbansolarcarver.local_web_service.projects import CriterionConfigError, ProjectError, ProjectStore
 from urbansolarcarver.mode_registry import MODES
 
 COMMENT_LINE = "# Written by the UrbanSolarCarver app from project.json; change settings in the app."
@@ -416,6 +416,7 @@ def test_a_shared_setting_that_breaks_a_criterion_is_refused(tmp_path, monkeypat
     with pytest.raises(ConfigError) as refused:
         store.write_shared_settings("p", {"voxel_size": 0.0})
     assert [error.field for error in refused.value.errors] == ["voxel_size"]
+    assert isinstance(refused.value, CriterionConfigError) and refused.value.criterion == "1"     # the first criterion checked
     assert project_json_path.read_bytes() == json_before and config_path.read_bytes() == config_before
     # every criterion that is on is checked, not only the first: a config that fails for the second one alone refuses the save
     # (monkeypatched, since no real shared value breaks only one criterion)
@@ -426,8 +427,9 @@ def test_a_shared_setting_that_breaks_a_criterion_is_refused(tmp_path, monkeypat
             raise ConfigError("criterion 2 does not accept this")
         return original(self, project_folder, values, criterion_id)
     monkeypatch.setattr(ProjectStore, "_config_from_browser_values", fails_for_the_second)
-    with pytest.raises(ConfigError, match="criterion 2"):
+    with pytest.raises(CriterionConfigError, match="criterion 2") as refused_for_the_second:
         store.write_shared_settings("p", {"voxel_size": 2.0})
+    assert refused_for_the_second.value.criterion == "2"                  # the app shows it with that criterion's name
     assert project_json_path.read_bytes() == json_before and config_path.read_bytes() == config_before
     # a bypassed criterion takes no part in the check
     monkeypatch.undo()

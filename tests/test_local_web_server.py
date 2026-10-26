@@ -1652,6 +1652,7 @@ def test_shared_settings_are_saved_without_a_mode_and_refused_with_a_criterion_k
     assert [error["field"] for error in refused.json()["field_errors"]] == ["threshold"] and refused.json()["criterion"] is None
     broken = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 0.0}})
     assert broken.status_code == 422 and broken.json()["field_errors"][0]["field"] == "voxel_size"
+    assert broken.json()["criterion"] == "1"                                      # the criterion the value was checked with
     over_budget = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 0.0125}})
     assert over_budget.status_code == 422 and over_budget.json()["grid_plan"]["total_voxels"] > over_budget.json()["grid_plan"]["budget_voxels"]
     assert client.get("/api/projects/p").json()["settings"]["voxel_size"] == 2.0      # nothing was stored by the refusals

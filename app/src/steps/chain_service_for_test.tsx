@@ -189,9 +189,13 @@ function summedStages(stages: Record<string, CriterionStages>): CriterionStages 
 /** The service of the project opened last (openChain). */
 export let service: ChainService;
 
-/** Opens the project "p" of these criteria, every one carved, at the Criteria step; *prepare* sets what the service holds before the page asks. */
+/**
+ * Opens the project "p" of these criteria, every one carved, at the Criteria step; *prepare* sets what the service holds before the
+ * page asks, *adjust* changes the project as it is opened (its inputs, say).
+ */
 export async function openChain(entries: CriterionEntry[], stages: Record<string, CriterionStages> = Object.fromEntries(entries.map((entry) => [entry.id, CURRENT])),
-                                prepare: (service: ChainService) => void = () => {}, unlistedTestSurfaceFiles: string[] = []) {
+                                prepare: (service: ChainService) => void = () => {}, unlistedTestSurfaceFiles: string[] = [],
+                                adjust: (opened: ProjectDetail) => ProjectDetail = (opened) => opened) {
   service = new ChainService(entries, { ...stages });
   prepare(service);
   service.stages = { ...CARVED, ...summedStages(stages) };
@@ -201,7 +205,7 @@ export async function openChain(entries: CriterionEntry[], stages: Record<string
     ...project(service.stages), settings: { voxel_size: 1, ...entries[0].settings }, criteria: entries, criterion_status: stages,
     inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: files, weather: [{ name: "weather.epw", triangle_count: 0 }] },
   };
-  await openWorkspace(service, opened);
+  await openWorkspace(service, adjust(opened));
   service.storedTestSurfaces = files;
   openStep("Criteria");
   await settle();

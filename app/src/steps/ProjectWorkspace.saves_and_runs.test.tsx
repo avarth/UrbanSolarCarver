@@ -4,11 +4,11 @@ import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
-import type { ModeInfo } from "../api_client/client";
+import type { ModeInfo, ProjectDetail } from "../api_client/client";
 import { LAYERS_SHOWN_IN_STEP, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "./step_summaries";
 import {
-  CURRENT, FACADES, OUT_OF_DATE, WINDOWS, card, cardLine, carvingSummaryOf, openChain, panel, panelFrame, select, selectedCardName, service as chainService,
+  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, carvingSummaryOf, openChain, panel, panelFrame, select, selectedCardName, service as chainService,
   type CriterionStages,
 } from "./chain_service_for_test";
 import {
@@ -734,7 +734,7 @@ test("Run analysis waits for the test surfaces of every criterion that is on, an
   expect(runButton().disabled).toBe(true);
   expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
   // A carving change of criterion 1 waits for criterion 2, which needs test surfaces before any analysis.
-  expect(panel().textContent).toContain("Add test surfaces to Spring sun on windows.");
+  expect(panel().textContent).toContain("Add test surfaces to Spring sun on windows first");
   expect(panel().textContent).not.toContain("Run the analysis for Spring sun on windows first");
   await bypass("Spring sun on windows");
   expect(runButton().disabled).toBe(false);
@@ -746,7 +746,7 @@ test("with every criterion bypassed Run analysis says to turn one on", async () 
   await bypass("Spring sun on windows");
   const runButton = buttonIn(panel(), "Run analysis");
   expect(runButton.disabled).toBe(true);
-  expect(reasonOf(runButton)).toBe("Turn on a criterion to run.");
+  expect(reasonOf(runButton)).toBe("Turn on a criterion to run");
 });
 
 test("moving an earlier cutoff with auto update runs once, rethresholds the later criterion, and keeps that criterion's histogram", async () => {
@@ -840,4 +840,61 @@ test("the selected criterion's carving locks only while its own analysis is out 
   await select("Spring sun on windows");
   expect(thresholdField().disabled).toBe(true);
   expect(panel().textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+});
+
+test("a run refused for criterion 2's settings, seen from criterion 1, names criterion 2; its link selects criterion 2 and focuses the field there", async () => {
+  await openChain([FACADES, WINDOWS]);
+  chainService.runRefusal = {
+    status: 422, body: { field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }], grid_plan: null, criterion: "2" },
+  };
+  await pressRunAnalysis();
+  expect(panel().textContent).toContain("The run stopped on an error.");          // in criterion 2's panel, which it selected
+  await select("Winter sun on facades");
+  expect(panel().textContent).toContain("The run stopped on an error in the settings of Spring sun on windows.");
+  const link = buttonIn(panel(), "Go to steepest step between columns of Spring sun on windows");
+  await act(async () => link.click());
+  await settle();
+  expect(selectedCardName()).toBe("Spring sun on windows");
+  expect(container().querySelector('[data-setting="max_slope_deg"]')!.contains(document.activeElement)).toBe(true);
+});
+
+test("with several criteria the build buttons name the criterion whose analysis they wait for", async () => {
+  await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: OUT_OF_DATE });
+  openStep("Envelope and massing");
+  for (const [part, label] of [["Envelope", "Build envelope"], ["Building massing", "Build massing"]]) {
+    expect(reasonOf(buttonIn(buildPart(part), label))).toBe("Run the analysis for Spring sun on windows first");
+  }
+});
+
+test("Site and grid's Run analysis names the criterion without test surfaces, whichever criterion is shown", async () => {
+  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
+  await select("Spring sun on windows");
+  openStep("Site and grid");
+  const runButton = buttonIn(container().querySelector(".step-pinned-action")!, "Run analysis");
+  expect(reasonOf(runButton)).toBe("Add test surfaces to Spring sun on windows to run the analysis");
+});
+
+test("Run analysis asks for the weather file a criterion that is on needs, also when the shown one needs none", async () => {
+  const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
+  await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2" }], undefined, undefined, [], withoutWeatherFile);
+  expect(reasonOf(buttonIn(panel(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
+  openStep("Site and grid");
+  expect(reasonOf(buttonIn(container().querySelector(".step-pinned-action")!, "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
+  openStep("Criteria");
+  await select("Winter sun on facades");
+  expect(reasonOf(buttonIn(panel(), "Run analysis"))).toBe("Add a weather file to run this mode");
+});
+
+test("a shared setting refused by another criterion's settings is said in Site and grid with that criterion's name, on no criterion field", async () => {
+  await openChain([FACADES, WINDOWS], undefined, (chain) => {
+    chain.configErrorsOf = (values) => (values.voxel_size === 3 ? [{ field: "max_slope_deg", message: "Input should be less than 90" }] : null);
+    chain.sharedRefusalCriterion = "2";
+  });
+  openStep("Site and grid");
+  typeAndLeave(voxelSizeField(), "3");
+  await waitForTheSave();
+  await settle();
+  expect(stepRow("Site and grid").textContent).toContain("Spring sun on windows: Steepest step between columns: Input should be less than 90");
+  openStep("Criteria");
+  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')).toBeNull();     // criterion 1's own field is fine
 });

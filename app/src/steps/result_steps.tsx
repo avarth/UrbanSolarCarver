@@ -15,7 +15,7 @@ import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
 import { CarvingStep, thresholdControlOf, useAutoUpdate } from "./CarvingStep";
 import { EnvelopeAndMassingStep } from "./EnvelopeAndMassingStep";
 import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
-import { RunProgress } from "./RunProgress";
+import { RunProgress, type GoToSetting } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
 import { runAnalysisAfterSaving, RunAnalysisButton, SettingsToFix } from "./SettingsStep";
 import { criterionProgressOf, runProgressShare, runStages, stageRunState, type RunFailure, type RunLoop, type RunOrigin, type RunOutcome, type RunRecord } from "./run_state";
@@ -155,6 +155,11 @@ export interface ResultStepsContext {
    * (M10). Absent or null: none.
    */
   analysisWaitsFor?: { name: string; protectsNothing: boolean } | null;
+  /**
+   * Why the builds wait while the analysis of the chain is not current, naming the criterion (with several criteria): "Run the
+   * analysis for {name} first", "Add test surfaces to {name} first". Absent or null: the settings changed since the analysis.
+   */
+  buildWaitReason?: string | null;
   /** The selected criterion is bypassed: its panel says so in place of a carving rule. */
   criterionBypassed?: boolean;
   /**
@@ -187,7 +192,7 @@ export interface ResultStepsContext {
   projectRunActive: boolean;
   origin: Point3;
   openStep: (step: StepName) => void;
-  goToSetting: (settingName: string) => void;
+  goToSetting: GoToSetting;
   onServiceProblem: (error: unknown) => void;
 }
 
@@ -339,7 +344,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const submitThreshold = (values: Record<string, unknown>) => thresholdQueue.submit({ values, mode: form.mode }, context.criterionId ?? "");
 
   const feedback = (origin: RunOrigin) => (
-    <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} criterionNames={context.criterionNames} />
+    <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} criterionNames={context.criterionNames}
+                 shownCriterionId={context.criterionId} />
   );
 
   const carvingUpdateRunning = runs.activeRun?.project === project && runs.activeRun.origin === "carving_update";
@@ -350,7 +356,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
 
   // A build reads the carving of every criterion, so it waits while the analysis of any is out of date: it would run that analysis
   // first, which only Run analysis starts (M10). The first reason that blocks a run comes first, as for Run analysis.
-  const buildBlocker = runBlocker ?? (chainAnalysisOutOfDate ? messages.buildWaitsForAnalysis : null);
+  const buildWait = chainAnalysisOutOfDate ? context.buildWaitReason ?? messages.buildWaitsForAnalysis : null;
+  const buildBlocker = runBlocker ?? buildWait;
   const buildButton = (label: string, produce: PipelineStage[], origin: RunOrigin) => (
     <RunAnalysisButton blocker={buildBlocker} label={label} feedback={feedback(origin)} onRunAnalysis={() => void startAfterSaving(produce, origin)} />
   );
@@ -373,7 +380,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // A format change rebuilds the parts that exist (the envelope, the massing or both), so every file is in the new format at once.
   // They read the carving: while Carving is locked the format is stored and the parts keep their out-of-date marks, as the build
   // buttons wait (M10).
-  const formatRunReason = chainAnalysisOutOfDate ? messages.buildWaitsForAnalysis : null;
+  const formatRunReason = buildWait;
   const changeMeshFormat = async (format: string) => {
     const outcome = await changeAndSave({ final_mesh_format: format });
     const partsBuilt = BUILD_STAGES.filter((stage) => stages[stage] !== "missing");
@@ -391,7 +398,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // its own, at Update carving otherwise.
   const waitsFor = context.analysisWaitsFor ?? null;
   const carvingWaitReason = analysisOutOfDate || waitsFor === null ? null
-    : waitsFor.protectsNothing ? messages.addTestSurfacesTo(waitsFor.name) : messages.carvingWaitsForAnalysisOf(waitsFor.name);
+    : waitsFor.protectsNothing ? messages.addTestSurfacesFirst(waitsFor.name) : messages.carvingWaitsForAnalysisOf(waitsFor.name);
   const carvingUpdatesOnItsOwn = autoUpdate && thresholdView !== null;
   // Before the selected criterion's first analysis there is no carving to show: the reason, how the last carving update ended,
   // and the carving settings a refused save marked, so they can be fixed. A bypassed criterion has no carving in the chain.

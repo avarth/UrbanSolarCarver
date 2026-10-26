@@ -241,7 +241,8 @@ export const messages = {
   // Under the tiles while Night cooling is the chosen mode (R2 3: the tile itself shows the symbol and the name only).
   radiativeCoolingIsExperimental: (plainName: string) => `${plainName} is experimental and assumes horizontal test surfaces.`,
 
-  // Run buttons (5.4, 6.4)
+  // Run buttons (5.4, 6.4). The reasons a run button waits, and those a carving change or a build waits for, fill the same slots:
+  // a reason of one sentence has no final period, one of two sentences ends each with one.
   runAnalysis: "Run analysis",
   runInProgress: "A run is in progress",
   addMaxVolumeToRun: "Add a maximum volume to run the analysis",
@@ -250,9 +251,9 @@ export const messages = {
   // Another criterion that is on protects nothing (7.2: the run refuses to start until every one protects something)
   addTestSurfacesOfCriterionToRun: (criterionName: string) => `Add test surfaces to ${criterionName} to run the analysis`,
   // Every criterion is bypassed (the service's words for the refusal)
-  turnOnCriterionToRun: "Turn on a criterion to run.",
-  fixSettingsToRun: "Fix the settings above to run the analysis.",
-  fixSettingsInStepToRun: (stepTitle: string) => `Fix the settings in ${stepTitle} to run the analysis.`,
+  turnOnCriterionToRun: "Turn on a criterion to run",
+  fixSettingsToRun: "Fix the settings above to run the analysis",
+  fixSettingsInStepToRun: (stepTitle: string) => `Fix the settings in ${stepTitle} to run the analysis`,
 
   // Warm-up and device status (5.1, 6.1, 11)
   gpuPreparing: "Preparing the GPU",
@@ -270,8 +271,10 @@ export const messages = {
   addFiles: "Add files",
   orTryAnExample: "or try an example",
   weatherFileNeeded: "Add a weather file to run this mode",
-  fixSettingToRun: (settingLabel: string) => `Fix the ${String(settingLabel).toLowerCase()} to run the analysis.`,
-  fixSettingInStepToRun: (settingLabel: string, stepTitle: string) => `Fix the ${String(settingLabel).toLowerCase()} in ${stepTitle} to run the analysis.`,
+  // A criterion that is on, not the one shown, has a mode that needs a weather file (Site and grid names the shown one too)
+  weatherFileNeededFor: (criterionName: string) => `Add a weather file to run ${criterionName}`,
+  fixSettingToRun: (settingLabel: string) => `Fix the ${String(settingLabel).toLowerCase()} to run the analysis`,
+  fixSettingInStepToRun: (settingLabel: string, stepTitle: string) => `Fix the ${String(settingLabel).toLowerCase()} in ${stepTitle} to run the analysis`,
   settingsToFix: (count: number) => `${count} ${count === 1 ? "setting" : "settings"} to fix`,
   gridOverBudget: (voxelsPerSide: number, totalVoxels: number, budgetVoxels: number, smallestVoxelSize: number) => ({
     description: `This grid would have ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total. ` +
@@ -309,6 +312,9 @@ export const messages = {
   runFailed: "The run stopped on an error.",
   errorType: (errorType: string) => `Error type: ${errorType}`,
   goToSetting: (settingLabel: string) => `Go to ${String(settingLabel).toLowerCase()}`,
+  // A run refused for the settings of a criterion other than the one shown (several criteria)
+  runFailedForCriterion: (criterionName: string) => `The run stopped on an error in the settings of ${criterionName}.`,
+  goToSettingOf: (settingLabel: string, criterionName: string) => `Go to ${String(settingLabel).toLowerCase()} of ${criterionName}`,
   runConnectionLost: "The connection to the engine was lost during the run.",
   runReportUnreadable: "The run report could not be read. Build the envelope or the massing again to write it.",
   warningsTitle: "Warnings",
@@ -323,11 +329,13 @@ export const messages = {
   updateWhenThresholdChanges: "Update when I change the threshold",
   updateCarving: "Update carving",
   buildEnvelopeAndMassing: "Build envelope and massing",
-  // Why the build buttons wait while Carving is locked: a build would run the analysis first (M10).
+  // Why the build buttons wait while Carving is locked: a build would run the analysis first (M10). With several criteria they name
+  // the criterion whose analysis is missing or out of date instead (carvingWaitsForAnalysisOf, addTestSurfacesFirst).
   buildWaitsForAnalysis: "Settings changed since the analysis. Run the analysis again before building.",
   // Why a carving change of the selected criterion runs nothing while another criterion's analysis is out of date: the carving
-  // run would trace that criterion first, which only Run analysis starts (M10).
+  // run would trace that criterion first, which only Run analysis starts (M10). The same while that criterion protects nothing.
   carvingWaitsForAnalysisOf: (criterionName: string) => `Run the analysis for ${criterionName} first`,
+  addTestSurfacesFirst: (criterionName: string) => `Add test surfaces to ${criterionName} first`,
   // The panel of a bypassed criterion, in place of its carving rule
   criterionBypassedNote: "Bypassed: the chain skips this criterion.",
   // In place of that note when the project has one criterion, which has no card and so no bypass switch (a hand edit of project.json)
@@ -522,7 +530,7 @@ export const messages = {
     building_massing: "Building massing",
   },
   carvedByCriterionMissing: "Shows once every criterion that is on has run.",
-  noResultForStage:"No result for this stage: the last run stopped before it",
+  noResultForStage: "No result for this stage: the last run stopped before it",
   viewerNeedsWebGl: "The 3D view cannot start because this browser cannot use WebGL here, for example over a remote desktop, or when " +
     "the graphics card is blocked. The steps on the left still work. To see the 3D view, open this page in another browser or at the computer itself.",
   layers: "Layers",

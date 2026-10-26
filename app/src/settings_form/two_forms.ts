@@ -3,9 +3,11 @@
 // the service's criterion keys (GET criterion-keys). Until the steps show the two apart, they see them as one form: each value
 // read from the form that owns it, each change sent to it.
 import { useEffect, useRef } from "react";
-import type { ConfigErrorReply } from "../api_client/client";
-import { shownConfigErrorOf } from "./engine_errors";
-import { shownValue, storedValue, type FormAction, type FormState, type SaveOutcome, type SettingsForm } from "./form_state";
+import { ApiError, type ConfigErrorReply, type CriterionEntry } from "../api_client/client";
+import { messages } from "../messages";
+import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
+import { isConfigErrorReply, shownValue, storedValue, type FormAction, type FormState, type SaveOutcome, type SettingsForm } from "./form_state";
+import { presentedSettingOf } from "./presentation";
 
 /** Settings split into the shared ones and those of a criterion (the mode among them), by the criterion keys (GET criterion-keys). */
 export function splitSettings(values: Record<string, unknown>, criterionKeys: ReadonlySet<string>) {
@@ -59,6 +61,27 @@ function splitFieldErrors(fieldErrors: readonly FieldError[], mode: string, crit
     if (named.length === 0 || named.some((name) => criterionKeys.has(name))) criterion.push(error);
   }
   return { shared, criterion };
+}
+
+/**
+ * A refused save of the shared settings (PUT shared-settings) as the shared form is to show it. The service checks the shared values
+ * with each criterion that is on and names the one that refused them (ConfigErrorReply.criterion): an error on a setting of that
+ * criterion is not the shared form's, nor the shown criterion's, so it becomes a message of Site and grid with the setting's label,
+ * and with the criterion's name when the project has several. *criterionOf* finds a criterion by id. Any other failure is unchanged.
+ */
+export function sharedRefusalShown(error: unknown, criterionKeys: ReadonlySet<string>, criterionOf: (id: string) => CriterionEntry | null,
+                                   severalCriteria: boolean): unknown {
+  if (!(error instanceof ApiError) || error.status !== 422 || !isConfigErrorReply(error.body)) return error;
+  const reply = error.body;
+  const refusing = reply.criterion == null ? null : criterionOf(reply.criterion);
+  const mode = String(refusing?.settings?.mode ?? "");
+  const fieldErrors = reply.field_errors.map((fieldError) => {
+    const setting = fieldError.field === null ? null : presentedSettingOf(fieldError.field);
+    if (setting === null || !criterionKeys.has(setting)) return fieldError;
+    const problem = errorOfHiddenSetting(setting, shownConfigErrorOf(fieldError.field, fieldError.message, mode).message, mode);
+    return { field: null, message: refusing !== null && severalCriteria ? messages.settingProblem(refusing.name, problem) : problem };
+  });
+  return new ApiError(error.status, { ...reply, field_errors: fieldErrors });
 }
 
 /** The calls of the two forms as one, for the steps that show the settings of both. */
