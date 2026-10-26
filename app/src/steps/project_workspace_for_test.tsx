@@ -35,9 +35,12 @@ export const MODES: ModeInfo[] = [
   { name: "daylight", description: "", needs_epw: false, needs_period: false, experimental: false, score_kind: "weighted_sum", weight_unit: "", score_unit: "",
     starting_values: {} },
 ];
-/** The settings of SCHEMA that belong to a criterion, as GET criterion-keys names them. */
+/** The settings that belong to a criterion, as GET criterion-keys names them. */
 export const CRITERION_KEYS: ReadonlySet<string> = new Set([
-  "mode", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "threshold", "carve_above", "carve_above_min_consecutive", "max_slope_deg",
+  "balance_offset", "balance_temperature", "bliss_k", "carve_above", "carve_above_min_consecutive", "carve_fraction", "dew_point_celsius", "edge_taper",
+  "end_day", "end_hour", "end_month", "id", "include_harm", "max_slope_deg", "min_altitude", "min_sky_elevation_deg", "mode", "name", "rays_per_patch",
+  "score_smoothing", "simulated_weights_path", "start_day", "start_hour", "start_month", "sun_steps_per_hour", "test_surface_path", "threshold",
+  "tilted_plane_angle_deg", "time_basis",
 ]);
 export const TRIANGLE_OBJ = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 3\n";
 export const CARVING = {
@@ -88,6 +91,8 @@ export class FakeService {
   modes: ModeInfo[] = MODES;
   /** The shared settings stored by the saves of this test, which a shared settings save is merged into. */
   sharedSettings: Record<string, unknown> = {};
+  /** The settings of criterion 1 as stored: those the project opened with (openWorkspace), then those of the last criterion save. */
+  criterionSettings: Record<string, unknown> = {};
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -115,10 +120,12 @@ export class FakeService {
       const fieldErrors = this.configErrorsOf(values);
       if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null, criterion: "1" }, 422);
       this.savedValues.push(values);
-      // The criterion's settings are replaced, on top of the starting values of their mode, and it is named after a new mode.
+      // The criterion's settings are replaced, on top of the starting values of their mode (shared settings in the values are
+      // ignored), and it is named after a new mode.
       const mode = String(values.mode);
       const startingValues = this.modes.find((candidate) => candidate.name === mode)?.starting_values ?? {};
-      return json(criterionEntry({ ...startingValues, ...values }));
+      this.criterionSettings = Object.fromEntries(Object.entries({ ...startingValues, ...values }).filter(([name]) => CRITERION_KEYS.has(name)));
+      return json(criterionEntry(this.criterionSettings));
     }
     if (path === "/stage-status") return json({ stages: this.stages });
     if (method === "POST" && path === "/runs") {
@@ -207,6 +214,7 @@ export async function openWorkspace(
 ) {
   vi.stubGlobal("fetch", vi.fn(service.answer));
   service.modes = modes;
+  service.criterionSettings = opened.criteria?.[0]?.settings ?? {};
   function Page() {
     const runs = useRunLoop("token", () => {});
     return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}

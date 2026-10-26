@@ -6,7 +6,8 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { downloadWithToken, failureTextOf, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
-import { analysisDiffersFromStored, shownValue, type FormState, type SaveOutcome, type StepFormAction } from "../settings_form/form_state";
+import { analysisDiffersFromStored, shownValue, type FormState, type SaveOutcome } from "../settings_form/form_state";
+import type { StepFormAction } from "../settings_form/two_forms";
 import type { Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";

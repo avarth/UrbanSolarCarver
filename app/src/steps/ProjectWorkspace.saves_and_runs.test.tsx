@@ -114,7 +114,7 @@ test("a rejected criterion setting marks its field", async () => {
   typeAndLeave(container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!, "100");
   await waitForTheSave();
   await settle();
-  expect(new Set(settingsSaves())).toEqual(new Set(["PATCH /criteria/1"]));
+  expect(settingsSaves()).toEqual(["PATCH /criteria/1"]);
   expect(service.savedValues).toEqual([]);
   expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("Input should be less than 90");
   expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
@@ -138,6 +138,33 @@ test("a mode change starts the criterion from the new mode's values", async () =
   expect(service.savedValues.at(-1)).toEqual({ mode: "time-based" });
   expect(settingsSummaryText()).toContain("21 Dec");
   expect(settingsSummaryText()).toContain("2 m");                // the shared voxel size stays
+});
+
+test("a shared change refused for the criterion's mode is saved again once a mode change makes it storable, and Run analysis starts", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  // The service checks the shared settings with the criterion: Solar time-based needs the weather file the project lacks.
+  service.configErrorsOf = (values) => ("voxel_size" in values && service.criterionSettings.mode === "time-based"
+    ? [{ field: null, message: "Value error, mode 'time-based' requires epw_path" }] : null);
+  await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
+  openStep("Settings");
+  type(voxelSizeField(), "2");
+  await waitForTheSave();
+  await settle();
+  expect(settingsSaves()).toEqual(["PUT /shared-settings"]);
+  expect(container().querySelector(".step-error")!.textContent).toBe("Add a weather file to run this mode");
+
+  openStep("Mode");
+  act(() => modeTiles()[4].click());                                  // Daylight reads no weather file
+  await waitForTheSave();
+  await settle();
+  await waitForTheSave();                                             // the shared settings, sent again after the criterion's save
+  await settle();
+  expect(settingsSaves()).toEqual(["PUT /shared-settings", "PATCH /criteria/1", "PUT /shared-settings"]);
+  expect(service.savedValues).toEqual([{ mode: "daylight" }, { voxel_size: 2 }]);
+  openStep("Settings");
+  expect(container().querySelector(".step-error")).toBeNull();
+  await pressRunAnalysis();
+  expect(service.runsStarted).toEqual([["thresholding"]]);
 });
 
 test("a page opened during a run it does not follow: Run analysis answered with up to date brings the carving the service holds", async () => {

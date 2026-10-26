@@ -12,9 +12,10 @@ import { useCriteria } from "../criteria/use_criteria";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import {
-  analysisDiffersFromStored, bothForms, shownValue, splitSettings, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend,
+  analysisDiffersFromStored, shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend,
 } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
+import { splitSettings, useBothForms } from "../settings_form/two_forms";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
@@ -123,7 +124,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const sharedForm = useSettingsForm(token, project.name, formStarts.shared, putSharedSettings);
   const criterionForm = useSettingsForm(token, project.name, formStarts.criterion, saveCriterionSettings);
   // The steps show the settings of both forms as one; each change goes to the form of its settings.
-  const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = bothForms(sharedForm, criterionForm, criterionKeys);
+  const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useBothForms(sharedForm, criterionForm, criterionKeys);
   const runActive = runs.activeRun?.project === project.name;
   // The uploads and removals of input files under way, each until its reply (and the save it may start) is in.
   const inputChangesUnderWay = useRef(new Set<Promise<unknown>>());
