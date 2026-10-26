@@ -150,13 +150,14 @@ export const messages = {
   criterionUpdatesFrom: (criterionName: string) => `Updates from ${criterionName}`,
   criterionRunning: "Running",
   criterionOff: "Off",
+  allCriteriaOff: "All off",
   criterionNeedsTestSurfaces: "Add test surfaces",
   criterionNotRunYet: "Not run yet",
   // Criteria with several criteria: the ones that are on in order, each with the share it kept, "Daylight on windows 70 %, then
   // Solar usefulness 80 %"
   criterionKeptInChain: (criterionName: string, percentText: string) => `${criterionName} ${percentText}`,
   criteriaThen: (earlierText: string, laterText: string) => `${earlierText}, then ${laterText}`,
-  // The cards of several criteria (7.2), their menu and dialogs
+  // The cards of the criteria (7.2), their menu and dialogs
   criteriaListLabel: "Criteria in carving order",
   addCriterion: "Add criterion",
   newCriterionModeTitle: "Mode of the new criterion",

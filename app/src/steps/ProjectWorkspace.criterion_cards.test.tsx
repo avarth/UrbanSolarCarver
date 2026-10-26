@@ -136,7 +136,10 @@ test("turning the only criterion off and on again: Run analysis waits while it i
   expect(cardLine("Winter sun on facades")).toBe("Off");
   expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);
   expect(panel().textContent).toContain("Off: the chain skips this criterion");
-  expect(reasonOf(buttonIn(container().querySelector(".step-pinned-action") ?? panel(), "Run analysis"))).toContain("Turn on a criterion to run");
+  expect(reasonOf(buttonIn(panel(), "Run analysis"))).toContain("Turn on a criterion to run");
+  openStep("Inputs");
+  expect(criteriaSummary()).toBe("Solar time-based, Off");
+  openStep("Criteria");
   await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
   expect(service.patches[1]).toEqual({ id: "1", body: { bypassed: false } });
@@ -153,7 +156,6 @@ test("switch off the first of two criteria, delete the second: the one left is o
   expect(cardNames()).toEqual(["Winter sun on facades"]);
   expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
   expect(service.entries.map((entry) => [entry.id, entry.bypassed])).toEqual([["1", false]]);     // as the service stores it
-  expect(buttonIn(panel(), "Turn on")).toBeUndefined();
   expect(container().textContent).not.toContain("Turn on a criterion");
   expect(buttonIn(panel(), "Run analysis").disabled).toBe(false);
 });

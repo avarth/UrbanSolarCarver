@@ -392,6 +392,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     settingsToFix: settingsToFixByStep(sharedForm.form, criterionForm.form, criterionKeys),
     stages: shownStages,
     keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
+    criterionOff: criteria.criteria.length === 1 && criteria.criteria[0].bypassed,
     criteriaInChain: criteria.criteria.length < 2 ? null
       : active.map((entry) => ({ name: entry.name, keptPercent: carvingSummaryOf(entry)?.carving?.retention_pct ?? null })),
     totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,

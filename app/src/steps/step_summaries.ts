@@ -37,6 +37,8 @@ export interface ProjectViewState {
   terrainFiles?: number;
   /** The mode of the criterion. */
   mode: string;
+  /** The only criterion is off (the chain skips it); absent: it is on, or there are several. */
+  criterionOff?: boolean;
   northDegrees: number;
   voxelSize: number;
   /** Settings whose last save was refused, by the step that shows them (messages that name no setting count where they are shown). */
@@ -73,14 +75,18 @@ function carvingSummary(state: ProjectViewState): string {
 }
 
 /**
- * One criterion: its mode and its carving, "Solar usefulness, 56 % kept", "Daylight, Out of date". Several: the ones that are on in
- * order, each with the share it kept, "Daylight on windows 70 %, then Solar usefulness 80 %", once the carving is current.
+ * One criterion: its mode and its carving, "Solar usefulness, 56 % kept", "Daylight, Out of date", or "Daylight, Off" while it is off.
+ * Several: the ones that are on in order, each with the share it kept, "Daylight on windows 70 %, then Solar usefulness 80 %", once
+ * the carving is current; "All off" when none is on.
  */
 function criteriaSummary(state: ProjectViewState): string {
   const chain = state.criteriaInChain;
-  if (chain === undefined || chain === null) return messages.criterionSummary(plainModeName(state.mode), carvingSummary(state));
+  if (chain === undefined || chain === null) {
+    return messages.criterionSummary(plainModeName(state.mode), state.criterionOff === true ? messages.criterionOff : carvingSummary(state));
+  }
+  if (chain.length === 0) return messages.allCriteriaOff;
   if (state.stages.thresholding === "out_of_date") return messages.outOfDateSummary;
-  if (state.stages.thresholding === "missing" || chain.length === 0) return messages.notRunYet;
+  if (state.stages.thresholding === "missing") return messages.notRunYet;
   return chain.map(({ name, keptPercent }) => (keptPercent === null ? name : messages.criterionKeptInChain(name, formatPercent(keptPercent))))
     .reduce((earlier, later) => messages.criteriaThen(earlier, later));
 }

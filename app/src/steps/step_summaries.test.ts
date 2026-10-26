@@ -68,6 +68,11 @@ test("the criteria summary of one criterion joins its mode and its carving", () 
   expect(stepSummary("criteria", stateWith({ settingsToFix: { criteria: 2 } }))).toBe("2 settings to fix");
 });
 
+test("the criteria summary says Off for the only criterion when it is off, and All off when every one of several is", () => {
+  expect(stepSummary("criteria", { ...stateWith({ mode: "daylight", stages: { thresholding: "current" }, keptPercent: 56.2 }), criterionOff: true })).toBe("Daylight, Off");
+  expect(stepSummary("criteria", { ...stateWith({ stages: { thresholding: "current" } }), criteriaInChain: [] })).toBe("All off");
+});
+
 test("the criteria summary of several criteria reads as the sequence of the active ones, with the share each kept", () => {
   const chain: { name: string; keptPercent: number | null }[] = [{ name: "Daylight on windows", keptPercent: 70.2 }, { name: "Solar usefulness", keptPercent: 80 }];
   const withChain = (stages: Partial<Record<PipelineStage, StageState>>, criteriaInChain = chain) => ({ ...stateWith({ stages }), criteriaInChain });

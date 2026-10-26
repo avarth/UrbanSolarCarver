@@ -512,7 +512,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .criterion-carving,
 .criterion-run { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
 
-/* Several criteria: the cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
+/* The cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
 .criteria-list-block { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
 .criteria-list-block + .criterion-panel-frame,
 .chain-summary + .criterion-panel-frame { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
