@@ -1414,3 +1414,183 @@ def test_context_and_terrain_routes_upload_list_and_remove(client_with_inputs):
     assert "context_path" not in detail["settings"]
     assert client.delete("/api/projects/p/inputs/context/mass.ply").status_code == 200
     assert client.get("/api/projects/p").json()["inputs"]["context"] == []
+
+
+# ---- Criteria and their test surfaces ----
+
+OTHER_SURFACE = ("other.ply", box_bytes([0, 0, 0], extents=(5, 5, 0.1)))
+
+
+def criteria_of(client, name="p"):
+    return client.get(f"/api/projects/{name}").json()["criteria"]
+
+
+def add_criterion(client, mode="time-based", project="p", **body):
+    reply = client.post(f"/api/projects/{project}/criteria", json={"mode": mode, **body})
+    assert reply.status_code == 200, reply.text
+    return reply.json()
+
+
+def upload_to_criterion(client, criterion_id, file, name="p"):
+    file_name, data = file
+    return client.post(f"/api/projects/{name}/criteria/{criterion_id}/test-surfaces",
+                       files={"file": (file_name, data, "application/octet-stream")})
+
+
+@pytest.fixture
+def client_with_two_criteria(client_with_inputs):
+    """Project 'p' with criterion "1" (daylight, surface.ply) and criterion "2" (time-based, no test surface yet)."""
+    add_criterion(client_with_inputs, "time-based")
+    return client_with_inputs
+
+
+def test_the_criterion_keys_are_listed_sorted(client):
+    from urbansolarcarver.chain_config import CRITERION_KEYS
+    reply = client.get("/api/criterion-keys")
+    assert reply.status_code == 200 and reply.json() == sorted(CRITERION_KEYS) and "mode" in reply.json()
+
+
+def test_an_opened_project_lists_its_criteria_and_their_status(client_with_inputs):
+    detail = client_with_inputs.get("/api/projects/p").json()
+    assert [(entry["id"], entry["settings"]["mode"], entry["test_surface_files"]) for entry in detail["criteria"]] == [("1", "daylight", ["surface.ply"])]
+    assert detail["criterion_status"] == {"1": {"preprocessing": "missing", "thresholding": "missing"}}
+    assert detail["criterion_status"] == detail["stage_status"]["criteria"]
+
+
+def test_a_criterion_is_added_changed_duplicated_ordered_and_deleted(client_with_inputs):
+    client = client_with_inputs
+    added = add_criterion(client, "time-based", name="Winter sun")
+    assert added["id"] == "2" and added["name"] == "Winter sun" and added["settings"]["mode"] == "time-based" and added["test_surface_files"] == []
+    patched = client.patch("/api/projects/p/criteria/2", json={"name": "Second", "colour": "#112233", "bypassed": True})
+    assert patched.status_code == 200 and (patched.json()["name"], patched.json()["colour"], patched.json()["bypassed"]) == ("Second", "#112233", True)
+    patched = client.patch("/api/projects/p/criteria/2", json={"values": {"mode": "daylight"}})
+    assert patched.status_code == 200 and patched.json()["settings"]["mode"] == "daylight" and patched.json()["name"] == "Second"
+    duplicated = client.post("/api/projects/p/criteria/2/duplicate")
+    assert duplicated.status_code == 200 and duplicated.json()["id"] == "3" and duplicated.json()["name"] == "Second copy"
+    ordered = client.put("/api/projects/p/criteria/order", json={"ids": ["3", "1", "2"]})
+    assert ordered.status_code == 200 and [entry["id"] for entry in ordered.json()] == ["3", "1", "2"]
+    assert [entry["id"] for entry in criteria_of(client)] == ["3", "1", "2"]
+    deleted = client.delete("/api/projects/p/criteria/3")
+    assert deleted.status_code == 204 and deleted.content == b""
+    assert [entry["id"] for entry in criteria_of(client)] == ["1", "2"]
+    assert add_criterion(client)["id"] == "4"       # an id is not used again
+
+
+def test_a_bad_order_is_422_and_changes_nothing(client_with_two_criteria):
+    client = client_with_two_criteria
+    for ids in (["1"], ["1", "1"], ["1", "2", "3"], ["2", "9"]):
+        assert client.put("/api/projects/p/criteria/order", json={"ids": ids}).status_code == 422, ids
+    assert [entry["id"] for entry in criteria_of(client)] == ["1", "2"]
+
+
+def test_invalid_criterion_values_are_422_with_the_field_and_change_nothing(client_with_two_criteria):
+    client = client_with_two_criteria
+    before = criteria_of(client)
+    reply = client.patch("/api/projects/p/criteria/2", json={"values": {"mode": "time-based", "start_month": 13}})
+    assert reply.status_code == 422 and reply.json()["field_errors"], reply.text
+    assert client.patch("/api/projects/p/criteria/2", json={"colour": "red"}).status_code == 422
+    assert client.post("/api/projects/p/criteria", json={"mode": "no_such_mode"}).status_code == 422
+    assert criteria_of(client) == before
+
+
+def test_test_surfaces_of_a_criterion_are_uploaded_used_and_removed(client_with_two_criteria):
+    client = client_with_two_criteria
+    uploaded = upload_to_criterion(client, "2", OTHER_SURFACE)
+    assert uploaded.status_code == 200 and uploaded.json()["id"] == "2" and uploaded.json()["test_surface_files"] == ["other.ply"]
+    assert [entry["test_surface_files"] for entry in criteria_of(client)] == [["surface.ply"], ["other.ply"]]
+    used = client.put("/api/projects/p/criteria/2/test-surfaces/surface.ply")
+    assert used.status_code == 200 and used.json()["test_surface_files"] == ["other.ply", "surface.ply"]
+    assert client.put("/api/projects/p/criteria/2/test-surfaces/missing.ply").status_code == 404
+    removed = client.delete("/api/projects/p/criteria/2/test-surfaces/other.ply")
+    assert removed.status_code == 200 and removed.json()["test_surface_files"] == ["surface.ply"]
+    assert client.delete("/api/projects/p/criteria/2/test-surfaces/other.ply").status_code == 404
+    assert [entry["test_surface_files"] for entry in criteria_of(client)] == [["surface.ply"], ["surface.ply"]]
+    assert upload_to_criterion(client, "2", ("notes.txt", b"hello")).status_code == 422
+
+
+def test_the_settings_of_a_criterion_are_saved_and_opened_by_the_criterion_parameter(client_with_two_criteria):
+    client = client_with_two_criteria
+    saved = client.put("/api/projects/p/config", params={"criterion": "2"}, json={"values": {"mode": "time-based", "voxel_size": 3.0}})
+    assert saved.status_code == 200 and saved.json()["settings"]["mode"] == "time-based"
+    second = client.get("/api/projects/p", params={"criterion": "2"}).json()
+    first = client.get("/api/projects/p", params={"criterion": "1"}).json()
+    assert second["settings"]["mode"] == "time-based" and first["settings"]["mode"] == "daylight"
+    assert second["settings"]["voxel_size"] == first["settings"]["voxel_size"] == 3.0     # voxel_size is shared
+    assert client.get("/api/projects/p").json()["settings"] == first["settings"]        # no parameter: the first criterion
+    assert [entry["id"] for entry in second["criteria"]] == ["1", "2"]
+    # several criteria and no criterion: the settings belong to none
+    assert client.put("/api/projects/p/config", json={"values": {"mode": "daylight"}}).status_code == 422
+
+
+def test_an_unknown_criterion_is_404_with_its_id_in_every_route(client_with_two_criteria):
+    client = client_with_two_criteria
+    requests = [
+        ("patch", "/api/projects/p/criteria/9", {"json": {"name": "x"}}),
+        ("delete", "/api/projects/p/criteria/9", {}),
+        ("post", "/api/projects/p/criteria/9/duplicate", {}),
+        ("post", "/api/projects/p/criteria/9/test-surfaces", {"files": {"file": (*OTHER_SURFACE, "application/octet-stream")}}),
+        ("put", "/api/projects/p/criteria/9/test-surfaces/surface.ply", {}),
+        ("delete", "/api/projects/p/criteria/9/test-surfaces/surface.ply", {}),
+        ("get", "/api/projects/p", {"params": {"criterion": "9"}}),
+        ("put", "/api/projects/p/config", {"params": {"criterion": "9"}, "json": {"values": {"mode": "daylight"}}}),
+        ("get", "/api/projects/p/run/score-points", {"params": {"criterion": "9"}}),
+        ("get", "/api/projects/p/run/sky-patches", {"params": {"criterion": "9"}}),
+    ]
+    for method, url, arguments in requests:
+        reply = getattr(client, method)(url, **arguments)
+        assert reply.status_code == 404 and "'9'" in reply.json()["detail"], (method, url, reply.text)
+
+
+def test_results_of_a_criterion_and_of_the_chain_are_served(client_with_two_criteria, projects_folder):
+    client = client_with_two_criteria
+    write_fake_run(projects_folder / "p")
+    write_fake_run(projects_folder / "p", criterion_id="2", after_criterion_id="1")
+    for query in ({}, {"criterion": "1"}, {"criterion": "2"}):
+        reply = client.get("/api/projects/p/run/score-points", params=query)
+        assert reply.status_code == 200 and reply.headers["content-type"] == "application/octet-stream", query
+    assert client.get("/api/projects/p/run/sky-patches", params={"criterion": "1"}).status_code == 404     # a time-based run has no patches
+    carved = client.get("/api/projects/p/run/carved-by-criterion")
+    assert carved.status_code == 200 and carved.headers["content-type"] == "application/octet-stream" and len(carved.content) > 4
+    assert carved.headers["cache-control"] == "no-cache"
+
+
+def test_the_chain_results_are_404_before_a_run(client_with_two_criteria):
+    assert client_with_two_criteria.get("/api/projects/p/run/carved-by-criterion").status_code == 404
+
+
+def test_criteria_routes_are_409_during_a_run_of_the_project(client_with_blocking_run):
+    client, run_id = client_with_blocking_run
+    requests = [
+        ("post", "/api/projects/p/criteria", {"json": {"mode": "daylight"}}),
+        ("patch", "/api/projects/p/criteria/1", {"json": {"name": "x"}}),
+        ("delete", "/api/projects/p/criteria/1", {}),
+        ("post", "/api/projects/p/criteria/1/duplicate", {}),
+        ("put", "/api/projects/p/criteria/order", {"json": {"ids": ["1"]}}),
+        ("post", "/api/projects/p/criteria/1/test-surfaces", {"files": {"file": (*OTHER_SURFACE, "application/octet-stream")}}),
+        ("put", "/api/projects/p/criteria/1/test-surfaces/surface.ply", {}),
+        ("delete", "/api/projects/p/criteria/1/test-surfaces/surface.ply", {}),
+        ("put", "/api/projects/p/config", {"params": {"criterion": "1"}, "json": {"values": {"mode": "daylight"}}}),
+    ]
+    for method, url, arguments in requests:
+        reply = getattr(client, method)(url, **arguments)
+        assert reply.status_code == 409 and "p" in reply.json()["detail"], (method, url, reply.text)
+    create_project_with_inputs(client, "other")         # another project is free to change
+    assert client.post("/api/projects/other/criteria", json={"mode": "daylight"}).status_code == 200
+
+
+def test_the_criteria_routes_need_the_token_and_the_openapi_document_describes_them(projects_folder):
+    bare_client = build_client(projects_folder, authorized=False)[0]
+    assert bare_client.get("/api/criterion-keys").status_code == 401
+    assert bare_client.post("/api/projects/p/criteria", json={"mode": "daylight"}).status_code == 401
+    assert bare_client.get("/api/projects/p/run/carved-by-criterion").status_code == 401
+    document = openapi_document()
+    paths = document["paths"]
+    assert "get" in paths["/api/criterion-keys"] and "post" in paths["/api/projects/{name}/criteria"]
+    assert {"patch", "delete"} <= set(paths["/api/projects/{name}/criteria/{criterion_id}"])
+    assert "post" in paths["/api/projects/{name}/criteria/{criterion_id}/duplicate"] and "put" in paths["/api/projects/{name}/criteria/order"]
+    assert "post" in paths["/api/projects/{name}/criteria/{criterion_id}/test-surfaces"]
+    assert {"put", "delete"} <= set(paths["/api/projects/{name}/criteria/{criterion_id}/test-surfaces/{file_name}"])
+    assert "204" in paths["/api/projects/{name}/criteria/{criterion_id}"]["delete"]["responses"]
+    assert "get" in paths["/api/projects/{name}/run/carved-by-criterion"]
+    assert "criterion" in {parameter["name"] for parameter in paths["/api/projects/{name}/config"]["put"]["parameters"]}
+    assert {"criteria", "criterion_status"} <= set(document["components"]["schemas"]["ProjectDetail"]["properties"])

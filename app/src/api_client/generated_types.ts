@@ -174,7 +174,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Open Project */
+        /**
+         * Open Project
+         * @description The project with the shared settings and those of one criterion; 404 for an unknown project or criterion.
+         */
         get: operations["open_project"];
         put?: never;
         post?: never;
@@ -346,10 +349,165 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Save Config */
+        /**
+         * Save Config
+         * @description Save the settings: the shared ones, and the criterion ones to the criterion *criterion* (the only criterion when there is one).
+         */
         put: operations["save_config"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/criterion-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Criterion Keys
+         * @description The names of the settings that belong to a criterion; every other setting is shared by the criteria.
+         */
+        get: operations["criterion_keys"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/criteria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Criterion
+         * @description Add a criterion of a mode at the end of the chain, with the mode's starting values and no test surfaces.
+         */
+        post: operations["add_criterion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/criteria/{criterion_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Criterion
+         * @description Remove a criterion with its results and its joined test surface file; its id is not used again.
+         */
+        delete: operations["delete_criterion"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Criterion
+         * @description Change the name, colour, bypass or settings of a criterion; what is not sent stays.
+         *
+         *     *values* replace the criterion's settings on top of the starting values of their mode. The shared settings
+         *     among them are ignored: they are saved with PUT /config. A bad name or colour is 422 with a message; settings
+         *     that do not validate are 422 with the fields. Nothing changes then.
+         */
+        patch: operations["update_criterion"];
+        trace?: never;
+    };
+    "/api/projects/{name}/criteria/{criterion_id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Duplicate Criterion
+         * @description Add a copy of a criterion, with its settings and test surfaces, at the end of the chain.
+         */
+        post: operations["duplicate_criterion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/criteria/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reorder Criteria
+         * @description Put the criteria in the order of *ids*, which names each criterion once (else 422).
+         */
+        put: operations["reorder_criteria"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/criteria/{criterion_id}/test-surfaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Criterion Test Surface
+         * @description Add an uploaded test surface file to a criterion (multipart, as the inputs upload).
+         */
+        post: operations["add_criterion_test_surface"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/criteria/{criterion_id}/test-surfaces/{file_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Use Test Surface
+         * @description Let a criterion use a test surface file that is stored already (404 when it is not).
+         */
+        put: operations["use_test_surface"];
+        post?: never;
+        /**
+         * Remove Criterion Test Surface
+         * @description Take a test surface file out of a criterion; the stored file is deleted when no criterion uses it any more.
+         */
+        delete: operations["remove_criterion_test_surface"];
         options?: never;
         head?: never;
         patch?: never;
@@ -413,7 +571,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Run Sky Patches */
+        /**
+         * Run Sky Patches
+         * @description The sky patches of a criterion's run (default: the last criterion that is on).
+         */
         get: operations["run_sky_patches"];
         put?: never;
         post?: never;
@@ -430,8 +591,31 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Run Score Points */
+        /**
+         * Run Score Points
+         * @description The score layer of a criterion's run (default: the last criterion that is on).
+         */
         get: operations["run_score_points"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/run/carved-by-criterion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Run Carved By Criterion
+         * @description Which criterion removed each voxel of the grid (layout in score_points.py); 404 until every criterion that is on has run.
+         */
+        get: operations["run_carved_by_criterion"];
         put?: never;
         post?: never;
         delete?: never;
@@ -498,6 +682,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_add_criterion_test_surface */
+        Body_add_criterion_test_surface: {
+            /** File */
+            file: string;
+        };
         /** Body_add_input */
         Body_add_input: {
             /** File */
@@ -557,6 +746,16 @@ export interface components {
             slope_limit_extra_voxels_removed: number;
         };
         /**
+         * ChainSummary
+         * @description What the chain of criteria that are on kept, from the volumes of the criteria.
+         */
+        ChainSummary: {
+            /** Volume After Each M3 */
+            volume_after_each_m3: number[];
+            /** Share Of Max Volume Kept */
+            share_of_max_volume_kept: number | null;
+        };
+        /**
          * ColdPeriodDates
          * @description Start and end of the cold period (inclusive); start after end wraps across the new year.
          */
@@ -613,6 +812,16 @@ export interface components {
             };
         };
         /**
+         * CreateCriterionRequest
+         * @description The body of a request to add a criterion: its mode, and optionally its name (default: from the mode and its first test surface).
+         */
+        CreateCriterionRequest: {
+            /** Mode */
+            mode: string;
+            /** Name */
+            name?: string | null;
+        };
+        /**
          * CreateProjectRequest
          * @description The body of a request to create a project.
          */
@@ -624,6 +833,63 @@ export interface components {
              * @default time-based
              */
             mode: string;
+        };
+        /**
+         * CriterionCarvingSummary
+         * @description What one criterion that is on reports for the run summary: its carving, and the volume it started with and kept.
+         *
+         *     A criterion whose thresholding has no output is listed too, with its numbers None, so the app can say it has not run yet.
+         */
+        CriterionCarvingSummary: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Colour */
+            colour: string;
+            /** Mode */
+            mode: string;
+            carving: components["schemas"]["CarvingSummary"] | null;
+            /** Voxels At Start */
+            voxels_at_start: number | null;
+            /** Volume Kept M3 */
+            volume_kept_m3: number | null;
+        };
+        /**
+         * CriterionEntry
+         * @description One criterion of a project's chain, as project.json keeps it. config.yaml is generated from these.
+         */
+        CriterionEntry: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Named By User
+             * @default false
+             */
+            named_by_user: boolean;
+            /** Colour */
+            colour: string;
+            /**
+             * Bypassed
+             * @default false
+             */
+            bypassed: boolean;
+            /** Test Surface Files */
+            test_surface_files?: string[];
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * CriterionOrderRequest
+         * @description The body of a reorder: the id of every criterion once, in the new carving order.
+         */
+        CriterionOrderRequest: {
+            /** Ids */
+            ids: string[];
         };
         /**
          * EnvelopeSummary
@@ -807,6 +1073,14 @@ export interface components {
             grid_plan: components["schemas"]["GridPlanReply"] | null;
             /** Carving Chain */
             carving_chain?: components["schemas"]["CarvingChainStep"][];
+            /** Criteria */
+            criteria?: components["schemas"]["CriterionEntry"][];
+            /** Criterion Status */
+            criterion_status?: {
+                [key: string]: {
+                    [key: string]: "current" | "out_of_date" | "missing";
+                };
+            };
         };
         /**
          * ProjectSummary
@@ -865,11 +1139,16 @@ export interface components {
         /**
          * RunSummary
          * @description What the finished stages of a run report; a part is None when its stage has no output.
+         *
+         *     ``carving`` describes the last criterion that is on; ``criteria`` has every criterion that is on, in chain order.
          */
         RunSummary: {
             carving: components["schemas"]["CarvingSummary"] | null;
             envelope: components["schemas"]["EnvelopeSummary"] | null;
             massing: components["schemas"]["MassingSummary"] | null;
+            /** Criteria */
+            criteria?: components["schemas"]["CriterionCarvingSummary"][];
+            chain?: components["schemas"]["ChainSummary"] | null;
         };
         /**
          * SkyDome
@@ -892,6 +1171,12 @@ export interface components {
             stages: {
                 [key: string]: "current" | "out_of_date" | "missing";
             };
+            /** Criteria */
+            criteria?: {
+                [key: string]: {
+                    [key: string]: "current" | "out_of_date" | "missing";
+                };
+            };
         };
         /**
          * StartRunReply
@@ -907,6 +1192,10 @@ export interface components {
             run_id: string | null;
             /** Stages */
             stages: string[];
+            /** Criterion Stages */
+            criterion_stages?: {
+                [key: string]: string[];
+            };
         };
         /**
          * StartRunRequest
@@ -947,6 +1236,22 @@ export interface components {
             period_path: number[][];
             /** Markers */
             markers: components["schemas"]["SunMarker"][];
+        };
+        /**
+         * UpdateCriterionRequest
+         * @description The body of a criterion change: what is not sent (or null) stays as it is.
+         */
+        UpdateCriterionRequest: {
+            /** Name */
+            name?: string | null;
+            /** Colour */
+            colour?: string | null;
+            /** Bypassed */
+            bypassed?: boolean | null;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -1294,7 +1599,10 @@ export interface operations {
     };
     open_project: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The id of a criterion; the first one when omitted. */
+                criterion?: string | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -1310,6 +1618,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectDetail"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
             /** @description Validation Error */
@@ -1757,7 +2074,10 @@ export interface operations {
     };
     save_config: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The id of a criterion; the first one when omitted. */
+                criterion?: string | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -1779,6 +2099,15 @@ export interface operations {
                     "application/json": components["schemas"]["ConfigReply"];
                 };
             };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
             /** @description A run of this project is active. */
             409: {
                 headers: {
@@ -1795,6 +2124,422 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ConfigErrorReply"];
+                };
+            };
+        };
+    };
+    criterion_keys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    add_criterion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCriterionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriterionEntry"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigErrorReply"];
+                };
+            };
+        };
+    };
+    delete_criterion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                criterion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_criterion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                criterion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCriterionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriterionEntry"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigErrorReply"];
+                };
+            };
+        };
+    };
+    duplicate_criterion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                criterion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriterionEntry"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    reorder_criteria: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CriterionOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriterionEntry"][];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    add_criterion_test_surface: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                criterion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_add_criterion_test_surface"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriterionEntry"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    use_test_surface: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                criterion_id: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriterionEntry"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    remove_criterion_test_surface: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                criterion_id: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriterionEntry"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };
@@ -1907,7 +2652,10 @@ export interface operations {
     };
     run_sky_patches: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The id of a criterion; the first one when omitted. */
+                criterion?: string | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -1937,6 +2685,40 @@ export interface operations {
         };
     };
     run_score_points: {
+        parameters: {
+            query?: {
+                /** @description The id of a criterion; the first one when omitted. */
+                criterion?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_carved_by_criterion: {
         parameters: {
             query?: never;
             header?: never;

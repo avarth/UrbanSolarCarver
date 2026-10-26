@@ -315,6 +315,25 @@ class ConfigValuesRequest(BaseModel):
     values: dict
 
 
+class CreateCriterionRequest(BaseModel):
+    """The body of a request to add a criterion: its mode, and optionally its name (default: from the mode and its first test surface)."""
+    mode: str
+    name: str | None = None
+
+
+class UpdateCriterionRequest(BaseModel):
+    """The body of a criterion change: what is not sent (or null) stays as it is."""
+    name: str | None = None
+    colour: str | None = None           # "#RRGGBB"
+    bypassed: bool | None = None
+    values: dict | None = None          # the criterion's settings as the browser holds them
+
+
+class CriterionOrderRequest(BaseModel):
+    """The body of a reorder: the id of every criterion once, in the new carving order."""
+    ids: list[str]
+
+
 class StartRunRequest(BaseModel):
     """The body of a request to run: the stages whose results are wanted."""
     produce: list[str] = Field(default_factory=lambda: ["exporting", "massing"])
@@ -326,7 +345,7 @@ class ProjectDetail(BaseModel):
     created: str                # ISO 8601, UTC
     modified: str               # ISO 8601, UTC
     example: str | None = None  # as in ProjectSummary: the app offers "Reset to the example" when it is set
-    settings: dict              # without the paths and device the service owns
+    settings: dict              # without the paths and device the service owns; the shared ones and those of one criterion (default: the first)
     inputs: dict[str, list[InputFileInfo]]      # role -> files, for every role
     joined_bounds: list[list[float]] | None     # as in InputFilesReply
     weather_location: str | None
@@ -334,6 +353,8 @@ class ProjectDetail(BaseModel):
     stage_status: StageStatusReply
     grid_plan: GridPlanReply | None             # of the stored settings, as a save would plan it; None without a max volume
     carving_chain: list[CarvingChainStep] = Field(default_factory=list)   # as in ProjectJson
+    criteria: list[CriterionEntry] = Field(default_factory=list)          # the chain in carving order, bypassed criteria included
+    criterion_status: dict[str, dict[str, StageState]] = Field(default_factory=dict)    # as stage_status.criteria
 
 
 class CancelRunReply(BaseModel):
