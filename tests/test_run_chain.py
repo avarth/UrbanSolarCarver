@@ -39,11 +39,26 @@ def test_a_chain_of_two_writes_one_folder_per_criterion_and_builds_from_the_last
 def test_the_report_lists_each_criterion_with_the_voxels_it_started_with_and_kept(tmp_path):
     result = run_chain(_two_criteria(tmp_path), tmp_path / "run")
     first, second = (r.thresholding for r in result.criteria)
-    rows = [line for line in (tmp_path / "run/run_report.md").read_text(encoding="utf-8").splitlines()
-            if line.startswith(("| 1 |", "| 2 |"))]
+    report = (tmp_path / "run/run_report.md").read_text(encoding="utf-8")
+    criteria = report[report.index("## Criteria"):report.index("## Chain")]
+    rows = [line for line in criteria.splitlines() if line.startswith(("| 1 |", "| 2 |"))]
     assert len(rows) == 2
     assert f"{first.voxels_kept + first.voxels_removed:,}" in rows[0] and f"{first.voxels_kept:,}" in rows[0]
     assert f"{first.voxels_kept:,}" in rows[1] and f"{second.voxels_kept:,}" in rows[1]
+
+
+def test_the_report_of_a_chain_run_gives_the_volumes_and_the_total_time(tmp_path):
+    result = run_chain(_two_criteria(tmp_path), tmp_path / "run")
+    first, second = (r.thresholding for r in result.criteria)
+    voxel_size = json.loads((tmp_path / "run/criteria/1/preprocessing/manifest.json").read_text())["voxel_size"]
+    report = (tmp_path / "run/run_report.md").read_text(encoding="utf-8")
+    chain = report[report.index("## Chain"):report.index("## Preprocessing")]
+    for result_thr in (first, second):
+        assert f"{result_thr.voxels_kept * voxel_size ** 3:,.1f}" in chain
+    share = 100 * second.voxels_kept / (first.voxels_kept + first.voxels_removed)
+    assert f"{share:.1f}% of the maximum volume" in chain
+    assert "| # | Name | Mode | Rule | Cutoff |" in report
+    assert "**Total time:**" in report.split("## Total")[1]
 
 
 def test_massing_of_a_chain_follows_the_drawn_footprint(tmp_path):

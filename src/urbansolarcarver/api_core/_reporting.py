@@ -75,10 +75,23 @@ def _leaf_stage_dir(stage_dir: Path, thresholding_run_id: str):
     return stage_dir if upstream_run_id == thresholding_run_id else None
 
 
-def _criteria_lines(report_folder: Path, thr_dir: Path) -> list:
-    """The "Criteria" section of a chain run: one row per criterion, from ``criteria/chain.json`` and each criterion's
-    thresholding diagnostics. Empty when there is no chain file, or its last criterion is not the thresholding run
-    this report describes (the file belongs to an earlier run)."""
+_DASH = "—"
+
+
+def _read_json(path: Path) -> dict:
+    """The JSON object at *path*; empty when the file is missing or unreadable."""
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _chain_rows(report_folder: Path, thr_dir: Path) -> list:
+    """The criteria of a chain run, from ``criteria/chain.json`` and each criterion's folders: one dict per criterion, in
+    order, with its ``name``, ``mode``, thresholding diagnostics (``diag``), preprocessing and thresholding wall time
+    (``seconds``) and the voxel size of its grid (``voxel_size``); an empty dict or None for what a folder does not hold.
+    Empty when there is no chain file, or its last criterion is not the thresholding run this report describes (the file
+    belongs to an earlier run)."""
     criteria_folder = Path(report_folder) / "criteria"
     try:
         listed = json.loads((criteria_folder / "chain.json").read_text(encoding="utf-8"))["criteria"]
@@ -87,24 +100,60 @@ def _criteria_lines(report_folder: Path, thr_dir: Path) -> list:
             return []
     except (OSError, ValueError, KeyError, TypeError):
         return []
-    dash = "—"
+    rows = []
+    for row in listed:
+        folder = criteria_folder / str(row["id"])
+        diag = _read_json(folder / "thresholding" / "diagnostics" / "diagnostic.json")
+        pre_diag = _read_json(folder / "preprocessing" / "diagnostics" / "diagnostic.json")
+        seconds = sum(d.get("timings", {}).get("wall_seconds", 0) for d in (pre_diag, diag))
+        rows.append({"name": str(row.get("name", row["id"])), "mode": str(row.get("mode", _DASH)), "diag": diag,
+                     "seconds": seconds, "voxel_size": _read_json(folder / "preprocessing" / "manifest.json").get("voxel_size")})
+    return rows
+
+
+def _criteria_lines(rows: list) -> list:
+    """The "Criteria" section of a chain run: one row per criterion, with the carving rule and the cutoff it resolved to."""
     lines = ["## Criteria\n",
              "Each criterion decides among the voxels the one before it kept. The Configuration, Preprocessing and "
              "Thresholding sections describe the last criterion.\n",
-             "| # | Name | Mode | Threshold | Voxels at start | Voxels kept |",
-             "|---|------|------|-----------|-----------------|-------------|"]
-    for position, row in enumerate(listed, start=1):
-        diag_path = criteria_folder / str(row["id"]) / "thresholding" / "diagnostics" / "diagnostic.json"
-        try:
-            diag = json.loads(diag_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            diag = {}
-        threshold = f"{diag.get('threshold_method', 'unknown')} {diag.get('threshold_value', 0):.4g}" if diag else dash
+             "| # | Name | Mode | Rule | Cutoff | Voxels at start | Voxels kept |",
+             "|---|------|------|------|--------|-----------------|-------------|"]
+    for position, row in enumerate(rows, start=1):
+        diag = row["diag"]
+        rule = str(diag.get("threshold_method", "unknown")) if diag else _DASH
+        cutoff = _DASH if not diag else f"{diag.get('threshold_value', 0):.4g}" + (
+            f" {diag['score_unit']}" if diag.get("score_unit") else "")
         started = diag.get("voxels_at_start", diag.get("voxels_occupied"))
         kept = diag.get("voxels_kept")
-        cells = [str(position), str(row.get("name", row["id"])), str(row.get("mode", dash)), threshold,
-                 dash if started is None else f"{started:,}", dash if kept is None else f"{kept:,}"]
+        cells = [str(position), row["name"], row["mode"], rule, cutoff,
+                 _DASH if started is None else f"{started:,}", _DASH if kept is None else f"{kept:,}"]
         lines.append("| " + " | ".join(cells) + " |")
+    lines.append("")
+    return lines
+
+
+def _chain_lines(rows: list) -> list:
+    """The "Chain" section: the volume after each criterion and its share of the maximum volume (the filled voxels the
+    first criterion started with). Empty when a criterion has no kept voxels or no voxel size, as in the service's chain
+    summary."""
+    if not rows or any(row["diag"].get("voxels_kept") is None or not row["voxel_size"] for row in rows):
+        return []
+    first = rows[0]
+    started = first["diag"].get("voxels_at_start", first["diag"].get("voxels_occupied"))
+    if started is None:
+        return []
+    max_volume = started * first["voxel_size"] ** 3
+    lines = ["## Chain\n",
+             f"- **Maximum volume:** {max_volume:,.1f} m³ (the filled voxels the first criterion started with)\n",
+             "| # | Name | Volume after it (m³) | Share of the maximum volume (%) |",
+             "|---|------|----------------------|---------------------------------|"]
+    volume = 0.0
+    for position, row in enumerate(rows, start=1):
+        volume = row["diag"]["voxels_kept"] * row["voxel_size"] ** 3
+        share = f"{100 * volume / max_volume:.1f}" if max_volume else _DASH
+        lines.append(f"| {position} | {row['name']} | {volume:,.1f} | {share} |")
+    if max_volume:
+        lines.append(f"\nAfter the last criterion {volume:,.1f} m³ is kept, {100 * volume / max_volume:.1f}% of the maximum volume.")
     lines.append("")
     return lines
 
@@ -187,7 +236,10 @@ def generate_run_report(
     lines.append("")
 
     # --- Criteria of a chain run ---
-    lines.extend(_criteria_lines(Path(out_dir), Path(thr_dir)))
+    chain_rows = _chain_rows(Path(out_dir), Path(thr_dir))
+    if chain_rows:
+        lines.extend(_criteria_lines(chain_rows))
+        lines.extend(_chain_lines(chain_rows))
 
     # --- Preprocessing ---
     pre_summary, pre_timing = _load_diag(pre_dir)
@@ -300,11 +352,16 @@ def generate_run_report(
         lines.append("")
 
     # --- Total time ---
-    total_wall = sum(
-        t.get("wall_seconds", 0) for t in [pre_timing, thr_timing, exp_timing, m_timing]
-    )
+    if chain_rows:
+        # Every criterion's preprocessing and thresholding, then the stages built from the last one.
+        total_wall = sum(row["seconds"] for row in chain_rows) + sum(
+            t.get("wall_seconds", 0) for t in [exp_timing, m_timing])
+    else:
+        total_wall = sum(t.get("wall_seconds", 0) for t in [pre_timing, thr_timing, exp_timing, m_timing])
     lines.append("## Total\n")
     lines.append(f"- **Total time:** {total_wall:.1f}s")
+    if chain_rows:
+        lines.append(f"- Over the {len(chain_rows)} criteria (preprocessing and thresholding of each), exporting and massing")
 
     report_path = Path(out_dir) / "run_report.md"
     report_path.write_text("\n".join(lines), encoding="utf-8")
