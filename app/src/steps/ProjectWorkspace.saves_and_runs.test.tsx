@@ -8,7 +8,8 @@ import type { ModeInfo, ProjectDetail } from "../api_client/client";
 import { LAYERS_SHOWN_IN_STEP, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "./step_summaries";
 import {
-  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, carvingSummaryOf, openChain, panel, panelFrame, select, selectedCardName, service as chainService,
+  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, carvingSummaryOf, openChain, panel, panelFrame, select, selectedCardName,
+  service as chainService,
   type CriterionStages,
 } from "./chain_service_for_test";
 import {
@@ -445,6 +446,35 @@ test("the saver of the open project waits for an upload in flight, so a rename, 
   expect(uploadsEnded).toBe(true);
 });
 
+test("the saver of the open project waits for criterion requests in flight: a bypass, and the settings of a card just selected", async () => {
+  let saver: OpenProjectSettingsSaver | null = null;
+  let answerPatch: () => void = () => {};
+  let answerSettings: () => void = () => {};
+  await openChain([FACADES, WINDOWS, ROOFS], undefined, (chain) => {
+    chain.patchesAnswerWhen = new Promise((resolve) => { answerPatch = resolve; });
+    chain.settingsAnswerWhen["2"] = new Promise((resolve) => { answerSettings = resolve; });
+  }, [], undefined, { onSettingsSaverReady: (ready) => { saver = ready; } });
+  let ended = false;
+  const waitForTheRequests = () => {
+    ended = false;
+    void saver!.waitForInputChanges().then(() => { ended = true; });
+  };
+  await act(async () => card("Daylight on roofs").querySelector<HTMLInputElement>('[role="switch"]')!.click());
+  waitForTheRequests();
+  await settle();
+  expect(ended).toBe(false);                                     // PATCH criteria/3 has no reply yet
+  await act(async () => answerPatch());
+  await settle();
+  expect(ended).toBe(true);
+  await select("Spring sun on windows");
+  waitForTheRequests();
+  await settle();
+  expect(ended).toBe(false);                                     // GET criteria/2/settings has no reply yet
+  await act(async () => answerSettings());
+  await settle();
+  expect(ended).toBe(true);
+});
+
 // The notice of a new weather file (weather_change_notice.ts), over the criterion's settings in Criteria.
 const BENEFIT_SCHEMA = {
   properties: { ...SCHEMA.properties, balance_temperature: { default: 15, type: "number" }, balance_offset: { default: 2, minimum: 0, type: "number" } },
@@ -842,7 +872,7 @@ test("the selected criterion's carving locks only while its own analysis is out 
   expect(panel().textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
 });
 
-test("a run refused for criterion 2's settings, seen from criterion 1, names criterion 2; its link selects criterion 2 and focuses the field there", async () => {
+test("a run refused for criterion 2's settings, seen from criterion 1, names criterion 2; its link selects it and focuses the field", async () => {
   await openChain([FACADES, WINDOWS]);
   chainService.runRefusal = {
     status: 422, body: { field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }], grid_plan: null, criterion: "2" },

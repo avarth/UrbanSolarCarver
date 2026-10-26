@@ -89,7 +89,18 @@ def test_a_missing_value_in_the_criteria_table_is_a_hyphen(tmp_path):
     last = run / "criteria/2"
     report = generate_run_report(run, last / "preprocessing", last / "thresholding").read_text(encoding="utf-8")
     assert "| 2 | East daylight | daylight | - | - | - | - |" in report
-    assert "—" not in report.split("## Preprocessing")[0]
+    assert "—" not in report
+
+
+def test_a_missing_weather_file_or_mesh_path_is_a_hyphen(tmp_path):
+    run = _report_folder(tmp_path)
+    last = run / "criteria/2"
+    _write(last / "preprocessing/diagnostics/config_snapshot.json", {"mode": "time-based", "voxel_size": VOXEL_SIZE, "epw_path": None})
+    _write(run / "exporting/diagnostics/diagnostic.json", {"vertices": 3, "triangles": 1, "timings": {"wall_seconds": 3.0}})
+    report = generate_run_report(run, last / "preprocessing", last / "thresholding", exporting_dir=run / "exporting").read_text(encoding="utf-8")
+    assert "| EPW | - |" in report
+    assert "- **Output mesh:** `-`" in report
+    assert "—" not in report
 
 
 def test_the_run_report_total_time_covers_the_chain(tmp_path):

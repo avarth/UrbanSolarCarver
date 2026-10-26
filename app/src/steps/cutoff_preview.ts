@@ -1,4 +1,4 @@
-// What a cutoff on the histogram of the Carving step would carve, worked out in the browser from the score points of the last
+// What a cutoff on the histogram of a criterion's carving rule would carve, worked out in the browser from the score points of the last
 // carving (UX proposal 1), before any run: the share of the volume it keeps and the carve amount it stands for. The points are
 // ranked by the score the engine compared with the cutoff, highest first, with the sum of their own scores above each rank.
 // The run gives the exact numbers: it applies the slope limit, counts the smoothed scores and sees every voxel where the points

@@ -198,9 +198,6 @@ export const removeInput = (token: string, project: string, role: string, fileNa
 export const getInputFiles = (token: string, project: string, role: string) =>
   requestJson<InputFileInfo[]>(token, `${projectPath(project)}/inputs/${encodeURIComponent(role)}`);
 
-export const putConfig = (token: string, project: string, values: Record<string, unknown>) =>
-  requestJson<ConfigReply>(token, `${projectPath(project)}/config`, "PUT", { values });
-
 export const getStageStatus = (token: string, project: string) =>
   requestJson<StageStatusReply>(token, `${projectPath(project)}/stage-status`);
 

@@ -1,4 +1,4 @@
-// The numbers behind the histogram of the Carving step (UX 5.5): the scores the engine compared with the cutoff, in bins of
+// The numbers behind the histogram of a criterion's carving rule (UX 5.5): the scores the engine compared with the cutoff, in bins of
 // equal width over their range, each bin split into its kept and carved voxels, and the bar heights on a log or linear axis.
 
 export interface HistogramBin {

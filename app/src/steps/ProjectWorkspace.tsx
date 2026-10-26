@@ -2,23 +2,20 @@
 // Export) and the 3D view beside it. It holds what the steps share: the input files, the criteria (useCriteria) and their cards'
 // requests, the two settings forms (the shared settings, shown in Site and grid, and the selected criterion's, shown in its panel;
 // the steps read them as one), the stage status the step summaries read, and the input meshes (input_meshes.ts) and the sun path
-// (sun_path_request.ts) the 3D view draws. The parts that start runs and show their results (the criterion's carving rule, Envelope and massing, Export) are
-// put together in result_steps.tsx from these and the app's run loop.
+// (sun_path_request.ts) the 3D view draws. The criteria's selection, run conditions and cards are in use_workspace_criteria.ts.
+// The parts that start runs and show their results (the criterion's carving rule, Envelope and massing, Export) are put together
+// in result_steps.tsx from these and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   addInput, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
   type CriterionEntry, type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
-import {
-  activeCriteria, cardLineOf, chainSummaryLine, criteriaProtectingNothing, criterionStatus, filesOfOtherCriteria, stagesByCriterionOf, stagesDuringRun, type StagesByCriterion,
-} from "../criteria/criteria_state";
-import type { CriterionListProps } from "../criteria/CriterionList";
+import { activeCriteria, filesOfOtherCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
 import { CriteriaStep } from "../criteria/CriteriaStep";
 import { CriterionPanel, TurnOnCriterion } from "../criteria/CriterionPanel";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
-import { useCriterionSelection } from "../criteria/use_criterion_selection";
-import { useRefusalSelection } from "../criteria/use_refusal_selection";
+import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import {
@@ -34,10 +31,8 @@ import { useColdPeriod } from "./cold_period_request";
 import { boundsOf, joinedGeometryOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { carvedByNote, InputBox, inputProblemText, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
-import { criterionProgressOf, runningCriterion, type RunFailure, type RunLoop } from "./run_state";
-import {
-  RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep, stepOfSetting,
-} from "./SettingsStep";
+import type { RunLoop } from "./run_state";
+import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep } from "./SettingsStep";
 import { SiteAndGridStep } from "./SiteAndGridStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
@@ -48,10 +43,6 @@ import { periodChangedSince, weatherChangeSuggestion, type WeatherFileChange } f
 
 const NO_SHIFT: Point3 = [0, 0, 0];
 
-/** A criterion's stages that have output (none for a criterion the stage status does not list: bypassed, or new). */
-function stagesWithOutputOf(stages: StagesByCriterion[string] | undefined): string[] {
-  return stages === undefined ? [] : (["preprocessing", "thresholding"] as const).filter((stage) => stages[stage] !== "missing");
-}
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "site_and_grid"];
@@ -371,129 +362,24 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     setSettingToFocus({ name: fieldSettingOf(ANALYSIS_PERIOD_FIELDS[0]) });
   };
 
-  // The selection of a card and the requests that change the criteria (use_criterion_selection.ts).
-  const selection = useCriterionSelection({
-    token, project: project.name, criteria, shownCriterionId, setShownCriterionId, criterionForm, sharedForm, refreshStageStatus, onServiceProblem,
-    afterDelete: testSurfaceCalls.reloadStoredFiles,
-    criterionStartOf: (settings) => ({ schema: props.schema, modes, settings: splitSettings(settings, criterionKeys).criterion, gridPlan: null }),
+  // The criteria's part: the selection, the requests of the cards, why a run cannot start, and what the results and cards read.
+  const workspaceCriteria = useWorkspaceCriteria({
+    token, project: project.name, criteria, shownCriterionId, setShownCriterionId, criterion, resultsCriterionId, sharedForm, criterionForm, form, dispatch,
+    currentForm, schema: props.schema, modes, criterionKeys, runs, warmUpState, maxVolumeFiles: files.max_volume.length,
+    testSurfaceFiles: files.test_surfaces.length, hasWeatherFile, modeNeedsWeatherFile, criterionStages, shownAs, refreshStageStatus,
+    followed: followedInputChange, reloadTestSurfaces: testSurfaceCalls.reloadStoredFiles, openStep: openTheStep,
+    focusSetting: (settingName) => setSettingToFocus({ name: fieldSettingOf(settingName) }), onServiceProblem,
   });
-  // A start refused for another criterion's settings marks them once that criterion's panel shows them, with the forms then.
-  const latestForms = useRef({ dispatch, currentForm });
-  latestForms.current = { dispatch, currentForm };
-  const markRunErrors = (fieldErrors: RunFailure["field_errors"]) => {
-    latestForms.current.dispatch({ type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: latestForms.current.currentForm().gridPlan } });
-  };
-  const showRefusalOfCriterion = (id: string, fieldErrors: RunFailure["field_errors"]) => selection.showCriterion(id, () => markRunErrors(fieldErrors));
-  // A failed run's link to the setting it names: the step that holds the setting opens and the focus goes to its field. A setting
-  // of the criterion the run named is focused in that criterion's panel, selected first, with the run's errors marked there again.
-  const goToSetting = (settingName: string, criterionId: string | null = null) => {
-    const step = stepOfSetting(settingName, criterionKeys);
-    if (step === null) return;
-    openTheStep(step);
-    const focusField = () => setSettingToFocus({ name: fieldSettingOf(settingName) });
-    if (step !== "criteria" || criterionId === null || criterionId === shownCriterionId || !criteria.criteria.some((entry) => entry.id === criterionId)) {
-      focusField();
-      return;
-    }
-    const failure = runs.current?.project === project.name ? runs.current.state.failure : null;
-    selection.showCriterion(criterionId, () => {
-      if (failure?.criterion === criterionId) markRunErrors(failure.field_errors);
-      focusField();
-    });
-  };
-
-  // Run analysis is in Criteria and pinned in Site and grid: each names a setting to fix in another step with that step. Every
-  // criterion that is on needs test surfaces (a bypassed one needs none).
-  const active = activeCriteria(criteria.criteria);
-  const protectingNothing = criteriaProtectingNothing(criteria.criteria);
-  // The only criterion, bypassed (project.json edited by hand): it has no card, so its panel offers to turn it on.
-  const onlyCriterionBypassed = criteria.criteria.length === 1 && criteria.criteria[0].bypassed;
-  const severalCriteria = criteria.criteria.length >= 2;
-  // The criteria that are on whose mode needs a weather file (the shown one by the mode its form shows): the run needs it for each.
-  const needingWeatherFile = active.filter((entry) => modes.find((mode) => mode.name === (entry.id === criterion?.id ? form.mode : entry.settings?.mode))?.needs_epw);
-  const runConditions = {
-    runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length,
-    testSurfaceFiles: criterion === null ? files.test_surfaces.length : criterion.bypassed ? 1 : (criterion.test_surface_files ?? []).length,
-    otherCriterionWithoutTestSurfaces: protectingNothing.find((entry) => entry.id !== criterion?.id)?.name ?? null,
-    noCriterionOn: criteria.criteria.length > 0 && active.length === 0,
-    modeNeedsWeatherFile: modeNeedsWeatherFile && !(criterion?.bypassed ?? false),
-    otherCriterionNeedingWeatherFile: needingWeatherFile.find((entry) => entry.id !== criterion?.id)?.name ?? null,
-    hasWeatherFile, form, warmUpState, criterionKeys,
-    stepErrorsByStep: { site_and_grid: sharedForm.form.stepErrors, criteria: criterionForm.form.stepErrors },
-  };
-  const runBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "criteria" });
-  // Site and grid shows no criterion: with several, the one without test surfaces or that needs a weather file is named, the shown one too.
-  const siteAndGridRunBlocker = runAnalysisBlocker(severalCriteria
-    ? { ...runConditions, shownIn: "site_and_grid", testSurfaceFiles: 1, otherCriterionWithoutTestSurfaces: protectingNothing[0]?.name ?? null,
-        modeNeedsWeatherFile: false, otherCriterionNeedingWeatherFile: needingWeatherFile[0]?.name ?? null }
-    : { ...runConditions, shownIn: "site_and_grid" });
-  // The shown criterion's own analysis and carving: its carving rule locks while its analysis is out of date; another criterion's
-  // analysis out of date keeps a carving change from running (result_steps.tsx).
-  const ownStages = resultsCriterionId === undefined ? undefined
-    : shownAs(criterionStages[resultsCriterionId] ?? { preprocessing: "missing", thresholding: "missing" });
-  const waitedFor = active.find((entry) => entry.id !== resultsCriterionId && criterionStages[entry.id]?.preprocessing !== "current");
-  const analysisWaitsFor = waitedFor === undefined ? null : { name: waitedFor.name, protectsNothing: protectingNothing.includes(waitedFor) };
-  // With several criteria the builds name the first criterion that is on whose analysis is not current (the shown one as shown).
-  const notAnalysed = active.find((entry) => (entry.id === resultsCriterionId ? ownStages : criterionStages[entry.id])?.preprocessing !== "current");
-  const buildWaitReason = !severalCriteria || notAnalysed === undefined ? null
-    : protectingNothing.includes(notAnalysed) ? messages.addTestSurfacesFirst(notAnalysed.name) : messages.carvingWaitsForAnalysisOf(notAnalysed.name);
-  // A threshold value of another criterion, whose turn in the threshold queue came after this one was selected: its settings with
-  // the value, while it is there with the mode the value was given in.
-  const saveToCriterion = async (id: string, mode: string, values: Record<string, unknown>): Promise<boolean> => {
-    const entry = criteria.current().criteria.find((candidate) => candidate.id === id);
-    if (entry === undefined || entry.settings?.mode !== mode) return false;
-    try {
-      criteria.applyReply(await updateCriterion(token, project.name, id, { values: { ...entry.settings, ...values } }));
-      refreshStageStatus();
-      return true;
-    } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
-      return false;
-    }
-  };
-  // Which criterion removed each voxel: asked for with two or more criteria on, once every one has thresholding output (the service
-  // answers 404 before), and again whenever the criteria that are on change.
-  const carvedByCriterionWanted = active.length >= 2;
-  const carvedByCriterionIds = carvedByCriterionWanted && active.every((entry) => stagesWithOutputOf(criterionStages[entry.id]).includes("thresholding"))
-    ? active.map((entry) => entry.id) : null;
+  const { selection, active, ownStages } = workspaceCriteria;
   const resultSteps = useResultSteps({
-    token, project: project.name, criterionId: resultsCriterionId, criterionStagesWithResults: resultsCriterionId === undefined ? undefined : stagesWithOutputOf(criterionStages[resultsCriterionId]),
-    carvedByCriterionIds, carvedByCriterionWanted,
-    carvedByCriterionOutOfDate: active.some((entry) => shownAs(criterionStages[entry.id] ?? { preprocessing: "missing", thresholding: "missing" }).thresholding !== "current"),
-    criterionStages: ownStages, chainOrder: criteria.criteria.map((entry) => entry.id), analysisWaitsFor, buildWaitReason, showRefusalOfCriterion, saveToCriterion,
-    criterionBypassed: criterion?.bypassed ?? false,
-    criterionNames: criteria.criteria.length < 2 ? undefined : Object.fromEntries(criteria.criteria.map((entry) => [entry.id, entry.name])),
+    ...workspaceCriteria.ofResults,
+    token, project: project.name, criterionId: resultsCriterionId,
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
-    refreshStageStatus, runs, runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
+    refreshStageStatus, runs, runBlocker: workspaceCriteria.runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep,
+    goToSetting: workspaceCriteria.goToSetting, onServiceProblem,
   });
-
-  // The cards (CriteriaStep): their lines from the criteria's stages and the run summary. While a run of the project goes on, the
-  // criterion it works on says Running and the stages it has done or still has to do count as current or out of date.
-  const record = runs.current?.project === project.name ? runs.current : null;
-  const runUnderWay = record !== null && record.state.final === null && record.refusal === null;
-  const runningId = runUnderWay ? runningCriterion(record.state) : null;
-  const cardStages = runUnderWay ? stagesDuringRun(criterionStages, criterionProgressOf(record.state)) : criterionStages;
-  const summaryCriteria = resultSteps.results.summary?.criteria ?? [];
-  const carvingSummaryOf = (entry: CriterionEntry) => summaryCriteria.find((summary) => summary.id === entry.id);
-  // What the chain kept, under the cards, only while every card that is on shows its current result: otherwise its numbers are those
-  // of the run before.
-  const chainCurrent = active.every((entry) => !resultSteps.criteriaAwaitingNumbers.has(entry.id)
-    && criterionStatus(entry, criteria.criteria, cardStages, runningId).kind === "current");
-  const chainLine = chainCurrent ? chainSummaryLine(resultSteps.results.summary?.chain, active.length) : null;
-  const criterionList: CriterionListProps = {
-    criteria: criteria.criteria,
-    selectedId: criteria.selectedId,
-    lineOf: (entry) => cardLineOf(resultSteps.criteriaAwaitingNumbers.has(entry.id) ? { kind: "running" }
-      : criterionStatus(entry, criteria.criteria, cardStages, runningId), carvingSummaryOf(entry)),
-    runningId,
-    disabledReason: inputsDisabledReason,
-    ...selection.requests,
-  };
-
-  // A start refused because criteria that are on protect nothing selects the first of them; its panel asks for test surfaces.
-  const panelProblem = useRefusalSelection({
-    record, criteria: criteria.criteria, selectedId: criteria.selectedId, shownCriterion: criterion, showCriterion: (id) => selection.showCriterion(id),
-  });
+  const cards = workspaceCriteria.cardsOf(resultSteps, inputsDisabledReason);
+  const carvingSummaryOf = (entry: CriterionEntry) => resultSteps.results.summary?.criteria?.find((summary) => summary.id === entry.id);
 
   const viewState: ProjectViewState = {
     maxVolumeFiles: files.max_volume.length,
@@ -507,7 +393,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     stages: shownStages,
     keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
     criteriaInChain: criteria.criteria.length < 2 ? null
-      : activeCriteria(criteria.criteria).map((entry) => ({ name: entry.name, keptPercent: carvingSummaryOf(entry)?.carving?.retention_pct ?? null })),
+      : active.map((entry) => ({ name: entry.name, keptPercent: carvingSummaryOf(entry)?.carving?.retention_pct ?? null })),
     totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
     storeys: resultSteps.results.summary?.massing?.storeys_built ?? null,
   };
@@ -529,8 +415,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={criterionList} load={selection.load} chainLine={chainLine}
-                    panelProblem={panelProblem} panel={
+      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine}
+                    panelProblem={workspaceCriteria.panelProblem} panel={
         <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
@@ -538,7 +424,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                         weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
-                        carvingRule={onlyCriterionBypassed
+                        carvingRule={workspaceCriteria.onlyCriterionBypassed
                           ? <TurnOnCriterion onTurnOn={() => selection.requests.onSetBypassed(criterionId, false)} disabledReason={inputsDisabledReason} />
                           : resultSteps.carvingRule}
                         runAnalysis={resultSteps.criterionRunAnalysis} />
@@ -573,7 +459,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     void resultSteps.startRun(ANALYSIS_STAGES, "settings_run_analysis").then((outcome) => { if (outcome === "finished") openTheStep("criteria"); });
   });
   const pinnedActions: Partial<Record<StepName, ReactNode>> = {
-    site_and_grid: <RunAnalysisButton blocker={siteAndGridRunBlocker} onRunAnalysis={runAnalysis} feedback={resultSteps.feedback("settings_run_analysis")} />,
+    site_and_grid: (
+      <RunAnalysisButton blocker={workspaceCriteria.siteAndGridRunBlocker} onRunAnalysis={runAnalysis} feedback={resultSteps.feedback("settings_run_analysis")} />
+    ),
     ...resultSteps.pinnedAction,
   };
   const openStepUsable = openStep !== null && stepNotUsableYet(openStep, viewState) === null;

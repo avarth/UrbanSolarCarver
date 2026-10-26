@@ -24,7 +24,7 @@ const workspaceSteps = vi.hoisted(() => ({
 vi.mock("./steps/ProjectWorkspace", async () => {
   const { useEffect } = await import("react");
   const { createConfigSaver } = await import("./settings_form/form_state");
-  const { putConfig } = await import("./api_client/client");
+  const { putSharedSettings } = await import("./api_client/client");
   return {
     ProjectWorkspace: ({ token, project, runs, criterionKeys, startSteps, onStepsChange, onSettingsSaverReady }: {
       token: string; project: ProjectDetail; runs: RunLoop; criterionKeys: ReadonlySet<string>; startSteps?: WorkspaceSteps; onStepsChange?: (steps: WorkspaceSteps) => void;
@@ -35,7 +35,7 @@ vi.mock("./steps/ProjectWorkspace", async () => {
       useEffect(() => {
         workspaceSteps.startedWith.push(startSteps);
         workspaceMounts.push(project.name);
-        const saver = createConfigSaver((values) => putConfig(token, project.name, values), () => {}, workspaceSettings.delay);
+        const saver = createConfigSaver((values) => putSharedSettings(token, project.name, values), () => {}, workspaceSettings.delay);
         workspaceSettings.saver = saver;
         onSettingsSaverReady?.({ flush: saver.flush, cancel: saver.cancel, waitForInputChanges: async () => { await workspaceSettings.inputChangesEndWhen; } });
         return () => {
@@ -199,7 +199,7 @@ class FakeService {
     const name = decodeURIComponent(projectRoute[1]);
     const rest = projectRoute[2] ?? "";
     if (method === "GET" && rest === "") return json(projectDetail(name, "2026-10-17T09:00:00", "perimeter_block"));
-    if (method === "PUT" && rest === "/config") {
+    if (method === "PUT" && rest === "/shared-settings") {
       if (this.refuseConfigSaves) return json({ detail: "A run of this project is in progress." }, 409);
       return json({ settings: JSON.parse(String(init!.body)).values, grid_plan: null });
     }
@@ -341,10 +341,10 @@ test("a rename of the open project sends its waiting settings first, under the o
   type(dialog().querySelector("input")!, "Plot 8");
   await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   await settle();
-  const putAt = service.requests.indexOf("PUT /api/projects/Plot%207/config");
+  const putAt = service.requests.indexOf("PUT /api/projects/Plot%207/shared-settings");
   expect(putAt).toBeGreaterThan(-1);
   expect(putAt).toBeLessThan(service.requests.indexOf("POST /api/projects/Plot%207/rename"));
-  expect(savedChanges(service)).toEqual(["PUT /api/projects/Plot%207/config"]);
+  expect(savedChanges(service)).toEqual(["PUT /api/projects/Plot%207/shared-settings"]);
   expect(topBarMenuButton()!.textContent).toContain("Plot 8");
 });
 

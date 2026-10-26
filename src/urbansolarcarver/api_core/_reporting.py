@@ -213,7 +213,7 @@ def generate_run_report(
             ("Device", run_cfg.get("device")),
         ]
         if mode in MODES_NEEDING_EPW:
-            cfg_items.append(("EPW", run_cfg.get("epw_path") or "\u2014"))
+            cfg_items.append(("EPW", run_cfg.get("epw_path") or _DASH))
             if run_cfg.get("start_month") is not None:
                 period = (f"{run_cfg['start_month']}/{run_cfg['start_day']} {run_cfg['start_hour']}:00 \u2192 "
                           f"{run_cfg['end_month']}/{run_cfg['end_day']} {run_cfg['end_hour']}:00")
@@ -307,7 +307,7 @@ def generate_run_report(
         exp_summary, exp_timing = _load_diag(exporting_dir)
         lines.append("## Export\n")
         if exp_summary:
-            _mesh_path = exp_summary.get('mesh_path', '\u2014')
+            _mesh_path = exp_summary.get("mesh_path", _DASH)
             lines.append(f"- **Output mesh:** `{_mesh_path}`")
             lines.append(f"- **Vertices:** {exp_summary.get('vertices') or 0:,}")
             lines.append(f"- **Triangles:** {exp_summary.get('triangles') or 0:,}")

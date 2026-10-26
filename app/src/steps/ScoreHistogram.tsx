@@ -1,4 +1,4 @@
-// The histogram of the Carving step (UX 5.5, 9, 12): the scores the engine compared with the cutoff, for the occupied voxels
+// The histogram of a criterion's carving rule (UX 5.5, 9, 12): the scores the engine compared with the cutoff, for the occupied voxels
 // sent, each bar split into its kept part (accent) and its carved part (carved colour) stacked on top, the cutoff as a dashed
 // ink line with its value on an ink label. Log counts by default, with a Log / Linear switch at the title's right. Hovering a
 // bar, or moving along the bars with the arrow keys, shows its range and its counts. Drawn in the browser as SVG.

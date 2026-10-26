@@ -1,5 +1,5 @@
-// The Mode step (UX 5.3, 12; R2 3): six tiles in a 3 × 2 radio group, each with its symbol and plain name only. Arrow keys move
-// the focus, Space or Enter chooses. Hovering a tile, focusing it with the keyboard, or clicking its "i", shows the tile's tooltip
+// A criterion's mode, in its panel (UX 5.3, 12; R2 3; once the Mode step): six tiles in a 3 × 2 radio group, each with its symbol
+// and plain name only. Arrow keys move the focus, Space or Enter chooses. Hovering a tile, focusing it with the keyboard, or clicking its "i", shows the tile's tooltip
 // (plain name, one line, longer description, what the mode needs, engine name), which Escape closes. The same text, after the
 // name, is the tile's description for a screen reader at all times. The focus a mouse click gives a tile does not hold the
 // tooltip open: it goes when the pointer leaves. A tooltip pinned with the "i" goes when a press lands anywhere but on that

@@ -122,7 +122,7 @@ UrbanSolarCarver/
 |-------|--------------|
 | `GET /criterion-keys` | The settings that belong to a criterion (`CRITERION_KEYS`); every other setting is shared |
 | `POST /projects/{name}/criteria` | Add a criterion at the end; body `mode` and optional `name`. Returns the `CriterionEntry` |
-| `PATCH /projects/{name}/criteria/{id}` | Change `name`, `colour`, `bypassed` or `values` (the criterion's own settings; shared keys in `values` are ignored and belong to `PUT /config`) |
+| `PATCH /projects/{name}/criteria/{id}` | Change `name`, `colour`, `bypassed` or `values` (the criterion's own settings; shared keys in `values` are ignored and belong to `PUT /projects/{name}/shared-settings`) |
 | `DELETE /projects/{name}/criteria/{id}` | Delete a criterion (204) and the stored test surface files no other criterion uses |
 | `POST /projects/{name}/criteria/{id}/duplicate` | Copy the settings and the test surface files into a new criterion at the end |
 | `PUT /projects/{name}/criteria/order` | Reorder; body `ids`, every id once. A bad list is a 422 and changes nothing |

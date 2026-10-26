@@ -2,7 +2,8 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   addCriterion, addCriterionTestSurface, deleteCriterion, duplicateCriterion, getCarvedByCriterion, getCriterionKeys, getCriterionSettings, getSkyPatches,
   getSunPath, putSharedSettings, removeCriterionTestSurface, reorderCriteria, reuseTestSurface, updateCriterion,
-  ApiError, addInput, chooseProjectsFolder, deleteProject, failureTextOf, getHealth, getInputFiles, getProjectsFolder, getScorePoints, openProjectFolder, projectDownloadUrl, putConfig,
+  ApiError, addInput, chooseProjectsFolder, deleteProject, failureTextOf, getHealth, getInputFiles, getProjectsFolder, getScorePoints, openProjectFolder,
+  projectDownloadUrl,
   readTokenFromLaunchUrl, renameProject, resetProjectToExample, runFileUrl, serviceProblemOf, startRun,
 } from "./client";
 
@@ -73,9 +74,9 @@ test("a request carries the token in X-USC-Token", async () => {
 
 test("a JSON body is sent with its content type", async () => {
   const fetchStub = answerWith(JSON.stringify({ settings: {}, grid_plan: null }));
-  await putConfig("secret", "my project", { voxel_size: 1 });
+  await putSharedSettings("secret", "my project", { voxel_size: 1 });
   const [address, options] = fetchStub.mock.calls[0];
-  expect(address).toBe("/api/projects/my%20project/config");
+  expect(address).toBe("/api/projects/my%20project/shared-settings");
   expect(options!.method).toBe("PUT");
   expect(new Headers(options!.headers).get("Content-Type")).toBe("application/json");
   expect(JSON.parse(options!.body as string)).toEqual({ values: { voxel_size: 1 } });

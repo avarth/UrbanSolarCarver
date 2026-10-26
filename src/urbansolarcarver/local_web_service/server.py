@@ -522,8 +522,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """Change the name, colour, bypass or settings of a criterion; what is not sent stays.
 
         *values* replace the criterion's settings on top of the starting values of their mode. The shared settings
-        among them are ignored: they are saved with PUT /config. A bad name or colour is 422 with a message; settings
-        that do not validate are 422 with the fields. Nothing changes then.
+        among them are ignored: they are saved with PUT /projects/{name}/shared-settings. A bad name or colour is 422 with a
+        message; settings that do not validate are 422 with the fields. Nothing changes then.
         """
         with writable_project(name) as store:
             return store.update_criterion(name, criterion_id, name=request.name, colour=request.colour,

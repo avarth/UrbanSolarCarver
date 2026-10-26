@@ -58,7 +58,7 @@ interface InputBoxProps {
   drawingProblems?: string[];
   /** A line under the files: for the maximum volume, how carving further made it (carvedByNote). */
   note?: string | null;
-  /** The box's title, hint and add button in place of the role's (a criterion's test surfaces: "Protects", the mode's hint). */
+  /** The box's title, hint and add button in place of the role's (a criterion's test surfaces: the hint of its mode). */
   title?: string;
   hint?: string;
   addLabel?: string;

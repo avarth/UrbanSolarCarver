@@ -28,6 +28,8 @@ interface CriterionSelectionSource {
   /** The criterion form's start from a criterion's settings as GET criteria/{id}/settings gives them (the shared ones with them). */
   criterionStartOf: (settings: Record<string, unknown>) => FormStart;
   refreshStageStatus: () => void;
+  /** Follows a request until its reply is in (the app waits for it before a rename, reset or delete of the project); absent: none. */
+  followed?: <Reply>(request: Promise<Reply>) => Promise<Reply>;
   /** After a criterion is deleted: the stored test surface files are asked for again, as the files only it used are gone. */
   afterDelete?: () => Promise<void>;
   onServiceProblem: (error: unknown) => void;
@@ -45,6 +47,7 @@ export interface CriterionSelection {
 
 export function useCriterionSelection(source: CriterionSelectionSource): CriterionSelection {
   const { token, project, criteria, shownCriterionId, criterionForm, onServiceProblem } = source;
+  const followed = <Reply,>(request: Promise<Reply>): Promise<Reply> => source.followed?.(request) ?? request;
   const [failure, setFailure] = useState<{ id: string; problem: string } | null>(null);
   const [attempt, setAttempt] = useState(0);         // a press on a card whose settings were refused asks again
   const selectionRequest = useRef(0);
@@ -63,7 +66,7 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
     if (wanted === "" || wanted === shownCriterionId) return;
     saveTheShownCriterion();
     setFailure(null);                                 // a refusal of an earlier request is not said while this one is out
-    getCriterionSettings(token, project, wanted).then((reply) => {
+    followed(getCriterionSettings(token, project, wanted)).then((reply) => {
       if (request !== selectionRequest.current) return;
       // The restart sends a change still waiting with the send of the render before, the shown criterion's.
       criterionForm.restart(source.criterionStartOf(reply.settings));
@@ -86,7 +89,7 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
 
   const change = async (request: () => Promise<unknown>): Promise<string | null> => {
     try {
-      await request();
+      await followed(request());
       source.refreshStageStatus();
       return null;
     } catch (error) {

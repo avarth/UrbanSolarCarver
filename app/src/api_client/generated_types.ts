@@ -470,8 +470,8 @@ export interface paths {
          * @description Change the name, colour, bypass or settings of a criterion; what is not sent stays.
          *
          *     *values* replace the criterion's settings on top of the starting values of their mode. The shared settings
-         *     among them are ignored: they are saved with PUT /config. A bad name or colour is 422 with a message; settings
-         *     that do not validate are 422 with the fields. Nothing changes then.
+         *     among them are ignored: they are saved with PUT /projects/{name}/shared-settings. A bad name or colour is 422 with a
+         *     message; settings that do not validate are 422 with the fields. Nothing changes then.
          */
         patch: operations["update_criterion"];
         trace?: never;

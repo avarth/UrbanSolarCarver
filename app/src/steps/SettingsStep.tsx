@@ -69,7 +69,8 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
   if (!hasTestSurfaces) return messages.addTestSurfacesToRun;
   if (conditions.otherCriterionWithoutTestSurfaces != null) return messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces);
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) return messages.weatherFileNeeded;
-  if (conditions.otherCriterionNeedingWeatherFile != null && !conditions.hasWeatherFile) return messages.weatherFileNeededFor(conditions.otherCriterionNeedingWeatherFile);
+  const otherNeedingWeatherFile = conditions.otherCriterionNeedingWeatherFile;
+  if (otherNeedingWeatherFile != null && !conditions.hasWeatherFile) return messages.weatherFileNeededFor(otherNeedingWeatherFile);
   const firstFieldWithError = Object.keys(form.fieldErrors)[0];
   if (firstFieldWithError !== undefined) {
     // A setting of another step is named with its step, so the user knows where to find it.
