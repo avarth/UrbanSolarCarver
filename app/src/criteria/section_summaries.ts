@@ -7,6 +7,7 @@ import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, presentedSettingOf, SETTING_PRE
 import type { ThresholdSpec } from "../settings_form/widgets/ThresholdRule";
 import { carvingRuleOf, manualCarveAmountOf, thresholdControlOf } from "../steps/CarvingStep";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
+import { fieldsWithErrors } from "../steps/SettingsStep";
 import { plainModeName } from "../steps/step_summaries";
 
 export type PanelSectionId = "test_surfaces" | "mode" | "settings" | "carving";
@@ -54,15 +55,18 @@ export function criterionSettingsSummary(form: FormState, criterionKeys: Readonl
   return changedFields.size === 0 ? messages.startingValues : messages.settingsChanged(changedFields.size);
 }
 
-/** "Carve 70 %" (Manual), "Cutoff 1.5 m²·h" (a fixed cutoff), "Automatic", or the angle rule's line. */
-export function carvingRuleSummary(form: FormState): string {
+/**
+ * "Carve 70 %" (Manual), "Cutoff 1.5 m²·h" (a fixed cutoff, in Shadow tolerated's unit or, in a weighted mode, the mode's score
+ * unit), "Automatic", or the angle rule's line.
+ */
+export function carvingRuleSummary(form: FormState, scoreUnit = ""): string {
   const control = thresholdControlOf(form.mode);
   if (control === null) return messages.angleRuleSummary;
   const spec = shownValue(form, "threshold") as ThresholdSpec | null;
   if (control.name === "threshold" || spec?.method === "cutoff") {
     // Shadow tolerated unset is a cutoff at 0, as the engine applies it.
     const cutoff = spec?.method === "cutoff" && typeof spec.value === "number" ? spec.value : 0;
-    return messages.cutoffSummary(withUnit(formattedNumber(cutoff), control.name === "threshold" ? unitBesideValue(control) : ""));
+    return messages.cutoffSummary(withUnit(formattedNumber(cutoff), control.name === "threshold" ? unitBesideValue(control) : scoreUnit));
   }
   if (carvingRuleOf(form) === "headtail") return messages.carvingRuleChoices.headtail;
   const carveAmount = manualCarveAmountOf(form, null);
@@ -71,17 +75,14 @@ export function carvingRuleSummary(form: FormState): string {
 }
 
 /**
- * The settings to fix in each section: the criterion's fields with an error of its last save (the six period settings are one
- * field, as are the balance temperature and its dead band), and the messages that name no setting, which Settings shows.
+ * The settings to fix in each section: the criterion's fields with an error of its last save, counted as the steps count them
+ * (fieldsWithErrors), and the messages that name no setting, which Settings shows.
  */
 export function settingsToFixBySection(form: { fieldErrors: FormState["fieldErrors"]; stepErrors: readonly string[] }, criterionKeys: ReadonlySet<string>)
   : Partial<Record<PanelSectionId, number>> {
   const counts: Partial<Record<PanelSectionId, number>> = {};
   const count = (section: PanelSectionId, added: number) => { if (added > 0) counts[section] = (counts[section] ?? 0) + added; };
-  const fields = new Set(Object.keys(form.fieldErrors)
-    .map((name) => (name === "mode" ? name : fieldSettingOf(presentedSettingOf(name) ?? name)))
-    .filter((name) => criterionKeys.has(name)));
-  for (const name of fields) count(sectionOfSetting(name), 1);
+  for (const name of fieldsWithErrors(form.fieldErrors)) if (criterionKeys.has(name)) count(sectionOfSetting(name), 1);
   count("settings", form.stepErrors.length);
   return counts;
 }

@@ -60,6 +60,8 @@ interface InputBoxProps {
   note?: string | null;
   /** The box's title, hint and add button in place of the role's (a criterion's test surfaces: the hint of its mode). */
   title?: string;
+  /** The title is for screen readers only: a section around the box says it already (a criterion's Test surfaces). */
+  titleHidden?: boolean;
   hint?: string;
   addLabel?: string;
   /** Whether the reason things are disabled is written here; false where another part says it (a criterion's Run analysis). */
@@ -93,7 +95,8 @@ function RemoveIcon() {
 const NO_PROBLEMS: string[] = [];
 
 export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
-                           drawingProblems = NO_PROBLEMS, note = null, title, hint: hintGiven, addLabel, showsDisabledReason = true }: InputBoxProps) {
+                           drawingProblems = NO_PROBLEMS, note = null, title, titleHidden = false, hint: hintGiven, addLabel,
+                           showsDisabledReason = true }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -146,7 +149,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
       <input ref={picker} type="file" hidden multiple={!isWeather} accept={isWeather ? WEATHER_FILE_TYPE : MESH_FILE_TYPES}
              onChange={(event) => { void add(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
       <div className="input-box-title-row">
-        <h3 id={titleId} className="input-box-title">{title ?? (isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role])}</h3>
+        <h3 id={titleId} className={titleHidden ? "input-box-title visually-hidden" : "input-box-title"}>{title ?? (isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role])}</h3>
         {filled ? addButton : badge !== null && <span className="input-box-required">{badge}</span>}
       </div>
       {!filled && (

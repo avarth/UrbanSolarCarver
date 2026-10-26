@@ -553,6 +553,7 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
   white-space: nowrap;
 }
 .panel-section-summary-problem { color: var(--colour-error); font-weight: 600; }
+.panel-section-summary-problem .setting-error-icon { margin: 0 var(--space-unit) 0 0; vertical-align: -2px; }
 .panel-section-content { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); padding-bottom: calc(var(--space-unit) * 4); }
 /* The notice of a new weather file, under the Settings header open or closed. */
 .panel-section > .weather-change-region:not(:empty) { padding-bottom: calc(var(--space-unit) * 3); }

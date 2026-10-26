@@ -1,8 +1,9 @@
 // One folded section of a criterion's panel (CriterionPanel): a header button with the section's title and, while it is closed,
-// what it holds in one line, in the warning colour when the section has something to fix; the content only while it is open.
-// The open sections belong to the Criteria step (usePanelSections), not to one criterion: they stay as they are when another
-// criterion is selected.
+// what it holds in one line, with a warning icon and in the warning colour when the section has something to fix; the content
+// only while it is open. The open sections belong to the workspace (usePanelSections), not to one criterion: they stay as they
+// are when another criterion is selected, and when the Criteria step is closed and opened again.
 import { useId, useState, type ReactNode } from "react";
+import { WarningIcon } from "../settings_form/SettingField";
 import { DEFAULT_OPEN_SECTIONS, type PanelSectionId } from "./section_summaries";
 import "../steps/steps.css";
 
@@ -12,7 +13,7 @@ interface PanelSectionProps {
   summary: string;
   open: boolean;
   onToggle: () => void;
-  /** The section has something to fix: its summary is in the warning colour. */
+  /** The section has something to fix: its summary has a warning icon and is in the warning colour. */
   problem: boolean;
   /** What the section shows under its header open or closed (a live region that must stay on the page); absent: nothing. */
   alwaysShown?: ReactNode;
@@ -26,7 +27,11 @@ export function PanelSection({ id, title, summary, open, onToggle, problem, alwa
       <h3 className="panel-section-heading">
         <button type="button" className="panel-section-header" aria-expanded={open} aria-controls={open ? contentId : undefined} onClick={onToggle}>
           <span className="panel-section-title">{title}</span>
-          {!open && <span className={problem ? "panel-section-summary panel-section-summary-problem" : "panel-section-summary"}>{summary}</span>}
+          {!open && (
+            <span className={problem ? "panel-section-summary panel-section-summary-problem" : "panel-section-summary"}>
+              {problem && <WarningIcon />}{summary}
+            </span>
+          )}
         </button>
       </h3>
       {alwaysShown}

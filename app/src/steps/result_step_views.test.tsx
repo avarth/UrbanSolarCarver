@@ -534,7 +534,9 @@ test("a weighted mode: Manual or Automatic at the top, the control of the rule u
   for (const [threshold, controlLabel] of [[null, "Carve amount"], [{ method: "headtail" }, null]] as const) {
     rendered = renderForTest(<CarvingStep {...weightedCarvingProps(threshold === null ? {} : { threshold })} />);
     const container = rendered.container;
+    // The panel's section is titled Carving rule: the choice's own label is for screen readers only.
     expect(container.querySelector(".carving-rule-choice .setting-label")!.textContent).toBe("Carving rule");
+    expect(container.querySelector(".carving-rule-choice .setting-label")!.classList.contains("visually-hidden")).toBe(true);
     expect(ruleChoices(container).map((choice) => [choice.parentElement!.textContent, choice.checked]))
       .toEqual([["Manual", threshold === null], ["Automatic", threshold !== null]]);
     expect(container.querySelector(".threshold-control label")?.textContent ?? null).toBe(controlLabel);

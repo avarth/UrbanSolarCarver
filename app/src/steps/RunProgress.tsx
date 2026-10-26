@@ -5,9 +5,10 @@
 // seconds: "Results are up to date" when the service had nothing to run, "A run is in progress" for a press during a run.
 import { useEffect, useState } from "react";
 import { messages } from "../messages";
-import { presentedSettingOf, settingView } from "../settings_form/presentation";
+import { presentedSettingOf } from "../settings_form/presentation";
 import { formatNumber } from "./format_numbers";
 import { criterionOfKey, stageDisplayName, stageOfKey, type RunLoop, type RunOrigin, type RunRecord, type RunState } from "./run_state";
+import { shownLabelOf } from "./SettingsStep";
 import "./steps.css";
 
 /** Goes to a setting a failed run names; *criterion*: the criterion whose settings the run found it in, null when it named none. */
@@ -76,8 +77,9 @@ interface EndedRunContext {
 function RunFailure({ record, mode, onGoToSetting, shownCriterionId, criterionNames, criterionKeys }: EndedRunContext & { record: RunRecord }) {
   const failure = record.state.failure!;
   if (failure.error_type === STAGE_CHAIN_ERROR) return <p className="run-outcome run-outcome-error">{messages.resultsOutOfDate}</p>;
-  const namedSettings = [...new Set(failure.field_errors.map((fieldError) => (fieldError.field === null ? null : presentedSettingOf(fieldError.field)))
-    .filter((name): name is string => name !== null))];
+  // The mode has no field but its tiles, which its link goes to.
+  const settingOf = (field: string | null) => (field === null ? null : field === "mode" ? field : presentedSettingOf(field));
+  const namedSettings = [...new Set(failure.field_errors.map((fieldError) => settingOf(fieldError.field)).filter((name): name is string => name !== null))];
   // The settings of a criterion other than the one shown are said with its name, so they are not taken for the shown one's; a
   // shared setting (not a criterion key) is the project's, and is said without it.
   const criterion = failure.criterion ?? null;
@@ -88,7 +90,7 @@ function RunFailure({ record, mode, onGoToSetting, shownCriterionId, criterionNa
     <div className="run-outcome run-outcome-error">
       <p>{otherName === null ? messages.runFailed : messages.runFailedForCriterion(otherName)}</p>
       {namedSettings.map((name) => {
-        const label = settingView(name, mode).label;
+        const label = shownLabelOf(name, mode);
         const ofCriterion = isCriterionSetting(name);
         return (
           <button key={name} type="button" className="link-button" onClick={() => onGoToSetting(name, ofCriterion ? criterion : null)}>

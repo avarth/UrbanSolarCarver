@@ -13,6 +13,7 @@ import {
 import { activeCriteria, filesOfOtherCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
 import { CriteriaStep } from "../criteria/CriteriaStep";
 import { CriterionPanel } from "../criteria/CriterionPanel";
+import { usePanelSections } from "../criteria/PanelSection";
 import { sectionOfSetting } from "../criteria/section_summaries";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
@@ -351,15 +352,17 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   useEffect(() => {
     if (settingToFocus === null) return;
-    // The input the field's label targets: the number field of a slider, the balance temperature's number of the balance widget.
+    // The input the field's label targets: the number field of a slider, the balance temperature's number of the balance widget;
+    // for the mode, its chosen tile (the one in the tab order).
     const field = panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"]`);
     const labelled = field?.dataset.inputId === undefined ? null : document.getElementById(field.dataset.inputId);
-    (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
-    setSettingToFocus(null);          // done: a Criteria step opened later opens no section for it
+    (labelled ?? field?.querySelector<HTMLElement>(':is(input, select, [role="radio"][tabindex="0"])'))?.focus();
   }, [settingToFocus]);
-  // A setting of the criterion's panel to focus opens the panel's section that holds it first, in the same render.
+  // The criterion panel's open sections, kept here so they outlast the Criteria step while it is closed (not stored). A setting of
+  // the panel to focus opens the section that holds it first, in the same render.
   const openSectionRequest = useMemo(() => (settingToFocus === null || stepOfSetting(settingToFocus.name, criterionKeys) !== "criteria" ? null
-    : { section: sectionOfSetting(settingToFocus.name) }), [settingToFocus]);
+    : { section: sectionOfSetting(settingToFocus.name) }), [settingToFocus, criterionKeys]);
+  const panelSections = usePanelSections(openSectionRequest);
 
   // Either button of the notice ends it; the focus, on a button that goes away, moves to the period the notice was about.
   const endWeatherChangeNotice = () => {
@@ -421,18 +424,18 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} openSectionRequest={openSectionRequest}
-                    panelProblem={workspaceCriteria.panelProblem} panel={(sections) => (
-        <CriterionPanel key={criterionId} {...sections} testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
+      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine}
+                    panelProblem={workspaceCriteria.panelProblem} panel={
+        <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} testSurfacesNeeded={!(criterion?.bypassed ?? false)} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
                         onChange={changeSettings} onChooseMode={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
                         weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
-                        carvingRule={resultSteps.carvingRule}
+                        carvingRule={resultSteps.carvingRule} scoreUnit={modeInfo?.score_unit}
                         runAnalysis={resultSteps.criterionRunAnalysis} />
-      )} />
+      } />
     ),
     ...resultSteps.content,
   };

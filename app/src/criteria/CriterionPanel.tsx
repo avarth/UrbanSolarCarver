@@ -1,8 +1,9 @@
 // A criterion's panel (spec 7.1, 7.2), in four folded sections (PanelSection): Test surfaces (ProtectsBox), Mode (the tiles of
 // ModeStep, with the weather box and the values a mode change reset), Settings (the analysis settings that are criterion keys,
 // SettingsStep) and Carving rule (CarvingStep, put together in result_steps.tsx), then Run analysis. The shared settings are in
-// Site and grid. The open sections are the step's (usePanelSections); a section opens when something it shows appears: no test
-// surfaces, a field with an error of the criterion's save, the weather box or the values reset under the tiles. A criterion just
+// Site and grid. The open sections are the workspace's (usePanelSections); a section opens when something it shows appears: no test
+// surfaces (of a criterion that is on), a field with an error of the criterion's save, the weather box or the values reset under
+// the tiles. A criterion just
 // selected shows them all as new. The notice of a new weather file is under the Settings header, open or closed.
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
@@ -21,6 +22,8 @@ import "../steps/steps.css";
 export interface CriterionPanelProps extends PanelSections {
   /** The criterion's test surface files, with their triangle counts. */
   testSurfaces: InputFileInfo[];
+  /** Whether the run needs the criterion's test surfaces; false while it is off (the chain skips it). Absent: true. */
+  testSurfacesNeeded?: boolean;
   /** The files of the test surfaces the 3D view cannot draw. */
   testSurfaceDrawingProblems?: string[];
   onAddTestSurfaces: (files: File[]) => Promise<string[]>;
@@ -45,6 +48,8 @@ export interface CriterionPanelProps extends PanelSections {
   weatherChangeNotice?: WeatherChangeNoticeContent | null;
   /** The criterion's carving rule, or why it waits for an analysis. */
   carvingRule: ReactNode;
+  /** The unit of the mode's scores, for a cutoff in the carving rule's summary; absent: none. */
+  scoreUnit?: string;
   /** Run analysis, with the progress of its run. */
   runAnalysis: ReactNode;
 }
@@ -55,7 +60,7 @@ export function CriterionPanel(props: CriterionPanelProps) {
   const hasWeatherBox = props.weatherDropZone !== null && props.weatherDropZone !== undefined && props.weatherDropZone !== false;
   // What a section has to fix: its summary is in the warning colour.
   const problems: Record<PanelSectionId, boolean> = {
-    test_surfaces: props.testSurfaces.length === 0,
+    test_surfaces: (props.testSurfacesNeeded ?? true) && props.testSurfaces.length === 0,
     mode: hasWeatherBox || toFix.mode !== undefined,
     settings: toFix.settings !== undefined,
     carving: toFix.carving !== undefined,
@@ -74,7 +79,7 @@ export function CriterionPanel(props: CriterionPanelProps) {
     test_surfaces: testSurfacesSummary(props.testSurfaces.map((file) => file.name)),
     mode: modeSummary(form.mode),
     settings: criterionSettingsSummary(form, criterionKeys),
-    carving: carvingRuleSummary(form),
+    carving: carvingRuleSummary(form, props.scoreUnit),
   };
   // A closed section with settings to fix says how many, as a step row does.
   const section = (id: PanelSectionId, children: ReactNode, alwaysShown?: ReactNode) => {
@@ -95,8 +100,11 @@ export function CriterionPanel(props: CriterionPanelProps) {
                      onUseFile={props.onUseTestSurface} />
       ))}
       {section("mode", (
-        <ModeStep mode={form.mode} onChoose={props.onChooseMode} disabledReason={disabledReason} valuesReset={form.valuesResetByModeChange}
-                  weatherDropZone={props.weatherDropZone} showsDisabledReason={false} />
+        // The field of the mode, which a link to the mode focuses: its chosen tile.
+        <div className="criterion-mode" data-setting="mode">
+          <ModeStep mode={form.mode} onChoose={props.onChooseMode} disabledReason={disabledReason} valuesReset={form.valuesResetByModeChange}
+                    weatherDropZone={props.weatherDropZone} showsDisabledReason={false} />
+        </div>
       ))}
       {section("settings", (
         <SettingsStep form={form} stepErrors={props.stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={props.inputRoles}

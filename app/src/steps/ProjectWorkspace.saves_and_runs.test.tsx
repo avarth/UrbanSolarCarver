@@ -301,6 +301,55 @@ test("go to a setting opens its section: a run refused for the analysis period, 
   expect(container().querySelector('[data-setting="start_month"]')!.contains(document.activeElement)).toBe(true);
 });
 
+test("go to a carving setting opens the Carving rule, closed before, and focuses the field", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  togglePanelSection("Carving rule");
+  await pressRunAnalysis();
+  FakeWebSocket.opened[0].send({ type: "run_failed", error_type: "ConfigError", message: "invalid",
+                                 field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }] });
+  await settle();
+  expect(panelSectionOpen("Carving rule")).toBe(true);              // the error marked in the field opened it
+  togglePanelSection("Carving rule");
+  act(() => buttonIn(container(), "Go to steepest step between columns").click());
+  expect(panelSectionOpen("Carving rule")).toBe(true);
+  expect(container().querySelector('[data-setting="max_slope_deg"]')!.contains(document.activeElement)).toBe(true);
+});
+
+test("go to the mode opens the Mode section and focuses the chosen tile", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  await pressRunAnalysis();
+  FakeWebSocket.opened[0].send({ type: "run_failed", error_type: "ConfigError", message: "invalid",
+                                 field_errors: [{ field: "mode", message: "Input should be a valid mode" }] });
+  await settle();
+  expect(panelSectionOpen("Mode")).toBe(false);
+  act(() => buttonIn(container(), "Go to mode").click());
+  expect(panelSectionOpen("Mode")).toBe(true);
+  expect(document.activeElement).toBe(container().querySelector('[role="radio"][aria-checked="true"]'));
+});
+
+test("closing the Carving rule while a threshold value waits for the carving run still starts the run that follows", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  openStep("Criteria");
+  typeAndLeave(thresholdField(), "1");
+  await settle();
+  expect(service.runsStarted).toEqual([["thresholding"]]);         // run A, for 1
+  typeAndLeave(thresholdField(), "3");                              // waits for run A
+  await settle();
+  togglePanelSection("Carving rule");
+  expect(container().querySelector(".threshold-control")).toBeNull();
+  const runA = FakeWebSocket.opened[0];
+  runA.send({ type: "stage_progress", stage: "thresholding", done: 0, total: 1 });
+  runA.send({ type: "run_finished", stages: ["thresholding"], files: [] });
+  await settle();
+  expect(service.savedValues.map(thresholdOf)).toEqual([1, 3]);
+  expect(service.count("POST /runs")).toBe(2);                      // run B, for 3
+});
+
 test("Build massing sends only massing and Build envelope only exporting; each leaves the other part's out-of-date mark (Review Focus 5)", async () => {
   // A threshold change and Run analysis since the last build: the envelope and the massing are both out of date.
   const stagesAfterAnalysis: Record<PipelineStage, StageState> = { ...CARVED, exporting: "out_of_date", massing: "out_of_date" };
@@ -912,6 +961,22 @@ test("a run refused for criterion 2's settings, seen from criterion 1, names cri
   await settle();
   expect(selectedCardName()).toBe("Spring sun on windows");
   expect(container().querySelector('[data-setting="max_slope_deg"]')!.contains(document.activeElement)).toBe(true);
+});
+
+test("go to a setting of another criterion, its section closed: that criterion is selected, the section opens and the field has the focus", async () => {
+  await openChain([FACADES, WINDOWS]);
+  chainService.runRefusal = {
+    status: 422, body: { field_errors: [{ field: "start_month", message: "Input should be 12 or less" }], grid_plan: null, criterion: "2" },
+  };
+  await pressRunAnalysis();                                       // selects criterion 2, whose marked field opens Settings
+  await select("Winter sun on facades");
+  expect(panelSectionOpen("Settings")).toBe(true);
+  togglePanelSection("Settings");
+  await act(async () => buttonIn(panel(), "Go to analysis period of Spring sun on windows").click());
+  await settle();
+  expect(selectedCardName()).toBe("Spring sun on windows");
+  expect(panelSectionOpen("Settings")).toBe(true);
+  expect(container().querySelector('[data-setting="start_month"]')!.contains(document.activeElement)).toBe(true);
 });
 
 test("with several criteria the build buttons name the criterion whose analysis they wait for", async () => {

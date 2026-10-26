@@ -68,6 +68,10 @@ test("the open sections stay as the user left them when another criterion is sel
   expect(openPanelSections()).toEqual(["Test surfaces", "Mode"]);
   await select("Winter sun on facades");
   expect(openPanelSections()).toEqual(["Test surfaces", "Mode"]);
+  // The open sections are the workspace's: closing the step and opening it again keeps them.
+  openStep("Inputs");
+  openStep("Criteria");
+  expect(openPanelSections()).toEqual(["Test surfaces", "Mode"]);
 });
 
 test("a pending save goes to the criterion it was typed in", async () => {

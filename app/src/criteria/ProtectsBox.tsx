@@ -1,5 +1,5 @@
 // What a criterion protects (spec 7.2): the drop box of its test surfaces, titled "Test surfaces" as the Inputs box was (one
-// criterion brings no new words), with its files. While it has none the box offers to add test surfaces, with a hint of what its
+// criterion brings no new words) for screen readers only, as the panel's section around it has that title, with its files. While it has none the box offers to add test surfaces, with a hint of what its
 // mode may protect (mode_tiles.json, protects_hint; hints only). With several criteria, the stored files the others use and this
 // one does not follow under "Use a file from another criterion", each with a Use button (the file is stored once).
 import type { InputFileInfo } from "../api_client/client";
@@ -56,7 +56,7 @@ function FilesOfOtherCriteria({ files, onUseFile, disabledReason }: { files: str
 export function ProtectsBox({ files, mode, onAddFiles, onRemoveFile, disabledReason, drawingProblems, otherFiles = [], onUseFile }: ProtectsBoxProps) {
   return (
     <div className="protects">
-      <InputBox role="test_surfaces" files={files} hint={protectsHintOf(mode)} addLabel={messages.addTestSurfaces}
+      <InputBox role="test_surfaces" files={files} hint={protectsHintOf(mode)} addLabel={messages.addTestSurfaces} titleHidden
                 weatherLocation={null} weatherHint="" onAddFiles={(_role, chosen) => onAddFiles(chosen)} onRemoveFile={(_role, fileName) => onRemoveFile(fileName)}
                 disabledReason={disabledReason} drawingProblems={drawingProblems} showsDisabledReason={false} />
       {otherFiles.length > 0 && onUseFile !== undefined && <FilesOfOtherCriteria files={otherFiles} onUseFile={onUseFile} disabledReason={disabledReason} />}

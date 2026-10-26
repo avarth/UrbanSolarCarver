@@ -277,7 +277,8 @@ function CarvingRuleChoice({ mode, rule, disabled, onChoose }: CarvingRuleChoice
   return (
     <div className="setting-field carving-rule-choice" data-setting="threshold">
       <div className="setting-label-row">
-        <span id={labelId} className="setting-label">{view.label}</span>
+        {/* The panel's section is titled Carving rule already: the label names the choice for screen readers. */}
+        <span id={labelId} className="setting-label visually-hidden">{view.label}</span>
         <SettingTooltip settingLabel={view.label} help={view.help} configName="threshold" defaultText={messages.carvingRuleChoices.carve_fraction} />
       </div>
       <div role="radiogroup" aria-labelledby={labelId} className="carving-rule-options">

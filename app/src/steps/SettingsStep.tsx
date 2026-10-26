@@ -43,10 +43,11 @@ export interface RunAnalysisConditions {
 }
 
 /**
- * The step that draws a setting's field: Site and grid for a shared analysis setting, Criteria for a criterion's and for the
- * carving, Envelope and massing and Export for theirs; null for a name the form does not show.
+ * The step that draws a setting's field: Site and grid for a shared analysis setting, Criteria for a criterion's, for the carving
+ * and for the mode (its tiles), Envelope and massing and Export for theirs; null for a name the form does not show.
  */
 export function stepOfSetting(name: string, criterionKeys: ReadonlySet<string>): StepName | null {
+  if (name === "mode") return "criteria";
   const shownName = fieldSettingOf(name);
   const formStep = SETTING_PRESENTATIONS[shownName]?.step;
   if (formStep === undefined) return null;
@@ -54,9 +55,12 @@ export function stepOfSetting(name: string, criterionKeys: ReadonlySet<string>):
   return formStep === "carving" ? "criteria" : formStep;
 }
 
-/** The label of a setting as the form shows it; settings drawn as one field have its label (the six period settings, "Analysis period"). */
-function shownLabelOf(settingName: string, mode: string): string {
-  return settingView(fieldSettingOf(settingName), mode).label;
+/**
+ * The label of a setting as the form shows it; settings drawn as one field have its label (the six period settings, "Analysis
+ * period"); the mode, which has tiles and no label, is "Mode".
+ */
+export function shownLabelOf(settingName: string, mode: string): string {
+  return settingName === "mode" ? messages.modeGroupLabel : settingView(fieldSettingOf(settingName), mode).label;
 }
 
 /** Why Run analysis cannot start, the first of: a run, the inputs, the weather file, a setting, the warm-up; null when it can. */
@@ -136,7 +140,7 @@ type FormErrors = Pick<FormState, "fieldErrors" | "stepErrors">;
  * counted where they are shown: the shared settings' in Site and grid, the criterion's in Criteria.
  */
 export function settingsToFixByStep(shared: FormErrors, criterion: FormErrors, criterionKeys: ReadonlySet<string>): Partial<Record<StepName, number>> {
-  const fields = new Set([...Object.keys(shared.fieldErrors), ...Object.keys(criterion.fieldErrors)].map(fieldSettingOf));
+  const fields = fieldsWithErrors({ ...shared.fieldErrors, ...criterion.fieldErrors });
   const counts: Partial<Record<StepName, number>> = {};
   const count = (step: StepName, added: number) => { if (added > 0) counts[step] = (counts[step] ?? 0) + added; };
   for (const name of fields) count(stepOfSetting(name, criterionKeys) ?? "site_and_grid", 1);
@@ -145,9 +149,18 @@ export function settingsToFixByStep(shared: FormErrors, criterion: FormErrors, c
   return counts;
 }
 
+/**
+ * The fields that hold an error, each counted once by the setting that draws it: the six period settings are one field, as are the
+ * balance temperature and its dead band; the mode is one (its tiles). The steps (settingsToFixByStep) and a criterion's sections
+ * (settingsToFixBySection) count these.
+ */
+export function fieldsWithErrors(fieldErrors: FormState["fieldErrors"]): Set<string> {
+  return new Set(Object.keys(fieldErrors).map(fieldSettingOf));
+}
+
 /** All the settings to fix of a form: its fields with an error and its messages that name no field. */
 export function settingsToFixCount(form: FormErrors): number {
-  return new Set(Object.keys(form.fieldErrors).map(fieldSettingOf)).size + form.stepErrors.length;
+  return fieldsWithErrors(form.fieldErrors).size + form.stepErrors.length;
 }
 
 interface SettingsToFixProps {

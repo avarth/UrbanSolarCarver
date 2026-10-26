@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { initialFormState, type FormState } from "../settings_form/form_state";
 import { CRITERION_KEYS, MODES, SCHEMA } from "../steps/project_workspace_for_test";
+import { settingsToFixByStep } from "../steps/SettingsStep";
 import {
   carvingRuleSummary, criterionSettingsSummary, DEFAULT_OPEN_SECTIONS, modeSummary, sectionOfSetting, settingsToFixBySection, testSurfacesSummary,
 } from "./section_summaries";
@@ -41,6 +42,7 @@ test("the carving rule in one line: the carve amount, a fixed cutoff, Automatic,
   expect(carvingRuleSummary(formFor({ mode: "daylight", carve_fraction: 0.705 }))).toBe("Carve 70.5 %");
   expect(carvingRuleSummary(formFor({ mode: "daylight", threshold: { method: "headtail" } }))).toBe("Automatic");
   expect(carvingRuleSummary(formFor({ mode: "daylight", threshold: { method: "cutoff", value: 0.42 } }))).toBe("Cutoff 0.42");
+  expect(carvingRuleSummary(formFor({ mode: "daylight", threshold: { method: "cutoff", value: 0.42 } }), "lx")).toBe("Cutoff 0.42 lx");       // the mode's score unit
   expect(carvingRuleSummary(formFor({ mode: "time-based", threshold: { method: "cutoff", value: 1.5 } }))).toBe("Cutoff 1.5 m²·h");
   expect(carvingRuleSummary(formFor({ mode: "time-based" }))).toBe("Cutoff 0 m²·h");       // unset: the engine cuts at 0
   expect(carvingRuleSummary(formFor({ mode: "tilted_plane" }))).toBe("Everything above the planes");
@@ -62,4 +64,6 @@ test("the settings to fix by section: the criterion's fields with an error, one 
     stepErrors: ["Add a weather file to run this mode"] };
   expect(settingsToFixBySection(form, CRITERION_KEYS)).toEqual({ settings: 2, carving: 1, mode: 1 });
   expect(settingsToFixBySection(formFor({ mode: "daylight" }), CRITERION_KEYS)).toEqual({});
+  // Counted as the steps count them: the mode in Criteria, the shared voxel size in Site and grid.
+  expect(settingsToFixByStep({ fieldErrors: {}, stepErrors: [] }, form, CRITERION_KEYS)).toEqual({ criteria: 4, site_and_grid: 1 });
 });

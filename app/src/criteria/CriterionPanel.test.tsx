@@ -124,6 +124,25 @@ test("a criterion without test surfaces opens its test surfaces section; closed,
   expect(sectionOpen("test_surfaces")).toBe(false);
   expect(sectionSummary("test_surfaces")!.textContent).toBe("None yet");
   expect(isWarning(sectionSummary("test_surfaces")!)).toBe(true);
+  expect(sectionSummary("test_surfaces")!.querySelector(".setting-error-icon")).not.toBeNull();       // a warning icon, not the colour alone
+  expect(sectionSummary("mode")!.querySelector(".setting-error-icon")).toBeNull();
+});
+
+test("a criterion that is off needs no test surfaces: none is no problem, and the section stays as it is", () => {
+  rendered = renderForTest(<PanelInStep {...panelProps({ testSurfacesNeeded: false })} />);
+  click(sectionHeader("test_surfaces"));
+  rendered.rerender(<PanelInStep {...panelProps({ testSurfacesNeeded: false, testSurfaces: [] })} />);
+  expect(sectionOpen("test_surfaces")).toBe(false);
+  expect(sectionSummary("test_surfaces")!.textContent).toBe("None yet");
+  expect(isWarning(sectionSummary("test_surfaces")!)).toBe(false);
+});
+
+test("inside the sections the test surfaces box does not repeat the section's title, which names it for screen readers", () => {
+  rendered = renderForTest(<PanelInStep {...panelProps()} />);
+  const boxTitle = find('.panel-section[data-section="test_surfaces"] .input-box h3')!;
+  expect(boxTitle.textContent).toBe("Test surfaces");
+  expect(boxTitle.classList.contains("visually-hidden")).toBe(true);
+  expect(find(".input-box .input-add")).not.toBeNull();              // its Add button stays
 });
 
 test("a field error of the criterion's save opens the section that holds the field; the weather box and the values reset open Mode", () => {
