@@ -45,7 +45,7 @@ interface AddCriterionProps {
  * link, which takes the focus if it was in the menu or on the link (not when the user has moved on). A link that waits (a run
  * started meanwhile) cannot take the focus: it goes to the card selected, so it is not lost to the page.
  */
-export function AddCriterion({ onAdd, disabledReason }: AddCriterionProps) {
+function AddCriterion({ onAdd, disabledReason }: AddCriterionProps) {
   const [choosing, setChoosing] = useState(false);
   const { problem, setProblem, busy, send } = useDialogRequest(() => setChoosing(false));
   const link = useRef<HTMLButtonElement>(null);

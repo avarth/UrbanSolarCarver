@@ -422,7 +422,7 @@ test("while the carving is locked, Build envelope, Build massing and the Build e
   // A voxel size typed and not saved yet: the analysis is out of date for the settings shown, and a build would run it.
   openStep("Site and grid");
   type(voxelSizeField(), "2");
-  const lockReason = "Settings changed since the analysis. Run the analysis again before building.";
+  const lockReason = "Settings changed: run the analysis again before building";
   openStep("Envelope and massing");
   for (const [part, label] of [["Envelope", "Build envelope"], ["Building massing", "Build massing"]]) {
     const button = buttonIn(buildPart(part), label);
@@ -448,7 +448,7 @@ test("while the carving is locked, a mesh format change is stored but builds not
   const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
   service = new FakeService(built, CARVING);
   await openWorkspace(service, project(built, { final_mesh_format: "ply" }));
-  const lockReason = "Settings changed since the analysis. Run the analysis again before building.";
+  const lockReason = "Settings changed: run the analysis again before building";
   const formatField = () => container().querySelector('[data-setting="final_mesh_format"]')!;
   openStep("Export");
   expect(formatField().textContent).not.toContain(lockReason);
@@ -884,7 +884,8 @@ test("a run refused for missing test surfaces selects that criterion and asks fo
   chainService.runRefusal = { status: 422, body: { detail: refusal, missing_inputs: ["test_surfaces:2"] } };
   await pressRunAnalysis();                                       // the pinned Run analysis, which says the refusal itself
   expect(selectedCardName()).toBe("Spring sun on windows");
-  expect(timesShown(pinnedBar(), refusal) + timesShown(panelFrame(), refusal)).toBe(1);
+  expect(timesShown(pinnedBar(), refusal)).toBe(1);
+  expect(timesShown(panelFrame(), refusal)).toBe(0);
   // From Site and grid the refusal is said there; the panel of the criterion says it once too.
   await select("Winter sun on facades");
   openStep("Site and grid");

@@ -15,10 +15,9 @@ test("the reasons a run button or a carving change waits, which fill the same sl
     messages.fixSettingsInStepToRun("Criteria"), messages.fixSettingToRun("Voxel size"), messages.fixSettingInStepToRun("Voxel size", "Site and grid"),
     messages.weatherFileNeeded, messages.weatherFileNeededFor("Daylight"), messages.runButtonWaitsForGpu, messages.carvingWaitsForAnalysisOf("Daylight"),
     messages.addTestSurfacesFirst("Daylight"), messages.fixSettingOfCriterionToRun("Voxel size", "Daylight"),
-    messages.fixSettingsOfCriterionToRun("Daylight"),
+    messages.fixSettingsOfCriterionToRun("Daylight"), messages.buildWaitsForAnalysis, messages.buildWaitsForFirstAnalysis, messages.buildWaitsForCarving,
   ];
   for (const reason of oneSentence) expect(reason).toMatch(/^[^.]+[^.]$/);
-  expect(messages.buildWaitsForAnalysis).toMatch(/^[^.]+\. [^.]+\.$/);            // two sentences, each with its period
 });
 
 test("the engine stopped and access lost messages show the command as code, without markdown backticks", () => {

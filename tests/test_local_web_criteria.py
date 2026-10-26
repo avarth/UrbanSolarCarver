@@ -165,16 +165,17 @@ def test_the_only_criterion_cannot_be_deleted(tmp_path):
     assert [c.id for c in store.criteria("p")] == ["2"]
 
 
-def test_the_criterion_left_after_a_delete_is_turned_on(tmp_path):
-    # A project of one criterion has no bypass switch: the one left is never bypassed, so a run can start.
+def test_a_criterion_left_after_a_delete_keeps_its_switch(tmp_path):
+    # The app shows the switch of the only criterion too: one left that is off stays off (a run then asks to turn one on).
     store = ProjectStore(tmp_path)
     store.create("p", "daylight")
     store.add_criterion("p", "time-based")
     store.update_criterion("p", "1", bypassed=True)
     store.delete_criterion("p", "2")
     [left] = store.criteria("p")
-    assert (left.id, left.bypassed) == ("1", False)
-    assert _ids_in_config(store, "p") == ["1"]
+    assert (left.id, left.bypassed) == ("1", True)
+    assert _ids_in_config(store, "p") == []
+    store.update_criterion("p", "1", bypassed=False)
     # with two or more left, a bypassed one stays bypassed
     store.add_criterion("p", "time-based")
     store.add_criterion("p", "daylight")

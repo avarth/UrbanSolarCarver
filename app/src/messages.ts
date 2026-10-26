@@ -336,7 +336,7 @@ export const messages = {
   buildEnvelopeAndMassing: "Build envelope and massing",
   // Why the build buttons wait while Carving is locked: a build would run the analysis first (M10). With several criteria they name
   // the criterion whose analysis is missing or out of date instead (carvingWaitsForAnalysisOf, addTestSurfacesFirst).
-  buildWaitsForAnalysis: "Settings changed since the analysis. Run the analysis again before building.",
+  buildWaitsForAnalysis: "Settings changed: run the analysis again before building",
   // The same for the build pinned in Criteria, which shows before the first analysis and while a carving is not current.
   buildWaitsForFirstAnalysis: "Run the analysis before building",
   buildWaitsForCarving: "Update the carving before building",

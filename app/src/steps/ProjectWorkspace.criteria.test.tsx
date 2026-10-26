@@ -125,7 +125,7 @@ test("build waits in the pinned bar until every criterion is carved", async () =
   openStep("Site and grid");
   type(voxelSizeField(), "2");
   openStep("Criteria");
-  expect(reasonOf(build())).toBe("Settings changed since the analysis. Run the analysis again before building.");
+  expect(reasonOf(build())).toBe("Settings changed: run the analysis again before building");
 });
 
 test("during a run the criterion's controls are disabled and the pinned bar says why once, under both buttons", async () => {

@@ -106,6 +106,13 @@ test("removing the selected criterion selects the next card, else the previous o
   unmount();
 });
 
+test("the criterion left after a remove keeps its switch: one that is off stays off", async () => {
+  const { hook, unmount } = renderedHook(projectWith([entry("1", { bypassed: true }), entry("2")]), () => new Response(null, { status: 204 }));
+  await act(async () => { await hook().remove("2"); });
+  expect(hook().criteria.map((criterion) => [criterion.id, criterion.bypassed])).toEqual([["1", true]]);
+  unmount();
+});
+
 test("removing another criterion keeps the selection", async () => {
   const { hook, unmount } = renderedHook(projectWith([entry("1"), entry("2")]), () => new Response(null, { status: 204 }));
   await act(async () => { await hook().remove("2"); });

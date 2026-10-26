@@ -171,16 +171,17 @@ test("turning the only criterion off and on again: Run analysis waits while it i
   expectNoProblemShown();
 });
 
-test("switch off the first of two criteria, delete the second: the one left is on, and Run analysis can start", async () => {
+test("switch off the first of two criteria, delete the second: the one left stays off, and Run analysis says to turn it on", async () => {
   await openChain([FACADES, WINDOWS]);
   await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
   await deleteCriterion("Spring sun on windows");
   expect(cardNames()).toEqual(["Winter sun on facades"]);
-  expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
-  expect(service.entries.map((entry) => [entry.id, entry.bypassed])).toEqual([["1", false]]);     // as the service stores it
-  expect(container().textContent).not.toContain("Turn on a criterion");
-  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
+  expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);
+  expect(cardLine("Winter sun on facades")).toBe("Off");
+  expect(service.entries.map((entry) => [entry.id, entry.bypassed])).toEqual([["1", true]]);      // as the service stores it
+  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(true);
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Turn on a criterion to run");
 });
 
 test("Add criterion with one criterion opens a menu of the modes; choosing one adds a criterion of it, selected, its test surfaces open", async () => {

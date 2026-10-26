@@ -499,7 +499,7 @@ class ProjectStore:
         ProjectError(422) for the only one (a project holds at least one criterion). Nothing changes then.
 
         The stored test surface files that no other criterion uses go to the recycle bin (discard_file). Its id is not used again.
-        When one criterion is left it is turned on (bypassed False): a project of one criterion has nothing else to run.
+        The criteria left keep their switches: one left that is bypassed stays so (a run then refuses to start until it is on).
         """
         with self.project_lock(name):
             project_folder = self.open(name)
@@ -512,8 +512,6 @@ class ProjectStore:
                 raise ProjectError(f"The results folder of the criterion '{removed.name}' is not in {RUN_FOLDER}/{CRITERIA_FOLDER}, so "
                                    "nothing was removed.", status_code=422)
             project_json.criteria = [criterion for criterion in project_json.criteria if criterion.id != removed.id]
-            if len(project_json.criteria) == 1:
-                project_json.criteria[0].bypassed = False         # a project of one criterion has no bypass switch in the app
             project_json.criterion_records.pop(removed.id, None)
             unused_files = [file_name for file_name in removed.test_surface_files
                             if not test_surfaces.criteria_using(project_json.criteria, file_name)]
