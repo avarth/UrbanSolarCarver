@@ -11,7 +11,8 @@ import send2trash
 import trimesh
 import yaml
 from local_web_test_support import (
-    FakeRecycleBin, box_bytes, has_vertex_normals, make_link_to_folder, wait_until_finished, write_joined_test_surfaces_without_normals,
+    FakeRecycleBin, box_bytes, has_vertex_normals, make_link_to_folder, pretend_to_be_on_windows_volume, wait_until_finished,
+    write_joined_test_surfaces_without_normals,
 )
 
 from urbansolarcarver.errors import ConfigError
@@ -1075,15 +1076,6 @@ def test_rename_whose_rollback_fails_tells_where_the_folder_is_and_keeps_the_fir
     assert "disk full" in str(err.value) and "open in another program" in str(err.value) and "now" in str(err.value)
     assert isinstance(err.value.__cause__, OSError) and "disk full" in str(err.value.__cause__)
     assert [folder.name for folder in tmp_path.iterdir()] == ["b"]
-
-
-def pretend_to_be_on_windows_volume(monkeypatch, volume_root, drive_type):
-    """Makes the drive check run as on Windows, with the volume of every folder at *volume_root* and of the given type; the questions asked."""
-    asked = {"paths": [], "volume_roots": []}
-    monkeypatch.setattr(project_removal.sys, "platform", "win32")
-    monkeypatch.setattr(project_removal, "_windows_volume_root", lambda path: asked["paths"].append(path) or volume_root)
-    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda root: asked["volume_roots"].append(root) or drive_type)
-    return asked
 
 
 @pytest.mark.parametrize("drive_type, allowed", [(0, False), (1, False), (2, False), (3, True), (4, False), (5, False), (6, False)])

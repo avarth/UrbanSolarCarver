@@ -4,13 +4,14 @@ from pathlib import Path
 
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from urbansolarcarver.chain_config import CRITERION_KEYS, is_chain_file, load_chain
 from urbansolarcarver.errors import ConfigError
 from urbansolarcarver.local_web_service.api_models import CriterionEntry
-from urbansolarcarver.local_web_service.criteria import MODE_LABELS, CRITERION_COLOURS, chain_config_document, default_criterion_name, split_settings
-from urbansolarcarver.mode_registry import MODES
+from urbansolarcarver.local_web_service.criteria import CRITERION_COLOURS, MODE_LABELS, chain_config_document, default_criterion_name, split_settings
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
+from urbansolarcarver.mode_registry import MODES
 
 COMMENT_LINE = "# Written by the UrbanSolarCarver app from project.json; change settings in the app."
 # The names of the modes as the app shows them (step_summaries.ts reads them for the Mode step and the step summaries).
@@ -164,12 +165,43 @@ def test_the_only_criterion_cannot_be_deleted(tmp_path):
     assert [c.id for c in store.criteria("p")] == ["2"]
 
 
+@pytest.mark.parametrize("bad_id", ["..", "../..", "1/2", "a", "", " 1"])
+def test_a_criterion_id_is_digits_only(tmp_path, bad_id):
+    with pytest.raises(ValidationError):
+        CriterionEntry(id=bad_id, name="x", colour="#000000")
+    store = ProjectStore(tmp_path)
+    store.create("p", "daylight")
+    project_json_path = store.open("p") / "project.json"
+    stored = json.loads(project_json_path.read_text(encoding="utf-8"))
+    stored["criteria"][0]["id"] = bad_id                     # a hand edit
+    project_json_path.write_text(json.dumps(stored), encoding="utf-8")
+    with pytest.raises(ProjectError) as caught:
+        store.read_project_json("p")
+    assert caught.value.status_code == 422
+
+
+def test_deleting_a_criterion_never_removes_a_folder_outside_run_criteria(tmp_path, monkeypatch):
+    store = ProjectStore(tmp_path)
+    store.create("p", "daylight")
+    store.add_criterion("p", "daylight")
+    project_json = store.read_project_json("p")
+    project_json.criteria[1] = project_json.criteria[1].model_copy(update={"id": ".."})   # model_copy does not validate
+    monkeypatch.setattr(store, "read_project_json", lambda name: project_json.model_copy(deep=True))
+    (store.open("p") / "run" / "criteria").mkdir()
+    (store.open("p") / "run" / "kept.txt").write_text("a result", encoding="utf-8")
+    json_before = (store.open("p") / "project.json").read_bytes()
+    with pytest.raises(ProjectError) as caught:
+        store.delete_criterion("p", "..")
+    assert caught.value.status_code == 422
+    assert (store.open("p") / "run" / "kept.txt").is_file() and (store.open("p") / "project.json").read_bytes() == json_before
+
+
 def test_mixed_settings_need_a_criterion_when_there_are_several(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("p", "daylight")
     store.add_criterion("p", "time-based")
     json_before, config_before = (store.open("p") / "project.json").read_bytes(), _config_path(store, "p").read_bytes()
-    with pytest.raises(ProjectError, match="Say which criterion these settings belong to") as caught:
+    with pytest.raises(ProjectError, match=r"^Say which criterion these settings belong to\.$") as caught:
         store.write_config_from_values("p", {"mode": "daylight", "voxel_size": 2.0})
     assert caught.value.status_code == 422
     assert (store.open("p") / "project.json").read_bytes() == json_before and _config_path(store, "p").read_bytes() == config_before

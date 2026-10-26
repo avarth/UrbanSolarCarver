@@ -195,10 +195,12 @@ def test_carved_by_criterion_leaves_out_a_bypassed_criterion(chain_of_two):
 
 def test_carved_by_criterion_is_not_available_without_the_masks_of_every_criterion(chain_of_two):
     store, name = chain_of_two
+    store.update_criterion(name, "2", name="East facade")
     shutil.rmtree(store.open(name) / "run" / "criteria" / "2" / "thresholding")
     with pytest.raises(ProjectError) as error:
         build_carved_by_criterion(store, name)
     assert error.value.status_code == 404
+    assert str(error.value) == "The criterion 'East facade' has no results yet: run the analysis first."
 
 
 def test_carved_by_criterion_is_not_available_when_the_criteria_have_other_grids(chain_of_two):

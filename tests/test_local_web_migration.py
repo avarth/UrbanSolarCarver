@@ -259,6 +259,15 @@ def test_saving_the_settings_of_an_earlier_project_migrates_it_first(store):
     assert not (store.open("p") / "inputs" / "test_surfaces" / "surface.ply").exists()
 
 
+def test_adding_a_criterion_to_an_earlier_project_migrates_it_first(store):
+    write_earlier_version_project(store, "p")
+    earlier_settings = store.read_settings("p")      # the flat config.yaml of the earlier version
+    added = store.add_criterion("p", "time-based")
+    assert added.id == "2" and [criterion.id for criterion in store.criteria("p")] == ["1", "2"]
+    assert store.read_settings("p", "1") == earlier_settings and store.criteria("p")[0].test_surface_files == ["surface.ply"]
+    assert criterion_status(store, "p")["1"] == {"preprocessing": "current", "thresholding": "current"}
+
+
 @pytest.mark.parametrize("stages", [(), ("preprocessing",)])
 def test_a_project_without_a_run_or_with_preprocessing_only_migrates(store, stages):
     write_earlier_version_project(store, "p", stages=stages)

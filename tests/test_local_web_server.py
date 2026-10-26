@@ -30,7 +30,7 @@ from local_web_test_support import (
 )
 from urbansolarcarver import __version__
 from urbansolarcarver.local_web_service import create_app
-from urbansolarcarver.local_web_service import folder_picker, folder_picker_child, user_preferences
+from urbansolarcarver.local_web_service import folder_picker, folder_picker_child, stage_records, user_preferences
 from urbansolarcarver.local_web_service.folder_picker import FolderPickerUnavailable
 from urbansolarcarver.local_web_service.gpu_warm_up import GpuWarmUp
 from urbansolarcarver.local_web_service.projects import ProjectStore
@@ -1484,6 +1484,14 @@ def test_the_only_criterion_is_not_deleted(client_with_inputs):
     assert refused.status_code == 422 and refused.json()["detail"] == "A project needs at least one criterion."
     assert [entry["id"] for entry in criteria_of(client)] == ["1"]
     assert "422" in openapi_document()["paths"]["/api/projects/{name}/criteria/{criterion_id}"]["delete"]["responses"]
+
+
+def test_opening_a_project_works_out_its_stage_status_once(client_with_inputs, monkeypatch):
+    worked_out = []
+    project_status = stage_records._project_status
+    monkeypatch.setattr(stage_records, "_project_status", lambda store, name: worked_out.append(name) or project_status(store, name))
+    detail = client_with_inputs.get("/api/projects/p").json()
+    assert worked_out == ["p"] and detail["criterion_status"] == detail["stage_status"]["criteria"]
 
 
 def test_a_bad_order_is_422_and_changes_nothing(client_with_two_criteria):

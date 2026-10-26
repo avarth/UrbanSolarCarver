@@ -51,7 +51,7 @@ from .projects import (
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_carved_by_criterion, build_score_points
-from .stage_records import criterion_status, stage_status_reply
+from .stage_records import stage_status_reply
 
 _log = logging.getLogger(__name__)
 API_PREFIX = "/api"
@@ -285,15 +285,16 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """The project as the browser opens it, with the settings of the criterion *criterion_id* (default: the first); 404 for an unknown one."""
         with store.project_lock(name):
             summary = store.summary(name)
+            status = stage_status_reply(store, name)
             return ProjectDetail(
                 name=summary.name, created=summary.created, modified=summary.modified, example=summary.example,
                 settings=store.read_settings(name, criterion_id),
                 inputs={role: store.input_files(name, role) for role in (*MESH_ROLES, WEATHER_ROLE)},
                 joined_bounds=store.joined_bounds(name), weather_location=store.weather_location(name),
                 weather_latitude=store.weather_latitude(name),
-                stage_status=stage_status_reply(store, name), grid_plan=store.stored_grid_plan(name),
+                stage_status=status, grid_plan=store.stored_grid_plan(name),
                 carving_chain=store.read_project_json(name).carving_chain, criteria=store.criteria(name),
-                criterion_status=criterion_status(store, name))
+                criterion_status=status.criteria)
 
     def run_folder_of(name: str) -> Path:
         return folder_in_use.store.open(name) / RUN_FOLDER

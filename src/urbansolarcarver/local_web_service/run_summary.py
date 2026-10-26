@@ -66,7 +66,12 @@ def _criterion_results(run_folder: Path, criterion: CriterionEntry) -> tuple[Cri
     preprocessing = read_stage_manifest(run_folder, "preprocessing", PreprocessingManifest, criterion.id)
     voxel_size = None if preprocessing is None else preprocessing[0].voxel_size
     # A diagnostic from before thresholding named them does not give the voxels it decided about; for the first criterion those are the occupied ones.
-    voxels_at_start = None if diagnostic is None else diagnostic.get("voxels_at_start", diagnostic["voxels_occupied"])
+    if diagnostic is None:
+        voxels_at_start = None
+    elif "voxels_at_start" in diagnostic:
+        voxels_at_start = diagnostic["voxels_at_start"]
+    else:
+        voxels_at_start = diagnostic["voxels_occupied"]
     volume_kept = None if carving is None or voxel_size is None else carving.voxels_kept * voxel_size ** 3
     return CriterionCarvingSummary(
         id=criterion.id, name=criterion.name, colour=criterion.colour, mode=canonical_mode_name(criterion.settings.get("mode")),

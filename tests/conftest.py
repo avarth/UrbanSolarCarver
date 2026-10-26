@@ -1,5 +1,6 @@
 """Shared fixtures for UrbanSolarCarver tests."""
 import os
+import shutil
 import pytest
 import numpy as np
 from pathlib import Path
@@ -55,6 +56,25 @@ def example_project_templates(tmp_path_factory):
     """For the local web service tests: copy_example_project(store, name, example) makes a project from a packaged example."""
     from local_web_test_support import ExampleProjectTemplates
     return ExampleProjectTemplates(tmp_path_factory.mktemp("example_project_templates"))
+
+
+@pytest.fixture(autouse=True)
+def no_real_recycle_bin(monkeypatch):
+    """What the local web service sends to the recycle bin (a removed project, a test surface file no criterion uses) is
+    removed instead, so a test run never fills the recycle bin of this computer. A test that checks the moves gives send2trash
+    its own FakeRecycleBin (local_web_test_support.py)."""
+    try:
+        import send2trash
+    except ImportError:     # the [ui] extra is not installed: nothing sends anything to the recycle bin
+        return
+
+    def remove(path):
+        if os.path.isdir(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+
+    monkeypatch.setattr(send2trash, "send2trash", remove)
 
 
 @pytest.fixture

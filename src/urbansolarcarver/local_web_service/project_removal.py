@@ -3,7 +3,8 @@
 Deleting or resetting a project must never remove anything but that one project folder (spec R2 7.3). A folder is
 removed only when the checks below pass, and then it is moved to the recycle bin (Windows) or trash (macOS, Linux)
 with the ``send2trash`` package, not deleted for good, so a mistake can be undone. The check that no run of the
-project is active belongs to the caller, which holds the project lock.
+project is active belongs to the caller, which holds the project lock. A file a project no longer needs (a test surface
+file no criterion uses) goes the same way (discard_file).
 """
 from __future__ import annotations
 
@@ -121,6 +122,20 @@ def check_project_folder_can_be_removed(projects_folder: Path, name: str) -> Pat
     _check_folder_has_a_recycle_bin(project_folder)
     _check_nothing_is_a_link(Path(projects_folder) / project_name)
     return project_folder
+
+
+def discard_file(path: Path) -> None:
+    """Move a file to the recycle bin or trash, or delete it on a drive that has none (where a project folder would be left in
+    place, see _check_folder_has_a_recycle_bin); nothing for a file that is not there. OSError when neither works (the file
+    then stays)."""
+    if not path.is_file():
+        return
+    try:
+        _check_folder_has_a_recycle_bin(path.parent)
+    except ProjectRemovalRefused:
+        path.unlink()
+        return
+    send2trash.send2trash(str(path))
 
 
 def move_to_recycle_bin(folder: Path) -> None:

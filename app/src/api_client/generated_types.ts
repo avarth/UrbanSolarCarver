@@ -413,7 +413,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Criterion
-         * @description Remove a criterion with its results and its joined test surface file; its id is not used again.
+         * @description Remove a criterion with its results and its joined test surface file; its id is not used again. The only criterion of a
+         *     project is not removed (422).
          */
         delete: operations["delete_criterion"];
         options?: never;
@@ -2229,13 +2230,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
-            /** @description Validation Error */
+            /** @description The request cannot be served as sent. */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };

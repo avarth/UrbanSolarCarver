@@ -42,6 +42,7 @@ from pydantic import BaseModel
 from ..mode_registry import MODES
 from ..pydantic_schemas import PreprocessingManifest, ThresholdingManifest
 from ..stage_settings import stage_folder
+from .api_models import CriterionEntry
 from .criteria import active_criteria, criterion_run_folder, find_criterion
 from .project_names import ProjectError
 from .projects import RUN_FOLDER, ProjectStore
@@ -179,7 +180,7 @@ def build_carved_by_criterion(store: ProjectStore, name: str) -> bytes:
     kept_before = _load_array(resolve_stored_path(preprocessing_folder, preprocessing_manifest.voxel_grid_path)).astype(bool)
     carved_by = np.zeros(kept_before.shape, dtype="u1")
     for position, criterion in enumerate(active, start=1):
-        kept = _kept_mask(run_folder, criterion.id)
+        kept = _kept_mask(run_folder, criterion)
         if kept.shape != kept_before.shape:
             raise ProjectError("The results of the criteria are on different grids: run the analysis again.", status_code=404)
         carved_by[kept_before & ~kept] = position
@@ -195,11 +196,11 @@ def build_carved_by_criterion(store: ProjectStore, name: str) -> bytes:
     return b"".join([struct.pack("<I", len(header_bytes)), header_bytes, carved_by.tobytes()])
 
 
-def _kept_mask(run_folder: Path, criterion_id: str) -> np.ndarray:
-    """The kept mask of a criterion's thresholding run; ProjectError 404 when it has none."""
-    thresholding = read_stage_manifest(run_folder, "thresholding", ThresholdingManifest, criterion_id)
+def _kept_mask(run_folder: Path, criterion: CriterionEntry) -> np.ndarray:
+    """The kept mask of a criterion's thresholding run; ProjectError 404, naming the criterion, when it has none."""
+    thresholding = read_stage_manifest(run_folder, "thresholding", ThresholdingManifest, criterion.id)
     if thresholding is None:
-        raise ProjectError(f"Criterion {criterion_id} has no results yet: run the analysis first.", status_code=404)
+        raise ProjectError(f"The criterion '{criterion.name}' has no results yet: run the analysis first.", status_code=404)
     manifest, manifest_folder = thresholding
     return _load_array(resolve_stored_path(manifest_folder, manifest.mask_path)).astype(bool)
 

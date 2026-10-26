@@ -24,7 +24,7 @@ import trimesh
 import yaml
 
 from urbansolarcarver.io import load_mesh, save_mesh
-from urbansolarcarver.local_web_service import test_surfaces
+from urbansolarcarver.local_web_service import project_removal, test_surfaces
 from urbansolarcarver.local_web_service.api_models import StageRecord
 from urbansolarcarver.local_web_service.example_catalog import read_examples
 from urbansolarcarver.local_web_service.projects import INPUTS_FOLDER, JOINED_FOLDER, ProjectStore
@@ -42,20 +42,34 @@ ALL_MISSING = {stage: "missing" for stage in PIPELINE_STAGES}
 # ---- Projects ----
 
 class FakeRecycleBin:
-    """Stands in for ``send2trash.send2trash``: records the folders it was given and removes them, as moving them away does.
+    """Stands in for ``send2trash.send2trash``: records the folders and files it was given and removes them, as moving them away does.
 
-    ``error`` (an exception) makes every call fail instead, leaving the folder where it is.
+    ``error`` (an exception) makes every call fail instead, leaving the folder or file where it is.
     """
 
     def __init__(self, error: Exception | None = None):
         self.folders: list[Path] = []
+        self.files: list[Path] = []
         self.error = error
 
-    def __call__(self, folder) -> None:
+    def __call__(self, path) -> None:
         if self.error is not None:
             raise self.error
-        self.folders.append(Path(folder))
-        shutil.rmtree(folder)
+        if Path(path).is_dir():
+            self.folders.append(Path(path))
+            shutil.rmtree(path)
+        else:
+            self.files.append(Path(path))
+            Path(path).unlink()
+
+
+def pretend_to_be_on_windows_volume(monkeypatch, volume_root, drive_type):
+    """Makes the drive check run as on Windows, with the volume of every folder at *volume_root* and of the given type; the questions asked."""
+    asked = {"paths": [], "volume_roots": []}
+    monkeypatch.setattr(project_removal.sys, "platform", "win32")
+    monkeypatch.setattr(project_removal, "_windows_volume_root", lambda path: asked["paths"].append(path) or volume_root)
+    monkeypatch.setattr(project_removal, "_windows_drive_type", lambda root: asked["volume_roots"].append(root) or drive_type)
+    return asked
 
 
 def make_link_to_folder(link: Path, target: Path, kind: str) -> None:

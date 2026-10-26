@@ -34,7 +34,8 @@ class CarvingChainStep(BaseModel):
 
 class CriterionEntry(BaseModel):
     """One criterion of a project's chain, as project.json keeps it. config.yaml is generated from these."""
-    id: str                             # assigned by the service from ProjectJson.next_criterion_id, never reused; names the run folder
+    # Assigned by the service from ProjectJson.next_criterion_id, never reused; names the run folder, so digits only.
+    id: str = Field(pattern=r"^[0-9]+$")
     name: str
     named_by_user: bool = False         # False: the name follows the mode and the first test surface file (see criteria.py)
     colour: str                         # "#RRGGBB", the criterion's colour in the 3D view

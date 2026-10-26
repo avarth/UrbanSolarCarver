@@ -34,13 +34,13 @@ from .api_models import (
     ProjectJson, ProjectSummary,
 )
 from .criteria import (
-    OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria, append_criterion, chain_config_document, chain_config_text, checked_colour,
+    CRITERIA_FOLDER, OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria, append_criterion, chain_config_document, chain_config_text, checked_colour,
     checked_criterion_name, criterion_run_folder, find_criterion, flat_settings, joined_test_surfaces_path, reads_weather_file,
     set_criterion_settings, split_settings,
 )
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
-from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, move_to_recycle_bin
+from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, discard_file, move_to_recycle_bin
 
 CONFIG_FILE_NAME = "config.yaml"
 INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/context", "inputs/terrain", "inputs/joined")
@@ -397,10 +397,13 @@ class ProjectStore:
 
         It is named after its mode unless *criterion_name* is given (see default_criterion_name), and gets the next colour of
         the palette. ConfigError, and nothing changes, when the mode is not one the engine knows or the chain becomes invalid.
+        A project of an earlier version is made a chain of one first (migrate_to_criteria), so its settings stay criterion 1's.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
+            if not project_json.criteria and self.migrate_to_criteria(name):
+                project_json = self.read_project_json(name)
             settings = self._validated_criterion_settings(project_folder, name, {"mode": mode}, str(project_json.next_criterion_id))
             entry = append_criterion(project_json, settings, criterion_name)
             self._rewrite_chain(name, project_folder, project_json)
@@ -438,7 +441,7 @@ class ProjectStore:
         """Remove a criterion, its run folder (run/criteria/<id>/) and its joined test surface file; 404 for an unknown one, and
         ProjectError(422) for the only one (a project holds at least one criterion). Nothing changes then.
 
-        The stored test surface files that no other criterion uses are deleted. Its id is not used again.
+        The stored test surface files that no other criterion uses go to the recycle bin (discard_file). Its id is not used again.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
@@ -446,6 +449,10 @@ class ProjectStore:
             removed = find_criterion(project_json, criterion_id)
             if len(project_json.criteria) == 1:
                 raise ProjectError("A project needs at least one criterion.", status_code=422)
+            removed_run_folder = criterion_run_folder(project_folder / RUN_FOLDER, removed.id).resolve()
+            if removed_run_folder.parent != (project_folder / RUN_FOLDER / CRITERIA_FOLDER).resolve():     # an id that is a path
+                raise ProjectError(f"The results folder of the criterion '{removed.name}' is not in {RUN_FOLDER}/{CRITERIA_FOLDER}, so "
+                                   "nothing was removed.", status_code=422)
             project_json.criteria = [criterion for criterion in project_json.criteria if criterion.id != removed.id]
             project_json.criterion_records.pop(removed.id, None)
             unused_files = [file_name for file_name in removed.test_surface_files
@@ -453,11 +460,9 @@ class ProjectStore:
             for file_name in unused_files:
                 project_json.input_files.get(test_surfaces.ROLE, {}).pop(file_name, None)
             self._rewrite_chain(name, project_folder, project_json)
-            shutil.rmtree(criterion_run_folder(project_folder / RUN_FOLDER, removed.id), ignore_errors=True)
+            shutil.rmtree(removed_run_folder, ignore_errors=True)
             (project_folder / joined_test_surfaces_path(removed.id)).unlink(missing_ok=True)
-            for file_name in unused_files:
-                with contextlib.suppress(OSError):      # a program has the file open: it stays, project.json no longer lists it
-                    test_surfaces.stored_path(project_folder, file_name).unlink(missing_ok=True)
+            self._discard_test_surface_files(project_folder, unused_files)
 
     def duplicate_criterion(self, name: str, criterion_id: str) -> CriterionEntry:
         """Add a copy of a criterion at the end of the chain: its settings and test surfaces, named "<name> copy"."""
@@ -551,8 +556,9 @@ class ProjectStore:
     def remove_criterion_test_surface(self, name: str, criterion_id: str, file_name: str) -> CriterionEntry:
         """Take a test surface file out of the criterion *criterion_id* and build its joined file again (none when no file is left).
 
-        The stored file stays for the criteria that use it and is deleted when no criterion uses it any more. ProjectError 404
-        for an unknown criterion or a file the criterion does not use. Nothing is deleted unless the joined file could be built.
+        The stored file stays for the criteria that use it and goes to the recycle bin when no criterion uses it any more
+        (discard_file). ProjectError 404 for an unknown criterion or a file the criterion does not use. Nothing is removed unless
+        the joined file could be built.
         """
         with self.project_lock(name):
             project_folder = self.open(name)
@@ -561,17 +567,26 @@ class ProjectStore:
             if file_name not in entry.test_surface_files:
                 raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{file_name}' in the criterion '{entry.name}'.", status_code=404)
             remaining_names = [other for other in entry.test_surface_files if other != file_name]
+            unused = len(test_surfaces.criteria_using(project_json.criteria, file_name)) == 1
             joined_files = test_surfaces.build_joined_files(project_folder, {entry.id: remaining_names})
             try:
-                if len(test_surfaces.criteria_using(project_json.criteria, file_name)) == 1:
-                    test_surfaces.stored_path(project_folder, file_name).unlink(missing_ok=True)
-                    project_json.input_files[test_surfaces.ROLE].pop(file_name, None)
                 test_surfaces.install_joined_files(project_folder, joined_files)
             finally:
                 test_surfaces.remove_temporary_files(joined_files)
+            if unused:
+                project_json.input_files[test_surfaces.ROLE].pop(file_name, None)
             entry.test_surface_files = remaining_names
             self._write_after_test_surface_change(name, project_folder, project_json, entry)
+            if unused:
+                self._discard_test_surface_files(project_folder, [file_name])
             return entry
+
+    @staticmethod
+    def _discard_test_surface_files(project_folder: Path, file_names: list[str]) -> None:
+        """Send stored test surface files that no criterion uses to the recycle bin (discard_file), once project.json no longer lists them."""
+        for file_name in file_names:
+            with contextlib.suppress(OSError):      # a program has the file open: it stays, project.json no longer lists it
+                discard_file(test_surfaces.stored_path(project_folder, file_name))
 
     def _write_after_test_surface_change(self, name: str, project_folder: Path, project_json: ProjectJson, entry: CriterionEntry) -> None:
         """Write project.json after the test surfaces of *entry* changed, and config.yaml too when its default name followed them."""
@@ -582,10 +597,12 @@ class ProjectStore:
 
     def _only_criterion(self, name: str) -> CriterionEntry:
         """The criterion an upload or removal of the earlier app belongs to: the only one; ProjectError(422) with none or several."""
-        entry = self._criterion_for_settings(self.read_project_json(name), None)
-        if entry is None:
+        criteria = self.read_project_json(name).criteria
+        if len(criteria) > 1:
+            raise ProjectError("Say which criterion these test surfaces belong to.", status_code=422)
+        if not criteria:    # a project of an earlier version that was not opened since: it has no criterion yet
             raise ProjectError("The project has no criterion for these test surfaces: add a criterion first.", status_code=422)
-        return entry
+        return criteria[0]
 
     def read_stored_config(self, name: str, criterion_id: str | None = None) -> dict:
         """The settings of one criterion as one flat mapping, service paths and device included (the single-criterion form of
@@ -624,7 +641,7 @@ class ProjectStore:
     def _criterion_for_settings(project_json: ProjectJson, criterion_id: str | None) -> CriterionEntry | None:
         """The criterion a settings save belongs to: the one named, the only one, None when there is none yet (a first one is made)."""
         if criterion_id is None and len(project_json.criteria) > 1:
-            raise ProjectError("Say which criterion these settings belong to", status_code=422)
+            raise ProjectError("Say which criterion these settings belong to.", status_code=422)
         if criterion_id is None and not project_json.criteria:
             return None
         return find_criterion(project_json, criterion_id)
