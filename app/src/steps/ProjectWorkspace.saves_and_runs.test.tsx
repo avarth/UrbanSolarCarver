@@ -1029,6 +1029,11 @@ test("go to a setting of another criterion, its section closed: that criterion i
 
 test("with several criteria the build buttons name the criterion whose analysis they wait for", async () => {
   await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: OUT_OF_DATE });
+  // The build pinned in Criteria says the same.
+  const pinnedBuild = buttonIn(pinnedBar(), "Build envelope and massing");
+  expect(pinnedBuild.disabled).toBe(true);
+  expect(reasonOf(pinnedBuild)).toBe("Run the analysis for Spring sun on windows first");
+  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
   openStep("Envelope and massing");
   for (const [part, label] of [["Envelope", "Build envelope"], ["Building massing", "Build massing"]]) {
     expect(reasonOf(buttonIn(buildPart(part), label))).toBe("Run the analysis for Spring sun on windows first");

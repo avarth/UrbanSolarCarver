@@ -316,18 +316,21 @@ interface RunAnalysisButtonProps {
   feedback?: ReactNode;
   /** Drawn as the lesser of two buttons side by side (the build next to Run analysis in Criteria). */
   secondary?: boolean;
+  /** The id of a line that gives the reason for both of two buttons (CriteriaRunBar): the button names it and does not write its own. */
+  sharedReasonId?: string;
 }
 
 /** A step's run button, pinned under the step list, with the reason it is disabled and the progress of its run under it. */
-export function RunAnalysisButton({ blocker, onRunAnalysis, label = messages.runAnalysis, feedback, secondary = false }: RunAnalysisButtonProps) {
-  const reasonId = useId();
+export function RunAnalysisButton({ blocker, onRunAnalysis, label = messages.runAnalysis, feedback, secondary = false, sharedReasonId }: RunAnalysisButtonProps) {
+  const ownReasonId = useId();
+  const reasonId = sharedReasonId ?? ownReasonId;
   return (
     <div className="run-button-area">
       <button type="button" className={secondary ? "secondary-button" : "primary-button"} disabled={blocker !== null} aria-describedby={blocker !== null ? reasonId : undefined}
               onClick={onRunAnalysis}>
         {label}
       </button>
-      {blocker !== null && <p id={reasonId} className="run-button-reason">{blocker}</p>}
+      {blocker !== null && sharedReasonId === undefined && <p id={reasonId} className="run-button-reason">{blocker}</p>}
       {feedback}
     </div>
   );

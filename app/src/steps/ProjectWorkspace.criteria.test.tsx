@@ -105,7 +105,12 @@ test("build waits in the pinned bar until every criterion is carved", async () =
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
   openStep("Criteria");
-  expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(true);
+  const neverAnalysed = buttonIn(pinnedBar(), "Build envelope and massing");
+  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);            // nothing blocks the run: the build's own reason shows
+  expect(neverAnalysed.disabled).toBe(true);
+  expect(reasonOf(neverAnalysed)).toBe("Run the analysis before building");
+  expect(pinnedBar().querySelectorAll(".run-button-reason")).toHaveLength(1);    // under the build only
+  expect(neverAnalysed.closest(".run-button-area")!.querySelector(".run-button-reason")).not.toBeNull();
   // The analysis is current but the carving is not: it waits for the carving.
   const analysed: Record<PipelineStage, StageState> = { ...CARVED, thresholding: "out_of_date" };
   service = new FakeService(analysed, CARVING);
@@ -123,7 +128,7 @@ test("build waits in the pinned bar until every criterion is carved", async () =
   expect(reasonOf(build())).toBe("Settings changed since the analysis. Run the analysis again before building.");
 });
 
-test("during a run the criterion's controls are disabled and the panel says why once, at Run analysis", async () => {
+test("during a run the criterion's controls are disabled and the pinned bar says why once, under both buttons", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Criteria");
@@ -131,6 +136,8 @@ test("during a run the criterion's controls are disabled and the panel says why 
   expect(service.runsStarted).toHaveLength(1);
   const runButton = buttonIn(pinnedBar(), "Run analysis");
   expect(reasonOf(runButton)).toBe("A run is in progress");
+  expect(reasonOf(buttonIn(pinnedBar(), "Build envelope and massing"))).toBe("A run is in progress");      // the same line
+  expect(pinnedBar().textContent!.split("A run is in progress")).toHaveLength(2);
   expect(panel()!.textContent).not.toContain("A run is in progress");
   expect(protectsBox().querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
   openPanelSection("Mode");

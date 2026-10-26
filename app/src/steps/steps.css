@@ -314,8 +314,8 @@
 
 .run-button-area .primary-button, .run-button-area .secondary-button { width: 100%; }
 /* Criteria: Run analysis and the build side by side, each button over its own reason, the progress under both. */
-.criteria-run-buttons { display: flex; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
-.criteria-run-buttons .run-button-area { flex: 1 1 0; min-width: 0; }
+.criteria-run-buttons { display: flex; flex-wrap: wrap; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
+.criteria-run-buttons .run-button-area { flex: 1 1 10rem; min-width: 0; }     /* two rows when the bar is too narrow for 2 x 10rem */
 .run-button-reason { margin: var(--space-unit) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 
 /* Inputs ---------------------------------------------------------------------------------------------------------------- */
