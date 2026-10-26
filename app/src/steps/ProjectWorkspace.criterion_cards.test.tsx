@@ -195,6 +195,8 @@ test("turning a selected criterion that has results back on fetches its score po
   service.criterionStages["2"] = CURRENT;                          // its results from before it was bypassed
   await select("Spring sun on windows");
   expect(service.requests.filter((request) => request.includes("/run/") && request.includes("criterion=2"))).toEqual([]);
+  expect(panel().textContent).toContain("Bypassed: the chain skips this criterion.");        // not that it needs an analysis
+  expect(panel().textContent).not.toContain("Run the analysis to see the carving");
   await act(async () => card("Spring sun on windows").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
   expect(selectedCardName()).toBe("Spring sun on windows");

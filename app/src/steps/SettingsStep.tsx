@@ -25,6 +25,8 @@ export interface RunAnalysisConditions {
   testSurfaceFiles: number;
   /** The name of another criterion that is on and protects nothing (the run refuses to start then); absent or null: none. */
   otherCriterionWithoutTestSurfaces?: string | null;
+  /** Every criterion is bypassed: the run refuses to start. */
+  noCriterionOn?: boolean;
   modeNeedsWeatherFile: boolean;
   hasWeatherFile: boolean;
   form: Pick<FormState, "mode" | "fieldErrors">;
@@ -58,6 +60,7 @@ function shownLabelOf(settingName: string, mode: string): string {
 export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | null {
   const { form } = conditions;
   if (conditions.runActive) return messages.runInProgress;
+  if (conditions.noCriterionOn === true) return messages.turnOnCriterionToRun;
   const hasMaxVolume = conditions.maxVolumeFiles > 0, hasTestSurfaces = conditions.testSurfaceFiles > 0;
   if (!hasMaxVolume && !hasTestSurfaces) return messages.addMaxVolumeAndTestSurfacesToRun;
   if (!hasMaxVolume) return messages.addMaxVolumeToRun;

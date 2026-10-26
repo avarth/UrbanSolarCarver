@@ -246,6 +246,8 @@ export const messages = {
   addMaxVolumeAndTestSurfacesToRun: "Add a maximum volume and test surfaces to run the analysis",
   // Another criterion that is on protects nothing (7.2: the run refuses to start until every one protects something)
   addTestSurfacesOfCriterionToRun: (criterionName: string) => `Add test surfaces to ${criterionName} to run the analysis`,
+  // Every criterion is bypassed (the service's words for the refusal)
+  turnOnCriterionToRun: "Turn on a criterion to run.",
   fixSettingsToRun: "Fix the settings above to run the analysis.",
   fixSettingsInStepToRun: (stepTitle: string) => `Fix the settings in ${stepTitle} to run the analysis.`,
 
@@ -323,6 +325,8 @@ export const messages = {
   // Why a carving change of the selected criterion runs nothing while another criterion's analysis is out of date: the carving
   // run would trace that criterion first, which only Run analysis starts (M10).
   carvingWaitsForAnalysisOf: (criterionName: string) => `Run the analysis for ${criterionName} first`,
+  // The panel of a bypassed criterion, in place of its carving rule
+  criterionBypassedNote: "Bypassed: the chain skips this criterion.",
   histogramTitle: "Scores of the voxels",
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",

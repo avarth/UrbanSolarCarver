@@ -10,7 +10,7 @@ import {
   type CriterionEntry, type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import {
-  activeCriteria, cardLineOf, criterionStatus, filesOfOtherCriteria, stagesByCriterionOf, stagesDuringRun, type StagesByCriterion,
+  activeCriteria, cardLineOf, criteriaProtectingNothing, criterionStatus, filesOfOtherCriteria, stagesByCriterionOf, stagesDuringRun, type StagesByCriterion,
 } from "../criteria/criteria_state";
 import type { CriterionListProps } from "../criteria/CriterionList";
 import { CriteriaStep } from "../criteria/CriteriaStep";
@@ -18,6 +18,7 @@ import { CriterionPanel } from "../criteria/CriterionPanel";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
 import { useCriterionSelection } from "../criteria/use_criterion_selection";
+import { useRefusalSelection } from "../criteria/use_refusal_selection";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import {
@@ -54,13 +55,6 @@ function stagesWithOutputOf(stages: StagesByCriterion[string] | undefined): stri
 }
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
-// A refused start's missing input for a criterion that is on and protects nothing: "test_surfaces:<criterion id>".
-const TEST_SURFACES_ROLE_PREFIX = "test_surfaces:";
-
-/** A criterion's test surface files as one string, to tell whether they changed. */
-function testSurfaceFilesKey(criteria: CriterionEntry[], id: string): string {
-  return (criteria.find((entry) => entry.id === id)?.test_surface_files ?? []).join("\n");
-}
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "site_and_grid"];
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
 // they cover the kept ones; the Layers menu shows them. Criteria shows what the Mode and Carving steps showed together, the maximum
@@ -387,11 +381,12 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // Run analysis is in Criteria and pinned in Site and grid: each names a setting to fix in another step with that step. Every
   // criterion that is on needs test surfaces (a bypassed one needs none).
   const active = activeCriteria(criteria.criteria);
-  const withoutTestSurfaces = active.filter((entry) => (entry.test_surface_files ?? []).length === 0);
+  const protectingNothing = criteriaProtectingNothing(criteria.criteria);
   const runConditions = {
     runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length,
     testSurfaceFiles: criterion === null ? files.test_surfaces.length : criterion.bypassed ? 1 : (criterion.test_surface_files ?? []).length,
-    otherCriterionWithoutTestSurfaces: withoutTestSurfaces.find((entry) => entry.id !== criterion?.id)?.name ?? null,
+    otherCriterionWithoutTestSurfaces: protectingNothing.find((entry) => entry.id !== criterion?.id)?.name ?? null,
+    noCriterionOn: criteria.criteria.length > 0 && active.length === 0,
     modeNeedsWeatherFile, hasWeatherFile, form, warmUpState, criterionKeys,
     stepErrorsByStep: { site_and_grid: sharedForm.form.stepErrors, criteria: criterionForm.form.stepErrors },
   };
@@ -401,10 +396,26 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // analysis out of date keeps a carving change from running (result_steps.tsx).
   const ownStages = resultsCriterionId === undefined ? undefined
     : shownAs(criterionStages[resultsCriterionId] ?? { preprocessing: "missing", thresholding: "missing" });
-  const analysisWaitsFor = active.find((entry) => entry.id !== resultsCriterionId && criterionStages[entry.id]?.preprocessing !== "current")?.name ?? null;
+  const waitedFor = active.find((entry) => entry.id !== resultsCriterionId && criterionStages[entry.id]?.preprocessing !== "current");
+  const analysisWaitsFor = waitedFor === undefined ? null : { name: waitedFor.name, protectsNothing: protectingNothing.includes(waitedFor) };
+  // A threshold value of another criterion, whose turn in the threshold queue came after this one was selected: its settings with
+  // the value, while it is there with the mode the value was given in.
+  const saveToCriterion = async (id: string, mode: string, values: Record<string, unknown>): Promise<boolean> => {
+    const entry = criteria.current().criteria.find((candidate) => candidate.id === id);
+    if (entry === undefined || entry.settings?.mode !== mode) return false;
+    try {
+      criteria.applyReply(await updateCriterion(token, project.name, id, { values: { ...entry.settings, ...values } }));
+      refreshStageStatus();
+      return true;
+    } catch (error) {
+      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      return false;
+    }
+  };
   const resultSteps = useResultSteps({
     token, project: project.name, criterionId: resultsCriterionId, criterionStagesWithResults: resultsCriterionId === undefined ? undefined : stagesWithOutputOf(criterionStages[resultsCriterionId]),
-    criterionStages: ownStages, chainOrder: criteria.criteria.map((entry) => entry.id), analysisWaitsFor, showRefusalOfCriterion,
+    criterionStages: ownStages, chainOrder: criteria.criteria.map((entry) => entry.id), analysisWaitsFor, showRefusalOfCriterion, saveToCriterion,
+    criterionBypassed: criterion?.bypassed ?? false,
     criterionNames: criteria.criteria.length < 2 ? undefined : Object.fromEntries(criteria.criteria.map((entry) => [entry.id, entry.name])),
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
@@ -422,26 +433,17 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const criterionList: CriterionListProps = {
     criteria: criteria.criteria,
     selectedId: criteria.selectedId,
-    lineOf: (entry) => cardLineOf(criterionStatus(entry, criteria.criteria, cardStages, runningId), carvingSummaryOf(entry)),
+    lineOf: (entry) => cardLineOf(resultSteps.criteriaAwaitingNumbers.has(entry.id) ? { kind: "running" }
+      : criterionStatus(entry, criteria.criteria, cardStages, runningId), carvingSummaryOf(entry)),
     runningId,
     disabledReason: inputsDisabledReason,
     ...selection.requests,
   };
 
-  // A start refused because criteria that are on protect nothing selects the first of them (unless one is selected), whose panel
-  // asks for test surfaces until its files change or another run is asked for.
-  const testSurfacesAskedFor = record?.missingInputs?.filter((role) => role.startsWith(TEST_SURFACES_ROLE_PREFIX))
-    .map((role) => role.slice(TEST_SURFACES_ROLE_PREFIX.length)) ?? [];
-  const filesWhenRefused = useMemo(() => Object.fromEntries(testSurfacesAskedFor.map((id) => [id, testSurfaceFilesKey(criteria.criteria, id)])),
-                                   [record?.serial]);
-  const refusalSeen = useRef(record?.serial ?? null);
-  useEffect(() => {
-    if (record === null || record.serial === refusalSeen.current) return;
-    refusalSeen.current = record.serial;
-    if (testSurfacesAskedFor.length > 0 && !testSurfacesAskedFor.includes(criteria.selectedId)) selection.showCriterion(testSurfacesAskedFor[0]);
-  }, [record?.serial]);
-  const shownAskedForTestSurfaces = criterion !== null && testSurfacesAskedFor.includes(criterion.id)
-    && filesWhenRefused[criterion.id] === testSurfaceFilesKey(criteria.criteria, criterion.id);
+  // A start refused because criteria that are on protect nothing selects the first of them; its panel asks for test surfaces.
+  const panelProblem = useRefusalSelection({
+    record, criteria: criteria.criteria, selectedId: criteria.selectedId, shownCriterion: criterion, showCriterion: (id) => selection.showCriterion(id),
+  });
 
   const viewState: ProjectViewState = {
     maxVolumeFiles: files.max_volume.length,
@@ -478,7 +480,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     ),
     criteria: (
       <CriteriaStep list={criterionList} load={selection.load}
-                    panelProblem={shownAskedForTestSurfaces ? messages.addTestSurfacesTo(criterion.name) : null} panel={
+                    panelProblem={panelProblem} panel={
         <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}

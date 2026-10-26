@@ -32,8 +32,8 @@ export function activeCriteria(criteria: CriterionEntry[]): CriterionEntry[] {
  * What a card says about its criterion. Bypassed, running and without test surfaces come first. Then, from its stages: current;
  * not run yet when either stage is missing; out of date when its preprocessing is, or when its thresholding is and every earlier
  * criterion that is on is current; "updates from" the first earlier criterion that is on and not current when its thresholding
- * is out of date only because that one will change the voxels it decides among (out of date while an earlier one protects
- * nothing, since no run starts then). During a run, *stagesByCriterion* are those stagesDuringRun gives.
+ * is out of date only because that one will change the voxels it decides among (out of date while any criterion that is on
+ * protects nothing, since no run starts then). During a run, *stagesByCriterion* are those stagesDuringRun gives.
  */
 export function criterionStatus(entry: CriterionEntry, criteria: CriterionEntry[], stagesByCriterion: StagesByCriterion, runningId: string | null): CardStatus {
   if (entry.bypassed) return { kind: "bypassed" };
@@ -46,9 +46,15 @@ export function criterionStatus(entry: CriterionEntry, criteria: CriterionEntry[
   const active = activeCriteria(criteria);
   const earlier = active.slice(0, active.findIndex((criterion) => criterion.id === entry.id));
   const earlierNotCurrent = earlier.find((criterion) => !isCurrent(stagesByCriterion[criterion.id]));
-  // "Updates from" names only a criterion a run brings up to date first: while an earlier one protects nothing, the run is refused.
-  const runRefused = earlier.some((criterion) => (criterion.test_surface_files ?? []).length === 0);
+  // "Updates from" names only a criterion a run brings up to date first: while any criterion that is on protects nothing, the run
+  // is refused.
+  const runRefused = criteriaProtectingNothing(criteria).length > 0;
   return earlierNotCurrent === undefined || runRefused ? { kind: "out_of_date" } : { kind: "updates_from", from: earlierNotCurrent.name };
+}
+
+/** The criteria that are on and protect nothing (no test surfaces): a run refuses to start while there is one. */
+export function criteriaProtectingNothing(criteria: CriterionEntry[]): CriterionEntry[] {
+  return activeCriteria(criteria).filter((criterion) => (criterion.test_surface_files ?? []).length === 0);
 }
 
 function isCurrent(stages: StagesByCriterion[string] | undefined): boolean {

@@ -3,7 +3,7 @@ import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/clie
 import type { StageState } from "../steps/step_summaries";
 import {
   activeCriteria, cardLineOf, cardResultLine, cardStatusText, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving, selectionAfterRemoving,
-  stagesByCriterionOf, stagesDuringRun,
+  criteriaProtectingNothing, stagesByCriterionOf, stagesDuringRun,
 } from "./criteria_state";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
@@ -78,6 +78,15 @@ test("updates from names only a criterion a run brings up to date first: not whi
   // Never run but with test surfaces, it does run first.
   const withSurfaces = [{ ...criteria[0], test_surface_files: ["facades.obj"] }, criteria[1], criteria[2]];
   expect(criterionStatus(withSurfaces[2], withSurfaces, stages, null)).toEqual({ kind: "updates_from", from: "Facades" });
+});
+
+test("updates from is not named while any criterion that is on protects nothing, earlier or later; the helper lists those criteria", () => {
+  const criteria = [entry("1", { name: "Facades" }), entry("2"), entry("3", { test_surface_files: [] }), entry("4", { test_surface_files: [], bypassed: true })];
+  const stages = { "1": THRESHOLD_OUT_OF_DATE, "2": THRESHOLD_OUT_OF_DATE, "3": NOTHING };
+  expect(criteriaProtectingNothing(criteria).map((criterion) => criterion.id)).toEqual(["3"]);
+  expect(criterionStatus(criteria[1], criteria, stages, null)).toEqual({ kind: "out_of_date" });
+  const allProtect = criteria.slice(0, 2);
+  expect(criterionStatus(allProtect[1], allProtect, stages, null)).toEqual({ kind: "updates_from", from: "Facades" });
 });
 
 test("during a run a criterion's stages are current once the run has done them and out of date while it still has to", () => {

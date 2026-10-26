@@ -19,7 +19,7 @@ import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
 import { RunProgress } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
 import { runAnalysisAfterSaving, RunAnalysisButton, SettingsToFix } from "./SettingsStep";
-import { runProgressShare, runStages, stageRunState, type RunFailure, type RunLoop, type RunOrigin, type RunOutcome, type RunRecord } from "./run_state";
+import { criterionProgressOf, runProgressShare, runStages, stageRunState, type RunFailure, type RunLoop, type RunOrigin, type RunOutcome, type RunRecord } from "./run_state";
 import { useResultsFollowingRun, useRunResults, type RunResults } from "./run_results";
 import type { PipelineStage, StageState, StepName } from "./step_summaries";
 import { createThresholdUpdateQueue } from "./threshold_queue";
@@ -144,11 +144,18 @@ export interface ResultStepsContext {
   /** The criteria's names by id, which label their stages in a run's progress; absent with one criterion. */
   criterionNames?: Readonly<Record<string, string>>;
   /**
-   * The name of another criterion that is on and whose analysis is not current: a carving change of the selected one is then
-   * saved but runs nothing, since the run would trace that criterion first, which only Run analysis starts (M10). Absent or null:
-   * none.
+   * Another criterion that is on and whose analysis is not current (and whether it protects nothing): a carving change of the
+   * selected one is then saved but runs nothing, since the run would trace that criterion first, which only Run analysis starts
+   * (M10). Absent or null: none.
    */
-  analysisWaitsFor?: string | null;
+  analysisWaitsFor?: { name: string; protectsNothing: boolean } | null;
+  /** The selected criterion is bypassed: its panel says so in place of a carving rule. */
+  criterionBypassed?: boolean;
+  /**
+   * Saves threshold values to a criterion that is not the one shown (a value of the threshold queue whose turn came after another
+   * card was selected): its settings with the values, if it still has *mode*. Resolves with whether they were stored.
+   */
+  saveToCriterion?: (criterionId: string, mode: string, values: Record<string, unknown>) => Promise<boolean>;
   /**
    * Shows a run refused for another criterion's settings: selects that criterion and marks the fields once its settings are
    * shown. Absent: the fields are marked in the forms shown.
@@ -180,6 +187,12 @@ export interface ResultStepsContext {
   onCarveFurther: () => Promise<string | null>;
 }
 
+/** A value of the threshold queue: the threshold settings and the mode they were given in (the queue keys it by criterion). */
+interface ThresholdValue {
+  values: Record<string, unknown>;
+  mode: string;
+}
+
 export interface ResultSteps {
   content: Record<"envelope_and_massing" | "export", ReactNode>;
   /** The criterion's carving rule, or, before its first analysis, why there is none yet. */
@@ -189,6 +202,8 @@ export interface ResultSteps {
   pinnedAction: Partial<Record<StepName, ReactNode>>;
   viewer: Pick<ViewerPaneProps, "results" | "dimmedLayers" | "missingLayers" | "runProgress" | "overlayContent">;
   results: RunResults;
+  /** The criteria whose thresholding the last run did and whose new numbers are not in yet: their cards say Running. */
+  criteriaAwaitingNumbers: ReadonlySet<string>;
   /** The warnings of the project's last run, by the step that started it. */
   warningsOfStep: Partial<Record<StepName, number>>;
   /** The progress and outcome shown under a button. */
@@ -202,7 +217,7 @@ export interface ResultSteps {
 export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const { token, project, form, dispatch, flushSave, changeAndSave, stages, runs, runBlocker, projectRunActive } = context;
   const meshFormat = String(shownValue(form, "final_mesh_format") ?? "ply");
-  const [results, reloadResults] = useRunResults({
+  const [results, reloadResults, reloadSummary] = useRunResults({
     token, project, origin: context.origin, criterionId: context.criterionId, criterionStagesWithResults: context.criterionStagesWithResults,
     onServiceProblem: context.onServiceProblem,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
@@ -229,7 +244,18 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       if (criterion != null && context.showRefusalOfCriterion !== undefined) context.showRefusalOfCriterion(criterion, fieldErrors);
       else dispatch({ type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: form.gridPlan } });
     }
-  });
+  }, () => void reloadSummary());
+
+  // A criterion whose thresholding the run has done shows its numbers once a run summary fetched since is in: until then its card
+  // goes on saying Running (the summary held before has its numbers from before the run).
+  const summaryWhenCarved = useRef<{ serial: number | null; byCriterion: Map<string, RunSummary | null> }>({ serial: null, byCriterion: new Map() });
+  if (record !== null && summaryWhenCarved.current.serial !== record.serial) summaryWhenCarved.current = { serial: record.serial, byCriterion: new Map() };
+  if (record !== null) {
+    for (const [id, progress] of Object.entries(criterionProgressOf(record.state))) {
+      if (progress.thresholding === "done" && !summaryWhenCarved.current.byCriterion.has(id)) summaryWhenCarved.current.byCriterion.set(id, results.summary);
+    }
+  }
+  const criteriaAwaitingNumbers = new Set([...summaryWhenCarved.current.byCriterion].filter(([, summary]) => summary === results.summary).map(([id]) => id));
 
   // The results the service holds, fetched again with the stage status, when the page may show older ones. After the last
   // threshold value ended without a run (its save was not stored, its run did not start, or the service had nothing to run),
@@ -262,17 +288,17 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const ownStages: Record<PipelineStage, StageState> = context.criterionStages === undefined ? stages : { ...stages, ...context.criterionStages };
   const analysisOutOfDate = ownStages.preprocessing !== "current";
   const chainAnalysisOutOfDate = stages.preprocessing !== "current";
-  const carvingLocked = useRef(analysisOutOfDate);
-  carvingLocked.current = analysisOutOfDate;
-  const carvingWaitsFor = useRef<string | null>(null);
-  carvingWaitsFor.current = context.analysisWaitsFor ?? null;
   const buildsLocked = useRef(chainAnalysisOutOfDate);
   buildsLocked.current = chainAnalysisOutOfDate;
-  const carvingRunsNow = () => !carvingLocked.current && carvingWaitsFor.current === null;
+  // What the threshold queue, made once, reads when a value's turn comes: this render's context and locks.
+  const latest = useRef({ context, analysisOutOfDate });
+  latest.current = { context, analysisOutOfDate };
+  /** Every criterion that is on has a current analysis (the selected one's, and the others' by analysisWaitsFor). */
+  const carvingRunsNow = () => !latest.current.analysisOutOfDate && (latest.current.context.analysisWaitsFor ?? null) === null;
   /** Whether the save just stored changed what the analysis reads, or the form still shows other analysis settings. */
   const analysisChangedBy = (revisionBefore: number) => {
-    const latest = context.currentForm();
-    return latest.storedAnalysisRevision !== revisionBefore || analysisDiffersFromStored(latest);
+    const shownForm = latest.current.context.currentForm();
+    return shownForm.storedAnalysisRevision !== revisionBefore || analysisDiffersFromStored(shownForm);
   };
   // Update carving: saved first, and run only when the save left the analysis as it was.
   const updateCarvingAfterSaving = async () => {
@@ -282,20 +308,30 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     if ((outcome === "saved" || outcome === "none") && !analysisChangedBy(revisionBefore) && carvingRunsNow()) void startRun(CARVING_STAGES, "carving_update");
   };
 
-  // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value next. A run whose value
-  // the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the carving stays dimmed
-  // until the next value's run, or, when none follows, until the results the service holds have been fetched.
-  const thresholdQueue = useMemo(() => createThresholdUpdateQueue<Record<string, unknown>>(async (thresholdValues, isSuperseded) => {
-    if (thresholdControlOf(form.mode) === null || carvingLocked.current) return false;
-    const revisionBefore = context.currentForm().storedAnalysisRevision;
-    const outcome = await changeAndSave(thresholdValues);
-    if (outcome !== "saved" && outcome !== "none") return false;
-    // The save stored a mode or an analysis setting a refused save had left in the form: the carving waits for Run analysis.
-    if (analysisChangedBy(revisionBefore) || !carvingRunsNow()) return false;
-    // The service thresholds again from the first criterion whose carving is not current, the selected one, and the criteria after it.
-    const runOutcome = await runs.start(project, CARVING_STAGES, "carving_update", { isSuperseded, chainOrder: context.chainOrder });
+  // Threshold changes with auto-update on go through the queue: one carving run at a time, the last value of each criterion next.
+  // A run whose value the user left while it ran is marked so (RunRecord.isSuperseded): its results are not fetched and the
+  // carving stays dimmed until the next value's run, or, when none follows, until the results the service holds have been fetched.
+  // Each value is saved to the criterion it was given for, with the mode it was given in: through the form while that criterion is
+  // shown, else straight to it (saveToCriterion); a value of a mode the criterion no longer has, or of a criterion gone, is dropped.
+  const thresholdQueue = useMemo(() => createThresholdUpdateQueue<ThresholdValue>(async ({ values, mode }, isSuperseded, criterionId) => {
+    const now = latest.current.context;
+    if (thresholdControlOf(mode) === null) return false;
+    if (criterionId === (now.criterionId ?? "")) {
+      if (now.form.mode !== mode || latest.current.analysisOutOfDate) return false;
+      const revisionBefore = now.currentForm().storedAnalysisRevision;
+      const outcome = await now.changeAndSave(values);
+      if (outcome !== "saved" && outcome !== "none") return false;
+      // The save stored a mode or an analysis setting a refused save had left in the form: the carving waits for Run analysis.
+      if (analysisChangedBy(revisionBefore)) return false;
+    } else if (now.saveToCriterion === undefined || !(await now.saveToCriterion(criterionId, mode, values))) {
+      return false;
+    }
+    if (!carvingRunsNow()) return false;
+    // The service thresholds again from the first criterion whose carving is not current, this one, and the criteria after it.
+    const runOutcome = await now.runs.start(project, CARVING_STAGES, "carving_update", { isSuperseded, chainOrder: latest.current.context.chainOrder });
     return runOutcome !== "up_to_date" && runOutcome !== "not_started";
-  }, () => showResultsTheServiceHolds.current(CARVING_STAGES)), [form.mode]);
+  }, () => showResultsTheServiceHolds.current(CARVING_STAGES)), []);
+  const submitThreshold = (values: Record<string, unknown>) => thresholdQueue.submit({ values, mode: form.mode }, context.criterionId ?? "");
 
   const feedback = (origin: RunOrigin) => (
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} criterionNames={context.criterionNames} />
@@ -348,11 +384,14 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const criterionCarving = carvingOfCriterion(results.summary, context.criterionId);
   // A carving change of the selected criterion waits for another criterion's analysis: said over the carving when it updates on
   // its own, at Update carving otherwise.
-  const carvingWaitReason = !analysisOutOfDate && context.analysisWaitsFor != null ? messages.carvingWaitsForAnalysisOf(context.analysisWaitsFor) : null;
+  const waitsFor = context.analysisWaitsFor ?? null;
+  const carvingWaitReason = analysisOutOfDate || waitsFor === null ? null
+    : waitsFor.protectsNothing ? messages.addTestSurfacesTo(waitsFor.name) : messages.carvingWaitsForAnalysisOf(waitsFor.name);
   const carvingUpdatesOnItsOwn = autoUpdate && thresholdView !== null;
   // Before the selected criterion's first analysis there is no carving to show: the reason, how the last carving update ended,
-  // and the carving settings a refused save marked, so they can be fixed.
-  const carvingRule = ownStages.thresholding === "missing" ? (
+  // and the carving settings a refused save marked, so they can be fixed. A bypassed criterion has no carving in the chain.
+  const carvingRule = context.criterionBypassed === true ? <p className="step-reason">{messages.criterionBypassedNote}</p>
+    : ownStages.thresholding === "missing" ? (
     <>
       <p className="step-not-usable">{messages.carvingNeedsAnalysis}</p>
       {feedback("carving_update")}
@@ -367,8 +406,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                    autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
                    thresholdDisabledReason={otherRunActive ? messages.runInProgress : null} settingsDisabledReason={settingsDisabledReason}
                    runBlocker={runBlocker ?? carvingWaitReason} onChange={changeSettings}
-                   onThresholdCommit={(thresholdValues) => thresholdQueue.submit(thresholdValues)}
-                   onCarvingSettingCommit={() => { if (thresholdView !== null) thresholdQueue.submit({}); }}
+                   onThresholdCommit={submitThreshold}
+                   onCarvingSettingCommit={() => { if (thresholdView !== null) submitThreshold({}); }}
                    onUpdateCarving={() => void updateCarvingAfterSaving()}
                    lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")} showsDisabledReason={false} />
     </>
@@ -421,6 +460,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
         : null,
     },
     results,
+    criteriaAwaitingNumbers,
     warningsOfStep,
     feedback,
     feedbackWhenNotUsable: {

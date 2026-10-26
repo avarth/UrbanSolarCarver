@@ -14,6 +14,27 @@ test("threshold moves during a run give exactly one more run, with the last valu
   expect(queue.busy()).toBe(false);
 });
 
+test("values of different keys (criteria) wait side by side: one never replaces another's, and a run is superseded only by its own key's", async () => {
+  const calls: string[] = [];
+  const supersededChecks: (() => boolean)[] = [];
+  let finish!: () => void;
+  const queue = createThresholdUpdateQueue<number>((v, isSuperseded, key) => {
+    calls.push(`${key}=${v}`);
+    supersededChecks.push(isSuperseded);
+    return new Promise((r) => { finish = () => r(true); });
+  }, vi.fn());
+  queue.submit(1, "1");
+  queue.submit(2, "1");
+  queue.submit(4, "2");
+  expect(supersededChecks[0]()).toBe(true);           // criterion 1's newer value waits
+  queue.submit(5, "2");                               // replaces criterion 2's waiting value only
+  finish(); await flush();
+  expect(supersededChecks[1]()).toBe(false);          // criterion 2's waiting value does not supersede criterion 1's run
+  finish(); await flush(); finish(); await flush();
+  expect(calls).toEqual(["1=1", "1=2", "2=5"]);
+  expect(queue.busy()).toBe(false);
+});
+
 test("a value submitted while idle runs at once, and a failed run does not stop the next value", async () => {
   const calls: number[] = [];
   const queue = createThresholdUpdateQueue(async (v) => {

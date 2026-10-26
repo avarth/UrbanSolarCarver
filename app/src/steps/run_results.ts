@@ -13,7 +13,7 @@ import type { Point3 } from "../viewer/local_origin";
 import { decodeScorePoints, type ScorePoints } from "../viewer/score_points_decoder";
 import type { PlatesFile } from "./EnvelopeAndMassingStep";
 import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH, meshFormatOf } from "./ExportStep";
-import { runStages, stagesDone, type RunRecord } from "./run_state";
+import { criterionOfKey, runStages, stageOfKey, stagesDone, type RunRecord } from "./run_state";
 import type { PipelineStage } from "./step_summaries";
 
 export interface RunResults {
@@ -72,8 +72,11 @@ interface RunResultsSource {
   onServiceProblem: (error: unknown) => void;
 }
 
-/** The results, and the function that fetches again what the given stages write; its promise resolves once every fetch has ended. */
-export function useRunResults({ token, project, origin, stagesWithResults, criterionId, criterionStagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
+/**
+ * The results, the function that fetches again what the given stages write (its promise resolves once every fetch has ended),
+ * and the one that fetches the run summary again.
+ */
+export function useRunResults({ token, project, origin, stagesWithResults, criterionId, criterionStagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>] {
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
   const source = useRef({ token, origin, criterionId, onServiceProblem });
@@ -166,12 +169,15 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
     fetchResults(MESH_RESULTS.filter((name) => results[name] !== null));
   }, [originKey]);
 
-  return [results, reload];
+  const reloadSummary = useCallback(() => fetchResults(["summary"]), [fetchResults]);
+  return [results, reload, reloadSummary];
 }
 
 interface FollowedRun {
   serial: number | null;
   reloadedStages: Set<string>;
+  /** The criteria whose thresholding the run has done (onCriterionCarved). */
+  carvedCriteria: Set<string>;
   ended: boolean;
 }
 
@@ -179,20 +185,33 @@ interface FollowedRun {
  * Fetches again what a run's stages wrote as each one is done, and at the run's end what its unfinished stages left (a
  * cancelled or failed stage removed its old results when it began); calls *onRunEnded* once per run. A run that had ended
  * before the project was opened is not followed again: the project opened with its results. Nothing is fetched for a run whose
- * value the user has left (RunRecord.isSuperseded): its results would show that value until the next run's arrive.
+ * value the user has left (RunRecord.isSuperseded): its results would show that value until the next run's arrive. With
+ * several criteria, *onCriterionCarved* is called once for each criterion whose thresholding is done while the run still has the
+ * thresholding of others to do (the stage's results are fetched again once it is done for every criterion).
  */
-export function useResultsFollowingRun(record: RunRecord | null, reload: (stages: readonly string[]) => void, onRunEnded: (record: RunRecord) => void): void {
-  const followed = useRef<FollowedRun>({ serial: record?.serial ?? null, reloadedStages: new Set(), ended: record?.state.final != null });
+export function useResultsFollowingRun(record: RunRecord | null, reload: (stages: readonly string[]) => void, onRunEnded: (record: RunRecord) => void,
+                                       onCriterionCarved?: (criterionId: string) => void): void {
+  const followed = useRef<FollowedRun>({ serial: record?.serial ?? null, reloadedStages: new Set(), carvedCriteria: new Set(), ended: record?.state.final != null });
   const doneStages = record === null ? [] : stagesDone(record.state);
-  const progressKey = record === null ? "" : `${record.serial}:${doneStages.join(",")}:${record.state.final}`;
+  const doneKeys = record === null ? [] : record.state.order.filter((key) => record.state.stages[key].state === "done");
+  const progressKey = record === null ? "" : `${record.serial}:${doneKeys.join(",")}:${record.state.final}`;
   useEffect(() => {
     if (record === null || record.refusal !== null) return;
-    if (followed.current.serial !== record.serial) followed.current = { serial: record.serial, reloadedStages: new Set(), ended: false };
+    if (followed.current.serial !== record.serial) followed.current = { serial: record.serial, reloadedStages: new Set(), carvedCriteria: new Set(), ended: false };
     const run = followed.current;
     if (run.ended) return;
+    const superseded = record.isSuperseded?.() ?? false;
     const stagesToReload = (record.state.final === null ? doneStages : runStages(record.state)).filter((stage) => !run.reloadedStages.has(stage));
     stagesToReload.forEach((stage) => run.reloadedStages.add(stage));
-    if (stagesToReload.length > 0 && !(record.isSuperseded?.() ?? false)) reload(stagesToReload);
+    if (stagesToReload.length > 0 && !superseded) reload(stagesToReload);
+    if (record.state.final === null && !run.reloadedStages.has("thresholding")) {
+      for (const key of doneKeys) {
+        const criterion = criterionOfKey(key);
+        if (criterion === null || stageOfKey(key) !== "thresholding" || run.carvedCriteria.has(criterion)) continue;
+        run.carvedCriteria.add(criterion);
+        if (!superseded) onCriterionCarved?.(criterion);
+      }
+    }
     if (record.state.final !== null) {
       run.ended = true;
       onRunEnded(record);
