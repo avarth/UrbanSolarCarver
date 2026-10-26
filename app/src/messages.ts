@@ -518,6 +518,7 @@ export const messages = {
     terrain: "Terrain",
     kept_voxels: "Kept voxels, coloured by score",
     carved_voxels: "Carved voxels",
+    carved_by_criterion: "Carved voxels, by criterion",
     sun_path: "Sun path",
     sky_dome: "Sky dome",
     envelope: "Carved envelope",
@@ -556,5 +557,6 @@ export const messages = {
   skyDomeLegend: (mode: string | null) => (mode !== null && Object.hasOwn(SKY_PATCH_WEIGHT_OF_MODE, mode)
     ? SKY_PATCH_WEIGHT_OF_MODE[mode] : "Sky patch weight"),
   buildingMassingLegend: "Building massing, by storey",
+  carvedByCriterionLegend: "Carved voxels, by the criterion that removed them",
   legend: "Legend",
 };

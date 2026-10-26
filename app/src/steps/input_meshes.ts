@@ -23,6 +23,12 @@ function joinedGeometry(parts: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return mergeGeometries(parts.map((part) => (part.index ? part.toNonIndexed() : part))) ?? new THREE.BufferGeometry();
 }
 
+/** The meshes of the named files joined; a name without a mesh (not loaded, or unreadable) is left out, and null when none is left. */
+export function joinedGeometryOf(byFile: Record<string, THREE.BufferGeometry>, names: readonly string[]): THREE.BufferGeometry | null {
+  const parts = names.filter((name) => Object.hasOwn(byFile, name)).map((name) => byFile[name]);
+  return parts.length > 0 ? joinedGeometry(parts) : null;
+}
+
 /** The bounds of the geometries together; null when there is none. */
 export function boundsOf(geometries: (THREE.BufferGeometry | null)[]): Bounds3 | null {
   const box = new THREE.Box3();
@@ -37,11 +43,13 @@ export function boundsOf(geometries: (THREE.BufferGeometry | null)[]): Bounds3 |
 export interface InputGeometry {
   /** The files the view could read, joined; null while none is loaded. */
   geometry: THREE.BufferGeometry | null;
+  /** The mesh of each file the view could read, by file name (the test surfaces are drawn by criterion). */
+  byFile: Record<string, THREE.BufferGeometry>;
   /** One text per file the view cannot draw, naming the file, for its input box. */
   drawingProblems: string[];
 }
 
-const NOTHING_LOADED: InputGeometry = { geometry: null, drawingProblems: [] };
+const NOTHING_LOADED: InputGeometry = { geometry: null, byFile: {}, drawingProblems: [] };
 
 /** The joined mesh of a role's files in local coordinates; reloaded when the files, their contents or the local origin change. */
 export function useInputGeometry(token: string, project: string, role: MeshRole, files: InputFileInfo[], origin: Point3, revision: number,
@@ -57,15 +65,16 @@ export function useInputGeometry(token: string, project: string, role: MeshRole,
     Promise.allSettled(files.map((file) => loadMesh(inputFileUrl(project, role, file.name), token, extensionOf(file.name), origin)))
       .then((outcomes) => {
         if (stale) return;
-        const parts: THREE.BufferGeometry[] = [];
+        const byFile: Record<string, THREE.BufferGeometry> = {};
         const drawingProblems: string[] = [];
         let failedRequest: unknown = null;
         outcomes.forEach((outcome, index) => {
-          if (outcome.status === "fulfilled") parts.push(outcome.value);
+          if (outcome.status === "fulfilled") byFile[files[index].name] = outcome.value;
           else if (outcome.reason instanceof MeshNotReadableError) drawingProblems.push(messages.fileProblem(files[index].name, outcome.reason.message));
           else failedRequest ??= outcome.reason;
         });
-        setLoaded({ geometry: parts.length > 0 ? joinedGeometry(parts) : null, drawingProblems });
+        const parts = Object.values(byFile);
+        setLoaded({ geometry: parts.length > 0 ? joinedGeometry(parts) : null, byFile, drawingProblems });
         if (parts.length > 0) onLoaded();
         // A failed request may mean a lost token or a stopped engine: the app tells which, and leaves a refusal of another kind
         if (failedRequest !== null) onServiceProblem(failedRequest);

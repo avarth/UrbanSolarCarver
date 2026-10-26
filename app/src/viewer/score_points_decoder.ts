@@ -51,8 +51,11 @@ export function decodeScorePoints(buffer: ArrayBuffer): ScorePoints {
   return { header, indices, scores, kept, comparedScores };
 }
 
+/** Where a voxel grid lies: the corner, the number of voxels per axis and the voxel size (the score points' header, or the carved-by-criterion layer's). */
+export type GridPlacement = Pick<ScorePointsHeader, "origin" | "shape" | "voxel_size">;
+
 /** The centre of each indexed voxel relative to the local origin, as x, y, z triples: header.origin + (ijk + 0.5) * voxel_size. */
-export function voxelCentres(header: ScorePointsHeader, indices: Uint32Array, origin: Point3): Float32Array {
+export function voxelCentres(header: GridPlacement, indices: Uint32Array, origin: Point3): Float32Array {
   const [, rowCount, layerCount] = header.shape;
   const size = header.voxel_size;
   const gridCorner = toLocal(header.origin, origin);      // float64 here, so the float32 centres are small numbers

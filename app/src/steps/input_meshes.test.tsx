@@ -3,7 +3,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { useInputGeometry } from "./input_meshes";
+import { joinedGeometryOf, useInputGeometry, type InputGeometry } from "./input_meshes";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -51,4 +51,24 @@ test("a request that never got a reply is a service problem for the app to check
   expect(onServiceProblem).toHaveBeenCalledOnce();
   expect(rendered.container.querySelector("p")).toBeNull();
   expect(rendered.container.firstElementChild!.getAttribute("data-vertex-count")).toBe("none");
+});
+
+const TWO_TRIANGLES_OBJ = "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 1 1 0\nf 1 2 3\nf 2 4 3\n";
+
+test("each file's mesh is kept by name, and any of them can be joined again", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (address: string) => new Response(address.includes("pair.obj") ? TWO_TRIANGLES_OBJ : TRIANGLE_OBJ)));
+  let loaded: InputGeometry | null = null;
+  function Probe() {
+    loaded = useInputGeometry("t", "p", "test_surfaces", [{ name: "single.obj", triangle_count: 1 }, { name: "pair.obj", triangle_count: 2 }], [0, 0, 0], 0, () => {}, () => {});
+    return null;
+  }
+  rendered = renderForTest(<Probe />);
+  await settle();
+  expect(Object.keys(loaded!.byFile).sort()).toEqual(["pair.obj", "single.obj"]);
+  expect(loaded!.geometry!.getAttribute("position").count).toBe(9);              // all three triangles, as before
+  const vertexCount = (names: string[]) => joinedGeometryOf(loaded!.byFile, names)?.getAttribute("position").count;
+  expect(vertexCount(["pair.obj"])).toBe(6);
+  expect(vertexCount(["single.obj", "pair.obj", "not-there.obj"])).toBe(9);      // a name without a mesh is left out
+  expect(joinedGeometryOf(loaded!.byFile, ["not-there.obj"])).toBeNull();
+  expect(joinedGeometryOf(loaded!.byFile, [])).toBeNull();
 });

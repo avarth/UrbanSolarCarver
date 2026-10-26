@@ -6,10 +6,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import {
-  ApiError, getRunFileJson, getRunSummary, getScorePoints, getSkyPatches, runFileUrl, serviceProblemOf, type RunSummary, type SkyDome,
+  ApiError, getCarvedByCriterion, getRunFileJson, getRunSummary, getScorePoints, getSkyPatches, runFileUrl, serviceProblemOf, type RunSummary, type SkyDome,
 } from "../api_client/client";
 import { loadMesh } from "../viewer/loaders";
 import type { Point3 } from "../viewer/local_origin";
+import { decodeCarvedByCriterion, type CarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
 import { decodeScorePoints, type ScorePoints } from "../viewer/score_points_decoder";
 import type { PlatesFile } from "./EnvelopeAndMassingStep";
 import { exportedMeshPath, MASSING_JSON_PATH, MASSING_OBJ_PATH, meshFormatOf } from "./ExportStep";
@@ -23,11 +24,13 @@ export interface RunResults {
   envelope: THREE.BufferGeometry | null;
   massing: THREE.BufferGeometry | null;
   platesFile: PlatesFile | null;
+  /** Which criterion removed each voxel: only with two or more criteria on, once every one has run. */
+  carvedByCriterion: CarvedByCriterion | null;
 }
 
 type ResultName = keyof RunResults;
 
-const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null };
+const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
 
 /**
  * What each stage writes. The score points need the carving's mask, so they follow thresholding, not the analysis; the run
@@ -69,6 +72,12 @@ interface RunResultsSource {
   criterionId?: string;
   /** That criterion's stages with output: its score points and sky dome are asked for only when they are there (no 404s). */
   criterionStagesWithResults?: readonly string[];
+  /**
+   * The criteria that are on, in chain order, when there are two or more and every one has thresholding output: the carved-by-criterion
+   * layer is asked for only then (the service answers 404 otherwise). It is fetched again when this list changes (a reorder, bypass or
+   * delete) and with each run's thresholding. Absent or null: the layer is not asked for.
+   */
+  carvedByCriterionIds?: readonly string[] | null;
   onServiceProblem: (error: unknown) => void;
 }
 
@@ -76,11 +85,12 @@ interface RunResultsSource {
  * The results, the function that fetches again what the given stages write (its promise resolves once every fetch has ended),
  * and the one that fetches the run summary again.
  */
-export function useRunResults({ token, project, origin, stagesWithResults, criterionId, criterionStagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>] {
+export function useRunResults({ token, project, origin, stagesWithResults, criterionId, criterionStagesWithResults, carvedByCriterionIds = null, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>, () => Promise<void>] {
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
-  const source = useRef({ token, origin, criterionId, onServiceProblem });
-  source.current = { token, origin, criterionId, onServiceProblem };
+  const carvedByKey = carvedByCriterionIds === null ? null : carvedByCriterionIds.join(",");
+  const source = useRef({ token, origin, criterionId, carvedByKey, onServiceProblem });
+  source.current = { token, origin, criterionId, carvedByKey, onServiceProblem };
 
   /** *summary*: the run summary of this round of fetches, asked for once however many results read it. */
   const fetchResult = (name: ResultName, summary: () => Promise<RunSummary>): Promise<RunResults[ResultName]> => {
@@ -102,6 +112,9 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
         return loadMesh(runFileUrl(project, MASSING_OBJ_PATH), currentToken, "obj", currentOrigin);
       case "platesFile":
         return getRunFileJson<PlatesFile>(currentToken, project, MASSING_JSON_PATH);
+      case "carvedByCriterion":
+        // Not asked for while the criteria that are on are fewer than two or one of them has not run: the service would answer 404.
+        return source.current.carvedByKey === null ? Promise.resolve(null) : getCarvedByCriterion(currentToken, project).then(decodeCarvedByCriterion);
     }
   };
 
@@ -129,11 +142,21 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
     return Promise.all(fetches).then(() => undefined);     // each fetch handles its own failure, so none rejects
   }, [project]);
 
-  const reload = useCallback((stages: readonly string[]) => fetchResults(resultsOfStages(stages)), [fetchResults]);
+  // The thresholding of the criteria also writes what the by-criterion layer shows.
+  const reload = useCallback((stages: readonly string[]) => fetchResults([...resultsOfStages(stages), ...(stages.includes("thresholding") ? ["carvedByCriterion" as const] : [])]),
+                             [fetchResults]);
 
   useEffect(() => {
     fetchResults(resultsAtOpen(stagesWithResults, criterionStagesWithResults));
   }, []);
+
+  // The criteria that are on changed (or, at open, are there): the layer of the ones before is dropped, and the new one asked for
+  // when every criterion has run.
+  useEffect(() => {
+    latestRequest.current.carvedByCriterion = (latestRequest.current.carvedByCriterion ?? 0) + 1;
+    setResults((current) => (current.carvedByCriterion === null ? current : { ...current, carvedByCriterion: null }));
+    if (carvedByKey !== null) fetchResults(["carvedByCriterion"]);
+  }, [carvedByKey]);
 
   // Another criterion selected: its score points and sky dome replace the last one's, which are not shown meanwhile.
   const writtenOfCriterion = criterionStagesWithResults === undefined ? CRITERION_RESULTS

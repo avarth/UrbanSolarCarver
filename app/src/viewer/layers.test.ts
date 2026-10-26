@@ -1,6 +1,9 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
-import { buildingMassingLayer, carvedOutlineSegments, contextLayer, LAYER_NAMES, terrainLayer, keptColumnTops, pointSizeForVoxel, splitScorePoints, storeyOfPart, volumeOutline } from "./layers";
+import {
+  buildingMassingLayer, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, LAYER_NAMES, terrainLayer, keptColumnTops, pointSizeForVoxel, splitScorePoints,
+  storeyOfPart, testSurfacesLayer, volumeOutline,
+} from "./layers";
 import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
@@ -107,4 +110,42 @@ test("the existing surroundings and the terrain are layers of their own, listed 
   const geometry = new THREE.BoxGeometry(1, 1, 1);
   expect(contextLayer(geometry.clone())).toBeInstanceOf(THREE.Object3D);
   expect(terrainLayer(geometry.clone())).toBeInstanceOf(THREE.Object3D);
+});
+
+test("the carved-by-criterion layer comes right after the carved voxels", () => {
+  expect(LAYER_NAMES[LAYER_NAMES.indexOf("carved_voxels") + 1]).toBe("carved_by_criterion");
+});
+
+test("the carved-by-criterion layer draws each voxel in the colour of the criterion that removed it", () => {
+  const layer = carvedByCriterionLayer({
+    voxels: { centres: Float32Array.from([0.5, 0.5, 0.5, 1.5, 0.5, 0.5, 2.5, 0.5, 0.5]), criterionIndex: Uint8Array.from([0, 1, 0]) },
+    colours: ["#4477aa", "#228833"], voxelSize: 1,
+  }) as THREE.InstancedMesh;
+  const colourOf = (voxel: number) => {
+    const colour = new THREE.Color();
+    layer.getColorAt(voxel, colour);
+    return colour.getHexString();
+  };
+  expect(layer.count).toBe(3);
+  expect([0, 1, 2].map(colourOf)).toEqual([new THREE.Color("#4477aa"), new THREE.Color("#228833"), new THREE.Color("#4477aa")].map((colour) => colour.getHexString()));
+});
+
+test("the carved-by-criterion layer of a grid where nothing was carved is empty", () => {
+  const layer = carvedByCriterionLayer({ voxels: { centres: new Float32Array(0), criterionIndex: new Uint8Array(0) }, colours: ["#4477aa"], voxelSize: 1 });
+  expect(layer.children).toHaveLength(0);
+});
+
+test("the test surfaces layer draws the highlighted surfaces at full strength and the dimmed ones faded; without dimmed ones there is nothing faded", () => {
+  const surfaces = () => new THREE.BoxGeometry(1, 1, 0.1);
+  const opacityOf = (layer: THREE.Object3D, name: string) => ((layer.getObjectByName(name) as THREE.Mesh | undefined)?.material as THREE.Material | undefined)?.opacity;
+  const layer = testSurfacesLayer(surfaces(), surfaces());
+  expect(opacityOf(layer, "highlighted")).toBe(1);
+  expect(opacityOf(layer, "dimmed")).toBeLessThan(0.5);
+  expect(opacityOf(layer, "dimmed")).toBeGreaterThan(0);
+  const alone = testSurfacesLayer(surfaces());
+  expect(opacityOf(alone, "highlighted")).toBe(1);
+  expect(alone.getObjectByName("dimmed")).toBeUndefined();
+  const onlyDimmed = testSurfacesLayer(null, surfaces());
+  expect(onlyDimmed.getObjectByName("highlighted")).toBeUndefined();
+  expect(opacityOf(onlyDimmed, "dimmed")).toBeLessThan(0.5);
 });

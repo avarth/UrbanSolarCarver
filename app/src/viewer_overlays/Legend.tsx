@@ -10,6 +10,7 @@ export interface LegendContent {
   skyDome?: { title: string; lowestWeight: number; highestWeight: number };
   sunPath?: string;                               // sunPathLegend(sunPath)
   buildingMassing?: { storeyCount: number };
+  carvedByCriterion?: { name: string; colour: string }[];     // one swatch and name per criterion that was on
 }
 
 interface LegendProps {
@@ -59,8 +60,8 @@ function KeptVoxelsRange({ cutoff, unit }: { cutoff: number; unit?: string }) {
 }
 
 export function Legend({ content, theme }: LegendProps) {
-  const { keptVoxels, skyDome, sunPath, buildingMassing } = content;
-  if (!keptVoxels && !skyDome && !sunPath && !buildingMassing) return null;
+  const { keptVoxels, skyDome, sunPath, buildingMassing, carvedByCriterion } = content;
+  if (!keptVoxels && !skyDome && !sunPath && !buildingMassing && !carvedByCriterion) return null;
   return (
     <div className="viewer-overlay viewer-legend" data-viewport-theme={theme} role="group" aria-label={messages.legend}>
       {keptVoxels && (
@@ -69,6 +70,19 @@ export function Legend({ content, theme }: LegendProps) {
           <KeptVoxelsRange cutoff={keptVoxels.cutoff} unit={keptVoxels.unit} />
           <p className="viewer-muted">{messages.keptVoxelsNote(withUnit(formattedNumber(keptVoxels.cutoff), keptVoxels.unit))}</p>
           {keptVoxels.thinningStep > 1 && <p className="viewer-muted">{messages.thinnedVoxels(keptVoxels.thinningStep)}</p>}
+        </section>
+      )}
+      {carvedByCriterion && (
+        <section>
+          <h3>{messages.carvedByCriterionLegend}</h3>
+          <ul className="viewer-criterion-legend">
+            {carvedByCriterion.map((criterion, position) => (
+              <li key={position}>
+                <span className="viewer-criterion-swatch" style={{ background: criterion.colour }} aria-hidden="true" />
+                {criterion.name}
+              </li>
+            ))}
+          </ul>
         </section>
       )}
       {skyDome && (

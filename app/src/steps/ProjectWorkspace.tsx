@@ -31,7 +31,7 @@ import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
-import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
+import { boundsOf, joinedGeometryOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, inputProblemText, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { carvedByNote } from "./CarveFurther";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
@@ -200,6 +200,16 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
   // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
   const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
+  // With several criteria the shown criterion's test surfaces are drawn at full strength and the files only the others use dimmed (a
+  // file both use is highlighted); with one, or when the criterion does not list its files, all of them at full strength.
+  const shownCriterionFiles = criteria.criteria.length < 2 || criterion === null ? undefined : criterion.test_surface_files;
+  const shownCriterionFilesKey = shownCriterionFiles?.join("\n");
+  const testSurfaceDrawing = useMemo(() => {
+    if (shownCriterionFiles === undefined) return { highlighted: testSurfaces, dimmed: null };
+    const others = Object.keys(testSurfacesMesh.byFile).filter((name) => !shownCriterionFiles.includes(name));
+    if (others.length === 0) return { highlighted: testSurfaces, dimmed: null };
+    return { highlighted: joinedGeometryOf(testSurfacesMesh.byFile, shownCriterionFiles), dimmed: joinedGeometryOf(testSurfacesMesh.byFile, others) };
+  }, [testSurfaces, testSurfacesMesh.byFile, shownCriterionFilesKey]);
   const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
@@ -412,8 +422,14 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       return false;
     }
   };
+  // Which criterion removed each voxel: asked for with two or more criteria on, once every one has thresholding output (the service
+  // answers 404 before), and again whenever the criteria that are on change.
+  const carvedByCriterionWanted = active.length >= 2;
+  const carvedByCriterionIds = carvedByCriterionWanted && active.every((entry) => stagesWithOutputOf(criterionStages[entry.id]).includes("thresholding"))
+    ? active.map((entry) => entry.id) : null;
   const resultSteps = useResultSteps({
     token, project: project.name, criterionId: resultsCriterionId, criterionStagesWithResults: resultsCriterionId === undefined ? undefined : stagesWithOutputOf(criterionStages[resultsCriterionId]),
+    carvedByCriterionIds, carvedByCriterionWanted,
     criterionStages: ownStages, chainOrder: criteria.criteria.map((entry) => entry.id), analysisWaitsFor, showRefusalOfCriterion, saveToCriterion,
     criterionBypassed: criterion?.bypassed ?? false,
     criterionNames: criteria.criteria.length < 2 ? undefined : Object.fromEntries(criteria.criteria.map((entry) => [entry.id, entry.name])),
@@ -551,7 +567,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        pinnedAction={saveFailureNotice === null && openStepAction === null ? null : <>{saveFailureNotice}{openStepAction}</>} />
       </aside>
       <section className="workspace-view">
-        <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaces} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
+        <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceDrawing.highlighted} dimmedTestSurfaces={testSurfaceDrawing.dimmed}
+                    criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}

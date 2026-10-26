@@ -49,7 +49,7 @@ const STEP_OF_ORIGIN: Record<RunOrigin, StepName> = {
 /** The layers each stage's results are drawn in. */
 const LAYERS_OF_STAGE: Record<PipelineStage, LayerName[]> = {
   preprocessing: ["sky_dome"],
-  thresholding: ["kept_voxels", "carved_voxels"],
+  thresholding: ["kept_voxels", "carved_voxels", "carved_by_criterion"],
   exporting: ["envelope"],
   massing: ["building_massing"],
 };
@@ -102,8 +102,9 @@ export function dimmedLayersOf(record: RunRecord | null, stages: Record<Pipeline
 /** The layers of a run that was cancelled or failed whose stage left no data: listed with the missing-result note (UX 8.2). */
 export function missingLayersOf(record: RunRecord | null, results: RunResults, isWeightedMode: boolean): LayerName[] {
   if (record === null || (record.state.final !== "cancelled" && record.state.final !== "failed")) return [];
+  // The by-criterion layer exists only with several criteria: useResultSteps lists it as missing for those.
   return runStages(record.state).flatMap((stage) => LAYERS_OF_STAGE[stage as PipelineStage] ?? [])
-    .filter((layer) => (layer !== "sky_dome" || isWeightedMode) && !layerHasData(layer, results));
+    .filter((layer) => layer !== "carved_by_criterion" && (layer !== "sky_dome" || isWeightedMode) && !layerHasData(layer, results));
 }
 
 /**
@@ -134,6 +135,10 @@ export interface ResultStepsContext {
   criterionId?: string;
   /** The selected criterion's stages with output (run_results.ts asks for its score points and sky dome only then). */
   criterionStagesWithResults?: readonly string[];
+  /** The criteria that are on, in chain order, when there are two or more and every one has run: the by-criterion layer is asked for then. */
+  carvedByCriterionIds?: readonly string[] | null;
+  /** Two or more criteria are on: the by-criterion layer belongs to the view, and is listed as missing while it has no data. */
+  carvedByCriterionWanted?: boolean;
   /**
    * The selected criterion's own analysis and carving stages, as shown (out of date while the form differs from the stored
    * settings): its carving rule locks while its own analysis is out of date. Absent: the project's stages.
@@ -219,6 +224,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const meshFormat = String(shownValue(form, "final_mesh_format") ?? "ply");
   const [results, reloadResults, reloadSummary] = useRunResults({
     token, project, origin: context.origin, criterionId: context.criterionId, criterionStagesWithResults: context.criterionStagesWithResults,
+    carvedByCriterionIds: context.carvedByCriterionIds,
     onServiceProblem: context.onServiceProblem,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
   });
@@ -451,9 +457,10 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     pinnedAction: context.everyCriterionCarved ? { criteria: buildFromCarvingButton } : {},
     viewer: {
       results: { scorePoints: viewerResults.scorePoints, carving: criterionCarving, skyDome: viewerResults.skyDome,
-                 envelope: viewerResults.envelope, massing: viewerResults.massing },
+                 envelope: viewerResults.envelope, massing: viewerResults.massing, carvedByCriterion: viewerResults.carvedByCriterion },
       dimmedLayers: dimmedLayersOf(record, ownStages, stagesBeingFetched, context.criterionId),
-      missingLayers: missingLayersOf(record, viewerResults, context.isWeightedMode),
+      missingLayers: [...missingLayersOf(record, viewerResults, context.isWeightedMode),
+                      ...(context.carvedByCriterionWanted === true && viewerResults.carvedByCriterion === null ? ["carved_by_criterion" as const] : [])],
       runProgress: running ? runProgressShare(record.state) : null,
       overlayContent: runReportOpen
         ? <RunReportPanel token={token} project={project} onClose={() => setRunReportOpen(false)} onServiceProblem={context.onServiceProblem} />

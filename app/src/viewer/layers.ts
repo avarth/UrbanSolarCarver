@@ -8,18 +8,19 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 import type { SkyDome } from "../api_client/client";
 import { messages } from "../messages";
 import { cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
+import type { CarvedVoxels } from "./carved_by_criterion_decoder";
 import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
 import { pointOnHemisphere, skyPatchOutline, skyPatchShares, type Hemisphere } from "./sky_dome";
 import type { SunPathObjects } from "./sun_path";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
-export type LayerName = "max_volume" | "test_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "sun_path" | "sky_dome" | "envelope" |
-  "building_massing";
+export type LayerName = "max_volume" | "test_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "carved_by_criterion" | "sun_path" |
+  "sky_dome" | "envelope" | "building_massing";
 
 /** The layers in the order of UX 8.2, which the layers menu and the accessible name follow. */
-export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "sun_path", "sky_dome",
-  "envelope", "building_massing"];
+export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
+  "sun_path", "sky_dome", "envelope", "building_massing"];
 
 /** The layers that can reach far beyond the site (a city model, a terrain kilometres wide): the camera frames the rest. */
 export const SURROUNDING_LAYERS: readonly LayerName[] = ["context", "terrain"];
@@ -32,6 +33,7 @@ const GHOST_EDGE_OPACITY = 0.3;
 const SEE_THROUGH_ENVELOPE_OPACITY = 0.3;
 const SEE_THROUGH_EDGE_OPACITY = 0.2;
 const CARVED_VOXEL_OPACITY = 0.1;
+const DIMMED_TEST_SURFACE_OPACITY = 0.2;     // the test surfaces of the criteria that are not selected
 const CARVED_OUTLINE_OPACITY = 0.6;
 const MASSING_EDGE_OPACITY = 0.25;
 const FEATURE_EDGE_DEGREES = 20;
@@ -136,12 +138,23 @@ export function maxVolumeLayer(geometry: THREE.BufferGeometry, appearance: MaxVo
   return solidWithEdges(geometry, ghost ? GHOST_OPACITY : 1, ghost ? GHOST_EDGE_OPACITY : SOFT_EDGE_OPACITY).group;
 }
 
-/** The test surfaces in the accent colour, a lighter blue on the dark viewport. */
-export function testSurfacesLayer(geometry: THREE.BufferGeometry): THREE.Object3D {
-  const material = solidMaterial(colourToken("accent"), 1, THREE.DoubleSide);
-  const surfaces = new THREE.Mesh(geometry, material);
-  surfaces.userData.applyTheme = (theme: ViewportTheme) => material.color.set(colourToken(theme === "dark" ? "test-surface-on-dark" : "accent"));
-  return surfaces;
+/**
+ * The test surfaces in the accent colour, a lighter blue on the dark viewport: the *highlighted* ones at full strength and the
+ * *dimmed* ones (the files only the criteria that are not selected use) faded. Either may be null.
+ */
+export function testSurfacesLayer(highlighted: THREE.BufferGeometry | null, dimmed: THREE.BufferGeometry | null = null): THREE.Object3D {
+  const layer = new THREE.Group();
+  const materials: THREE.MeshLambertMaterial[] = [];
+  for (const [name, geometry, opacity] of [["highlighted", highlighted, 1], ["dimmed", dimmed, DIMMED_TEST_SURFACE_OPACITY]] as const) {
+    if (geometry === null) continue;
+    const material = solidMaterial(colourToken("accent"), opacity, THREE.DoubleSide);
+    const surfaces = new THREE.Mesh(geometry, material);
+    surfaces.name = name;
+    materials.push(material);
+    layer.add(surfaces);
+  }
+  layer.userData.applyTheme = (theme: ViewportTheme) => materials.forEach((material) => material.color.set(colourToken(theme === "dark" ? "test-surface-on-dark" : "accent")));
+  return layer;
 }
 
 /** The existing surroundings: neutral grey massing with soft edges. */
@@ -399,6 +412,23 @@ export function carvedVoxelsLayer({ voxels, voxelSize, voxelCount, outline, kept
   const outlineMaterial = layerMaterial(new THREE.LineBasicMaterial({ color: carvedColour, depthWrite: false }), CARVED_OUTLINE_OPACITY);
   layer.add(new THREE.LineSegments(outlineGeometry, outlineMaterial));
   layer.userData.summary = messages.voxelCount(voxelCount);
+  return layer;
+}
+
+export interface CarvedByCriterionDrawing {
+  voxels: CarvedVoxels;
+  colours: readonly string[];         // the colour of each criterion, in the order of the layer's criterion ids
+  voxelSize: number;
+}
+
+/** The voxels some criterion removed, each in the colour of the criterion that removed it; one without a colour here is drawn in the carved colour. */
+export function carvedByCriterionLayer({ voxels, colours, voxelSize }: CarvedByCriterionDrawing): THREE.Object3D {
+  const count = voxels.criterionIndex.length;
+  if (count === 0) return new THREE.Group();
+  const carvedColour = new THREE.Color(colourToken("carved"));
+  const colourOf = colours.map((colour) => new THREE.Color(colour));
+  const layer = voxelObject(voxels.centres, voxelSize, Array.from(voxels.criterionIndex, (criterion) => colourOf[criterion] ?? carvedColour), "#ffffff", 1);
+  layer.userData.summary = messages.voxelCount(count);
   return layer;
 }
 

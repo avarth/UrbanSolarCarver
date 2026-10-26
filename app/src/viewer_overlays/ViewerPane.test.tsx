@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import * as THREE from "three";
 import type { SkyDome } from "../api_client/client";
+import { decodeCarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
+import { packCarvedByCriterion } from "../viewer/packed_results_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
@@ -116,4 +119,76 @@ test("with surroundings and terrain, the layers menu lists them after the test s
   const names = [...rendered.container.querySelectorAll(".viewer-layers-panel label")].map((label) => label.textContent);
   expect(names.slice(0, 3)).toEqual(["Test surfaces", "Existing surroundings", "Terrain"]);
   for (const step of Object.values(LAYERS_SHOWN_IN_STEP)) expect(step).toEqual(expect.arrayContaining(["context", "terrain"]));
+});
+
+const CRITERIA = [
+  { id: "1", name: "Winter sun on facades", colour: "#4477aa" },
+  { id: "2", name: "Spring sun on windows", colour: "#ee6677" },
+  { id: "3", name: "Daylight on roofs", colour: "#228833" },
+];
+// Two voxels of a (2, 2, 1) grid were carved: one by the first criterion that was on (id 1), one by the second (id 3).
+const CARVED_BY = decodeCarvedByCriterion(packCarvedByCriterion([2, 2, 1], ["1", "3"], [0, 1, 2, 0]));
+
+function viewCarvedBy(shownByDefault: ViewerPaneProps["shownByDefault"]): ViewerPaneProps {
+  return { ...viewWithSkyDome("daylight"), shownByDefault, results: { ...NO_VIEWER_RESULTS, carvedByCriterion: CARVED_BY }, criteria: CRITERIA };
+}
+
+const hexOf = (colour: string) => new THREE.Color(colour).getHexString();
+
+test("test the carved-by-criterion layer colours each voxel by its criterion", () => {
+  rendered = renderForTest(<ViewerPane {...viewCarvedBy([])} />);
+  const layer = FakeViewerScene.latest!.layers.get("carved_by_criterion") as THREE.InstancedMesh;
+  const colourOf = (voxel: number) => {
+    const colour = new THREE.Color();
+    layer.getColorAt(voxel, colour);
+    return colour.getHexString();
+  };
+  expect(layer.count).toBe(2);
+  expect([colourOf(0), colourOf(1)]).toEqual([hexOf("#4477aa"), hexOf("#228833")]);      // the criteria 1 and 3, in their own colours
+  expect(FakeViewerScene.latest!.visibleLayers.has("carved_by_criterion")).toBe(false);   // hidden until the Layers menu turns it on
+  click(rendered.container.querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!);
+  const entry = [...rendered.container.querySelectorAll<HTMLLabelElement>(".viewer-layers-panel label")].find((label) => label.textContent === "Carved voxels, by criterion")!;
+  click(entry.querySelector("input")!);
+  expect(FakeViewerScene.latest!.visibleLayers.has("carved_by_criterion")).toBe(true);
+});
+
+test("test the legend names each criterion", () => {
+  rendered = renderForTest(<ViewerPane {...viewCarvedBy([])} />);
+  expect(rendered.container.querySelector(".viewer-legend")).toBeNull();                  // hidden layer, no legend
+  rendered.rerender(<ViewerPane {...viewCarvedBy(["carved_by_criterion"])} />);
+  const items = [...rendered.container.querySelectorAll<HTMLElement>(".viewer-legend .viewer-criterion-legend li")];
+  expect(items.map((item) => item.textContent)).toEqual(["Winter sun on facades", "Daylight on roofs"]);      // the criteria that were on, not criterion 2
+  expect(items.map((item) => item.querySelector<HTMLElement>(".viewer-criterion-swatch")!.style.backgroundColor)).toEqual(["rgb(68, 119, 170)", "rgb(34, 136, 51)"]);
+});
+
+test("test the other criteria's test surfaces are dimmed", () => {
+  const selected = new THREE.BoxGeometry(1, 1, 0.1), others = new THREE.BoxGeometry(2, 2, 0.1);
+  rendered = renderForTest(<ViewerPane {...viewCarvedBy([])} testSurfaces={selected} dimmedTestSurfaces={others} />);
+  const layer = FakeViewerScene.latest!.layers.get("test_surfaces")!;
+  const opacityOf = (name: string) => ((layer.getObjectByName(name) as THREE.Mesh).material as THREE.Material).opacity;
+  expect(opacityOf("highlighted")).toBe(1);
+  expect(opacityOf("dimmed")).toBeLessThan(1);
+  rendered.rerender(<ViewerPane {...viewCarvedBy([])} testSurfaces={selected} />);          // one criterion: nothing is dimmed
+  expect(FakeViewerScene.latest!.layers.get("test_surfaces")!.getObjectByName("dimmed")).toBeUndefined();
+  expect(FakeViewerScene.latest!.layersWithObjects()).toContain("test_surfaces");
+});
+
+test("a criterion's test surfaces alone, dimmed ones only, still make the test surfaces layer", () => {
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} dimmedTestSurfaces={new THREE.BoxGeometry(1, 1, 0.1)} shownByDefault={["test_surfaces"]} />);
+  expect(FakeViewerScene.latest!.layersWithObjects()).toContain("test_surfaces");
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
+});
+
+test("a layer listed as missing says no result for it, and cannot be turned on", () => {
+  rendered = renderForTest(<ViewerPane {...viewWithSkyDome("daylight")} missingLayers={["carved_by_criterion"]} />);
+  click(rendered.container.querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!);
+  const entry = [...rendered.container.querySelectorAll<HTMLElement>(".viewer-layers-panel li")].find((item) => item.textContent!.includes("Carved voxels, by criterion"))!;
+  expect(entry.querySelector("input")!.disabled).toBe(true);
+  expect(entry.querySelector(".viewer-layer-note")).not.toBeNull();
+});
+
+test("a dimmed carved-by-criterion layer is drawn dimmed, and the stamp says so while it is shown", () => {
+  rendered = renderForTest(<ViewerPane {...viewCarvedBy(["carved_by_criterion"])} dimmedLayers={["carved_by_criterion"]} />);
+  expect(FakeViewerScene.latest!.dimmed.has("carved_by_criterion")).toBe(true);
+  expect(rendered.container.querySelector(".viewer-out-of-date")).not.toBeNull();
 });

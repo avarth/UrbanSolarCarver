@@ -11,7 +11,7 @@ import { initialRunState, runReducer, useRunLoop, type RunRecord, type RunState 
 import type { PipelineStage, StageState } from "./step_summaries";
 
 const ALL_CURRENT: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
-const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null };
+const NO_RESULTS: RunResults = { summary: null, scorePoints: null, skyDome: null, envelope: null, massing: null, platesFile: null, carvedByCriterion: null };
 
 function record(state: RunState, serial = 1): RunRecord {
   return { serial, project: "p", origin: "build", runId: `r${serial}`, state, refusal: null };
@@ -47,7 +47,7 @@ test("a stage of the run under way is dimmed until the run has done it; other st
   expect(isStageDimmed("exporting", record(state), stages)).toBe(false);       // done in this run, though its status still says missing
   expect(isStageDimmed("massing", record(state), stages)).toBe(true);
   expect(isStageDimmed("thresholding", record(state), stages)).toBe(true);     // not in the run: its status
-  expect(dimmedLayersOf(record(state), stages)).toEqual(["kept_voxels", "carved_voxels", "building_massing"]);
+  expect(dimmedLayersOf(record(state), stages)).toEqual(["kept_voxels", "carved_voxels", "carved_by_criterion", "building_massing"]);
   expect(dimmedLayersOf(null, ALL_CURRENT)).toEqual([]);
   const ended = runReducer(state, { type: "run_finished", stages: ["exporting", "massing"], files: [] });
   expect(isStageDimmed("massing", record(ended), { ...stages, massing: "current" })).toBe(false);
@@ -64,6 +64,8 @@ test("a run that stopped early lists the layers its stages left without data; a 
   const finished = runReducer(initialRunState(["exporting"]), { type: "run_finished", stages: ["exporting"], files: [] });
   expect(missingLayersOf(record(finished), NO_RESULTS, false)).toEqual([]);
   expect(missingLayersOf(null, NO_RESULTS, false)).toEqual([]);
+  // The by-criterion layer exists only with several criteria: a cancelled run of one criterion does not list it
+  expect(missingLayersOf(record(cancelled), withoutCarving, false)).not.toContain("carved_by_criterion");
 });
 
 test("each stage names the results it writes; the score points follow the carving, not the analysis", () => {

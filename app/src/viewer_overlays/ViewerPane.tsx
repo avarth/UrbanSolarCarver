@@ -8,10 +8,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
 import type { RunSummary, SkyDome } from "../api_client/client";
 import { messages } from "../messages";
-import { keptScoreRange } from "../viewer/colour_scales";
+import { carvedVoxelsByCriterion, type CarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
+import { colourToken, keptScoreRange } from "../viewer/colour_scales";
 import {
-  buildingMassingLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer, skyDomeLayer, splitScorePoints,
-  storeyOfPart, sunPathLayer, terrainLayer, testSurfacesLayer, volumeOutline, type MaxVolumeAppearance, type VolumeOutline,
+  buildingMassingLayer, carvedByCriterionLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer, skyDomeLayer,
+  splitScorePoints, storeyOfPart, sunPathLayer, terrainLayer, testSurfacesLayer, volumeOutline, type MaxVolumeAppearance, type VolumeOutline,
 } from "../viewer/layers";
 import type { Point3 } from "../viewer/local_origin";
 import { DEFAULT_SKY_DOME_OPACITY, ViewerScene, type CameraState, type GroundAid, type LayerName, type ViewportTheme } from "../viewer/scene";
@@ -33,13 +34,27 @@ export interface ViewerResults {
   skyDome: SkyDome | null;
   envelope: THREE.BufferGeometry | null;
   massing: THREE.BufferGeometry | null;
+  /** Which criterion removed each voxel; null with fewer than two criteria on, or until every one has run. */
+  carvedByCriterion: CarvedByCriterion | null;
 }
 
-export const NO_VIEWER_RESULTS: ViewerResults = { scorePoints: null, carving: null, skyDome: null, envelope: null, massing: null };
+export const NO_VIEWER_RESULTS: ViewerResults = { scorePoints: null, carving: null, skyDome: null, envelope: null, massing: null, carvedByCriterion: null };
+
+/** What the carved-by-criterion layer and its legend need of a criterion. */
+export interface CriterionSwatch {
+  id: string;
+  name: string;
+  colour: string;       // "#RRGGBB"
+}
 
 export interface ViewerPaneProps {
   maxVolume: THREE.BufferGeometry | null;
+  /** The test surfaces drawn at full strength: the selected criterion's files (all of them with one criterion). */
   testSurfaces: THREE.BufferGeometry | null;
+  /** The test surfaces drawn dimmed: the files only the criteria that are not selected use. */
+  dimmedTestSurfaces?: THREE.BufferGeometry | null;
+  /** The criteria that are on, for the colours and names of the carved-by-criterion layer. */
+  criteria?: readonly CriterionSwatch[];
   /** The existing surroundings and the terrain, when the project has them. */
   context?: THREE.BufferGeometry | null;
   terrain?: THREE.BufferGeometry | null;
@@ -79,7 +94,8 @@ const NO_CAMERA: CameraState = { yawDegrees: 0, elevationDegrees: 90, metresPerP
 const NO_SHIFT: Point3 = [0, 0, 0];
 const NO_LAYERS: readonly LayerName[] = [];
 const EMPTY_OUTLINE: VolumeOutline = { segments: new Float32Array(0), outwardNormals: new Float32Array(0) };
-const RESULT_LAYERS: readonly LayerName[] = ["kept_voxels", "carved_voxels", "sky_dome", "envelope", "building_massing"];
+const NO_CRITERIA: readonly CriterionSwatch[] = [];
+const RESULT_LAYERS: readonly LayerName[] = ["kept_voxels", "carved_voxels", "carved_by_criterion", "sky_dome", "envelope", "building_massing"];
 const WEBGL_CONTEXT = "webgl2";     // what three.js's WebGLRenderer asks the canvas for
 
 /**
@@ -103,7 +119,8 @@ function storeyCountOf(massing: THREE.BufferGeometry): number {
   return partNames.reduce((count, name) => Math.max(count, (storeyOfPart(name) ?? 0) + 1), 0);
 }
 
-export function ViewerPane({ maxVolume, testSurfaces, context = null, terrain = null, sunPath, hemisphere, maxVolumeAppearance, shownByDefault,
+export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null, criteria = NO_CRITERIA, context = null, terrain = null, sunPath, hemisphere,
+                             maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
                              analysisCurrent = false }: ViewerPaneProps) {
@@ -116,7 +133,7 @@ export function ViewerPane({ maxVolume, testSurfaces, context = null, terrain = 
   const [visibleByChoice, setVisibleByChoice] = useState<Partial<Record<LayerName, boolean>>>({});
   const [skyDomeOpacity, setSkyDomeOpacity] = useState(DEFAULT_SKY_DOME_OPACITY);
   const defaultsKey = shownByDefault.join(",");
-  const { scorePoints, carving, skyDome, envelope, massing } = results;
+  const { scorePoints, carving, skyDome, envelope, massing, carvedByCriterion } = results;
   const originKey = localOrigin.join(",");
 
   useEffect(() => {
@@ -150,7 +167,10 @@ export function ViewerPane({ maxVolume, testSurfaces, context = null, terrain = 
 
   // Every layer gets its own copy of the geometry: the scene disposes a layer's geometry when the layer is replaced.
   useEffect(() => scene?.setLayer("max_volume", maxVolume && maxVolumeLayer(maxVolume.clone(), maxVolumeAppearance)), [scene, maxVolume, maxVolumeAppearance]);
-  useEffect(() => scene?.setLayer("test_surfaces", testSurfaces && testSurfacesLayer(testSurfaces.clone())), [scene, testSurfaces]);
+  useEffect(() => {
+    const drawn = testSurfaces !== null || dimmedTestSurfaces !== null;
+    scene?.setLayer("test_surfaces", drawn ? testSurfacesLayer(testSurfaces?.clone() ?? null, dimmedTestSurfaces?.clone() ?? null) : null);
+  }, [scene, testSurfaces, dimmedTestSurfaces]);
   useEffect(() => scene?.setLayer("context", context && contextLayer(context.clone())), [scene, context]);
   useEffect(() => scene?.setLayer("terrain", terrain && terrainLayer(terrain.clone())), [scene, terrain]);
   useEffect(() => {
@@ -175,16 +195,25 @@ export function ViewerPane({ maxVolume, testSurfaces, context = null, terrain = 
       keptTopAt: keptColumnTops(scorePoints, localOrigin),
     }));
   }, [scene, voxels, outline]);
+  // Each carved voxel in the colour of the criterion that removed it, whose id the layer names; the layer is drawn again when a colour changes.
+  const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion === null ? null : carvedVoxelsByCriterion(carvedByCriterion, localOrigin)), [carvedByCriterion, originKey]);
+  const criterionColours = carvedByCriterion === null ? [] : carvedByCriterion.criterionIds.map((id) => criteria.find((entry) => entry.id === id)?.colour ?? colourToken("carved"));
+  const criterionColoursKey = criterionColours.join(",");
+  useEffect(() => {
+    scene?.setLayer("carved_by_criterion", carvedByCriterion && carvedVoxelsOfCriteria
+      && carvedByCriterionLayer({ voxels: carvedVoxelsOfCriteria, colours: criterionColours, voxelSize: carvedByCriterion.voxelSize }));
+  }, [scene, carvedVoxelsOfCriteria, criterionColoursKey]);
   useEffect(() => scene?.setLayer("sky_dome", skyDome && hemisphere && skyDomeLayer(skyDome, hemisphere)), [scene, skyDome, hemisphere]);
   useEffect(() => scene?.setLayer("envelope", envelope && envelopeLayer(envelope.clone())), [scene, envelope]);
   useEffect(() => scene?.setLayer("building_massing", massing && buildingMassingLayer(massing.clone())), [scene, massing]);
 
   const present: LayerName[] = [];
   if (maxVolume) present.push("max_volume");
-  if (testSurfaces) present.push("test_surfaces");
+  if (testSurfaces || dimmedTestSurfaces) present.push("test_surfaces");
   if (context) present.push("context");
   if (terrain) present.push("terrain");
   if (voxels) present.push("kept_voxels", "carved_voxels");
+  if (carvedVoxelsOfCriteria) present.push("carved_by_criterion");
   if (sunPath && hemisphere) present.push("sun_path");
   if (skyDome && hemisphere) present.push("sky_dome");
   if (envelope) present.push("envelope");
@@ -223,6 +252,9 @@ export function ViewerPane({ maxVolume, testSurfaces, context = null, terrain = 
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
+    carvedByCriterion: shown("carved_by_criterion") && carvedByCriterion
+      ? carvedByCriterion.criterionIds.flatMap((id) => criteria.filter((entry) => entry.id === id).map(({ name, colour }) => ({ name, colour })))
+      : undefined,
   };
   const dimmedResultShown = dimmedLayers.some(shown);
   const progressPercent = runProgress === null ? 0 : Math.round(runProgress * 100);

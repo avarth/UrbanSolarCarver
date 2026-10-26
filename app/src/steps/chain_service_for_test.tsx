@@ -35,6 +35,10 @@ export class ChainService extends FakeService {
   runCriterionStages: Record<string, string[]> | null = null;
   /** The status and body a request to run is refused with; null: it starts. */
   runRefusal: { status: number; body: unknown } | null = null;
+  /** GET run/score-points?criterion={id}: the packed score points of each criterion; a criterion without them is not there (404). */
+  scorePointsOf: Record<string, ArrayBuffer> = {};
+  /** GET run/carved-by-criterion: the packed layer; null: not there (404, as the service answers until every criterion has run). */
+  carvedByCriterion: ArrayBuffer | null = null;
 
   constructor(entries: CriterionEntry[], criterionStages: Record<string, CriterionStages>) {
     super(CARVED, CARVING);
@@ -56,6 +60,11 @@ export class ChainService extends FakeService {
     if (path === "/run/summary") {
       this.requests.push(`${method} ${fullPath}`);
       return json({ ...this.summary, criteria: this.summaryCriteria });
+    }
+    if (path === "/run/score-points" || path === "/run/carved-by-criterion") {
+      this.requests.push(`${method} ${fullPath}`);
+      const packed = path === "/run/carved-by-criterion" ? this.carvedByCriterion : this.scorePointsOf[new URLSearchParams(fullPath.split("?")[1]).get("criterion") ?? ""];
+      return packed === undefined || packed === null ? json({ detail: "Not found" }, 404) : new Response(packed);
     }
     if (method === "POST" && path === "/runs" && (this.runRefusal !== null || this.runCriterionStages !== null)) {
       this.requests.push(`${method} ${fullPath}`);
@@ -172,9 +181,11 @@ function summedStages(stages: Record<string, CriterionStages>): CriterionStages 
 /** The service of the project opened last (openChain). */
 export let service: ChainService;
 
-/** Opens the project "p" of these criteria, every one carved, at the Criteria step. */
-export async function openChain(entries: CriterionEntry[], stages: Record<string, CriterionStages> = Object.fromEntries(entries.map((entry) => [entry.id, CURRENT]))) {
+/** Opens the project "p" of these criteria, every one carved, at the Criteria step; *prepare* sets what the service holds before the page asks. */
+export async function openChain(entries: CriterionEntry[], stages: Record<string, CriterionStages> = Object.fromEntries(entries.map((entry) => [entry.id, CURRENT])),
+                                prepare: (service: ChainService) => void = () => {}) {
   service = new ChainService(entries, { ...stages });
+  prepare(service);
   service.stages = { ...CARVED, ...summedStages(stages) };
   service.summaryCriteria = entries.filter((entry) => !entry.bypassed).map((entry, index) => carvingSummaryOf(entry, [61, 80, 90][index]));
   const files = [...new Set(entries.flatMap((entry) => entry.test_surface_files ?? []))].map((name) => ({ name, triangle_count: 1 }));

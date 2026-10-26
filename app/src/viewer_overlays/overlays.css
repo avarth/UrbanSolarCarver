@@ -179,6 +179,16 @@
   font-weight: 600;
 }
 
+.viewer-criterion-legend { margin: 0; padding: 0; list-style: none; }
+.viewer-criterion-legend li { display: flex; align-items: center; gap: 6px; }
+
+.viewer-criterion-swatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
 /* The view and its centre message (the empty state of UX 11). */
 .viewer-pane { position: absolute; inset: 0; overflow: hidden; }
 .viewer-canvas { position: absolute; inset: 0; }
