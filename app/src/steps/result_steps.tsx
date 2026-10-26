@@ -305,7 +305,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                  onThresholdCommit={(thresholdValues) => thresholdQueue.submit(thresholdValues)}
                  onCarvingSettingCommit={() => { if (thresholdView !== null) thresholdQueue.submit({}); }}
                  onUpdateCarving={() => void updateCarvingAfterSaving()}
-                 lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")} analysisFeedback={null} />
+                 lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")} showsDisabledReason={false} />
   );
   const criterionRunAnalysis = (
     <RunAnalysisButton blocker={runBlocker} feedback={feedback("carving_run_analysis")}

@@ -1,6 +1,6 @@
 {
   "steps": {
-    "settings": ["When", "Mode specific", "Surroundings", "Detail"],
+    "settings": ["Site", "When", "Mode specific", "Surroundings", "Detail"],
     "carving": ["How much to carve"],
     "envelope_and_massing": ["Envelope", "Building massing"],
     "export": ["Export"]
@@ -39,7 +39,7 @@
     "north_deg": {
       "label": "North direction", "unit": "°",
       "help": "Angle of north, clockwise from the model's +Y axis. 0 means +Y points north.",
-      "step": "settings", "group": "When", "essential": "all", "slider": { "low": 0, "high": 359, "step": 1 }
+      "step": "settings", "group": "Site", "essential": "all", "slider": { "low": 0, "high": 359, "step": 1 }
     },
     "time_basis": {
       "label": "Time", "unit": "choice",
@@ -175,7 +175,7 @@
     },
     "min_voxels": {
       "label": "Drop pieces smaller than", "unit": "m³",
-      "help": "Loose pieces of the kept volume smaller than this are removed before meshing. The engine counts it in voxels: the volume shown is that count at the voxel size in Settings, and follows it when the voxel size changes.",
+      "help": "Loose pieces of the kept volume smaller than this are removed before meshing. The engine counts it in voxels: the volume shown is that count at the voxel size in Site and grid, and follows it when the voxel size changes.",
       "step": "envelope_and_massing", "group": "Envelope", "essential": false, "display": "voxel_volume"
     },
     "min_face_count": {

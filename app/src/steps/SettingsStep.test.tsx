@@ -9,6 +9,7 @@ import {
   runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, SettingsToFix, settingsToFixByStep, settingsToFixCount,
   type RunAnalysisConditions,
 } from "./SettingsStep";
+import { CRITERION_KEYS } from "./project_workspace_for_test";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -45,14 +46,11 @@ function rejected(fieldErrors: { field: string | null; message: string }[], grid
   return formReducer(form(), { type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: gridPlan } });
 }
 
-/** The settings of a criterion among those these tests name (GET criterion-keys gives the engine's list). */
-const CRITERION_KEYS: ReadonlySet<string> = new Set(["mode", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "threshold",
-                                                    "carve_fraction", "max_slope_deg"]);
-
-/** The conditions of the Run analysis pinned in Site and grid. */
-function conditions(overrides: Partial<RunAnalysisConditions> = {}): RunAnalysisConditions {
-  return { runActive: false, maxVolumeFiles: 1, testSurfaceFiles: 2, modeNeedsWeatherFile: true, hasWeatherFile: true, form: form(),
-           warmUpState: "ready", criterionKeys: CRITERION_KEYS, shownIn: "site_and_grid", ...overrides };
+/** The conditions of the Run analysis pinned in Site and grid; the messages for no field of *form* are shown there. */
+function conditions(overrides: Partial<Omit<RunAnalysisConditions, "form">> & { form?: FormState } = {}): RunAnalysisConditions {
+  const shown = overrides.form ?? form();
+  return { runActive: false, maxVolumeFiles: 1, testSurfaceFiles: 2, modeNeedsWeatherFile: true, hasWeatherFile: true, form: shown,
+           stepErrorsByStep: { site_and_grid: shown.stepErrors }, warmUpState: "ready", criterionKeys: CRITERION_KEYS, shownIn: "site_and_grid", ...overrides };
 }
 
 test("Run analysis says what blocks it, in order: a run, the inputs, the weather file, a setting, the warm-up", () => {
@@ -191,6 +189,12 @@ test("a setting to fix in another step is named with that step under the run but
   expect(runAnalysisBlocker(conditions({ form: voxelSizeRefused, shownIn: "criteria" }))).toBe("Fix the voxel size in Site and grid to run the analysis.");
   const marginRefused = rejected([{ field: "min_plate_dimension", message: "Input should be greater than 0" }]);
   expect(runAnalysisBlocker(conditions({ form: marginRefused, shownIn: "criteria" }))).toBe("Fix the grid module in Envelope and massing to run the analysis.");
+});
+
+test("a message for no field is told as above in its own step, and with the step's name in the other", () => {
+  const criterionMessage = { stepErrorsByStep: { site_and_grid: [], criteria: ["Value error, the settings do not fit together"] } };
+  expect(runAnalysisBlocker(conditions(criterionMessage))).toBe("Fix the settings in Criteria to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ ...criterionMessage, shownIn: "criteria" }))).toBe("Fix the settings above to run the analysis.");
 });
 
 test("Site and grid draws the shared settings and a criterion's panel its own, by the criterion keys", () => {

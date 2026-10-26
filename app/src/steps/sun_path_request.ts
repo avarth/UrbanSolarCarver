@@ -6,9 +6,17 @@ import { shownValue, storedValue, type FormState } from "../settings_form/form_s
 import { ANALYSIS_PERIOD_FIELDS } from "../settings_form/presentation";
 import { settingsToFixCount } from "./SettingsStep";
 import type { SunPathWithNorth } from "../viewer/sun_path";
-import type { AnalysisPeriod } from "./step_summaries";
 
 const MODE_WITH_SUN_PATH = "time-based";
+
+export interface AnalysisPeriod {
+  startMonth: number;
+  startDay: number;
+  startHour: number;
+  endMonth: number;
+  endDay: number;
+  endHour: number;
+}
 
 /** The analysis period the form holds, when the mode reads one and every part of it is set. */
 export function analysisPeriodOf(form: FormState, modeReadsPeriod: boolean): AnalysisPeriod | null {

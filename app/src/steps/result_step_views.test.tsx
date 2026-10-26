@@ -64,7 +64,7 @@ function carvingProps(overrides: Partial<CarvingStepProps> = {}): CarvingStepPro
     form: formFor("time-based", { threshold: { method: "cutoff", value: 1.5 } }), isWeightedMode: false, summary: CARVING, scorePoints: SCORE_POINTS,
     analysisOutOfDate: false, carvingDimmed: false, autoUpdate: true, onAutoUpdateChange: vi.fn(), thresholdDisabledReason: null,
     settingsDisabledReason: null, runBlocker: null, onChange: vi.fn(), onThresholdCommit: vi.fn(), onCarvingSettingCommit: vi.fn(),
-    onUpdateCarving: vi.fn(), onRunAnalysis: vi.fn(), lastAnalysisSeconds: 6.4, carvingFeedback: null, analysisFeedback: null, ...overrides,
+    onUpdateCarving: vi.fn(), lastAnalysisSeconds: 6.4, carvingFeedback: null, ...overrides,
   };
 }
 
@@ -158,20 +158,18 @@ test("a weighted mode shows Carve amount in % and Obstruction removed; the angle
   expect(rendered.container.textContent).toContain("Obstruction removed42 %");
   rendered.unmount();
   rendered = renderForTest(<CarvingStep {...carvingProps({ form: formFor("tilted_plane") })} />);
-  expect(rendered.container.textContent).toContain("The angle rule has no threshold: everything above the planes is removed. Change the angle in Settings.");
+  expect(rendered.container.textContent).toContain("The angle rule has no threshold: everything above the planes is removed. Change the angle above.");
   expect(rendered.container.querySelector(".score-histogram")).toBeNull();
   expect(rendered.container.textContent).toContain("Update carving");
 });
 
-test("an analysis out of date dims the carving, disables its controls and offers Run analysis", () => {
-  const onRunAnalysis = vi.fn();
-  rendered = renderForTest(<CarvingStep {...carvingProps({ analysisOutOfDate: true, onRunAnalysis })} />);
+test("an analysis out of date dims the carving, disables its controls and says so", () => {
+  rendered = renderForTest(<CarvingStep {...carvingProps({ analysisOutOfDate: true })} />);
   expect(rendered.container.textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   expect(rendered.container.querySelector(".carving-content-dimmed")).not.toBeNull();
   expect(rendered.container.querySelector<HTMLInputElement>(".threshold-control input[type=number]")!.disabled).toBe(true);
   expect(rendered.container.querySelector<HTMLInputElement>(".switch-row input")!.disabled).toBe(true);
-  click([...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Run analysis")!);
-  expect(onRunAnalysis).toHaveBeenCalledOnce();
+  expect([...rendered.container.querySelectorAll("button")].some((button) => button.textContent === "Run analysis")).toBe(false);
 });
 
 test("auto-update is on unless switched off for the project on this computer", () => {

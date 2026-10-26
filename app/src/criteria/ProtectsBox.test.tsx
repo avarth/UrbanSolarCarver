@@ -14,7 +14,7 @@ const box = () => rendered!.container.querySelector<HTMLElement>(".input-box")!;
 
 test("a criterion without test surfaces says what to add", () => {
   rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} />);
-  expect(box().querySelector("h3")!.textContent).toBe("Protects");
+  expect(box().querySelector("h3")!.textContent).toBe("Test surfaces");
   expect(box().classList.contains("input-box-empty")).toBe(true);
   expect(box().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight.");
   expect(box().querySelector(".input-box-actions")!.textContent).toBe("Add test surfacesor drop them here");
@@ -45,10 +45,10 @@ test("the criterion's files are listed with their triangle counts; dropped files
   expect(onRemoveFile).toHaveBeenCalledWith("windows.ply");
 });
 
-test("during a run the files cannot be added or removed, and the box says why", () => {
+test("during a run the files cannot be added or removed; the panel's Run analysis says why, not the box", () => {
   rendered = renderForTest(<ProtectsBox files={[{ name: "roofs.ply", triangle_count: 2 }]} mode="daylight" onAddFiles={async () => []}
                                         onRemoveFile={async () => null} disabledReason="A run is in progress" />);
   expect(box().querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
   expect(box().querySelector<HTMLButtonElement>(".input-remove")!.disabled).toBe(true);
-  expect(box().textContent).toContain("A run is in progress");
+  expect(box().textContent).not.toContain("A run is in progress");
 });

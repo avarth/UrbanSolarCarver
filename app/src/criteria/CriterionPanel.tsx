@@ -45,10 +45,10 @@ export function CriterionPanel(props: CriterionPanelProps) {
       <ProtectsBox files={props.testSurfaces} mode={form.mode} onAddFiles={props.onAddTestSurfaces} onRemoveFile={props.onRemoveTestSurface}
                    disabledReason={disabledReason} drawingProblems={props.testSurfaceDrawingProblems} />
       <ModeStep mode={form.mode} onChoose={props.onChooseMode} disabledReason={disabledReason} valuesReset={form.valuesResetByModeChange}
-                weatherDropZone={props.weatherDropZone} />
+                weatherDropZone={props.weatherDropZone} showsDisabledReason={false} />
       <SettingsStep form={form} stepErrors={props.stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={props.inputRoles}
                     coldPeriod={props.coldPeriod} hemisphere={props.hemisphere} weatherChangeNotice={props.weatherChangeNotice}
-                    settingShown={(name) => criterionKeys.has(name)} />
+                    settingShown={(name) => criterionKeys.has(name)} showsDisabledReason={false} />
       <div className="criterion-carving">{props.carvingRule}</div>
       <div className="criterion-run">{props.runAnalysis}</div>
     </div>

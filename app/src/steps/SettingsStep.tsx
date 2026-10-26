@@ -24,7 +24,9 @@ export interface RunAnalysisConditions {
   testSurfaceFiles: number;
   modeNeedsWeatherFile: boolean;
   hasWeatherFile: boolean;
-  form: Pick<FormState, "mode" | "fieldErrors" | "stepErrors">;
+  form: Pick<FormState, "mode" | "fieldErrors">;
+  /** The messages that name no setting, by the step that shows them (the shared form's in Site and grid, the criterion's in Criteria). */
+  stepErrorsByStep: Partial<Record<StepName, readonly string[]>>;
   warmUpState: HealthReply["warm_up"]["state"] | null;
   /** The settings that belong to a criterion (GET criterion-keys), for the step that shows a setting to fix. */
   criterionKeys: ReadonlySet<string>;
@@ -65,7 +67,10 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
     const label = shownLabelOf(firstFieldWithError, form.mode);
     return step === conditions.shownIn ? messages.fixSettingToRun(label) : messages.fixSettingInStepToRun(label, messages.stepTitles[step]);
   }
-  if (form.stepErrors.length > 0) return messages.fixSettingsToRun;
+  // A message that names no setting is shown above the settings of its step: "above" there, the step named elsewhere.
+  const stepsWithMessages = (Object.keys(conditions.stepErrorsByStep) as StepName[]).filter((step) => (conditions.stepErrorsByStep[step] ?? []).length > 0);
+  if (stepsWithMessages.includes(conditions.shownIn)) return messages.fixSettingsToRun;
+  if (stepsWithMessages.length > 0) return messages.fixSettingsInStepToRun(messages.stepTitles[stepsWithMessages[0]]);
   // A warm-up that failed blocks nothing: a run then reports the problem itself (the service's warm-up says the same).
   if (conditions.warmUpState === null || conditions.warmUpState === "not_started" || conditions.warmUpState === "running") return messages.runButtonWaitsForGpu;
   return null;
@@ -241,16 +246,18 @@ interface SettingsStepProps {
   settingShown?: (name: string) => boolean;
   /** The messages that name no setting to show here (those of the form these settings are saved by); absent, the form's. */
   stepErrors?: readonly string[];
+  /** Whether the reason things are disabled is written here; false where another part says it (a criterion's Run analysis). */
+  showsDisabledReason?: boolean;
 }
 
 const NO_INPUT_ROLES: readonly string[] = [];
 
 export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern", weatherChangeNotice = null,
-                               inputRoles = NO_INPUT_ROLES, settingShown, stepErrors = form.stepErrors }: SettingsStepProps) {
+                               inputRoles = NO_INPUT_ROLES, settingShown, stepErrors = form.stepErrors, showsDisabledReason = true }: SettingsStepProps) {
   const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
   return (
     <div className="settings-step">
-      {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
+      {disabledReason !== null && showsDisabledReason && <p className="step-reason">{disabledReason}</p>}
       {/* A live region on the page from the start, so that screen readers announce the notice that fills it. */}
       <div className="weather-change-region" role="status">
         {weatherChangeNotice !== null && (

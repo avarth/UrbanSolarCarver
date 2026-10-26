@@ -29,15 +29,6 @@ export function plainModeName(engineName: string): string {
   return MODE_TILES.find((tile) => tile.engine_name === engineName)?.plain_name ?? engineName;
 }
 
-export interface AnalysisPeriod {
-  startMonth: number;
-  startDay: number;
-  startHour: number;
-  endMonth: number;
-  endDay: number;
-  endHour: number;
-}
-
 export interface ProjectViewState {
   maxVolumeFiles: number;
   hasWeatherFile: boolean;

@@ -1,4 +1,4 @@
-// The notice of a new weather file in the Settings step: a weather file added or replaced in this session (not one the project
+// The notice of a new weather file over the criterion's settings (Criteria): a weather file added or replaced in this session (not one the project
 // opened with) may call for another analysis period, and the notice offers it, with Keep beside it.
 //
 // In Solar usefulness the offer is the cold period of the new file (steps/cold_period_request.ts), once the answer for that file

@@ -184,9 +184,8 @@ export const messages = {
   // A file the service accepted (the engine reads it) that the 3D view cannot draw, said in its box as fileProblem(name, reason)
   meshCannotBeDrawn: "The 3D view cannot read this file, so it is not drawn. Runs still use it.",
   meshTypeCannotBeShown: (extension: string) => `Meshes of type '${extension}' cannot be shown.`,
-  // A criterion's test surfaces (7.2): the drop box of the criterion, titled with what it does; its hint for the mode is in
+  // A criterion's test surfaces (7.2): the add button of its drop box, titled testSurfacesTitle; its hint for the mode is in
   // steps/mode_tiles.json (protects_hint).
-  protectsTitle: "Protects",
   addTestSurfaces: "Add test surfaces",
   inputsSizeTitle: "Size of all inputs together",
   inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ}\u00a0m`,
@@ -212,6 +211,7 @@ export const messages = {
   addTestSurfacesToRun: "Add test surfaces to run the analysis",
   addMaxVolumeAndTestSurfacesToRun: "Add a maximum volume and test surfaces to run the analysis",
   fixSettingsToRun: "Fix the settings above to run the analysis.",
+  fixSettingsInStepToRun: (stepTitle: string) => `Fix the settings in ${stepTitle} to run the analysis.`,
 
   // Warm-up and device status (5.1, 6.1, 11)
   gpuPreparing: "Preparing the GPU",
@@ -275,7 +275,7 @@ export const messages = {
   summaryWithWarnings: (summary: string, warningsText: string) => `${summary}, ${warningsText}`,
 
   // Carving (5.5)
-  angleRuleHasNoThreshold: "The angle rule has no threshold: everything above the planes is removed. Change the angle in Settings.",
+  angleRuleHasNoThreshold: "The angle rule has no threshold: everything above the planes is removed. Change the angle above.",
   analysisOutOfDate: "Settings changed since the analysis. Run the analysis again to update the carving.",
   sliderLowestEnd: "0",
   sliderHighestScore: (highestText: string) => `${highestText}, the highest score`,
@@ -366,6 +366,10 @@ export const messages = {
     "Envelope": "More envelope settings",
     "Building massing": "More massing settings",
   },
+  // The fold of a group that shows no essential setting where it is drawn (a criterion's Detail: the rays per sky patch only).
+  foldedGroupTitles: {
+    "Detail": "Detail settings",
+  },
   aboutSetting: (settingLabel: string) => `About ${String(settingLabel).toLowerCase()}`,
   configNameAndDefault: (configName: string, defaultText: string): MessagePart[] =>
     ["Config name: ", { code: String(configName) }, `, default ${defaultText}`],
@@ -427,7 +431,7 @@ export const messages = {
   periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
   // The heating season preset where the weather file is in the southern hemisphere.
   southernHeatingSeasonPresetName: "Heating season, April to October",
-  // The notice of a weather file added or replaced in this session (steps/weather_change_notice.ts), in the Settings step.
+  // The notice of a weather file added or replaced in this session (steps/weather_change_notice.ts), over the criterion's settings in Criteria.
   periodDates: (startMonth: number, startDay: number, endMonth: number, endDay: number) => periodDatesInWords(startMonth, startDay, endMonth, endDay),
   weatherChangeColdPeriod: (location: string | null, coldPeriodDatesText: string, periodDatesText: string) =>
     `The new weather file${location === null ? "" : ` (${location})`} has its cold period from ${coldPeriodDatesText}; ` +

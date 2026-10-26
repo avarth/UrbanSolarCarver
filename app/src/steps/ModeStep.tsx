@@ -27,6 +27,8 @@ interface ModeStepProps {
   weatherDropZone: ReactNode;
   /** The settings the last mode change set back to their defaults, as the new mode refused the user's values; null when none. */
   valuesReset?: { settings: string[]; mode: string } | null;
+  /** Whether the reason things are disabled is written here; false where another part says it (a criterion's Run analysis). */
+  showsDisabledReason?: boolean;
 }
 
 /** "Steepest step between columns and voxel size are back to their defaults: ..." */
@@ -44,7 +46,7 @@ export function tileAfterArrowKey(index: number, key: string, tileCount: number)
   return next >= 0 && next < tileCount ? next : null;                                          // stay in the column
 }
 
-export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valuesReset = null }: ModeStepProps) {
+export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valuesReset = null, showsDisabledReason = true }: ModeStepProps) {
   const chosenIndex = Math.max(0, MODE_TILES.findIndex((tile) => tile.engine_name === mode));
   const [focusIndex, setFocusIndex] = useState(chosenIndex);    // the tile in the tab order
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -185,7 +187,7 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
       <p className="mode-step-note">{messages.modeFillsStartingValues}</p>
       {mode === EXPERIMENTAL_MODE && <p className="mode-step-note">{messages.radiativeCoolingIsExperimental(plainModeName(mode))}</p>}
       {valuesReset !== null && valuesReset.settings.length > 0 && <p className="step-reason mode-values-reset" role="status">{valuesResetText(valuesReset)}</p>}
-      {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
+      {disabledReason !== null && showsDisabledReason && <p className="step-reason">{disabledReason}</p>}
       {weatherDropZone}
     </div>
   );

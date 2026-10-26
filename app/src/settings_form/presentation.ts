@@ -130,9 +130,12 @@ export function presentedSettingOf(field: string): string | null {
   return Object.hasOwn(SETTING_PRESENTATIONS, settingName) ? settingName : null;
 }
 
-/** The fold under a group's essential settings; a group without essential settings is one fold titled with the group name. */
+/**
+ * The fold under a group's essential settings; a group without essential settings is one fold titled with the group name, or a
+ * title that says it holds settings when the name alone would read as a heading ("Detail settings").
+ */
 function foldLabelOf(title: string, essential: SettingView[]): string {
-  if (essential.length === 0) return title;
+  if (essential.length === 0) return messages.foldedGroupTitles[title as keyof typeof messages.foldedGroupTitles] ?? title;
   return messages.moreSettingsOfGroup[title as keyof typeof messages.moreSettingsOfGroup] ?? title;
 }
 

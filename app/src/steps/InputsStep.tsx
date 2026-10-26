@@ -4,7 +4,7 @@
 // The test surfaces belong to the criteria: a criterion's panel has their box (ProtectsBox, which draws an InputBox).
 // While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason.
 import { useId, useRef, useState, type DragEvent } from "react";
-import type { InputFileInfo } from "../api_client/client";
+import { ApiError, failureTextOf, type InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
 import type { Bounds3 } from "../viewer/local_origin";
@@ -20,6 +20,13 @@ const OPTIONAL_MESH_ROLES: readonly InputRole[] = ["context", "terrain"];
 
 const MESH_FILE_TYPES = ".ply,.obj,.stl,.glb";
 const WEATHER_FILE_TYPE = ".epw";
+
+/** Why a request about an input file failed, in words for its box. */
+export function inputProblemText(error: unknown, fileName: string): string {
+  if (error instanceof ApiError && error.status === 409) return messages.runInProgress;
+  const detail = failureTextOf(error);
+  return detail.includes(fileName) ? detail : messages.fileProblem(fileName, detail);
+}
 
 /** Adds the files to the role; resolves with a message per file that could not be added (empty when all were). */
 export type AddInputFiles = (role: InputRole, files: File[]) => Promise<string[]>;
@@ -46,6 +53,8 @@ interface InputBoxProps {
   title?: string;
   hint?: string;
   addLabel?: string;
+  /** Whether the reason things are disabled is written here; false where another part says it (a criterion's Run analysis). */
+  showsDisabledReason?: boolean;
 }
 
 const TITLES: Record<InputRole, string> = {
@@ -75,7 +84,7 @@ function RemoveIcon() {
 const NO_PROBLEMS: string[] = [];
 
 export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
-                           drawingProblems = NO_PROBLEMS, note = null, title, hint: hintGiven, addLabel }: InputBoxProps) {
+                           drawingProblems = NO_PROBLEMS, note = null, title, hint: hintGiven, addLabel, showsDisabledReason = true }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -154,7 +163,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
         </ul>
       )}
       {filled && note !== null && <p className="input-box-hint">{note}</p>}
-      {disabledReason !== null && <p className="input-box-reason">{disabledReason}</p>}
+      {disabledReason !== null && showsDisabledReason && <p className="input-box-reason">{disabledReason}</p>}
       {[...problems, ...drawingProblems].map((problem) => <p key={problem} className="input-box-problem"><WarningIcon />{problem}</p>)}
     </section>
   );

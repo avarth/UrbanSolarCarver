@@ -10,8 +10,8 @@
 // score points, and sets the carve amount that cutoff stands for (Manual; Automatic turns into Manual, which the step says), or
 // the cutoff itself (Shadow tolerated). A cutoff a weighted mode's config holds (from the command line or an earlier version) is
 // shown as Manual, at the carve amount it stands for.
-// When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with Run
-// analysis when one is given (the criterion's panel has its own under the carving rule).
+// When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with a
+// line that says so (the criterion's panel has Run analysis under the carving rule).
 import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent,
          type ReactNode } from "react";
 import type { RunSummary } from "../api_client/client";
@@ -355,13 +355,11 @@ export interface CarvingStepProps {
   /** A carving setting was changed with auto-update on and the user is done with it: the carving reruns with it. */
   onCarvingSettingCommit: () => void;
   onUpdateCarving: () => void;
-  /** Run analysis beside the message that the analysis is out of date; absent, the message alone (Run analysis is elsewhere). */
-  onRunAnalysis?: () => void;
   lastAnalysisSeconds: number | null;
   /** The progress and outcome of a carving update, shown under the control or the Update carving button. */
   carvingFeedback: ReactNode;
-  /** The progress and outcome of the step's own Run analysis. */
-  analysisFeedback: ReactNode;
+  /** Whether the reason the controls are disabled is written over them; false where Run analysis says it (the criterion's panel). */
+  showsDisabledReason?: boolean;
 }
 
 /** A cutoff let go on the histogram: drawn until the carving it starts comes back, while the form holds the settings before it or those it set. */
@@ -372,7 +370,6 @@ interface ReleasedCutoff {
 
 export function CarvingStep(props: CarvingStepProps) {
   const { form, summary, scorePoints, analysisOutOfDate, autoUpdate, runBlocker, isWeightedMode } = props;
-  const reasonId = useId();
   const updateReasonId = useId();
   const settingChangedSinceCommit = useRef(false);
   const [draggedCutoff, setDraggedCutoff] = useState<number | null>(null);
@@ -481,19 +478,9 @@ export function CarvingStep(props: CarvingStepProps) {
       {analysisOutOfDate && (
         <div className="carving-locked">
           <p className="step-reason">{messages.analysisOutOfDate}</p>
-          {props.onRunAnalysis !== undefined && (
-            <>
-              <button type="button" className="primary-button" disabled={runBlocker !== null} aria-describedby={runBlocker !== null ? reasonId : undefined}
-                      onClick={props.onRunAnalysis}>
-                {messages.runAnalysis}
-              </button>
-              {runBlocker !== null && <p id={reasonId} className="run-button-reason">{runBlocker}</p>}
-            </>
-          )}
         </div>
       )}
-      {props.analysisFeedback}
-      {disabledReason !== null && <p className="step-reason">{disabledReason}</p>}
+      {disabledReason !== null && (props.showsDisabledReason ?? true) && <p className="step-reason">{disabledReason}</p>}
       {/* Only the results of the carving are dimmed (UX 5.5, 6.3); the controls are disabled instead, so their labels, the reasons
           and the messages of settings to fix keep their contrast next to what they explain (UX 12). */}
       <div className="carving-content">

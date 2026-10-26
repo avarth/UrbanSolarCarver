@@ -8,7 +8,7 @@ const names = (views: { name: string }[]) => views.map((view) => view.name);
 
 test("essential settings of the Settings step per mode", () => {
   const essentialNames = (mode: string) => settingsForStep("settings", mode).flatMap((group) => names(group.essential));
-  expect(essentialNames("time-based")).toEqual(["start_month", "north_deg", "voxel_size"]);
+  expect(essentialNames("time-based")).toEqual(["north_deg", "start_month", "voxel_size"]);
   expect(essentialNames("benefit")).toContain("balance_temperature");
   expect(essentialNames("tilted_plane")).toEqual(["north_deg", "tilted_plane_angle_deg", "voxel_size"]);
   expect(essentialNames("radiative_cooling")).toEqual(["north_deg", "dew_point_celsius", "voxel_size"]);
@@ -16,15 +16,15 @@ test("essential settings of the Settings step per mode", () => {
 
 test("the Settings step groups, their folds and their fold labels", () => {
   const groups = settingsForStep("settings", "time-based");
-  expect(groups.map((group) => group.title)).toEqual(["When", "Detail"]);     // no mode specific settings: left out
-  const [when, detail] = groups;
+  expect(groups.map((group) => group.title)).toEqual(["Site", "When", "Detail"]);     // no mode specific settings: left out
+  const [, when, detail] = groups;
   expect(names(when.folded)).toEqual(["time_basis", "sun_steps_per_hour", "min_altitude"]);
   expect(when.foldLabel).toBe("More sun settings");
   // R2 4.5: the computer's settings come last in the detail fold. The sample spacing is the engine's (half the voxel size),
   // the grid margin is hidden for now, and the edge strip is shown in Night cooling only.
   expect(names(detail.folded)).toEqual(["ray_batch_size", "diagnostics"]);
   expect(detail.foldLabel).toBe("More detail settings");
-  const benefitModeGroup = settingsForStep("settings", "benefit")[1];
+  const benefitModeGroup = settingsForStep("settings", "benefit")[2];
   expect(benefitModeGroup.title).toBe("Mode specific");
   expect(names(benefitModeGroup.essential)).toEqual(["balance_temperature"]);      // with its dead band, as one widget
   expect(names(benefitModeGroup.folded)).toEqual(["include_harm"]);
@@ -60,7 +60,7 @@ test("a ranged setting has its slider in the units shown: a share stored as 0 to
 });
 
 test("the analysis period is one setting labelled by its start month entry", () => {
-  const [when] = settingsForStep("settings", "irradiance");
+  const when = settingsForStep("settings", "irradiance").find((group) => group.title === "When")!;
   expect(when.essential[0]).toMatchObject({ name: "start_month", label: "Analysis period", widget: "analysis_period" });
   expect(names(settingsForStep("settings", "daylight")[0].essential)).toEqual(["north_deg"]);
 });

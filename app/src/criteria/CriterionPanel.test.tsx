@@ -33,7 +33,7 @@ test("the panel holds the test surfaces, the mode tiles, the criterion's setting
   const parts = [find(".input-box"), find('[role="radiogroup"]'), find('[data-setting="start_month"]'), find(".carving-rule-for-test"), runButton];
   expect(parts.every((part) => part !== null)).toBe(true);
   for (let index = 1; index < parts.length; index++) expect(follows(parts[index - 1]!, parts[index]!)).toBe(true);
-  expect(find(".input-box h3")!.textContent).toBe("Protects");
+  expect(find(".input-box h3")!.textContent).toBe("Test surfaces");
   expect(find(".input-file-name")!.textContent).toBe("windows.ply");
 });
 
@@ -41,6 +41,12 @@ test("the criterion's settings leave out the shared ones, which Site and grid sh
   rendered = renderForTest(<CriterionPanel {...panelProps()} />);
   expect(find('[data-setting="start_month"]')).not.toBeNull();
   for (const shared of ["voxel_size", "north_deg", "ray_batch_size", "context_blocks_rays"]) expect(find(`[data-setting="${shared}"]`), shared).toBeNull();
+});
+
+test("a group with only folded settings in the panel is a fold that says it holds settings, not a bare heading", () => {
+  rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("daylight") })} />);
+  expect([...rendered.container.querySelectorAll(".setting-group-title")].map((title) => title.textContent)).toEqual([]);
+  expect([...rendered.container.querySelectorAll(".settings-step .setting-fold")].map((fold) => fold.textContent)).toEqual(["Detail settings"]);
 });
 
 test("a tile chooses the criterion's mode; a message of the criterion's save that names no setting is shown in the panel", () => {

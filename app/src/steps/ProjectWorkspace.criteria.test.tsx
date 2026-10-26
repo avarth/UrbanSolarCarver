@@ -38,7 +38,9 @@ test("one criterion shows no list chrome", async () => {
   const step = stepRow("Criteria");
   expect(panel()).not.toBeNull();                                                      // the criterion open at once
   expect(step.querySelector(".criterion-list, .criterion-card, [role='list'], [role='listitem']")).toBeNull();
-  expect(step.querySelector("[role='switch'][aria-label], [draggable='true']")).toBeNull();      // no bypass toggle, no drag handle
+  // No bypass toggle and no drag handle: the only switch is the carving rule's "Update when I change the threshold".
+  expect([...step.querySelectorAll("[role='switch']")].map((toggle) => toggle.closest("label")?.textContent)).toEqual(["Update when I change the threshold"]);
+  expect(step.querySelector("[draggable='true']")).toBeNull();
   expect(step.textContent).not.toContain("Add another criterion");
   expect(protectedFiles()).toEqual(["surfaces.obj"]);
   expect(buttonIn(panel()!, "Run analysis")).toBeDefined();
@@ -46,6 +48,20 @@ test("one criterion shows no list chrome", async () => {
   expect(stepRow("Criteria").querySelector(".step-summary")).toBeNull();               // open, no setting to fix
   openStep("Inputs");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61 % kept");
+});
+
+test("during a run the criterion's controls are disabled and the panel says why once, at Run analysis", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  openStep("Criteria");
+  await act(async () => buttonIn(panel()!, "Run analysis").click());
+  await settle();
+  expect(service.runsStarted).toHaveLength(1);
+  const runButton = buttonIn(panel()!, "Run analysis");
+  expect(reasonOf(runButton)).toBe("A run is in progress");
+  expect(panel()!.textContent!.split("A run is in progress")).toHaveLength(2);
+  expect(protectsBox().querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
+  expect(panel()!.querySelector('[role="radiogroup"]')!.getAttribute("aria-disabled")).toBe("true");
 });
 
 test("an earlier project shows its test surfaces in the criterion", async () => {
@@ -115,6 +131,8 @@ test("test surfaces added to and removed from the criterion go to its routes; th
   expect(service.requests.some((request) => request.startsWith("POST /inputs/"))).toBe(false);
   expect(service.requests).toContain("GET /inputs/test_surfaces");
   expect(protectedFiles()).toEqual(["surfaces.obj", "windows.obj"]);
+  const fileReads = (fileName: string) => service.count(`GET /inputs/test_surfaces/${fileName}`);
+  expect(fileReads("windows.obj")).toBe(1);                                          // the 3D view draws the new file
   expect(service.count("GET /stage-status")).toBe(statusReadsBefore + 1);
   expect(container().querySelector(".step-pinned-action")).toBeNull();               // the carving is out of date: nothing to build from
 
@@ -124,4 +142,6 @@ test("test surfaces added to and removed from the criterion go to its routes; th
   expect(service.requests.some((request) => request.startsWith("DELETE /inputs/"))).toBe(false);
   expect(protectedFiles()).toEqual(["windows.obj"]);
   expect(service.count("GET /stage-status")).toBe(statusReadsBefore + 2);
+  expect(fileReads("windows.obj")).toBe(2);                                          // the test surfaces drawn again, without the removed file
+  expect(fileReads("surfaces.obj")).toBe(2);                                         // drawn at the start and after the upload only
 });

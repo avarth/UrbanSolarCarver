@@ -1,5 +1,6 @@
-// What a criterion protects (spec 7.2): the drop box of its test surfaces, as the Inputs boxes are, with its files. While it has
-// none the box says to add test surfaces, with a hint of what its mode may protect (mode_tiles.json, protects_hint; hints only).
+// What a criterion protects (spec 7.2): the drop box of its test surfaces, titled "Test surfaces" as the Inputs box was (one
+// criterion brings no new words), with its files. While it has none the box offers to add test surfaces, with a hint of what its
+// mode may protect (mode_tiles.json, protects_hint; hints only).
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { InputBox } from "../steps/InputsStep";
@@ -26,8 +27,8 @@ export function protectsHintOf(mode: string): string {
 
 export function ProtectsBox({ files, mode, onAddFiles, onRemoveFile, disabledReason, drawingProblems }: ProtectsBoxProps) {
   return (
-    <InputBox role="test_surfaces" files={files} title={messages.protectsTitle} hint={protectsHintOf(mode)} addLabel={messages.addTestSurfaces}
+    <InputBox role="test_surfaces" files={files} hint={protectsHintOf(mode)} addLabel={messages.addTestSurfaces}
               weatherLocation={null} weatherHint="" onAddFiles={(_role, chosen) => onAddFiles(chosen)} onRemoveFile={(_role, fileName) => onRemoveFile(fileName)}
-              disabledReason={disabledReason} drawingProblems={drawingProblems} />
+              disabledReason={disabledReason} drawingProblems={drawingProblems} showsDisabledReason={false} />
   );
 }
