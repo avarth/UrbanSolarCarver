@@ -1478,6 +1478,14 @@ def test_a_criterion_is_added_changed_duplicated_ordered_and_deleted(client_with
     assert add_criterion(client)["id"] == "4"       # an id is not used again
 
 
+def test_the_only_criterion_is_not_deleted(client_with_inputs):
+    client = client_with_inputs
+    refused = client.delete("/api/projects/p/criteria/1")
+    assert refused.status_code == 422 and refused.json()["detail"] == "A project needs at least one criterion."
+    assert [entry["id"] for entry in criteria_of(client)] == ["1"]
+    assert "422" in openapi_document()["paths"]["/api/projects/{name}/criteria/{criterion_id}"]["delete"]["responses"]
+
+
 def test_a_bad_order_is_422_and_changes_nothing(client_with_two_criteria):
     client = client_with_two_criteria
     for ids in (["1"], ["1", "1"], ["1", "2", "3"], ["2", "9"]):

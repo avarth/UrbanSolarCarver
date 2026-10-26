@@ -192,14 +192,13 @@ def test_the_joined_file_and_fingerprint_helpers(tmp_path):
 def test_a_run_needs_test_surfaces_in_every_active_criterion(tmp_path):
     store = _store_with_criteria(tmp_path)
     store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
-    config = store.load_project_config("p")
-    assert missing_inputs(store, "p", config) == ["test_surfaces:1", "test_surfaces:2"]
+    assert missing_inputs(store, "p") == ["test_surfaces:1", "test_surfaces:2"]
     store.add_criterion_test_surface("p", "1", "facade.ply", _panel(0))
-    assert missing_inputs(store, "p", config) == ["test_surfaces:2"]
+    assert missing_inputs(store, "p") == ["test_surfaces:2"]
     store.update_criterion("p", "2", bypassed=True)
-    assert missing_inputs(store, "p", config) == []
+    assert missing_inputs(store, "p") == []
     store.update_criterion("p", "1", bypassed=True)
-    assert missing_inputs(store, "p", config) == ["criteria"]
+    assert missing_inputs(store, "p") == ["criteria"]
 
 
 def test_the_apps_test_surface_upload_goes_to_the_only_criterion(tmp_path):

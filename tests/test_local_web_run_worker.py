@@ -298,6 +298,58 @@ def test_the_refusals_name_every_missing_input(tmp_path):
                                   f"Add test surfaces to {store.criteria('p')[0].name}.")
 
 
+def _break_the_stored_settings_of(store, name, criterion_id):
+    """Give a criterion stored settings that do not validate, as a hand edit of project.json would."""
+    project_json = store.read_project_json(name)
+    next(entry for entry in project_json.criteria if entry.id == criterion_id).settings["start_month"] = 13
+    store.write_project_json(name, project_json)
+
+
+def test_a_run_needs_the_weather_file_when_a_later_criterion_reads_one(project_with_inputs):
+    store, name = project_with_inputs
+    worker = make_worker(store)
+    run_and_wait(worker, name, ["thresholding"])
+    records_before = store.read_project_json(name).criterion_records
+    entry = store.add_criterion(name, "benefit")
+    store.add_criterion_test_surface(name, entry.id, "surface_2.ply", box_bytes([0, 0, 20], extents=(2, 2, 0.1)))
+    engine = FakeEngine()
+    with pytest.raises(MissingInputs) as refused:
+        make_worker(store, handle_request=engine).start(name, ["exporting"])
+    assert refused.value.roles == ["weather"] and str(refused.value) == "Upload the missing input files first: weather."
+    assert engine.requests == [] and store.read_project_json(name).criterion_records == records_before    # nothing was forgotten
+
+
+def test_a_bypassed_criterion_takes_no_part_in_the_checks_a_run_starts_with(project_with_inputs):
+    store, name = project_with_inputs
+    store.update_criterion(name, "1", values={"mode": "benefit"})
+    entry = store.add_criterion(name, "daylight")
+    store.add_criterion_test_surface(name, entry.id, "surface_2.ply", box_bytes([0, 0, 20], extents=(2, 2, 0.1)))
+    store.update_criterion(name, "1", bypassed=True)
+    _break_the_stored_settings_of(store, name, "1")
+    reply = run_and_wait(make_worker(store), name, ["exporting"])     # no weather file, and criterion 1 does not validate
+    assert reply.status == "started" and reply.criterion_stages == {"2": ["preprocessing", "thresholding"]}
+
+
+def test_a_criterion_that_is_on_and_does_not_validate_refuses_the_run(chain_of_two):
+    store, name = chain_of_two
+    _break_the_stored_settings_of(store, name, "2")
+    engine = FakeEngine()
+    with pytest.raises(ConfigError) as refused:
+        make_worker(store, handle_request=engine).start(name, ["thresholding"])
+    assert [error.field for error in refused.value.errors] == ["start_month"]
+    assert engine.requests == []
+
+
+def test_with_no_criterion_on_the_run_says_so_whatever_the_stored_settings(chain_of_two):
+    store, name = chain_of_two
+    for criterion_id in ("1", "2"):
+        store.update_criterion(name, criterion_id, bypassed=True)
+    _break_the_stored_settings_of(store, name, "1")
+    with pytest.raises(MissingInputs) as refused:
+        make_worker(store).start(name, ["thresholding"])
+    assert str(refused.value) == "Turn on a criterion to run." and refused.value.roles == ["criteria"]
+
+
 class CountingSession:
     """A session that counts its releases; ``instances`` collects every one created."""
 

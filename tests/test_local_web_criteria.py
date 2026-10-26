@@ -131,6 +131,22 @@ def test_criteria_can_be_added_renamed_reordered_bypassed_duplicated_and_deleted
     load_chain(str(_config_path(store, "p")))                              # the engine reads the result
 
 
+def test_the_only_criterion_cannot_be_deleted(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("p", "daylight")
+    store.add_criterion("p", "time-based")
+    store.delete_criterion("p", "1")
+    json_before, config_before = (store.open("p") / "project.json").read_bytes(), _config_path(store, "p").read_bytes()
+    with pytest.raises(ProjectError, match="^A project needs at least one criterion.$") as caught:
+        store.delete_criterion("p", "2")
+    assert caught.value.status_code == 422
+    assert (store.open("p") / "project.json").read_bytes() == json_before and _config_path(store, "p").read_bytes() == config_before
+    store.update_criterion("p", "2", bypassed=True)        # also when it is bypassed: the project still holds it
+    with pytest.raises(ProjectError, match="at least one criterion"):
+        store.delete_criterion("p", "2")
+    assert [c.id for c in store.criteria("p")] == ["2"]
+
+
 def test_mixed_settings_need_a_criterion_when_there_are_several(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("p", "daylight")

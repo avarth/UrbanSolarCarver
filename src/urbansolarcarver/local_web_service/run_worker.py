@@ -151,22 +151,23 @@ class RunWorker:
     def start(self, name: str, produce: list[str]) -> StartRunReply:
         """Start a run that brings *produce* up to date, or reply that nothing needs to run.
 
-        Raises RunConflict when a run is active, MissingInputs when the project lacks input files,
-        ConfigError when config.yaml is not valid, ValueError for an unknown stage name in *produce*.
+        Raises RunConflict when a run is active, MissingInputs when the project lacks input files, ConfigError when the stored
+        settings of a criterion that is on are not valid (a bypassed one takes no part), ValueError for an unknown stage name in *produce*.
         """
         with self._store.project_lock(name), self._start_lock:
             if self._active is not None:
                 raise RunConflict(self._active.state.project)
             self._store.migrate_to_criteria(name)
             self._store.rebuild_joined_test_surfaces_without_normals(name)
-            config = self._store.load_project_config(name)
-            absent_roles = missing_inputs(self._store, name, config)
+            settings = run_settings(self._store, name)
+            for criterion_settings in settings.criteria.values():
+                self._store.config_from_settings(name, criterion_settings)
+            absent_roles = missing_inputs(self._store, name)
             if absent_roles:
                 raise MissingInputs(absent_roles, {criterion.id: criterion.name for criterion in self._store.criteria(name)})
             choice = choose_stages(self._store, name, produce)
             if not choice.stages:
                 return StartRunReply(status="up_to_date", run_id=None, stages=[], criterion_stages={})
-            settings = run_settings(self._store, name)
             # Removed before the engine starts: a run that stops without finishing (a crash, a closed service)
             # leaves these stages missing, so the next run completes them.
             forget_stages(self._store, name, choice.stages, choice.criterion_stages)

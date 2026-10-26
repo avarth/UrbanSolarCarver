@@ -503,9 +503,10 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
                                           bypassed=request.bypassed, values=request.values)
 
     @router.delete("/projects/{name}/criteria/{criterion_id}", status_code=204, response_class=Response,
-                   responses={404: _CRITERION_RESPONSES[404], 409: _ERROR_RESPONSES[409]})
+                   responses=_CRITERION_RESPONSES)
     def delete_criterion(name: str, criterion_id: str) -> Response:
-        """Remove a criterion with its results and its joined test surface file; its id is not used again."""
+        """Remove a criterion with its results and its joined test surface file; its id is not used again. The only criterion of a
+        project is not removed (422)."""
         with writable_project(name) as store:
             store.delete_criterion(name, criterion_id)
         return Response(status_code=204)

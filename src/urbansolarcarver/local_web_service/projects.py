@@ -434,7 +434,8 @@ class ProjectStore:
             return entry
 
     def delete_criterion(self, name: str, criterion_id: str) -> None:
-        """Remove a criterion, its run folder (run/criteria/<id>/) and its joined test surface file; 404 for an unknown one.
+        """Remove a criterion, its run folder (run/criteria/<id>/) and its joined test surface file; 404 for an unknown one, and
+        ProjectError(422) for the only one (a project holds at least one criterion). Nothing changes then.
 
         The stored test surface files that no other criterion uses are deleted. Its id is not used again.
         """
@@ -442,6 +443,8 @@ class ProjectStore:
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
             removed = find_criterion(project_json, criterion_id)
+            if len(project_json.criteria) == 1:
+                raise ProjectError("A project needs at least one criterion.", status_code=422)
             project_json.criteria = [criterion for criterion in project_json.criteria if criterion.id != removed.id]
             project_json.criterion_records.pop(removed.id, None)
             unused_files = [file_name for file_name in removed.test_surface_files

@@ -82,7 +82,7 @@ A project opens as a list of six steps on the left, with the 3D view on the righ
 
 ## Criteria in a project
 
-A project holds an ordered list of **criteria**, the carving passes of a chain (see [Criteria: chained carvings](criteria.md)). Each has its own mode, test surfaces, mode settings and carving rule, and decides among the voxels the criteria before it kept. Every project holds at least one.
+A project holds an ordered list of **criteria**, the carving passes of a chain (see [Criteria: chained carvings](criteria.md)). Each has its own mode, test surfaces, mode settings and carving rule, and decides among the voxels the criteria before it kept. Every project holds at least one: deleting the only criterion is refused with a 422 (*A project needs at least one criterion.*).
 
 !!! note "What the app shows today"
     The steps above show and edit one criterion. The service already stores and runs several, but the app has no list of criteria yet; it follows in a later phase. The routes the app uses keep their meaning for a project with one criterion. For a project with several, a request without a `criterion` reads the settings of the first criterion and the results of the last one that is on (the score colours, the sky dome and the run summary's top-level carving), while a settings save and the app's test surface upload and removal are refused with a 422 that says which criterion they belong to.
@@ -98,7 +98,7 @@ A project holds an ordered list of **criteria**, the carving passes of a chain (
 
 - An upload with the content of a stored file reuses that file. An upload with the name of a stored file and other content replaces it in every criterion that uses it, and puts out of date only those criteria. A file that no criterion uses any more is deleted.
 - A criterion uses a stored file of another criterion through the *use* route, which adds no copy. Removing a file from one criterion leaves it in the others.
-- A new criterion has no test surfaces. A run refuses to start while no criterion is on (*Turn on a criterion to run.*) or while one that is on protects nothing (*Add test surfaces to <name>.*). A criterion that gets its first file and has not been renamed is named "<mode> on <file name>".
+- A new criterion has no test surfaces. A run refuses to start while no criterion is on (*Turn on a criterion to run.*) or while one that is on protects nothing (*Add test surfaces to <name>.*). The checks a run starts with look at the criteria that are on only: the settings of each must validate, and the weather file is needed when one of them reads it. A bypassed criterion needs nothing. A criterion that gets its first file and has not been renamed is named "<mode> on <file name>".
 - The Inputs step's upload and removal of test surfaces go to the only criterion; with several they are refused with a 422.
 
 **What goes out of date**

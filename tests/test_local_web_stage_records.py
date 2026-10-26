@@ -518,17 +518,17 @@ def test_forgetting_a_criterion_stage_removes_it_for_the_criteria_named(chain_of
 def test_missing_inputs_lists_the_roles_without_a_joined_file(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("p", "daylight")
-    assert missing_inputs(store, "p", store.load_project_config("p")) == ["max_volume", "test_surfaces:1"]
+    assert missing_inputs(store, "p") == ["max_volume", "test_surfaces:1"]
     store.add_input("p", "test_surfaces", "surface.ply", box_bytes([0, 0, 0], extents=(6, 6, 0.1)))
-    assert missing_inputs(store, "p", store.load_project_config("p")) == ["max_volume"]
+    assert missing_inputs(store, "p") == ["max_volume"]
 
 
 def test_missing_inputs_names_the_weather_file_for_a_mode_that_reads_one(tmp_path):
     store = ProjectStore(tmp_path)
     store.create("p", "time-based")
-    assert missing_inputs(store, "p", store.load_project_config("p")) == ["max_volume", "test_surfaces:1", "weather"]
+    assert missing_inputs(store, "p") == ["max_volume", "test_surfaces:1", "weather"]
     store.add_input("p", "weather", "weather.epw", GOLDEN_EPW.read_bytes())
-    assert missing_inputs(store, "p", store.load_project_config("p")) == ["max_volume", "test_surfaces:1"]
+    assert missing_inputs(store, "p") == ["max_volume", "test_surfaces:1"]
 
 
 def _rewrite_preprocessing_manifest(store, name, **changes):
@@ -575,7 +575,7 @@ def test_a_time_based_run_from_before_the_score_unit_was_recorded_stays_current(
 
 def test_optional_roles_are_not_missing_inputs(project_with_inputs):
     store, name = project_with_inputs
-    assert missing_inputs(store, name, store.load_project_config(name)) == []
+    assert missing_inputs(store, name) == []
 
 
 def test_removing_the_context_drops_the_path_and_marks_the_run_out_of_date(project_with_inputs):

@@ -26,6 +26,7 @@ from ..pydantic_schemas import UserConfig, resolve_grid_step
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
 from . import test_surfaces
 from .api_models import ProjectJson, StageRecord, StageState, StageStatusReply
+from .criteria import reads_weather_file
 from .projects import INPUTS_FOLDER, JOINED_FOLDER, REQUIRED_MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
 
 MANIFEST_FILE_NAME = "manifest.json"
@@ -414,10 +415,10 @@ def record_stages(store: ProjectStore, name: str, choice: StageChoice, settings:
         store.write_project_json(name, project_json)
 
 
-def missing_inputs(store: ProjectStore, name: str, config: UserConfig) -> list[str]:
-    """What a run of this config still lacks: the required meshes without a joined file (the role), a criterion that is on and
-    protects nothing ("test_surfaces:<id>"), "criteria" when no criterion is on, and the weather file when the mode reads one.
-    Context and terrain are optional."""
+def missing_inputs(store: ProjectStore, name: str) -> list[str]:
+    """What a run of the project still lacks: the required meshes without a joined file (the role), a criterion that is on and
+    protects nothing ("test_surfaces:<id>"), "criteria" when no criterion is on, and the weather file when the mode of a criterion
+    that is on reads one. Context and terrain are optional; a bypassed criterion needs nothing."""
     project_folder = store.open(name)
     absent = [role for role in REQUIRED_MESH_ROLES if not (project_folder / JOINED_FOLDER / f"{role}.ply").is_file()]
     active = [criterion for criterion in store.criteria(name) if not criterion.bypassed]
@@ -425,6 +426,7 @@ def missing_inputs(store: ProjectStore, name: str, config: UserConfig) -> list[s
         absent.append("criteria")
     absent += [f"{test_surfaces.ROLE}:{criterion.id}" for criterion in active
                if not criterion.test_surface_files or not test_surfaces.joined_path(project_folder, criterion.id).is_file()]
-    if MODES[config.mode].needs_epw and not (project_folder / INPUTS_FOLDER / WEATHER_FILE_NAME).is_file():
+    if (any(reads_weather_file(criterion.settings.get("mode")) for criterion in active)
+            and not (project_folder / INPUTS_FOLDER / WEATHER_FILE_NAME).is_file()):
         absent.append(WEATHER_ROLE)
     return absent
