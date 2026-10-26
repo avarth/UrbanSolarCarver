@@ -68,6 +68,16 @@ test("the criteria summary of one criterion joins its mode and its carving", () 
   expect(stepSummary("criteria", stateWith({ settingsToFix: { criteria: 2 } }))).toBe("2 settings to fix");
 });
 
+test("the criteria summary of several criteria reads as the sequence of the active ones, with the share each kept", () => {
+  const chain: { name: string; keptPercent: number | null }[] = [{ name: "Daylight on windows", keptPercent: 70.2 }, { name: "Solar usefulness", keptPercent: 80 }];
+  const withChain = (stages: Partial<Record<PipelineStage, StageState>>, criteriaInChain = chain) => ({ ...stateWith({ stages }), criteriaInChain });
+  expect(stepSummary("criteria", withChain({ thresholding: "current" }))).toBe(`Daylight on windows 70${NBSP}%, then Solar usefulness 80${NBSP}%`);
+  expect(stepSummary("criteria", withChain({ thresholding: "current" }, [chain[0], { name: "Night cooling", keptPercent: null }])))
+    .toBe(`Daylight on windows 70${NBSP}%, then Night cooling`);
+  expect(stepSummary("criteria", withChain({ thresholding: "out_of_date" }))).toBe("Out of date");
+  expect(stepSummary("criteria", withChain({}))).toBe("Not run yet");
+});
+
 test("the envelope and export summaries follow the stage status", () => {
   expect(stepSummary("envelope_and_massing", stateWith({}))).toBe("Not built yet");
   expect(stepSummary("export", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("Ready");

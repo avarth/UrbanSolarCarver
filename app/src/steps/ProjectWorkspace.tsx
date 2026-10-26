@@ -1,15 +1,18 @@
 // An open project (UX 4, spec 7.1): the step accordion in the left panel (Inputs, Site and grid, Criteria, Envelope and massing,
-// Export) and the 3D view beside it. It holds what the steps share: the input files, the criteria (useCriteria), the two settings
-// forms (the shared settings, shown in Site and grid, and the first criterion's, shown in its panel; the steps read them as one),
-// the stage status the step summaries read, and the input meshes (input_meshes.ts) and the sun path (sun_path_request.ts) the 3D
-// view draws. The parts that start runs and show their results (the criterion's carving rule, Envelope and massing, Export) are
+// Export) and the 3D view beside it. It holds what the steps share: the input files, the criteria (useCriteria) and their cards'
+// requests, the two settings forms (the shared settings, shown in Site and grid, and the selected criterion's, shown in its panel;
+// the steps read them as one), the stage status the step summaries read, and the input meshes (input_meshes.ts) and the sun path
+// (sun_path_request.ts) the 3D view draws. The parts that start runs and show their results (the criterion's carving rule, Envelope and massing, Export) are
 // put together in result_steps.tsx from these and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  addInput, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
-  type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
+  addInput, failureTextOf, getCriterionSettings, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
+  type CriterionEntry, type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
-import { activeCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
+import {
+  activeCriteria, cardLineOf, criterionStatus, filesOfOtherCriteria, selectionAfterRemoving, stagesByCriterionOf, type StagesByCriterion,
+} from "../criteria/criteria_state";
+import type { CriterionListProps } from "../criteria/CriterionList";
 import { CriteriaStep } from "../criteria/CriteriaStep";
 import { CriterionPanel } from "../criteria/CriterionPanel";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
@@ -102,10 +105,15 @@ export interface OpenProjectSettingsSaver {
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { token, project, modes, criterionKeys, warmUpState, runs, onServiceProblem } = props;
   const criteria = useCriteria(token, project);
-  // The criterion the steps show and change (its settings, its test surfaces, the run's check of them): the selected one, the first
-  // by default. A project that lists none (its migration failed) still has the settings of one.
-  const criterion = criteria.criteria.find((entry) => entry.id === criteria.selectedId) ?? null;
+  // The criterion whose settings the criterion form holds: the selected one, once its settings are in (a card just selected waits
+  // for GET criteria/{id}/settings). Its panel, its results and the run's check of its test surfaces follow it. A project that lists
+  // none (its migration failed) still has the settings of one.
+  const [shownCriterionId, setShownCriterionId] = useState(criteria.selectedId);
+  const formCriterionId = shownCriterionId === "" ? FIRST_CRITERION_ID : shownCriterionId;
+  // The shown criterion; while a deleted one's place waits for the next one's settings, the selected one.
+  const criterion = criteria.criteria.find((entry) => entry.id === shownCriterionId) ?? criteria.criteria.find((entry) => entry.id === criteria.selectedId) ?? null;
   const criterionId = criterion?.id ?? FIRST_CRITERION_ID;
+  const resultsCriterionId = criteria.criteria.length > 0 ? formCriterionId : undefined;
   // The project's settings are the shared ones with the first criterion's: each form starts from its own. The shared form takes
   // the criterion's mode, which decides the settings it shows, but does not save it.
   const formStarts = useMemo((): { shared: FormStart; criterion: FormStart } => {
@@ -115,9 +123,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       criterion: { schema: props.schema, modes, settings: criterion, gridPlan: null },
     };
   }, []);
-  // A criterion's save replaces its settings; a new mode may rename it, so its entry is kept.
+  // A criterion's save replaces its settings; a new mode may rename it, so its entry is kept. The save goes to the criterion whose
+  // settings the form holds (the form reads this send when a save goes out).
   const saveCriterionSettings: SettingsSend = async (formToken, projectName, values) => {
-    const entry = await updateCriterion(formToken, projectName, criterionId, { values });
+    const entry = await updateCriterion(formToken, projectName, formCriterionId, { values });
     criteria.applyReply(entry);
     return entry;
   };
@@ -231,7 +240,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   }, [form.saveFailure]);
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
-  const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, onServiceProblem });
+  const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, criterionId: resultsCriterionId, onServiceProblem });
   const { coldPeriod, answeredWeatherFileRevision } = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision, onServiceProblem });
   const modeReadsPeriod = modeInfo?.needs_period ?? false;
   const periodShown = analysisPeriodOf(form, modeReadsPeriod);
@@ -359,10 +368,79 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const runBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "criteria" });
   const siteAndGridRunBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "site_and_grid" });
   const resultSteps = useResultSteps({
-    token, project: project.name, form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
+    token, project: project.name, criterionId: resultsCriterionId, form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
     onCarveFurther: props.onCarveFurther,
   });
+
+  // The cards (CriteriaStep): their lines from the criteria's stages and the run summary, and the requests that change the criteria.
+  // Each change dates thresholding (the order, a bypass, test surfaces) or adds stages, so the stage status is asked for again.
+  const summaryCriteria = resultSteps.results.summary?.criteria ?? [];
+  const carvingSummaryOf = (entry: CriterionEntry) => summaryCriteria.find((summary) => summary.id === entry.id);
+  const criteriaChange = async (change: () => Promise<unknown>): Promise<string | null> => {
+    try {
+      await change();
+      refreshStageStatus();
+      return null;
+    } catch (error) {
+      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      return failureTextOf(error);
+    }
+  };
+  // Before another criterion is selected or the selected one goes, a change still waiting is saved to the criterion it was made in.
+  const saveTheShownCriterion = () => void criterionForm.flushSave();
+  const criterionList: CriterionListProps = {
+    criteria: criteria.criteria,
+    selectedId: criteria.selectedId,
+    lineOf: (entry) => cardLineOf(criterionStatus(entry, criteria.criteria, criterionStages, null), carvingSummaryOf(entry)),
+    disabledReason: inputsDisabledReason,
+    onSelect: (id) => {
+      saveTheShownCriterion();
+      criteria.select(id);
+    },
+    onReorder: (ids) => criteriaChange(() => criteria.reorder(ids)),
+    // Bypassing the selected criterion selects the next card (else the previous one), as deleting it does.
+    onSetBypassed: (id, on) => {
+      const { criteria: listBefore, selectedId } = criteria;
+      if (on && id === selectedId) saveTheShownCriterion();
+      return criteriaChange(async () => {
+        await criteria.setBypassed(id, on);
+        if (on) criteria.select(selectionAfterRemoving(listBefore, id, selectedId));
+      });
+    },
+    onRename: (id, name) => criteriaChange(() => criteria.rename(id, name)),
+    onDuplicate: (id) => {
+      saveTheShownCriterion();
+      return criteriaChange(() => criteria.duplicate(id));
+    },
+    onDelete: (id) => {
+      saveTheShownCriterion();
+      return criteriaChange(() => criteria.remove(id));
+    },
+    onAdd: (mode) => {
+      saveTheShownCriterion();
+      return criteriaChange(() => criteria.add(mode));
+    },
+  };
+
+  // Another card selected (by a press, or as the selected one was deleted, bypassed, added or duplicated): its settings start the
+  // criterion form again, the shared form follows its mode, and its panel and results follow. A change still waiting in the form
+  // was sent to its own criterion when the card was pressed, and is sent again here (restart) with the send of the render before.
+  const selectionRequest = useRef(0);
+  useEffect(() => {
+    const wanted = criteria.selectedId;
+    const request = ++selectionRequest.current;       // a reply for a card selected before is not used
+    if (wanted === "" || wanted === shownCriterionId) return;
+    saveTheShownCriterion();
+    getCriterionSettings(token, project.name, wanted).then((reply) => {
+      if (request !== selectionRequest.current) return;
+      criterionForm.restart({ schema: props.schema, modes, settings: splitSettings(reply.settings, criterionKeys).criterion, gridPlan: null });
+      sharedForm.dispatch({ type: "mode_followed", mode: criterionForm.currentForm().mode });
+      setShownCriterionId(wanted);
+    }).catch((error) => {
+      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+    });
+  }, [criteria.selectedId]);
 
   const viewState: ProjectViewState = {
     maxVolumeFiles: files.max_volume.length,
@@ -375,6 +453,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     settingsToFix: settingsToFixByStep(sharedForm.form, criterionForm.form, criterionKeys),
     stages: shownStages,
     keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
+    criteriaInChain: criteria.criteria.length < 2 ? null
+      : activeCriteria(criteria.criteria).map((entry) => ({ name: entry.name, keptPercent: carvingSummaryOf(entry)?.carving?.retention_pct ?? null })),
     totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
     storeys: resultSteps.results.summary?.massing?.storeys_built ?? null,
   };
@@ -396,9 +476,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep panel={
+      <CriteriaStep list={criterionList} panel={
         <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
-                        onRemoveTestSurface={testSurfaceCalls.remove} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
+                        onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
+                        onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
                         onChange={changeSettings} onChooseMode={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
                         weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}

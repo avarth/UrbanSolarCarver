@@ -44,6 +44,11 @@ export interface ProjectViewState {
   stages: Record<PipelineStage, StageState>;
   /** From the run summary of the last carving; null before one. */
   keptPercent: number | null;
+  /**
+   * With several criteria, those that are on in carving order, each with the share of the volume it kept (from the run summary;
+   * null before its carving); absent or null with one criterion.
+   */
+  criteriaInChain?: { name: string; keptPercent: number | null }[] | null;
   totalFloorArea: number | null;
   storeys: number | null;
 }
@@ -67,9 +72,17 @@ function carvingSummary(state: ProjectViewState): string {
   return messages.keptShare(formatPercent(state.keptPercent));
 }
 
-/** One criterion: its mode and its carving, "Solar usefulness, 56 % kept", "Daylight, Out of date". */
+/**
+ * One criterion: its mode and its carving, "Solar usefulness, 56 % kept", "Daylight, Out of date". Several: the ones that are on in
+ * order, each with the share it kept, "Daylight on windows 70 %, then Solar usefulness 80 %", once the carving is current.
+ */
 function criteriaSummary(state: ProjectViewState): string {
-  return messages.criterionSummary(plainModeName(state.mode), carvingSummary(state));
+  const chain = state.criteriaInChain;
+  if (chain === undefined || chain === null) return messages.criterionSummary(plainModeName(state.mode), carvingSummary(state));
+  if (state.stages.thresholding === "out_of_date") return messages.outOfDateSummary;
+  if (state.stages.thresholding === "missing" || chain.length === 0) return messages.notRunYet;
+  return chain.map(({ name, keptPercent }) => (keptPercent === null ? name : messages.criterionKeptInChain(name, formatPercent(keptPercent))))
+    .reduce((earlier, later) => messages.criteriaThen(earlier, later));
 }
 
 /**

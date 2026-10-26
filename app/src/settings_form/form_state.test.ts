@@ -298,6 +298,35 @@ test("opening another project shows its settings and sends it nothing; a change 
   vi.unstubAllGlobals();
 });
 
+test("restarting the form shows other settings; a change still waiting goes with the send it was made with, its reply not shown", async () => {
+  vi.useFakeTimers();
+  const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ settings: { mode: "daylight", voxel_size: 2 } })));
+  vi.stubGlobal("fetch", fetchMock);
+  let latest: ReturnType<typeof useSettingsForm> | null = null;
+  function FormProbe({ criterionId }: { criterionId: string }) {
+    const sendToCriterion = (token: string, project: string, values: Record<string, unknown>) => updateCriterion(token, project, criterionId, { values });
+    latest = useSettingsForm("launch token", "p", { schema: SCHEMA, modes: MODES, settings: { mode: "daylight" }, gridPlan: null }, sendToCriterion);
+    return null;
+  }
+  const rendered = renderForTest(createElement(FormProbe, { criterionId: "1" }));
+  const revisionBefore = latest!.form.storedAnalysisRevision;
+  act(() => latest!.dispatch({ type: "values_changed", values: { voxel_size: 2 } }));
+  act(() => latest!.restart({ schema: SCHEMA, modes: MODES, settings: { mode: "irradiance", voxel_size: 3 }, gridPlan: null }));
+  rendered.rerender(createElement(FormProbe, { criterionId: "2" }));
+  await act(() => vi.advanceTimersByTimeAsync(1000));
+  expect(fetchMock.mock.calls.map(([address]) => address)).toEqual(["/api/projects/p/criteria/1"]);
+  expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ values: { voxel_size: 2, mode: "daylight" } });
+  expect(latest!.form.mode).toBe("irradiance");
+  expect(latest!.form.userValues).toEqual({ voxel_size: 3 });
+  expect(latest!.form.stored.mode).toBe("irradiance");           // the reply of criterion 1's save is not shown
+  expect(latest!.form.storedAnalysisRevision).toBe(revisionBefore);
+  act(() => latest!.dispatch({ type: "values_changed", values: { voxel_size: 4 } }));
+  await act(() => vi.advanceTimersByTimeAsync(400));
+  expect(fetchMock.mock.calls[1][0]).toBe("/api/projects/p/criteria/2");
+  rendered.unmount();
+  vi.unstubAllGlobals();
+});
+
 test("the form's flushSave sends a change at once, for a run that must use it", async () => {
   vi.useFakeTimers();
   const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ settings: {}, grid_plan: GRID_PLAN })));

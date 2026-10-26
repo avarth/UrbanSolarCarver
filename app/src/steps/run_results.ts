@@ -1,6 +1,7 @@
 // The results of the project's runs that the steps and the 3D view show: the run summary, the score points, the sky dome, the
 // envelope and building massing meshes and plates.json. Each is fetched again when a stage that writes it has run (UX 6.3:
-// results arrive stage by stage), and the result of the last request wins. A result a stage has not written (yet) is null.
+// results arrive stage by stage), and the result of the last request wins. A result a stage has not written (yet) is null. The
+// score points and the sky dome are those of the selected criterion: another criterion selected fetches them again.
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as THREE from "three";
 import {
@@ -38,6 +39,8 @@ const RESULTS_OF_STAGE: Record<PipelineStage, ResultName[]> = {
   massing: ["summary", "massing", "platesFile"],
 };
 const MESH_RESULTS: ResultName[] = ["envelope", "massing"];
+/** The results of one criterion (the summary holds every criterion's numbers). */
+const CRITERION_RESULTS: ResultName[] = ["scorePoints", "skyDome"];
 const NOT_FOUND = 404;
 
 export function resultsOfStages(stages: readonly string[]): ResultName[] {
@@ -51,26 +54,28 @@ interface RunResultsSource {
   origin: Point3;
   /** The stages with results when the project opens. */
   stagesWithResults: readonly string[];
+  /** The criterion whose score points and sky dome are shown; absent: the service's default (the last criterion that is on). */
+  criterionId?: string;
   onServiceProblem: (error: unknown) => void;
 }
 
 /** The results, and the function that fetches again what the given stages write; its promise resolves once every fetch has ended. */
-export function useRunResults({ token, project, origin, stagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
+export function useRunResults({ token, project, origin, stagesWithResults, criterionId, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
-  const source = useRef({ token, origin, onServiceProblem });
-  source.current = { token, origin, onServiceProblem };
+  const source = useRef({ token, origin, criterionId, onServiceProblem });
+  source.current = { token, origin, criterionId, onServiceProblem };
 
   /** *summary*: the run summary of this round of fetches, asked for once however many results read it. */
   const fetchResult = (name: ResultName, summary: () => Promise<RunSummary>): Promise<RunResults[ResultName]> => {
-    const { token: currentToken, origin: currentOrigin } = source.current;
+    const { token: currentToken, origin: currentOrigin, criterionId: currentCriterion } = source.current;
     switch (name) {
       case "summary":
         return summary();
       case "scorePoints":
-        return getScorePoints(currentToken, project).then(decodeScorePoints);
+        return getScorePoints(currentToken, project, currentCriterion).then(decodeScorePoints);
       case "skyDome":
-        return getSkyPatches(currentToken, project);
+        return getSkyPatches(currentToken, project, currentCriterion);
       case "envelope":
         // The file exporting wrote, which the run summary names: a format chosen since without a build has no file yet.
         return summary().then((reply) => {
@@ -109,6 +114,15 @@ export function useRunResults({ token, project, origin, stagesWithResults, onSer
   useEffect(() => {
     reload(stagesWithResults);
   }, []);
+
+  // Another criterion selected: its score points and sky dome replace the last one's, which are not shown meanwhile.
+  const firstCriterion = useRef(criterionId);
+  useEffect(() => {
+    if (criterionId === firstCriterion.current) return;
+    firstCriterion.current = criterionId;
+    setResults((current) => ({ ...current, scorePoints: null, skyDome: null }));
+    fetchResults(CRITERION_RESULTS);
+  }, [criterionId]);
 
   // The meshes are drawn in the local origin of the inputs; new inputs can move it.
   const originKey = origin.join(",");

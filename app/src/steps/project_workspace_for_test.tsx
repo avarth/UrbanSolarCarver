@@ -105,8 +105,10 @@ export class FakeService {
 
   answer = async (address: string, init?: RequestInit): Promise<Response> => {
     const method = init?.method ?? "GET";
-    const path = address.replace("/api/projects/p", "");
-    this.requests.push(`${method} ${path}`);
+    // Requests are listed with their query (the criterion of a result); they are answered by their path.
+    const fullPath = address.replace("/api/projects/p", "");
+    const path = fullPath.split("?")[0];
+    this.requests.push(`${method} ${fullPath}`);
     if (method === "PUT" && path === "/shared-settings") {
       if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const { values } = JSON.parse(String(init!.body)) as { values: Record<string, unknown> };

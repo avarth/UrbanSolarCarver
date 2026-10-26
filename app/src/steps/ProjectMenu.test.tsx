@@ -207,7 +207,7 @@ test("the menu opens under its button, and above it near the bottom of the windo
   const menuHeight = vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(150);
   const buttonPlace = vi.spyOn(menuButton(), "getBoundingClientRect").mockReturnValue(new DOMRect(500, 100, 30, 30));
   click(menuButton());
-  const popup = () => rendered!.container.querySelector<HTMLElement>(".project-menu-popup")!;
+  const popup = () => rendered!.container.querySelector<HTMLElement>(".action-menu-popup")!;
   expect(popup().style.top).toBe("134px");
   click(menuButton());
   buttonPlace.mockReturnValue(new DOMRect(500, window.innerHeight - 60, 30, 30));

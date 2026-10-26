@@ -1,7 +1,10 @@
 import { expect, test } from "vitest";
 import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import type { StageState } from "../steps/step_summaries";
-import { activeCriteria, cardResultLine, cardStatusText, criterionStatus, selectionAfterRemoving, stagesByCriterionOf } from "./criteria_state";
+import {
+  activeCriteria, cardLineOf, cardResultLine, cardStatusText, criterionStatus, filesOfOtherCriteria, orderAfterDropping, orderAfterMoving, selectionAfterRemoving,
+  stagesByCriterionOf,
+} from "./criteria_state";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
   return { id, name: `Criterion ${id}`, named_by_user: false, colour: "#336699", bypassed: false, test_surface_files: ["roofs.obj"], settings: {}, ...overrides };
@@ -124,4 +127,33 @@ test("the stages of each criterion as the service gives them, a stage it does no
   expect(stagesByCriterionOf({ 1: { preprocessing: "current", thresholding: "out_of_date", exporting: "current" }, 2: { preprocessing: "current" } }))
     .toEqual({ 1: THRESHOLD_OUT_OF_DATE, 2: { preprocessing: "current", thresholding: "missing" } });
   expect(stagesByCriterionOf(undefined)).toEqual({});
+});
+
+test("reordering with the keyboard moves a card one place, and not past either end", () => {
+  expect(orderAfterMoving(["1", "2", "3"], "2", -1)).toEqual(["2", "1", "3"]);
+  expect(orderAfterMoving(["1", "2", "3"], "2", 1)).toEqual(["1", "3", "2"]);
+  expect(orderAfterMoving(["1", "2", "3"], "1", -1)).toBeNull();
+  expect(orderAfterMoving(["1", "2", "3"], "3", 1)).toBeNull();
+});
+
+test("a card dropped on another takes its place, the cards between moving one place", () => {
+  expect(orderAfterDropping(["1", "2", "3"], "1", "3")).toEqual(["2", "3", "1"]);
+  expect(orderAfterDropping(["1", "2", "3"], "3", "1")).toEqual(["3", "1", "2"]);
+  expect(orderAfterDropping(["1", "2", "3"], "2", "2")).toBeNull();
+  expect(orderAfterDropping(["1", "2", "3"], "4", "2")).toBeNull();
+});
+
+test("the files of other criteria are those they use and this one does not, each once", () => {
+  const criteria = [entry("1", { test_surface_files: ["roofs.obj"] }), entry("2", { test_surface_files: ["windows.obj", "roofs.obj"] }),
+                    entry("3", { test_surface_files: ["windows.obj", "courtyard.obj"] })];
+  expect(filesOfOtherCriteria(criteria, "1")).toEqual(["windows.obj", "courtyard.obj"]);
+  expect(filesOfOtherCriteria(criteria, "2")).toEqual(["courtyard.obj"]);
+  expect(filesOfOtherCriteria([entry("1")], "1")).toEqual([]);
+});
+
+test("a card's line is its result while current, else its status", () => {
+  expect(cardLineOf({ kind: "current" }, summary(CARVING, 1250.4))).toBe(cardResultLine(summary(CARVING, 1250.4)));
+  expect(cardLineOf({ kind: "current" }, undefined)).toBe("");
+  expect(cardLineOf({ kind: "bypassed" }, summary(CARVING, 1250.4))).toBe("Bypassed");
+  expect(cardLineOf({ kind: "updates_from", from: "Daylight on windows" }, undefined)).toBe("Updates from Daylight on windows");
 });

@@ -52,3 +52,30 @@ test("during a run the files cannot be added or removed; the panel's Run analysi
   expect(box().querySelector<HTMLButtonElement>(".input-remove")!.disabled).toBe(true);
   expect(box().textContent).not.toContain("A run is in progress");
 });
+
+test("use a file from another criterion: the stored files other criteria use are offered, each with a Use button", async () => {
+  const onUseFile = vi.fn(async (_fileName: string) => null as string | null);
+  rendered = renderForTest(<ProtectsBox files={[{ name: "roofs.ply", triangle_count: 2 }]} mode="daylight" onAddFiles={async () => []}
+                                        onRemoveFile={async () => null} disabledReason={null} otherFiles={["windows.ply", "courtyard.obj"]}
+                                        onUseFile={onUseFile} />);
+  const reuse = rendered.container.querySelector<HTMLElement>(".protects-reuse")!;
+  expect(reuse.querySelector(".protects-reuse-title")!.textContent).toBe("Use a file from another criterion");
+  expect([...reuse.querySelectorAll(".protects-reuse-name")].map((name) => name.textContent)).toEqual(["windows.ply", "courtyard.obj"]);
+  const useButton = reuse.querySelector<HTMLButtonElement>('[aria-label="Use windows.ply"]')!;
+  expect(useButton.textContent).toBe("Use");
+  await act(async () => click(useButton));
+  expect(onUseFile).toHaveBeenCalledExactlyOnceWith("windows.ply");
+});
+
+test("with no file of another criterion to use, nothing more is offered", () => {
+  rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null}
+                                        otherFiles={[]} onUseFile={async () => null} />);
+  expect(rendered.container.querySelector(".protects-reuse")).toBeNull();
+});
+
+test("a file the criterion could not use is said under the list", async () => {
+  rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null}
+                                        otherFiles={["windows.ply"]} onUseFile={async () => "A run is in progress"} />);
+  await act(async () => click(rendered!.container.querySelector('[aria-label="Use windows.ply"]')!));
+  expect(rendered.container.querySelector('.protects-reuse [role="alert"]')!.textContent).toBe("A run is in progress");
+});

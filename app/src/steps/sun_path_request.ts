@@ -1,5 +1,5 @@
 // The sun path of the stored analysis period (UX 8.2), asked for as soon as the mode reads one, the weather file is there and
-// every part of the period is set, before any run.
+// every part of the period is set, before any run; of the selected criterion, asked for again when another is selected.
 import { useEffect, useRef, useState } from "react";
 import { getSunPath, serviceProblemOf } from "../api_client/client";
 import { shownValue, storedValue, type FormState } from "../settings_form/form_state";
@@ -32,6 +32,8 @@ interface SunPathSource {
   form: FormState;
   hasWeatherFile: boolean;
   northDegrees: number;
+  /** The criterion whose period it is; absent: the service's default criterion. */
+  criterionId?: string;
   onServiceProblem: (error: unknown) => void;
 }
 
@@ -39,9 +41,9 @@ interface SunPathSource {
  * The sun path of the stored period, with the stored North it was computed with; null when the mode has none, the weather file or a
  * part of the period is missing.
  */
-export function useSunPathOfStoredPeriod({ token, project, form, hasWeatherFile, northDegrees, onServiceProblem }: SunPathSource): SunPathWithNorth | null {
+export function useSunPathOfStoredPeriod({ token, project, form, hasWeatherFile, northDegrees, criterionId, onServiceProblem }: SunPathSource): SunPathWithNorth | null {
   const [sunPath, setSunPath] = useState<SunPathWithNorth | null>(null);
-  const sunPathKey = JSON.stringify([form.mode, ANALYSIS_PERIOD_FIELDS.map((name) => shownValue(form, name)), northDegrees, hasWeatherFile]);
+  const sunPathKey = JSON.stringify([form.mode, ANALYSIS_PERIOD_FIELDS.map((name) => shownValue(form, name)), northDegrees, hasWeatherFile, criterionId]);
   const sunPathWanted = form.mode === MODE_WITH_SUN_PATH && hasWeatherFile && analysisPeriodOf(form, true) !== null;
   const sunPathRequestKey = useRef<string | null>(null);      // the period last asked for; only its reply is kept
   useEffect(() => {
@@ -55,7 +57,7 @@ export function useSunPathOfStoredPeriod({ token, project, form, hasWeatherFile,
     const requestKey = sunPathKey;
     const storedNorthDegrees = Number(storedValue(form, "north_deg") ?? 0);
     sunPathRequestKey.current = requestKey;
-    getSunPath(token, project).then((reply) => {
+    getSunPath(token, project, criterionId).then((reply) => {
       if (sunPathRequestKey.current === requestKey) setSunPath({ path: reply, northDegrees: storedNorthDegrees });
     }).catch((error) => {
       if (serviceProblemOf(error) !== "other") onServiceProblem(error);

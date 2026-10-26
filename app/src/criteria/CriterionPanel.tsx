@@ -17,6 +17,9 @@ export interface CriterionPanelProps {
   testSurfaceDrawingProblems?: string[];
   onAddTestSurfaces: (files: File[]) => Promise<string[]>;
   onRemoveTestSurface: (fileName: string) => Promise<string | null>;
+  /** The stored test surface files other criteria use and this one does not, offered for use (several criteria only). */
+  otherTestSurfaces?: string[];
+  onUseTestSurface?: (fileName: string) => Promise<string | null>;
   /** The settings the panel shows: the criterion's, with the shared ones they are read with. */
   form: FormState;
   /** The messages of the criterion's last save that name no setting. */
@@ -43,7 +46,8 @@ export function CriterionPanel(props: CriterionPanelProps) {
   return (
     <div className="criterion-panel">
       <ProtectsBox files={props.testSurfaces} mode={form.mode} onAddFiles={props.onAddTestSurfaces} onRemoveFile={props.onRemoveTestSurface}
-                   disabledReason={disabledReason} drawingProblems={props.testSurfaceDrawingProblems} />
+                   disabledReason={disabledReason} drawingProblems={props.testSurfaceDrawingProblems} otherFiles={props.otherTestSurfaces}
+                   onUseFile={props.onUseTestSurface} />
       <ModeStep mode={form.mode} onChoose={props.onChooseMode} disabledReason={disabledReason} valuesReset={form.valuesResetByModeChange}
                 weatherDropZone={props.weatherDropZone} showsDisabledReason={false} />
       <SettingsStep form={form} stepErrors={props.stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={props.inputRoles}

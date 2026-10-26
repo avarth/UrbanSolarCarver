@@ -95,7 +95,8 @@ export type FormAction =
   | { type: "save_succeeded"; reply: SaveReply }
   | { type: "save_rejected"; reply: ConfigErrorReply }
   | { type: "save_failed"; error: unknown }
-  | { type: "project_opened"; start: FormStart };
+  | { type: "project_opened"; start: FormStart }
+  | { type: "form_restarted"; start: FormStart };
 
 const sameValue = (first: unknown, second: unknown) => JSON.stringify(first) === JSON.stringify(second);
 
@@ -201,6 +202,10 @@ export function formReducer(state: FormState, action: FormAction): FormState {
       return { ...state, pendingSave: false, saveFailure: action.error };
     case "project_opened":
       return initialFormState(action.start);
+    case "form_restarted":
+      // Another criterion's settings in the same project: the count of stored analysis changes goes on, so a stage status asked for
+      // before is not taken for one that follows a later save (ProjectWorkspace compares the two).
+      return { ...initialFormState(action.start), storedAnalysisRevision: state.storedAnalysisRevision };
   }
 }
 
@@ -375,13 +380,20 @@ export function useSettingsForm(token: string, project: string, start: FormStart
     currentToken.current = token;      // a new token is used from the next save on; it starts no save of its own
   }, [token]);
 
-  useEffect(() => {
-    const projectSaver: ConfigSaver = createConfigSaver((values) => currentSend.current(currentToken.current, project, values),
+  /** A saver whose replies reach the form only while it is the form's saver. */
+  const newSaver = (projectName: string): ConfigSaver => {
+    const projectSaver: ConfigSaver = createConfigSaver((values) => currentSend.current(currentToken.current, projectName, values),
       (action) => { if (saver.current === projectSaver) dispatch(action); });
+    return projectSaver;
+  };
+
+  useEffect(() => {
+    const projectSaver = newSaver(project);
     saver.current = projectSaver;
     return () => {
+      const current = saver.current;      // this one, or the one a restart put in its place
       saver.current = null;
-      void projectSaver.flush();
+      void current?.flush();
     };
   }, [project]);
 
@@ -410,7 +422,16 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   }, []);
   // Drops a waiting or failed save, so the flush when the project closes sends nothing: for a project renamed, reset or deleted.
   const cancelSave = useCallback(() => saver.current?.cancel(), []);
-  return { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm, pendingSave: form.pendingSave };
+  // Starts the form again from *nextStart* in the same project (another criterion's settings). A change still waiting is sent at
+  // once with the send of the render before, the one it was made with; its reply is not shown, as the form shows other settings.
+  const restart = useCallback((nextStart: FormStart) => {
+    const previous = saver.current;
+    saver.current = newSaver(formProject.current);
+    void previous?.flush();
+    changeSavedAtOnce.current = 0;
+    dispatch({ type: "form_restarted", start: nextStart });
+  }, []);
+  return { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm, restart, pendingSave: form.pendingSave };
 }
 
 export type SettingsForm = ReturnType<typeof useSettingsForm>;

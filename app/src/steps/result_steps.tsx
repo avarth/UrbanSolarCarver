@@ -5,7 +5,7 @@
 // stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results are fetched here and again as
 // each stage of a run is done.
 import { useMemo, useRef, useState, type ReactNode } from "react";
-import { downloadWithToken, failureTextOf, serviceProblemOf } from "../api_client/client";
+import { downloadWithToken, failureTextOf, serviceProblemOf, type RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import { analysisDiffersFromStored, shownValue, type FormState, type SaveOutcome } from "../settings_form/form_state";
 import type { StepFormAction } from "../settings_form/two_forms";
@@ -108,9 +108,21 @@ export function stagesToFetchWhenUpToDate(produce: readonly string[], stages: Re
   return PIPELINE_STAGES.filter((stage, index) => produce.includes(stage) || (index < lastAskedFor && stages[stage] !== "current"));
 }
 
+/**
+ * The carving of the selected criterion in the run summary (its entry of the chain's criteria); without a criterion, or from a
+ * summary that lists none, the carving of the last criterion that is on.
+ */
+export function carvingOfCriterion(summary: RunSummary | null, criterionId?: string): RunSummary["carving"] {
+  const entries = summary?.criteria ?? [];
+  if (criterionId === undefined || entries.length === 0) return summary?.carving ?? null;
+  return entries.find((entry) => entry.id === criterionId)?.carving ?? null;
+}
+
 export interface ResultStepsContext {
   token: string;
   project: string;
+  /** The selected criterion, whose carving, score points and sky dome are shown; absent: the service's default. */
+  criterionId?: string;
   form: FormState;
   /** The form after every action so far, read after a save is awaited. */
   currentForm: () => FormState;
@@ -160,7 +172,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const { token, project, form, dispatch, flushSave, changeAndSave, stages, runs, runBlocker, projectRunActive } = context;
   const meshFormat = String(shownValue(form, "final_mesh_format") ?? "ply");
   const [results, reloadResults] = useRunResults({
-    token, project, origin: context.origin, onServiceProblem: context.onServiceProblem,
+    token, project, origin: context.origin, criterionId: context.criterionId, onServiceProblem: context.onServiceProblem,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
   });
   const [autoUpdate, setAutoUpdate] = useAutoUpdate(project);
@@ -288,6 +300,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const envelopeBuilt = builtBy("exporting"), massingBuilt = builtBy("massing");
   // The stages the run under way has still to finish: each removes its old files when it begins, so Export does not offer them.
   const stagesStillToFinish = running ? record.state.order.filter((stage) => record.state.stages[stage].state !== "done") : [];
+  const criterionCarving = carvingOfCriterion(results.summary, context.criterionId);
   // Before the first analysis there is no carving to show: the reason, how the last carving update ended, and the carving settings
   // a refused save marked, so they can be fixed.
   const carvingRule = stages.thresholding === "missing" ? (
@@ -297,7 +310,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
       <SettingsToFix step="carving" form={form} onChange={changeSettings} disabledReason={settingsDisabledReason} />
     </>
   ) : (
-    <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={results.summary?.carving ?? null} scorePoints={results.scorePoints}
+    <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={criterionCarving} scorePoints={results.scorePoints}
                  analysisOutOfDate={analysisOutOfDate} carvingDimmed={isStageDimmed("thresholding", record, stages, stagesBeingFetched)}
                  autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
                  thresholdDisabledReason={otherRunActive ? messages.runInProgress : null} settingsDisabledReason={settingsDisabledReason}
@@ -345,7 +358,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     criterionRunAnalysis,
     pinnedAction: context.everyCriterionCarved ? { criteria: buildFromCarvingButton } : {},
     viewer: {
-      results: { scorePoints: viewerResults.scorePoints, carving: viewerResults.summary?.carving ?? null, skyDome: viewerResults.skyDome,
+      results: { scorePoints: viewerResults.scorePoints, carving: criterionCarving, skyDome: viewerResults.skyDome,
                  envelope: viewerResults.envelope, massing: viewerResults.massing },
       dimmedLayers: dimmedLayersOf(record, stages, stagesBeingFetched),
       missingLayers: missingLayersOf(record, viewerResults, context.isWeightedMode),

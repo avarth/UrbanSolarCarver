@@ -41,7 +41,11 @@ test("one criterion shows no list chrome", async () => {
   // No bypass toggle and no drag handle: the only switch is the carving rule's "Update when I change the threshold".
   expect([...step.querySelectorAll("[role='switch']")].map((toggle) => toggle.closest("label")?.textContent)).toEqual(["Update when I change the threshold"]);
   expect(step.querySelector("[draggable='true']")).toBeNull();
-  expect(step.textContent).not.toContain("Add another criterion");
+  // The one new thing: a quiet link at the end of the step.
+  const addLink = buttonIn(step, "Add another criterion");
+  expect(addLink.classList.contains("link-button")).toBe(true);
+  expect(panel()!.compareDocumentPosition(addLink) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(step.textContent).not.toContain("Add criterion");
   expect(protectedFiles()).toEqual(["surfaces.obj"]);
   expect(buttonIn(panel()!, "Run analysis")).toBeDefined();
   expect(buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing")).toBeDefined();

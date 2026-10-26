@@ -1,7 +1,8 @@
 // The dialogs of the project menu (R2 7.2): Rename, checked by the project-name rule before it is sent; Delete, which names the
 // project and its folder and waits for the project name to be typed; Reset to the example, after a confirmation; and the reason
 // Open folder failed. Each is modal: the focus moves into it and stays there with Tab, and Escape or Cancel closes it (not while
-// its request is out). A refusal of the service is shown in the dialog in the service's words, and the dialog stays open.
+// its request is out). A refusal of the service is shown in the dialog in the service's words, and the dialog stays open. The frame,
+// buttons and request of a dialog are the criterion dialogs' too (criteria/CriterionDialogs.tsx).
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
 import { messages } from "../messages";
 import "./steps.css";
@@ -44,7 +45,7 @@ function focusableControls(dialog: HTMLElement): HTMLElement[] {
     (element instanceof HTMLButtonElement || element instanceof HTMLInputElement) && !element.disabled);
 }
 
-interface DialogFrameProps {
+export interface DialogFrameProps {
   title: string;
   /** While the dialog's request is out, Escape does not close it. */
   busy: boolean;
@@ -55,7 +56,7 @@ interface DialogFrameProps {
 }
 
 /** A modal dialog: the element marked data-autofocus (else the first control) takes the focus, which Tab keeps inside. */
-function DialogFrame({ title, busy, onClose, describedBy, children }: DialogFrameProps) {
+export function DialogFrame({ title, busy, onClose, describedBy, children }: DialogFrameProps) {
   const dialog = useRef<HTMLDivElement>(null);
   const titleId = useId();
 
@@ -95,7 +96,7 @@ function DialogFrame({ title, busy, onClose, describedBy, children }: DialogFram
   );
 }
 
-function DialogButtons({ confirmLabel, confirmDisabled, busy, onCancel, cancelHasFocus = false }: {
+export function DialogButtons({ confirmLabel, confirmDisabled, busy, onCancel, cancelHasFocus = false }: {
   confirmLabel: string;
   confirmDisabled: boolean;
   busy: boolean;
@@ -114,7 +115,7 @@ function DialogButtons({ confirmLabel, confirmDisabled, busy, onCancel, cancelHa
 }
 
 /** The request of a dialog: *send* resolves with the service's reason when it refused, or null once done, which closes the dialog. */
-function useDialogRequest(onClose: () => void) {
+export function useDialogRequest(onClose: () => void) {
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const send = async (request: () => Promise<string | null>) => {
@@ -127,7 +128,7 @@ function useDialogRequest(onClose: () => void) {
   return { problem, setProblem, busy, send };
 }
 
-function ProblemLine({ problem }: { problem: string | null }) {
+export function ProblemLine({ problem }: { problem: string | null }) {
   return problem === null ? null : <p className="setting-error" role="alert">{problem}</p>;
 }
 

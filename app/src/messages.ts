@@ -149,6 +149,29 @@ export const messages = {
   criterionBypassed: "Bypassed",
   criterionNeedsTestSurfaces: "Add test surfaces",
   criterionNotRunYet: "Not run yet",
+  // Criteria with several criteria: the ones that are on in order, each with the share it kept, "Daylight on windows 70 %, then
+  // Solar usefulness 80 %"
+  criterionKeptInChain: (criterionName: string, percentText: string) => `${criterionName} ${percentText}`,
+  criteriaThen: (earlierText: string, laterText: string) => `${earlierText}, then ${laterText}`,
+  // The cards of several criteria (7.2), their menu and dialogs
+  criteriaListLabel: "Criteria in carving order",
+  addCriterion: "Add criterion",
+  addAnotherCriterion: "Add another criterion",
+  newCriterionModeTitle: "Mode of the new criterion",
+  moveCriterion: (criterionName: string) => `Move ${criterionName}`,
+  moveCriterionHint: "Drag to reorder, or press the up and down arrow keys",
+  bypassCriterion: (criterionName: string) => `Bypass ${criterionName}`,
+  criterionMenuOf: (criterionName: string) => `Actions for ${criterionName}`,
+  renameCriterion: "Rename",
+  duplicateCriterion: "Duplicate",
+  deleteCriterion: "Delete",
+  onlyCriterionStays: "A project needs at least one criterion.",
+  renameCriterionTitle: (criterionName: string) => `Rename ${criterionName}`,
+  newCriterionNameLabel: "New name",
+  criterionNeedsName: "A criterion needs a name.",      // the service's words for an empty name
+  deleteCriterionTitle: "Delete criterion",
+  deleteCriterionExplanation: (criterionName: string) =>
+    `Delete ${criterionName}? Its settings and results go; test surface files no other criterion uses go to the recycle bin.`,
   massingSummary: (floorAreaText: string, storeysText: string) => `${floorAreaText}, ${storeysText}`,
   notBuiltYet: "Not built yet",
   // What exists of the two parts of Envelope and massing (R2 5): "Envelope built, massing not built".
@@ -187,6 +210,10 @@ export const messages = {
   // A criterion's test surfaces (7.2): the add button of its drop box, titled testSurfacesTitle; its hint for the mode is in
   // steps/mode_tiles.json (protects_hint).
   addTestSurfaces: "Add test surfaces",
+  // Under the box with several criteria: the stored files the other criteria use, each with a button that adds it to this one.
+  useFileOfOtherCriterion: "Use a file from another criterion",
+  useFile: "Use",
+  useFileNamed: (fileName: string) => `Use ${fileName}`,
   inputsSizeTitle: "Size of all inputs together",
   inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ}\u00a0m`,
 

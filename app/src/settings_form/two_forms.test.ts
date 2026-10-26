@@ -88,6 +88,7 @@ function fakeFormHook(settings: Record<string, unknown>, savesMode = true) {
       return "saved";
     },
     cancelSave: () => { calls.push("cancel"); },
+    restart: (start) => { state = formReducer(state, { type: "form_restarted", start }); },
     currentForm: () => state,
   };
   return { hook, calls };

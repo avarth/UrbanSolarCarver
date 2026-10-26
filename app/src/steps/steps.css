@@ -102,11 +102,11 @@
 .start-projects-folder code { font-family: var(--font-family-code); }
 .start-projects-folder-path { overflow-wrap: anywhere; }
 
-/* The menu of a project and its dialogs (R2 7.2) ------------------------------------------------------------------------ */
+/* The menu of actions of a project or a criterion card (ActionMenu), and the project's dialogs (R2 7.2) ---------------- */
 
 .project-menu { flex: none; }
 
-.project-menu-button {
+.action-menu-button {
   border: 1px solid transparent;
   border-radius: var(--radius-small);
   background: transparent;
@@ -115,8 +115,8 @@
   cursor: pointer;
 }
 
-.project-menu-button:hover,
-.project-menu-button[aria-expanded="true"] { border-color: var(--colour-line); background: var(--colour-chrome); }
+.action-menu-button:hover,
+.action-menu-button[aria-expanded="true"] { border-color: var(--colour-line); background: var(--colour-chrome); }
 .project-menu-button-row { padding: calc(var(--space-unit) * 2); font-size: var(--text-step-title); line-height: 1; }
 
 .project-menu-button-top-bar {
@@ -129,7 +129,7 @@
 
 .project-menu-caret { color: var(--colour-muted); }
 
-.project-menu-popup {
+.action-menu-popup {
   position: fixed;
   z-index: 30;
   min-width: 200px;
@@ -141,9 +141,9 @@
   box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
 }
 
-.project-menu-popup ul { margin: 0; padding: 0; list-style: none; }
+.action-menu-popup ul { margin: 0; padding: 0; list-style: none; }
 
-.project-menu-popup [role="menuitem"] {
+.action-menu-popup [role="menuitem"] {
   display: block;
   width: 100%;
   padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
@@ -157,11 +157,11 @@
   cursor: pointer;
 }
 
-.project-menu-popup [role="menuitem"]:hover,
-.project-menu-popup [role="menuitem"]:focus { background: var(--colour-accent-soft); }
-.project-menu-popup [role="menuitem"][aria-disabled="true"] { color: var(--colour-muted); cursor: default; }
+.action-menu-popup [role="menuitem"]:hover,
+.action-menu-popup [role="menuitem"]:focus { background: var(--colour-accent-soft); }
+.action-menu-popup [role="menuitem"][aria-disabled="true"] { color: var(--colour-muted); cursor: default; }
 
-.project-menu-reason {
+.action-menu-reason {
   margin: var(--space-unit) calc(var(--space-unit) * 3) calc(var(--space-unit) * 2);
   color: var(--colour-muted);
   font-size: var(--text-secondary);
@@ -507,9 +507,82 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 /* Criteria (spec 7.1, 7.2): one criterion opens straight on its panel; the carving rule and Run analysis close it, each set off by
    a line as the steps' sections are. ------------------------------------------------------------------------------------------- */
 
+.criteria-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
 .criterion-panel { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
 .criterion-carving,
 .criterion-run { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
+
+/* Several criteria: the cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
+.criteria-list-block { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.criteria-list-block + .criterion-panel { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
+.criterion-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
+
+.criterion-card {
+  display: flex;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 2);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+}
+
+.criterion-card-selected { border-color: var(--colour-accent); background: var(--colour-accent-soft); box-shadow: inset 3px 0 0 var(--colour-accent); }
+.criterion-card-drop-target { border-style: dashed; border-color: var(--colour-accent); }
+/* A bypassed card: muted text (AA on white, UX 12), its swatch and symbol faded. */
+.criterion-card-bypassed { color: var(--colour-muted); }
+.criterion-card-bypassed .criterion-card-swatch,
+.criterion-card-bypassed .mode-tile-symbol { opacity: 0.45; }
+
+.criterion-card-handle {
+  display: inline-flex;
+  flex: none;
+  padding: var(--space-unit) 2px;
+  border-radius: var(--radius-small);
+  color: var(--colour-muted);
+  cursor: grab;
+}
+
+.criterion-card-handle:active { cursor: grabbing; }
+.criterion-card-handle[aria-disabled="true"] { cursor: default; opacity: 0.5; }
+
+.criterion-card-select {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.criterion-card-swatch { flex: none; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--colour-ink) 25%, transparent); }
+.criterion-card-text { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.criterion-card-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.criterion-card-line { color: var(--colour-muted); font-size: var(--text-secondary); }
+.criterion-card .mode-tile-symbol { flex: none; width: 22px; height: 22px; }
+.criterion-card-bypass { flex: none; }
+.criterion-card-menu-button { padding: var(--space-unit) calc(var(--space-unit) * 1.5); font-size: var(--text-step-title); line-height: 1; }
+.criterion-list-problem { margin: 0; }
+
+/* Add criterion and the one-criterion step's Add another criterion: a link, then the mode tiles of the new criterion. */
+.add-criterion { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
+.add-criterion-open { align-items: stretch; padding: calc(var(--space-unit) * 3); border: 1px solid var(--colour-line); border-radius: var(--radius-large); }
+.add-criterion-open > .link-button { align-self: flex-start; }
+.add-criterion-title { margin: 0; font-weight: 600; }
+
+/* Use a file from another criterion, under the test surfaces box. */
+.protects { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.protects-reuse { display: flex; flex-direction: column; gap: var(--space-unit); }
+.protects-reuse-title { margin: 0; font-size: var(--text-secondary); font-weight: 600; }
+.protects-reuse-files { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; padding: 0; list-style: none; }
+.protects-reuse-files li { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.protects-reuse-name { overflow-wrap: anywhere; }
 
 /* Carving (UX 5.5) -------------------------------------------------------------------------------------------------------- */
 

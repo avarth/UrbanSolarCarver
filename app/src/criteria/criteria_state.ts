@@ -1,5 +1,5 @@
 // What the criteria list needs to know about its cards, with no React: which criteria are on, the status of a card, its result
-// line, and where the selection goes when a card is removed.
+// line, where the selection goes when a card is removed, the order after a card is moved, and the files of the other criteria.
 import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { formatNumber, formatPercent } from "../steps/format_numbers";
@@ -95,4 +95,35 @@ export function selectionAfterRemoving(criteria: CriterionEntry[], removedId: st
   const position = criteria.findIndex((criterion) => criterion.id === removedId);
   const neighbour = criteria[position + 1] ?? criteria[position - 1];
   return neighbour === undefined ? selectedId : neighbour.id;
+}
+
+/** A card's line: its result while current (empty until the run summary is in), else the words of its status. */
+export function cardLineOf(status: CardStatus, summary: CriterionCarvingSummary | undefined): string {
+  return cardStatusText(status) ?? (summary === undefined ? null : cardResultLine(summary)) ?? "";
+}
+
+/** The order once the card *id* moves one place up (-1) or down (1); null when it is at that end already. */
+export function orderAfterMoving(ids: readonly string[], id: string, step: -1 | 1): string[] | null {
+  const position = ids.indexOf(id);
+  const target = position + step;
+  if (position < 0 || target < 0 || target >= ids.length) return null;
+  const order = [...ids];
+  [order[position], order[target]] = [order[target], order[position]];
+  return order;
+}
+
+/** The order once the card *draggedId* is dropped on *targetId*: it takes that card's place; null when nothing moves. */
+export function orderAfterDropping(ids: readonly string[], draggedId: string, targetId: string): string[] | null {
+  const from = ids.indexOf(draggedId), to = ids.indexOf(targetId);
+  if (from < 0 || to < 0 || from === to) return null;
+  const order = ids.filter((id) => id !== draggedId);
+  order.splice(to, 0, draggedId);
+  return order;
+}
+
+/** The test surface files the other criteria use and *id* does not, each once, in the order of the cards. */
+export function filesOfOtherCriteria(criteria: CriterionEntry[], id: string): string[] {
+  const own = new Set(criteria.find((criterion) => criterion.id === id)?.test_surface_files ?? []);
+  const others = criteria.filter((criterion) => criterion.id !== id).flatMap((criterion) => criterion.test_surface_files ?? []);
+  return [...new Set(others)].filter((name) => !own.has(name));
 }

@@ -1,6 +1,6 @@
-// A criterion's test surfaces, added and removed through its own routes (useCriteria). The reply lists file names only, so after a
-// change the stored files are asked for again (with their triangle counts, for the box and the 3D view) and the stage status
-// follows, as after a change of the site's inputs.
+// A criterion's test surfaces, added, removed and taken from another criterion through its own routes (useCriteria). The reply
+// lists file names only, so after an upload or a removal the stored files are asked for again (with their triangle counts, for the
+// box and the 3D view); the stage status follows every change, as after a change of the site's inputs.
 import { getInputFiles, serviceProblemOf, type InputFileInfo } from "../api_client/client";
 import { inputProblemText } from "../steps/InputsStep";
 import type { CriteriaHook } from "./use_criteria";
@@ -24,6 +24,8 @@ export interface TestSurfaceCalls {
   add: (files: File[]) => Promise<string[]>;
   /** Takes the file out of the criterion; resolves with the reason it could not, or null. */
   remove: (fileName: string) => Promise<string | null>;
+  /** Lets the criterion use a file another criterion uses (stored already); resolves with the reason it could not, or null. */
+  use: (fileName: string) => Promise<string | null>;
 }
 
 export function testSurfaceCallsOf(context: TestSurfaceContext): TestSurfaceCalls {
@@ -62,8 +64,20 @@ export function testSurfaceCallsOf(context: TestSurfaceContext): TestSurfaceCall
       return inputProblemText(error, fileName);
     }
   };
+  // The file is stored already, with its mesh loaded: only the stage status changes.
+  const useStoredFile = async (fileName: string): Promise<string | null> => {
+    try {
+      await criteria.reuseFile(criterionId, fileName);
+      context.refreshStageStatus();
+      return null;
+    } catch (error) {
+      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      return inputProblemText(error, fileName);
+    }
+  };
   return {
     add: (files) => context.followed(addOneByOne(files)),
     remove: (fileName) => context.followed(removeAndApply(fileName)),
+    use: (fileName) => context.followed(useStoredFile(fileName)),
   };
 }
