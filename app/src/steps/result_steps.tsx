@@ -1,6 +1,6 @@
-// The parts that show and start runs (UX 5.5 to 5.7, 6): the criterion's carving rule and its Run analysis (in its panel), the
-// Envelope and massing and Export steps, their buttons (Build envelope and massing pinned under the steps in Criteria, Build
-// envelope and Build massing in the two parts of their step, R2 5), the progress under the button that started a run, and what
+// The parts that show and start runs (UX 5.5 to 5.7, 6): the criterion's carving rule, the Envelope and massing and Export steps,
+// their buttons (Run analysis and Build envelope and massing pinned under the steps in Criteria, with the progress of a carving
+// update; Build envelope and Build massing in the two parts of their step, R2 5), the progress under the button that started a run, and what
 // the 3D view draws of the results (dimmed while out of date or replaced, listed as missing after a run that stopped before their
 // stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results are fetched here and again as
 // each stage of a run is done.
@@ -14,6 +14,7 @@ import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
 import { CarvingStep, thresholdControlOf, useAutoUpdate } from "./CarvingStep";
 import { EnvelopeAndMassingStep } from "./EnvelopeAndMassingStep";
+import { CriteriaRunBar } from "./CriteriaRunBar";
 import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
 import { RunProgress, type GoToSetting } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
@@ -188,7 +189,7 @@ export interface ResultStepsContext {
   runs: RunLoop;
   /** Why no run can start now (a run, the inputs, a setting, the warm-up), as Criteria says it; null when one can. */
   runBlocker: string | null;
-  /** Every criterion that is on has a current carving: Criteria pins Build envelope and massing. */
+  /** Every criterion that is on has a current carving: Build envelope and massing, pinned in Criteria, waits until then. */
   everyCriterionCarved: boolean;
   /** A run of this project is starting or in progress: the service refuses to save its settings. */
   projectRunActive: boolean;
@@ -208,8 +209,7 @@ export interface ResultSteps {
   content: Record<"envelope_and_massing" | "export", ReactNode>;
   /** The criterion's carving rule, or, before its first analysis, why there is none yet. */
   carvingRule: ReactNode;
-  /** The criterion's Run analysis, with the progress of its run. */
-  criterionRunAnalysis: ReactNode;
+  /** The bar pinned under a step: in Criteria, Run analysis and Build envelope and massing with the progress of their runs. */
   pinnedAction: Partial<Record<StepName, ReactNode>>;
   viewer: Pick<ViewerPaneProps, "results" | "dimmedLayers" | "missingLayers" | "runProgress" | "overlayContent">;
   results: RunResults;
@@ -363,14 +363,11 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const buildButton = (label: string, produce: PipelineStage[], origin: RunOrigin) => (
     <RunAnalysisButton blocker={buildBlocker} label={label} feedback={feedback(origin)} onRunAnalysis={() => void startAfterSaving(produce, origin)} />
   );
-  // The button pinned in Criteria builds both parts; its run is shown in the Envelope and massing step, which it opens.
-  const buildFromCarvingButton = (
-    <RunAnalysisButton blocker={buildBlocker} label={messages.buildEnvelopeAndMassing}
-                       onRunAnalysis={() => {
-                         context.openStep("envelope_and_massing");
-                         void startAfterSaving(BUILD_STAGES, "build");
-                       }} />
-  );
+  // The build pinned in Criteria builds both parts; its run is shown in the Envelope and massing step, which it opens. It waits with
+  // the reason above, and, as the Criteria step does not offer it before, while no analysis has run or a carving is not current.
+  const neverAnalysed = stages.preprocessing === "missing";
+  const pinnedBuildBlocker = runBlocker ?? (chainAnalysisOutOfDate ? context.buildWaitReason ?? (neverAnalysed ? messages.buildWaitsForFirstAnalysis : messages.buildWaitsForAnalysis)
+    : context.everyCriterionCarved ? null : messages.buildWaitsForCarving);
 
   const download = (file: ExportDownload) => {
     setDownloadProblem(null);
@@ -402,13 +399,13 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const carvingWaitReason = analysisOutOfDate || waitsFor === null ? null
     : waitsFor.protectsNothing ? messages.addTestSurfacesFirst(waitsFor.name) : messages.carvingWaitsForAnalysisOf(waitsFor.name);
   const carvingUpdatesOnItsOwn = autoUpdate && thresholdView !== null;
-  // Before the selected criterion's first analysis there is no carving to show: the reason, how the last carving update ended,
-  // and the carving settings a refused save marked, so they can be fixed. A criterion that is off has no carving in the chain.
+  // Before the selected criterion's first analysis there is no carving to show: the reason and the carving settings a refused
+  // save marked, so they can be fixed. A criterion that is off has no carving in the chain. How a carving update ended is said in
+  // the pinned bar, which is in view with the section closed.
   const carvingRule = context.criterionBypassed === true ? <p className="step-reason">{messages.criterionOffNote}</p>
     : ownStages.thresholding === "missing" ? (
     <>
       <p className="step-not-usable">{messages.carvingNeedsAnalysis}</p>
-      {feedback("carving_update")}
       <SettingsToFix step="carving" form={form} onChange={changeSettings} disabledReason={settingsDisabledReason} />
     </>
   ) : (
@@ -423,12 +420,19 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                    onThresholdCommit={submitThreshold}
                    onCarvingSettingCommit={() => { if (thresholdView !== null) submitThreshold({}); }}
                    onUpdateCarving={() => void updateCarvingAfterSaving()}
-                   lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")} showsDisabledReason={false} />
+                   lastAnalysisSeconds={lastAnalysisSeconds} showsDisabledReason={false} />
     </>
   );
-  const criterionRunAnalysis = (
-    <RunAnalysisButton blocker={runBlocker} feedback={feedback("carving_run_analysis")}
-                       onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")} />
+  // Criteria's pinned bar: Run analysis and the build, with the progress and outcome of Run analysis and of a carving update (whose
+  // controls are in the Carving rule section, which may be closed), each failure with its links to the settings to fix.
+  const criteriaRunBar = (
+    <CriteriaRunBar runBlocker={runBlocker} onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")}
+                    buildBlocker={pinnedBuildBlocker}
+                    onBuild={() => {
+                      context.openStep("envelope_and_massing");
+                      void startAfterSaving(BUILD_STAGES, "build");
+                    }}
+                    feedback={<>{feedback("carving_run_analysis")}{feedback("carving_update")}</>} />
   );
   const content = {
     envelope_and_massing: (
@@ -458,8 +462,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   return {
     content,
     carvingRule,
-    criterionRunAnalysis,
-    pinnedAction: context.everyCriterionCarved ? { criteria: buildFromCarvingButton } : {},
+    pinnedAction: { criteria: criteriaRunBar },
     viewer: {
       results: { scorePoints: viewerResults.scorePoints, carving: criterionCarving, skyDome: viewerResults.skyDome,
                  envelope: viewerResults.envelope, massing: viewerResults.massing, carvedByCriterion: viewerResults.carvedByCriterion },

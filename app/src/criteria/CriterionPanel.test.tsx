@@ -24,18 +24,18 @@ function panelProps(overrides: Partial<CriterionPanelProps> = {}): CriterionPane
     testSurfaces: [{ name: "windows.ply", triangle_count: 12 }], onAddTestSurfaces: async () => [], onRemoveTestSurface: async () => null,
     form: formFor("time-based"), stepErrors: [], criterionKeys: CRITERION_KEYS, onChange: () => {}, onChooseMode: () => {}, disabledReason: null,
     weatherDropZone: null, carvingRule: <div className="carving-rule-for-test">carving rule</div>,
-    runAnalysis: <button type="button">Run analysis</button>, ...overrides,
+    ...overrides,
   };
 }
 
 const find = (selector: string) => rendered!.container.querySelector<HTMLElement>(selector);
 const follows = (earlier: Element, later: Element) => (earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
-test("the panel holds the test surfaces, the mode tiles, the criterion's settings, the carving rule and Run analysis, in that order", () => {
+test("the panel holds the test surfaces, the mode tiles, the criterion's settings and the carving rule, in that order, and no Run analysis", () => {
   rendered = renderForTest(<CriterionPanel {...panelProps()} />);
-  const runButton = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Run analysis")!;
-  const parts = [find(".input-box"), find('[role="radiogroup"]'), find('[data-setting="start_month"]'), find(".carving-rule-for-test"), runButton];
+  const parts = [find(".input-box"), find('[role="radiogroup"]'), find('[data-setting="start_month"]'), find(".carving-rule-for-test")];
   expect(parts.every((part) => part !== null)).toBe(true);
+  expect([...rendered.container.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Run analysis");
   for (let index = 1; index < parts.length; index++) expect(follows(parts[index - 1]!, parts[index]!)).toBe(true);
   expect(find(".input-box h3")!.textContent).toBe("Test surfaces");
   expect(find(".input-file-name")!.textContent).toBe("windows.ply");
@@ -85,8 +85,6 @@ test("the panel shows four sections with test surfaces and carving open", () => 
   expect(find('[role="radiogroup"]')).toBeNull();
   expect(find('[data-setting="start_month"]')).toBeNull();
   expect(find(".carving-rule-for-test")).not.toBeNull();
-  const runButton = [...rendered.container.querySelectorAll("button")].find((button) => button.textContent === "Run analysis")!;
-  expect(follows(find('.panel-section[data-section="carving"]')!, runButton)).toBe(true);       // Run analysis under the sections
   click(sectionHeader("mode"));
   expect(sectionOpen("mode")).toBe(true);
   expect(find('[role="radiogroup"]')).not.toBeNull();

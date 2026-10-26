@@ -332,6 +332,9 @@ export const messages = {
   // Why the build buttons wait while Carving is locked: a build would run the analysis first (M10). With several criteria they name
   // the criterion whose analysis is missing or out of date instead (carvingWaitsForAnalysisOf, addTestSurfacesFirst).
   buildWaitsForAnalysis: "Settings changed since the analysis. Run the analysis again before building.",
+  // The same for the build pinned in Criteria, which shows before the first analysis and while a carving is not current.
+  buildWaitsForFirstAnalysis: "Run the analysis before building",
+  buildWaitsForCarving: "Update the carving before building",
   // Why a carving change of the selected criterion runs nothing while another criterion's analysis is out of date: the carving
   // run would trace that criterion first, which only Run analysis starts (M10). The same while that criterion protects nothing.
   carvingWaitsForAnalysisOf: (criterionName: string) => `Run the analysis for ${criterionName} first`,

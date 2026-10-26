@@ -226,7 +226,7 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
       refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
-    return <>{latest.carvingRule}</>;
+    return <>{latest.carvingRule}{latest.pinnedAction.criteria}</>;
   }
   rendered = renderForTest(<Workspace />);
   await settle();
@@ -286,7 +286,7 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
       stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
       openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
-    return <>{latest.carvingRule}</>;
+    return <>{latest.carvingRule}{latest.pinnedAction.criteria}</>;
   }
   rendered = renderForTest(<Workspace />);
   await settle();
@@ -334,7 +334,7 @@ test("Run analysis answered with up to date asks for the stage status again and 
       stages, refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
-    return <>{steps.carvingRule}{steps.criterionRunAnalysis}</>;
+    return <>{steps.carvingRule}{steps.pinnedAction.criteria}</>;
   }
   rendered = renderForTest(<Workspace />);
   await settle();

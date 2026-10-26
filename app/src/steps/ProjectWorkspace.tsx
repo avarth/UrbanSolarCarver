@@ -238,7 +238,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     ? Object.fromEntries(Object.entries(stagesOf).map(([stage, state]) => [stage, state === "current" ? "out_of_date" : state])) as Record<Stage, StageState>
     : stagesOf);
   const shownStages = shownAs(stages);
-  // Criteria pins Build envelope and massing once every criterion that is on has a current carving (disabled, with the reason,
+  // Criteria's pinned Build envelope and massing waits until every criterion that is on has a current carving (disabled, with the reason,
   // while the settings shown differ from those it was made with).
   const everyCriterionCarved = activeCriteria(criteria.criteria).length > 0
     && activeCriteria(criteria.criteria).every((criterion) => criterionStages[criterion.id]?.thresholding === "current");
@@ -433,8 +433,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                         weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
-                        carvingRule={resultSteps.carvingRule} scoreUnit={modeInfo?.score_unit}
-                        runAnalysis={resultSteps.criterionRunAnalysis} />
+                        carvingRule={resultSteps.carvingRule} scoreUnit={modeInfo?.score_unit} />
       } />
     ),
     ...resultSteps.content,

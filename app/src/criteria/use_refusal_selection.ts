@@ -1,6 +1,6 @@
 // A start refused because criteria that are on protect nothing (MissingInputsReply naming "test_surfaces:<id>", spec 7.2, 7.3):
 // the first of them is selected (unless one of them is selected already), and its panel asks for test surfaces until its files
-// change or another run is asked for. The panel's own Run analysis and carving update say the refusal under their button, so
+// change or another run is asked for. The Criteria bar's Run analysis and carving update say the refusal under their button, so
 // the panel asks only for a refusal of a button elsewhere (Site and grid), and never says it twice.
 import { useEffect, useMemo, useRef } from "react";
 import type { CriterionEntry } from "../api_client/client";
@@ -8,8 +8,8 @@ import { messages } from "../messages";
 import type { RunOrigin, RunRecord } from "../steps/run_state";
 
 const TEST_SURFACES_ROLE_PREFIX = "test_surfaces:";
-/** The buttons whose progress and outcome are shown in the criterion's panel. */
-const ORIGINS_IN_PANEL: readonly RunOrigin[] = ["carving_run_analysis", "carving_update"];
+/** The runs whose progress and outcome are shown in the bar pinned under the Criteria step. */
+const ORIGINS_IN_CRITERIA_BAR: readonly RunOrigin[] = ["carving_run_analysis", "carving_update"];
 
 /** A criterion's test surface files as one string, to tell whether they changed. */
 function testSurfaceFilesKey(criteria: CriterionEntry[], id: string): string {
@@ -38,7 +38,7 @@ export function useRefusalSelection({ record, criteria, selectedId, shownCriteri
     refusalSeen.current = record.serial;
     if (askedFor.length > 0 && !askedFor.includes(selectedId)) showCriterion(askedFor[0]);
   }, [record?.serial]);
-  const asksHere = shownCriterion !== null && record !== null && !ORIGINS_IN_PANEL.includes(record.origin) && askedFor.includes(shownCriterion.id)
+  const asksHere = shownCriterion !== null && record !== null && !ORIGINS_IN_CRITERIA_BAR.includes(record.origin) && askedFor.includes(shownCriterion.id)
     && filesWhenRefused[shownCriterion.id] === testSurfaceFilesKey(criteria, shownCriterion.id);
   return asksHere ? messages.addTestSurfacesTo(shownCriterion.name) : null;
 }

@@ -64,7 +64,7 @@ function carvingProps(overrides: Partial<CarvingStepProps> = {}): CarvingStepPro
     form: formFor("time-based", { threshold: { method: "cutoff", value: 1.5 } }), isWeightedMode: false, summary: CARVING, scorePoints: SCORE_POINTS,
     analysisOutOfDate: false, carvingDimmed: false, autoUpdate: true, onAutoUpdateChange: vi.fn(), thresholdDisabledReason: null,
     settingsDisabledReason: null, runBlocker: null, onChange: vi.fn(), onThresholdCommit: vi.fn(), onCarvingSettingCommit: vi.fn(),
-    onUpdateCarving: vi.fn(), lastAnalysisSeconds: 6.4, carvingFeedback: null, ...overrides,
+    onUpdateCarving: vi.fn(), lastAnalysisSeconds: 6.4, ...overrides,
   };
 }
 

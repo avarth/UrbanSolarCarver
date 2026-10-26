@@ -312,7 +312,10 @@
 .save-failure { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-unit); }
 .save-failure:not(:last-child) { margin-bottom: calc(var(--space-unit) * 3); }   /* above the open step's run button */
 
-.run-button-area .primary-button { width: 100%; }
+.run-button-area .primary-button, .run-button-area .secondary-button { width: 100%; }
+/* Criteria: Run analysis and the build side by side, each button over its own reason, the progress under both. */
+.criteria-run-buttons { display: flex; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
+.criteria-run-buttons .run-button-area { flex: 1 1 0; min-width: 0; }
 .run-button-reason { margin: var(--space-unit) 0 0; color: var(--colour-muted); font-size: var(--text-secondary); }
 
 /* Inputs ---------------------------------------------------------------------------------------------------------------- */
@@ -504,12 +507,11 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .run-issues ul { margin: var(--space-unit) 0 0; padding-left: calc(var(--space-unit) * 4); }
 .run-issues-title { margin: 0; font-weight: 600; }
 
-/* Criteria (spec 7.1, 7.2): the cards, then the selected criterion's panel in folded sections and Run analysis, each set off by a
+/* Criteria (spec 7.1, 7.2): the cards, then the selected criterion's panel in folded sections, each set off by a
    line. ------------------------------------------------------------------------------------------------------------------------ */
 
 .criteria-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
 .criterion-panel { display: flex; flex-direction: column; }
-.criterion-run { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
 .criterion-carving { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
 
 /* A section of the panel: its header a full-width button with a caret, the title and, while closed, what the section holds on the

@@ -11,9 +11,8 @@
 // the cutoff itself (Shadow tolerated). A cutoff a weighted mode's config holds (from the command line or an earlier version) is
 // shown as Manual, at the carve amount it stands for.
 // When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with a
-// line that says so (the criterion's panel has Run analysis under the carving rule).
-import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent,
-         type ReactNode } from "react";
+// line that says so (Run analysis is in the bar pinned under the Criteria step).
+import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent } from "react";
 import type { RunSummary } from "../api_client/client";
 import { messages } from "../messages";
 import { shownValue, type FormState } from "../settings_form/form_state";
@@ -357,9 +356,7 @@ export interface CarvingStepProps {
   onCarvingSettingCommit: () => void;
   onUpdateCarving: () => void;
   lastAnalysisSeconds: number | null;
-  /** The progress and outcome of a carving update, shown under the control or the Update carving button. */
-  carvingFeedback: ReactNode;
-  /** Whether the reason the controls are disabled is written over them; false where Run analysis says it (the criterion's panel). */
+  /** Whether the reason the controls are disabled is written over them; false where Run analysis says it (the Criteria step's pinned bar). */
   showsDisabledReason?: boolean;
 }
 
@@ -514,7 +511,6 @@ export function CarvingStep(props: CarvingStepProps) {
           {updateBlocker !== null && <p id={updateReasonId} className="run-button-reason">{updateBlocker}</p>}
         </div>
       )}
-      {props.carvingFeedback}
       {summary !== null && (
         <div className={resultsClassName}>
           {thresholdView !== null && comparedScores !== null && kept !== null && shownCutoff !== null && (

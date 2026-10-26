@@ -7,7 +7,7 @@ import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { PipelineStage, StageState } from "./step_summaries";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep,
-  openPanelSection, openWorkspace, project, reasonOf, settle, startWorkspaceTest, stepRow,
+  openPanelSection, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle, startWorkspaceTest, stepRow, type, voxelSizeField,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -58,8 +58,8 @@ test("one criterion shows its row in the list, with the switch on and no drag ha
   expect(step.textContent).not.toContain("Add another criterion");
   expect(step.querySelector(".chain-summary")).toBeNull();
   expect(protectedFiles()).toEqual(["surfaces.obj"]);
-  expect(buttonIn(panel()!, "Run analysis")).toBeDefined();
-  expect(buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing")).toBeDefined();
+  expect(buttonIn(pinnedBar(), "Run analysis")).toBeDefined();
+  expect(buttonIn(pinnedBar(), "Build envelope and massing")).toBeDefined();
   expect(stepRow("Criteria").querySelector(".step-summary")).toBeNull();               // open, no setting to fix
   openStep("Inputs");
   expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61 % kept");
@@ -75,16 +75,63 @@ test("a new project opens with one criterion in the list, its switch on", async 
   expect(rows[0].querySelector(".criterion-card-line")!.textContent).not.toBe("Off");
 });
 
+test("the criteria step pins run analysis and build side by side under the steps", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED));
+  openStep("Criteria");
+  const bar = pinnedBar();
+  const run = buttonIn(bar, "Run analysis"), build = buttonIn(bar, "Build envelope and massing");
+  expect(run.disabled).toBe(false);
+  expect(build.disabled).toBe(false);
+  expect(run.closest(".run-button-area")!.parentElement).toBe(build.closest(".run-button-area")!.parentElement);      // one row
+  expect(stepRow("Criteria").contains(bar)).toBe(false);                                                             // under the step list
+  expect(bar.compareDocumentPosition(panel()!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  openStep("Inputs");
+  expect(container().querySelector(".step-pinned-action")).toBeNull();                                               // only for Criteria
+});
+
+test("the panel has no run analysis of its own", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED));
+  openStep("Criteria");
+  for (const section of ["Test surfaces", "Mode", "Settings", "Carving rule"]) openPanelSection(section);
+  expect([...panel()!.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Run analysis");
+  expect(panel()!.querySelector(".criterion-run")).toBeNull();
+  expect(panel()!.querySelector(".run-button-area")).toBeNull();
+});
+
+test("build waits in the pinned bar until every criterion is carved", async () => {
+  // Never analysed: the build waits for the first analysis.
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(true);
+  // The analysis is current but the carving is not: it waits for the carving.
+  const analysed: Record<PipelineStage, StageState> = { ...CARVED, thresholding: "out_of_date" };
+  service = new FakeService(analysed, CARVING);
+  await openWorkspace(service, project(analysed));
+  openStep("Criteria");
+  const build = () => buttonIn(pinnedBar(), "Build envelope and massing");
+  expect(build().disabled).toBe(true);
+  expect(reasonOf(build())).toBe("Update the carving before building");
+  // The settings shown differ from the analysis: its existing reason.
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, project(CARVED));
+  openStep("Site and grid");
+  type(voxelSizeField(), "2");
+  openStep("Criteria");
+  expect(reasonOf(build())).toBe("Settings changed since the analysis. Run the analysis again before building.");
+});
+
 test("during a run the criterion's controls are disabled and the panel says why once, at Run analysis", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Criteria");
-  await act(async () => buttonIn(panel()!, "Run analysis").click());
-  await settle();
+  await pressRunAnalysis();
   expect(service.runsStarted).toHaveLength(1);
-  const runButton = buttonIn(panel()!, "Run analysis");
+  const runButton = buttonIn(pinnedBar(), "Run analysis");
   expect(reasonOf(runButton)).toBe("A run is in progress");
-  expect(panel()!.textContent!.split("A run is in progress")).toHaveLength(2);
+  expect(panel()!.textContent).not.toContain("A run is in progress");
   expect(protectsBox().querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
   openPanelSection("Mode");
   expect(panel()!.querySelector('[role="radiogroup"]')!.getAttribute("aria-disabled")).toBe("true");
@@ -139,7 +186,7 @@ test("a criterion without test surfaces says what to add", async () => {
   openStep("Criteria");
   expect(protectsBox().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight.");
   expect(buttonIn(protectsBox(), "Add test surfaces")).toBeDefined();
-  const runButton = buttonIn(panel()!, "Run analysis");
+  const runButton = buttonIn(pinnedBar(), "Run analysis");
   expect(runButton.disabled).toBe(true);
   expect(reasonOf(runButton)).toBe("Add test surfaces to run the analysis");
 });
@@ -161,7 +208,7 @@ test("test surfaces added to and removed from the criterion go to its routes; th
   const fileReads = (fileName: string) => service.count(`GET /inputs/test_surfaces/${fileName}`);
   expect(fileReads("windows.obj")).toBe(1);                                          // the 3D view draws the new file
   expect(service.count("GET /stage-status")).toBe(statusReadsBefore + 1);
-  expect(container().querySelector(".step-pinned-action")).toBeNull();               // the carving is out of date: nothing to build from
+  expect(buttonIn(pinnedBar(), "Build envelope and massing").disabled).toBe(true);   // the carving is out of date: nothing to build from
 
   await act(async () => protectsBox().querySelector<HTMLButtonElement>('[aria-label="Remove surfaces.obj"]')!.click());
   await settle();

@@ -1,10 +1,10 @@
 // A criterion's panel (spec 7.1, 7.2), in four folded sections (PanelSection): Test surfaces (ProtectsBox), Mode (the tiles of
 // ModeStep, with the weather box and the values a mode change reset), Settings (the analysis settings that are criterion keys,
-// SettingsStep) and Carving rule (CarvingStep, put together in result_steps.tsx), then Run analysis. The shared settings are in
-// Site and grid. The open sections are the workspace's (usePanelSections); a section opens when something it shows appears: no test
-// surfaces (of a criterion that is on), a field with an error of the criterion's save, the weather box or the values reset under
-// the tiles. A criterion just
-// selected shows them all as new. The notice of a new weather file is under the Settings header, open or closed.
+// SettingsStep) and Carving rule (CarvingStep, put together in result_steps.tsx). Run analysis is in the bar pinned under the step list
+// (CriteriaRunBar). The shared settings are in Site and grid. The open sections are the workspace's (usePanelSections); a section opens
+// when something it shows appears: no test surfaces (of a criterion that is on), a field with an error of the criterion's save, the
+// weather box or the values reset under the tiles. A criterion just selected shows them all as new. The notice of a new weather file is
+// under the Settings header, open or closed.
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
@@ -50,8 +50,6 @@ export interface CriterionPanelProps extends PanelSections {
   carvingRule: ReactNode;
   /** The unit of the mode's scores, for a cutoff in the carving rule's summary; absent: none. */
   scoreUnit?: string;
-  /** Run analysis, with the progress of its run. */
-  runAnalysis: ReactNode;
 }
 
 export function CriterionPanel(props: CriterionPanelProps) {
@@ -114,7 +112,6 @@ export function CriterionPanel(props: CriterionPanelProps) {
         <WeatherChangeRegion notice={props.weatherChangeNotice ?? null} form={form} onChange={onChange} disabled={disabledReason !== null} />
       ))}
       {section("carving", <div className="criterion-carving">{props.carvingRule}</div>)}
-      <div className="criterion-run">{props.runAnalysis}</div>
     </div>
   );
 }

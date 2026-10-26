@@ -4,6 +4,7 @@ import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
+import { addStyleSheetForTest } from "../viewer_overlays/render_for_test";
 import type { ModeInfo, ProjectDetail } from "../api_client/client";
 import { LAYERS_SHOWN_IN_STEP, type OpenProjectSettingsSaver } from "./ProjectWorkspace";
 import type { PipelineStage, StageState } from "./step_summaries";
@@ -14,7 +15,7 @@ import {
 } from "./chain_service_for_test";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, MODES, NOTHING_RUN, SCHEMA, TRIANGLE_OBJ, buildPart, buttonIn, container,
-  dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pressRunAnalysis, project, reasonOf, settle,
+  dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pinnedBar, pressRunAnalysis, project, reasonOf, settle,
   startWorkspaceTest, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, unmountWorkspace, voxelSizeField,
   waitForTheSave,
 } from "./project_workspace_for_test";
@@ -413,7 +414,7 @@ test("while the carving is locked, Build envelope, Build massing and the Build e
     expect(reasonOf(button)).toBe(lockReason);
   }
   openStep("Criteria");
-  const carvingBuild = buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing");
+  const carvingBuild = buttonIn(pinnedBar(), "Build envelope and massing");
   expect(carvingBuild.disabled).toBe(true);
   expect(reasonOf(carvingBuild)).toBe(lockReason);
 
@@ -453,7 +454,7 @@ test("the Build envelope and massing of Criteria opens the step, builds both par
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
   openStep("Criteria");
-  await act(async () => buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing").click());
+  await act(async () => buttonIn(pinnedBar(), "Build envelope and massing").click());
   await settle();
   expect(stepRow("Envelope and massing").classList.contains("step-open")).toBe(true);
   expect(service.runsStarted).toEqual([["exporting", "massing"]]);
@@ -742,7 +743,7 @@ test("once the period is changed by hand the notice is gone, also when the perio
 const THRESHOLD_OUT_OF_DATE: CriterionStages = { preprocessing: "current", thresholding: "out_of_date" };
 const NOT_RUN: CriterionStages = { preprocessing: "missing", thresholding: "missing" };
 /** The stages of the run shown in the criterion's panel: each one's name and state. */
-const stageRows = () => [...panel().querySelectorAll(".run-stage")]
+const stageRows = () => [...pinnedBar().querySelectorAll(".run-stage")]
   .map((row) => `${row.querySelector(".run-stage-name")!.textContent} | ${row.querySelector(".run-stage-state")!.textContent}`);
 /** A card's result line of a mode that is not weighted, as formatNumber writes it (no-break spaces before the units). */
 const volumeLine = (percent: number, volume: number) => `${percent} % of the volume carved, ${volume} m³ removed`;
@@ -792,6 +793,39 @@ test("a run of two criteria shows each one's stages by name; its card says Runni
   expect(cardLine("Spring sun on windows")).toBe(volumeLine(25, 250));
 });
 
+test("the pinned bar scrolls when the run progress is long, and the step stays on the page", async () => {
+  const removeStyleSheet = addStyleSheetForTest("src/steps/steps.css");
+  try {
+    await openChain([FACADES, WINDOWS], { 1: OUT_OF_DATE, 2: THRESHOLD_OUT_OF_DATE });
+    chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"], 2: ["preprocessing", "thresholding"] };
+    await pressRunAnalysis();
+    expect(stageRows()).toHaveLength(4);
+    const bar = pinnedBar();
+    expect(bar.classList.contains("step-pinned-action")).toBe(true);
+    expect(bar.querySelectorAll(".run-stage")).toHaveLength(4);
+    const style = getComputedStyle(bar);                          // jsdom has no layout: the class says it scrolls inside half the panel
+    expect(style.maxHeight).toBe("50%");
+    expect(style.overflowY).toBe("auto");
+    expect(panel()).not.toBeNull();                               // the step above is still there to reach
+    expect(card("Winter sun on facades")).toBeDefined();
+  } finally {
+    removeStyleSheet();
+  }
+});
+
+test("a carving update's failure is said in the pinned bar, whether the Carving rule section is open or closed", async () => {
+  await openChain([FACADES], { 1: CURRENT });
+  chainService.runRefusal = { status: 503, body: { detail: "The analysis service is busy." } };
+  typeAndLeave(thresholdField(), "1");
+  await waitForTheSave();
+  await settle();
+  expect(timesShown(pinnedBar(), "The analysis service is busy.")).toBe(1);
+  expect(panel().querySelector(".run-outcome")).toBeNull();                       // not in the section
+  togglePanelSection("Carving rule");
+  expect(panelSectionOpen("Carving rule")).toBe(false);
+  expect(timesShown(pinnedBar(), "The analysis service is busy.")).toBe(1);
+});
+
 test("with one criterion a run's stages keep their names, with no criterion's", async () => {
   await openChain([FACADES], { 1: OUT_OF_DATE });
   chainService.runCriterionStages = { 1: ["preprocessing", "thresholding"] };
@@ -807,20 +841,34 @@ test("a run refused for criterion 2's settings selects its card, says so in its 
   await pressRunAnalysis();
   expect(selectedCardName()).toBe("Spring sun on windows");
   expect(chainService.requests).toContain("GET /criteria/2/settings");
-  expect(panel().textContent).toContain("The run stopped on an error.");
+  expect(pinnedBar().textContent).toContain("The run stopped on an error.");
   expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("Input should be less than 90");
   await select("Winter sun on facades");
   expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')).toBeNull();      // criterion 1's settings are fine
 });
 
-test("a run refused for missing test surfaces selects that criterion and asks for them once in its panel", async () => {
+test("the pinned run says what a criterion without test surfaces needs", async () => {
   await openChain([FACADES, WINDOWS]);
   // The service found criterion 2's test surfaces gone (removed in another tab, say).
   const refusal = "Add test surfaces to Spring sun on windows.";
   chainService.runRefusal = { status: 422, body: { detail: refusal, missing_inputs: ["test_surfaces:2"] } };
-  await pressRunAnalysis();                                       // the panel's Run analysis, which says the refusal itself
+  await pressRunAnalysis();
+  expect(timesShown(pinnedBar(), refusal)).toBe(1);
+  expect(pinnedBar().querySelector(".run-outcome-error")!.textContent).toBe(refusal);
+  expect(timesShown(panelFrame(), refusal)).toBe(0);              // the panel does not say it a second time
+  // Known beforehand, the button waits and names the criterion.
+  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add test surfaces to Spring sun on windows to run the analysis");
+});
+
+test("a run refused for missing test surfaces selects that criterion and asks for them once, in the pinned bar", async () => {
+  await openChain([FACADES, WINDOWS]);
+  // The service found criterion 2's test surfaces gone (removed in another tab, say).
+  const refusal = "Add test surfaces to Spring sun on windows.";
+  chainService.runRefusal = { status: 422, body: { detail: refusal, missing_inputs: ["test_surfaces:2"] } };
+  await pressRunAnalysis();                                       // the pinned Run analysis, which says the refusal itself
   expect(selectedCardName()).toBe("Spring sun on windows");
-  expect(timesShown(panelFrame(), refusal)).toBe(1);
+  expect(timesShown(pinnedBar(), refusal) + timesShown(panelFrame(), refusal)).toBe(1);
   // From Site and grid the refusal is said there; the panel of the criterion says it once too.
   await select("Winter sun on facades");
   openStep("Site and grid");
@@ -835,7 +883,7 @@ test("a run refused for missing test surfaces selects that criterion and asks fo
 
 test("Run analysis waits for the test surfaces of every criterion that is on, and names the one without", async () => {
   await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
-  const runButton = () => buttonIn(panel(), "Run analysis");
+  const runButton = () => buttonIn(pinnedBar(), "Run analysis");
   expect(runButton().disabled).toBe(true);
   expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
   // A carving change of criterion 1 waits for criterion 2, which needs test surfaces before any analysis.
@@ -849,7 +897,7 @@ test("with every criterion bypassed Run analysis says to turn one on", async () 
   await openChain([FACADES, WINDOWS]);
   await bypass("Winter sun on facades");
   await bypass("Spring sun on windows");
-  const runButton = buttonIn(panel(), "Run analysis");
+  const runButton = buttonIn(pinnedBar(), "Run analysis");
   expect(runButton.disabled).toBe(true);
   expect(reasonOf(runButton)).toBe("Turn on a criterion to run");
 });
@@ -953,10 +1001,10 @@ test("a run refused for criterion 2's settings, seen from criterion 1, names cri
     status: 422, body: { field_errors: [{ field: "max_slope_deg", message: "Input should be less than 90" }], grid_plan: null, criterion: "2" },
   };
   await pressRunAnalysis();
-  expect(panel().textContent).toContain("The run stopped on an error.");          // in criterion 2's panel, which it selected
+  expect(pinnedBar().textContent).toContain("The run stopped on an error.");          // said in the pinned bar; criterion 2 is selected
   await select("Winter sun on facades");
-  expect(panel().textContent).toContain("The run stopped on an error in the settings of Spring sun on windows.");
-  const link = buttonIn(panel(), "Go to steepest step between columns of Spring sun on windows");
+  expect(pinnedBar().textContent).toContain("The run stopped on an error in the settings of Spring sun on windows.");
+  const link = buttonIn(pinnedBar(), "Go to steepest step between columns of Spring sun on windows");
   await act(async () => link.click());
   await settle();
   expect(selectedCardName()).toBe("Spring sun on windows");
@@ -972,7 +1020,7 @@ test("go to a setting of another criterion, its section closed: that criterion i
   await select("Winter sun on facades");
   expect(panelSectionOpen("Settings")).toBe(true);
   togglePanelSection("Settings");
-  await act(async () => buttonIn(panel(), "Go to analysis period of Spring sun on windows").click());
+  await act(async () => buttonIn(pinnedBar(), "Go to analysis period of Spring sun on windows").click());
   await settle();
   expect(selectedCardName()).toBe("Spring sun on windows");
   expect(panelSectionOpen("Settings")).toBe(true);
@@ -991,19 +1039,19 @@ test("Site and grid's Run analysis names the criterion without test surfaces, wh
   await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], { 1: CURRENT, 2: NOT_RUN });
   await select("Spring sun on windows");
   openStep("Site and grid");
-  const runButton = buttonIn(container().querySelector(".step-pinned-action")!, "Run analysis");
+  const runButton = buttonIn(pinnedBar(), "Run analysis");
   expect(reasonOf(runButton)).toBe("Add test surfaces to Spring sun on windows to run the analysis");
 });
 
 test("Run analysis asks for the weather file a criterion that is on needs, also when the shown one needs none", async () => {
   const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
   await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2" }], undefined, undefined, [], withoutWeatherFile);
-  expect(reasonOf(buttonIn(panel(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
   openStep("Site and grid");
-  expect(reasonOf(buttonIn(container().querySelector(".step-pinned-action")!, "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
   openStep("Criteria");
   await select("Winter sun on facades");
-  expect(reasonOf(buttonIn(panel(), "Run analysis"))).toBe("Add a weather file to run this mode");
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run this mode");
 });
 
 test("a shared setting refused by another criterion's settings is said in Site and grid with that criterion's name, on no criterion field", async () => {

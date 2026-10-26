@@ -8,7 +8,7 @@ import {
   settingsSaves,
 } from "./chain_service_for_test";
 import {
-  buttonIn, container, endWorkspaceTest, openPanelSection, openPanelSections, openStep, reasonOf, settle, startWorkspaceTest, stepRow, thresholdField, togglePanelSection,
+  buttonIn, container, endWorkspaceTest, openPanelSection, openPanelSections, openStep, pinnedBar, reasonOf, settle, startWorkspaceTest, stepRow, thresholdField, togglePanelSection,
   unmountWorkspace, waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -158,7 +158,7 @@ test("turning the only criterion off and on again: Run analysis waits while it i
   expect(cardLine("Winter sun on facades")).toBe("Off");
   expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(false);
   expect(panel().textContent).toContain("Off: the chain skips this criterion");
-  expect(reasonOf(buttonIn(panel(), "Run analysis"))).toContain("Turn on a criterion to run");
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toContain("Turn on a criterion to run");
   openStep("Inputs");
   expect(criteriaSummary()).toBe("Solar time-based, Off");
   openStep("Criteria");
@@ -179,7 +179,7 @@ test("switch off the first of two criteria, delete the second: the one left is o
   expect(card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.checked).toBe(true);
   expect(service.entries.map((entry) => [entry.id, entry.bypassed])).toEqual([["1", false]]);     // as the service stores it
   expect(container().textContent).not.toContain("Turn on a criterion");
-  expect(buttonIn(panel(), "Run analysis").disabled).toBe(false);
+  expect(buttonIn(pinnedBar(), "Run analysis").disabled).toBe(false);
 });
 
 test("Add criterion with one criterion opens a menu of the modes; choosing one adds a criterion of it, selected, its test surfaces open", async () => {

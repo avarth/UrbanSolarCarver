@@ -1,7 +1,7 @@
 // The analysis settings (UX 5.4, 11), drawn by Site and grid (the shared ones) and by a criterion's panel (its own): the settings in
 // their groups, the grid under Voxel size, the grid-over-budget message in place of the engine's, and messages that name no single
-// setting. Run analysis (RunAnalysisButton) is pinned at the bottom of the panel in Site and grid and ends a criterion's panel,
-// disabled with the first reason that blocks the run, its run's progress under it. Above the groups, after a weather file is added
+// setting. Run analysis (RunAnalysisButton) is pinned at the bottom of the panel, in Site and grid and, with Build envelope and massing,
+// in Criteria (CriteriaRunBar): disabled with the first reason that blocks the run, its run's progress under it. Above the groups, after a weather file is added
 // or replaced in this session, the notice of the period it may call for (weather_change_notice.ts); a criterion's panel shows it
 // under the header of its Settings section instead, open or closed (WeatherChangeRegion).
 import { useId, type ReactNode } from "react";
@@ -314,14 +314,16 @@ interface RunAnalysisButtonProps {
   label?: string;
   /** The progress and outcome of the run the button started (RunProgress). */
   feedback?: ReactNode;
+  /** Drawn as the lesser of two buttons side by side (the build next to Run analysis in Criteria). */
+  secondary?: boolean;
 }
 
 /** A step's run button, pinned under the step list, with the reason it is disabled and the progress of its run under it. */
-export function RunAnalysisButton({ blocker, onRunAnalysis, label = messages.runAnalysis, feedback }: RunAnalysisButtonProps) {
+export function RunAnalysisButton({ blocker, onRunAnalysis, label = messages.runAnalysis, feedback, secondary = false }: RunAnalysisButtonProps) {
   const reasonId = useId();
   return (
     <div className="run-button-area">
-      <button type="button" className="primary-button" disabled={blocker !== null} aria-describedby={blocker !== null ? reasonId : undefined}
+      <button type="button" className={secondary ? "secondary-button" : "primary-button"} disabled={blocker !== null} aria-describedby={blocker !== null ? reasonId : undefined}
               onClick={onRunAnalysis}>
         {label}
       </button>

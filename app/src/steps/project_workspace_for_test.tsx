@@ -296,10 +296,12 @@ export function typeAndLeave(input: HTMLInputElement, text: string) {
   act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
 }
 
-/** Presses Run analysis: pinned under the steps (Site and grid), else in the open criterion's panel. */
+/** The bar pinned under the steps: Run analysis in Site and grid; Run analysis and Build envelope and massing in Criteria. */
+export const pinnedBar = () => container().querySelector<HTMLElement>(".step-pinned-action")!;
+
+/** Presses Run analysis, pinned under the steps. */
 export async function pressRunAnalysis() {
-  const button = [...container().querySelectorAll<HTMLButtonElement>(".step-pinned-action button, .criterion-panel button")]
-    .find((candidate) => candidate.textContent === "Run analysis")!;
+  const button = [...pinnedBar().querySelectorAll<HTMLButtonElement>("button")].find((candidate) => candidate.textContent === "Run analysis")!;
   await act(async () => button.click());
   await settle();
 }
