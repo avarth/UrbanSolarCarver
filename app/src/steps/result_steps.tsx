@@ -14,7 +14,6 @@ import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
 import { CarvingStep, thresholdControlOf, useAutoUpdate } from "./CarvingStep";
 import { EnvelopeAndMassingStep } from "./EnvelopeAndMassingStep";
-import { CarveFurtherSection } from "./CarveFurther";
 import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
 import { RunProgress } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
@@ -190,8 +189,6 @@ export interface ResultStepsContext {
   openStep: (step: StepName) => void;
   goToSetting: (settingName: string) => void;
   onServiceProblem: (error: unknown) => void;
-  /** Makes the built envelope the maximum volume (CarveFurther.tsx); resolves with the reason it was refused, or null. */
-  onCarveFurther: () => Promise<string | null>;
 }
 
 /** A value of the threshold queue: the threshold settings and the mode they were given in (the queue keys it by criterion). */
@@ -440,10 +437,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                   downloads={exportDownloads({ project, meshFormat, envelopeFile: results.summary?.envelope?.mesh_file ?? null, envelope: stages.exporting,
                                                massingFile: results.summary?.massing?.export_mesh_file ?? null, massing: stages.massing,
                                                stagesBeingRebuilt: stagesStillToFinish })}
-                  onDownload={download} formatFeedback={feedback("export_format")} downloadProblem={downloadProblem}
-                  carveFurther={<CarveFurtherSection onCarveFurther={context.onCarveFurther}
-                                                     disabledReason={runs.activeRun !== null ? messages.runInProgress
-                                                       : stages.exporting !== "current" ? messages.carveFurtherNeedsCurrentEnvelope : null} />} />
+                  onDownload={download} formatFeedback={feedback("export_format")} downloadProblem={downloadProblem} />
     ),
   };
 

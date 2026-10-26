@@ -80,3 +80,14 @@ test("two criteria show their cards, then Add criterion, then the selected crite
   expect(add.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(step().textContent).not.toContain("Add another criterion");
 });
+
+test("the chain summary line comes under the cards, before the panel; a step given none shows none", () => {
+  const criteria = [entry("1", "Daylight on windows"), entry("2", "Night cooling")];
+  rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps(criteria)} chainLine="Kept 480 m³, 48 % of the maximum volume" />);
+  const line = step().querySelector(".chain-summary")!;
+  expect(line.textContent).toBe("Kept 480 m³, 48 % of the maximum volume");
+  expect(step().querySelector(".criterion-list")!.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(line.compareDocumentPosition(step().querySelector(".criterion-panel")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  rendered.rerender(<CriteriaStep panel={PANEL} list={listProps(criteria)} />);
+  expect(step().querySelector(".chain-summary")).toBeNull();
+});

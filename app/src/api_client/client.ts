@@ -179,10 +179,6 @@ export async function deleteProject(token: string, name: string, confirmName: st
 export const resetProjectToExample = (token: string, name: string) =>
   requestJson<ProjectDetail>(token, `${projectPath(name)}/reset-to-example`, "POST");
 
-/** Makes the project's exported envelope its maximum volume and returns its settings to a new project's; the project as it is then. */
-export const carveFurther = (token: string, name: string) =>
-  requestJson<ProjectDetail>(token, `${projectPath(name)}/carve-further`, "POST");
-
 /** Opens the project folder in the file manager of this computer. */
 export async function openProjectFolder(token: string, name: string): Promise<void> {
   await send(token, `${projectPath(name)}/open-folder`, "POST");

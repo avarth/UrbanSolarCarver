@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { InputBox, InputsStep, inputsSizeText, type AddInputFiles } from "./InputsStep";
+import { carvedByNote, InputBox, InputsStep, inputsSizeText, type AddInputFiles } from "./InputsStep";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -128,4 +128,16 @@ test("a surroundings file is listed in its box with its triangle count", () => {
   const context = boxTitled("Existing surroundings (optional)");
   expect(context.querySelector(".input-file-name")!.textContent).toBe("neighbours.ply");
   expect(context.querySelector(".input-file-detail")!.textContent).toBe("96 triangles");
+});
+
+test("a project carved further with an earlier version keeps its note on the maximum volume", () => {
+  const chain = [{ mode: "daylight" }, { mode: "time-based" }];
+  const note = "Carved by Daylight, then Solar time-based. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.";
+  expect(carvedByNote([])).toBeNull();
+  expect(carvedByNote(chain)).toBe(note);
+  rendered = renderForTest(
+    <InputsStep files={SOME_FILES} weatherLocation={null} weatherHint={WEATHER_HINT} inputsBounds={null} onAddFiles={async () => []}
+                onRemoveFile={async () => null} disabledReason={null} maxVolumeNote={carvedByNote(chain)} />);
+  expect(boxTitled("Maximum volume").querySelector(".input-box-hint")!.textContent).toBe(note);
+  expect(boxTitled(CONTEXT_TITLE).textContent).not.toContain("Carved by");
 });

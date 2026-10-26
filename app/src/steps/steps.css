@@ -514,7 +514,10 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 
 /* Several criteria: the cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
 .criteria-list-block { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
-.criteria-list-block + .criterion-panel-frame { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
+.criteria-list-block + .criterion-panel-frame,
+.chain-summary + .criterion-panel-frame { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
+/* What the chain kept, under the cards. */
+.chain-summary { margin: 0; font-size: var(--text-body); font-weight: 600; }
 /* The panel and the open mode tiles take the focus after a change of the cards; a ring only when the keyboard put it there. */
 .criterion-panel-frame:focus,
 .add-criterion-open:focus { outline: none; }
@@ -812,13 +815,6 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .download-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
 .download-list li { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); }
 .download-note { color: var(--colour-muted); font-size: var(--text-secondary); }
-
-/* Carve further (CarveFurther.tsx): set apart from the downloads, as the parts of the build step are. */
-.carve-further { display: flex; flex-direction: column; align-items: flex-start; gap: calc(var(--space-unit) * 2);
-                 padding-top: calc(var(--space-unit) * 3); border-top: 1px solid var(--colour-line); }
-.carve-further-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
-.carve-further-question { display: flex; flex-wrap: wrap; align-items: center; gap: calc(var(--space-unit) * 2); }
-.carve-further-question p { flex-basis: 100%; margin: 0; }
 
 .out-of-date-tag {
   padding: 0 var(--space-unit);

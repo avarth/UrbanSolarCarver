@@ -162,7 +162,7 @@ test("threshold moves during a carving run: one more run with the last value, an
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
       refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
     return <>{latest.carvingRule}</>;
   }
@@ -224,7 +224,7 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
       refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
     return <>{latest.carvingRule}</>;
   }
@@ -284,7 +284,7 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
       stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
-      openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
+      openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
     return <>{latest.carvingRule}</>;
   }
@@ -332,7 +332,7 @@ test("Run analysis answered with up to date asks for the stage status again and 
     const steps = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
       stages, refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
     return <>{steps.carvingRule}{steps.criterionRunAnalysis}</>;
   }
@@ -374,7 +374,7 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
     const steps = useResultSteps({
       token: "token", project: "p", form, currentForm: () => formNow, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false,
       stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
-      goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
     });
     return <>{steps.carvingRule}</>;
   }
@@ -385,4 +385,25 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
   expect(changeAndSave).toHaveBeenCalledOnce();
   expect(requests.filter((request) => request.startsWith("POST"))).toEqual([]);
   expect(FakeWebSocket.opened).toHaveLength(0);
+});
+
+test("the export step has no carve further: its downloads end the step, with no title, button or confirmation", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ detail: "none" }), { status: 404 })));
+  const form = initialFormState({ schema: { properties: { mode: { default: "daylight" } } }, modes: [], settings: { mode: "daylight" }, gridPlan: null });
+  function Workspace() {
+    const runs = useRunLoop("token", vi.fn());
+    const steps = useResultSteps({
+      token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
+      stages: ALL_CURRENT, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
+      goToSetting: vi.fn(), onServiceProblem: vi.fn(),
+    });
+    return <>{steps.content.export}</>;
+  }
+  rendered = renderForTest(<Workspace />);
+  await settle();
+  const step = rendered.container.querySelector(".export-step")!;
+  expect(step.querySelector(".carve-further")).toBeNull();
+  expect(step.textContent).not.toMatch(/carve further/i);
+  expect([...step.querySelectorAll("button")].map((button) => button.textContent)).not.toContain("Carve further with another criterion");
+  expect(step.lastElementChild!.classList.contains("download-list")).toBe(true);
 });

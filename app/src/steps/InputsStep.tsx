@@ -10,6 +10,7 @@ import { WarningIcon } from "../settings_form/SettingField";
 import type { Bounds3 } from "../viewer/local_origin";
 import { sizeWarning } from "../viewer/size_check";
 import { formatNumber, formattedNumber } from "./format_numbers";
+import { plainModeName } from "./step_summaries";
 import "./steps.css";
 
 export type InputRole = "max_volume" | "test_surfaces" | "context" | "terrain" | "weather";
@@ -20,6 +21,14 @@ const OPTIONAL_MESH_ROLES: readonly InputRole[] = ["context", "terrain"];
 
 const MESH_FILE_TYPES = ".ply,.obj,.stl,.glb";
 const WEATHER_FILE_TYPE = ".epw";
+
+/**
+ * "Carved by Daylight, then Solar time-based. ..." for a project that was carved further with an earlier version of the app (its
+ * record stays, spec 9); null for one that was not.
+ */
+export function carvedByNote(chain: readonly { mode: string }[]): string | null {
+  return chain.length === 0 ? null : messages.carvedBy(chain.map((step) => plainModeName(step.mode)).join(", then "));
+}
 
 /** Why a request about an input file failed, in words for its box. */
 export function inputProblemText(error: unknown, fileName: string): string {
@@ -47,7 +56,7 @@ interface InputBoxProps {
   weatherNeeded?: boolean;
   /** The files of the box that the 3D view cannot draw, one text each naming the file. */
   drawingProblems?: string[];
-  /** A line under the files: for the maximum volume, how carving further made it (CarveFurther.tsx). */
+  /** A line under the files: for the maximum volume, how carving further made it (carvedByNote). */
   note?: string | null;
   /** The box's title, hint and add button in place of the role's (a criterion's test surfaces: "Protects", the mode's hint). */
   title?: string;

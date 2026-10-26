@@ -143,6 +143,9 @@ export const messages = {
   criterionResultOfVolume: (percentText: string, volumeText: string) => `${percentText} of the volume carved, ${volumeText} removed`,
   criterionScoreCarved: (percentText: string) => `${percentText} of the score carved`,
   criterionVolumeCarved: (percentText: string) => `${percentText} of the volume carved`,
+  // Under the cards of two or more criteria (7.2): what the chain kept of the maximum volume; the volume alone without the share.
+  chainKept: (volumeText: string, percentText: string) => `Kept ${volumeText}, ${percentText} of the maximum volume`,
+  chainKeptVolume: (volumeText: string) => `Kept ${volumeText}`,
   criterionOutOfDate: "Out of date",
   criterionUpdatesFrom: (criterionName: string) => `Updates from ${criterionName}`,
   criterionRunning: "Running",
@@ -388,14 +391,6 @@ export const messages = {
   projectZipDownload: "Whole project (zip)",
   outOfDateFile: "Out of date",
 
-  // Carve further (Export step): the envelope becomes the project's maximum volume, to be carved by another criterion.
-  carveFurtherTitle: "Carve further",
-  carveFurtherButton: "Carve further with another criterion",
-  carveFurtherNote: "Makes this envelope the maximum volume of the project and returns the settings to their defaults, so you can choose " +
-    "the next criterion. The current maximum volume is kept in the project folder.",
-  carveFurtherQuestion: "Replace the maximum volume with this envelope and return the settings to their defaults?",
-  carveFurtherConfirm: "Replace and reset",
-  carveFurtherNeedsCurrentEnvelope: "Build the envelope with the current settings first.",
   // Under the maximum volume file once the project has carved further: the plain mode names in the order they carved it, joined by ", then ".
   carvedBy: (modesInOrder: string) => `Carved by ${modesInOrder}. The earlier maximum volumes are kept in the ` +
     "project folder, in inputs/earlier_max_volumes.",

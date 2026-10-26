@@ -8,7 +8,7 @@ import {
   settingsSaves,
 } from "./chain_service_for_test";
 import {
-  buttonIn, container, endWorkspaceTest, openStep, settle, startWorkspaceTest, stepRow, thresholdField, waitForTheSave,
+  buttonIn, container, endWorkspaceTest, openStep, settle, startWorkspaceTest, stepRow, thresholdField, unmountWorkspace, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -269,4 +269,31 @@ test("duplicating a card adds the copy after the last card and selects it", asyn
   expect(selectedCardName()).toBe("Winter sun on facades copy");
   expect(document.activeElement).toBe(selectButtonOf("Winter sun on facades copy"));
   expect(service.requests).toContain("GET /criteria/3/settings");
+});
+
+const chainLine = () => container().querySelector(".chain-summary")?.textContent?.replace(/[  ]/g, " ") ?? null;
+
+test("the chain summary line under the cards: the last volume and its share of the maximum volume", async () => {
+  await openChain([FACADES, WINDOWS], undefined, (chain) => { chain.summaryChain = { volume_after_each_m3: [610, 480], share_of_max_volume_kept: 0.4813 }; });
+  expect(chainLine()).toBe("Kept 480 m³, 48 % of the maximum volume");
+  const list = container().querySelector(".criterion-list")!;
+  expect(list.compareDocumentPosition(container().querySelector(".chain-summary")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(container().querySelector(".chain-summary")!.compareDocumentPosition(panel()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("the chain summary line says the volume alone when there is no share, and is not there while the summary has no chain", async () => {
+  await openChain([FACADES, WINDOWS], undefined, (chain) => { chain.summaryChain = { volume_after_each_m3: [610, 1234], share_of_max_volume_kept: null }; });
+  expect(chainLine()).toBe("Kept 1 234 m³");
+  unmountWorkspace();
+  await openChain([FACADES, WINDOWS]);
+  expect(chainLine()).toBeNull();
+});
+
+test("the chain summary line needs two criteria that are on", async () => {
+  const chain = { volume_after_each_m3: [610], share_of_max_volume_kept: 0.61 };
+  await openChain([FACADES], undefined, (service) => { service.summaryChain = chain; });
+  expect(chainLine()).toBeNull();
+  unmountWorkspace();
+  await openChain([FACADES, { ...WINDOWS, bypassed: true }], undefined, (service) => { service.summaryChain = chain; });
+  expect(chainLine()).toBeNull();
 });

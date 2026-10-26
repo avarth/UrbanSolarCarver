@@ -3,6 +3,7 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import * as THREE from "three";
+import type { ProjectDetail } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { PipelineStage, StageState } from "./step_summaries";
@@ -38,6 +39,15 @@ test("the 3D view and Export use the envelope file that was built, not a format 
   openStep("Export");
   const envelopeDownload = container().querySelector(".download-list li")!;
   expect(envelopeDownload.textContent).toBe("Carved envelope (PLY)Out of dateBuilt as PLY; the next envelope build writes OBJ.");
+});
+
+test("a project carved further with an earlier version keeps its note on the maximum volume, and the Export step offers no carve further", async () => {
+  service = new FakeService(CARVED, CARVING);
+  await openWorkspace(service, { ...project(CARVED), carving_chain: [{ mode: "daylight" }, { mode: "time-based" }] } as ProjectDetail);
+  expect(container().querySelector(".inputs-step .input-box-hint")!.textContent).toContain(
+    "Carved by Daylight, then Solar time-based. The earlier maximum volumes are kept in the project folder, in inputs/earlier_max_volumes.");
+  openStep("Export");
+  expect(container().textContent).not.toMatch(/carve further/i);
 });
 
 test("the 3D view draws no envelope while its stage is not recorded: a run that wrote it and then failed", async () => {

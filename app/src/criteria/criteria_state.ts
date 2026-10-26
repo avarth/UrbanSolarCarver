@@ -1,6 +1,6 @@
 // What the criteria list needs to know about its cards, with no React: which criteria are on, the status of a card, its result
 // line, where the selection goes when a card is removed, the order after a card is moved, and the files of the other criteria.
-import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
+import type { ChainSummary, CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { formatNumber, formatPercent } from "../steps/format_numbers";
 import type { StageRunState } from "../steps/run_state";
@@ -114,6 +114,18 @@ export function cardResultLine(summary: CriterionCarvingSummary): string | null 
   }
   const volumeText = formatNumber(summary.volume_removed_m3, "m³");
   return isWeighted ? messages.criterionResultOfScore(percentText, volumeText) : messages.criterionResultOfVolume(percentText, volumeText);
+}
+
+/**
+ * "Kept 18 400 m³, 61 % of the maximum volume": the volume the last criterion kept and its share of the maximum volume (the volume
+ * alone when the share is unknown); null without a chain or with fewer than two criteria on, where the card says it.
+ */
+export function chainSummaryLine(chain: ChainSummary | null | undefined, criteriaOn: number): string | null {
+  const volumes = chain?.volume_after_each_m3 ?? [];
+  if (chain === null || chain === undefined || criteriaOn < 2 || volumes.length === 0) return null;
+  const volumeText = formatNumber(volumes[volumes.length - 1], "m³");
+  return chain.share_of_max_volume_kept === null ? messages.chainKeptVolume(volumeText)
+    : messages.chainKept(volumeText, formatPercent(chain.share_of_max_volume_kept * 100));
 }
 
 /**

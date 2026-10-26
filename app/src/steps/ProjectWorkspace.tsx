@@ -10,7 +10,7 @@ import {
   type CriterionEntry, type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import {
-  activeCriteria, cardLineOf, criteriaProtectingNothing, criterionStatus, filesOfOtherCriteria, stagesByCriterionOf, stagesDuringRun, type StagesByCriterion,
+  activeCriteria, cardLineOf, chainSummaryLine, criteriaProtectingNothing, criterionStatus, filesOfOtherCriteria, stagesByCriterionOf, stagesDuringRun, type StagesByCriterion,
 } from "../criteria/criteria_state";
 import type { CriterionListProps } from "../criteria/CriterionList";
 import { CriteriaStep } from "../criteria/CriteriaStep";
@@ -32,8 +32,7 @@ import { sceneHemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
 import { boundsOf, joinedGeometryOf, useInputGeometry, type MeshRole } from "./input_meshes";
-import { InputBox, inputProblemText, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
-import { carvedByNote } from "./CarveFurther";
+import { carvedByNote, InputBox, inputProblemText, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import { criterionProgressOf, runningCriterion, type RunFailure, type RunLoop } from "./run_state";
 import {
@@ -89,8 +88,6 @@ interface ProjectWorkspaceProps {
   startSteps?: WorkspaceSteps;
   /** Told the open step and the step the view shows whenever either changes. */
   onStepsChange?: (steps: WorkspaceSteps) => void;
-  /** Makes the built envelope the maximum volume and reopens the project (CarveFurther.tsx); resolves with the reason it was refused, or null. */
-  onCarveFurther: () => Promise<string | null>;
 }
 
 /** The step open in the panel (null when all are closed) and the step whose layers the 3D view shows: the last one opened. */
@@ -436,7 +433,6 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     criterionNames: criteria.criteria.length < 2 ? undefined : Object.fromEntries(criteria.criteria.map((entry) => [entry.id, entry.name])),
     form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
-    onCarveFurther: props.onCarveFurther,
   });
 
   // The cards (CriteriaStep): their lines from the criteria's stages and the run summary. While a run of the project goes on, the
@@ -496,7 +492,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={criterionList} load={selection.load}
+      <CriteriaStep list={criterionList} load={selection.load} chainLine={chainSummaryLine(resultSteps.results.summary?.chain, active.length)}
                     panelProblem={panelProblem} panel={
         <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}

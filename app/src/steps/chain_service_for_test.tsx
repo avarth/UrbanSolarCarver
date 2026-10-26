@@ -3,7 +3,7 @@
 // Each test file mocks ../viewer/scene with FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest.
 import { act } from "react";
 import { expect } from "vitest";
-import type { CriterionCarvingSummary, CriterionEntry, ProjectDetail } from "../api_client/client";
+import type { ChainSummary, CriterionCarvingSummary, CriterionEntry, ProjectDetail } from "../api_client/client";
 import { plainModeName, type PipelineStage, type StageState } from "./step_summaries";
 import {
   CARVED, CARVING, CRITERION_KEYS, FakeService, buttonIn, container, json, openStep, openWorkspace, project, settle, stepRow,
@@ -23,6 +23,8 @@ export class ChainService extends FakeService {
   entries: CriterionEntry[];
   criterionStages: Record<string, CriterionStages>;
   summaryCriteria: CriterionCarvingSummary[] = [];
+  /** The chain the run summary reports (RunSummary.chain); null: the summary has none. */
+  summaryChain: ChainSummary | null = null;
   /** The body of every PATCH criteria/{id}, with the id. */
   readonly patches: { id: string; body: Record<string, unknown> }[] = [];
   /** While set for a criterion, GET criteria/{id}/settings answers once the promise resolves. */
@@ -61,7 +63,7 @@ export class ChainService extends FakeService {
     }
     if (path === "/run/summary") {
       this.requests.push(`${method} ${fullPath}`);
-      return json({ ...this.summary, criteria: this.summaryCriteria });
+      return json({ ...this.summary, criteria: this.summaryCriteria, chain: this.summaryChain });
     }
     if (path === "/run/score-points" || path === "/run/carved-by-criterion") {
       this.requests.push(`${method} ${fullPath}`);

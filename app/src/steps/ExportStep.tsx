@@ -112,11 +112,9 @@ interface ExportStepProps {
   formatFeedback: ReactNode;
   /** Why the last download failed, in the service's words; null when it did not. */
   downloadProblem: string | null;
-  /** The carve-further section (CarveFurther.tsx), under the downloads. */
-  carveFurther?: ReactNode;
 }
 
-export function ExportStep({ form, downloads, disabledReason, formatRunReason, onFormatChange, onDownload, formatFeedback, downloadProblem, carveFurther }: ExportStepProps) {
+export function ExportStep({ form, downloads, disabledReason, formatRunReason, onFormatChange, onDownload, formatFeedback, downloadProblem }: ExportStepProps) {
   const reasonId = useId();
   return (
     <div className="export-step">
@@ -136,7 +134,6 @@ export function ExportStep({ form, downloads, disabledReason, formatRunReason, o
         ))}
       </ul>
       {downloadProblem !== null && <p className="setting-error"><WarningIcon /><span>{downloadProblem}</span></p>}
-      {carveFurther}
     </div>
   );
 }
