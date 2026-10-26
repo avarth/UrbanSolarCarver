@@ -255,8 +255,32 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Sun Path */
+        /**
+         * Sun Path
+         * @description The sun path of a criterion's stored settings (default: the first criterion that is on, the first one when none is).
+         */
         get: operations["sun_path"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/criteria/{criterion_id}/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Criterion Settings
+         * @description The settings of one criterion with the shared ones, without the paths and device the service owns. It reads the stored
+         *     settings only: the test surface files are not looked at, so it answers at once (the project detail looks at them for the stage status).
+         */
+        get: operations["criterion_settings"];
         put?: never;
         post?: never;
         delete?: never;
@@ -354,6 +378,28 @@ export interface paths {
          * @description Save the settings: the shared ones, and the criterion ones to the criterion *criterion* (the only criterion when there is one).
          */
         put: operations["save_config"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/shared-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Save Shared Settings
+         * @description Save the settings shared by the criteria (voxel size, north, ...); no mode is needed. A key that is a criterion's setting is
+         *     refused (422, the fields named); a value that makes any criterion that is on invalid is refused too. The reply holds the shared
+         *     settings as stored and the grid plan.
+         */
+        put: operations["save_shared_settings"];
         post?: never;
         delete?: never;
         options?: never;
@@ -790,6 +836,8 @@ export interface components {
             /** Field Errors */
             field_errors: components["schemas"]["FieldErrorReply"][];
             grid_plan: components["schemas"]["GridPlanReply"] | null;
+            /** Criterion */
+            criterion?: string | null;
         };
         /**
          * ConfigReply
@@ -855,6 +903,8 @@ export interface components {
             voxels_at_start: number | null;
             /** Volume Kept M3 */
             volume_kept_m3: number | null;
+            /** Volume Removed M3 */
+            volume_removed_m3?: number | null;
         };
         /**
          * CriterionEntry
@@ -891,6 +941,18 @@ export interface components {
         CriterionOrderRequest: {
             /** Ids */
             ids: string[];
+        };
+        /**
+         * CriterionSettingsReply
+         * @description The settings of one criterion with the shared ones, without the paths and device the service owns.
+         */
+        CriterionSettingsReply: {
+            /** Criterion Id */
+            criterion_id: string;
+            /** Settings */
+            settings: {
+                [key: string]: unknown;
+            };
         };
         /**
          * EnvelopeSummary
@@ -1810,7 +1872,10 @@ export interface operations {
     };
     sun_path: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description The id of a criterion; the first criterion that is on when omitted (the first one when none is). */
+                criterion?: string | null;
+            };
             header?: never;
             path: {
                 name: string;
@@ -1826,6 +1891,56 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SunPath"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    criterion_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                criterion_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriterionSettingsReply"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
             /** @description Validation Error */
@@ -2107,6 +2222,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Settings that do not validate (the fields), or a request that cannot be served as sent (a message). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigErrorReply"] | components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    save_shared_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConfigValuesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigReply"];
                 };
             };
             /** @description A run of this project is active. */

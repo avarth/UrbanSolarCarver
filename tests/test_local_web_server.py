@@ -1634,3 +1634,107 @@ def test_the_criteria_routes_need_the_token_and_the_openapi_document_describes_t
         assert {option["$ref"].rsplit("/", 1)[-1] for option in refused["anyOf"]} == {"ConfigErrorReply", "ErrorDetailReply"}
     score_points = next(parameter for parameter in paths["/api/projects/{name}/run/score-points"]["get"]["parameters"] if parameter["name"] == "criterion")
     assert "last criterion that is on" in score_points["description"]
+
+
+# ---- What the app needs besides the criteria routes: shared settings, a criterion's settings, its sun path, its refusals ----
+
+def test_shared_settings_are_saved_without_a_mode_and_refused_with_a_criterion_key(client_with_two_criteria):
+    client = client_with_two_criteria
+    criteria_before = criteria_of(client)
+    saved = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["settings"]["voxel_size"] == 2.0 and "mode" not in saved.json()["settings"]
+    assert saved.json()["grid_plan"]["voxel_size"] == 2.0
+    assert criteria_of(client) == criteria_before
+    assert client.get("/api/projects/p", params={"criterion": "2"}).json()["settings"]["voxel_size"] == 2.0
+    refused = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 3.0, "threshold": "carve_fraction"}})
+    assert refused.status_code == 422
+    assert [error["field"] for error in refused.json()["field_errors"]] == ["threshold"] and refused.json()["criterion"] is None
+    broken = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 0.0}})
+    assert broken.status_code == 422 and broken.json()["field_errors"][0]["field"] == "voxel_size"
+    over_budget = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 0.0125}})
+    assert over_budget.status_code == 422 and over_budget.json()["grid_plan"]["total_voxels"] > over_budget.json()["grid_plan"]["budget_voxels"]
+    assert client.get("/api/projects/p").json()["settings"]["voxel_size"] == 2.0      # nothing was stored by the refusals
+    assert client.put("/api/projects/missing/shared-settings", json={"values": {}}).status_code == 404
+
+
+def test_shared_settings_are_409_during_a_run_and_need_the_token(client_with_blocking_run, projects_folder):
+    client, run_id = client_with_blocking_run
+    reply = client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}})
+    assert reply.status_code == 409 and reply.json()["detail"] == "A run of project 'p' is active. Wait for it to finish or cancel it."
+    assert build_client(projects_folder, authorized=False)[0].put("/api/projects/p/shared-settings", json={"values": {}}).status_code == 401
+
+
+def test_criterion_settings_read_does_not_digest_test_surfaces(client_with_two_criteria, monkeypatch):
+    from urbansolarcarver.local_web_service import test_surfaces
+
+    def not_called(*arguments, **keywords):
+        raise AssertionError("the settings of a criterion are read without looking at its test surface files")
+    monkeypatch.setattr(test_surfaces, "fingerprint", not_called)
+    client = client_with_two_criteria
+    assert client.put("/api/projects/p/shared-settings", json={"values": {"voxel_size": 2.0}}).status_code == 200
+    second = client.get("/api/projects/p/criteria/2/settings")
+    assert second.status_code == 200
+    assert second.json()["criterion_id"] == "2" and second.json()["settings"]["mode"] == "time-based"
+    first = client.get("/api/projects/p/criteria/1/settings").json()
+    assert first["criterion_id"] == "1" and first["settings"]["mode"] == "daylight"
+    assert first["settings"]["voxel_size"] == second.json()["settings"]["voxel_size"]       # the shared settings come with it
+    for service_owned in ("max_volume_path", "test_surface_path", "out_dir", "device", "epw_path"):
+        assert service_owned not in first["settings"] and service_owned not in second.json()["settings"]
+    assert client.get("/api/projects/p/criteria/9/settings").status_code == 404
+    assert "'9'" in client.get("/api/projects/p/criteria/9/settings").json()["detail"]
+    assert client.get("/api/projects/missing/criteria/1/settings").status_code == 404
+
+
+@pytest.mark.skipif(not GOLDEN_EPW.is_file(), reason="the bundled weather file is missing")
+def test_sun_path_of_a_chosen_criterion(client_with_two_criteria):
+    client = client_with_two_criteria
+    assert upload(client, "p", "weather", ("golden.epw", GOLDEN_EPW.read_bytes())).status_code == 200
+    assert client.get("/api/projects/p/sun-path").json() == {"days": []}          # the first criterion that is on: daylight, no sun path
+    chosen = client.get("/api/projects/p/sun-path", params={"criterion": "2"}).json()
+    assert [day["date"] for day in chosen["days"]] == ["12-21"]
+    assert client.get("/api/projects/p/sun-path", params={"criterion": "1"}).json() == {"days": []}
+    assert client.patch("/api/projects/p/criteria/1", json={"bypassed": True}).status_code == 200
+    assert client.get("/api/projects/p/sun-path").json() == chosen                 # the first criterion that is on is now criterion 2
+    assert client.patch("/api/projects/p/criteria/2", json={"bypassed": True}).status_code == 200
+    assert client.get("/api/projects/p/sun-path").json() == {"days": []}           # none on: the first criterion, daylight
+    unknown = client.get("/api/projects/p/sun-path", params={"criterion": "9"})
+    assert unknown.status_code == 404 and "'9'" in unknown.json()["detail"]
+    assert "criterion" in {parameter["name"] for parameter in openapi_document()["paths"]["/api/projects/{name}/sun-path"]["get"]["parameters"]}
+
+
+def test_the_project_list_shows_the_first_active_criterions_mode(client_with_two_criteria):
+    client = client_with_two_criteria
+    assert [row["mode"] for row in client.get("/api/projects").json()] == ["daylight"]
+    client.patch("/api/projects/p/criteria/1", json={"bypassed": True})
+    assert [row["mode"] for row in client.get("/api/projects").json()] == ["time-based"]
+    client.patch("/api/projects/p/criteria/2", json={"bypassed": True})
+    assert [row["mode"] for row in client.get("/api/projects").json()] == ["daylight"]      # none on: the first criterion
+    client.patch("/api/projects/p/criteria/1", json={"bypassed": False})
+    client.put("/api/projects/p/criteria/order", json={"ids": ["2", "1"]})
+    assert [row["mode"] for row in client.get("/api/projects").json()] == ["daylight"]      # criterion 2 is first but bypassed
+
+
+def test_a_run_refused_for_a_criterions_settings_names_it(client_with_two_criteria, projects_folder):
+    client = client_with_two_criteria
+    assert client.patch("/api/projects/p/criteria/2", json={"values": {"mode": "daylight"}}).status_code == 200
+    assert upload_to_criterion(client, "2", OTHER_SURFACE).status_code == 200
+    store = ProjectStore(projects_folder)
+    project_json = store.read_project_json("p")
+    next(entry for entry in project_json.criteria if entry.id == "2").settings["start_month"] = 13       # as a hand edit would
+    store.write_project_json("p", project_json)
+    refused = client.post("/api/projects/p/runs", json={"produce": ["thresholding"]})
+    assert refused.status_code == 422
+    assert refused.json()["criterion"] == "2" and [error["field"] for error in refused.json()["field_errors"]] == ["start_month"]
+
+
+def test_a_rejected_criterion_change_names_the_criterion_in_the_reply(client_with_two_criteria):
+    client = client_with_two_criteria
+    reply = client.patch("/api/projects/p/criteria/2", json={"values": {"mode": "time-based", "start_month": 13}})
+    assert reply.status_code == 422 and reply.json()["criterion"] == "2" and reply.json()["field_errors"]
+    elsewhere = client.put("/api/projects/p/config", params={"criterion": "2"}, json={"values": {"mode": "time-based", "start_month": 13}})
+    assert elsewhere.status_code == 422 and elsewhere.json()["criterion"] is None
+    schema = openapi_document()["components"]["schemas"]
+    assert "criterion" in schema["ConfigErrorReply"]["properties"]
+    assert {"criterion_id", "settings"} <= set(schema["CriterionSettingsReply"]["properties"])
+    assert "volume_removed_m3" in schema["CriterionCarvingSummary"]["properties"]

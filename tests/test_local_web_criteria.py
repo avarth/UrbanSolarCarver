@@ -326,3 +326,105 @@ def test_chain_config_document_lists_the_criteria_that_are_on(tmp_path):
     (tmp_path / "inputs" / "joined").mkdir(parents=True)
     (tmp_path / "inputs" / "joined" / "terrain.ply").write_bytes(b"ply")
     assert chain_config_document({}, entries[:1], tmp_path)["terrain_path"] == "inputs/joined/terrain.ply"
+
+
+# ---- Shared settings on their own ----
+
+def _chain_of_two_with_a_max_volume(tmp_path):
+    store = ProjectStore(tmp_path, device="cpu")
+    store.create("p", "daylight")
+    store.add_input("p", "max_volume", "volume.ply", _box_bytes())
+    store.add_criterion("p", "time-based")
+    return store
+
+
+def test_shared_settings_save_without_a_mode(tmp_path):
+    store = _chain_of_two_with_a_max_volume(tmp_path)
+    criteria_before = [entry.model_dump() for entry in store.criteria("p")]
+    reply = store.write_shared_settings("p", {"voxel_size": 2.0, "north_deg": 15})
+    assert reply.settings["voxel_size"] == 2.0 and reply.settings["north_deg"] == 15.0 and "mode" not in reply.settings
+    assert reply.grid_plan is not None and reply.grid_plan.voxel_size == 2.0
+    assert [entry.model_dump() for entry in store.criteria("p")] == criteria_before     # every criterion's settings are as they were
+    stored = _stored(store, "p")
+    assert stored["voxel_size"] == 2.0 and stored["north_deg"] == 15.0 and stored["device"] == "cpu"
+    assert [criterion["id"] for criterion in stored["criteria"]] == ["1", "2"]
+    for criterion_id in ("1", "2"):
+        assert store.read_settings("p", criterion_id)["voxel_size"] == 2.0
+        assert store.load_project_config("p", criterion_id).north_deg == 15.0
+    load_chain(str(_config_path(store, "p")))
+    # a later save keeps the shared settings it does not send again
+    again = store.write_shared_settings("p", {"voxel_size": 3.0})
+    assert again.settings["voxel_size"] == 3.0 and again.settings["north_deg"] == 15.0
+    # the paths and the device are the service's, whatever is sent
+    store.write_shared_settings("p", {"voxel_size": 3.0, "out_dir": "elsewhere", "device": "cuda", "epw_path": "x.epw",
+                                      "grid_step": 0.5, "score_rule": "summed"})
+    stored = _stored(store, "p")
+    assert stored["out_dir"] == "run" and stored["device"] == "cpu" and stored["epw_path"] == "inputs/weather.epw"
+    assert "grid_step" not in stored and "score_rule" not in stored
+
+
+def test_shared_settings_save_before_a_max_volume_has_no_grid_plan(tmp_path):
+    store = ProjectStore(tmp_path)
+    store.create("p", "daylight")
+    assert store.write_shared_settings("p", {"voxel_size": 2.0}).grid_plan is None
+    assert store.read_settings("p")["voxel_size"] == 2.0
+
+
+def test_shared_settings_refuse_criterion_keys(tmp_path):
+    store = _chain_of_two_with_a_max_volume(tmp_path)
+    project_json_path, config_path = store.open("p") / "project.json", _config_path(store, "p")
+    json_before, config_before = project_json_path.read_bytes(), config_path.read_bytes()
+    with pytest.raises(ConfigError) as refused:
+        store.write_shared_settings("p", {"voxel_size": 2.0, "threshold": "carve_fraction", "mode": "daylight"})
+    assert [error.field for error in refused.value.errors] == ["mode", "threshold"]
+    assert "threshold" in str(refused.value) and "criterion" in str(refused.value)
+    assert project_json_path.read_bytes() == json_before and config_path.read_bytes() == config_before
+
+
+def test_a_shared_setting_that_breaks_a_criterion_is_refused(tmp_path, monkeypatch):
+    store = _chain_of_two_with_a_max_volume(tmp_path)
+    project_json_path, config_path = store.open("p") / "project.json", _config_path(store, "p")
+    json_before, config_before = project_json_path.read_bytes(), config_path.read_bytes()
+    with pytest.raises(ConfigError) as refused:
+        store.write_shared_settings("p", {"voxel_size": 0.0})
+    assert [error.field for error in refused.value.errors] == ["voxel_size"]
+    assert project_json_path.read_bytes() == json_before and config_path.read_bytes() == config_before
+    # every criterion that is on is checked, not only the first: a config that fails for the second one alone refuses the save
+    original = ProjectStore._config_from_browser_values
+
+    def fails_for_the_second(self, project_folder, values, criterion_id):
+        if criterion_id == "2":
+            raise ConfigError("criterion 2 does not accept this")
+        return original(self, project_folder, values, criterion_id)
+    monkeypatch.setattr(ProjectStore, "_config_from_browser_values", fails_for_the_second)
+    with pytest.raises(ConfigError, match="criterion 2"):
+        store.write_shared_settings("p", {"voxel_size": 2.0})
+    assert project_json_path.read_bytes() == json_before and config_path.read_bytes() == config_before
+    # a bypassed criterion takes no part in the check
+    monkeypatch.undo()
+    store.update_criterion("p", "2", bypassed=True)
+    monkeypatch.setattr(ProjectStore, "_config_from_browser_values", fails_for_the_second)
+    assert store.write_shared_settings("p", {"voxel_size": 2.0}).settings["voxel_size"] == 2.0
+
+
+def test_a_shared_setting_over_the_grid_budget_is_refused_with_the_plan(tmp_path):
+    from urbansolarcarver.local_web_service.projects import GridOverBudget
+    store = _chain_of_two_with_a_max_volume(tmp_path)
+    config_before = _config_path(store, "p").read_bytes()
+    with pytest.raises(GridOverBudget) as refused:
+        store.write_shared_settings("p", {"voxel_size": 0.0125})
+    assert refused.value.grid_plan.total_voxels > refused.value.grid_plan.budget_voxels
+    assert _config_path(store, "p").read_bytes() == config_before
+
+
+def test_a_rejected_criterion_change_names_the_criterion(tmp_path):
+    from urbansolarcarver.local_web_service.projects import CriterionConfigError
+    store = ProjectStore(tmp_path)
+    store.create("p", "daylight")
+    store.add_criterion("p", "time-based")
+    for attempt in (lambda: store.update_criterion("p", "2", values={"mode": "time-based", "start_month": 13}),
+                    lambda: store.update_criterion("p", "2", values={"mode": "no-such-mode"})):
+        with pytest.raises(CriterionConfigError) as refused:
+            attempt()
+        assert refused.value.criterion == "2" and refused.value.errors
+        assert isinstance(refused.value, ConfigError)

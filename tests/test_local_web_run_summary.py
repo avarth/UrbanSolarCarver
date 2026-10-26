@@ -74,6 +74,20 @@ def test_the_summary_lists_each_criterion_and_the_chain(project_with_inputs):
     assert summary.chain.share_of_max_volume_kept == pytest.approx(240.0 / (100 * VOXEL_SIZE ** 3))
 
 
+def test_the_summary_gives_the_volume_each_criterion_removed(project_with_inputs):
+    store, name = project_with_inputs
+    run = write_chain_of_two_with_results(store, name)
+    first, second = build_run_summary(store, name).criteria
+    assert first.volume_removed_m3 == (100 - 60) * VOXEL_SIZE ** 3 == 320.0
+    assert second.volume_removed_m3 == (60 - 30) * VOXEL_SIZE ** 3 == 240.0
+    # unknown without the size of a voxel (no preprocessing manifest) and without thresholding output
+    shutil.rmtree(run / "criteria" / "1" / "preprocessing")
+    shutil.rmtree(run / "criteria" / "2" / "thresholding")
+    first, second = build_run_summary(store, name).criteria
+    assert first.volume_removed_m3 is None and first.volume_kept_m3 is None
+    assert second.volume_removed_m3 is None and second.voxels_at_start is None
+
+
 def test_a_bypassed_criterion_is_left_out_of_the_summary(project_with_inputs):
     store, name = project_with_inputs
     write_chain_of_two_with_results(store, name)

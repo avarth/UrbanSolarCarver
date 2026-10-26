@@ -130,6 +130,9 @@ UrbanSolarCarver/
 | `PUT /projects/{name}/criteria/{id}/test-surfaces/{file}` | Use a stored file of another criterion |
 | `DELETE /projects/{name}/criteria/{id}/test-surfaces/{file}` | Remove a file from a criterion |
 | `GET /projects/{name}`, `PUT /projects/{name}/config` | Take an optional `criterion` (default: the first for a read, the only one for a save; a save with several criteria and none named is a 422). `ProjectDetail` gains `criteria` and `criterion_status` |
+| `PUT /projects/{name}/shared-settings` | Save the settings the criteria share (body `values`, no mode); a criterion's own key is a 422 that names it, and so is a value that makes a criterion that is on invalid. Returns the shared settings as stored and the `grid_plan` |
+| `GET /projects/{name}/criteria/{id}/settings` | The settings of one criterion with the shared ones (`criterion_id`, `settings`), read without looking at the test surface files |
+| `GET /projects/{name}/sun-path` | Takes an optional `criterion` (default: the first criterion that is on) |
 | `GET /projects/{name}/run/score-points`, `.../run/sky-patches` | Take an optional `criterion` (default: the last criterion that is on) |
 | `GET /projects/{name}/run/carved-by-criterion` | One byte per voxel: the criterion that removed it (format in [Browser UI](ui.md#criteria-in-a-project)) |
 

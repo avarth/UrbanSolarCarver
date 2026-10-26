@@ -20,7 +20,7 @@ from ..run_context import RunContext
 from ..stage_settings import PIPELINE_STAGES
 from . import test_surfaces
 from .api_models import StartRunReply
-from .projects import RUN_FOLDER, ProjectError, ProjectStore
+from .projects import RUN_FOLDER, ProjectError, ProjectStore, naming_criterion
 from .stage_records import ANALYSIS_STAGES, RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_stages, run_settings
 
 _log = logging.getLogger(__name__)
@@ -151,8 +151,9 @@ class RunWorker:
     def start(self, name: str, produce: list[str]) -> StartRunReply:
         """Start a run that brings *produce* up to date, or reply that nothing needs to run.
 
-        Raises RunConflict when a run is active, MissingInputs when the project lacks input files, ConfigError when the stored
-        settings of a criterion that is on are not valid (a bypassed one takes no part), ValueError for an unknown stage name in *produce*.
+        Raises RunConflict when a run is active, MissingInputs when the project lacks input files, CriterionConfigError (a ConfigError
+        naming the criterion) when the stored settings of a criterion that is on are not valid (a bypassed one takes no part),
+        ValueError for an unknown stage name in *produce*.
         """
         with self._store.project_lock(name), self._start_lock:
             if self._active is not None:
@@ -160,8 +161,9 @@ class RunWorker:
             self._store.migrate_to_criteria(name)
             self._store.rebuild_joined_test_surfaces_without_normals(name)
             settings = run_settings(self._store, name)
-            for criterion_settings in settings.criteria.values():
-                self._store.config_from_settings(name, criterion_settings)
+            for criterion_id, criterion_settings in settings.criteria.items():
+                with naming_criterion(criterion_id):    # the refusal says whose settings it is
+                    self._store.config_from_settings(name, criterion_settings)
             absent_roles = missing_inputs(self._store, name)
             if absent_roles:
                 raise MissingInputs(absent_roles, {criterion.id: criterion.name for criterion in self._store.criteria(name)})

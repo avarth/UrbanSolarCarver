@@ -73,9 +73,11 @@ def _criterion_results(run_folder: Path, criterion: CriterionEntry) -> tuple[Cri
     else:
         voxels_at_start = diagnostic["voxels_occupied"]
     volume_kept = None if carving is None or voxel_size is None else carving.voxels_kept * voxel_size ** 3
+    volume_removed = (None if carving is None or voxel_size is None or voxels_at_start is None
+                      else (voxels_at_start - carving.voxels_kept) * voxel_size ** 3)
     return CriterionCarvingSummary(
         id=criterion.id, name=criterion.name, colour=criterion.colour, mode=canonical_mode_name(criterion.settings.get("mode")),
-        carving=carving, voxels_at_start=voxels_at_start, volume_kept_m3=volume_kept), voxel_size
+        carving=carving, voxels_at_start=voxels_at_start, volume_kept_m3=volume_kept, volume_removed_m3=volume_removed), voxel_size
 
 
 def _chain_summary(results: list[tuple[CriterionCarvingSummary, float | None]]) -> ChainSummary | None:

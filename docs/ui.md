@@ -101,6 +101,14 @@ A project holds an ordered list of **criteria**, the carving passes of a chain (
 - A new criterion has no test surfaces. A run refuses to start while no criterion is on (*Turn on a criterion to run.*) or while one that is on protects nothing (*Add test surfaces to <name>.*). The checks a run starts with look at the criteria that are on only: the settings of each must validate, and the weather file is needed when one of them reads it. A bypassed criterion needs nothing. A criterion is named after its mode as the app shows it ("Solar time-based", "Daylight", ...) until it is renamed; one that gets its first file and has not been renamed is named "<mode> on <file name>", for example "Daylight on roofs". A project from an earlier version names its criterion 1 the same way.
 - The Inputs step's upload and removal of test surfaces go to the only criterion; with several they are refused with a 422.
 
+**Settings routes**
+
+- `PUT /api/projects/<name>/shared-settings` saves the settings the criteria share (voxel size, north and the like) from a body `{values}`, with no mode; the values are merged into the stored shared settings. A key that is a criterion's own setting is refused with a 422 that names it, and so is a value that makes any criterion that is on invalid or a grid over the budget. Nothing is stored then. The reply holds the shared settings as stored and the `grid_plan`.
+- `GET /api/projects/<name>/criteria/<id>/settings` answers `{criterion_id, settings}`: the criterion's settings with the shared ones, without the paths and device the service owns.
+- `GET /api/projects/<name>/sun-path` takes an optional `criterion` (default: the first criterion that is on, the first one when none is).
+- A 422 that comes from one criterion's settings (a refused run start, a rejected `PATCH` of a criterion) carries `criterion`, its id, next to `field_errors`.
+- The project list's `mode` is the mode of the first criterion that is on. `criteria` in the run summary gain `volume_removed_m3`, the volume a criterion removed (null without results).
+
 **What goes out of date**
 
 | Change | Out of date |

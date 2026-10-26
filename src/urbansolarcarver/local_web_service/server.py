@@ -37,7 +37,7 @@ from ..stage_settings import PIPELINE_STAGES
 from . import folder_picker, user_preferences
 from .api_models import (
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
-    CriterionEntry, CriterionOrderRequest, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
+    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
     UpdateCriterionRequest,
 )
@@ -45,8 +45,10 @@ from .carve_further import carve_further
 from .example_catalog import EXAMPLE_PROJECTS_FOLDER, EXAMPLE_WEATHER_FILE_NAME, read_examples
 from .folder_picker import FolderPickerUnavailable
 from .gpu_warm_up import GpuWarmUp
+from .criteria import active_criteria, find_criterion
 from .projects import (
-    CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, GridOverBudget, ProjectError, ProjectStore, example_of_project, validate_project_name,
+    CONFIG_FILE_NAME, MESH_ROLES, RUN_FOLDER, WEATHER_ROLE, CriterionConfigError, GridOverBudget, ProjectError, ProjectStore, example_of_project,
+    validate_project_name,
 )
 from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
@@ -78,7 +80,8 @@ _CONFIG_OR_MESSAGE_ERROR = {
     "description": "Settings that do not validate (the fields), or a request that cannot be served as sent (a message).",
 }
 CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first one when omitted."
-RESULTS_CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the last criterion that is on when omitted."
+SUN_PATH_CRITERION_QUERY_DESCRIPTION = "The id of a criterion; the first criterion that is on when omitted (the first one when none is)."
+RESULTS_CRITERION_QUERY_DESCRIPTION ="The id of a criterion; the last criterion that is on when omitted."
 
 
 class SecurityMiddleware:
@@ -242,7 +245,8 @@ def _add_exception_handlers(app: FastAPI) -> None:
         field_errors = [FieldErrorReply(field=field_error.field, message=field_error.message) for field_error in error.errors]
         reply = ConfigErrorReply(
             field_errors=field_errors or [FieldErrorReply(field=None, message=str(error))],
-            grid_plan=error.grid_plan if isinstance(error, GridOverBudget) else None)
+            grid_plan=error.grid_plan if isinstance(error, GridOverBudget) else None,
+            criterion=error.criterion if isinstance(error, CriterionConfigError) else None)
         return JSONResponse(reply.model_dump(mode="json"), status_code=422)
 
 
@@ -432,9 +436,23 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def project_stage_status(name: str) -> StageStatusReply:
         return stage_status_reply(folder_in_use.store, name)
 
-    @router.get("/projects/{name}/sun-path")
-    def sun_path(name: str) -> SunPath:
-        return sun_path_for_config(folder_in_use.store.load_project_config(name))
+    @router.get("/projects/{name}/sun-path", responses={404: _CRITERION_RESPONSES[404]})
+    def sun_path(name: str, criterion: str | None = Query(None, description=SUN_PATH_CRITERION_QUERY_DESCRIPTION)) -> SunPath:
+        """The sun path of a criterion's stored settings (default: the first criterion that is on, the first one when none is)."""
+        store = folder_in_use.store
+        if criterion is None:
+            active = active_criteria(store.criteria(name))
+            criterion = active[0].id if active else None
+        return sun_path_for_config(store.load_project_config(name, criterion))
+
+    @router.get("/projects/{name}/criteria/{criterion_id}/settings", responses={404: _CRITERION_RESPONSES[404]})
+    def criterion_settings(name: str, criterion_id: str) -> CriterionSettingsReply:
+        """The settings of one criterion with the shared ones, without the paths and device the service owns. It reads the stored
+        settings only: the test surface files are not looked at, so it answers at once (the project detail looks at them for the stage status)."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            entry = find_criterion(store.read_project_json(name), criterion_id)      # 404 for an unknown criterion
+            return CriterionSettingsReply(criterion_id=entry.id, settings=store.read_settings(name, entry.id))
 
     @router.get("/projects/{name}/cold-period", responses=_ERROR_RESPONSES)
     def cold_period(name: str, base_temperature: float = Query(ge=-60, le=60, allow_inf_nan=False)) -> ColdPeriodReply:
@@ -479,6 +497,14 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """Save the settings: the shared ones, and the criterion ones to the criterion *criterion* (the only criterion when there is one)."""
         with writable_project(name) as store:
             return store.write_config_from_values(name, request.values, criterion)
+
+    @router.put("/projects/{name}/shared-settings", responses={409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
+    def save_shared_settings(name: str, request: ConfigValuesRequest) -> ConfigReply:
+        """Save the settings shared by the criteria (voxel size, north, ...); no mode is needed. A key that is a criterion's setting is
+        refused (422, the fields named); a value that makes any criterion that is on invalid is refused too. The reply holds the shared
+        settings as stored and the grid plan."""
+        with writable_project(name) as store:
+            return store.write_shared_settings(name, request.values)
 
     @router.get("/criterion-keys")
     def criterion_keys() -> list[str]:

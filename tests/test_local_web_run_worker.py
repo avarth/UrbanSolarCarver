@@ -337,6 +337,7 @@ def test_a_criterion_that_is_on_and_does_not_validate_refuses_the_run(chain_of_t
     with pytest.raises(ConfigError) as refused:
         make_worker(store, handle_request=engine).start(name, ["thresholding"])
     assert [error.field for error in refused.value.errors] == ["start_month"]
+    assert refused.value.criterion == "2"       # the refusal names the criterion whose settings it comes from
     assert engine.requests == []
 
 

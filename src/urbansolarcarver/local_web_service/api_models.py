@@ -135,6 +135,12 @@ class ConfigReply(BaseModel):
     grid_plan: GridPlanReply | None     # None before a max volume is uploaded
 
 
+class CriterionSettingsReply(BaseModel):
+    """The settings of one criterion with the shared ones, without the paths and device the service owns."""
+    criterion_id: str
+    settings: dict
+
+
 class FieldErrorReply(BaseModel):
     """One invalid setting."""
     field: str | None           # None for a check that involves several settings
@@ -145,6 +151,7 @@ class ConfigErrorReply(BaseModel):
     """The body of a rejected settings save."""
     field_errors: list[FieldErrorReply]
     grid_plan: GridPlanReply | None     # the rejected plan when the error is the voxel budget
+    criterion: str | None = None        # the id of the criterion whose settings are invalid (a run start, a criterion change); None for shared ones
 
 
 class CarvingSummary(BaseModel):
@@ -185,6 +192,7 @@ class CriterionCarvingSummary(BaseModel):
     carving: CarvingSummary | None      # None without thresholding output
     voxels_at_start: int | None         # the voxels it could carve: the previous criterion's kept voxels, the max volume's filled ones for the first
     volume_kept_m3: float | None        # its kept voxels times the voxel size cubed; None without a thresholding and a preprocessing manifest
+    volume_removed_m3: float | None = None      # the voxels it started with minus those it kept, times the voxel size cubed; None when either is unknown
 
 
 class ChainSummary(BaseModel):

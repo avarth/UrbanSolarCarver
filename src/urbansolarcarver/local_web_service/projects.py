@@ -21,9 +21,9 @@ import trimesh
 import yaml
 from pydantic import ValidationError
 
-from ..chain_config import load_chain
+from ..chain_config import CRITERION_KEYS, load_chain
 from ..cold_period import cold_period_from_weather_file
-from ..errors import ConfigError, InputError
+from ..errors import ConfigError, ConfigFieldError, InputError
 from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_budget, plan_voxel_grid
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
@@ -78,6 +78,25 @@ class GridOverBudget(ConfigError):
     def __init__(self, message: str, errors, grid_plan: GridPlanReply):
         super().__init__(message, errors)
         self.grid_plan = grid_plan
+
+
+class CriterionConfigError(ConfigError):
+    """A ConfigError that comes from the settings of one criterion; ``criterion`` is its id, so the app can show it on that criterion."""
+
+    def __init__(self, error: ConfigError, criterion: str):
+        super().__init__(str(error), error.errors)
+        self.criterion = criterion
+
+
+@contextlib.contextmanager
+def naming_criterion(criterion_id: str):
+    """Makes a ConfigError raised in the block a CriterionConfigError naming *criterion_id* (one that names a criterion already stays)."""
+    try:
+        yield
+    except CriterionConfigError:
+        raise
+    except ConfigError as error:
+        raise CriterionConfigError(error, criterion_id) from error
 
 
 def is_from_example(project_json: ProjectJson, example: str, example_title: str) -> bool:
@@ -388,6 +407,38 @@ class ProjectStore:
             self._write_chain(name, project_folder, project_json, shared)
             return ConfigReply(settings={**shared, **entry.settings}, grid_plan=grid_plan)
 
+    def write_shared_settings(self, name: str, values: dict) -> ConfigReply:
+        """Store settings that the whole chain shares (voxel size, north, ...), without touching any criterion's own.
+
+        *values* are merged into the shared settings stored now. The paths, the device and the settings left to the engine in
+        *values* are dropped, as write_config_from_values drops them; a key that is a criterion's setting (CRITERION_KEYS, the mode
+        among them) is refused with a ConfigError naming each. Every criterion that is on (all of them when none is) is built with
+        the new shared settings, and the chain they make must load; the grid of the joined max volume is planned and a grid over the
+        engine's budget raises GridOverBudget. Nothing is stored then. The reply holds the shared settings as stored.
+        A project of an earlier version is made a chain of one first (migrate_to_criteria).
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            if not project_json.criteria and self.migrate_to_criteria(name):
+                project_json = self.read_project_json(name)
+            browser_values = {key: value for key, value in values.items()
+                              if key not in SERVICE_OWNED_SETTINGS and key not in SETTINGS_LEFT_TO_THE_ENGINE}
+            criterion_keys = sorted(key for key in browser_values if key in CRITERION_KEYS)
+            if criterion_keys:
+                raise ConfigError(
+                    f"{', '.join(criterion_keys)}: a setting of one criterion, not shared by the criteria; save it with the criterion.",
+                    [ConfigFieldError(key, "A setting of one criterion, not shared by the criteria.") for key in criterion_keys])
+            shared = {**self._stored_shared_settings(project_folder, name), **browser_values}
+            checked = active_criteria(project_json.criteria) or project_json.criteria
+            if not checked:
+                raise ProjectError("The project has no criterion to check the shared settings with: add a criterion first.", status_code=422)
+            configs = [self._config_from_browser_values(project_folder, {**shared, **criterion.settings}, criterion.id)[0]
+                       for criterion in checked]
+            grid_plan = self._plan_and_check_grid(name, configs[0])
+            self._write_chain(name, project_folder, project_json, shared)
+            return ConfigReply(settings=shared, grid_plan=grid_plan)
+
     def criteria(self, name: str) -> list[CriterionEntry]:
         """The criteria of a project in carving order, bypassed ones included."""
         return self.read_project_json(name).criteria
@@ -417,8 +468,8 @@ class ProjectStore:
         chain, *values* are its settings from the browser, validated as write_config_from_values does: they replace its
         settings, on top of the starting values of their mode (the current mode when they name none). Shared settings in
         *values* are ignored. A criterion that is not named by the user is named after its new mode when the mode changes.
-        ProjectError 404 for an unknown criterion and 422 for a bad name or colour; ConfigError for settings that do not
-        validate. Nothing changes then.
+        ProjectError 404 for an unknown criterion and 422 for a bad name or colour; CriterionConfigError (a ConfigError that names
+        the criterion) for settings that do not validate, or that make a chain that does not load. Nothing changes then.
         """
         with self.project_lock(project):
             project_folder = self.open(project)
@@ -430,11 +481,12 @@ class ProjectStore:
                 entry.colour = checked_colour(colour)
             if bypassed is not None:
                 entry.bypassed = bypassed
-            if values is not None:
-                settings = self._validated_criterion_settings(
-                    project_folder, project, {"mode": entry.settings.get("mode"), **values}, entry.id)
-                set_criterion_settings(entry, settings)
-            self._rewrite_chain(project, project_folder, project_json)
+            with naming_criterion(entry.id):
+                if values is not None:
+                    settings = self._validated_criterion_settings(
+                        project_folder, project, {"mode": entry.settings.get("mode"), **values}, entry.id)
+                    set_criterion_settings(entry, settings)
+                self._rewrite_chain(project, project_folder, project_json)
             return entry
 
     def delete_criterion(self, name: str, criterion_id: str) -> None:
@@ -1148,13 +1200,15 @@ class ProjectStore:
 
     @classmethod
     def _mode(cls, project_folder: Path, project_json: ProjectJson) -> str:
-        """The mode of the project's first criterion; "" without a config.yaml or one that sets no mode (a hand edit)."""
+        """The mode of the project's first criterion that is on (the first one when none is); "" without a config.yaml or one that
+        sets no mode (a hand edit)."""
         config_path = project_folder / CONFIG_FILE_NAME
         if not config_path.is_file():
             return ""
         stored_config = cls._parse_config_file(config_path, project_folder.name)
         if "criteria" in stored_config:
-            return str(project_json.criteria[0].settings.get("mode", "")) if project_json.criteria else ""
+            first = (active_criteria(project_json.criteria) or project_json.criteria)[:1]
+            return str(first[0].settings.get("mode", "")) if first else ""
         return str(stored_config.get("mode", ""))
 
     @staticmethod
