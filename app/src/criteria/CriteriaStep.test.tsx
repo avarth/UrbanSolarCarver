@@ -48,12 +48,26 @@ test("Add another criterion opens the mode tiles; a tile adds a criterion of tha
   expect(onAdd).toHaveBeenCalledExactlyOnceWith("benefit");
 });
 
-test("the mode tiles of a new criterion close with Cancel", () => {
+test("the mode tiles of a new criterion take the focus, are named for it, and close with Cancel, which gives the focus back to the link", () => {
   rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps([entry("1", "Daylight on windows")])} />);
   click(buttonNamed("Add another criterion")!);
+  const chooser = step().querySelector<HTMLElement>(".add-criterion-open")!;
+  expect(document.activeElement).toBe(chooser);
+  expect(document.getElementById(chooser.getAttribute("aria-labelledby")!)!.textContent).toBe("Mode of the new criterion");
+  const group = chooser.querySelector('[role="radiogroup"]')!;
+  expect(document.getElementById(group.getAttribute("aria-labelledby")!)!.textContent).toBe("Mode of the new criterion");
   click(buttonNamed("Cancel")!);
   expect(step().querySelector(".add-criterion [role='radio']")).toBeNull();
-  expect(buttonNamed("Add another criterion")).toBeDefined();
+  expect(document.activeElement).toBe(buttonNamed("Add another criterion"));
+});
+
+test("while the selected criterion's settings are on their way the panel waits; a refusal is said there", () => {
+  const criteria = [entry("1", "Daylight on windows"), entry("2", "Night cooling")];
+  rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps(criteria, { selectedId: "2" })} load={{ state: "loading" }} />);
+  expect(step().querySelector(".criterion-panel")).toBeNull();
+  expect(step().querySelector('.criterion-panel-frame [role="status"]')!.textContent).toBe("Loading the settings of Night cooling");
+  rendered.rerender(<CriteriaStep panel={PANEL} list={listProps(criteria, { selectedId: "2" })} load={{ state: "failed", problem: "Not found." }} />);
+  expect(step().querySelector('.criterion-panel-frame [role="alert"]')!.textContent).toBe("Not found.");
 });
 
 test("two criteria show their cards, then Add criterion, then the selected criterion's panel", () => {

@@ -79,6 +79,10 @@ test("a card dragged by its handle and dropped on another takes its place", asyn
   const over = dragEvent("dragover");
   act(() => target.dispatchEvent(over));
   expect(over.defaultPrevented).toBe(true);               // a drop is allowed there
+  expect(target.classList.contains("criterion-card-drop-target")).toBe(true);
+  act(() => target.dispatchEvent(dragEvent("dragleave")));
+  expect(target.classList.contains("criterion-card-drop-target")).toBe(false);      // the mark goes when the card is left
+  act(() => target.dispatchEvent(dragEvent("dragover")));
   await act(async () => target.dispatchEvent(dragEvent("drop")));
   expect(onReorder).toHaveBeenCalledExactlyOnceWith(["4", "2", "1"]);
 });

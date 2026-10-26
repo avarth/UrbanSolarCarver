@@ -2,10 +2,10 @@
 // criterion brings no new words), with its files. While it has none the box offers to add test surfaces, with a hint of what its
 // mode may protect (mode_tiles.json, protects_hint; hints only). With several criteria, the stored files the others use and this
 // one does not follow under "Use a file from another criterion", each with a Use button (the file is stored once).
-import { useState } from "react";
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { InputBox } from "../steps/InputsStep";
+import { useDialogRequest } from "../steps/ProjectDialogs";
 import { MODE_TILES } from "../steps/step_summaries";
 
 interface ProtectsBoxProps {
@@ -32,17 +32,8 @@ export function protectsHintOf(mode: string): string {
 }
 
 function FilesOfOtherCriteria({ files, onUseFile, disabledReason }: { files: string[]; onUseFile: (fileName: string) => Promise<string | null>; disabledReason: string | null }) {
-  const [problem, setProblem] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const use = async (fileName: string) => {
-    setBusy(true);
-    setProblem(null);
-    try {
-      setProblem(await onUseFile(fileName));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const { problem, busy, send } = useDialogRequest(() => {});
+  const use = (fileName: string) => send(() => onUseFile(fileName));
   return (
     <div className="protects-reuse">
       <p className="protects-reuse-title">{messages.useFileOfOtherCriterion}</p>

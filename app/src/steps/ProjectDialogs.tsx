@@ -114,12 +114,16 @@ export function DialogButtons({ confirmLabel, confirmDisabled, busy, onCancel, c
   );
 }
 
-/** The request of a dialog: *send* resolves with the service's reason when it refused, or null once done, which closes the dialog. */
+/**
+ * The request of a dialog (or of a part that sends one request at a time: Add criterion, Use a file): *send*'s request resolves with
+ * the service's reason when it refused, which is shown, or null once done, which closes the dialog.
+ */
 export function useDialogRequest(onClose: () => void) {
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const send = async (request: () => Promise<string | null>) => {
     setBusy(true);
+    setProblem(null);
     const reason = await request();
     setBusy(false);
     if (reason === null) onClose();

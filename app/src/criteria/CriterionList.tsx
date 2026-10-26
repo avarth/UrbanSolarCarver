@@ -2,10 +2,11 @@
 // which opens the mode tiles. A card moves by dragging its handle onto another card, or with the arrow keys on its handle; its
 // menu renames (in a dialog), duplicates, or deletes (after a confirmation; never the only criterion). A change the service
 // refuses is said under the cards. AddCriterion is also the one-criterion step's quiet "Add another criterion" (CriteriaStep).
-import { useEffect, useRef, useState, type DragEvent } from "react";
+import { useEffect, useId, useRef, useState, type DragEvent } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { ModeStep } from "../steps/ModeStep";
+import { useDialogRequest } from "../steps/ProjectDialogs";
 import { CriterionCard, type CriterionMenuItem } from "./CriterionCard";
 import { DeleteCriterionDialog, RenameCriterionDialog } from "./CriterionDialogs";
 import { orderAfterDropping, orderAfterMoving } from "./criteria_state";
@@ -38,33 +39,43 @@ interface AddCriterionProps {
   disabledReason: string | null;
 }
 
-/** A link that opens the mode tiles; choosing one adds a criterion of that mode, and the tiles close once it is added. */
+/**
+ * A link that opens the mode tiles; choosing one adds a criterion of that mode, and the tiles close once it is added. The open tiles
+ * take the focus; Cancel gives it back to the link.
+ */
 export function AddCriterion({ label, onAdd, disabledReason }: AddCriterionProps) {
   const [choosing, setChoosing] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const add = async (mode: string) => {
-    setBusy(true);
+  const { problem, setProblem, busy, send } = useDialogRequest(() => setChoosing(false));
+  const [focusLink, setFocusLink] = useState(false);
+  const link = useRef<HTMLButtonElement>(null);
+  const chooser = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    if (choosing) chooser.current?.focus();
+    else if (focusLink) {
+      link.current?.focus();
+      setFocusLink(false);
+    }
+  }, [choosing]);
+  const cancel = () => {
+    setChoosing(false);
     setProblem(null);
-    const reason = await onAdd(mode);
-    setBusy(false);
-    if (reason === null) setChoosing(false);
-    else setProblem(reason);
+    setFocusLink(true);
   };
   if (!choosing) {
     return (
       <div className="add-criterion">
-        <button type="button" className="link-button" disabled={disabledReason !== null} onClick={() => setChoosing(true)}>{label}</button>
+        <button ref={link} type="button" className="link-button" disabled={disabledReason !== null} onClick={() => setChoosing(true)}>{label}</button>
       </div>
     );
   }
   return (
-    <div className="add-criterion add-criterion-open">
-      <p className="add-criterion-title">{messages.newCriterionModeTitle}</p>
-      <ModeStep mode="" onChoose={(mode) => void add(mode)} disabledReason={busy ? "" : disabledReason} weatherDropZone={null}
-                showsNote={false} showsDisabledReason={false} />
+    <div ref={chooser} className="add-criterion add-criterion-open" tabIndex={-1} role="group" aria-labelledby={titleId}>
+      <p id={titleId} className="add-criterion-title">{messages.newCriterionModeTitle}</p>
+      <ModeStep mode="" onChoose={(mode) => void send(() => onAdd(mode))} disabledReason={busy ? messages.addingCriterion : disabledReason}
+                weatherDropZone={null} showsNote={false} showsDisabledReason={false} groupLabel={messages.newCriterionModeTitle} />
       {problem !== null && <p className="setting-error" role="alert">{problem}</p>}
-      <button type="button" className="link-button" disabled={busy} onClick={() => { setChoosing(false); setProblem(null); }}>{messages.cancel}</button>
+      <button type="button" className="link-button" disabled={busy} onClick={cancel}>{messages.cancel}</button>
     </div>
   );
 }
@@ -132,6 +143,11 @@ export function CriterionList(props: CriterionListProps) {
       event.preventDefault();                 // a card may be dropped here
       if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
       setDropTargetId(criterion.id);
+    },
+    // Leaving the card, not only moving onto one of its children, takes the mark away.
+    onDragLeave: (event: DragEvent) => {
+      if (event.relatedTarget instanceof Node && (event.currentTarget as HTMLElement).contains(event.relatedTarget)) return;
+      setDropTargetId((current) => (current === criterion.id ? null : current));
     },
     onDrop: (event: DragEvent) => {
       if (draggedId === null) return;

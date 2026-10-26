@@ -28,6 +28,12 @@ class ChainService extends FakeService {
   summaryCriteria: CriterionCarvingSummary[] = [];
   /** The body of every PATCH criteria/{id}, with the id. */
   readonly patches: { id: string; body: Record<string, unknown> }[] = [];
+  /** While set for a criterion, GET criteria/{id}/settings answers once the promise resolves. */
+  readonly settingsAnswerWhen: Record<string, Promise<void>> = {};
+  /** The status GET criteria/{id}/settings is refused with, by criterion. */
+  readonly settingsRefusedWith: Record<string, number> = {};
+  /** While set, a PATCH criteria/{id} answers once the promise resolves. */
+  patchesAnswerWhen: Promise<void> | null = null;
 
   constructor(entries: CriterionEntry[], criterionStages: Record<string, CriterionStages>) {
     super(CARVED, CARVING);
@@ -74,9 +80,14 @@ class ChainService extends FakeService {
       this.entries = this.entries.map((candidate) => (candidate.id === changed.id ? changed : candidate));
       return json(changed);
     };
-    if (method === "GET" && part === "settings") return json({ criterion_id: id, settings: { ...this.sharedSettings, ...entry.settings } });
+    if (method === "GET" && part === "settings") {
+      await this.settingsAnswerWhen[id];
+      if (this.settingsRefusedWith[id] !== undefined) return json({ detail: `The settings of criterion ${id} could not be read.` }, this.settingsRefusedWith[id]);
+      return json({ criterion_id: id, settings: { ...this.sharedSettings, ...entry.settings } });
+    }
     if (method === "PATCH" && part === undefined) {
       this.patches.push({ id, body });
+      await this.patchesAnswerWhen;
       if (body.name === "") return json({ detail: "A criterion needs a name." }, 422);
       const values = body.values as Record<string, unknown> | undefined;
       const startingValues = this.modes.find((candidate) => candidate.name === values?.mode)?.starting_values ?? {};
@@ -167,6 +178,21 @@ const periodFieldText = () => container().querySelector('[data-setting="start_mo
 const keptTile = () => panel().querySelector(".number-tile-value")!.textContent;
 const criteriaSummary = () => stepRow("Criteria").querySelector(".step-summary")!.textContent;
 const settingsSaves = () => service.requests.filter((request) => request.startsWith("PATCH") || request.startsWith("PUT /shared"));
+const selectButtonOf = (name: string) => card(name).querySelector(".criterion-card-select");
+const panelFrame = () => container().querySelector<HTMLElement>(".criterion-panel-frame")!;
+
+/** The results of criterion *id* were asked for: its score points, sky dome and sun path. */
+function expectResultsOfCriterion(id: string) {
+  expect(service.requests).toEqual(expect.arrayContaining([
+    `GET /run/score-points?criterion=${id}`, `GET /run/sky-patches?criterion=${id}`, `GET /sun-path?criterion=${id}`,
+  ]));
+}
+
+/** No refusal, failure or save-failure notice is on the page. */
+function expectNoProblemShown() {
+  expect(container().querySelector('[role="alert"]')).toBeNull();
+  expect(container().querySelector(".save-failure")).toBeNull();
+}
 
 async function select(name: string) {
   act(() => card(name).querySelector<HTMLButtonElement>(".criterion-card-select")!.click());
@@ -250,6 +276,20 @@ test("bypassing the selected card selects the next one", async () => {
   await settle();
   expect(selectedCardName()).toBe("Spring sun on windows");
   expect(periodFieldText()).toContain("21 Mar");
+  expectResultsOfCriterion("2");
+  expectNoProblemShown();
+});
+
+test("a bypass whose reply comes after another card was pressed moves the selection from the card pressed", async () => {
+  await openChain([FACADES, WINDOWS, ROOFS]);
+  let answerPatches = () => {};
+  service.patchesAnswerWhen = new Promise((resolve) => { answerPatches = resolve; });
+  await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
+  await select("Daylight on roofs");                              // while the bypass is on its way
+  await act(async () => answerPatches());
+  await settle();
+  expect(card("Winter sun on facades").classList.contains("criterion-card-bypassed")).toBe(true);
+  expect(selectedCardName()).toBe("Daylight on roofs");           // not the card after the bypassed one
 });
 
 test("deleting the selected criterion selects the next one, and the last one the previous; settings and results follow", async () => {
@@ -258,14 +298,19 @@ test("deleting the selected criterion selects the next one, and the last one the
   expect(service.requests).toContain("DELETE /criteria/1");
   expect(cardNames()).toEqual(["Spring sun on windows", "Daylight on roofs"]);
   expect(selectedCardName()).toBe("Spring sun on windows");
+  expect(document.activeElement).toBe(selectButtonOf("Spring sun on windows"));     // the focus goes to the card selected now
   expect(periodFieldText()).toContain("21 Mar");
   expect(thresholdField().value).toBe("3");
   expect(keptTile()).toContain("80");
+  expectResultsOfCriterion("2");
+  expectNoProblemShown();
   await select("Daylight on roofs");
   await deleteCriterion("Daylight on roofs");
   expect(service.requests).toContain("DELETE /criteria/3");
-  // One criterion left: no cards, its panel at once, and Add another criterion.
+  // One criterion left: no cards, its panel at once (with the focus), and Add another criterion.
   expect(cards()).toEqual([]);
+  expect(document.activeElement).toBe(panelFrame());
+  expectNoProblemShown();
   expect(periodFieldText()).toContain("21 Mar");
   expect(protectedFiles()).toEqual(["windows.obj"]);
   expect(buttonIn(stepRow("Criteria"), "Add another criterion")).toBeDefined();
@@ -282,8 +327,42 @@ test("Add another criterion adds one of the chosen mode and selects it", async (
   expect(selectedCardName()).toBe("Daylight");
   expect(service.requests).toContain("GET /criteria/2/settings");
   expect(cardLine("Daylight")).toBe("Add test surfaces");
+  expect(document.activeElement).toBe(selectButtonOf("Daylight"));
   expect(protectedFiles()).toEqual([]);
   expect(panel().querySelector('[role="radio"][aria-checked="true"]')!.textContent).toBe("Daylight");
+  // It has not run: its score points and sky dome are not asked for (the service has none).
+  expect(service.requests.filter((request) => request.includes("criterion=2") && request.includes("/run/"))).toEqual([]);
+});
+
+test("while a card's settings are on their way its panel waits, and a reply for a card pressed before is not used", async () => {
+  await openChain([FACADES, WINDOWS, ROOFS]);
+  let answerWindows = () => {};
+  service.settingsAnswerWhen["2"] = new Promise((resolve) => { answerWindows = resolve; });
+  await select("Spring sun on windows");
+  expect(container().querySelector(".criterion-panel")).toBeNull();          // no settings of another criterion to type into
+  expect(panelFrame().querySelector('[role="status"]')!.textContent).toBe("Loading the settings of Spring sun on windows");
+  await select("Daylight on roofs");                              // before criterion 2's settings are in
+  await act(async () => answerWindows());
+  await settle();
+  expect(selectedCardName()).toBe("Daylight on roofs");
+  expect(protectedFiles()).toEqual(["roofs.obj"]);
+  expect(panel().querySelector('[role="radio"][aria-checked="true"]')!.textContent).toBe("Daylight");
+  act(() => panel().querySelector<HTMLElement>('[role="radio"][aria-checked="false"]')!.click());       // another mode for it
+  await waitForTheSave();
+  await settle();
+  expect(service.patches.map((patch) => patch.id)).toEqual(["3"]);
+});
+
+test("settings that cannot be read are said in the panel; a press on the card asks again", async () => {
+  await openChain([FACADES, WINDOWS]);
+  service.settingsRefusedWith["2"] = 500;
+  await select("Spring sun on windows");
+  expect(panelFrame().querySelector('[role="alert"]')!.textContent).toBe("The settings of criterion 2 could not be read.");
+  expect(container().querySelector(".criterion-panel")).toBeNull();
+  delete service.settingsRefusedWith["2"];
+  await select("Spring sun on windows");
+  expect(periodFieldText()).toContain("21 Mar");
+  expectNoProblemShown();
 });
 
 test("reordering with the keyboard sends the new order and the cards follow it", async () => {
@@ -350,5 +429,6 @@ test("duplicating a card adds the copy after the last card and selects it", asyn
   expect(service.requests).toContain("POST /criteria/1/duplicate");
   expect(cardNames()).toEqual(["Winter sun on facades", "Spring sun on windows", "Winter sun on facades copy"]);
   expect(selectedCardName()).toBe("Winter sun on facades copy");
+  expect(document.activeElement).toBe(selectButtonOf("Winter sun on facades copy"));
   expect(service.requests).toContain("GET /criteria/3/settings");
 });

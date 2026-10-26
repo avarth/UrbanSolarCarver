@@ -6,7 +6,7 @@ import { initialFormState, type SaveOutcome } from "../settings_form/form_state"
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { dimmedLayersOf, isStageDimmed, missingLayersOf, useResultSteps, type ResultSteps } from "./result_steps";
-import { resultsOfStages, useResultsFollowingRun, type RunResults } from "./run_results";
+import { resultsAtOpen, resultsOfStages, useResultsFollowingRun, type RunResults } from "./run_results";
 import { initialRunState, runReducer, useRunLoop, type RunRecord, type RunState } from "./run_state";
 import type { PipelineStage, StageState } from "./step_summaries";
 
@@ -56,6 +56,12 @@ test("each stage names the results it writes; the score points follow the carvin
   expect(resultsOfStages(["preprocessing"])).toEqual(["skyDome"]);
   expect(resultsOfStages(["thresholding", "exporting", "massing"])).toEqual(["summary", "scorePoints", "envelope", "massing", "platesFile"]);
   expect(resultsOfStages(["exporting"])).toEqual(["summary", "envelope"]);       // the envelope volume is in the run summary (R2 5)
+});
+
+test("at open the score points and sky dome are asked for only when the selected criterion's own stages wrote them", () => {
+  expect(resultsAtOpen(["preprocessing", "thresholding"])).toEqual(["skyDome", "summary", "scorePoints"]);
+  expect(resultsAtOpen(["exporting"], ["preprocessing", "thresholding"])).toEqual(["summary", "envelope", "skyDome", "scorePoints"]);
+  expect(resultsAtOpen(["preprocessing", "thresholding"], [])).toEqual(["summary"]);
 });
 
 function followedRun(initial: RunRecord | null) {

@@ -31,6 +31,8 @@ interface ModeStepProps {
   showsDisabledReason?: boolean;
   /** Whether the line that choosing a mode fills its starting values is shown; false where the tiles add a new criterion. */
   showsNote?: boolean;
+  /** The name of the tiles' radio group; absent: "Mode". */
+  groupLabel?: string;
 }
 
 /** "Steepest step between columns and voxel size are back to their defaults: ..." */
@@ -48,7 +50,7 @@ export function tileAfterArrowKey(index: number, key: string, tileCount: number)
   return next >= 0 && next < tileCount ? next : null;                                          // stay in the column
 }
 
-export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valuesReset = null, showsDisabledReason = true, showsNote = true }: ModeStepProps) {
+export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valuesReset = null, showsDisabledReason = true, showsNote = true, groupLabel = messages.modeGroupLabel }: ModeStepProps) {
   const chosenIndex = Math.max(0, MODE_TILES.findIndex((tile) => tile.engine_name === mode));
   const [focusIndex, setFocusIndex] = useState(chosenIndex);    // the tile in the tab order
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -139,7 +141,7 @@ export function ModeStep({ mode, onChoose, disabledReason, weatherDropZone, valu
   const openTile = openIndex === null ? null : MODE_TILES[openIndex];
   return (
     <div className="mode-step">
-      <span id={groupLabelId} className="visually-hidden">{messages.modeGroupLabel}</span>
+      <span id={groupLabelId} className="visually-hidden">{groupLabel}</span>
       <div className="mode-tiles" role="radiogroup" aria-labelledby={groupLabelId} aria-disabled={disabled || undefined}>
         {MODE_TILES.map((tile, index) => {
           const chosen = tile.engine_name === mode;

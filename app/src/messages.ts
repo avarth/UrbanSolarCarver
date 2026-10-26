@@ -158,6 +158,9 @@ export const messages = {
   addCriterion: "Add criterion",
   addAnotherCriterion: "Add another criterion",
   newCriterionModeTitle: "Mode of the new criterion",
+  addingCriterion: "Adding the criterion",
+  // The panel of a card just selected, until its settings are in
+  loadingCriterion: (criterionName: string) => `Loading the settings of ${criterionName}`,
   moveCriterion: (criterionName: string) => `Move ${criterionName}`,
   moveCriterionHint: "Drag to reorder, or press the up and down arrow keys",
   bypassCriterion: (criterionName: string) => `Bypass ${criterionName}`,

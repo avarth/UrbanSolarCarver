@@ -63,6 +63,7 @@ test("the handle is dragged, and the arrow keys on it move the card one place", 
   renderCard({ onMove });
   expect(handle().getAttribute("draggable")).toBe("true");
   expect(handle().getAttribute("aria-label")).toBe("Move Daylight on windows");
+  expect(document.getElementById(handle().getAttribute("aria-describedby")!)!.textContent).toBe("Drag to reorder, or press the up and down arrow keys");
   press(handle(), "ArrowUp");
   press(handle(), "ArrowDown");
   press(handle(), "ArrowLeft");

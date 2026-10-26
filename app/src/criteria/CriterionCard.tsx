@@ -2,7 +2,7 @@
 // swatch of the criterion in the 3D view, its name, its mode's symbol and one line (its result while current, else its status), a
 // bypass switch and a menu with Rename, Duplicate and Delete. A press on the card selects it. The list (CriterionList) does the
 // dragging and the requests.
-import type { DragEvent, KeyboardEvent } from "react";
+import { useId, type DragEvent, type KeyboardEvent } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
 import { ActionMenu } from "../steps/ActionMenu";
@@ -30,6 +30,7 @@ export interface CriterionCardProps {
   onDragStart?: (event: DragEvent) => void;
   onDragEnd?: () => void;
   onDragOver?: (event: DragEvent) => void;
+  onDragLeave?: (event: DragEvent) => void;
   onDrop?: (event: DragEvent) => void;
   /** A card is dragged over this one, where it would go if dropped. */
   dropTarget?: boolean;
@@ -48,6 +49,7 @@ function GripIcon() {
 export function CriterionCard(props: CriterionCardProps) {
   const { entry, selected, disabledReason } = props;
   const disabled = disabledReason !== null;
+  const hintId = useId();
   const mode = String(entry.settings?.mode ?? "");
   const symbol = MODE_TILES.find((tile) => tile.engine_name === mode)?.symbol;
   const moveWithKeys = (event: KeyboardEvent) => {
@@ -59,11 +61,12 @@ export function CriterionCard(props: CriterionCardProps) {
   const classes = ["criterion-card", selected && "criterion-card-selected", entry.bypassed && "criterion-card-bypassed", props.dropTarget && "criterion-card-drop-target"];
   return (
     <li className={classes.filter(Boolean).join(" ")} aria-current={selected || undefined} data-criterion-id={entry.id}
-        onDragOver={props.onDragOver} onDrop={props.onDrop}>
+        onDragOver={props.onDragOver} onDragLeave={props.onDragLeave} onDrop={props.onDrop}>
       <span className="criterion-card-handle" role="button" tabIndex={0} draggable={!disabled} aria-disabled={disabled || undefined}
-            aria-label={messages.moveCriterion(entry.name)} title={messages.moveCriterionHint} onKeyDown={moveWithKeys}
+            aria-label={messages.moveCriterion(entry.name)} aria-describedby={hintId} title={messages.moveCriterionHint} onKeyDown={moveWithKeys}
             onDragStart={props.onDragStart} onDragEnd={props.onDragEnd}>
         <GripIcon />
+        <span id={hintId} className="visually-hidden">{messages.moveCriterionHint}</span>
       </span>
       <button type="button" className="criterion-card-select" onClick={props.onSelect}>
         <span className="criterion-card-swatch" style={{ background: entry.colour }} aria-hidden="true" />

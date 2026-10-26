@@ -514,7 +514,13 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 
 /* Several criteria: the cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
 .criteria-list-block { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
-.criteria-list-block + .criterion-panel { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
+.criteria-list-block + .criterion-panel-frame { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
+/* The panel and the open mode tiles take the focus after a change of the cards; a ring only when the keyboard put it there. */
+.criterion-panel-frame:focus,
+.add-criterion-open:focus { outline: none; }
+.criterion-panel-frame:focus-visible,
+.add-criterion-open:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 2px; }
+.criterion-panel-waits { margin: 0; }
 .criterion-list { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin: 0; padding: 0; list-style: none; }
 
 .criterion-card {

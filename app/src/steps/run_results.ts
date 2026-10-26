@@ -47,6 +47,16 @@ export function resultsOfStages(stages: readonly string[]): ResultName[] {
   return [...new Set(stages.flatMap((stage) => RESULTS_OF_STAGE[stage as PipelineStage] ?? []))];
 }
 
+/**
+ * What to fetch when the project opens: the results of the project's stages, and the score points and sky dome only when the
+ * selected criterion's own stages wrote them (given as *criterionStages*; absent: as the project's).
+ */
+export function resultsAtOpen(stages: readonly string[], criterionStages?: readonly string[]): ResultName[] {
+  if (criterionStages === undefined) return resultsOfStages(stages);
+  const ofCriterion = resultsOfStages(criterionStages).filter((name) => CRITERION_RESULTS.includes(name));
+  return [...new Set([...resultsOfStages(stages).filter((name) => !CRITERION_RESULTS.includes(name)), ...ofCriterion])];
+}
+
 interface RunResultsSource {
   token: string;
   project: string;
@@ -56,11 +66,13 @@ interface RunResultsSource {
   stagesWithResults: readonly string[];
   /** The criterion whose score points and sky dome are shown; absent: the service's default (the last criterion that is on). */
   criterionId?: string;
+  /** That criterion's stages with output: its score points and sky dome are asked for only when they are there (no 404s). */
+  criterionStagesWithResults?: readonly string[];
   onServiceProblem: (error: unknown) => void;
 }
 
 /** The results, and the function that fetches again what the given stages write; its promise resolves once every fetch has ended. */
-export function useRunResults({ token, project, origin, stagesWithResults, criterionId, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
+export function useRunResults({ token, project, origin, stagesWithResults, criterionId, criterionStagesWithResults, onServiceProblem }: RunResultsSource): [RunResults, (stages: readonly string[]) => Promise<void>] {
   const [results, setResults] = useState<RunResults>(NO_RESULTS);
   const latestRequest = useRef<Partial<Record<ResultName, number>>>({});
   const source = useRef({ token, origin, criterionId, onServiceProblem });
@@ -112,7 +124,7 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
   const reload = useCallback((stages: readonly string[]) => fetchResults(resultsOfStages(stages)), [fetchResults]);
 
   useEffect(() => {
-    reload(stagesWithResults);
+    fetchResults(resultsAtOpen(stagesWithResults, criterionStagesWithResults));
   }, []);
 
   // Another criterion selected: its score points and sky dome replace the last one's, which are not shown meanwhile.
@@ -121,7 +133,11 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
     if (criterionId === firstCriterion.current) return;
     firstCriterion.current = criterionId;
     setResults((current) => ({ ...current, scorePoints: null, skyDome: null }));
-    fetchResults(CRITERION_RESULTS);
+    const written = criterionStagesWithResults === undefined ? CRITERION_RESULTS
+      : resultsOfStages(criterionStagesWithResults).filter((name) => CRITERION_RESULTS.includes(name));
+    // A request still out for the criterion before is not kept.
+    for (const name of CRITERION_RESULTS) latestRequest.current[name] = (latestRequest.current[name] ?? 0) + 1;
+    fetchResults(written);
   }, [criterionId]);
 
   // The meshes are drawn in the local origin of the inputs; new inputs can move it.

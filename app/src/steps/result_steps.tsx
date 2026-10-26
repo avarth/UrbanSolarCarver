@@ -123,6 +123,8 @@ export interface ResultStepsContext {
   project: string;
   /** The selected criterion, whose carving, score points and sky dome are shown; absent: the service's default. */
   criterionId?: string;
+  /** The selected criterion's stages with output (run_results.ts asks for its score points and sky dome only then). */
+  criterionStagesWithResults?: readonly string[];
   form: FormState;
   /** The form after every action so far, read after a save is awaited. */
   currentForm: () => FormState;
@@ -172,7 +174,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const { token, project, form, dispatch, flushSave, changeAndSave, stages, runs, runBlocker, projectRunActive } = context;
   const meshFormat = String(shownValue(form, "final_mesh_format") ?? "ply");
   const [results, reloadResults] = useRunResults({
-    token, project, origin: context.origin, criterionId: context.criterionId, onServiceProblem: context.onServiceProblem,
+    token, project, origin: context.origin, criterionId: context.criterionId, criterionStagesWithResults: context.criterionStagesWithResults,
+    onServiceProblem: context.onServiceProblem,
     stagesWithResults: (Object.keys(stages) as PipelineStage[]).filter((stage) => stages[stage] !== "missing"),
   });
   const [autoUpdate, setAutoUpdate] = useAutoUpdate(project);

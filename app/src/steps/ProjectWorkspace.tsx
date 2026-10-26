@@ -6,17 +6,18 @@
 // put together in result_steps.tsx from these and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  addInput, failureTextOf, getCriterionSettings, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
+  addInput, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
   type CriterionEntry, type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import {
-  activeCriteria, cardLineOf, criterionStatus, filesOfOtherCriteria, selectionAfterRemoving, stagesByCriterionOf, type StagesByCriterion,
+  activeCriteria, cardLineOf, criterionStatus, filesOfOtherCriteria, stagesByCriterionOf, type StagesByCriterion,
 } from "../criteria/criteria_state";
 import type { CriterionListProps } from "../criteria/CriterionList";
 import { CriteriaStep } from "../criteria/CriteriaStep";
 import { CriterionPanel } from "../criteria/CriterionPanel";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
+import { useCriterionSelection } from "../criteria/use_criterion_selection";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import {
@@ -46,6 +47,11 @@ import { analysisPeriodOf, useSunPathOfStoredPeriod } from "./sun_path_request";
 import { periodChangedSince, weatherChangeSuggestion, type WeatherFileChange } from "./weather_change_notice";
 
 const NO_SHIFT: Point3 = [0, 0, 0];
+
+/** A criterion's stages that have output (none for a criterion the stage status does not list: bypassed, or new). */
+function stagesWithOutputOf(stages: StagesByCriterion[string] | undefined): string[] {
+  return stages === undefined ? [] : (["preprocessing", "thresholding"] as const).filter((stage) => stages[stage] !== "missing");
+}
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "site_and_grid"];
@@ -368,79 +374,27 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const runBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "criteria" });
   const siteAndGridRunBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "site_and_grid" });
   const resultSteps = useResultSteps({
-    token, project: project.name, criterionId: resultsCriterionId, form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
+    token, project: project.name, criterionId: resultsCriterionId, criterionStagesWithResults: resultsCriterionId === undefined ? undefined : stagesWithOutputOf(criterionStages[resultsCriterionId]),
+    form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
     refreshStageStatus, runs, runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
     onCarveFurther: props.onCarveFurther,
   });
 
-  // The cards (CriteriaStep): their lines from the criteria's stages and the run summary, and the requests that change the criteria.
-  // Each change dates thresholding (the order, a bypass, test surfaces) or adds stages, so the stage status is asked for again.
+  // The cards (CriteriaStep): their lines from the criteria's stages and the run summary, and the requests that change the criteria
+  // and the selection (use_criterion_selection.ts).
   const summaryCriteria = resultSteps.results.summary?.criteria ?? [];
   const carvingSummaryOf = (entry: CriterionEntry) => summaryCriteria.find((summary) => summary.id === entry.id);
-  const criteriaChange = async (change: () => Promise<unknown>): Promise<string | null> => {
-    try {
-      await change();
-      refreshStageStatus();
-      return null;
-    } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
-      return failureTextOf(error);
-    }
-  };
-  // Before another criterion is selected or the selected one goes, a change still waiting is saved to the criterion it was made in.
-  const saveTheShownCriterion = () => void criterionForm.flushSave();
+  const selection = useCriterionSelection({
+    token, project: project.name, criteria, shownCriterionId, setShownCriterionId, criterionForm, sharedForm, refreshStageStatus, onServiceProblem,
+    criterionStartOf: (settings) => ({ schema: props.schema, modes, settings: splitSettings(settings, criterionKeys).criterion, gridPlan: null }),
+  });
   const criterionList: CriterionListProps = {
     criteria: criteria.criteria,
     selectedId: criteria.selectedId,
     lineOf: (entry) => cardLineOf(criterionStatus(entry, criteria.criteria, criterionStages, null), carvingSummaryOf(entry)),
     disabledReason: inputsDisabledReason,
-    onSelect: (id) => {
-      saveTheShownCriterion();
-      criteria.select(id);
-    },
-    onReorder: (ids) => criteriaChange(() => criteria.reorder(ids)),
-    // Bypassing the selected criterion selects the next card (else the previous one), as deleting it does.
-    onSetBypassed: (id, on) => {
-      const { criteria: listBefore, selectedId } = criteria;
-      if (on && id === selectedId) saveTheShownCriterion();
-      return criteriaChange(async () => {
-        await criteria.setBypassed(id, on);
-        if (on) criteria.select(selectionAfterRemoving(listBefore, id, selectedId));
-      });
-    },
-    onRename: (id, name) => criteriaChange(() => criteria.rename(id, name)),
-    onDuplicate: (id) => {
-      saveTheShownCriterion();
-      return criteriaChange(() => criteria.duplicate(id));
-    },
-    onDelete: (id) => {
-      saveTheShownCriterion();
-      return criteriaChange(() => criteria.remove(id));
-    },
-    onAdd: (mode) => {
-      saveTheShownCriterion();
-      return criteriaChange(() => criteria.add(mode));
-    },
+    ...selection.requests,
   };
-
-  // Another card selected (by a press, or as the selected one was deleted, bypassed, added or duplicated): its settings start the
-  // criterion form again, the shared form follows its mode, and its panel and results follow. A change still waiting in the form
-  // was sent to its own criterion when the card was pressed, and is sent again here (restart) with the send of the render before.
-  const selectionRequest = useRef(0);
-  useEffect(() => {
-    const wanted = criteria.selectedId;
-    const request = ++selectionRequest.current;       // a reply for a card selected before is not used
-    if (wanted === "" || wanted === shownCriterionId) return;
-    saveTheShownCriterion();
-    getCriterionSettings(token, project.name, wanted).then((reply) => {
-      if (request !== selectionRequest.current) return;
-      criterionForm.restart({ schema: props.schema, modes, settings: splitSettings(reply.settings, criterionKeys).criterion, gridPlan: null });
-      sharedForm.dispatch({ type: "mode_followed", mode: criterionForm.currentForm().mode });
-      setShownCriterionId(wanted);
-    }).catch((error) => {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
-    });
-  }, [criteria.selectedId]);
 
   const viewState: ProjectViewState = {
     maxVolumeFiles: files.max_volume.length,
@@ -476,7 +430,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={criterionList} panel={
+      <CriteriaStep list={criterionList} load={selection.load} panel={
         <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}

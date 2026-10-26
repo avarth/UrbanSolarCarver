@@ -12,6 +12,8 @@ export interface CriteriaHook {
   criteria: CriterionEntry[];
   /** The id of the selected criterion; empty when the project lists none. */
   selectedId: string;
+  /** The list and the selection as they are now, with the replies that arrived since the last render. */
+  current: () => { criteria: CriterionEntry[]; selectedId: string };
   select: (id: string) => void;
   /** Adds a criterion of *mode* at the end and selects it. */
   add: (mode: string) => Promise<CriterionEntry>;
@@ -52,6 +54,7 @@ export function useCriteria(token: string, project: ProjectDetail): CriteriaHook
   return {
     criteria: state.criteria,
     selectedId: state.selectedId,
+    current: () => latest.current,
     select: (id) => commit({ ...latest.current, selectedId: id }),
     add: async (mode) => {
       const entry = await addCriterion(token, project.name, mode);

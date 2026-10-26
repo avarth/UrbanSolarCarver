@@ -3,7 +3,7 @@
 // Escape or Cancel closes them, and a refusal of the service is shown in its words with the dialog left open.
 import { useId, useState, type FormEvent } from "react";
 import { messages } from "../messages";
-import { DialogButtons, DialogFrame, ProblemLine, useDialogRequest, withoutSurroundingSpaces } from "../steps/ProjectDialogs";
+import { DialogButtons, DialogFrame, ProblemLine, useDialogRequest } from "../steps/ProjectDialogs";
 
 interface RenameCriterionDialogProps {
   name: string;
@@ -16,12 +16,14 @@ export function RenameCriterionDialog({ name, onRename, onClose }: RenameCriteri
   const [newName, setNewName] = useState(name);
   const { problem, setProblem, busy, send } = useDialogRequest(onClose);
   const fieldId = useId();
-  const unchanged = withoutSurroundingSpaces(newName) === name;
+  // The name as the service stores it: without the white space around it (Python's strip).
+  const storedName = newName.trim();
+  const unchanged = storedName === name;
   const rename = (event: FormEvent) => {
     event.preventDefault();
     if (busy || unchanged) return;
-    if (newName.trim() === "") return setProblem(messages.criterionNeedsName);
-    void send(() => onRename(newName.trim()));
+    if (storedName === "") return setProblem(messages.criterionNeedsName);
+    void send(() => onRename(storedName));
   };
   return (
     <DialogFrame title={messages.renameCriterionTitle(name)} busy={busy} onClose={onClose}>

@@ -43,6 +43,12 @@ test("the rename dialog refuses an empty name with the service's message, and se
   expect(onClose).toHaveBeenCalled();
 });
 
+test("a name with only white space around it is the name it has: nothing to send", () => {
+  rendered = renderForTest(<RenameCriterionDialog name="Daylight" onRename={async () => null} onClose={() => {}} />);
+  type(dialog()!.querySelector<HTMLInputElement>("input")!, "	Daylight ");
+  expect(dialogButton("Rename").disabled).toBe(true);
+});
+
 test("a rename the service refuses keeps the dialog open with its reason", async () => {
   rendered = renderForTest(<RenameCriterionDialog name="Daylight" onRename={async () => "A run of this project is in progress."} onClose={() => {}} />);
   type(dialog()!.querySelector<HTMLInputElement>("input")!, "Daylight 2");
