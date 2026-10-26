@@ -269,18 +269,16 @@ def stages_the_engine_runs(request) -> list[str]:
 def criteria_the_engine_runs(request, stage: str, criterion_ids: list[str]) -> list[str]:
     """The criteria whose *stage* folder run_chain writes for *request*: preprocessing traces the criteria in trace_criteria (every
     one without it), and thresholding starts at the first traced one or at threshold_from_criterion, whichever comes first, or at
-    the first criterion when preprocessing does not run."""
+    threshold_from_criterion (the first criterion without it) when preprocessing does not run."""
     traces = request.start_from == "preprocessing"
     traced = [criterion_id for criterion_id in criterion_ids
               if not traces or request.trace_criteria is None or criterion_id in request.trace_criteria]
     if stage == "preprocessing":
         return traced
-    if not (traces and traced):
-        return list(criterion_ids)
-    starts = [criterion_ids.index(traced[0])]
+    starts = [criterion_ids.index(traced[0])] if traces and traced else []
     if request.threshold_from_criterion is not None:
         starts.append(criterion_ids.index(request.threshold_from_criterion))
-    return criterion_ids[min(starts):]
+    return criterion_ids[min(starts, default=0):]
 
 
 class FakeEngine:

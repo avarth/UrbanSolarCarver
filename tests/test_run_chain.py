@@ -222,6 +222,51 @@ def test_thresholding_from_a_later_criterion_than_the_first_traced_changes_nothi
     assert second.preprocessing is None and second.thresholding is not None
 
 
+def test_rethresholding_from_the_second_criterion_keeps_the_first(tmp_path):
+    out = tmp_path / "run"
+    run_chain(_two_criteria(tmp_path), out)
+    scores = [out / f"criteria/{cid}/preprocessing/scores.npy" for cid in ("1", "2")]
+    mtimes = [path.stat().st_mtime_ns for path in scores]
+    old = {name: _run_id(out / folder) for name, folder in (
+        ("thr_1", "criteria/1/thresholding"), ("thr_2", "criteria/2/thresholding"), ("export", "exporting"))}
+    again = run_chain(_two_criteria(tmp_path, second=0.8, folder="cfg2"), out, start_from="thresholding", threshold_from="2")
+    first, second = again.criteria
+    assert first.preprocessing is None and first.thresholding is None
+    assert second.preprocessing is None and second.thresholding is not None
+    assert [path.stat().st_mtime_ns for path in scores] == mtimes
+    assert _run_id(out / "criteria/1/thresholding") == old["thr_1"]
+    assert second.thresholding.run_id != old["thr_2"] and _run_id(out / "exporting") != old["export"]
+    manifest_2 = json.loads((out / "criteria/2/thresholding/manifest.json").read_text())
+    assert manifest_2["after_run_id"] == old["thr_1"]
+    listed = json.loads((out / "criteria/chain.json").read_text())["criteria"]
+    assert [row["thresholding_run_id"] for row in listed] == [old["thr_1"], second.thresholding.run_id]
+
+
+def test_rethresholding_from_the_first_criterion_thresholds_the_whole_chain(tmp_path):
+    out = tmp_path / "run"
+    run_chain(_two_criteria(tmp_path), out)
+    old_thr = [_run_id(out / f"criteria/{cid}/thresholding") for cid in ("1", "2")]
+    again = run_chain(_two_criteria(tmp_path, folder="cfg2"), out, produce=("thresholding",), start_from="thresholding",
+                      threshold_from="1")
+    assert all(r.preprocessing is None and r.thresholding is not None for r in again.criteria)
+    assert [r.thresholding.run_id for r in again.criteria] != old_thr
+    assert all(r.thresholding.run_id != old for r, old in zip(again.criteria, old_thr))
+
+
+def test_rethresholding_from_a_criterion_after_one_without_thresholding_names_the_folder(tmp_path):
+    out = tmp_path / "run"
+    chain = _two_criteria(tmp_path)
+    run_chain(chain, out, produce=("thresholding",))
+    shutil.rmtree(out / "criteria/1/thresholding")
+    with pytest.raises(StageChainError, match=r"criteria.1.thresholding"):
+        run_chain(chain, out, produce=("thresholding",), start_from="thresholding", threshold_from="2")
+
+
+def test_thresholding_from_a_criterion_not_in_the_chain_is_refused_when_starting_at_thresholding(tmp_path):
+    with pytest.raises(ValueError, match="threshold_from"):
+        run_chain(_two_criteria(tmp_path), tmp_path / "run", start_from="thresholding", threshold_from="7")
+
+
 def test_thresholding_from_a_criterion_not_in_the_chain_is_refused(tmp_path):
     with pytest.raises(ValueError, match="threshold_from"):
         run_chain(_two_criteria(tmp_path), tmp_path / "run", trace={"2"}, threshold_from="7")

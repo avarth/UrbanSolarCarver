@@ -200,6 +200,24 @@ def test_a_second_run_traces_only_the_changed_criterion(chain_of_two):
     assert criterion_status(store, name) == {"1": CURRENT, "2": CURRENT} and stage_status(store, name) == ALL_CURRENT
 
 
+def test_a_threshold_change_reruns_only_that_criterion_and_the_ones_after(chain_of_two):
+    store, name = chain_of_two
+    engine = FakeEngine()
+    worker = make_worker(store, handle_request=engine)
+    run_and_wait(worker, name, ["exporting", "massing"])
+    run_folder = store.open(name) / "run"
+    first_before = {stage: run_id_in(run_folder / "criteria" / "1" / stage) for stage in ("preprocessing", "thresholding")}
+    records_before = store.read_project_json(name).criterion_records["1"]
+    store.update_criterion(name, "2", values={"carve_fraction": 0.3})
+    reply = run_and_wait(worker, name, ["exporting", "massing"])
+    request = engine.requests[1]
+    assert (request.start_from, request.trace_criteria, request.threshold_from_criterion) == ("thresholding", None, "2")
+    assert reply.criterion_stages == {"1": [], "2": ["thresholding"]}
+    assert {stage: run_id_in(run_folder / "criteria" / "1" / stage) for stage in first_before} == first_before
+    assert store.read_project_json(name).criterion_records["1"] == records_before
+    assert criterion_status(store, name) == {"1": CURRENT, "2": CURRENT} and stage_status(store, name) == ALL_CURRENT
+
+
 def test_one_run_brings_back_an_earlier_thresholding_and_a_later_preprocessing(chain_of_two):
     store, name = chain_of_two
     engine = FakeEngine()

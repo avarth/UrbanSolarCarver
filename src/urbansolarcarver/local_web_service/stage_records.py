@@ -56,8 +56,9 @@ class StageChoice:
     trace_criteria: list[str]       # the criteria that are on whose preprocessing is not current, in chain order: traced again
     # Every criterion that is on -> the stages the run executes for it, as run_chain runs them (empty when it runs none).
     criterion_stages: dict[str, list[str]]
-    # With trace_criteria: the criterion thresholding starts at when that is before the first traced one (its thresholding is not
-    # current while its preprocessing is); None when thresholding starts at the first traced criterion anyway, or nothing is traced.
+    # Where thresholding starts when run_chain would not start it there on its own: with trace_criteria, a criterion before the
+    # first traced one (its thresholding is not current while its preprocessing is); without them, the first criterion whose
+    # thresholding is not current. None when thresholding starts at the first traced or the first criterion anyway, or does not run.
     threshold_from: str | None = None
 
 
@@ -268,7 +269,8 @@ def choose_stages(store: ProjectStore, name: str, produce: list[str]) -> StageCh
     When the preprocessing of a criterion that is on is not current (as far as *produce* needs it), the run starts at
     preprocessing and traces those criteria again (trace_criteria); run_chain then thresholds every criterion from the first
     traced one on, or from an earlier one whose thresholding is not current (threshold_from). Else, when the thresholding of
-    one is not current, it starts at thresholding and thresholds the whole chain again. Either way it runs every stage of *produce* that follows: those read the new thresholding, so they cannot stay.
+    one is not current, it starts at thresholding and thresholds the chain from the first criterion whose thresholding is not
+    current on (threshold_from; the ones before it keep theirs). Either way it runs every stage of *produce* that follows: those read the new thresholding, so they cannot stay.
     Otherwise it runs each stage of *produce* that is not current. Raises ValueError for a stage name the pipeline does not have.
     """
     needed = stages_needed_for(produce)
@@ -285,10 +287,12 @@ def choose_stages(store: ProjectStore, name: str, produce: list[str]) -> StageCh
     stages = [stage for stage in PIPELINE_STAGES if stage in chosen]
     criterion_ids = list(status.criteria)
     threshold_from = None
-    if trace and "thresholding" in chosen:
-        # Thresholding starts at the first criterion whose is not current; run_chain starts it at the first traced one unless told.
+    if "thresholding" in chosen:
+        # Thresholding starts at the first criterion whose is not current; run_chain starts it at the first traced one (or at the
+        # first criterion, with no tracing) unless told.
         first_to_threshold = next(criterion_id for criterion_id in criterion_ids if status.criteria[criterion_id]["thresholding"] != "current")
-        if criterion_ids.index(first_to_threshold) < criterion_ids.index(trace[0]):
+        starts_on_its_own_at = criterion_ids.index(trace[0]) if trace else 0
+        if criterion_ids.index(first_to_threshold) != starts_on_its_own_at:     # a traced criterion's thresholding is never current
             threshold_from = first_to_threshold
     return StageChoice(stages=stages, produce_for_engine=[stage for stage in stages if stage in produce],
                        start_from=stages[0] if stages else None, trace_criteria=trace,
@@ -298,14 +302,13 @@ def choose_stages(store: ProjectStore, name: str, produce: list[str]) -> StageCh
 def _criterion_stages(criterion_ids: list[str], stages: list[str], trace: list[str], threshold_from: str | None) -> dict[str, list[str]]:
     """The analysis stages a run of *stages* executes for each criterion, as run_chain runs them: from preprocessing it traces the
     criteria of *trace* and thresholds every criterion from the first of them (or from *threshold_from*, when that is earlier) on;
-    from thresholding it thresholds every criterion."""
+    from thresholding it thresholds every criterion from *threshold_from* on (from the first, without it)."""
     thresholds = "thresholding" in stages
-    if "preprocessing" in stages:
-        first_thresholded = min(criterion_ids.index(criterion_id) for criterion_id in [*trace, *([threshold_from] if threshold_from else [])])
-        return {criterion_id: [*(["preprocessing"] if criterion_id in trace else []),
-                               *(["thresholding"] if thresholds and position >= first_thresholded else [])]
-                for position, criterion_id in enumerate(criterion_ids)}
-    return {criterion_id: ["thresholding"] if thresholds else [] for criterion_id in criterion_ids}
+    starts = [criterion_ids.index(criterion_id) for criterion_id in [*trace, *([threshold_from] if threshold_from else [])]]
+    first_thresholded = min(starts) if starts else 0
+    return {criterion_id: [*(["preprocessing"] if "preprocessing" in stages and criterion_id in trace else []),
+                           *(["thresholding"] if thresholds and position >= first_thresholded else [])]
+            for position, criterion_id in enumerate(criterion_ids)}
 
 
 def envelope_voxel_size(store: ProjectStore, name: str) -> float | None:

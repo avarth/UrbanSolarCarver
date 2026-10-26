@@ -120,8 +120,10 @@ With `start_from="preprocessing"`, `trace` is a collection of criterion ids: onl
 again, and the others keep their existing preprocessing folder (`StageChainError` when it is missing). Thresholding
 runs for every criterion from the first one that traced on, so a criterion decides after the existing run of the one
 before it. `threshold_from` names a criterion, earlier in the chain than the first traced one, whose thresholding is run
-again as well. With `start_from="preprocessing"`, a `trace` that names no criterion of the chain (an empty one too) and
-a `threshold_from` that is not in the chain raise `ValueError` before anything is touched. The default of both is the
+again as well. With `start_from="thresholding"`, every criterion is thresholded again, or, with `threshold_from`, only that
+criterion and the ones after it; the ones before it keep their thresholding folders (`StageChainError` when one is
+missing). A `trace` that names no criterion of the chain (an empty one too, with `start_from="preprocessing"`) and
+a `threshold_from` that is not in the chain (with either start) raise `ValueError` before anything is touched. The default of both is the
 behaviour without them: every criterion traces and thresholds.
 
 The daemon runs a chain when a `run` request names a chain file; its overrides set shared settings only, and its
@@ -192,7 +194,7 @@ and see the effect on the whole chain, edit it and run `usc run -c chain.yaml --
 
 The local service behind `usc ui` keeps the criteria of a project in `project.json` and writes the project's `config.yaml` as a chain file from them, so a project folder also runs with `usc run -c <folder>/config.yaml`. Each criterion has its own test surface files: a file is stored once in the project, several criteria can use it, and the engine reads one joined file per criterion. A criterion's id is a number the service assigns (`1`, `2`, ...); it names the criterion's output folder and stays the same when the criteria are reordered.
 
-A run does only what changed. The service compares each criterion's settings and test surfaces with the ones its results were made from, and asks the engine to trace only the criteria whose rays changed (`trace_criteria`), then to threshold the chain from the first traced criterion on. When a criterion earlier in the chain needs thresholding again while a later one is traced, it also sends `threshold_from_criterion`; when no criterion needs tracing, it thresholds the whole chain again. The result of each criterion, the volume each one kept and the criterion that removed each voxel are served per criterion.
+A run does only what changed. The service compares each criterion's settings and test surfaces with the ones its results were made from, and asks the engine to trace only the criteria whose rays changed (`trace_criteria`), then to threshold the chain from the first traced criterion on. When a criterion earlier in the chain needs thresholding again while a later one is traced, it also sends `threshold_from_criterion`; when no criterion needs tracing, it thresholds the chain from the first criterion whose thresholding is out of date on (`threshold_from_criterion`), so the ones before it keep their results. The result of each criterion, the volume each one kept and the criterion that removed each voxel are served per criterion.
 
 On the packaged Perimeter block example (Solar time-based, then Daylight on the same test surfaces; NVIDIA RTX 3060), the first analysis took 2.4 s and kept 187,743 m³. After adding the Daylight criterion, the next analysis traced only that criterion and took 2.7 s; the chain then kept 187,743 m³ after the first criterion and 119,848 m³ after the second. Projects made with an earlier version open as a chain of one criterion with their results still current. The routes, the files and the rules for what goes out of date are in [Criteria in a project](ui.md#criteria-in-a-project).
 

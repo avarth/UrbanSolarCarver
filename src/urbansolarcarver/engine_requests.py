@@ -66,8 +66,9 @@ class RunRequest(_EngineRequest):
     and the overrides set shared settings only.  *trace_criteria* (chain only,
     ignored otherwise) lists the criterion ids to trace again when starting
     from preprocessing; the others reuse their existing preprocessing.
-    *threshold_from_criterion* (chain only, with *trace_criteria*) names a criterion
-    to threshold again even though it comes before the first traced one.
+    *threshold_from_criterion* (chain only) names the criterion thresholding starts at:
+    with *trace_criteria*, one that comes before the first traced one; when starting
+    from thresholding, any one, the criteria before it keeping their thresholding.
     *after* (a config without ``criteria:``, a run that starts at thresholding) is the
     previous criterion's thresholding folder or manifest: thresholding then decides only
     among the voxels that criterion kept.  A chain file or an earlier ``start_from``

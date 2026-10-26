@@ -467,14 +467,32 @@ def test_choose_stages_rethresholds_an_earlier_criterion_while_tracing_a_later_o
     assert choice.criterion_stages == {"1": ["thresholding"], "2": ["thresholding"], "3": ["preprocessing", "thresholding"]}
 
 
-def test_choose_stages_rethresholds_the_chain_when_only_a_carving_rule_changed(chain_of_three):
+def test_choose_stages_rethresholds_from_the_last_criterion_when_only_its_carving_rule_changed(chain_of_three):
     store, name = chain_of_three
     store.update_criterion(name, "3", values={"carve_fraction": 0.3})
     choice = choose_stages(store, name, ["thresholding"])
-    assert (choice.stages, choice.start_from, choice.trace_criteria) == (["thresholding"], "thresholding", [])
-    assert choice.criterion_stages == {"1": ["thresholding"], "2": ["thresholding"], "3": ["thresholding"]}
+    assert (choice.stages, choice.start_from, choice.trace_criteria, choice.threshold_from) == (
+        ["thresholding"], "thresholding", [], "3")
+    assert choice.criterion_stages == {"1": [], "2": [], "3": ["thresholding"]}
     assert choose_stages(store, name, ["preprocessing"]).stages == []
-    assert choose_stages(store, name, ["thresholding"]).threshold_from is None      # starting at thresholding thresholds everything
+
+
+def test_choose_stages_rethresholds_the_whole_chain_when_the_first_criterions_carving_rule_changed(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "1", values={"carve_fraction": 0.3})
+    choice = choose_stages(store, name, ["thresholding"])
+    assert (choice.stages, choice.start_from, choice.trace_criteria, choice.threshold_from) == (
+        ["thresholding"], "thresholding", [], None)         # run_chain thresholds every criterion without threshold_from
+    assert choice.criterion_stages == {"1": ["thresholding"], "2": ["thresholding"], "3": ["thresholding"]}
+
+
+def test_choose_stages_rethresholds_from_the_changed_criterion(chain_of_three):
+    store, name = chain_of_three
+    store.update_criterion(name, "2", values={"carve_fraction": 0.3})
+    choice = choose_stages(store, name, ["thresholding"])
+    assert (choice.stages, choice.start_from, choice.trace_criteria, choice.threshold_from) == (
+        ["thresholding"], "thresholding", [], "2")
+    assert choice.criterion_stages == {"1": [], "2": ["thresholding"], "3": ["thresholding"]}
 
 
 def test_a_run_of_the_chosen_stages_brings_every_criterion_back(chain_of_three):
@@ -493,7 +511,8 @@ def test_recording_stages_keeps_each_criterions_settings_and_test_surfaces(chain
     choice = choose_stages(store, name, ["thresholding"])
     settings = run_settings(store, name)
     run_folder = store.open(name) / "run"
-    write_fake_stage_output(run_folder, "thresholding")     # as the engine rethresholds the chain
+    assert choice.criterion_stages == {"1": [], "2": [], "3": ["thresholding"]}
+    write_fake_stage_output(run_folder, "thresholding", criterion_ids=["3"])     # as the engine rethresholds from criterion 3
     record_stages(store, name, choice, settings)
     records = store.read_project_json(name).criterion_records
     assert records["3"]["thresholding"].config == store.read_stored_config(name, "3")

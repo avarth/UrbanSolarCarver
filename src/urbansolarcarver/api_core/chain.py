@@ -80,7 +80,7 @@ def run_chain(
         Stages wanted, as for :func:`~urbansolarcarver.run_pipeline`.
     start_from : str
         ``"preprocessing"`` traces every criterion. ``"thresholding"`` reads each criterion's existing preprocessing
-        folder and thresholds the chain again. ``"exporting"`` and ``"massing"`` read the last criterion's existing
+        folder and thresholds the chain again (from ``threshold_from`` on, when given). ``"exporting"`` and ``"massing"`` read the last criterion's existing
         thresholding folder.
     context : RunContext | None
         Progress callback and cancel flag for the run. Progress is reported under ``criterion <id>`` for the
@@ -94,8 +94,10 @@ def run_chain(
     threshold_from : str | None
         With ``start_from="preprocessing"``: the id of a criterion to threshold again even when it comes before the first
         traced one (its preprocessing, which was not traced, is read as it is). Thresholding then starts at the earlier of
-        this criterion and the first traced one. Default: start at the first traced criterion. Ignored for the other
-        values of *start_from*.
+        this criterion and the first traced one. Default: start at the first traced criterion.
+        With ``start_from="thresholding"``: thresholding starts at this criterion; the criteria before it keep their
+        thresholding, which the first one thresholded decides after. Default: threshold every criterion.
+        Ignored for the other values of *start_from*.
 
     Returns
     -------
@@ -109,7 +111,8 @@ def run_chain(
         *trace* names no criterion of the chain, or *threshold_from* names none.
     StageChainError
         If a folder to read before ``start_from`` (or the preprocessing folder of a criterion that *trace* leaves
-        out) has no usable output; the message names the stage to re-run.
+        out, or of a criterion before *threshold_from* with ``start_from="thresholding"``) has no usable output; the
+        message names the stage to re-run.
     RunCancelled
         If the context is cancelled; stages that finished keep their output.
     """
@@ -140,7 +143,7 @@ def run_chain(
         ran = [stage for stage in _CRITERION_STAGES if stage in stages_to_run]
         if trace is not None and start_from == "preprocessing" and not {c.id for c in criteria} & set(trace):
             raise ValueError(f"trace names no criterion of the chain (ids {[c.id for c in criteria]}): {sorted(trace)}")
-        if threshold_from is not None and start_from == "preprocessing" and threshold_from not in {c.id for c in criteria}:
+        if threshold_from is not None and start_from in _CRITERION_STAGES and threshold_from not in {c.id for c in criteria}:
             raise ValueError(f"threshold_from names no criterion of the chain (ids {[c.id for c in criteria]}): {threshold_from!r}")
         if "thresholding" in ran:
             # A run that stops before the last criterion must not leave a list that names the earlier run.
@@ -148,7 +151,9 @@ def run_chain(
 
         previous = None
         thresholding_run_ids = []
-        thresholding_started = False
+        # From preprocessing, thresholding starts at the first traced criterion or at threshold_from; from thresholding, at
+        # threshold_from, or at the first criterion without it.
+        thresholding_started = start_from == "thresholding" and threshold_from is None
         for position, criterion in enumerate(criteria, start=1):
             with stage_context(f"criterion {criterion.id}"):
                 context.raise_if_cancelled()
@@ -162,7 +167,7 @@ def run_chain(
                     thresholding_started = True
                 if criterion.id == threshold_from:
                     thresholding_started = True
-                if "thresholding" in ran and (thresholding_started or "preprocessing" not in ran):
+                if "thresholding" in ran and thresholding_started:
                     thr = thresholding(pre if pre is not None else pre_folder, criterion.config, thr_folder,
                                        after=previous)
                 # A criterion that is not thresholded keeps its thresholding folder, which the next one reads.
