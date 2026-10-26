@@ -382,14 +382,45 @@ def test_write_optional_geometry_without_input_writes_nothing(gh, tmp_path):
 
 def test_run_stages_sends_after_only_when_given(gh, monkeypatch):
     sent = []
-    monkeypatch.setattr(gh, "call_daemon",
-                        lambda session, cmd, payload=None, timeout=None: sent.append(payload) or {"status": "ok"})
+    monkeypatch.setattr(gh, "call_daemon", lambda session, cmd, payload=None, timeout=None: (
+        {"status": "ok", "features": ["run_after"]} if cmd == "ping" else sent.append(payload) or {"status": "ok"}))
     gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None, after="C:/other/thresholding/manifest.json")
     gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None)
     gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None, after="")
     with_after, without, empty = sent
     assert with_after["after"] == "C:/other/thresholding/manifest.json"
     assert "after" not in without and "after" not in empty
+
+
+def _stub_daemon(monkeypatch, gh, ping_reply):
+    sent = []
+
+    def fake_call_daemon(session, cmd, payload=None, timeout=None):
+        sent.append(cmd)
+        return ping_reply if cmd == "ping" else {"status": "ok"}
+
+    monkeypatch.setattr(gh, "call_daemon", fake_call_daemon)
+    return sent
+
+
+def test_run_stages_with_after_refuses_an_engine_without_the_run_after_feature(gh, monkeypatch):
+    for ping_reply in ({"status": "ok", "pid": 1}, {"status": "ok", "pid": 1, "features": []}):
+        sent = _stub_daemon(monkeypatch, gh, ping_reply)
+        with pytest.raises(gh.DaemonError, match="older than this definition and cannot chain criteria. Restart it from USC_Session"):
+            gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None, after="C:/a/manifest.json")
+        assert sent == ["ping"]
+
+
+def test_run_stages_with_after_proceeds_when_the_engine_lists_run_after(gh, monkeypatch):
+    sent = _stub_daemon(monkeypatch, gh, {"status": "ok", "pid": 1, "features": ["run_after"]})
+    gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None, after="C:/a/manifest.json")
+    assert sent == ["ping", "run"]
+
+
+def test_run_stages_without_after_does_not_ping(gh, monkeypatch):
+    sent = _stub_daemon(monkeypatch, gh, {"status": "ok", "pid": 1})
+    gh.run_stages("s", _config("C:/base.yaml"), ["thresholding"], "thresholding", None)
+    assert sent == ["run"]
 
 
 _STUB_GH = """

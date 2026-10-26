@@ -30,7 +30,7 @@ The reply holds `stage_folders` (stage name to folder, only for the stages that 
 
 **`preprocessing`, `thresholding`, `exporting`, `massing`** run one stage. They need `config`; every stage but preprocessing also needs `from`, the upstream stage's folder or manifest. `out_dir` defaults to `<config out_dir>/<stage>`. `thresholding` also takes `after`, the previous criterion's thresholding folder or `manifest.json` (`StageRequest.after`): the stage then decides only among the voxels that criterion kept, and `out_dir` may not be that criterion's own folder. The reply has `issues` and `manifest`, `export_path` (exporting) or `plates_path`, `mesh_path` and `export_mesh_path` (massing).
 
-**`run_pipeline`** runs preprocessing, thresholding and exporting into `out_dir` (default: the config's `out_dir`); Grasshopper definitions saved before `run` existed still send it. **`simulate_weights`** writes a simulated-weights file (`epw`, `archetype`, `out`, optional `internal_gains_w_m2` and `eps`) and replies with `artifact` and `preview`. **`ping`** replies with the process id (`pid`).
+**`run_pipeline`** runs preprocessing, thresholding and exporting into `out_dir` (default: the config's `out_dir`); Grasshopper definitions saved before `run` existed still send it. **`simulate_weights`** writes a simulated-weights file (`epw`, `archetype`, `out`, optional `internal_gains_w_m2` and `eps`) and replies with `artifact` and `preview`. **`ping`** replies with the process id (`pid`) and `features`, a list of what this engine supports beyond the first version (`run_after`: the `after` key of `run`), so a client can tell an older engine.
 
 Keys a command does not use are ignored. Reply fields that are None are left out.
 

@@ -106,7 +106,9 @@ def run_stages(session, config, produce, start_from, extra_overrides=None, after
     the folder of each stage that ran, and its ``issues`` go to
     :func:`show_issues`.  *after* (the thresholding manifest of the previous
     criterion, or None) is sent when given: thresholding then keeps only
-    voxels that criterion kept.
+    voxels that criterion kept.  An engine that does not list ``run_after``
+    among the ``features`` of its ping reply would ignore it, so the daemon
+    is pinged first and a DaemonError raised for an older one.
 
     Without a YAML the configuration needs ``max_volume_path`` and
     ``test_surface_path``.  When the overrides lack them, they default to the
@@ -127,6 +129,9 @@ def run_stages(session, config, produce, start_from, extra_overrides=None, after
     if config.yaml_path:
         payload["config"] = str(config.yaml_path)
     if after:
+        if "run_after" not in call_daemon(session, "ping", timeout=PING_TIMEOUT_S).get("features", []):
+            raise DaemonError("The UrbanSolarCarver engine running now is older than this definition and cannot "
+                              "chain criteria. Restart it from USC_Session.")
         payload["after"] = str(after)
     return call_daemon(session, "run", payload)
 

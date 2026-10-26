@@ -167,9 +167,10 @@ def test_a_malformed_message_gets_an_error_reply_naming_the_problem():
     assert "Unknown command" in reply["error"]
 
 
-def test_ping_answers_with_the_process_id():
+def test_ping_answers_with_the_process_id_and_the_features():
     import os
-    assert answer_engine_message({"cmd": "ping"}, _CountingSession()) == {"status": "ok", "pid": os.getpid()}
+    assert answer_engine_message({"cmd": "ping"}, _CountingSession()) == {
+        "status": "ok", "pid": os.getpid(), "features": ["run_after"]}
 
 
 def test_memory_is_released_when_a_stage_command_fails(tmp_path):
@@ -381,6 +382,14 @@ def test_a_run_request_with_after_refuses_a_chain_file(tmp_path):
                                    "config": str(chain), "run_folder": str(tmp_path / "run")}, _CountingSession())
     assert reply["status"] == "error" and reply["error_type"] == "ConfigError", reply
     assert "after" in reply["error"] and "criteria" in reply["error"]
+
+
+def test_a_run_request_with_after_and_an_unknown_start_from_gets_the_start_from_error(tmp_path, tmp_mesh_files):
+    cfg_path = _write_daylight_yaml(tmp_path, *tmp_mesh_files)
+    reply = answer_engine_message({"cmd": "run", "produce": ["exporting"], "start_from": "nonsense", "after": "earlier/thresholding",
+                                   "config": str(cfg_path), "run_folder": str(tmp_path / "run")}, _CountingSession())
+    assert reply["status"] == "error" and reply["error_type"] == "ValueError", reply
+    assert "start_from" in reply["error"] and "after" not in reply["error"]
 
 
 def test_after_is_a_key_of_the_run_request():

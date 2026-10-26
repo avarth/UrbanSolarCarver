@@ -38,6 +38,9 @@ from .stage_settings import PIPELINE_STAGES, stage_folder
 
 _log = logging.getLogger(__name__)
 
+# What this engine can do that older ones could not, named in the ping reply so a client can tell.
+ENGINE_FEATURES = ("run_after",)        # RunRequest.after
+
 # ``key=value`` strings, or a mapping of typed values.
 Overrides = Union[List[str], Dict[str, Any]]
 
@@ -135,6 +138,7 @@ class IssueReply(BaseModel):
 class PingReply(BaseModel):
     status: Literal["ok"] = "ok"
     pid: int
+    features: List[str] = Field(default_factory=list)
 
 
 class RunReply(BaseModel):
@@ -244,7 +248,7 @@ def handle_engine_request(request: EngineRequest, session, context: Optional[Run
     is used when it is None.
     """
     if isinstance(request, PingRequest):
-        return PingReply(pid=os.getpid())
+        return PingReply(pid=os.getpid(), features=list(ENGINE_FEATURES))
     if isinstance(request, SimulateWeightsRequest):
         return _simulate_weights(request)
     context = context if context is not None else RunContext()
@@ -273,8 +277,9 @@ def _issue_replies(context: RunContext) -> List[IssueReply]:
 
 
 def _refuse_after(request: RunRequest, message: str) -> None:
-    """Raise ConfigError with *message* when *request* carries ``after``."""
-    if request.after is not None:
+    """Raise ConfigError with *message* when *request* carries ``after``; a ``start_from`` that is no stage is left to
+    the run, which reports it first."""
+    if request.after is not None and request.start_from in PIPELINE_STAGES:
         raise ConfigError(message, [ConfigFieldError("after", message)])
 
 

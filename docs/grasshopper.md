@@ -91,7 +91,7 @@ Both take the geometry: `max_volume`, `test_surfaces`, and the optional `context
 
 - **USC_ThresholdStage**: runs thresholding only. Accepts `threshold_overrides` directly. Its summary shows the slope limit (angle, voxels removed, share of the obstruction score). Errors turn the component red.
 
-  To chain two criteria, give the second one its own Config (a different `out_dir`), Preprocess and ThresholdStage, and wire the first ThresholdStage's `thr_result` into the second one's `after` input (the last input; empty = a single criterion as before). The second stage then decides only among the voxels the first kept and never keeps one it removed. Restart the daemon from USC_Session after updating, so it reads `after`.
+  To chain two criteria, give the second one its own Config (a different `out_dir`), Preprocess and ThresholdStage, and wire the first ThresholdStage's `thr_result` into the second one's `after` input (the last input; empty = a single criterion as before). The second stage then decides only among the voxels the first kept and never keeps one it removed. A daemon started before the update cannot chain; the component then says so and asks for a restart from USC_Session.
 - **USC_Export**: runs exporting only. Accepts `postprocess_overrides` directly. Errors turn the component red.
 - **USC_Massing**: stage 4, builds floor plates from the carving mask (inputs `config`, `thr_result`, `massing_overrides`, `run`; outputs closed Breps, floor areas per floor and in total, and the `plates.json` path). See [Floor-plate massing](massing.md).
 - **USC_MassingSettings**: floor heights, module size, tolerance and stacking for USC_Massing. Connect its output to USC_Massing's `massing_overrides` input so changes re-run only massing.
