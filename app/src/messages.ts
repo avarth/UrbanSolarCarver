@@ -338,6 +338,16 @@ export const messages = {
   addTestSurfacesFirst: (criterionName: string) => `Add test surfaces to ${criterionName} first`,
   // The panel of a criterion that is off, in place of its carving rule
   criterionOffNote: "Off: the chain skips this criterion",
+  // The folded sections of a criterion's panel, each saying in one line what it holds while it is closed
+  panelSectionTitles: { test_surfaces: "Test surfaces", mode: "Mode", settings: "Settings", carving: "Carving rule" },
+  noTestSurfacesYet: "None yet",
+  twoFileNames: (firstName: string, secondName: string) => `${firstName}, ${secondName}`,
+  fileCount: (count: number) => `${count} ${count === 1 ? "file" : "files"}`,
+  startingValues: "Starting values",
+  settingsChanged: (count: number) => `${count} ${count === 1 ? "setting" : "settings"} changed`,
+  carveAmountSummary: (percentText: string) => `Carve ${percentText}`,
+  cutoffSummary: (cutoffText: string) => `Cutoff ${cutoffText}`,
+  angleRuleSummary: "Everything above the planes",
   histogramTitle: "Scores of the voxels",
   histogramScaleLabel: "Scale of the counts",
   logScale: "Log",

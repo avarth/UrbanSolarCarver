@@ -7,7 +7,7 @@ import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import type { PipelineStage, StageState } from "./step_summaries";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, NOTHING_RUN, TRIANGLE_OBJ, buttonIn, container, criterionEntry, endWorkspaceTest, openStep,
-  openWorkspace, project, reasonOf, settle, startWorkspaceTest, stepRow,
+  openPanelSection, openWorkspace, project, reasonOf, settle, startWorkspaceTest, stepRow,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -86,6 +86,7 @@ test("during a run the criterion's controls are disabled and the panel says why 
   expect(reasonOf(runButton)).toBe("A run is in progress");
   expect(panel()!.textContent!.split("A run is in progress")).toHaveLength(2);
   expect(protectsBox().querySelector<HTMLButtonElement>(".input-add")!.disabled).toBe(true);
+  openPanelSection("Mode");
   expect(panel()!.querySelector('[role="radiogroup"]')!.getAttribute("aria-disabled")).toBe("true");
 });
 
@@ -126,6 +127,7 @@ test("site and grid shows only shared settings", async () => {
   expect(field("start_month")).toBeNull();
   expect(buttonIn(container().querySelector(".step-pinned-action")!, "Run analysis")).toBeDefined();
   openStep("Criteria");
+  openPanelSection("Settings");
   expect(field("start_month")).not.toBeNull();
   expect(field("voxel_size")).toBeNull();
 });

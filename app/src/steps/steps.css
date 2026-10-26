@@ -504,13 +504,58 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .run-issues ul { margin: var(--space-unit) 0 0; padding-left: calc(var(--space-unit) * 4); }
 .run-issues-title { margin: 0; font-weight: 600; }
 
-/* Criteria (spec 7.1, 7.2): one criterion opens straight on its panel; the carving rule and Run analysis close it, each set off by
-   a line as the steps' sections are. ------------------------------------------------------------------------------------------- */
+/* Criteria (spec 7.1, 7.2): the cards, then the selected criterion's panel in folded sections and Run analysis, each set off by a
+   line. ------------------------------------------------------------------------------------------------------------------------ */
 
 .criteria-step { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
-.criterion-panel { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
-.criterion-carving,
+.criterion-panel { display: flex; flex-direction: column; }
 .criterion-run { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
+.criterion-carving { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
+
+/* A section of the panel: its header a full-width button with a caret, the title and, while closed, what the section holds on the
+   same line, cut short when it is too long; in the error colour when the section has something to fix, as a step's summary. */
+.panel-section + .panel-section { border-top: 1px solid var(--colour-line); }
+.panel-section-heading { margin: 0; font: inherit; }
+.panel-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: calc(var(--space-unit) * 2);
+  width: 100%;
+  padding: calc(var(--space-unit) * 3) 0;
+  border: 0;
+  background: transparent;
+  color: var(--colour-ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.panel-section-header::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 6px;
+  height: 6px;
+  margin: 0 2px;
+  border-right: 2px solid var(--colour-muted);
+  border-bottom: 2px solid var(--colour-muted);
+  transform: rotate(-45deg);
+}
+.panel-section-header[aria-expanded="true"]::before { transform: rotate(45deg); }
+.panel-section-header:focus { outline: none; }
+.panel-section-header:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 2px; }
+.panel-section-title { flex: none; font-weight: 600; }
+.panel-section-summary {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--colour-muted);
+  font-size: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-section-summary-problem { color: var(--colour-error); font-weight: 600; }
+.panel-section-content { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); padding-bottom: calc(var(--space-unit) * 4); }
+/* The notice of a new weather file, under the Settings header open or closed. */
+.panel-section > .weather-change-region:not(:empty) { padding-bottom: calc(var(--space-unit) * 3); }
 
 /* The cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
 .criteria-list-block { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }

@@ -13,6 +13,7 @@ import {
 import { activeCriteria, filesOfOtherCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
 import { CriteriaStep } from "../criteria/CriteriaStep";
 import { CriterionPanel } from "../criteria/CriterionPanel";
+import { sectionOfSetting } from "../criteria/section_summaries";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
@@ -32,7 +33,7 @@ import { boundsOf, joinedGeometryOf, useInputGeometry, type MeshRole } from "./i
 import { carvedByNote, InputBox, inputProblemText, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import type { RunLoop } from "./run_state";
-import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep } from "./SettingsStep";
+import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep, stepOfSetting } from "./SettingsStep";
 import { SiteAndGridStep } from "./SiteAndGridStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
@@ -354,7 +355,11 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     const field = panel.current?.querySelector<HTMLElement>(`[data-setting="${settingToFocus.name}"]`);
     const labelled = field?.dataset.inputId === undefined ? null : document.getElementById(field.dataset.inputId);
     (labelled ?? field?.querySelector<HTMLElement>(":is(input, select)"))?.focus();
+    setSettingToFocus(null);          // done: a Criteria step opened later opens no section for it
   }, [settingToFocus]);
+  // A setting of the criterion's panel to focus opens the panel's section that holds it first, in the same render.
+  const openSectionRequest = useMemo(() => (settingToFocus === null || stepOfSetting(settingToFocus.name, criterionKeys) !== "criteria" ? null
+    : { section: sectionOfSetting(settingToFocus.name) }), [settingToFocus]);
 
   // Either button of the notice ends it; the focus, on a button that goes away, moves to the period the notice was about.
   const endWeatherChangeNotice = () => {
@@ -416,9 +421,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                        disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
     criteria: (
-      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine}
-                    panelProblem={workspaceCriteria.panelProblem} panel={
-        <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
+      <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine} openSectionRequest={openSectionRequest}
+                    panelProblem={workspaceCriteria.panelProblem} panel={(sections) => (
+        <CriterionPanel key={criterionId} {...sections} testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
                         onChange={changeSettings} onChooseMode={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
@@ -427,7 +432,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
                         carvingRule={resultSteps.carvingRule}
                         runAnalysis={resultSteps.criterionRunAnalysis} />
-      } />
+      )} />
     ),
     ...resultSteps.content,
   };

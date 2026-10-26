@@ -2,7 +2,8 @@
 // their groups, the grid under Voxel size, the grid-over-budget message in place of the engine's, and messages that name no single
 // setting. Run analysis (RunAnalysisButton) is pinned at the bottom of the panel in Site and grid and ends a criterion's panel,
 // disabled with the first reason that blocks the run, its run's progress under it. Above the groups, after a weather file is added
-// or replaced in this session, the notice of the period it may call for (weather_change_notice.ts).
+// or replaced in this session, the notice of the period it may call for (weather_change_notice.ts); a criterion's panel shows it
+// under the header of its Settings section instead, open or closed (WeatherChangeRegion).
 import { useId, type ReactNode } from "react";
 import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from "../api_client/client";
 import { messages } from "../messages";
@@ -249,7 +250,10 @@ interface SettingsStepProps {
   coldPeriod?: ColdPeriodState | null;
   /** The hemisphere of the weather file, for the period's heating season preset; northern without one. */
   hemisphere?: Hemisphere;
-  /** The notice of a weather file added or replaced in this session; null when there is none to show. */
+  /**
+   * The notice of a weather file added or replaced in this session; null when there is none to show; absent: the notice is not
+   * shown here (Site and grid, or a criterion's panel, which shows it over its folded settings, WeatherChangeRegion).
+   */
   weatherChangeNotice?: WeatherChangeNoticeContent | null;
   /** The input roles the project has files for: Account for context blocking shows only with surroundings or terrain. */
   inputRoles?: readonly string[];
@@ -263,18 +267,25 @@ interface SettingsStepProps {
 
 const NO_INPUT_ROLES: readonly string[] = [];
 
-export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern", weatherChangeNotice = null,
+/** The notice of a weather file in a live region on the page from the start, so that screen readers announce the notice that fills it. */
+export function WeatherChangeRegion({ notice, form, onChange, disabled }: { notice: WeatherChangeNoticeContent | null; form: FormState;
+                                     onChange: (values: Record<string, unknown>) => void; disabled: boolean }) {
+  return (
+    <div className="weather-change-region" role="status">
+      {notice !== null && <WeatherChangeNotice {...notice} form={form} onChange={onChange} disabled={disabled} />}
+    </div>
+  );
+}
+
+export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern", weatherChangeNotice,
                                inputRoles = NO_INPUT_ROLES, settingShown, stepErrors = form.stepErrors, showsDisabledReason = true }: SettingsStepProps) {
   const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
   return (
     <div className="settings-step">
       {disabledReason !== null && showsDisabledReason && <p className="step-reason">{disabledReason}</p>}
-      {/* A live region on the page from the start, so that screen readers announce the notice that fills it. */}
-      <div className="weather-change-region" role="status">
-        {weatherChangeNotice !== null && (
-          <WeatherChangeNotice {...weatherChangeNotice} form={form} onChange={onChange} disabled={disabledReason !== null} />
-        )}
-      </div>
+      {weatherChangeNotice !== undefined && (
+        <WeatherChangeRegion notice={weatherChangeNotice} form={form} onChange={onChange} disabled={disabledReason !== null} />
+      )}
       {stepErrors.map((error) => <p key={error} className="setting-error step-error"><WarningIcon /><span>{error}</span></p>)}
       {settingsForStep("settings", form.mode, inputRoles, settingShown).map((group) => (
         <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras} />

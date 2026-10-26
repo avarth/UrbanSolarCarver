@@ -263,6 +263,27 @@ export function openStep(title: string) {
   act(() => stepRow(title).querySelector<HTMLButtonElement>(".step-header")!.click());
 }
 
+/** The header of the criterion panel's section titled *title* ("Test surfaces", "Mode", "Settings", "Carving rule"). */
+export function panelSectionHeader(title: string): HTMLButtonElement {
+  return [...container().querySelectorAll<HTMLButtonElement>(".panel-section-header")]
+    .find((header) => header.querySelector(".panel-section-title")!.textContent === title)!;
+}
+
+export const panelSectionOpen = (title: string) => panelSectionHeader(title).getAttribute("aria-expanded") === "true";
+
+/** The titles of the criterion panel's open sections, in order. */
+export const openPanelSections = () => [...container().querySelectorAll<HTMLButtonElement>('.panel-section-header[aria-expanded="true"]')]
+  .map((header) => header.querySelector(".panel-section-title")!.textContent);
+
+export function togglePanelSection(title: string) {
+  act(() => panelSectionHeader(title).click());
+}
+
+/** Opens the criterion panel's section titled *title*, when it is closed. */
+export function openPanelSection(title: string) {
+  if (!panelSectionOpen(title)) togglePanelSection(title);
+}
+
 export function type(input: HTMLInputElement, text: string) {
   act(() => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, text);

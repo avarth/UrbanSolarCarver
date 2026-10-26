@@ -1,16 +1,24 @@
-// A criterion's panel (spec 7.1, 7.2): what it protects (ProtectsBox), its mode (the tiles of ModeStep), its own settings (the
-// analysis settings that are criterion keys, SettingsStep), its carving rule (CarvingStep, put together in result_steps.tsx) and
-// Run analysis, in that order. The shared settings are in Site and grid.
-import type { ReactNode } from "react";
+// A criterion's panel (spec 7.1, 7.2), in four folded sections (PanelSection): Test surfaces (ProtectsBox), Mode (the tiles of
+// ModeStep, with the weather box and the values a mode change reset), Settings (the analysis settings that are criterion keys,
+// SettingsStep) and Carving rule (CarvingStep, put together in result_steps.tsx), then Run analysis. The shared settings are in
+// Site and grid. The open sections are the step's (usePanelSections); a section opens when something it shows appears: no test
+// surfaces, a field with an error of the criterion's save, the weather box or the values reset under the tiles. A criterion just
+// selected shows them all as new. The notice of a new weather file is under the Settings header, open or closed.
+import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
+import { messages } from "../messages";
 import type { ColdPeriodState, Hemisphere } from "../settings_form/analysis_period";
 import type { FormState } from "../settings_form/form_state";
 import { ModeStep } from "../steps/ModeStep";
-import { SettingsStep, type WeatherChangeNoticeContent } from "../steps/SettingsStep";
+import { SettingsStep, WeatherChangeRegion, type WeatherChangeNoticeContent } from "../steps/SettingsStep";
+import { PanelSection, type PanelSections } from "./PanelSection";
 import { ProtectsBox } from "./ProtectsBox";
+import {
+  carvingRuleSummary, criterionSettingsSummary, modeSummary, PANEL_SECTIONS, settingsToFixBySection, testSurfacesSummary, type PanelSectionId,
+} from "./section_summaries";
 import "../steps/steps.css";
 
-export interface CriterionPanelProps {
+export interface CriterionPanelProps extends PanelSections {
   /** The criterion's test surface files, with their triangle counts. */
   testSurfaces: InputFileInfo[];
   /** The files of the test surfaces the 3D view cannot draw. */
@@ -42,18 +50,62 @@ export interface CriterionPanelProps {
 }
 
 export function CriterionPanel(props: CriterionPanelProps) {
-  const { form, criterionKeys, onChange, disabledReason } = props;
+  const { form, criterionKeys, onChange, disabledReason, openSections, onOpenSections } = props;
+  const toFix = settingsToFixBySection({ fieldErrors: form.fieldErrors, stepErrors: props.stepErrors }, criterionKeys);
+  const hasWeatherBox = props.weatherDropZone !== null && props.weatherDropZone !== undefined && props.weatherDropZone !== false;
+  // What a section has to fix: its summary is in the warning colour.
+  const problems: Record<PanelSectionId, boolean> = {
+    test_surfaces: props.testSurfaces.length === 0,
+    mode: hasWeatherBox || toFix.mode !== undefined,
+    settings: toFix.settings !== undefined,
+    carving: toFix.carving !== undefined,
+  };
+  const valuesReset = (form.valuesResetByModeChange?.settings.length ?? 0) > 0;
+  // A section opens when something it shows appears, before the page is drawn; the user may close it again.
+  const calling = PANEL_SECTIONS.filter((id) => problems[id] || (id === "mode" && valuesReset));
+  const calledBefore = useRef<ReadonlySet<PanelSectionId>>(new Set());
+  useLayoutEffect(() => {
+    const appeared = calling.filter((id) => !calledBefore.current.has(id));
+    calledBefore.current = new Set(calling);
+    if (appeared.length > 0) onOpenSections(appeared);
+  }, [calling.join(" ")]);
+
+  const summaries: Record<PanelSectionId, string> = {
+    test_surfaces: testSurfacesSummary(props.testSurfaces.map((file) => file.name)),
+    mode: modeSummary(form.mode),
+    settings: criterionSettingsSummary(form, criterionKeys),
+    carving: carvingRuleSummary(form),
+  };
+  // A closed section with settings to fix says how many, as a step row does.
+  const section = (id: PanelSectionId, children: ReactNode, alwaysShown?: ReactNode) => {
+    const settingsToFix = toFix[id];
+    return (
+      <PanelSection id={id} title={messages.panelSectionTitles[id]} open={openSections.has(id)} onToggle={() => props.onToggleSection(id)}
+                    summary={settingsToFix === undefined ? summaries[id] : messages.settingsToFix(settingsToFix)} problem={problems[id]}
+                    alwaysShown={alwaysShown}>
+        {children}
+      </PanelSection>
+    );
+  };
   return (
     <div className="criterion-panel">
-      <ProtectsBox files={props.testSurfaces} mode={form.mode} onAddFiles={props.onAddTestSurfaces} onRemoveFile={props.onRemoveTestSurface}
-                   disabledReason={disabledReason} drawingProblems={props.testSurfaceDrawingProblems} otherFiles={props.otherTestSurfaces}
-                   onUseFile={props.onUseTestSurface} />
-      <ModeStep mode={form.mode} onChoose={props.onChooseMode} disabledReason={disabledReason} valuesReset={form.valuesResetByModeChange}
-                weatherDropZone={props.weatherDropZone} showsDisabledReason={false} />
-      <SettingsStep form={form} stepErrors={props.stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={props.inputRoles}
-                    coldPeriod={props.coldPeriod} hemisphere={props.hemisphere} weatherChangeNotice={props.weatherChangeNotice}
-                    settingShown={(name) => criterionKeys.has(name)} showsDisabledReason={false} />
-      <div className="criterion-carving">{props.carvingRule}</div>
+      {section("test_surfaces", (
+        <ProtectsBox files={props.testSurfaces} mode={form.mode} onAddFiles={props.onAddTestSurfaces} onRemoveFile={props.onRemoveTestSurface}
+                     disabledReason={disabledReason} drawingProblems={props.testSurfaceDrawingProblems} otherFiles={props.otherTestSurfaces}
+                     onUseFile={props.onUseTestSurface} />
+      ))}
+      {section("mode", (
+        <ModeStep mode={form.mode} onChoose={props.onChooseMode} disabledReason={disabledReason} valuesReset={form.valuesResetByModeChange}
+                  weatherDropZone={props.weatherDropZone} showsDisabledReason={false} />
+      ))}
+      {section("settings", (
+        <SettingsStep form={form} stepErrors={props.stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={props.inputRoles}
+                      coldPeriod={props.coldPeriod} hemisphere={props.hemisphere} settingShown={(name) => criterionKeys.has(name)}
+                      showsDisabledReason={false} />
+      ), (
+        <WeatherChangeRegion notice={props.weatherChangeNotice ?? null} form={form} onChange={onChange} disabled={disabledReason !== null} />
+      ))}
+      {section("carving", <div className="criterion-carving">{props.carvingRule}</div>)}
       <div className="criterion-run">{props.runAnalysis}</div>
     </div>
   );

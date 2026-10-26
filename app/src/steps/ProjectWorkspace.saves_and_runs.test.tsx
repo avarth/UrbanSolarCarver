@@ -14,8 +14,8 @@ import {
 } from "./chain_service_for_test";
 import {
   CARVED, CARVING, ENVELOPE, FakeService, MASSING, MODES, NOTHING_RUN, SCHEMA, TRIANGLE_OBJ, buildPart, buttonIn, container,
-  dimmedCarvingLayers, endWorkspaceTest, openStep, openWorkspace, pressRunAnalysis, project, reasonOf, settle,
-  startWorkspaceTest, stepRow, thresholdField, thresholdOf, type, typeAndLeave, unmountWorkspace, voxelSizeField,
+  dimmedCarvingLayers, endWorkspaceTest, openPanelSection, openStep, openWorkspace, panelSectionOpen, pressRunAnalysis, project, reasonOf, settle,
+  startWorkspaceTest, stepRow, thresholdField, thresholdOf, togglePanelSection, type, typeAndLeave, unmountWorkspace, voxelSizeField,
   waitForTheSave,
 } from "./project_workspace_for_test";
 
@@ -86,7 +86,11 @@ test("a save the service refuses keeps Run analysis from starting a run, and say
 const settingsSaves = () => service.requests.filter((request) => request.startsWith("PUT") || request.startsWith("PATCH"));
 const modeTiles = () => [...container().querySelectorAll<HTMLElement>('[role="radio"]')];
 const siteAndGridSummaryText = () => stepRow("Site and grid").querySelector(".step-summary")!.textContent;
-const periodFieldText = () => container().querySelector('[data-setting="start_month"]')!.textContent;
+/** The text of the criterion's period field, its Settings section opened first. */
+function periodFieldText() {
+  openPanelSection("Settings");
+  return container().querySelector('[data-setting="start_month"]')!.textContent;
+}
 
 test("saving the voxel size sends only shared settings", async () => {
   service = new FakeService(NOTHING_RUN, null);
@@ -103,6 +107,7 @@ test("saving the analysis period sends the criterion's settings", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN, { voxel_size: 2, threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Criteria");
+  openPanelSection("Settings");
   act(() => buttonIn(container(), "21 June").click());
   await waitForTheSave();
   await settle();
@@ -132,6 +137,7 @@ test("a mode change starts the criterion from the new mode's values", async () =
   await openWorkspace(service, project(NOTHING_RUN, { voxel_size: 2, start_month: 3 }));
   openStep("Criteria");
   expect(periodFieldText()).toContain("21 Mar");
+  openPanelSection("Mode");
   act(() => modeTiles()[4].click());                                  // Daylight
   await waitForTheSave();
   await settle();
@@ -238,7 +244,8 @@ test("a refused mode change locks the carving: the old mode's carving is not sho
     ? [{ field: "max_slope_deg", message: "Input should be greater than 0" }] : null);
   await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   openStep("Criteria");
-  act(() => [...container().querySelectorAll<HTMLElement>('[role="radio"]')][4].click());      // Daylight
+  openPanelSection("Mode");
+  act(() => modeTiles()[4].click());                                  // Daylight
   // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Solar time-based.
   expect(stepRow("Criteria").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   await waitForTheSave();
@@ -275,6 +282,23 @@ test("a failed run's link to a setting opens its step and focuses the input its 
   const link = [...container().querySelectorAll<HTMLButtonElement>("button")].find((button) => button.textContent === "Go to voxel size")!;
   act(() => link.click());
   expect(document.activeElement).toBe(voxelSizeField());
+});
+
+test("go to a setting opens its section: a run refused for the analysis period, with Settings closed, focuses the period", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  expect(panelSectionOpen("Settings")).toBe(false);
+  await pressRunAnalysis();
+  FakeWebSocket.opened[0].send({ type: "run_failed", error_type: "ConfigError", message: "invalid",
+                                 field_errors: [{ field: "start_month", message: "Input should be 12 or less" }] });
+  await settle();
+  expect(panelSectionOpen("Settings")).toBe(true);                  // the error marked in the field opened it
+  togglePanelSection("Settings");
+  expect(container().querySelector('[data-setting="start_month"]')).toBeNull();
+  act(() => buttonIn(container(), "Go to analysis period").click());
+  expect(panelSectionOpen("Settings")).toBe(true);
+  expect(container().querySelector('[data-setting="start_month"]')!.contains(document.activeElement)).toBe(true);
 });
 
 test("Build massing sends only massing and Build envelope only exporting; each leaves the other part's out-of-date mark (Review Focus 5)", async () => {
@@ -492,6 +516,7 @@ async function addWeatherFile() {
   act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));
   await settle();
   openStep("Criteria");
+  openPanelSection("Settings");
 }
 
 /** Past the wait before the cold period is asked for, and its reply. */
@@ -534,6 +559,7 @@ test("a first weather file counts as after a northern one; the heating season pr
   service.uploadedWeather = BRISBANE;
   await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
   openStep("Criteria");
+  openPanelSection("Settings");
   expect(buttonIn(container(), "Heating season, October to April")).toBeDefined();
   await addWeatherFile();
   expect(noticeText()).toContain("(Brisbane, AUS) is in the southern hemisphere");

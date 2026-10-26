@@ -3,12 +3,13 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
-  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, cardNames, chooseFromMenu, criteriaSummary, deleteCriterion, expectNoProblemShown,
+  CURRENT, FACADES, OUT_OF_DATE, ROOFS, WINDOWS, card, cardLine, cardNames, chooseFromMenu, criteriaSummary, criterion, deleteCriterion, expectNoProblemShown,
   expectResultsOfCriterion, keptTile, openChain, panel, panelFrame, periodFieldText, protectedFiles, select, selectButtonOf, selectedCardName, service,
   settingsSaves,
 } from "./chain_service_for_test";
 import {
-  buttonIn, container, endWorkspaceTest, openStep, reasonOf, settle, startWorkspaceTest, stepRow, thresholdField, unmountWorkspace, waitForTheSave,
+  buttonIn, container, endWorkspaceTest, openPanelSection, openPanelSections, openStep, reasonOf, settle, startWorkspaceTest, stepRow, thresholdField, togglePanelSection,
+  unmountWorkspace, waitForTheSave,
 } from "./project_workspace_for_test";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
@@ -53,8 +54,25 @@ test("selecting a card shows its settings, its test surfaces and its results", a
                                                 threshold: { method: "cutoff", value: 3 } });
 });
 
+test("the open sections stay as the user left them when another criterion is selected; one without test surfaces opens them", async () => {
+  const bare = criterion("3", "Daylight on roofs", { mode: "daylight" }, []);
+  await openChain([FACADES, WINDOWS, bare]);
+  expect(openPanelSections()).toEqual(["Test surfaces", "Carving rule"]);
+  togglePanelSection("Mode");
+  togglePanelSection("Carving rule");
+  togglePanelSection("Test surfaces");
+  expect(openPanelSections()).toEqual(["Mode"]);
+  await select("Spring sun on windows");
+  expect(openPanelSections()).toEqual(["Mode"]);
+  await select("Daylight on roofs");                              // it protects nothing yet
+  expect(openPanelSections()).toEqual(["Test surfaces", "Mode"]);
+  await select("Winter sun on facades");
+  expect(openPanelSections()).toEqual(["Test surfaces", "Mode"]);
+});
+
 test("a pending save goes to the criterion it was typed in", async () => {
   await openChain([FACADES, WINDOWS]);
+  openPanelSection("Settings");
   act(() => buttonIn(container(), "21 June").click());           // a period for criterion 1, its save still waiting
   await select("Spring sun on windows");                           // before the save delay
   await waitForTheSave();
@@ -173,6 +191,7 @@ test("Add criterion with one criterion adds one of the chosen mode and selects i
   expect(cardLine("Daylight")).toBe("Add test surfaces");
   expect(document.activeElement).toBe(selectButtonOf("Daylight"));
   expect(protectedFiles()).toEqual([]);
+  openPanelSection("Mode");
   expect(panel().querySelector('[role="radio"][aria-checked="true"]')!.textContent).toBe("Daylight");
   // It has not run: its score points and sky dome are not asked for (the service has none).
   expect(service.requests.filter((request) => request.includes("criterion=2") && request.includes("/run/"))).toEqual([]);
@@ -190,6 +209,7 @@ test("while a card's settings are on their way its panel waits, and a reply for 
   await settle();
   expect(selectedCardName()).toBe("Daylight on roofs");
   expect(protectedFiles()).toEqual(["roofs.obj"]);
+  openPanelSection("Mode");
   expect(panel().querySelector('[role="radio"][aria-checked="true"]')!.textContent).toBe("Daylight");
   act(() => panel().querySelector<HTMLElement>('[role="radio"][aria-checked="false"]')!.click());       // another mode for it
   await waitForTheSave();

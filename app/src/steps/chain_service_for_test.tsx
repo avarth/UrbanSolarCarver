@@ -6,7 +6,7 @@ import { expect } from "vitest";
 import type { ChainSummary, CriterionCarvingSummary, CriterionEntry, ProjectDetail } from "../api_client/client";
 import { plainModeName, type PipelineStage, type StageState } from "./step_summaries";
 import {
-  CARVED, CARVING, CRITERION_KEYS, FakeService, buttonIn, container, json, openStep, openWorkspace, project, settle, stepRow,
+  CARVED, CARVING, CRITERION_KEYS, FakeService, buttonIn, container, json, openPanelSection, openStep, openWorkspace, project, settle, stepRow,
 } from "./project_workspace_for_test";
 
 export type CriterionStages = Record<"preprocessing" | "thresholding", StageState>;
@@ -220,7 +220,11 @@ export const cardLine = (name: string) => card(name).querySelector(".criterion-c
 export const selectedCardName = () => container().querySelector('.criterion-card[aria-current="true"] .criterion-card-name')!.textContent;
 export const panel = () => container().querySelector<HTMLElement>(".criterion-panel")!;
 export const protectedFiles = () => [...panel().querySelectorAll(".input-box .input-file-name")].map((name) => name.textContent);
-export const periodFieldText = () => container().querySelector('[data-setting="start_month"]')!.textContent;
+/** The text of the shown criterion's period field, its Settings section opened first. */
+export function periodFieldText() {
+  openPanelSection("Settings");
+  return container().querySelector('[data-setting="start_month"]')!.textContent;
+}
 export const keptTile = () => panel().querySelector(".number-tile-value")!.textContent;
 export const criteriaSummary = () => stepRow("Criteria").querySelector(".step-summary")!.textContent;
 export const settingsSaves = () => service.requests.filter((request) => request.startsWith("PATCH") || request.startsWith("PUT /shared"));
