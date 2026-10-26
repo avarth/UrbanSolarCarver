@@ -191,6 +191,20 @@ test("a setting to fix in another step is named with that step under the run but
   expect(runAnalysisBlocker(conditions({ form: marginRefused, shownIn: "criteria" }))).toBe("Fix the grid module in Envelope and massing to run the analysis");
 });
 
+test("with several criteria the reasons Criteria gives about the shown criterion name it", () => {
+  const named = { shownIn: "criteria" as const, shownCriterionName: "Daylight on roofs" };
+  expect(runAnalysisBlocker(conditions({ ...named, testSurfaceFiles: 0 }))).toBe("Add test surfaces to Daylight on roofs to run the analysis");
+  expect(runAnalysisBlocker(conditions({ ...named, hasWeatherFile: false }))).toBe("Add a weather file to run Daylight on roofs");
+  const slopeRefused = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
+  expect(runAnalysisBlocker(conditions({ ...named, form: slopeRefused }))).toBe("Fix the steepest step between columns of Daylight on roofs to run the analysis");
+  const criterionMessage = { stepErrorsByStep: { site_and_grid: [], criteria: ["Value error, the settings do not fit together"] } };
+  expect(runAnalysisBlocker(conditions({ ...named, ...criterionMessage }))).toBe("Fix the settings of Daylight on roofs to run the analysis");
+  // A setting of another step is named with its step, as with one criterion; Site and grid names no criterion.
+  const voxelSizeRefused = rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET);
+  expect(runAnalysisBlocker(conditions({ ...named, form: voxelSizeRefused }))).toBe("Fix the voxel size in Site and grid to run the analysis");
+  expect(runAnalysisBlocker(conditions({ shownCriterionName: "Daylight on roofs", testSurfaceFiles: 0 }))).toBe("Add test surfaces to run the analysis");
+});
+
 test("a message for no field is told as above in its own step, and with the step's name in the other", () => {
   const criterionMessage = { stepErrorsByStep: { site_and_grid: [], criteria: ["Value error, the settings do not fit together"] } };
   expect(runAnalysisBlocker(conditions(criterionMessage))).toBe("Fix the settings in Criteria to run the analysis");

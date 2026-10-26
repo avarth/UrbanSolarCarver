@@ -100,17 +100,18 @@ test("switching a card off greys it and reads Off", async () => {
   expect(criteriaSummary()).toBe("Winter sun on facades 61 %");       // the criterion that is off is left out
 });
 
-test("switching off the selected card selects the next one", async () => {
+test("switching off the selected card keeps it selected; its panel says it is off", async () => {
   await openChain([FACADES, WINDOWS]);
   await act(async () => card("Winter sun on facades").querySelector<HTMLInputElement>('[role="switch"]')!.click());
   await settle();
-  expect(selectedCardName()).toBe("Spring sun on windows");
-  expect(periodFieldText()).toContain("21 Mar");
-  expectResultsOfCriterion("2");
+  expect(selectedCardName()).toBe("Winter sun on facades");
+  expect(service.requests).not.toContain("GET /criteria/2/settings");
+  expect(panel().textContent).toContain("Off: the chain skips this criterion");
+  expect(periodFieldText()).toContain("21 Dec");
   expectNoProblemShown();
 });
 
-test("a switch-off whose reply comes after another card was pressed moves the selection from the card pressed", async () => {
+test("a switch-off whose reply comes after another card was pressed keeps the card pressed selected", async () => {
   await openChain([FACADES, WINDOWS, ROOFS]);
   let answerPatches = () => {};
   service.patchesAnswerWhen = new Promise((resolve) => { answerPatches = resolve; });
@@ -119,7 +120,7 @@ test("a switch-off whose reply comes after another card was pressed moves the se
   await act(async () => answerPatches());
   await settle();
   expect(card("Winter sun on facades").classList.contains("criterion-card-bypassed")).toBe(true);
-  expect(selectedCardName()).toBe("Daylight on roofs");           // not the card after the bypassed one
+  expect(selectedCardName()).toBe("Daylight on roofs");
 });
 
 test("deleting the selected criterion selects the next one, and the last one the previous; settings and results follow", async () => {

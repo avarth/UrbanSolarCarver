@@ -285,6 +285,22 @@ test("a failed run's link to a setting opens its step and focuses the input its 
   expect(document.activeElement).toBe(voxelSizeField());
 });
 
+test("the pinned bar folds the warnings of the last run behind one line", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN));
+  openStep("Criteria");
+  await pressRunAnalysis();
+  FakeWebSocket.opened[0].send({ type: "issue", stage: "preprocessing", code: "w", message: "1 panel skipped" });
+  FakeWebSocket.opened[0].send({ type: "run_cancelled" });
+  await settle();
+  expect(pinnedBar().textContent).toContain("Cancelled.");
+  const toggle = buttonIn(pinnedBar(), "1 warning");
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(pinnedBar().textContent).not.toContain("1 panel skipped");
+  act(() => toggle.click());
+  expect(pinnedBar().textContent).toContain("1 panel skipped");
+});
+
 test("go to a setting opens its section: a run refused for the analysis period, with Settings closed, focuses the period", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
@@ -889,6 +905,9 @@ test("Run analysis waits for the test surfaces of every criterion that is on, an
   // A carving change of criterion 1 waits for criterion 2, which needs test surfaces before any analysis.
   expect(panel().textContent).toContain("Add test surfaces to Spring sun on windows first");
   expect(panel().textContent).not.toContain("Run the analysis for Spring sun on windows first");
+  // Shown, it is named too: with several criteria the bar says which one the reason is about.
+  await select("Spring sun on windows");
+  expect(reasonOf(runButton())).toBe("Add test surfaces to Spring sun on windows to run the analysis");
   await bypass("Spring sun on windows");
   expect(runButton().disabled).toBe(false);
 });
@@ -1048,7 +1067,7 @@ test("Site and grid's Run analysis names the criterion without test surfaces, wh
   expect(reasonOf(runButton)).toBe("Add test surfaces to Spring sun on windows to run the analysis");
 });
 
-test("Run analysis asks for the weather file a criterion that is on needs, also when the shown one needs none", async () => {
+test("Run analysis asks for the weather file a criterion that is on needs, naming it, also when the shown one needs none", async () => {
   const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
   await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2" }], undefined, undefined, [], withoutWeatherFile);
   expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
@@ -1056,7 +1075,7 @@ test("Run analysis asks for the weather file a criterion that is on needs, also 
   expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
   openStep("Criteria");
   await select("Winter sun on facades");
-  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run this mode");
+  expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
 });
 
 test("a shared setting refused by another criterion's settings is said in Site and grid with that criterion's name, on no criterion field", async () => {

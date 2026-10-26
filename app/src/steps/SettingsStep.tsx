@@ -40,6 +40,11 @@ export interface RunAnalysisConditions {
   criterionKeys: ReadonlySet<string>;
   /** The step whose button says the reason: a setting to fix in another step is named with that step. */
   shownIn: StepName;
+  /**
+   * The shown criterion's name, with several criteria: in Criteria the reasons about it (its test surfaces, its weather file, its
+   * settings to fix) name it, as the reasons about another criterion do; absent or null: they do not.
+   */
+  shownCriterionName?: string | null;
 }
 
 /**
@@ -69,11 +74,14 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
   if (conditions.runActive) return messages.runInProgress;
   if (conditions.noCriterionOn === true) return messages.turnOnCriterionToRun;
   const hasMaxVolume = conditions.maxVolumeFiles > 0, hasTestSurfaces = conditions.testSurfaceFiles > 0;
+  const criterionName = conditions.shownIn === "criteria" ? conditions.shownCriterionName ?? null : null;
   if (!hasMaxVolume && !hasTestSurfaces) return messages.addMaxVolumeAndTestSurfacesToRun;
   if (!hasMaxVolume) return messages.addMaxVolumeToRun;
-  if (!hasTestSurfaces) return messages.addTestSurfacesToRun;
+  if (!hasTestSurfaces) return criterionName === null ? messages.addTestSurfacesToRun : messages.addTestSurfacesOfCriterionToRun(criterionName);
   if (conditions.otherCriterionWithoutTestSurfaces != null) return messages.addTestSurfacesOfCriterionToRun(conditions.otherCriterionWithoutTestSurfaces);
-  if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) return messages.weatherFileNeeded;
+  if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) {
+    return criterionName === null ? messages.weatherFileNeeded : messages.weatherFileNeededFor(criterionName);
+  }
   const otherNeedingWeatherFile = conditions.otherCriterionNeedingWeatherFile;
   if (otherNeedingWeatherFile != null && !conditions.hasWeatherFile) return messages.weatherFileNeededFor(otherNeedingWeatherFile);
   const firstFieldWithError = Object.keys(form.fieldErrors)[0];
@@ -81,11 +89,12 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
     // A setting of another step is named with its step, so the user knows where to find it.
     const step = stepOfSetting(firstFieldWithError, conditions.criterionKeys) ?? conditions.shownIn;
     const label = shownLabelOf(firstFieldWithError, form.mode);
-    return step === conditions.shownIn ? messages.fixSettingToRun(label) : messages.fixSettingInStepToRun(label, messages.stepTitles[step]);
+    if (step !== conditions.shownIn) return messages.fixSettingInStepToRun(label, messages.stepTitles[step]);
+    return criterionName === null ? messages.fixSettingToRun(label) : messages.fixSettingOfCriterionToRun(label, criterionName);
   }
   // A message that names no setting is shown above the settings of its step: "above" there, the step named elsewhere.
   const stepsWithMessages = (Object.keys(conditions.stepErrorsByStep) as StepName[]).filter((step) => (conditions.stepErrorsByStep[step] ?? []).length > 0);
-  if (stepsWithMessages.includes(conditions.shownIn)) return messages.fixSettingsToRun;
+  if (stepsWithMessages.includes(conditions.shownIn)) return criterionName === null ? messages.fixSettingsToRun : messages.fixSettingsOfCriterionToRun(criterionName);
   if (stepsWithMessages.length > 0) return messages.fixSettingsInStepToRun(messages.stepTitles[stepsWithMessages[0]]);
   // A warm-up that failed blocks nothing: a run then reports the problem itself (the service's warm-up says the same).
   if (conditions.warmUpState === null || conditions.warmUpState === "not_started" || conditions.warmUpState === "running") return messages.runButtonWaitsForGpu;

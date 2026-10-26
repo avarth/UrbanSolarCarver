@@ -1,5 +1,5 @@
 // The selected criterion and the requests of its cards (CriterionList), for the workspace. Selecting another card (a press, or the
-// selection moving as the selected one is deleted or bypassed, or a new one added or duplicated) first saves a change still waiting
+// selection moving as the selected one is deleted, or a new one added or duplicated) first saves a change still waiting
 // to the criterion it was made in, then asks for the new one's settings (GET criteria/{id}/settings) and starts the criterion form
 // again from them; the shared form follows its mode. Until they are in, the panel waits (SelectionLoad); a refusal is said there.
 // A run refused for a criterion selects it the same way (showCriterion) and marks its fields once its settings are shown.
@@ -7,7 +7,6 @@
 import { useEffect, useRef, useState } from "react";
 import { failureTextOf, getCriterionSettings, serviceProblemOf } from "../api_client/client";
 import type { FormStart, SettingsForm } from "../settings_form/form_state";
-import { selectionAfterRemoving } from "./criteria_state";
 import type { CriterionListProps } from "./CriterionList";
 import type { CriteriaHook } from "./use_criteria";
 
@@ -118,16 +117,8 @@ export function useCriterionSelection(source: CriterionSelectionSource): Criteri
   const requests: CriterionRequests = {
     onSelect: select,
     onReorder: (ids) => change(() => criteria.reorder(ids)),
-    // Bypassing the selected criterion selects the next card (else the previous one), as deleting it does: from the selection when
-    // the reply is in, which a press may have changed meanwhile.
-    onSetBypassed: (id, on) => {
-      if (on && id === wanted) saveTheShownCriterion();
-      return change(async () => {
-        await criteria.setBypassed(id, on);
-        const now = criteria.current();
-        if (on) criteria.select(selectionAfterRemoving(now.criteria, id, now.selectedId));
-      });
-    },
+    // Switching a criterion off keeps the selection: the selected one stays, its panel saying it is off.
+    onSetBypassed: (id, on) => change(() => criteria.setBypassed(id, on)),
     onRename: (id, name) => change(() => criteria.rename(id, name)),
     onDuplicate: (id) => {
       saveTheShownCriterion();

@@ -253,6 +253,8 @@ export const messages = {
   // Every criterion is off (the service's words for the refusal)
   turnOnCriterionToRun: "Turn on a criterion to run",
   fixSettingsToRun: "Fix the settings above to run the analysis",
+  // The shown criterion's messages that name no setting, with several criteria
+  fixSettingsOfCriterionToRun: (criterionName: string) => `Fix the settings of ${criterionName} to run the analysis`,
   fixSettingsInStepToRun: (stepTitle: string) => `Fix the settings in ${stepTitle} to run the analysis`,
 
   // Warm-up and device status (5.1, 6.1, 11)
@@ -275,6 +277,9 @@ export const messages = {
   weatherFileNeededFor: (criterionName: string) => `Add a weather file to run ${criterionName}`,
   fixSettingToRun: (settingLabel: string) => `Fix the ${String(settingLabel).toLowerCase()} to run the analysis`,
   fixSettingInStepToRun: (settingLabel: string, stepTitle: string) => `Fix the ${String(settingLabel).toLowerCase()} in ${stepTitle} to run the analysis`,
+  // A setting of the shown criterion, with several criteria
+  fixSettingOfCriterionToRun: (settingLabel: string, criterionName: string) =>
+    `Fix the ${String(settingLabel).toLowerCase()} of ${criterionName} to run the analysis`,
   settingsToFix: (count: number) => `${count} ${count === 1 ? "setting" : "settings"} to fix`,
   gridOverBudget: (voxelsPerSide: number, totalVoxels: number, budgetVoxels: number, smallestVoxelSize: number) => ({
     description: `This grid would have ${groupedDigits(voxelsPerSide)} voxels per side, ${groupedDigits(totalVoxels)} in total. ` +

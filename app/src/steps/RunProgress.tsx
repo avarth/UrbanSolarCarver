@@ -1,9 +1,10 @@
 // What a run shows under the button that started it (UX 6.3, 11): while it runs, each stage in plain words with its state (a
 // criterion's stages named with the criterion when the project has several, spec 7.3),
 // the batch count during the ray tracing, the elapsed time and Cancel; once it ended, how it ended (a failure with a Details
-// fold and a link to the setting it names, "Cancelled.") and the warnings it reported. A notice of the run loop shows for three
-// seconds: "Results are up to date" when the service had nothing to run, "A run is in progress" for a press during a run.
-import { useEffect, useState } from "react";
+// fold and a link to the setting it names, "Cancelled.") and the warnings it reported, listed or, in the Criteria step's pinned bar,
+// folded behind one line ("2 warnings"). A notice of the run loop shows for three seconds: "Results are up to date" when the
+// service had nothing to run, "A run is in progress" for a press during a run.
+import { useEffect, useId, useState } from "react";
 import { messages } from "../messages";
 import { presentedSettingOf } from "../settings_form/presentation";
 import { formatNumber } from "./format_numbers";
@@ -125,6 +126,30 @@ function RunEnded(props: EndedRunContext & { record: RunRecord }) {
   }
 }
 
+/** The warnings a run reported: listed under a title, or folded behind a toggle that says how many. */
+function RunIssues({ issues, folded }: { issues: RunState["issues"]; folded: boolean }) {
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const list = <ul id={listId}>{issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>;
+  if (!folded) {
+    return (
+      <div className="run-issues">
+        <p className="run-issues-title">{messages.warningsTitle}</p>
+        {list}
+      </div>
+    );
+  }
+  return (
+    <div className="run-issues">
+      <button type="button" className="link-button run-issues-toggle" aria-expanded={open} aria-controls={open ? listId : undefined}
+              onClick={() => setOpen((shown) => !shown)}>
+        {messages.warningCount(issues.length)}
+      </button>
+      {open && list}
+    </div>
+  );
+}
+
 interface RunProgressProps {
   runs: Pick<RunLoop, "current" | "notice" | "cancel">;
   project: string;
@@ -141,9 +166,11 @@ interface RunProgressProps {
    * names alone.
    */
   criterionNames?: Readonly<Record<string, string>>;
+  /** The warnings fold behind one line, so a bar that holds the progress stays short; absent: they are listed. */
+  foldWarnings?: boolean;
 }
 
-export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames, shownCriterionId, criterionKeys }: RunProgressProps) {
+export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames, shownCriterionId, criterionKeys, foldWarnings = false }: RunProgressProps) {
   const record = runs.current;
   const isThisButton = record !== null && record.project === project && record.origin === origin;
   const notice = runs.notice !== null && runs.notice.project === project && runs.notice.origin === origin ? runs.notice.message : null;
@@ -157,12 +184,7 @@ export function RunProgress({ runs, project, origin, mode, onGoToSetting, criter
             ? <StageList state={record.state} onCancel={runs.cancel} criterionNameOf={(id) => criterionNames?.[id] ?? null} />
             : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId} criterionNames={criterionNames}
                         criterionKeys={criterionKeys} />}
-          {record.state.issues.length > 0 && (
-            <div className="run-issues">
-              <p className="run-issues-title">{messages.warningsTitle}</p>
-              <ul>{record.state.issues.map((issue, index) => <li key={index}>{issue.message}</li>)}</ul>
-            </div>
-          )}
+          {record.state.issues.length > 0 && <RunIssues key={record.serial} issues={record.state.issues} folded={foldWarnings} />}
         </>
       )}
     </div>

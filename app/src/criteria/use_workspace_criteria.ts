@@ -134,7 +134,8 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   };
 
   // Run analysis is in Criteria and pinned in Site and grid: each names a setting to fix in another step with that step. Every
-  // criterion that is on needs test surfaces (a bypassed one needs none), and a weather file when its mode reads one.
+  // criterion that is on needs test surfaces (a bypassed one needs none), and a weather file when its mode reads one. With several
+  // criteria every reason about a criterion names it, the shown one's too.
   const active = activeCriteria(criteria.criteria);
   const protectingNothing = criteriaProtectingNothing(criteria.criteria);
   const severalCriteria = criteria.criteria.length >= 2;
@@ -148,6 +149,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
     modeNeedsWeatherFile: source.modeNeedsWeatherFile && !(criterion?.bypassed ?? false),
     otherCriterionNeedingWeatherFile: needingWeatherFile.find((entry) => entry.id !== criterion?.id)?.name ?? null,
     hasWeatherFile: source.hasWeatherFile, form, warmUpState: source.warmUpState, criterionKeys,
+    shownCriterionName: severalCriteria ? criterion?.name ?? null : null,
     stepErrorsByStep: { site_and_grid: source.sharedForm.form.stepErrors, criteria: source.criterionForm.form.stepErrors },
   };
   const runBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "criteria" });

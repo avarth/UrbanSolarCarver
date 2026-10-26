@@ -423,6 +423,32 @@ test("Cancelled, a stage chain error, the warnings of a run and Results are up t
   expect(rendered.container.textContent).toBe("Results are up to date");
 });
 
+test("folded, the warnings of a run are one line with a toggle; how the run ended stays as it is", () => {
+  let state = initialRunState(["preprocessing"]);
+  for (const message of ["1 panel skipped", "2 faces flipped"]) state = runReducer(state, { type: "issue", stage: "preprocessing", criterion: null, code: "w", message });
+  const view = (ended: RunRecord["state"]) => (
+    <RunProgress runs={runs({ serial: 1, project: "p", origin: "build", runId: "r", state: ended, refusal: null })} project="p" origin="build"
+                 mode="time-based" onGoToSetting={vi.fn()} foldWarnings />
+  );
+  rendered = renderForTest(view(runReducer(state, { type: "run_cancelled" })));
+  const toggle = rendered.container.querySelector<HTMLButtonElement>(".run-issues-toggle")!;
+  expect(rendered.container.textContent).toBe("Cancelled.2 warnings");
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  expect(rendered.container.querySelector(".run-issues ul")).toBeNull();
+  click(toggle);
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  const list = rendered.container.querySelector(".run-issues ul")!;
+  expect(toggle.getAttribute("aria-controls")).toBe(list.id);
+  expect(list.textContent).toBe("1 panel skipped2 faces flipped");
+  click(toggle);
+  expect(rendered.container.querySelector(".run-issues ul")).toBeNull();
+  // A failure is said in full, the warnings folded under it.
+  rendered.rerender(view(runReducer(state, { type: "run_failed", error_type: "ConfigError", message: "invalid", field_errors: [] })));
+  expect(rendered.container.textContent).toContain("The run stopped on an error.");
+  expect(rendered.container.querySelector(".run-issues-toggle")!.textContent).toBe("2 warnings");
+  expect(rendered.container.querySelector(".run-issues ul")).toBeNull();
+});
+
 function unfoldCarvingSettings(container: HTMLElement) {
   click([...container.querySelectorAll("button")].find((button) => button.textContent === "More carving settings")!);
 }

@@ -14,7 +14,8 @@ test("the reasons a run button or a carving change waits, which fill the same sl
     messages.addTestSurfacesOfCriterionToRun("Daylight"), messages.turnOnCriterionToRun, messages.fixSettingsToRun,
     messages.fixSettingsInStepToRun("Criteria"), messages.fixSettingToRun("Voxel size"), messages.fixSettingInStepToRun("Voxel size", "Site and grid"),
     messages.weatherFileNeeded, messages.weatherFileNeededFor("Daylight"), messages.runButtonWaitsForGpu, messages.carvingWaitsForAnalysisOf("Daylight"),
-    messages.addTestSurfacesFirst("Daylight"),
+    messages.addTestSurfacesFirst("Daylight"), messages.fixSettingOfCriterionToRun("Voxel size", "Daylight"),
+    messages.fixSettingsOfCriterionToRun("Daylight"),
   ];
   for (const reason of oneSentence) expect(reason).toMatch(/^[^.]+[^.]$/);
   expect(messages.buildWaitsForAnalysis).toMatch(/^[^.]+\. [^.]+\.$/);            // two sentences, each with its period

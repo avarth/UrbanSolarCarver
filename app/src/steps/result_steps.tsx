@@ -345,9 +345,9 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   }, () => showResultsTheServiceHolds.current(CARVING_STAGES)), []);
   const submitThreshold = (values: Record<string, unknown>) => thresholdQueue.submit({ values, mode: form.mode }, context.criterionId ?? "");
 
-  const feedback = (origin: RunOrigin) => (
+  const feedback = (origin: RunOrigin, foldWarnings = false) => (
     <RunProgress runs={runs} project={project} origin={origin} mode={form.mode} onGoToSetting={context.goToSetting} criterionNames={context.criterionNames}
-                 shownCriterionId={context.criterionId} criterionKeys={context.criterionKeys} />
+                 shownCriterionId={context.criterionId} criterionKeys={context.criterionKeys} foldWarnings={foldWarnings} />
   );
 
   const carvingUpdateRunning = runs.activeRun?.project === project && runs.activeRun.origin === "carving_update";
@@ -424,7 +424,8 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     </>
   );
   // Criteria's pinned bar: Run analysis and the build, with the progress and outcome of Run analysis and of a carving update (whose
-  // controls are in the Carving rule section, which may be closed), each failure with its links to the settings to fix.
+  // controls are in the Carving rule section, which may be closed), each failure with its links to the settings to fix. The
+  // warnings of a run fold behind one line, so the bar stays short.
   const criteriaRunBar = (
     <CriteriaRunBar runBlocker={runBlocker} onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")}
                     buildBlocker={pinnedBuildBlocker}
@@ -432,7 +433,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                       context.openStep("envelope_and_massing");
                       void startAfterSaving(BUILD_STAGES, "build");
                     }}
-                    feedback={<>{feedback("carving_run_analysis")}{feedback("carving_update")}</>} />
+                    feedback={<>{feedback("carving_run_analysis", true)}{feedback("carving_update", true)}</>} />
   );
   const content = {
     envelope_and_massing: (
