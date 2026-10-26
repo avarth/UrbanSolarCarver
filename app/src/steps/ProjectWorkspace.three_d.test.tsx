@@ -39,6 +39,19 @@ const layersMenuEntries = () => {
   return entries.map((entry) => ({ label: entry.querySelector("label")!.textContent, disabled: entry.querySelector("input")!.disabled, note: entry.querySelector(".viewer-layer-note") !== null }));
 };
 const carvedByEntry = () => layersMenuEntries().find((entry) => entry.label === "Carved voxels, by criterion");
+const carvedByNote = () => {
+  act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
+  const note = [...container().querySelectorAll<HTMLElement>(".viewer-layers-panel li")].find((entry) => entry.textContent!.includes("by criterion"))?.querySelector(".viewer-layer-note")?.textContent;
+  act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
+  return note;
+};
+/** The layer starts hidden and is built only once shown: this turns it on in the Layers menu. */
+const turnOnCarvedByCriterion = () => {
+  act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
+  const entry = [...container().querySelectorAll<HTMLElement>(".viewer-layers-panel li")].find((item) => item.textContent!.includes("by criterion"))!;
+  act(() => entry.querySelector<HTMLInputElement>("input")!.click());
+  act(() => container().querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!.click());
+};
 
 async function bypass(name: string) {
   await act(async () => card(name).querySelector<HTMLInputElement>('[role="switch"]')!.click());
@@ -50,6 +63,7 @@ test("test the layer is missing until every active criterion has run: no request
   expect(carvedByRequests()).toBe(0);                                   // the route would answer 404
   expect(layer("carved_by_criterion")).toBeNull();
   expect(carvedByEntry()).toEqual({ label: "Carved voxels, by criterion", disabled: true, note: true });
+  expect(carvedByNote()).toBe("Shows once every criterion that is on has run.");
 
   service.runCriterionStages = { 1: ["thresholding"], 2: ["preprocessing", "thresholding"] };
   await pressRunAnalysis();
@@ -64,16 +78,20 @@ test("test the layer is missing until every active criterion has run: no request
   run.send({ type: "run_finished", stages: ["preprocessing", "thresholding"], files: [] });
   await settle();
   expect(carvedByRequests()).toBe(1);
-  expect(countOf("carved_by_criterion")).toBe(2);
   expect(carvedByEntry()).toEqual({ label: "Carved voxels, by criterion", disabled: false, note: false });
+  turnOnCarvedByCriterion();
+  expect(countOf("carved_by_criterion")).toBe(2);
 });
 
-test("with every criterion run the layer is drawn, in the criteria's colours, and hidden until it is turned on", async () => {
+test("with every criterion run the layer is offered, built only once it is turned on, in the criteria's colours", async () => {
   await openChain([FACADES, WINDOWS], undefined, holdResults);
   expect(carvedByRequests()).toBe(1);
-  expect(countOf("carved_by_criterion")).toBe(2);
-  expect(FakeViewerScene.latest!.visibleLayers.has("carved_by_criterion")).toBe(false);
+  expect(carvedByEntry()).toEqual({ label: "Carved voxels, by criterion", disabled: false, note: false });
+  expect(layer("carved_by_criterion")).toBeNull();                       // hidden: nothing is built yet
   expect(FakeViewerScene.latest!.visibleLayers.has("kept_voxels")).toBe(true);
+  turnOnCarvedByCriterion();
+  expect(countOf("carved_by_criterion")).toBe(2);
+  expect(FakeViewerScene.latest!.visibleLayers.has("carved_by_criterion")).toBe(true);
   const mesh = layer("carved_by_criterion") as THREE.InstancedMesh;
   const colourOf = (voxel: number) => {
     const colour = new THREE.Color();
@@ -97,11 +115,10 @@ test("two criteria where one is bypassed ask nothing either; turning it back on 
   expect(carvedByRequests()).toBe(2);                                    // the criteria that are on changed
   await bypass("Spring sun on windows");
   expect(carvedByRequests()).toBe(2);                                    // one criterion on: nothing to tell apart
-  expect(layer("carved_by_criterion")).toBeNull();
   expect(carvedByEntry()).toBeUndefined();
   await bypass("Spring sun on windows");
   expect(carvedByRequests()).toBe(3);
-  expect(countOf("carved_by_criterion")).toBe(2);
+  expect(carvedByEntry()).toEqual({ label: "Carved voxels, by criterion", disabled: false, note: false });
 });
 
 test("reordering and deleting criteria ask again", async () => {
@@ -114,7 +131,42 @@ test("reordering and deleting criteria ask again", async () => {
   expect(carvedByRequests()).toBe(2);
   await deleteCriterion("Daylight on roofs");
   expect(carvedByRequests()).toBe(3);
+  turnOnCarvedByCriterion();
   expect(countOf("carved_by_criterion")).toBe(2);
+});
+
+test("after a reorder the layer on screen stays until the new reply replaces it: no flash to missing", async () => {
+  await openChain([FACADES, WINDOWS, ROOFS], undefined, (chain) => holdResults(chain, ["1", "2", "3"]));
+  turnOnCarvedByCriterion();
+  const before = layer("carved_by_criterion");
+  expect(before).not.toBeNull();
+  let reply!: () => void;
+  service.carvedByCriterionAnswerWhen = new Promise<void>((resolve) => { reply = resolve; });
+  service.carvedByCriterion = packCarvedByCriterion([2, 2, 1], ["2", "1", "3"], [0, 2, 1, 0]);
+  const handle = card("Spring sun on windows").querySelector<HTMLElement>(".criterion-card-handle")!;
+  handle.focus();
+  await act(async () => handle.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowUp", bubbles: true, cancelable: true })));
+  await settle();
+  expect(carvedByRequests()).toBe(2);
+  expect(layer("carved_by_criterion")).toBe(before);                      // the reply is not in
+  expect(carvedByEntry()).toEqual({ label: "Carved voxels, by criterion", disabled: false, note: false });
+  reply();
+  await settle();
+  expect(layer("carved_by_criterion")).not.toBe(before);
+  expect(countOf("carved_by_criterion")).toBe(2);
+});
+
+test("the by-criterion layer is dimmed when any criterion that is on is out of date, not only the selected one", async () => {
+  await openChain([FACADES, WINDOWS], { 1: CURRENT, 2: { preprocessing: "current", thresholding: "out_of_date" } }, holdResults);
+  expect(FakeViewerScene.latest!.dimmed.has("carved_by_criterion")).toBe(true);
+  expect(FakeViewerScene.latest!.dimmed.has("kept_voxels")).toBe(false);          // criterion 1, the selected one, is current
+  turnOnCarvedByCriterion();
+  expect(container().querySelector(".viewer-out-of-date")).not.toBeNull();       // the stamp says so while the layer is shown
+});
+
+test("the by-criterion layer of a project that is up to date is not dimmed", async () => {
+  await openChain([FACADES, WINDOWS], undefined, holdResults);
+  expect(FakeViewerScene.latest!.dimmed.has("carved_by_criterion")).toBe(false);
 });
 
 test("a run that thresholds the criteria again asks for the layer once it has finished", async () => {
@@ -135,14 +187,17 @@ test("a run that thresholds the criteria again asks for the layer once it has fi
 
 test("selecting a card shows the state after that criterion in the kept voxels, and leaves the by-criterion layer as it is", async () => {
   await openChain([FACADES, WINDOWS], undefined, holdResults);
-  expect(countOf("kept_voxels")).toBe(3);                                // after criterion 1: voxel 1 is carved
+  turnOnCarvedByCriterion();
+  // The carved voxels layer holds its cubes first, then the outline.
+  const carvedOf = () => (layer("carved_voxels") as THREE.Group).children.find((child) => child instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+  expect([countOf("kept_voxels"), carvedOf().count]).toEqual([3, 1]);   // after criterion 1: voxel 1 is carved
   await select("Spring sun on windows");
   expect(service.requests).toContain("GET /run/score-points?criterion=2");
-  expect(countOf("kept_voxels")).toBe(2);                                // after criterion 2: voxel 2 is carved too
+  expect([countOf("kept_voxels"), carvedOf().count]).toEqual([2, 2]);   // after criterion 2: voxel 2 is carved too
   expect(carvedByRequests()).toBe(1);
   expect(countOf("carved_by_criterion")).toBe(2);
   await select("Winter sun on facades");
-  expect(countOf("kept_voxels")).toBe(3);
+  expect([countOf("kept_voxels"), carvedOf().count]).toEqual([3, 1]);
 });
 
 const verticesOf = (name: string) => {
@@ -165,10 +220,20 @@ test("test the other criteria's test surfaces are dimmed: the selected criterion
   await select("Winter sun on facades");
   expect(verticesOf("highlighted")).toBe(3);
   expect(verticesOf("dimmed")).toBe(6);
+  expect(service.count("GET /inputs/test_surfaces/facades.obj")).toBe(1);   // each file is loaded once, however the selection moves
+  expect(service.count("GET /inputs/test_surfaces/windows.obj")).toBe(1);
 });
 
-test("with one criterion nothing is dimmed", async () => {
-  await openChain([FACADES], undefined, twoFiles);
-  expect(verticesOf("highlighted")).toBe(3);
+test("with one criterion nothing is dimmed, even when a stored file is not one the criterion lists", async () => {
+  await openChain([FACADES], undefined, twoFiles, ["windows.obj"]);
+  expect(verticesOf("highlighted")).toBe(9);                              // facades.obj and windows.obj, all at full strength
   expect(verticesOf("dimmed")).toBeNull();
+});
+
+test("a criterion that lists no files highlights nothing and dims every stored file", async () => {
+  await openChain([FACADES, { ...WINDOWS, test_surface_files: [] }], undefined, twoFiles);
+  await select("Spring sun on windows");
+  expect(verticesOf("highlighted")).toBeNull();
+  expect(verticesOf("dimmed")).toBe(3);                                   // facades.obj
+  expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
 });

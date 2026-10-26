@@ -10,7 +10,7 @@ export interface LegendContent {
   skyDome?: { title: string; lowestWeight: number; highestWeight: number };
   sunPath?: string;                               // sunPathLegend(sunPath)
   buildingMassing?: { storeyCount: number };
-  carvedByCriterion?: { name: string; colour: string }[];     // one swatch and name per criterion that was on
+  carvedByCriterion?: { criteria: { name: string; colour: string }[]; thinningStep: number };     // one swatch and name per criterion that was on
 }
 
 interface LegendProps {
@@ -76,13 +76,14 @@ export function Legend({ content, theme }: LegendProps) {
         <section>
           <h3>{messages.carvedByCriterionLegend}</h3>
           <ul className="viewer-criterion-legend">
-            {carvedByCriterion.map((criterion, position) => (
+            {carvedByCriterion.criteria.map((criterion, position) => (
               <li key={position}>
                 <span className="viewer-criterion-swatch" style={{ background: criterion.colour }} aria-hidden="true" />
                 {criterion.name}
               </li>
             ))}
           </ul>
+          {carvedByCriterion.thinningStep > 1 && <p className="viewer-muted">{messages.thinnedVoxels(carvedByCriterion.thinningStep)}</p>}
         </section>
       )}
       {skyDome && (

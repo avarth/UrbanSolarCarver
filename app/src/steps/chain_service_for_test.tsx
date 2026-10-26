@@ -39,6 +39,8 @@ export class ChainService extends FakeService {
   scorePointsOf: Record<string, ArrayBuffer> = {};
   /** GET run/carved-by-criterion: the packed layer; null: not there (404, as the service answers until every criterion has run). */
   carvedByCriterion: ArrayBuffer | null = null;
+  /** While set, GET run/carved-by-criterion answers once the promise resolves. */
+  carvedByCriterionAnswerWhen: Promise<void> | null = null;
 
   constructor(entries: CriterionEntry[], criterionStages: Record<string, CriterionStages>) {
     super(CARVED, CARVING);
@@ -63,6 +65,7 @@ export class ChainService extends FakeService {
     }
     if (path === "/run/score-points" || path === "/run/carved-by-criterion") {
       this.requests.push(`${method} ${fullPath}`);
+      if (path === "/run/carved-by-criterion") await this.carvedByCriterionAnswerWhen;
       const packed = path === "/run/carved-by-criterion" ? this.carvedByCriterion : this.scorePointsOf[new URLSearchParams(fullPath.split("?")[1]).get("criterion") ?? ""];
       return packed === undefined || packed === null ? json({ detail: "Not found" }, 404) : new Response(packed);
     }
@@ -183,12 +186,12 @@ export let service: ChainService;
 
 /** Opens the project "p" of these criteria, every one carved, at the Criteria step; *prepare* sets what the service holds before the page asks. */
 export async function openChain(entries: CriterionEntry[], stages: Record<string, CriterionStages> = Object.fromEntries(entries.map((entry) => [entry.id, CURRENT])),
-                                prepare: (service: ChainService) => void = () => {}) {
+                                prepare: (service: ChainService) => void = () => {}, unlistedTestSurfaceFiles: string[] = []) {
   service = new ChainService(entries, { ...stages });
   prepare(service);
   service.stages = { ...CARVED, ...summedStages(stages) };
   service.summaryCriteria = entries.filter((entry) => !entry.bypassed).map((entry, index) => carvingSummaryOf(entry, [61, 80, 90][index]));
-  const files = [...new Set(entries.flatMap((entry) => entry.test_surface_files ?? []))].map((name) => ({ name, triangle_count: 1 }));
+  const files = [...new Set([...entries.flatMap((entry) => entry.test_surface_files ?? []), ...unlistedTestSurfaceFiles])].map((name) => ({ name, triangle_count: 1 }));
   const opened: ProjectDetail = {
     ...project(service.stages), settings: { voxel_size: 1, ...entries[0].settings }, criteria: entries, criterion_status: stages,
     inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: files, weather: [{ name: "weather.epw", triangle_count: 0 }] },

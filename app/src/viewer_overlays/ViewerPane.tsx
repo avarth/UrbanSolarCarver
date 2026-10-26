@@ -195,8 +195,13 @@ export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null,
       keptTopAt: keptColumnTops(scorePoints, localOrigin),
     }));
   }, [scene, voxels, outline]);
-  // Each carved voxel in the colour of the criterion that removed it, whose id the layer names; the layer is drawn again when a colour changes.
-  const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion === null ? null : carvedVoxelsByCriterion(carvedByCriterion, localOrigin)), [carvedByCriterion, originKey]);
+  // Each carved voxel in the colour of the criterion that removed it, whose id the layer names; the layer is drawn again when a colour
+  // changes. It is a layer of up to a million cubes that starts hidden: it is built (and the voxels listed, thinned to the cap of the
+  // score points) only while it is shown, and dropped when it is hidden again.
+  const isVisible = (name: LayerName) => visibleByChoice[name] ?? shownByDefault.includes(name);
+  const showsCarvedByCriterion = carvedByCriterion !== null && isVisible("carved_by_criterion");
+  const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion !== null && showsCarvedByCriterion ? carvedVoxelsByCriterion(carvedByCriterion, localOrigin) : null),
+                                         [carvedByCriterion, showsCarvedByCriterion, originKey]);
   const criterionColours = carvedByCriterion === null ? [] : carvedByCriterion.criterionIds.map((id) => criteria.find((entry) => entry.id === id)?.colour ?? colourToken("carved"));
   const criterionColoursKey = criterionColours.join(",");
   useEffect(() => {
@@ -213,12 +218,11 @@ export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null,
   if (context) present.push("context");
   if (terrain) present.push("terrain");
   if (voxels) present.push("kept_voxels", "carved_voxels");
-  if (carvedVoxelsOfCriteria) present.push("carved_by_criterion");
+  if (carvedByCriterion) present.push("carved_by_criterion");
   if (sunPath && hemisphere) present.push("sun_path");
   if (skyDome && hemisphere) present.push("sky_dome");
   if (envelope) present.push("envelope");
   if (massing) present.push("building_massing");
-  const isVisible = (name: LayerName) => visibleByChoice[name] ?? shownByDefault.includes(name);
   const visibilityKey = present.map((name) => `${name}:${isVisible(name)}`).join(",");
   const dimmedKey = dimmedLayers.join(",");
 
@@ -253,7 +257,8 @@ export function ViewerPane({ maxVolume, testSurfaces, dimmedTestSurfaces = null,
       : undefined,
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
     carvedByCriterion: shown("carved_by_criterion") && carvedByCriterion
-      ? carvedByCriterion.criterionIds.flatMap((id) => criteria.filter((entry) => entry.id === id).map(({ name, colour }) => ({ name, colour })))
+      ? { criteria: carvedByCriterion.criterionIds.flatMap((id) => criteria.filter((entry) => entry.id === id).map(({ name, colour }) => ({ name, colour }))),
+          thinningStep: carvedVoxelsOfCriteria?.thinningStep ?? 1 }
       : undefined,
   };
   const dimmedResultShown = dimmedLayers.some(shown);

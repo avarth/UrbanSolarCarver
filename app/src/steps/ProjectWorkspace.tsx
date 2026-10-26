@@ -200,9 +200,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
   // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
   const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
-  // With several criteria the shown criterion's test surfaces are drawn at full strength and the files only the others use dimmed (a
-  // file both use is highlighted); with one, or when the criterion does not list its files, all of them at full strength.
-  const shownCriterionFiles = criteria.criteria.length < 2 || criterion === null ? undefined : criterion.test_surface_files;
+  // With several criteria the shown criterion's test surfaces are drawn at full strength and every other stored file dimmed (a file both
+  // use is highlighted; a criterion with no files highlights nothing and dims them all); with one criterion, all of them at full strength.
+  const shownCriterionFiles = criteria.criteria.length < 2 || criterion === null ? undefined : criterion.test_surface_files ?? [];
   const shownCriterionFilesKey = shownCriterionFiles?.join("\n");
   const testSurfaceDrawing = useMemo(() => {
     if (shownCriterionFiles === undefined) return { highlighted: testSurfaces, dimmed: null };
@@ -430,6 +430,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const resultSteps = useResultSteps({
     token, project: project.name, criterionId: resultsCriterionId, criterionStagesWithResults: resultsCriterionId === undefined ? undefined : stagesWithOutputOf(criterionStages[resultsCriterionId]),
     carvedByCriterionIds, carvedByCriterionWanted,
+    carvedByCriterionOutOfDate: active.some((entry) => shownAs(criterionStages[entry.id] ?? { preprocessing: "missing", thresholding: "missing" }).thresholding !== "current"),
     criterionStages: ownStages, chainOrder: criteria.criteria.map((entry) => entry.id), analysisWaitsFor, showRefusalOfCriterion, saveToCriterion,
     criterionBypassed: criterion?.bypassed ?? false,
     criterionNames: criteria.criteria.length < 2 ? undefined : Object.fromEntries(criteria.criteria.map((entry) => [entry.id, entry.name])),

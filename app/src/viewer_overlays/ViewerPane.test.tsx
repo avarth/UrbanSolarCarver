@@ -5,6 +5,7 @@ import { decodeCarvedByCriterion } from "../viewer/carved_by_criterion_decoder";
 import { packCarvedByCriterion } from "../viewer/packed_results_for_test";
 import type { ScorePoints } from "../viewer/score_points_decoder";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
+import { Legend } from "./Legend";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
 import { NO_VIEWER_RESULTS, ViewerPane, type ViewerPaneProps } from "./ViewerPane";
 
@@ -137,6 +138,11 @@ const hexOf = (colour: string) => new THREE.Color(colour).getHexString();
 
 test("test the carved-by-criterion layer colours each voxel by its criterion", () => {
   rendered = renderForTest(<ViewerPane {...viewCarvedBy([])} />);
+  expect(FakeViewerScene.latest!.layers.get("carved_by_criterion") ?? null).toBeNull();   // hidden: not built until the Layers menu turns it on
+  click(rendered.container.querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!);
+  const entry = [...rendered.container.querySelectorAll<HTMLLabelElement>(".viewer-layers-panel label")].find((label) => label.textContent === "Carved voxels, by criterion")!;
+  click(entry.querySelector("input")!);
+  expect(FakeViewerScene.latest!.visibleLayers.has("carved_by_criterion")).toBe(true);
   const layer = FakeViewerScene.latest!.layers.get("carved_by_criterion") as THREE.InstancedMesh;
   const colourOf = (voxel: number) => {
     const colour = new THREE.Color();
@@ -145,11 +151,16 @@ test("test the carved-by-criterion layer colours each voxel by its criterion", (
   };
   expect(layer.count).toBe(2);
   expect([colourOf(0), colourOf(1)]).toEqual([hexOf("#4477aa"), hexOf("#228833")]);      // the criteria 1 and 3, in their own colours
-  expect(FakeViewerScene.latest!.visibleLayers.has("carved_by_criterion")).toBe(false);   // hidden until the Layers menu turns it on
-  click(rendered.container.querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!);
-  const entry = [...rendered.container.querySelectorAll<HTMLLabelElement>(".viewer-layers-panel label")].find((label) => label.textContent === "Carved voxels, by criterion")!;
-  click(entry.querySelector("input")!);
-  expect(FakeViewerScene.latest!.visibleLayers.has("carved_by_criterion")).toBe(true);
+  click(entry.querySelector("input")!);                                                    // hidden again: the cubes are dropped
+  expect(FakeViewerScene.latest!.layers.get("carved_by_criterion") ?? null).toBeNull();
+});
+
+test("the legend of the carved-by-criterion layer says when the voxels drawn are thinned, and only then", () => {
+  const criteria = [{ name: "Winter sun on facades", colour: "#4477aa" }];
+  rendered = renderForTest(<Legend content={{ carvedByCriterion: { criteria, thinningStep: 3 } }} theme="light" />);
+  expect(rendered.container.querySelector(".viewer-legend")!.textContent).toContain("Showing 1 of every 3 voxels");
+  rendered.rerender(<Legend content={{ carvedByCriterion: { criteria, thinningStep: 1 } }} theme="light" />);
+  expect(rendered.container.querySelector(".viewer-legend")!.textContent).not.toContain("Showing 1 of every");
 });
 
 test("test the legend names each criterion", () => {
@@ -184,7 +195,7 @@ test("a layer listed as missing says no result for it, and cannot be turned on",
   click(rendered.container.querySelector<HTMLButtonElement>(".viewer-layers-menu > button")!);
   const entry = [...rendered.container.querySelectorAll<HTMLElement>(".viewer-layers-panel li")].find((item) => item.textContent!.includes("Carved voxels, by criterion"))!;
   expect(entry.querySelector("input")!.disabled).toBe(true);
-  expect(entry.querySelector(".viewer-layer-note")).not.toBeNull();
+  expect(entry.querySelector(".viewer-layer-note")!.textContent).toBe("Shows once every criterion that is on has run.");
 });
 
 test("a dimmed carved-by-criterion layer is drawn dimmed, and the stamp says so while it is shown", () => {

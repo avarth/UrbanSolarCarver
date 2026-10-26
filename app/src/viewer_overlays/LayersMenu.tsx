@@ -41,7 +41,7 @@ export function LayersMenu({ entries, skyDomeOpacity, theme, onVisibleChange, on
                        onChange={(event) => onVisibleChange(entry.name, event.target.checked)} />
                 {messages.layerNames[entry.name]}
               </label>
-              {!entry.available && <p className="viewer-layer-note viewer-muted">{messages.noResultForStage}</p>}
+              {!entry.available && <p className="viewer-layer-note viewer-muted">{entry.name === "carved_by_criterion" ? messages.carvedByCriterionMissing : messages.noResultForStage}</p>}
               {entry.available && entry.name === "sky_dome" && (
                 <label className="viewer-sky-dome-slider">
                   {messages.skyDomeTransparency}

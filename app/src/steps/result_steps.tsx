@@ -102,9 +102,9 @@ export function dimmedLayersOf(record: RunRecord | null, stages: Record<Pipeline
 /** The layers of a run that was cancelled or failed whose stage left no data: listed with the missing-result note (UX 8.2). */
 export function missingLayersOf(record: RunRecord | null, results: RunResults, isWeightedMode: boolean): LayerName[] {
   if (record === null || (record.state.final !== "cancelled" && record.state.final !== "failed")) return [];
-  // The by-criterion layer exists only with several criteria: useResultSteps lists it as missing for those.
+  // layerHasData has no case for the by-criterion layer, which exists only with several criteria: useResultSteps lists it as missing then.
   return runStages(record.state).flatMap((stage) => LAYERS_OF_STAGE[stage as PipelineStage] ?? [])
-    .filter((layer) => layer !== "carved_by_criterion" && (layer !== "sky_dome" || isWeightedMode) && !layerHasData(layer, results));
+    .filter((layer) => (layer !== "sky_dome" || isWeightedMode) && !layerHasData(layer, results));
 }
 
 /**
@@ -139,6 +139,8 @@ export interface ResultStepsContext {
   carvedByCriterionIds?: readonly string[] | null;
   /** Two or more criteria are on: the by-criterion layer belongs to the view, and is listed as missing while it has no data. */
   carvedByCriterionWanted?: boolean;
+  /** The thresholding of some criterion that is on is not current (as shown): the by-criterion layer is dimmed. */
+  carvedByCriterionOutOfDate?: boolean;
   /**
    * The selected criterion's own analysis and carving stages, as shown (out of date while the form differs from the stored
    * settings): its carving rule locks while its own analysis is out of date. Absent: the project's stages.
@@ -458,7 +460,9 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     viewer: {
       results: { scorePoints: viewerResults.scorePoints, carving: criterionCarving, skyDome: viewerResults.skyDome,
                  envelope: viewerResults.envelope, massing: viewerResults.massing, carvedByCriterion: viewerResults.carvedByCriterion },
-      dimmedLayers: dimmedLayersOf(record, ownStages, stagesBeingFetched, context.criterionId),
+      // The by-criterion layer follows every criterion that is on, not only the selected one: it is dimmed too when any of them is not current.
+      dimmedLayers: [...new Set([...dimmedLayersOf(record, ownStages, stagesBeingFetched, context.criterionId),
+                                 ...(context.carvedByCriterionOutOfDate === true ? ["carved_by_criterion" as const] : [])])],
       missingLayers: [...missingLayersOf(record, viewerResults, context.isWeightedMode),
                       ...(context.carvedByCriterionWanted === true && viewerResults.carvedByCriterion === null ? ["carved_by_criterion" as const] : [])],
       runProgress: running ? runProgressShare(record.state) : null,

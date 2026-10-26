@@ -428,7 +428,7 @@ export function carvedByCriterionLayer({ voxels, colours, voxelSize }: CarvedByC
   const carvedColour = new THREE.Color(colourToken("carved"));
   const colourOf = colours.map((colour) => new THREE.Color(colour));
   const layer = voxelObject(voxels.centres, voxelSize, Array.from(voxels.criterionIndex, (criterion) => colourOf[criterion] ?? carvedColour), "#ffffff", 1);
-  layer.userData.summary = messages.voxelCount(count);
+  layer.userData.summary = messages.voxelCount(voxels.carvedCount);
   return layer;
 }
 

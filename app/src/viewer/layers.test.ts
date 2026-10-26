@@ -118,7 +118,7 @@ test("the carved-by-criterion layer comes right after the carved voxels", () => 
 
 test("the carved-by-criterion layer draws each voxel in the colour of the criterion that removed it", () => {
   const layer = carvedByCriterionLayer({
-    voxels: { centres: Float32Array.from([0.5, 0.5, 0.5, 1.5, 0.5, 0.5, 2.5, 0.5, 0.5]), criterionIndex: Uint8Array.from([0, 1, 0]) },
+    voxels: { centres: Float32Array.from([0.5, 0.5, 0.5, 1.5, 0.5, 0.5, 2.5, 0.5, 0.5]), criterionIndex: Uint8Array.from([0, 1, 0]), carvedCount: 3, thinningStep: 1 },
     colours: ["#4477aa", "#228833"], voxelSize: 1,
   }) as THREE.InstancedMesh;
   const colourOf = (voxel: number) => {
@@ -131,7 +131,7 @@ test("the carved-by-criterion layer draws each voxel in the colour of the criter
 });
 
 test("the carved-by-criterion layer of a grid where nothing was carved is empty", () => {
-  const layer = carvedByCriterionLayer({ voxels: { centres: new Float32Array(0), criterionIndex: new Uint8Array(0) }, colours: ["#4477aa"], voxelSize: 1 });
+  const layer = carvedByCriterionLayer({ voxels: { centres: new Float32Array(0), criterionIndex: new Uint8Array(0), carvedCount: 0, thinningStep: 1 }, colours: ["#4477aa"], voxelSize: 1 });
   expect(layer.children).toHaveLength(0);
 });
 

@@ -33,19 +33,26 @@ export function decodeCarvedByCriterion(buffer: ArrayBuffer): CarvedByCriterion 
 }
 
 export interface CarvedVoxels {
-  centres: Float32Array;            // x, y, z per carved voxel, local coordinates
-  criterionIndex: Uint8Array;       // per carved voxel: the position of its criterion in criterionIds
+  centres: Float32Array;            // x, y, z per voxel drawn, local coordinates
+  criterionIndex: Uint8Array;       // per voxel drawn: the position of its criterion in criterionIds
+  carvedCount: number;              // the voxels some criterion removed, before thinning
+  thinningStep: number;             // 1 when every carved voxel is drawn
 }
 
-/** The voxels some criterion removed, with their centres relative to the local origin (as the score points' voxels are placed). */
-export function carvedVoxelsByCriterion(data: CarvedByCriterion, origin: Point3): CarvedVoxels {
-  const flatIndices: number[] = [];
-  const criterionIndex: number[] = [];
+/** The most carved voxels drawn: the cap the service puts on the score points, which the other voxel layers stay within. */
+export const CARVED_VOXELS_CAP = 1_000_000;
+
+/**
+ * The voxels some criterion removed, with their centres relative to the local origin (as the score points' voxels are placed).
+ * More than *cap* of them are thinned to every thinningStep-th one in grid order, an even stride as the service thins the score points.
+ */
+export function carvedVoxelsByCriterion(data: CarvedByCriterion, origin: Point3, cap = CARVED_VOXELS_CAP): CarvedVoxels {
+  const carvedIndices: number[] = [];
   data.carvedBy.forEach((criterion, flatIndex) => {
-    if (criterion === 0) return;
-    flatIndices.push(flatIndex);
-    criterionIndex.push(criterion - 1);
+    if (criterion !== 0) carvedIndices.push(flatIndex);
   });
-  const centres = voxelCentres({ origin: data.origin, shape: data.shape, voxel_size: data.voxelSize }, Uint32Array.from(flatIndices), origin);
-  return { centres, criterionIndex: Uint8Array.from(criterionIndex) };
+  const thinningStep = Math.max(1, Math.ceil(carvedIndices.length / cap));
+  const drawn = carvedIndices.filter((_, position) => position % thinningStep === 0);
+  const centres = voxelCentres({ origin: data.origin, shape: data.shape, voxel_size: data.voxelSize }, Uint32Array.from(drawn), origin);
+  return { centres, criterionIndex: Uint8Array.from(drawn, (flatIndex) => data.carvedBy[flatIndex] - 1), carvedCount: carvedIndices.length, thinningStep };
 }

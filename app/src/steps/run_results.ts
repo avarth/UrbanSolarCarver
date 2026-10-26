@@ -150,12 +150,16 @@ export function useRunResults({ token, project, origin, stagesWithResults, crite
     fetchResults(resultsAtOpen(stagesWithResults, criterionStagesWithResults));
   }, []);
 
-  // The criteria that are on changed (or, at open, are there): the layer of the ones before is dropped, and the new one asked for
-  // when every criterion has run.
+  // The criteria that are on changed (or, at open, are there): the new layer is asked for when every criterion has run, and replaces the
+  // one shown when it arrives (the old one stays meanwhile, so the layer does not flash to missing after a reorder). When the layer
+  // is no longer asked for (fewer than two criteria on, or one has not run) it is dropped, and a reply still out is not kept.
   useEffect(() => {
-    latestRequest.current.carvedByCriterion = (latestRequest.current.carvedByCriterion ?? 0) + 1;
-    setResults((current) => (current.carvedByCriterion === null ? current : { ...current, carvedByCriterion: null }));
-    if (carvedByKey !== null) fetchResults(["carvedByCriterion"]);
+    if (carvedByKey === null) {
+      latestRequest.current.carvedByCriterion = (latestRequest.current.carvedByCriterion ?? 0) + 1;
+      setResults((current) => (current.carvedByCriterion === null ? current : { ...current, carvedByCriterion: null }));
+    } else {
+      fetchResults(["carvedByCriterion"]);
+    }
   }, [carvedByKey]);
 
   // Another criterion selected: its score points and sky dome replace the last one's, which are not shown meanwhile.

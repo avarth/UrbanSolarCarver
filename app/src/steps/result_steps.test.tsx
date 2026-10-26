@@ -64,8 +64,6 @@ test("a run that stopped early lists the layers its stages left without data; a 
   const finished = runReducer(initialRunState(["exporting"]), { type: "run_finished", stages: ["exporting"], files: [] });
   expect(missingLayersOf(record(finished), NO_RESULTS, false)).toEqual([]);
   expect(missingLayersOf(null, NO_RESULTS, false)).toEqual([]);
-  // The by-criterion layer exists only with several criteria: a cancelled run of one criterion does not list it
-  expect(missingLayersOf(record(cancelled), withoutCarving, false)).not.toContain("carved_by_criterion");
 });
 
 test("each stage names the results it writes; the score points follow the carving, not the analysis", () => {
