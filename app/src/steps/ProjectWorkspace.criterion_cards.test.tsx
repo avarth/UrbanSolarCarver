@@ -32,6 +32,12 @@ test("two criteria show cards in order, each with its result, and the first is s
   expect(criteriaSummary()).toBe("Winter sun on facades 61 %, then Spring sun on windows 80 %");
 });
 
+test("the step summary names a criterion the user did not name by its mode, without its test surface file", async () => {
+  await openChain([{ ...FACADES, name: "Solar time-based on facades", named_by_user: false }, WINDOWS]);
+  openStep("Inputs");
+  expect(criteriaSummary()).toBe("Solar time-based 61 %, then Spring sun on windows 80 %");
+});
+
 test("selecting a card shows its settings, its test surfaces and its results", async () => {
   await openChain([FACADES, WINDOWS]);
   expect(periodFieldText()).toContain("21 Dec");

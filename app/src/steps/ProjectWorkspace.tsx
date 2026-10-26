@@ -415,8 +415,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     stages: shownStages,
     keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
     criterionOff: criteria.criteria.length === 1 && criteria.criteria[0].bypassed,
+    // A name the user did not give ends in its first test surface file ("Daylight on windows"); the summary says the mode alone.
     criteriaInChain: criteria.criteria.length < 2 ? null
-      : active.map((entry) => ({ name: entry.name, keptPercent: carvingSummaryOf(entry)?.carving?.retention_pct ?? null })),
+      : active.map((entry) => ({ name: entry.named_by_user ? entry.name : plainModeName(String(entry.settings?.mode ?? entry.name)),
+                                 keptPercent: carvingSummaryOf(entry)?.carving?.retention_pct ?? null })),
     totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
     storeys: resultSteps.results.summary?.massing?.storeys_built ?? null,
   };

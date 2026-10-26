@@ -107,8 +107,10 @@ export function disposeLayer(object: THREE.Object3D): void {
 
 // Solids ---------------------------------------------------------------------------------------------------------------------
 
-function solidMaterial(colour: string, baseOpacity: number, side: THREE.Side = THREE.FrontSide): THREE.MeshLambertMaterial {
-  const material = layerMaterial(new THREE.MeshLambertMaterial({ color: colour, flatShading: true, side, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }), baseOpacity);
+/** Solids are pushed back a little in depth so their edge lines draw over them; *pullForward* draws them in front instead. */
+function solidMaterial(colour: string, baseOpacity: number, side: THREE.Side = THREE.FrontSide, pullForward = false): THREE.MeshLambertMaterial {
+  const [polygonOffsetFactor, polygonOffsetUnits] = pullForward ? [-2, -8] : [1, 1];
+  const material = layerMaterial(new THREE.MeshLambertMaterial({ color: colour, flatShading: true, side, polygonOffset: true, polygonOffsetFactor, polygonOffsetUnits }), baseOpacity);
   material.depthWrite = baseOpacity >= 1;
   return material;
 }
@@ -146,13 +148,14 @@ export interface TestSurfacesPart {
 
 /**
  * The test surfaces, one mesh per part at full strength in the part's colour. A part without a colour takes the accent colour, a
- * lighter blue on the dark viewport; a criterion's colour does not change with the theme.
+ * lighter blue on the dark viewport; a criterion's colour does not change with the theme. They usually lie on a context facade or
+ * on the maximum volume, so they are pulled forward in depth to draw over that face instead of flickering through it.
  */
 export function testSurfacesLayer(parts: readonly TestSurfacesPart[]): THREE.Object3D {
   const layer = new THREE.Group();
   const accentMaterials: THREE.MeshLambertMaterial[] = [];
   for (const { name, colour, geometry } of parts) {
-    const material = solidMaterial(colour ?? colourToken("accent"), 1, THREE.DoubleSide);
+    const material = solidMaterial(colour ?? colourToken("accent"), 1, THREE.DoubleSide, true);
     const surfaces = new THREE.Mesh(geometry, material);
     surfaces.name = name;
     if (colour === null) accentMaterials.push(material);

@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
 import {
-  buildingMassingLayer, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, LAYER_NAMES, terrainLayer, keptColumnTops, pointSizeForVoxel, splitScorePoints,
+  buildingMassingLayer, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, LAYER_NAMES, maxVolumeLayer, terrainLayer, keptColumnTops, pointSizeForVoxel, splitScorePoints,
   storeyOfPart, testSurfacesLayer, volumeOutline,
 } from "./layers";
 import type { ScorePoints } from "./score_points_decoder";
@@ -150,4 +150,17 @@ test("the test surfaces layer has one mesh per part in the part's colour, all at
   expect(["1", "2"].map((name) => materialOf(name).color.getHexString())).toEqual(["4477aa", "228833"]);      // a criterion's colour stays
   expect(materialOf("3").color.getHexString()).toBe("00ffff");
   expect(testSurfacesLayer([]).children).toHaveLength(0);
+});
+
+test("test surfaces are drawn in front of a context or maximum volume face they lie on, instead of flickering through it", () => {
+  const geometry = () => new THREE.BoxGeometry(1, 1, 1);
+  const surfaces = (testSurfacesLayer([{ name: "1", colour: "#4477aa", geometry: geometry() }]).children[0] as THREE.Mesh).material as THREE.Material;
+  const context = (contextLayer(geometry()).children[0] as THREE.Mesh).material as THREE.Material;
+  const maxVolume = (maxVolumeLayer(geometry(), "solid").children[0] as THREE.Mesh).material as THREE.Material;
+  expect(surfaces.polygonOffset).toBe(true);
+  for (const other of [context, maxVolume]) {
+    expect(surfaces.polygonOffsetFactor).toBeLessThan(other.polygonOffsetFactor);
+    expect(surfaces.polygonOffsetUnits).toBeLessThan(other.polygonOffsetUnits);
+  }
+  expect(surfaces.polygonOffsetFactor).toBeLessThan(0);      // toward the camera, not only less far back
 });

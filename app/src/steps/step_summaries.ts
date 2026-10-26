@@ -76,8 +76,8 @@ function carvingSummary(state: ProjectViewState): string {
 
 /**
  * One criterion: its mode and its carving, "Solar usefulness, 56 % kept", "Daylight, Out of date", or "Daylight, Off" while it is off.
- * Several: the ones that are on in order, each with the share it kept, "Daylight on windows 70 %, then Solar usefulness 80 %", once
- * the carving is current; "All off" when none is on.
+ * Several: the ones that are on in order, each with the share it kept, "Daylight 70 %, then Winter sun on facades 80 %", once the
+ * carving is current; "All off" when none is on. A criterion the user did not name is called by its mode.
  */
 function criteriaSummary(state: ProjectViewState): string {
   const chain = state.criteriaInChain;
