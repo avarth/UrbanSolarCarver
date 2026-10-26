@@ -1,17 +1,16 @@
 import { expect, test } from "vitest";
-import { stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName } from "./step_summaries";
+import { STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName } from "./step_summaries";
 
 const THIN = "\u202f";
 const NBSP = "\u00a0";
 
 interface StateOverrides {
   maxVolume?: number;
-  testSurfaces?: number;
   weather?: boolean;
   context?: number;
   terrain?: number;
   mode?: string;
-  analysisPeriod?: ProjectViewState["analysisPeriod"];
+  north?: number;
   voxelSize?: number;
   settingsToFix?: Partial<Record<StepName, number>>;
   keptPercent?: number;
@@ -20,17 +19,14 @@ interface StateOverrides {
   stages?: Partial<Record<PipelineStage, StageState>>;
 }
 
-const DECEMBER_21_10_TO_14 = { startMonth: 12, startDay: 21, startHour: 10, endMonth: 12, endDay: 21, endHour: 14 };
-
 function stateWith(overrides: StateOverrides): ProjectViewState {
   return {
     maxVolumeFiles: overrides.maxVolume ?? 1,
-    testSurfaceFiles: overrides.testSurfaces ?? 1,
     hasWeatherFile: overrides.weather ?? false,
     contextFiles: overrides.context ?? 0,
     terrainFiles: overrides.terrain ?? 0,
     mode: overrides.mode ?? "time-based",
-    analysisPeriod: overrides.analysisPeriod === undefined ? DECEMBER_21_10_TO_14 : overrides.analysisPeriod,
+    northDegrees: overrides.north ?? 0,
     voxelSize: overrides.voxelSize ?? 1,
     settingsToFix: overrides.settingsToFix ?? {},
     keptPercent: overrides.keptPercent ?? null,
@@ -40,38 +36,39 @@ function stateWith(overrides: StateOverrides): ProjectViewState {
   };
 }
 
+test("the steps are Inputs, Site and grid, Criteria, Envelope and massing and Export", () => {
+  expect(STEP_NAMES).toEqual(["inputs", "site_and_grid", "criteria", "envelope_and_massing", "export"]);
+});
+
 test("closed steps summarise their state in the UX spec's words", () => {
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 2, weather: true }))).toBe("1 volume, 2 test surfaces, weather");
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 0 }))).toBe("Test surfaces missing");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, weather: true }))).toBe("1 volume, weather");
   expect(stepSummary("envelope_and_massing", stateWith({ totalFloorArea: 4820, storeys: 7, stages: { exporting: "current", massing: "current" } })))
     .toBe(`4${THIN}820${NBSP}m², 7 storeys`);
   expect(stepSummary("envelope_and_massing", stateWith({ stages: { exporting: "out_of_date", massing: "out_of_date" } }))).toBe("Out of date");
 });
 
-test("a new project's Mode summary names its starting mode", () => {
-  expect(stepSummary("mode", stateWith({ mode: "time-based" }))).toBe("Solar time-based");
-  expect(stepSummary("mode", stateWith({ mode: "radiative_cooling" }))).toBe("Night cooling");
+test("the inputs summary counts the site's files per role and names a missing maximum volume", () => {
+  expect(stepSummary("inputs", stateWith({ maxVolume: 2 }))).toBe("2 volumes");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 0 }))).toBe("Maximum volume missing");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 0, weather: true }))).toBe("Maximum volume missing");
 });
 
-test("the inputs summary counts files per role and names what is missing", () => {
-  expect(stepSummary("inputs", stateWith({ maxVolume: 2, testSurfaces: 1 }))).toBe("2 volumes, 1 test surface");
-  expect(stepSummary("inputs", stateWith({ maxVolume: 0, testSurfaces: 3 }))).toBe("Maximum volume missing");
-  expect(stepSummary("inputs", stateWith({ maxVolume: 0, testSurfaces: 0, weather: true }))).toBe("Maximum volume and test surfaces missing");
+test("the site and grid summary gives the north and the voxel size, or the count of settings to fix", () => {
+  expect(stepSummary("site_and_grid", stateWith({ north: 10, voxelSize: 0.5 }))).toBe(`North 10°, 0.5${NBSP}m voxels`);
+  expect(stepSummary("site_and_grid", stateWith({}))).toBe(`North 0°, 1${NBSP}m voxels`);
+  expect(stepSummary("site_and_grid", stateWith({ north: 12.5, voxelSize: 2 }))).toBe(`North 12.5°, 2${NBSP}m voxels`);
+  expect(stepSummary("site_and_grid", stateWith({ settingsToFix: { site_and_grid: 1 } }))).toBe("1 setting to fix");
 });
 
-test("the settings summary gives the period and the voxel size, or the count of settings to fix", () => {
-  expect(stepSummary("settings", stateWith({}))).toBe(`21 Dec, 10 to 14\u00a0h; 1${NBSP}m voxels`);
-  expect(stepSummary("settings", stateWith({ voxelSize: 0.5, analysisPeriod: { startMonth: 10, startDay: 15, startHour: 7, endMonth: 4, endDay: 15, endHour: 19 } })))
-    .toBe(`15 Oct to 15 Apr, 7 to 19${NBSP}h; 0.5${NBSP}m voxels`);
-  expect(stepSummary("settings", stateWith({ mode: "daylight", analysisPeriod: null, voxelSize: 2 }))).toBe(`2${NBSP}m voxels`);
-  expect(stepSummary("settings", stateWith({ settingsToFix: { settings: 1 } }))).toBe("1 setting to fix");
+test("the criteria summary of one criterion joins its mode and its carving", () => {
+  expect(stepSummary("criteria", stateWith({ mode: "benefit", keptPercent: 56.2, stages: { thresholding: "current" } }))).toBe(`Solar usefulness, 56${NBSP}% kept`);
+  expect(stepSummary("criteria", stateWith({ mode: "daylight", keptPercent: 56.2, stages: { thresholding: "out_of_date" } }))).toBe("Daylight, Out of date");
+  expect(stepSummary("criteria", stateWith({ mode: "radiative_cooling" }))).toBe("Night cooling, Not run yet");
+  expect(stepSummary("criteria", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("Solar time-based, Out of date");     // no run summary read
+  expect(stepSummary("criteria", stateWith({ settingsToFix: { criteria: 2 } }))).toBe("2 settings to fix");
 });
 
-test("the carving, envelope and export summaries follow the stage status", () => {
-  expect(stepSummary("carving", stateWith({}))).toBe("Not run yet");
-  expect(stepSummary("carving", stateWith({ keptPercent: 61.2, stages: { thresholding: "current" } }))).toBe(`61${NBSP}% kept`);
-  expect(stepSummary("carving", stateWith({ keptPercent: 61.2, stages: { thresholding: "out_of_date" } }))).toBe("Out of date");
-  expect(stepSummary("carving", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("Out of date");     // no run summary read
+test("the envelope and export summaries follow the stage status", () => {
   expect(stepSummary("envelope_and_massing", stateWith({}))).toBe("Not built yet");
   expect(stepSummary("export", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("Ready");
   expect(stepSummary("export", stateWith({}))).toBe("Not built yet");
@@ -108,32 +105,39 @@ test("Export can be used once either part is built, and says which is ready", ()
   expect(stepSummary("export", stateWith({ stages: { massing: "current" } }))).toBe("Massing ready");
 });
 
+test("Criteria can always be used, as it holds the mode and Run analysis; Envelope and massing waits for an analysis", () => {
+  expect(stepNotUsableYet("criteria", stateWith({}))).toBeNull();
+  expect(stepNotUsableYet("site_and_grid", stateWith({}))).toBeNull();
+  expect(stepNotUsableYet("envelope_and_massing", stateWith({}))).toBe("Run the analysis in Criteria before building the envelope and massing");
+  expect(stepNotUsableYet("envelope_and_massing", stateWith({ stages: { thresholding: "out_of_date" } }))).toBeNull();
+});
+
 test("each step's mark: done, a setting to fix, or nothing yet", () => {
   expect(stepMark("inputs", stateWith({}))).toBe("done");
-  expect(stepMark("inputs", stateWith({ testSurfaces: 0 }))).toBe("none");
-  expect(stepMark("mode", stateWith({}))).toBe("done");
-  expect(stepMark("settings", stateWith({ stages: { preprocessing: "current" } }))).toBe("done");
-  expect(stepMark("settings", stateWith({ settingsToFix: { settings: 2 }, stages: { preprocessing: "current" } }))).toBe("error");
-  expect(stepMark("carving", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("none");
+  expect(stepMark("inputs", stateWith({ maxVolume: 0 }))).toBe("none");
+  expect(stepMark("site_and_grid", stateWith({ stages: { preprocessing: "current" } }))).toBe("done");
+  expect(stepMark("site_and_grid", stateWith({}))).toBe("none");
+  expect(stepMark("site_and_grid", stateWith({ settingsToFix: { site_and_grid: 2 }, stages: { preprocessing: "current" } }))).toBe("error");
+  expect(stepMark("criteria", stateWith({ stages: { preprocessing: "current", thresholding: "current" } }))).toBe("done");
+  expect(stepMark("criteria", stateWith({ stages: { thresholding: "out_of_date" } }))).toBe("none");
   expect(stepMark("envelope_and_massing", stateWith({ stages: { exporting: "current", massing: "current" } }))).toBe("done");
 });
 
 test("a setting to fix is counted and marked on the step that holds it", () => {
-  const state = stateWith({ settingsToFix: { carving: 1, envelope_and_massing: 2 },
+  const state = stateWith({ settingsToFix: { criteria: 1, envelope_and_massing: 2 },
                             stages: { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" } });
-  expect(stepSummary("carving", state)).toBe("1 setting to fix");
-  expect(stepMark("carving", state)).toBe("error");
+  expect(stepSummary("criteria", state)).toBe("1 setting to fix");
+  expect(stepMark("criteria", state)).toBe("error");
   expect(stepSummary("envelope_and_massing", state)).toBe("2 settings to fix");
   expect(stepMark("envelope_and_massing", state)).toBe("error");
-  expect(stepSummary("settings", state)).toBe("21 Dec, 10 to 14 h; 1 m voxels");
-  expect(stepMark("settings", state)).toBe("done");
+  expect(stepSummary("site_and_grid", state)).toBe(`North 0°, 1${NBSP}m voxels`);
+  expect(stepMark("site_and_grid", state)).toBe("done");
   expect(stepMark("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("error");
   expect(stepSummary("export", stateWith({ settingsToFix: { export: 1 } }))).toBe("1 setting to fix");
 });
 
 test("the inputs summary counts the surroundings files and names the terrain when there are some", () => {
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 2, context: 3 }))).toBe("1 volume, 2 test surfaces, 3 surroundings files");
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 1, context: 1, terrain: 1, weather: true })))
-    .toBe("1 volume, 1 test surface, 1 surroundings file, terrain, weather");
-  expect(stepSummary("inputs", stateWith({ maxVolume: 1, testSurfaces: 1, terrain: 2 }))).toBe("1 volume, 1 test surface, terrain");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 3 }))).toBe("1 volume, 3 surroundings files");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, context: 1, terrain: 1, weather: true }))).toBe("1 volume, 1 surroundings file, terrain, weather");
+  expect(stepSummary("inputs", stateWith({ maxVolume: 1, terrain: 2 }))).toBe("1 volume, terrain");
 });

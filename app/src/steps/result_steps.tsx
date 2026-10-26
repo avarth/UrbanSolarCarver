@@ -1,8 +1,9 @@
-// The steps that show and start runs (UX 5.5 to 5.7, 6): Carving, Envelope and massing and Export, their buttons (Carving's
-// pinned under the steps, Build envelope and Build massing in the two parts of their step, R2 5), the progress under the button
-// that started a run, and what the 3D view draws of the results (dimmed while out of date or replaced, listed as missing after a
-// run that stopped before their stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results
-// are fetched here and again as each stage of a run is done.
+// The parts that show and start runs (UX 5.5 to 5.7, 6): the criterion's carving rule and its Run analysis (in its panel), the
+// Envelope and massing and Export steps, their buttons (Build envelope and massing pinned under the steps in Criteria, Build
+// envelope and Build massing in the two parts of their step, R2 5), the progress under the button that started a run, and what
+// the 3D view draws of the results (dimmed while out of date or replaced, listed as missing after a run that stopped before their
+// stage). ProjectWorkspace gives them the project's form, stage status and run loop; the results are fetched here and again as
+// each stage of a run is done.
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { downloadWithToken, failureTextOf, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
@@ -17,7 +18,7 @@ import { CarveFurtherSection } from "./CarveFurther";
 import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
 import { RunProgress } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
-import { runAnalysisAfterSaving, RunAnalysisButton } from "./SettingsStep";
+import { runAnalysisAfterSaving, RunAnalysisButton, SettingsToFix } from "./SettingsStep";
 import { runProgressShare, type RunLoop, type RunOrigin, type RunOutcome, type RunRecord } from "./run_state";
 import { useResultsFollowingRun, useRunResults, type RunResults } from "./run_results";
 import type { PipelineStage, StageState, StepName } from "./step_summaries";
@@ -25,7 +26,7 @@ import { createThresholdUpdateQueue } from "./threshold_queue";
 
 export const ANALYSIS_STAGES: PipelineStage[] = ["thresholding"];     // Run analysis: preprocessing is added when it is out of date
 export const CARVING_STAGES: PipelineStage[] = ["thresholding"];
-export const BUILD_STAGES: PipelineStage[] = ["exporting", "massing"];     // Carving's Build envelope and massing
+export const BUILD_STAGES: PipelineStage[] = ["exporting", "massing"];     // Build envelope and massing, pinned in Criteria
 // Build envelope and Build massing (R2 5): the massing reads the carving, not the envelope, so each runs its own stage. A mesh
 // format change runs the envelope's.
 export const ENVELOPE_STAGES: PipelineStage[] = ["exporting"];
@@ -34,9 +35,9 @@ const PIPELINE_STAGES: readonly PipelineStage[] = ["preprocessing", "thresholdin
 
 /** The step whose summary counts the warnings of a run started by each button. */
 const STEP_OF_ORIGIN: Record<RunOrigin, StepName> = {
-  settings_run_analysis: "settings",
-  carving_run_analysis: "carving",
-  carving_update: "carving",
+  settings_run_analysis: "site_and_grid",
+  carving_run_analysis: "criteria",
+  carving_update: "criteria",
   build: "envelope_and_massing",
   build_envelope: "envelope_and_massing",
   build_massing: "envelope_and_massing",
@@ -122,8 +123,10 @@ export interface ResultStepsContext {
   /** Asks for the stage status again; *completedStages* count as current until the reply. */
   refreshStageStatus: (completedStages?: readonly string[]) => void;
   runs: RunLoop;
-  /** Why no run can start now (a run, the inputs, a setting, the warm-up); null when one can. */
+  /** Why no run can start now (a run, the inputs, a setting, the warm-up), as Criteria says it; null when one can. */
   runBlocker: string | null;
+  /** Every criterion that is on has a current carving: Criteria pins Build envelope and massing. */
+  everyCriterionCarved: boolean;
   /** A run of this project is starting or in progress: the service refuses to save its settings. */
   projectRunActive: boolean;
   origin: Point3;
@@ -135,7 +138,11 @@ export interface ResultStepsContext {
 }
 
 export interface ResultSteps {
-  content: Record<"carving" | "envelope_and_massing" | "export", ReactNode>;
+  content: Record<"envelope_and_massing" | "export", ReactNode>;
+  /** The criterion's carving rule, or, before its first analysis, why there is none yet. */
+  carvingRule: ReactNode;
+  /** The criterion's Run analysis, with the progress of its run. */
+  criterionRunAnalysis: ReactNode;
   pinnedAction: Partial<Record<StepName, ReactNode>>;
   viewer: Pick<ViewerPaneProps, "results" | "dimmedLayers" | "missingLayers" | "runProgress" | "overlayContent">;
   results: RunResults;
@@ -249,7 +256,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const buildButton = (label: string, produce: PipelineStage[], origin: RunOrigin) => (
     <RunAnalysisButton blocker={buildBlocker} label={label} feedback={feedback(origin)} onRunAnalysis={() => void startAfterSaving(produce, origin)} />
   );
-  // Carving's button builds both parts; its run is shown in the Envelope and massing step, which it opens.
+  // The button pinned in Criteria builds both parts; its run is shown in the Envelope and massing step, which it opens.
   const buildFromCarvingButton = (
     <RunAnalysisButton blocker={buildBlocker} label={messages.buildEnvelopeAndMassing}
                        onRunAnalysis={() => {
@@ -281,20 +288,30 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const envelopeBuilt = builtBy("exporting"), massingBuilt = builtBy("massing");
   // The stages the run under way has still to finish: each removes its old files when it begins, so Export does not offer them.
   const stagesStillToFinish = running ? record.state.order.filter((stage) => record.state.stages[stage].state !== "done") : [];
+  // Before the first analysis there is no carving to show: the reason, how the last carving update ended, and the carving settings
+  // a refused save marked, so they can be fixed.
+  const carvingRule = stages.thresholding === "missing" ? (
+    <>
+      <p className="step-not-usable">{messages.carvingNeedsAnalysis}</p>
+      {feedback("carving_update")}
+      <SettingsToFix step="carving" form={form} onChange={changeSettings} disabledReason={settingsDisabledReason} />
+    </>
+  ) : (
+    <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={results.summary?.carving ?? null} scorePoints={results.scorePoints}
+                 analysisOutOfDate={analysisOutOfDate} carvingDimmed={isStageDimmed("thresholding", record, stages, stagesBeingFetched)}
+                 autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
+                 thresholdDisabledReason={otherRunActive ? messages.runInProgress : null} settingsDisabledReason={settingsDisabledReason}
+                 runBlocker={runBlocker} onChange={changeSettings}
+                 onThresholdCommit={(thresholdValues) => thresholdQueue.submit(thresholdValues)}
+                 onCarvingSettingCommit={() => { if (thresholdView !== null) thresholdQueue.submit({}); }}
+                 onUpdateCarving={() => void updateCarvingAfterSaving()}
+                 lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")} analysisFeedback={null} />
+  );
+  const criterionRunAnalysis = (
+    <RunAnalysisButton blocker={runBlocker} feedback={feedback("carving_run_analysis")}
+                       onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")} />
+  );
   const content = {
-    carving: (
-      <CarvingStep form={form} isWeightedMode={context.isWeightedMode} summary={results.summary?.carving ?? null} scorePoints={results.scorePoints}
-                   analysisOutOfDate={analysisOutOfDate} carvingDimmed={isStageDimmed("thresholding", record, stages, stagesBeingFetched)}
-                   autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
-                   thresholdDisabledReason={otherRunActive ? messages.runInProgress : null} settingsDisabledReason={settingsDisabledReason}
-                   runBlocker={runBlocker} onChange={changeSettings}
-                   onThresholdCommit={(thresholdValues) => thresholdQueue.submit(thresholdValues)}
-                   onCarvingSettingCommit={() => { if (thresholdView !== null) thresholdQueue.submit({}); }}
-                   onUpdateCarving={() => void updateCarvingAfterSaving()}
-                   onRunAnalysis={() => void startAfterSaving(ANALYSIS_STAGES, "carving_run_analysis")}
-                   lastAnalysisSeconds={lastAnalysisSeconds} carvingFeedback={feedback("carving_update")}
-                   analysisFeedback={feedback("carving_run_analysis")} />
-    ),
     envelope_and_massing: (
       <EnvelopeAndMassingStep form={form} onChange={changeSettings} disabledReason={settingsDisabledReason}
                               envelope={envelopeBuilt ? results.summary?.envelope ?? null : null} envelopeOutOfDate={stages.exporting === "out_of_date"}
@@ -324,7 +341,9 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
 
   return {
     content,
-    pinnedAction: { carving: buildFromCarvingButton },
+    carvingRule,
+    criterionRunAnalysis,
+    pinnedAction: context.everyCriterionCarved ? { criteria: buildFromCarvingButton } : {},
     viewer: {
       results: { scorePoints: viewerResults.scorePoints, carving: viewerResults.summary?.carving ?? null, skyDome: viewerResults.skyDome,
                  envelope: viewerResults.envelope, massing: viewerResults.massing },
@@ -339,7 +358,6 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
     warningsOfStep,
     feedback,
     feedbackWhenNotUsable: {
-      carving: <>{feedback("carving_run_analysis")}{feedback("carving_update")}</>,
       envelope_and_massing: <>{feedback("build")}{feedback("build_envelope")}{feedback("build_massing")}</>,
     },
     startRun,

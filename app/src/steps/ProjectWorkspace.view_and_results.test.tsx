@@ -83,7 +83,7 @@ test("a North not saved yet turns the drawn sun path with the compass ring, so t
     return first.sub(new THREE.Vector3(...FakeViewerScene.latest!.sceneHemisphere!.centre)).normalize();
   };
   expect(towardFirstSun().y).toBeCloseTo(1);
-  openStep("Settings");
+  openStep("Site and grid");
   type(container().querySelector<HTMLInputElement>('[data-setting="north_deg"] input[type="number"]')!, "90");
   expect(service.savedValues).toEqual([]);
   expect(towardFirstSun().x).toBeCloseTo(1);
@@ -93,7 +93,7 @@ test("a North not saved yet turns the drawn sun path with the compass ring, so t
 test("on a first build of both parts the 3D view draws the envelope once its stage is done, before the massing ends", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
-  openStep("Carving");
+  openStep("Criteria");
   await act(async () => buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing").click());
   await settle();
   const run = FakeWebSocket.opened[0];

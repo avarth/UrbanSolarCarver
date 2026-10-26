@@ -5,6 +5,7 @@
     "one_line": "A fixed plane from each facade",
     "tooltip": "Removes everything above a plane at a fixed angle from each facade.",
     "needs": "Needs a plane angle.",
+    "protects_hint": "Facades the angle is measured from, such as neighbouring facades.",
     "symbol": "facade_with_angled_line"
   },
   {
@@ -13,6 +14,7 @@
     "one_line": "Direct sun in a chosen period",
     "tooltip": "Keeps direct sun on the test surfaces during the hours you choose, for example 21 December, 10 to 14 h.",
     "needs": "Needs a weather file and an analysis period.",
+    "protects_hint": "Facades, windows or open spaces that keep direct sun in the period.",
     "symbol": "sun_with_clock"
   },
   {
@@ -21,6 +23,7 @@
     "one_line": "Sun and sky energy over a season",
     "tooltip": "Keeps the sun and sky energy that reaches the surfaces over the period.",
     "needs": "Needs a weather file and an analysis period.",
+    "protects_hint": "Roofs or facades that collect sun and sky energy, for example for solar panels.",
     "symbol": "sun_over_heat_waves"
   },
   {
@@ -29,6 +32,7 @@
     "one_line": "Sun in hours that need heating",
     "tooltip": "Like solar energy, counting only hours cold enough to need heating.",
     "needs": "Needs a weather file and an analysis period.",
+    "protects_hint": "Facades or windows that gain useful heat from the sun.",
     "symbol": "sun_with_thermometer"
   },
   {
@@ -37,6 +41,7 @@
     "one_line": "Light from an overcast sky",
     "tooltip": "Keeps the view of an overcast sky, for daylight rules and visual comfort.",
     "needs": "Needs nothing extra.",
+    "protects_hint": "Windows or facades that need daylight.",
     "symbol": "overcast_sky_dome"
   },
   {
@@ -45,6 +50,7 @@
     "one_line": "View of the cold night sky",
     "tooltip": "Keeps a flat roof's view of the cold night sky. Experimental; assumes horizontal test surfaces.",
     "needs": "Needs a night dew point.",
+    "protects_hint": "Flat roofs that cool toward the night sky.",
     "symbol": "crescent_moon_with_arrow"
   }
 ]

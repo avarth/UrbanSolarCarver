@@ -1,5 +1,7 @@
-// The Inputs step (UX 5.2): one box per input role with its files (the existing surroundings and the terrain are optional), "Add files" (picker, or drop the files onto the box) and a
-// remove button per file; under the boxes the size of all inputs together and the warning when it does not look like metres.
+// The Inputs step (UX 5.2, spec 7.1): the site only, one box per input role with its files (the maximum volume, the existing
+// surroundings and the terrain, which are optional, and the weather file), "Add files" (picker, or drop the files onto the box) and
+// a remove button per file; under the boxes the size of all inputs together and the warning when it does not look like metres.
+// The test surfaces belong to the criteria: a criterion's panel has their box (ProtectsBox, which draws an InputBox).
 // While a run of the project is active the service refuses uploads and removals, so both are disabled with the reason.
 import { useId, useRef, useState, type DragEvent } from "react";
 import type { InputFileInfo } from "../api_client/client";
@@ -11,7 +13,8 @@ import { formatNumber, formattedNumber } from "./format_numbers";
 import "./steps.css";
 
 export type InputRole = "max_volume" | "test_surfaces" | "context" | "terrain" | "weather";
-export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "test_surfaces", "context", "terrain", "weather"];
+/** The roles of the Inputs step: the site's (the test surfaces are each criterion's). */
+export const INPUT_ROLES: readonly InputRole[] = ["max_volume", "context", "terrain", "weather"];
 /** The mesh roles a run can do without: no "Required" beside their titles. */
 const OPTIONAL_MESH_ROLES: readonly InputRole[] = ["context", "terrain"];
 
@@ -39,6 +42,10 @@ interface InputBoxProps {
   drawingProblems?: string[];
   /** A line under the files: for the maximum volume, how carving further made it (CarveFurther.tsx). */
   note?: string | null;
+  /** The box's title, hint and add button in place of the role's (a criterion's test surfaces: "Protects", the mode's hint). */
+  title?: string;
+  hint?: string;
+  addLabel?: string;
 }
 
 const TITLES: Record<InputRole, string> = {
@@ -68,7 +75,7 @@ function RemoveIcon() {
 const NO_PROBLEMS: string[] = [];
 
 export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles, onRemoveFile, disabledReason, weatherNeeded = false,
-                           drawingProblems = NO_PROBLEMS, note = null }: InputBoxProps) {
+                           drawingProblems = NO_PROBLEMS, note = null, title, hint: hintGiven, addLabel }: InputBoxProps) {
   const [problems, setProblems] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -77,7 +84,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
   const isWeather = role === "weather";
   const filled = files.length > 0;
   const disabled = disabledReason !== null || busy;
-  const hint = role === "weather" ? weatherHint : MESH_HINTS[role];
+  const hint = hintGiven ?? (role === "weather" ? weatherHint : MESH_HINTS[role]);
   const badge = isWeather ? messages.weatherFileExtension : OPTIONAL_MESH_ROLES.includes(role) ? null : messages.requiredInput;
 
   const add = async (chosen: File[]) => {
@@ -110,7 +117,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
 
   const addButton = (
     <button type="button" className="input-add" disabled={disabled} onClick={() => picker.current?.click()}>
-      {isWeather && filled ? messages.replaceFile : messages.addFiles}
+      {isWeather && filled ? messages.replaceFile : addLabel ?? messages.addFiles}
     </button>
   );
   const boxClass = ["input-box", filled ? "input-box-filled" : "input-box-empty", dragging && !disabled ? "input-box-drop-target" : ""].join(" ");
@@ -121,7 +128,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
       <input ref={picker} type="file" hidden multiple={!isWeather} accept={isWeather ? WEATHER_FILE_TYPE : MESH_FILE_TYPES}
              onChange={(event) => { void add(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
       <div className="input-box-title-row">
-        <h3 id={titleId} className="input-box-title">{isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role]}</h3>
+        <h3 id={titleId} className="input-box-title">{title ?? (isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role])}</h3>
         {filled ? addButton : badge !== null && <span className="input-box-required">{badge}</span>}
       </div>
       {!filled && (

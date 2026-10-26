@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { CriterionCarvingSummary, CriterionEntry } from "../api_client/client";
 import type { StageState } from "../steps/step_summaries";
-import { activeCriteria, cardResultLine, cardStatusText, criterionStatus, selectionAfterRemoving } from "./criteria_state";
+import { activeCriteria, cardResultLine, cardStatusText, criterionStatus, selectionAfterRemoving, stagesByCriterionOf } from "./criteria_state";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
   return { id, name: `Criterion ${id}`, named_by_user: false, colour: "#336699", bypassed: false, test_surface_files: ["roofs.obj"], settings: {}, ...overrides };
@@ -118,4 +118,10 @@ test("the selection stays unless the selected card is removed, then moves to the
   expect(selectionAfterRemoving(criteria, "3", "3")).toBe("2");
   expect(selectionAfterRemoving(criteria, "1", "3")).toBe("3");
   expect(selectionAfterRemoving([entry("1")], "1", "1")).toBe("1");
+});
+
+test("the stages of each criterion as the service gives them, a stage it does not name read as missing", () => {
+  expect(stagesByCriterionOf({ 1: { preprocessing: "current", thresholding: "out_of_date", exporting: "current" }, 2: { preprocessing: "current" } }))
+    .toEqual({ 1: THRESHOLD_OUT_OF_DATE, 2: { preprocessing: "current", thresholding: "missing" } });
+  expect(stagesByCriterionOf(undefined)).toEqual({});
 });

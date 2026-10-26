@@ -1,8 +1,8 @@
-// The Settings step (UX 5.4, 11): the settings the analysis reads in their groups, the grid under Voxel size, the grid-over-budget
-// message in place of the engine's, and messages that name no single setting. The step's Run analysis button sits pinned at the
-// bottom of the panel (RunAnalysisButton), disabled with the first reason that blocks the run, its run's progress under it. Above
-// the groups, after a weather file is added or replaced in this session, the notice of the period it may call for
-// (weather_change_notice.ts).
+// The analysis settings (UX 5.4, 11), drawn by Site and grid (the shared ones) and by a criterion's panel (its own): the settings in
+// their groups, the grid under Voxel size, the grid-over-budget message in place of the engine's, and messages that name no single
+// setting. Run analysis (RunAnalysisButton) is pinned at the bottom of the panel in Site and grid and ends a criterion's panel,
+// disabled with the first reason that blocks the run, its run's progress under it. Above the groups, after a weather file is added
+// or replaced in this session, the notice of the period it may call for (weather_change_notice.ts).
 import { useId, type ReactNode } from "react";
 import { ApiError, refusalDetailOf, serviceProblemOf, type HealthReply } from "../api_client/client";
 import { messages } from "../messages";
@@ -14,6 +14,7 @@ import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS, settings
 import { fieldErrorOf, gridLineOf, SettingField, WarningIcon, type SettingFieldExtras } from "../settings_form/SettingField";
 import { SettingGroup } from "../settings_form/SettingGroup";
 import { gridIsOverBudget, smallestVoxelSizeWithinBudget } from "./grid_budget";
+import type { StepName } from "./step_summaries";
 import type { WeatherChangeSuggestion } from "./weather_change_notice";
 import "./steps.css";
 
@@ -25,6 +26,22 @@ export interface RunAnalysisConditions {
   hasWeatherFile: boolean;
   form: Pick<FormState, "mode" | "fieldErrors" | "stepErrors">;
   warmUpState: HealthReply["warm_up"]["state"] | null;
+  /** The settings that belong to a criterion (GET criterion-keys), for the step that shows a setting to fix. */
+  criterionKeys: ReadonlySet<string>;
+  /** The step whose button says the reason: a setting to fix in another step is named with that step. */
+  shownIn: StepName;
+}
+
+/**
+ * The step that draws a setting's field: Site and grid for a shared analysis setting, Criteria for a criterion's and for the
+ * carving, Envelope and massing and Export for theirs; null for a name the form does not show.
+ */
+export function stepOfSetting(name: string, criterionKeys: ReadonlySet<string>): StepName | null {
+  const shownName = fieldSettingOf(name);
+  const formStep = SETTING_PRESENTATIONS[shownName]?.step;
+  if (formStep === undefined) return null;
+  if (formStep === "settings") return criterionKeys.has(shownName) ? "criteria" : "site_and_grid";
+  return formStep === "carving" ? "criteria" : formStep;
 }
 
 /** The label of a setting as the form shows it; settings drawn as one field have its label (the six period settings, "Analysis period"). */
@@ -43,10 +60,10 @@ export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | 
   if (conditions.modeNeedsWeatherFile && !conditions.hasWeatherFile) return messages.weatherFileNeeded;
   const firstFieldWithError = Object.keys(form.fieldErrors)[0];
   if (firstFieldWithError !== undefined) {
-    // A setting of a later step is named with its step, so the user knows where to find it.
-    const step = SETTING_PRESENTATIONS[firstFieldWithError]?.step ?? "settings";
+    // A setting of another step is named with its step, so the user knows where to find it.
+    const step = stepOfSetting(firstFieldWithError, conditions.criterionKeys) ?? conditions.shownIn;
     const label = shownLabelOf(firstFieldWithError, form.mode);
-    return step === "settings" ? messages.fixSettingToRun(label) : messages.fixSettingInStepToRun(label, messages.stepTitles[step]);
+    return step === conditions.shownIn ? messages.fixSettingToRun(label) : messages.fixSettingInStepToRun(label, messages.stepTitles[step]);
   }
   if (form.stepErrors.length > 0) return messages.fixSettingsToRun;
   // A warm-up that failed blocks nothing: a run then reports the problem itself (the service's warm-up says the same).
@@ -94,26 +111,30 @@ export function SaveFailureNotice({ text, onSaveAgain }: { text: SaveFailureText
   );
 }
 
+type FormErrors = Pick<FormState, "fieldErrors" | "stepErrors">;
+
 /**
- * The settings to fix of each step (UX 4.1, 11): the fields with an error, counted in the step that draws them (the six period
- * settings are one field, as are the balance temperature and its dead band), and the messages that name no field, counted in
- * Settings, where they are shown.
+ * The settings to fix of each step (UX 4.1, 11): the fields with an error of either form, counted in the step that draws them (the
+ * six period settings are one field, as are the balance temperature and its dead band), and the messages that name no field,
+ * counted where they are shown: the shared settings' in Site and grid, the criterion's in Criteria.
  */
-export function settingsToFixByStep(form: Pick<FormState, "fieldErrors" | "stepErrors">): Partial<Record<FormStepName, number>> {
-  const fields = new Set(Object.keys(form.fieldErrors).map(fieldSettingOf));
-  const counts: Partial<Record<FormStepName, number>> = {};
-  const count = (step: FormStepName, added: number) => { counts[step] = (counts[step] ?? 0) + added; };
-  for (const name of fields) count(SETTING_PRESENTATIONS[name]?.step ?? "settings", 1);
-  if (form.stepErrors.length > 0) count("settings", form.stepErrors.length);
+export function settingsToFixByStep(shared: FormErrors, criterion: FormErrors, criterionKeys: ReadonlySet<string>): Partial<Record<StepName, number>> {
+  const fields = new Set([...Object.keys(shared.fieldErrors), ...Object.keys(criterion.fieldErrors)].map(fieldSettingOf));
+  const counts: Partial<Record<StepName, number>> = {};
+  const count = (step: StepName, added: number) => { if (added > 0) counts[step] = (counts[step] ?? 0) + added; };
+  for (const name of fields) count(stepOfSetting(name, criterionKeys) ?? "site_and_grid", 1);
+  count("site_and_grid", shared.stepErrors.length);
+  count("criteria", criterion.stepErrors.length);
   return counts;
 }
 
-/** All the settings to fix, in every step. */
-export function settingsToFixCount(form: Pick<FormState, "fieldErrors" | "stepErrors">): number {
-  return Object.values(settingsToFixByStep(form)).reduce((total, count) => total + count, 0);
+/** All the settings to fix of a form: its fields with an error and its messages that name no field. */
+export function settingsToFixCount(form: FormErrors): number {
+  return new Set(Object.keys(form.fieldErrors).map(fieldSettingOf)).size + form.stepErrors.length;
 }
 
 interface SettingsToFixProps {
+  /** The part of the form whose fields to show (Envelope and massing, Export, a criterion's carving rule). */
   step: FormStepName;
   form: FormState;
   onChange: (values: Record<string, unknown>) => void;
@@ -216,12 +237,16 @@ interface SettingsStepProps {
   weatherChangeNotice?: WeatherChangeNoticeContent | null;
   /** The input roles the project has files for: Account for context blocking shows only with surroundings or terrain. */
   inputRoles?: readonly string[];
+  /** Which settings to draw: the shared ones (Site and grid) or a criterion's (its panel); absent, all. */
+  settingShown?: (name: string) => boolean;
+  /** The messages that name no setting to show here (those of the form these settings are saved by); absent, the form's. */
+  stepErrors?: readonly string[];
 }
 
 const NO_INPUT_ROLES: readonly string[] = [];
 
 export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null, hemisphere = "northern", weatherChangeNotice = null,
-                               inputRoles = NO_INPUT_ROLES }: SettingsStepProps) {
+                               inputRoles = NO_INPUT_ROLES, settingShown, stepErrors = form.stepErrors }: SettingsStepProps) {
   const fieldExtras = { voxel_size: voxelSizeExtras(form), [ANALYSIS_PERIOD_FIELDS[0]]: { coldPeriod, hemisphere } };
   return (
     <div className="settings-step">
@@ -232,8 +257,8 @@ export function SettingsStep({ form, onChange, disabledReason, coldPeriod = null
           <WeatherChangeNotice {...weatherChangeNotice} form={form} onChange={onChange} disabled={disabledReason !== null} />
         )}
       </div>
-      {form.stepErrors.map((error) => <p key={error} className="setting-error step-error"><WarningIcon /><span>{error}</span></p>)}
-      {settingsForStep("settings", form.mode, inputRoles).map((group) => (
+      {stepErrors.map((error) => <p key={error} className="setting-error step-error"><WarningIcon /><span>{error}</span></p>)}
+      {settingsForStep("settings", form.mode, inputRoles, settingShown).map((group) => (
         <SettingGroup key={group.title} group={group} form={form} onChange={onChange} disabled={disabledReason !== null} fieldExtras={fieldExtras} />
       ))}
     </div>

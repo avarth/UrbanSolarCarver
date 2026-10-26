@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from "vitest";
 import {
   addCriterion, addCriterionTestSurface, deleteCriterion, duplicateCriterion, getCarvedByCriterion, getCriterionKeys, getCriterionSettings, getSkyPatches,
   getSunPath, putSharedSettings, removeCriterionTestSurface, reorderCriteria, reuseTestSurface, updateCriterion,
-  ApiError, addInput, chooseProjectsFolder, deleteProject, failureTextOf, getHealth, getProjectsFolder, getScorePoints, openProjectFolder, projectDownloadUrl, putConfig,
+  ApiError, addInput, chooseProjectsFolder, deleteProject, failureTextOf, getHealth, getInputFiles, getProjectsFolder, getScorePoints, openProjectFolder, projectDownloadUrl, putConfig,
   readTokenFromLaunchUrl, renameProject, resetProjectToExample, runFileUrl, serviceProblemOf, startRun,
 } from "./client";
 
@@ -220,4 +220,10 @@ test("which criterion removed each voxel arrives as bytes", async () => {
   const fetchStub = answerWith(new Uint8Array([0, 1, 2]));
   expect(new Uint8Array(await getCarvedByCriterion("secret", "demo"))).toEqual(new Uint8Array([0, 1, 2]));
   expect(fetchStub.mock.calls[0][0]).toBe("/api/projects/demo/run/carved-by-criterion");
+});
+
+test("the stored files of a role are listed with their triangle counts", async () => {
+  const fetchStub = answerWith(JSON.stringify([{ name: "roofs.ply", triangle_count: 20 }]));
+  expect(await getInputFiles("secret", "Plot 7", "test_surfaces")).toEqual([{ name: "roofs.ply", triangle_count: 20 }]);
+  expect(fetchStub.mock.calls[0][0]).toBe("/api/projects/Plot%207/inputs/test_surfaces");
 });

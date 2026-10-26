@@ -3,7 +3,7 @@
 // Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is written in).
 import { act, type ComponentProps } from "react";
 import { vi } from "vitest";
-import type { CriterionEntry, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
+import type { CriterionEntry, InputFileInfo, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
@@ -93,6 +93,10 @@ export class FakeService {
   sharedSettings: Record<string, unknown> = {};
   /** The settings of criterion 1 as stored: those the project opened with (openWorkspace), then those of the last criterion save. */
   criterionSettings: Record<string, unknown> = {};
+  /** The test surface files of criterion 1 (openWorkspace gives the opened project's), changed by its test surface routes. */
+  criterionTestSurfaceFiles: string[] = ["surfaces.obj"];
+  /** Every stored test surface file, as GET inputs/test_surfaces lists them. */
+  storedTestSurfaces: InputFileInfo[] = [{ name: "surfaces.obj", triangle_count: 1 }];
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -125,9 +129,25 @@ export class FakeService {
       const mode = String(values.mode);
       const startingValues = this.modes.find((candidate) => candidate.name === mode)?.starting_values ?? {};
       this.criterionSettings = Object.fromEntries(Object.entries({ ...startingValues, ...values }).filter(([name]) => CRITERION_KEYS.has(name)));
-      return json(criterionEntry(this.criterionSettings));
+      return json(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
     }
-    if (path === "/stage-status") return json({ stages: this.stages });
+    if (method === "POST" && path === "/criteria/1/test-surfaces") {
+      if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
+      const fileName = ((init!.body as FormData).get("file") as File).name;
+      if (!this.criterionTestSurfaceFiles.includes(fileName)) this.criterionTestSurfaceFiles = [...this.criterionTestSurfaceFiles, fileName];
+      if (!this.storedTestSurfaces.some((file) => file.name === fileName)) this.storedTestSurfaces = [...this.storedTestSurfaces, { name: fileName, triangle_count: 1 }];
+      return json(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
+    }
+    if (method === "DELETE" && path.startsWith("/criteria/1/test-surfaces/")) {
+      const fileName = decodeURIComponent(path.replace("/criteria/1/test-surfaces/", ""));
+      this.criterionTestSurfaceFiles = this.criterionTestSurfaceFiles.filter((name) => name !== fileName);
+      this.storedTestSurfaces = this.storedTestSurfaces.filter((file) => file.name !== fileName);       // no other criterion uses it
+      return json(criterionEntry(this.criterionSettings, this.criterionTestSurfaceFiles));
+    }
+    if (method === "GET" && path === "/inputs/test_surfaces") return json(this.storedTestSurfaces);
+    if (path === "/stage-status") {
+      return json({ stages: this.stages, criteria: { 1: { preprocessing: this.stages.preprocessing, thresholding: this.stages.thresholding } } });
+    }
     if (method === "POST" && path === "/runs") {
       await this.runStartsWaitFor;
       const { produce } = JSON.parse(String(init!.body)) as { produce: string[] };
@@ -158,8 +178,8 @@ export class FakeService {
 }
 
 /** Criterion 1 of the project "p", with *settings* (the mode and its settings), as the service replies with it. */
-export function criterionEntry(settings: Record<string, unknown>): CriterionEntry {
-  return { id: "1", name: String(settings.mode), named_by_user: false, colour: "#4477aa", bypassed: false, test_surface_files: ["surfaces.obj"], settings };
+export function criterionEntry(settings: Record<string, unknown>, testSurfaceFiles: string[] = ["surfaces.obj"]): CriterionEntry {
+  return { id: "1", name: String(settings.mode), named_by_user: false, colour: "#4477aa", bypassed: false, test_surface_files: testSurfaceFiles, settings };
 }
 
 /** The project "p" of one criterion; *settings* are flat, the shared ones with those of criterion 1, as GET project gives them. */
@@ -215,6 +235,8 @@ export async function openWorkspace(
   vi.stubGlobal("fetch", vi.fn(service.answer));
   service.modes = modes;
   service.criterionSettings = opened.criteria?.[0]?.settings ?? {};
+  service.criterionTestSurfaceFiles = opened.criteria?.[0]?.test_surface_files ?? [];
+  service.storedTestSurfaces = opened.inputs.test_surfaces ?? [];
   function Page() {
     const runs = useRunLoop("token", () => {});
     return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}
@@ -249,8 +271,10 @@ export function typeAndLeave(input: HTMLInputElement, text: string) {
   act(() => input.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
 }
 
+/** Presses Run analysis: pinned under the steps (Site and grid), else in the open criterion's panel. */
 export async function pressRunAnalysis() {
-  const button = [...container().querySelectorAll<HTMLButtonElement>(".step-pinned-action button")].find((candidate) => candidate.textContent === "Run analysis")!;
+  const button = [...container().querySelectorAll<HTMLButtonElement>(".step-pinned-action button, .criterion-panel button")]
+    .find((candidate) => candidate.textContent === "Run analysis")!;
   await act(async () => button.click());
   await settle();
 }

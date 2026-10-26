@@ -198,6 +198,10 @@ export async function addInput(token: string, project: string, role: string, fil
 export const removeInput = (token: string, project: string, role: string, fileName: string) =>
   requestJson<InputFilesReply>(token, inputFileUrl(project, role, fileName), "DELETE");
 
+/** The stored files of a role (for the test surfaces, every criterion's), with their triangle counts. */
+export const getInputFiles = (token: string, project: string, role: string) =>
+  requestJson<InputFileInfo[]>(token, `${projectPath(project)}/inputs/${encodeURIComponent(role)}`);
+
 export const putConfig = (token: string, project: string, values: Record<string, unknown>) =>
   requestJson<ConfigReply>(token, `${projectPath(project)}/config`, "PUT", { values });
 

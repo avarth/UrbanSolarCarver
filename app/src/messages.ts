@@ -109,20 +109,22 @@ export const messages = {
   // The steps and their summary lines (4.1)
   stepTitles: {
     inputs: "Inputs",
-    mode: "Mode",
-    settings: "Settings",
-    carving: "Carving",
+    site_and_grid: "Site and grid",
+    criteria: "Criteria",
     envelope_and_massing: "Envelope and massing",
     export: "Export",
   },
-  inputsSummary: (volumeCount: number, testSurfaceCount: number, hasWeatherFile: boolean, contextCount = 0, hasTerrain = false) =>
-    `${volumeCount} ${volumeCount === 1 ? "volume" : "volumes"}, ${testSurfaceCount} ${testSurfaceCount === 1 ? "test surface" : "test surfaces"}` +
+  // The site's files (the test surfaces belong to the criteria): "1 volume, 2 surroundings files, terrain, weather".
+  inputsSummary: (volumeCount: number, hasWeatherFile: boolean, contextCount = 0, hasTerrain = false) =>
+    `${volumeCount} ${volumeCount === 1 ? "volume" : "volumes"}` +
     (contextCount > 0 ? `, ${contextCount} ${contextCount === 1 ? "surroundings file" : "surroundings files"}` : "") +
     (hasTerrain ? ", terrain" : "") +
     (hasWeatherFile === true ? ", weather" : ""),
   maxVolumeMissing: "Maximum volume missing",
-  testSurfacesMissing: "Test surfaces missing",
-  maxVolumeAndTestSurfacesMissing: "Maximum volume and test surfaces missing",
+  // Site and grid: "North 10°, 0.5 m voxels"
+  siteAndGridSummary: (northText: string, voxelsText: string) => `North ${northText}°, ${voxelsText}`,
+  // Criteria with one criterion: its mode and its carving, "Solar usefulness, 56 % kept"
+  criterionSummary: (modeName: string, carvingText: string) => `${modeName}, ${carvingText}`,
   // The analysis period in words (R2 4.3), in the step summary and in the period's tooltip: "21 Dec, 10 to 14 h", "21 to 22 Dec,
   // 22 to 2 h" (one month written once), "1 Oct to 30 Apr, 0 to 23 h", "22 Dec to 21 Dec, 10 to 14 h" (across the new year within
   // one month). One date with hours across midnight is what the engine runs: every night of the year.
@@ -133,7 +135,6 @@ export const messages = {
     return `${periodDatesInWords(startMonth, startDay, endMonth, endDay)}, ${hours}`;
   },
   voxelsOfSize: (voxelSizeText: string) => `${voxelSizeText} voxels`,
-  settingsSummary: (periodText: string, voxelsText: string) => `${periodText}; ${voxelsText}`,
   keptShare: (percentText: string) => `${percentText} kept`,
   notRunYet: "Not run yet",
   outOfDateSummary: "Out of date",
@@ -157,8 +158,8 @@ export const messages = {
   exportReady: "Ready",
   envelopeReady: "Envelope ready",
   massingReady: "Massing ready",
-  carvingNeedsAnalysis: "Run the analysis in Settings to see the carving",
-  envelopeNeedsAnalysis: "Run the analysis in Settings before building the envelope and massing",
+  carvingNeedsAnalysis: "Run the analysis to see the carving",
+  envelopeNeedsAnalysis: "Run the analysis in Criteria before building the envelope and massing",
   exportNeedsBuild: "Build the envelope or the massing to export them",
 
   // Inputs (5.2)
@@ -183,12 +184,16 @@ export const messages = {
   // A file the service accepted (the engine reads it) that the 3D view cannot draw, said in its box as fileProblem(name, reason)
   meshCannotBeDrawn: "The 3D view cannot read this file, so it is not drawn. Runs still use it.",
   meshTypeCannotBeShown: (extension: string) => `Meshes of type '${extension}' cannot be shown.`,
+  // A criterion's test surfaces (7.2): the drop box of the criterion, titled with what it does; its hint for the mode is in
+  // steps/mode_tiles.json (protects_hint).
+  protectsTitle: "Protects",
+  addTestSurfaces: "Add test surfaces",
   inputsSizeTitle: "Size of all inputs together",
   inputsSize: (sideX: string, sideY: string, sideZ: string) => `${sideX} × ${sideY} × ${sideZ}\u00a0m`,
 
   // Mode (5.3). The names, lines and tooltips of the six modes are in steps/mode_tiles.json.
   modeGroupLabel: "Mode",
-  modeFillsStartingValues: "Choosing a mode fills its starting values in Settings.",
+  modeFillsStartingValues: "Choosing a mode fills its starting values in the settings below.",
   // After a mode change that set values the user had set back to the new mode's own (the new mode refuses them).
   valuesResetForMode: (listedLabels: string, count: number, modeName: string) => (count === 1
     ? `${listedLabels} is back to its default: ${modeName} cannot use the value you had set.`
@@ -220,7 +225,7 @@ export const messages = {
   runButtonWaitsForGpu: "Waiting for the GPU to be ready",
 
   // Empty, error and warning states (11)
-  noInputsYet: "Add a maximum volume and test surfaces to start",
+  noInputsYet: "Add a maximum volume to start",
   addFiles: "Add files",
   orTryAnExample: "or try an example",
   weatherFileNeeded: "Add a weather file to run this mode",

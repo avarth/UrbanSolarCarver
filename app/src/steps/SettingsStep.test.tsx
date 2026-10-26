@@ -45,9 +45,14 @@ function rejected(fieldErrors: { field: string | null; message: string }[], grid
   return formReducer(form(), { type: "save_rejected", reply: { field_errors: fieldErrors, grid_plan: gridPlan } });
 }
 
+/** The settings of a criterion among those these tests name (GET criterion-keys gives the engine's list). */
+const CRITERION_KEYS: ReadonlySet<string> = new Set(["mode", "start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour", "threshold",
+                                                    "carve_fraction", "max_slope_deg"]);
+
+/** The conditions of the Run analysis pinned in Site and grid. */
 function conditions(overrides: Partial<RunAnalysisConditions> = {}): RunAnalysisConditions {
   return { runActive: false, maxVolumeFiles: 1, testSurfaceFiles: 2, modeNeedsWeatherFile: true, hasWeatherFile: true, form: form(),
-           warmUpState: "ready", ...overrides };
+           warmUpState: "ready", criterionKeys: CRITERION_KEYS, shownIn: "site_and_grid", ...overrides };
 }
 
 test("Run analysis says what blocks it, in order: a run, the inputs, the weather file, a setting, the warm-up", () => {
@@ -61,7 +66,8 @@ test("Run analysis says what blocks it, in order: a run, the inputs, the weather
   expect(runAnalysisBlocker(conditions({ hasWeatherFile: false, modeNeedsWeatherFile: false }))).toBeNull();
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET) })))
     .toBe("Fix the voxel size to run the analysis.");
-  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "end_day", message: "no such day" }]) }))).toBe("Fix the analysis period to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "end_day", message: "no such day" }]) })))
+    .toBe("Fix the analysis period in Criteria to run the analysis.");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, ray_batch_size must be larger than voxel_size" }]) })))
     .toBe("Fix the rays per batch to run the analysis.");
   expect(runAnalysisBlocker(conditions({ form: rejected([{ field: null, message: "Value error, the settings do not fit together" }]) })))
@@ -155,13 +161,15 @@ test("an error of the whole config outlines the settings it names, opens their f
     .toBe("Grid at the saved voxel size of 1 m: 62 voxels per side, 238 328 in total");
 });
 
-test("the settings to fix are counted by the step whose field holds them; messages for no field count in Settings", () => {
-  const state = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" },
-                          { field: "start_day", message: "a" }, { field: "end_day", message: "b" },
-                          { field: "min_plate_dimension", message: "Input should be greater than 0" },
-                          { field: null, message: "Value error, the settings do not fit together" }]);
-  expect(settingsToFixByStep(state)).toEqual({ settings: 2, carving: 1, envelope_and_massing: 1 });
-  expect(settingsToFixCount(state)).toBe(4);
+test("the settings to fix are counted by the step whose field holds them; messages for no field count where their form's settings are", () => {
+  const criterion = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" },
+                              { field: "start_day", message: "a" }, { field: "end_day", message: "b" },
+                              { field: null, message: "Value error, the settings do not fit together" }]);
+  const shared = rejected([{ field: "voxel_size", message: "too many voxels" }, { field: "min_plate_dimension", message: "Input should be greater than 0" }]);
+  // The period and the slope limit (one each) and the message for no field are the criterion's; the voxel size is Site and grid's.
+  expect(settingsToFixByStep(shared, criterion, CRITERION_KEYS)).toEqual({ criteria: 3, site_and_grid: 1, envelope_and_massing: 1 });
+  expect(settingsToFixByStep(criterion, form(), CRITERION_KEYS)).toEqual({ criteria: 2, site_and_grid: 1 });
+  expect(settingsToFixCount(criterion)).toBe(3);
 });
 
 test("a step that cannot be used yet still shows its settings to fix, so they can be fixed", () => {
@@ -176,8 +184,22 @@ test("a step that cannot be used yet still shows its settings to fix, so they ca
 });
 
 test("a setting to fix in another step is named with that step under the run button", () => {
-  expect(runAnalysisBlocker(conditions({ form: rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]) })))
-    .toBe("Fix the steepest step between columns in Carving to run the analysis.");
+  const slopeRefused = rejected([{ field: "max_slope_deg", message: "Input should be greater than 0" }]);
+  expect(runAnalysisBlocker(conditions({ form: slopeRefused }))).toBe("Fix the steepest step between columns in Criteria to run the analysis.");
+  expect(runAnalysisBlocker(conditions({ form: slopeRefused, shownIn: "criteria" }))).toBe("Fix the steepest step between columns to run the analysis.");
+  const voxelSizeRefused = rejected([{ field: "voxel_size", message: "too many voxels" }], PLAN_OVER_BUDGET);
+  expect(runAnalysisBlocker(conditions({ form: voxelSizeRefused, shownIn: "criteria" }))).toBe("Fix the voxel size in Site and grid to run the analysis.");
+  const marginRefused = rejected([{ field: "min_plate_dimension", message: "Input should be greater than 0" }]);
+  expect(runAnalysisBlocker(conditions({ form: marginRefused, shownIn: "criteria" }))).toBe("Fix the grid module in Envelope and massing to run the analysis.");
+});
+
+test("Site and grid draws the shared settings and a criterion's panel its own, by the criterion keys", () => {
+  rendered = renderForTest(<SettingsStep form={form()} onChange={() => {}} disabledReason={null} settingShown={(name) => !CRITERION_KEYS.has(name)} />);
+  expect(rendered.container.querySelector('[data-setting="voxel_size"]')).not.toBeNull();
+  expect(rendered.container.querySelector('[data-setting="start_month"]')).toBeNull();
+  rendered.rerender(<SettingsStep form={form()} onChange={() => {}} disabledReason={null} settingShown={(name) => CRITERION_KEYS.has(name)} />);
+  expect(rendered.container.querySelector('[data-setting="voxel_size"]')).toBeNull();
+  expect(rendered.container.querySelector('[data-setting="start_month"]')).not.toBeNull();
 });
 
 /** The Settings step over the form the app holds, every change going to it as the app's onChange does. */

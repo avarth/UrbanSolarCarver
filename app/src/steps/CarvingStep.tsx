@@ -1,4 +1,5 @@
-// The Carving step (UX 5.5, 11): in the weighted modes the carving rule at the top (Manual or Automatic), then the control of the
+// A criterion's carving rule (UX 5.5, 11; once the Carving step, now in the criterion's panel, CriterionPanel): in the weighted
+// modes the carving rule at the top (Manual or Automatic), then the control of the
 // rule (Shadow tolerated in m²·h for Solar time-based, Carve amount in % under Manual, a line for Automatic; the angle rule's
 // message), the "Update when I change the threshold" switch, remembered per project, the histogram with its cutoff line, the
 // numbers of the last carving, and the other carving settings folded last.
@@ -10,7 +11,7 @@
 // the cutoff itself (Shadow tolerated). A cutoff a weighted mode's config holds (from the command line or an earlier version) is
 // shown as Manual, at the carve amount it stands for.
 // When the analysis is out of date the histogram and numbers of the last carving are shown dimmed, its controls disabled, with Run
-// analysis in the step.
+// analysis when one is given (the criterion's panel has its own under the carving rule).
 import { useEffect, useId, useMemo, useRef, useState, type FocusEvent, type FormEvent, type KeyboardEvent, type PointerEvent,
          type ReactNode } from "react";
 import type { RunSummary } from "../api_client/client";
@@ -354,7 +355,8 @@ export interface CarvingStepProps {
   /** A carving setting was changed with auto-update on and the user is done with it: the carving reruns with it. */
   onCarvingSettingCommit: () => void;
   onUpdateCarving: () => void;
-  onRunAnalysis: () => void;
+  /** Run analysis beside the message that the analysis is out of date; absent, the message alone (Run analysis is elsewhere). */
+  onRunAnalysis?: () => void;
   lastAnalysisSeconds: number | null;
   /** The progress and outcome of a carving update, shown under the control or the Update carving button. */
   carvingFeedback: ReactNode;
@@ -479,11 +481,15 @@ export function CarvingStep(props: CarvingStepProps) {
       {analysisOutOfDate && (
         <div className="carving-locked">
           <p className="step-reason">{messages.analysisOutOfDate}</p>
-          <button type="button" className="primary-button" disabled={runBlocker !== null} aria-describedby={runBlocker !== null ? reasonId : undefined}
-                  onClick={props.onRunAnalysis}>
-            {messages.runAnalysis}
-          </button>
-          {runBlocker !== null && <p id={reasonId} className="run-button-reason">{runBlocker}</p>}
+          {props.onRunAnalysis !== undefined && (
+            <>
+              <button type="button" className="primary-button" disabled={runBlocker !== null} aria-describedby={runBlocker !== null ? reasonId : undefined}
+                      onClick={props.onRunAnalysis}>
+                {messages.runAnalysis}
+              </button>
+              {runBlocker !== null && <p id={reasonId} className="run-button-reason">{runBlocker}</p>}
+            </>
+          )}
         </div>
       )}
       {props.analysisFeedback}

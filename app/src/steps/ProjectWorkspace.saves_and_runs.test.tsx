@@ -26,7 +26,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
   expect(service.count("GET /run/summary")).toBe(0);           // nothing has run: no results to fetch
-  openStep("Settings");
+  openStep("Site and grid");
 
   type(voxelSizeField(), "2");
   await waitForTheSave();
@@ -50,18 +50,18 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
 
   expect(service.count("GET /run/summary")).toBe(1);
   expect(service.count("GET /stage-status")).toBe(2);
-  expect(stepRow("Carving").classList.contains("step-open")).toBe(true);    // a finished analysis opens Carving
-  expect(stepRow("Carving").textContent).toContain("Volume kept61 %");
+  expect(stepRow("Criteria").classList.contains("step-open")).toBe(true);    // a finished analysis opens Criteria
+  expect(stepRow("Criteria").textContent).toContain("Volume kept61 %");
   expect(dimmedCarvingLayers()).toEqual([]);
-  openStep("Settings");
-  expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("61\u00a0% kept");
+  openStep("Site and grid");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61\u00a0% kept");
 });
 
 test("a save the service refuses keeps Run analysis from starting a run, and says why", async () => {
   service = new FakeService(NOTHING_RUN, null);
   service.refuseSavesWith = 409;
   await openWorkspace(service, project(NOTHING_RUN));
-  openStep("Settings");
+  openStep("Site and grid");
 
   type(voxelSizeField(), "2");
   await waitForTheSave();
@@ -80,12 +80,13 @@ test("a save the service refuses keeps Run analysis from starting a run, and say
 // The shared settings are saved with PUT shared-settings, the settings of the criterion (the mode among them) with PATCH criteria/1.
 const settingsSaves = () => service.requests.filter((request) => request.startsWith("PUT") || request.startsWith("PATCH"));
 const modeTiles = () => [...container().querySelectorAll<HTMLElement>('[role="radio"]')];
-const settingsSummaryText = () => stepRow("Settings").querySelector(".step-summary")!.textContent;
+const siteAndGridSummaryText = () => stepRow("Site and grid").querySelector(".step-summary")!.textContent;
+const periodFieldText = () => container().querySelector('[data-setting="start_month"]')!.textContent;
 
 test("saving the voxel size sends only shared settings", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN, { start_month: 3, north_deg: 10 }));
-  openStep("Settings");
+  openStep("Site and grid");
   type(voxelSizeField(), "2");
   await waitForTheSave();
   await settle();
@@ -96,7 +97,7 @@ test("saving the voxel size sends only shared settings", async () => {
 test("saving the analysis period sends the criterion's settings", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN, { voxel_size: 2, threshold: { method: "cutoff", value: 1.5 } }));
-  openStep("Settings");
+  openStep("Criteria");
   act(() => buttonIn(container(), "21 June").click());
   await waitForTheSave();
   await settle();
@@ -109,23 +110,23 @@ test("a rejected criterion setting marks its field", async () => {
   service = new FakeService(CARVED, CARVING);
   service.configErrorsOf = (values) => (values.max_slope_deg === 100 ? [{ field: "max_slope_deg", message: "Input should be less than 90" }] : null);
   await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
-  openStep("Carving");
-  act(() => stepRow("Carving").querySelector<HTMLButtonElement>(".setting-fold")!.click());      // More carving settings
+  openStep("Criteria");
+  act(() => stepRow("Criteria").querySelector<HTMLButtonElement>(".carving-settings .setting-fold")!.click());      // More carving settings
   typeAndLeave(container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!, "100");
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PATCH /criteria/1"]);
   expect(service.savedValues).toEqual([]);
   expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("Input should be less than 90");
-  expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
   expect(service.count("POST /runs")).toBe(0);
 });
 
 test("a mode change starts the criterion from the new mode's values", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN, { voxel_size: 2, start_month: 3 }));
-  expect(settingsSummaryText()).toContain("21 Mar");
-  openStep("Mode");
+  openStep("Criteria");
+  expect(periodFieldText()).toContain("21 Mar");
   act(() => modeTiles()[4].click());                                  // Daylight
   await waitForTheSave();
   await settle();
@@ -136,8 +137,8 @@ test("a mode change starts the criterion from the new mode's values", async () =
   await settle();
   expect(settingsSaves()).toEqual(["PATCH /criteria/1", "PATCH /criteria/1"]);
   expect(service.savedValues.at(-1)).toEqual({ mode: "time-based" });
-  expect(settingsSummaryText()).toContain("21 Dec");
-  expect(settingsSummaryText()).toContain("2 m");                // the shared voxel size stays
+  expect(periodFieldText()).toContain("21 Dec");
+  expect(siteAndGridSummaryText()).toContain("2\u00a0m");          // the shared voxel size stays
 });
 
 test("a shared change refused for the criterion's mode is saved again once a mode change makes it storable, and Run analysis starts", async () => {
@@ -146,14 +147,14 @@ test("a shared change refused for the criterion's mode is saved again once a mod
   service.configErrorsOf = (values) => ("voxel_size" in values && service.criterionSettings.mode === "time-based"
     ? [{ field: null, message: "Value error, mode 'time-based' requires epw_path" }] : null);
   await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
-  openStep("Settings");
+  openStep("Site and grid");
   type(voxelSizeField(), "2");
   await waitForTheSave();
   await settle();
   expect(settingsSaves()).toEqual(["PUT /shared-settings"]);
   expect(container().querySelector(".step-error")!.textContent).toBe("Add a weather file to run this mode");
 
-  openStep("Mode");
+  openStep("Criteria");
   act(() => modeTiles()[4].click());                                  // Daylight reads no weather file
   await waitForTheSave();
   await settle();
@@ -161,7 +162,7 @@ test("a shared change refused for the criterion's mode is saved again once a mod
   await settle();
   expect(settingsSaves()).toEqual(["PUT /shared-settings", "PATCH /criteria/1", "PUT /shared-settings"]);
   expect(service.savedValues).toEqual([{ mode: "daylight" }, { voxel_size: 2 }]);
-  openStep("Settings");
+  openStep("Site and grid");
   expect(container().querySelector(".step-error")).toBeNull();
   await pressRunAnalysis();
   expect(service.runsStarted).toEqual([["thresholding"]]);
@@ -171,16 +172,16 @@ test("a page opened during a run it does not follow: Run analysis answered with 
   service = new FakeService(CARVED, CARVING);                  // the run has ended since
   service.everythingUpToDate = true;
   await openWorkspace(service, project(NOTHING_RUN));                   // opened while the run had removed the stage records
-  openStep("Settings");
-  expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("Not run yet");
+  openStep("Site and grid");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, Not run yet");
 
   await pressRunAnalysis();
   expect(container().querySelector(".step-pinned-action")!.textContent).toContain("Results are up to date");
   expect(FakeWebSocket.opened).toHaveLength(0);
   expect(service.count("GET /run/summary")).toBe(1);
-  expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("61\u00a0% kept");
-  openStep("Carving");
-  expect(stepRow("Carving").textContent).not.toContain("Run the analysis in Settings to see the carving");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("Solar time-based, 61\u00a0% kept");
+  openStep("Criteria");
+  expect(stepRow("Criteria").textContent).not.toContain("Run the analysis to see the carving");
   expect(dimmedCarvingLayers()).toEqual([]);
 });
 
@@ -188,7 +189,7 @@ test("threshold values given during a carving run: one more run follows with the
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
   expect(service.count("GET /run/summary")).toBe(1);           // the carving the project opened with
-  openStep("Carving");
+  openStep("Criteria");
   expect(dimmedCarvingLayers()).toEqual([]);
 
   typeAndLeave(thresholdField(), "1");
@@ -225,27 +226,26 @@ test("threshold values given during a carving run: one more run follows with the
   expect(service.runsStarted).toHaveLength(2);
 });
 
-test("a refused mode change locks Carving: the old mode's carving is not shown as current, and fixing the setting starts no analysis", async () => {
+test("a refused mode change locks the carving: the old mode's carving is not shown as current, and fixing the setting starts no analysis", async () => {
   service = new FakeService(CARVED, CARVING);
   // Daylight is refused for a carving setting until the user sets it, as a stored config.yaml or a run could leave it.
   service.configErrorsOf = (values) => (values.mode === "daylight" && values.max_slope_deg === undefined
     ? [{ field: "max_slope_deg", message: "Input should be greater than 0" }] : null);
   await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
-  openStep("Mode");
+  openStep("Criteria");
   act(() => [...container().querySelectorAll<HTMLElement>('[role="radio"]')][4].click());      // Daylight
   // Locked at once, before the save is sent: the stored settings, which the stage status describes, are still Solar time-based.
-  openStep("Carving");
-  expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(stepRow("Criteria").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   await waitForTheSave();
   await settle();
   expect(service.count("PATCH /criteria/1")).toBe(1);
   expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Solar time-based
-  expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(stepRow("Criteria").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   expect(thresholdField().disabled).toBe(true);
   expect(dimmedCarvingLayers()).toEqual(["carved_voxels", "kept_voxels", "sky_dome"]);
-  expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
+  expect(stepRow("Criteria").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
 
-  // The setting with the error stays editable in the locked step; fixing it stores Daylight, and must not start a carving run,
+  // The setting with the error stays editable in the locked carving rule; fixing it stores Daylight, and must not start a carving run,
   // which would run the whole analysis.
   const slope = container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!;
   expect(slope.disabled).toBe(false);
@@ -257,13 +257,13 @@ test("a refused mode change locks Carving: the old mode's carving is not shown a
   expect(service.savedValues).toEqual([{ mode: "daylight", max_slope_deg: 45 }]);
   expect(service.count("POST /runs")).toBe(0);
   expect(FakeWebSocket.opened).toHaveLength(0);
-  expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
+  expect(stepRow("Criteria").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
 });
 
 test("a failed run's link to a setting opens its step and focuses the input its label names: a slider's number field", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, project(NOTHING_RUN));
-  openStep("Settings");
+  openStep("Site and grid");
   await pressRunAnalysis();
   FakeWebSocket.opened[0].send({ type: "run_failed", error_type: "ConfigError", message: "invalid", field_errors: [{ field: "voxel_size", message: "too small" }] });
   await settle();
@@ -300,7 +300,7 @@ test("Build massing sends only massing and Build envelope only exporting; each l
   run.send({ type: "run_finished", stages: ["massing"], files: [] });
   await settle();
   expect([envelopeOutOfDate(), massingOutOfDate()]).toEqual([true, false]);
-  openStep("Carving");
+  openStep("Criteria");
   expect(stepRow("Envelope and massing").querySelector(".step-summary")!.textContent).toBe("Envelope out of date, massing built");
 
   openStep("Envelope and massing");
@@ -317,7 +317,7 @@ test("Build massing sends only massing and Build envelope only exporting; each l
   expect([envelopeOutOfDate(), massingOutOfDate()]).toEqual([false, false]);
 });
 
-test("while Carving is locked, Build envelope, Build massing and Carving's Build envelope and massing are disabled and say why (M10)", async () => {
+test("while the carving is locked, Build envelope, Build massing and the Build envelope and massing of Criteria are disabled and say why (M10)", async () => {
   const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
   service = new FakeService(built, CARVING);
   await openWorkspace(service, project(built));
@@ -325,7 +325,7 @@ test("while Carving is locked, Build envelope, Build massing and Carving's Build
   expect(buttonIn(buildPart("Envelope"), "Build envelope").disabled).toBe(false);
 
   // A voxel size typed and not saved yet: the analysis is out of date for the settings shown, and a build would run it.
-  openStep("Settings");
+  openStep("Site and grid");
   type(voxelSizeField(), "2");
   const lockReason = "Settings changed since the analysis. Run the analysis again before building.";
   openStep("Envelope and massing");
@@ -334,7 +334,7 @@ test("while Carving is locked, Build envelope, Build massing and Carving's Build
     expect(button.disabled).toBe(true);
     expect(reasonOf(button)).toBe(lockReason);
   }
-  openStep("Carving");
+  openStep("Criteria");
   const carvingBuild = buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing");
   expect(carvingBuild.disabled).toBe(true);
   expect(reasonOf(carvingBuild)).toBe(lockReason);
@@ -349,7 +349,7 @@ test("while Carving is locked, Build envelope, Build massing and Carving's Build
   expect(service.count("POST /runs")).toBe(0);
 });
 
-test("while Carving is locked, a mesh format change is stored but builds nothing, and Export says why (M10)", async () => {
+test("while the carving is locked, a mesh format change is stored but builds nothing, and Export says why (M10)", async () => {
   const built: Record<PipelineStage, StageState> = { preprocessing: "current", thresholding: "current", exporting: "current", massing: "current" };
   service = new FakeService(built, CARVING);
   await openWorkspace(service, project(built, { final_mesh_format: "ply" }));
@@ -358,7 +358,7 @@ test("while Carving is locked, a mesh format change is stored but builds nothing
   openStep("Export");
   expect(formatField().textContent).not.toContain(lockReason);
 
-  openStep("Settings");
+  openStep("Site and grid");
   service.stages = { preprocessing: "out_of_date", thresholding: "out_of_date", exporting: "out_of_date", massing: "out_of_date" };
   type(voxelSizeField(), "2");
   await waitForTheSave();
@@ -371,10 +371,10 @@ test("while Carving is locked, a mesh format change is stored but builds nothing
   expect(service.count("POST /runs")).toBe(0);                  // a run would start with the analysis
 });
 
-test("Carving's Build envelope and massing opens the step, builds both parts, shows its run at the top of the step and blocks both buttons", async () => {
+test("the Build envelope and massing of Criteria opens the step, builds both parts, shows its run at the top of the step and blocks both buttons", async () => {
   service = new FakeService(CARVED, CARVING);
   await openWorkspace(service, project(CARVED));
-  openStep("Carving");
+  openStep("Criteria");
   await act(async () => buttonIn(container().querySelector(".step-pinned-action")!, "Build envelope and massing").click());
   await settle();
   expect(stepRow("Envelope and massing").classList.contains("step-open")).toBe(true);
@@ -399,25 +399,26 @@ test("Carving's Build envelope and massing opens the step, builds both parts, sh
   await settle();
   expect(service.count("GET /run/summary")).toBeGreaterThan(1);
   expect(buildPart("Envelope").querySelector(".envelope-results")).toBeNull();
-  openStep("Carving");
+  openStep("Criteria");
   expect(stepRow("Envelope and massing").querySelector(".step-summary")!.textContent).toBe("Not built yet");
 });
 
 test("a workspace made again for a renamed project opens with the steps it had open, and says when they change", async () => {
   service = new FakeService(CARVED, CARVING);
   const stepsReported = vi.fn();
-  await openWorkspace(service, project(CARVED), { startSteps: { open: "carving", view: "carving" }, onStepsChange: stepsReported });
-  expect(stepRow("Carving").classList.contains("step-open")).toBe(true);
+  await openWorkspace(service, project(CARVED), { startSteps: { open: "criteria", view: "criteria" }, onStepsChange: stepsReported });
+  expect(stepRow("Criteria").classList.contains("step-open")).toBe(true);
   expect(stepRow("Inputs").classList.contains("step-open")).toBe(false);
   expect(FakeViewerScene.latest!.visibleLayers.has("test_surfaces")).toBe(true);
-  expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(false);        // the view shows the carving's layers, not the inputs' ones
+  expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(true);         // the layers of Criteria, the maximum volume as a ghost
   openStep("Export");
   expect(stepsReported).toHaveBeenLastCalledWith({ open: "export", view: "export" });
+  expect(FakeViewerScene.latest!.visibleLayers.has("max_volume")).toBe(false);
 });
 
-test("the Carving step shows the kept voxels and starts with the carved ones hidden", () => {
-  expect(LAYERS_SHOWN_IN_STEP.carving).toContain("kept_voxels");
-  expect(LAYERS_SHOWN_IN_STEP.carving).not.toContain("carved_voxels");
+test("the Criteria step shows the kept voxels and starts with the carved ones hidden", () => {
+  expect(LAYERS_SHOWN_IN_STEP.criteria).toContain("kept_voxels");
+  expect(LAYERS_SHOWN_IN_STEP.criteria).not.toContain("carved_voxels");
 });
 
 test("the saver of the open project waits for an upload in flight, so a rename, reset or delete comes after it", async () => {
@@ -440,7 +441,7 @@ test("the saver of the open project waits for an upload in flight, so a rename, 
   expect(uploadsEnded).toBe(true);
 });
 
-// The notice of a new weather file (weather_change_notice.ts) in the Settings step.
+// The notice of a new weather file (weather_change_notice.ts), over the criterion's settings in Criteria.
 const BENEFIT_SCHEMA = {
   properties: { ...SCHEMA.properties, balance_temperature: { default: 15, type: "number" }, balance_offset: { default: 2, minimum: 0, type: "number" } },
 };
@@ -456,7 +457,7 @@ async function addWeatherFile() {
   Object.defineProperty(weatherPicker, "files", { value: [new File(["LOCATION"], "weather.epw")], configurable: true });
   act(() => weatherPicker.dispatchEvent(new Event("change", { bubbles: true })));
   await settle();
-  openStep("Settings");
+  openStep("Criteria");
 }
 
 /** Past the wait before the cold period is asked for, and its reply. */
@@ -475,7 +476,7 @@ const BRISBANE_SHIFT = "The new weather file (Brisbane, AUS) is in the southern 
 test("a project opened with a weather file in the other hemisphere shows no notice: only a weather file added in this session does", async () => {
   service = new FakeService(NOTHING_RUN, null);
   await openWorkspace(service, { ...project(NOTHING_RUN), weather_location: BRISBANE.location, weather_latitude: BRISBANE.latitude });
-  openStep("Settings");
+  openStep("Criteria");
   expect(weatherNotice()).toBeNull();
 });
 
@@ -498,7 +499,7 @@ test("a first weather file counts as after a northern one; the heating season pr
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
   await openWorkspace(service, { ...project(NOTHING_RUN), inputs: { ...project(NOTHING_RUN).inputs, weather: [] }, weather_location: null, weather_latitude: null });
-  openStep("Settings");
+  openStep("Criteria");
   expect(buttonIn(container(), "Heating season, October to April")).toBeDefined();
   await addWeatherFile();
   expect(noticeText()).toContain("(Brisbane, AUS) is in the southern hemisphere");
@@ -578,10 +579,10 @@ test("the notice is a live region kept on the page, empty until a notice fills i
   service = new FakeService(NOTHING_RUN, null);
   service.uploadedWeather = BRISBANE;
   await openWorkspace(service, project(NOTHING_RUN));
-  openStep("Settings");
+  openStep("Criteria");
   expect(noticeRegion()!.getAttribute("role")).toBe("status");
   expect(noticeRegion()!.textContent).toBe("");
-  await addWeatherFile();                                           // through the Inputs step, back to Settings
+  await addWeatherFile();                                           // through the Inputs step, back to Criteria
   const region = noticeRegion()!;
   expect(region.textContent).toContain(BRISBANE_SHIFT);
   act(() => buttonIn(weatherNotice()!, "Keep").click());

@@ -230,7 +230,7 @@ export function App() {
 
   /**
    * Carve further (CarveFurther.tsx): the open project's envelope becomes its maximum volume and its settings return to a new
-   * project's, so its waiting settings save is dropped; the project opens again at the Mode step to choose the next criterion.
+   * project's, so its waiting settings save is dropped; the project opens again at the Criteria step to choose the next criterion.
    */
   const carveOpenProjectFurther = async (): Promise<string | null> => {
     if (openProject === null) return null;
@@ -239,7 +239,7 @@ export function App() {
     return reasonIfRefused(() => carveFurther(accessToken, name), (carved) => {
       openProjectSettings.current?.cancel();
       setOpenProject(carved);
-      setWorkspaceStartSteps({ open: "mode", view: "inputs" });
+      setWorkspaceStartSteps({ open: "criteria", view: "inputs" });
       setOpenProjectResets((resets) => resets + 1);
     });
   };

@@ -141,10 +141,10 @@ test("threshold moves during a carving run: one more run with the last value, an
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
-      refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
+      refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
-    return <>{latest.content.carving}</>;
+    return <>{latest.carvingRule}</>;
   }
   rendered = renderForTest(<Workspace />);
   await settle();
@@ -203,10 +203,10 @@ test("a threshold run whose follow-up brings no run (a failed save, results up t
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false, stages,
-      refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
+      refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
-    return <>{latest.content.carving}</>;
+    return <>{latest.carvingRule}</>;
   }
   rendered = renderForTest(<Workspace />);
   await settle();
@@ -263,10 +263,10 @@ test("after a follow-up with nothing to run, the carving stays dimmed until the 
     const runs = useRunLoop("token", vi.fn());
     latest = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: false,
-      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
+      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0],
       openStep: vi.fn(), goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
-    return <>{latest.content.carving}</>;
+    return <>{latest.carvingRule}</>;
   }
   rendered = renderForTest(<Workspace />);
   await settle();
@@ -311,10 +311,10 @@ test("Run analysis answered with up to date asks for the stage status again and 
     const runs = useRunLoop("token", vi.fn());
     const steps = useResultSteps({
       token: "token", project: "p", form, currentForm: () => form, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave: async () => "saved", isWeightedMode: true,
-      stages, refreshStageStatus, runs, runBlocker: null, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
+      stages, refreshStageStatus, runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: runs.activeRun?.project === "p", origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
-    return <>{steps.content.carving}</>;
+    return <>{steps.carvingRule}{steps.criterionRunAnalysis}</>;
   }
   rendered = renderForTest(<Workspace />);
   await settle();
@@ -353,10 +353,10 @@ test("a threshold change whose save stores a mode or an analysis setting a refus
     const runs = useRunLoop("token", vi.fn());
     const steps = useResultSteps({
       token: "token", project: "p", form, currentForm: () => formNow, dispatch: vi.fn(), flushSave: async () => "none", changeAndSave, isWeightedMode: false,
-      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
+      stages, refreshStageStatus: vi.fn(), runs, runBlocker: null, everyCriterionCarved: true, projectRunActive: false, origin: [0, 0, 0], openStep: vi.fn(),
       goToSetting: vi.fn(), onServiceProblem: vi.fn(), onCarveFurther: vi.fn(async () => null),
     });
-    return <>{steps.content.carving}</>;
+    return <>{steps.carvingRule}</>;
   }
   rendered = renderForTest(<Workspace />);
   await settle();

@@ -35,7 +35,7 @@ test("the six tiles form one radio group, in the order of R2 3, with the chosen 
     .toEqual(["Angle rule", "Solar time-based", "Solar energy", "Solar usefulness", "Daylight", "Night cooling"]);
   expect(tiles().map((tile) => tile.getAttribute("aria-checked"))).toEqual(["false", "true", "false", "false", "false", "false"]);
   expect(tiles().map((tile) => tile.tabIndex)).toEqual([-1, 0, -1, -1, -1, -1]);
-  expect(rendered.container.textContent).toContain("Choosing a mode fills its starting values in Settings.");
+  expect(rendered.container.textContent).toContain("Choosing a mode fills its starting values in the settings below.");
 });
 
 test("a tile shows its symbol and its name only", () => {

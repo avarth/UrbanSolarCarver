@@ -4,6 +4,10 @@
 import { messages } from "../messages";
 import presentationFile from "./setting_presentation.json";
 
+/**
+ * The parts of the form a setting belongs to (setting_presentation.json): "settings" (the analysis: Site and grid shows its shared
+ * settings, a criterion's panel its own), "carving" (a criterion's carving rule), and the Envelope and massing and Export steps.
+ */
 export type StepName = "settings" | "carving" | "envelope_and_massing" | "export";
 export type WidgetName = "analysis_period" | "threshold" | "tilted_plane_angles" | "sun_steps_per_hour" | "mesh_format" | "balance_temperature";
 
@@ -141,10 +145,13 @@ function hasInputsFor(name: string, inputRoles: readonly string[]): boolean {
 /**
  * The groups of *step* in *mode*, in the file's order, each with its essential and folded settings; empty groups are left out.
  * *inputRoles*: the input roles the project has files for; a setting that needs inputs (shown_with_inputs) shows only with them.
+ * *settingShown*: which settings of the step to draw (the shared ones in Site and grid, a criterion's in its panel); absent, all.
  */
-export function settingsForStep(step: StepName, mode: string, inputRoles: readonly string[] = []): SettingGroupView[] {
+export function settingsForStep(step: StepName, mode: string, inputRoles: readonly string[] = [],
+                                settingShown: (name: string) => boolean = () => true): SettingGroupView[] {
   const shownNames = Object.keys(SETTING_PRESENTATIONS).filter((name) =>
-    SETTING_PRESENTATIONS[name].step === step && settingIsShownIn(name, mode) && hasInputsFor(name, inputRoles) && fieldSettingOf(name) === name);
+    SETTING_PRESENTATIONS[name].step === step && settingIsShownIn(name, mode) && hasInputsFor(name, inputRoles) && fieldSettingOf(name) === name
+    && settingShown(name));
   return PRESENTATION.steps[step].flatMap((title) => {
     const names = shownNames.filter((name) => SETTING_PRESENTATIONS[name].group === title);
     const essential = names.filter((name) => isEssentialIn(SETTING_PRESENTATIONS[name], mode)).map((name) => settingView(name, mode));

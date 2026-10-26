@@ -504,6 +504,13 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 .run-issues ul { margin: var(--space-unit) 0 0; padding-left: calc(var(--space-unit) * 4); }
 .run-issues-title { margin: 0; font-weight: 600; }
 
+/* Criteria (spec 7.1, 7.2): one criterion opens straight on its panel; the carving rule and Run analysis close it, each set off by
+   a line as the steps' sections are. ------------------------------------------------------------------------------------------- */
+
+.criterion-panel { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 4); }
+.criterion-carving,
+.criterion-run { padding-top: calc(var(--space-unit) * 4); border-top: 1px solid var(--colour-line); }
+
 /* Carving (UX 5.5) -------------------------------------------------------------------------------------------------------- */
 
 .carving-step,

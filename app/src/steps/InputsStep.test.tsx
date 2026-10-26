@@ -11,12 +11,13 @@ afterEach(() => {
 });
 
 const WEATHER_HINT = "Needed for Solar time-based, Solar energy and Solar usefulness.";
-const NO_FILES = { max_volume: [], test_surfaces: [], weather: [] };
+const NO_FILES = { max_volume: [], context: [], weather: [] };
 const SOME_FILES = {
   max_volume: [{ name: "max_volume.ply", triangle_count: 1152 }],
-  test_surfaces: [{ name: "neighbor_roofs.ply", triangle_count: 2040 }, { name: "neighbor_windows.ply", triangle_count: 1730 }],
+  context: [{ name: "neighbour_blocks.ply", triangle_count: 2040 }, { name: "neighbour_trees.ply", triangle_count: 1730 }],
   weather: [{ name: "weather.epw", triangle_count: 0 }],
 };
+const CONTEXT_TITLE = "Existing surroundings (optional)";
 
 function boxTitled(title: string): HTMLElement {
   return [...rendered!.container.querySelectorAll<HTMLElement>(".input-box")].find((box) => box.querySelector("h3")!.textContent === title)!;
@@ -36,7 +37,6 @@ test("empty boxes: dashed, Required or .epw beside the title, the hint, Add file
   expect(maxVolume.classList.contains("input-box-empty")).toBe(true);
   expect(maxVolume.querySelector(".input-box-required")!.textContent).toBe("Required");
   expect(maxVolume.textContent).toContain("The largest building you would allow, as one or more closed meshes.");
-  expect(boxTitled("Test surfaces").textContent).toContain("The surfaces whose sun or sky the carving protects, such as neighbouring facades.");
   const weather = boxTitled("Weather file (optional)");
   expect(weather.querySelector(".input-box-required")!.textContent).toBe(".epw");
   expect(weather.textContent).toContain(WEATHER_HINT);
@@ -46,12 +46,12 @@ test("empty boxes: dashed, Required or .epw beside the title, the hint, Add file
 
 test("filled boxes: a row per file with its triangle count or location, a named remove button, Replace for the weather", () => {
   rendered = renderForTest(inputsStep(SOME_FILES));
-  const testSurfaces = boxTitled("Test surfaces");
-  expect(testSurfaces.classList.contains("input-box-filled")).toBe(true);
-  expect(testSurfaces.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
-  expect([...testSurfaces.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbor_roofs.ply", "neighbor_windows.ply"]);
-  expect(testSurfaces.querySelector(".input-file-detail")!.textContent).toBe("2\u202f040 triangles");
-  expect(testSurfaces.querySelector('[aria-label="Remove neighbor_windows.ply"]')).not.toBeNull();
+  const context = boxTitled(CONTEXT_TITLE);
+  expect(context.classList.contains("input-box-filled")).toBe(true);
+  expect(context.querySelector(".input-box-title-row button")!.textContent).toBe("Add files");
+  expect([...context.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbour_blocks.ply", "neighbour_trees.ply"]);
+  expect(context.querySelector(".input-file-detail")!.textContent).toBe("2\u202f040 triangles");
+  expect(context.querySelector('[aria-label="Remove neighbour_trees.ply"]')).not.toBeNull();
   const weather = boxTitled("Weather file (optional)");
   expect(weather.querySelector(".input-box-title-row button")!.textContent).toBe("Replace");
   expect(weather.querySelector(".input-file-detail")!.textContent).toBe("Golden, CO, USA");
@@ -65,10 +65,10 @@ test("files dropped on a box are added to its role, and a file that cannot be re
   const drop = new Event("drop", { bubbles: true, cancelable: true });
   Object.defineProperty(drop, "dataTransfer", { value: { files: [file] } });
   await act(async () => {
-    boxTitled("Test surfaces").dispatchEvent(drop);
+    boxTitled(CONTEXT_TITLE).dispatchEvent(drop);
   });
-  expect(onAddFiles).toHaveBeenCalledWith("test_surfaces", [file]);
-  expect(boxTitled("Test surfaces").querySelector(".input-box-problem")!.textContent).toBe("No triangles found in facade_b.obj");
+  expect(onAddFiles).toHaveBeenCalledWith("context", [file]);
+  expect(boxTitled(CONTEXT_TITLE).querySelector(".input-box-problem")!.textContent).toBe("No triangles found in facade_b.obj");
 });
 
 test("during a run adding and removing are disabled, with the reason", () => {
@@ -93,20 +93,25 @@ test("the weather box where the chosen mode needs the file is not titled optiona
 });
 
 test("a file the 3D view cannot draw is named in its box, next to the files, which stay", () => {
-  const problem = "neighbor_windows.ply: The 3D view cannot read this file, so it is not drawn. Runs still use it.";
+  const problem = "neighbour_trees.ply: The 3D view cannot read this file, so it is not drawn. Runs still use it.";
   rendered = renderForTest(
     <InputsStep files={SOME_FILES} weatherLocation="Golden, CO, USA" weatherHint={WEATHER_HINT} inputsBounds={null} onAddFiles={async () => []}
-                onRemoveFile={async () => null} disabledReason={null} drawingProblems={{ max_volume: [], test_surfaces: [problem] }} />);
-  const testSurfaces = boxTitled("Test surfaces");
-  expect([...testSurfaces.querySelectorAll(".input-box-problem")].map((paragraph) => paragraph.textContent)).toEqual([problem]);
-  expect([...testSurfaces.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbor_roofs.ply", "neighbor_windows.ply"]);
+                onRemoveFile={async () => null} disabledReason={null} drawingProblems={{ max_volume: [], context: [problem] }} />);
+  const context = boxTitled(CONTEXT_TITLE);
+  expect([...context.querySelectorAll(".input-box-problem")].map((paragraph) => paragraph.textContent)).toEqual([problem]);
+  expect([...context.querySelectorAll(".input-file-name")].map((name) => name.textContent)).toEqual(["neighbour_blocks.ply", "neighbour_trees.ply"]);
   expect(boxTitled("Maximum volume").querySelector(".input-box-problem")).toBeNull();
 });
 
-test("the optional boxes for the existing surroundings and the terrain follow the test surfaces, with no Required badge", () => {
+test("inputs hold only the site", () => {
   rendered = renderForTest(inputsStep(NO_FILES));
   const titles = [...rendered.container.querySelectorAll(".input-box h3")].map((title) => title.textContent);
-  expect(titles).toEqual(["Maximum volume", "Test surfaces", "Existing surroundings (optional)", "Terrain (optional)", "Weather file (optional)"]);
+  expect(titles).toEqual(["Maximum volume", "Existing surroundings (optional)", "Terrain (optional)", "Weather file (optional)"]);
+  expect(rendered.container.textContent).not.toContain("Test surfaces");
+});
+
+test("the optional boxes for the existing surroundings and the terrain follow the maximum volume, with no Required badge", () => {
+  rendered = renderForTest(inputsStep(NO_FILES));
   const context = boxTitled("Existing surroundings (optional)");
   expect(context.querySelector(".input-box-required")).toBeNull();
   expect(context.textContent).toContain("Buildings and large trees that stay. They block sun and sky, and nothing is built in their place.");

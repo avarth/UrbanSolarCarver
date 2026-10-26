@@ -71,7 +71,7 @@ export function shownConfigErrorOf(field: string | null, message: string, mode: 
   if (field === "epw_path") return { settings: [], message: messages.weatherFileNeeded };
   // A setting the form has no field for: the mode by the name of its step, any other by the engine's name for it.
   if (setting === null) {
-    return { settings: [], message: messages.settingProblem(field === "mode" ? messages.stepTitles.mode : field, inInterfaceWords(message, mode, false)) };
+    return { settings: [], message: messages.settingProblem(field === "mode" ? messages.modeGroupLabel : field, inInterfaceWords(message, mode, false)) };
   }
   return { settings: [setting], message: inInterfaceWords(message, mode) };
 }

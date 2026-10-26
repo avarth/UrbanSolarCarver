@@ -1,20 +1,24 @@
-// An open project (UX 4): the step accordion in the left panel and the 3D view beside it. It holds what the steps share: the
-// input files, the two settings forms (the shared settings and the first criterion's, shown to the steps as one: the Mode step
-// and the Settings step both change them), the stage status the step summaries read, and the input meshes (input_meshes.ts) and
-// the sun path (sun_path_request.ts) the 3D view draws. The steps that start runs and show their results (Carving, Envelope and
-// massing, Export) are put together in result_steps.tsx from these and the app's run loop.
+// An open project (UX 4, spec 7.1): the step accordion in the left panel (Inputs, Site and grid, Criteria, Envelope and massing,
+// Export) and the 3D view beside it. It holds what the steps share: the input files, the criteria (useCriteria), the two settings
+// forms (the shared settings, shown in Site and grid, and the first criterion's, shown in its panel; the steps read them as one),
+// the stage status the step summaries read, and the input meshes (input_meshes.ts) and the sun path (sun_path_request.ts) the 3D
+// view draws. The parts that start runs and show their results (the criterion's carving rule, Envelope and massing, Export) are
+// put together in result_steps.tsx from these and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  addInput, ApiError, failureTextOf, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
+  addInput, ApiError, failureTextOf, getInputFiles, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
   type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
+import { activeCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
+import { CriteriaStep } from "../criteria/CriteriaStep";
+import { CriterionPanel } from "../criteria/CriterionPanel";
 import { useCriteria } from "../criteria/use_criteria";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import {
   analysisDiffersFromStored, shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend,
 } from "../settings_form/form_state";
-import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
+import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf } from "../settings_form/presentation";
 import { splitSettings, useBothForms } from "../settings_form/two_forms";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
@@ -23,13 +27,13 @@ import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
 import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
 import { InputBox, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
-import { ModeStep } from "./ModeStep";
 import { carvedByNote } from "./CarveFurther";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import type { RunLoop } from "./run_state";
 import {
-  RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsStep, SettingsToFix, settingsToFixByStep,
+  RunAnalysisButton, runAnalysisAfterSaving, runAnalysisBlocker, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep, stepOfSetting,
 } from "./SettingsStep";
+import { SiteAndGridStep } from "./SiteAndGridStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import {
   plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName,
@@ -40,14 +44,14 @@ import { periodChangedSince, weatherChangeSuggestion, type WeatherFileChange } f
 const NO_SHIFT: Point3 = [0, 0, 0];
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
-const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "mode", "settings"];
+const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "site_and_grid"];
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
-// they cover the kept ones; the Layers menu shows them.
+// they cover the kept ones; the Layers menu shows them. Criteria shows what the Mode and Carving steps showed together, the maximum
+// volume as a ghost.
 export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   inputs: ["max_volume", "test_surfaces", "context", "terrain"],
-  mode: ["max_volume", "test_surfaces", "context", "terrain"],
-  settings: ["max_volume", "test_surfaces", "context", "terrain", "sun_path"],
-  carving: ["test_surfaces", "context", "terrain", "sun_path", "kept_voxels", "sky_dome"],
+  site_and_grid: ["max_volume", "test_surfaces", "context", "terrain", "sun_path"],
+  criteria: ["max_volume", "test_surfaces", "context", "terrain", "sun_path", "kept_voxels", "sky_dome"],
   envelope_and_massing: ["context", "terrain", "envelope", "building_massing"],
   export: ["context", "terrain", "envelope", "building_massing"],
 };
@@ -157,6 +161,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // or without a latitude: what the period was likely chosen for.
   const hemisphereOfLastWeatherFile = useRef<Hemisphere>(hemisphereOfLatitude(project.weather_latitude));
   const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
+  const [criterionStages, setCriterionStages] = useState<StagesByCriterion>(() => stagesByCriterionOf(project.criterion_status));
   // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
   const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
   const storedAnalysisRevision = useRef(form.storedAnalysisRevision);
@@ -189,12 +194,19 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // (RunLoop.replyStillHolds), and the run's end asks again. *completedStages*: the stages a run just completed are current at
   // once, so their layers are not dimmed until the reply.
   const refreshStageStatus = (completedStages: readonly string[] = []) => {
-    if (completedStages.length > 0) setStages((current) => ({ ...current, ...Object.fromEntries(completedStages.map((stage) => [stage, "current"])) }));
+    if (completedStages.length > 0) {
+      const completed = Object.fromEntries(completedStages.map((stage) => [stage, "current"]));
+      setStages((current) => ({ ...current, ...completed }));
+      const completedOfCriteria = Object.fromEntries(completedStages.filter((stage) => stage === "preprocessing" || stage === "thresholding")
+        .map((stage) => [stage, "current"]));
+      setCriterionStages((current) => Object.fromEntries(Object.entries(current).map(([id, ofCriterion]) => [id, { ...ofCriterion, ...completedOfCriteria }])));
+    }
     const replyStillHolds = runs.replyStillHolds(project.name);
     const revisionAsked = storedAnalysisRevision.current;
     getStageStatus(token, project.name).then((reply) => {
       if (!replyStillHolds()) return;
       setStages(reply.stages as Record<PipelineStage, StageState>);
+      setCriterionStages(stagesByCriterionOf(reply.criteria));
       setRevisionOfStageStatus((revision) => Math.max(revision, revisionAsked));
     }).catch(onServiceProblem);
   };
@@ -207,6 +219,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const shownStages: Record<PipelineStage, StageState> = analysisOfOtherSettings
     ? Object.fromEntries(Object.entries(stages).map(([stage, state]) => [stage, state === "current" ? "out_of_date" : state])) as Record<PipelineStage, StageState>
     : stages;
+  // Criteria pins Build envelope and massing once every criterion that is on has a current carving (disabled, with the reason,
+  // while the settings shown differ from those it was made with).
+  const everyCriterionCarved = activeCriteria(criteria.criteria).length > 0
+    && activeCriteria(criteria.criteria).every((criterion) => criterionStages[criterion.id]?.thresholding === "current");
 
   // A save changes what the stages were run with; its reply is in once no save waits.
   useEffect(() => {
@@ -293,9 +309,54 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       return inputProblemText(error, fileName);
     }
   };
-  // The app waits for both before a rename, reset or delete of the project (waitForInputChanges).
+  // The criterion's test surfaces go through its own routes (useCriteria). Its reply lists file names only: the stored files, with
+  // their triangle counts, are asked for again, and the 3D view loads them again (a replaced file keeps its name).
+  const criterion = criteria.criteria.find((entry) => entry.id === criteria.selectedId) ?? criteria.criteria[0] ?? null;
+  const afterTestSurfacesChanged = async () => {
+    refreshStageStatus();
+    try {
+      const stored = await getInputFiles(token, project.name, "test_surfaces");
+      setFiles((current) => ({ ...current, test_surfaces: stored }));
+      setInputRevisions((current) => ({ ...current, test_surfaces: current.test_surfaces + 1 }));
+    } catch (error) {
+      onServiceProblem(error);
+    }
+  };
+  const addTestSurfacesOneByOne = async (chosenFiles: File[]): Promise<string[]> => {
+    const problems: string[] = [];
+    for (const file of chosenFiles) {
+      try {
+        await criteria.addTestSurfaces(criterionId, [file]);
+      } catch (error) {
+        if (serviceProblemOf(error) !== "other") {
+          onServiceProblem(error);
+          break;
+        }
+        problems.push(inputProblemText(error, file.name));
+      }
+    }
+    if (problems.length < chosenFiles.length) await afterTestSurfacesChanged();
+    return problems;
+  };
+  const removeTestSurfaceAndApply = async (fileName: string): Promise<string | null> => {
+    try {
+      await criteria.removeFile(criterionId, fileName);
+      await afterTestSurfacesChanged();
+      return null;
+    } catch (error) {
+      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
+      return inputProblemText(error, fileName);
+    }
+  };
+
+  // The app waits for these before a rename, reset or delete of the project (waitForInputChanges).
   const addFiles: AddInputFiles = (role, chosenFiles) => followedInputChange(addFilesOneByOne(role, chosenFiles));
   const removeFile: RemoveInputFile = (role, fileName) => followedInputChange(removeFileAndApply(role, fileName));
+  const addTestSurfaces = (chosenFiles: File[]) => followedInputChange(addTestSurfacesOneByOne(chosenFiles));
+  const removeTestSurface = (fileName: string) => followedInputChange(removeTestSurfaceAndApply(fileName));
+  // The criterion's files as stored, in its order; a file just added shows once the stored files have been asked for again.
+  const criterionTestSurfaces = criterion === null ? files.test_surfaces
+    : (criterion.test_surface_files ?? []).flatMap((name) => files.test_surfaces.filter((file) => file.name === name));
 
   const openTheStep = (step: StepName | null) => {
     setOpenStep(step);
@@ -304,11 +365,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // A failed run's link to the setting it names: the step that holds the setting opens and the focus goes to its field.
   const goToSetting = (settingName: string) => {
-    const shownName = fieldSettingOf(settingName);
-    const step = SETTING_PRESENTATIONS[shownName]?.step;
-    if (step === undefined) return;
+    const step = stepOfSetting(settingName, criterionKeys);
+    if (step === null) return;
     openTheStep(step);
-    setSettingToFocus({ name: shownName });
+    setSettingToFocus({ name: fieldSettingOf(settingName) });
   };
   useEffect(() => {
     if (settingToFocus === null) return;
@@ -324,26 +384,29 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     setSettingToFocus({ name: fieldSettingOf(ANALYSIS_PERIOD_FIELDS[0]) });
   };
 
-  const runBlocker = runAnalysisBlocker({
-    runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length, testSurfaceFiles: files.test_surfaces.length, modeNeedsWeatherFile,
-    hasWeatherFile, form, warmUpState,
-  });
+  // Run analysis is in Criteria and pinned in Site and grid: each names a setting to fix in another step with that step.
+  const runConditions = {
+    runActive: runs.activeRun !== null, maxVolumeFiles: files.max_volume.length,
+    testSurfaceFiles: criterion === null ? files.test_surfaces.length : (criterion.test_surface_files ?? []).length, modeNeedsWeatherFile,
+    hasWeatherFile, form, warmUpState, criterionKeys,
+  };
+  const runBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "criteria" });
+  const siteAndGridRunBlocker = runAnalysisBlocker({ ...runConditions, shownIn: "site_and_grid" });
   const resultSteps = useResultSteps({
     token, project: project.name, form, currentForm, dispatch, flushSave, changeAndSave, isWeightedMode: modeInfo?.score_kind === "weighted_sum", stages: shownStages,
-    refreshStageStatus, runs, runBlocker, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
+    refreshStageStatus, runs, runBlocker, everyCriterionCarved, projectRunActive: runActive, origin, openStep: openTheStep, goToSetting, onServiceProblem,
     onCarveFurther: props.onCarveFurther,
   });
 
   const viewState: ProjectViewState = {
     maxVolumeFiles: files.max_volume.length,
-    testSurfaceFiles: files.test_surfaces.length,
     hasWeatherFile,
     contextFiles: files.context.length,
     terrainFiles: files.terrain.length,
     mode: form.mode,
-    analysisPeriod: analysisPeriodOf(form, modeInfo?.needs_period ?? false),
+    northDegrees,
     voxelSize: Number(shownValue(form, "voxel_size")),
-    settingsToFix: settingsToFixByStep(form),
+    settingsToFix: settingsToFixByStep(sharedForm.form, criterionForm.form, criterionKeys),
     stages: shownStages,
     keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
     totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
@@ -355,23 +418,28 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     <InputBox role="weather" files={files.weather} weatherLocation={weatherLocation} weatherHint={weatherHint} onAddFiles={addFiles}
               onRemoveFile={removeFile} disabledReason={inputsDisabledReason} weatherNeeded />
   );
+  const changeSettings = (values: Record<string, unknown>) => dispatch({ type: "values_changed", values });
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
       <InputsStep files={files} weatherLocation={weatherLocation} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
-                  drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, test_surfaces: testSurfacesMesh.drawingProblems,
-                                     context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
+                  drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
     ),
-    mode: (
-      <ModeStep mode={form.mode} onChoose={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
-                valuesReset={form.valuesResetByModeChange}
-                weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} />
+    site_and_grid: (
+      <SiteAndGridStep form={form} stepErrors={sharedForm.form.stepErrors} criterionKeys={criterionKeys} onChange={changeSettings}
+                       disabledReason={inputsDisabledReason} inputRoles={inputRolesWithFiles} />
     ),
-    settings: <SettingsStep form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason}
-                            inputRoles={inputRolesWithFiles}
-                            coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
-                            weatherChangeNotice={weatherChangeSuggestionNow === null ? null
-                              : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }} />,
+    criteria: (
+      <CriteriaStep criteria={criteria.criteria} selectedId={criteria.selectedId} panelOf={() => (
+        <CriterionPanel testSurfaces={criterionTestSurfaces} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={addTestSurfaces}
+                        onRemoveTestSurface={removeTestSurface} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
+                        onChange={changeSettings} onChooseMode={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
+                        weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
+                        coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
+                        weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
+                        carvingRule={resultSteps.carvingRule} runAnalysis={resultSteps.criterionRunAnalysis} />
+      )} />
+    ),
     ...resultSteps.content,
   };
   const summaryOf = (name: StepName) => {
@@ -390,18 +458,18 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     feedbackWhenNotUsable: (
       <>
         {resultSteps.feedbackWhenNotUsable[name]}
-        {name !== "inputs" && name !== "mode" && (
-          <SettingsToFix step={name} form={form} onChange={(values) => dispatch({ type: "values_changed", values })} disabledReason={inputsDisabledReason} />
+        {(name === "envelope_and_massing" || name === "export") && (
+          <SettingsToFix step={name} form={form} onChange={changeSettings} disabledReason={inputsDisabledReason} />
         )}
       </>
     ),
   }));
 
   const runAnalysis = () => void runAnalysisAfterSaving(flushSave, () => {
-    void resultSteps.startRun(ANALYSIS_STAGES, "settings_run_analysis").then((outcome) => { if (outcome === "finished") openTheStep("carving"); });
+    void resultSteps.startRun(ANALYSIS_STAGES, "settings_run_analysis").then((outcome) => { if (outcome === "finished") openTheStep("criteria"); });
   });
   const pinnedActions: Partial<Record<StepName, ReactNode>> = {
-    settings: <RunAnalysisButton blocker={runBlocker} onRunAnalysis={runAnalysis} feedback={resultSteps.feedback("settings_run_analysis")} />,
+    site_and_grid: <RunAnalysisButton blocker={siteAndGridRunBlocker} onRunAnalysis={runAnalysis} feedback={resultSteps.feedback("settings_run_analysis")} />,
     ...resultSteps.pinnedAction,
   };
   const openStepUsable = openStep !== null && stepNotUsableYet(openStep, viewState) === null;

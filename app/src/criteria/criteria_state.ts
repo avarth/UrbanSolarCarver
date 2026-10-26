@@ -12,6 +12,16 @@ export type CardStatus =
 /** The stages of each criterion that is on, by criterion id (a bypassed criterion is not in it). */
 export type StagesByCriterion = Record<string, Record<"preprocessing" | "thresholding", StageState>>;
 
+/**
+ * The stages of each criterion as the service gives them (ProjectDetail.criterion_status, StageStatusReply.criteria: a dict of
+ * dicts the generated types leave open), with a stage it does not name as missing; empty without them.
+ */
+export function stagesByCriterionOf(status: Record<string, Record<string, StageState>> | undefined): StagesByCriterion {
+  return Object.fromEntries(Object.entries(status ?? {}).map(([id, stages]) => [id, {
+    preprocessing: stages.preprocessing ?? "missing", thresholding: stages.thresholding ?? "missing",
+  }]));
+}
+
 /** The criteria that are on, in chain order. */
 export function activeCriteria(criteria: CriterionEntry[]): CriterionEntry[] {
   return criteria.filter((criterion) => !criterion.bypassed);

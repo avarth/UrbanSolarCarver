@@ -516,13 +516,13 @@ test("renaming the open project keeps the open step; opening a project and reset
   await chooseFromTopBarMenu("Reset to the example");
   await act(async () => click(buttonNamed("Reset project", dialog())));
   await settle();
-  act(() => workspaceSteps.report!({ open: "carving", view: "carving" }));
+  act(() => workspaceSteps.report!({ open: "criteria", view: "criteria" }));
   await chooseFromTopBarMenu("Rename");
   type(dialog().querySelector("input")!, "Plot 8");
   await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
   await settle();
   expect(workspaceMounts).toEqual(["Plot 7", "Plot 7", "Plot 8"]);
-  expect(workspaceSteps.startedWith).toEqual([undefined, undefined, { open: "carving", view: "carving" }]);
+  expect(workspaceSteps.startedWith).toEqual([undefined, undefined, { open: "criteria", view: "criteria" }]);
   click(buttonNamed("Projects"));
   await settle();
   await openPlot7();
