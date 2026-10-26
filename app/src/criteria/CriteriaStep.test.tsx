@@ -44,25 +44,26 @@ test("one criterion shows its row in the list, then Add criterion under it, then
   expect(step().querySelector(".chain-summary")).toBeNull();
 });
 
-test("Add criterion opens the mode tiles; a tile adds a criterion of that mode", async () => {
+const menuItem = (name: string) => [...step().querySelectorAll<HTMLElement>('.add-criterion [role="menuitem"]')].find((item) => item.querySelector(".mode-menu-name")!.textContent === name)!;
+
+test("Add criterion opens the menu of the modes; an item adds a criterion of that mode and the focus goes to the card selected then", async () => {
   const onAdd = vi.fn(async (_mode: string) => null as string | null);
   rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps([entry("1", "Daylight on windows")], { onAdd })} />);
   click(buttonNamed("Add criterion")!);
-  const tiles = [...step().querySelectorAll<HTMLElement>(".add-criterion [role='radio']")];
-  await act(async () => tiles.find((tile) => tile.textContent === "Solar usefulness")!.click());
+  await act(async () => menuItem("Solar usefulness").click());
   expect(onAdd).toHaveBeenCalledExactlyOnceWith("benefit");
+  expect(step().querySelector('.add-criterion [role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(step().querySelector('.criterion-card[aria-current="true"] .criterion-card-select'));
 });
 
-test("the mode tiles of a new criterion take the focus, are named for it, and close with Cancel, which gives the focus back to the link", () => {
+test("the menu of a new criterion's mode takes the focus, is named for it, and closes with Escape, which gives the focus back to Add criterion", () => {
   rendered = renderForTest(<CriteriaStep panel={PANEL} list={listProps([entry("1", "Daylight on windows")])} />);
   click(buttonNamed("Add criterion")!);
-  const chooser = step().querySelector<HTMLElement>(".add-criterion-open")!;
-  expect(document.activeElement).toBe(chooser);
-  expect(document.getElementById(chooser.getAttribute("aria-labelledby")!)!.textContent).toBe("Mode of the new criterion");
-  const group = chooser.querySelector('[role="radiogroup"]')!;
-  expect(document.getElementById(group.getAttribute("aria-labelledby")!)!.textContent).toBe("Mode of the new criterion");
-  click(buttonNamed("Cancel")!);
-  expect(step().querySelector(".add-criterion [role='radio']")).toBeNull();
+  const menu = step().querySelector<HTMLElement>('.add-criterion [role="menu"]')!;
+  expect(menu.getAttribute("aria-label")).toBe("Mode of the new criterion");
+  expect(document.activeElement).toBe(menu.querySelector('[role="menuitem"]'));
+  act(() => { document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+  expect(step().querySelector('.add-criterion [role="menu"]')).toBeNull();
   expect(document.activeElement).toBe(buttonNamed("Add criterion"));
 });
 

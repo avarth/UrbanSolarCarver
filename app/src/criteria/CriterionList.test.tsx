@@ -143,16 +143,62 @@ test("a refused change is said under the cards", async () => {
   expect(rendered.container.querySelector('.criterion-list-problem[role="alert"]')!.textContent).toBe("A run of this project is in progress.");
 });
 
-test("Add criterion under the last card opens the mode tiles; a tile adds a criterion of its mode", async () => {
-  const onAdd = vi.fn(async (_mode: string) => null as string | null);
-  rendered = renderForTest(<CriterionList {...listProps({ onAdd })} />);
+const menuItems = () => [...rendered!.container.querySelectorAll<HTMLElement>('.add-criterion [role="menuitem"]')];
+const itemNamed = (name: string) => menuItems().find((item) => item.querySelector(".mode-menu-name")!.textContent === name)!;
+
+test("Add criterion under the last card opens a menu of the modes: six items in the order of the tiles, each with its one line", () => {
+  rendered = renderForTest(<CriterionList {...listProps()} />);
   const addButton = buttonNamed(rendered.container, "Add criterion");
   expect(addButton.compareDocumentPosition(cards()[2]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+  expect(menuItems()).toEqual([]);
   click(addButton);
-  const tiles = [...rendered.container.querySelectorAll<HTMLElement>(".add-criterion [role='radio']")];
-  expect(tiles).toHaveLength(6);
-  expect(tiles.some((tile) => tile.getAttribute("aria-checked") === "true")).toBe(false);
-  await act(async () => tiles.find((tile) => tile.textContent === "Daylight")!.click());
+  expect(addButton.getAttribute("aria-expanded")).toBe("true");
+  expect(rendered.container.querySelector('.add-criterion [role="radio"]')).toBeNull();     // no tile grid
+  expect(menuItems().map((item) => [item.querySelector(".mode-menu-name")!.textContent, item.querySelector(".mode-menu-line")!.textContent])).toEqual([
+    ["Angle rule", "A fixed plane from each facade"],
+    ["Solar time-based", "Direct sun in a chosen period"],
+    ["Solar energy", "Sun and sky energy over a season"],
+    ["Solar usefulness", "Sun in hours that need heating"],
+    ["Daylight", "Light from an overcast sky"],
+    ["Night cooling", "View of the cold night sky"],
+  ]);
+  expect(document.activeElement).toBe(menuItems()[0]);
+});
+
+test("choosing a mode adds a criterion of it and closes the menu", async () => {
+  const onAdd = vi.fn(async (_mode: string) => null as string | null);
+  rendered = renderForTest(<CriterionList {...listProps({ onAdd })} />);
+  click(buttonNamed(rendered.container, "Add criterion"));
+  await act(async () => itemNamed("Daylight").click());
   expect(onAdd).toHaveBeenCalledExactlyOnceWith("daylight");
-  expect(rendered.container.querySelector(".add-criterion [role='radio']")).toBeNull();     // closed once added
+  expect(menuItems()).toEqual([]);     // closed once added
+});
+
+test("a refused add closes the menu and is said under Add criterion, which has the focus", async () => {
+  rendered = renderForTest(<CriterionList {...listProps({ onAdd: async () => "A run of this project is in progress." })} />);
+  click(buttonNamed(rendered.container, "Add criterion"));
+  await act(async () => itemNamed("Daylight").click());
+  expect(menuItems()).toEqual([]);
+  expect(rendered.container.querySelector('.add-criterion [role="alert"]')!.textContent).toBe("A run of this project is in progress.");
+  expect(document.activeElement).toBe(buttonNamed(rendered.container, "Add criterion"));
+});
+
+test("Escape closes the menu and the focus goes back to Add criterion", () => {
+  rendered = renderForTest(<CriterionList {...listProps()} />);
+  click(buttonNamed(rendered.container, "Add criterion"));
+  press(document.activeElement!, "Escape");
+  expect(menuItems()).toEqual([]);
+  expect(document.activeElement).toBe(buttonNamed(rendered.container, "Add criterion"));
+});
+
+test("the menu waits while a run is in progress: its items are disabled with the run's reason", async () => {
+  const onAdd = vi.fn(async (_mode: string) => null as string | null);
+  rendered = renderForTest(<CriterionList {...listProps({ onAdd })} />);
+  click(buttonNamed(rendered.container, "Add criterion"));
+  rendered.rerender(<CriterionList {...listProps({ onAdd, disabledReason: "A run is in progress." })} />);
+  expect(menuItems()).toHaveLength(6);
+  expect(menuItems().every((item) => item.getAttribute("aria-disabled") === "true")).toBe(true);
+  expect(rendered.container.querySelector(".add-criterion .action-menu-reason")!.textContent).toBe("A run is in progress.");
+  await act(async () => itemNamed("Daylight").click());
+  expect(onAdd).not.toHaveBeenCalled();
 });

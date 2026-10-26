@@ -1,15 +1,15 @@
 // The criteria of a project (spec 7.2), also one: their cards in carving order, the selected one marked, then Add criterion, which
-// opens the mode tiles. With several cards, a card moves by dragging its handle onto another card, or with the arrow keys on its
+// opens a short menu of the modes. With several cards, a card moves by dragging its handle onto another card, or with the arrow keys on its
 // handle; its menu renames (in a dialog), duplicates, or deletes (after a confirmation; never the only criterion). A change the
 // service refuses is said under the cards.
-import { useEffect, useId, useRef, useState, type DragEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import type { CriterionEntry } from "../api_client/client";
 import { messages } from "../messages";
-import { ModeStep } from "../steps/ModeStep";
 import { useDialogRequest } from "../steps/ProjectDialogs";
 import { CriterionCard, type CriterionMenuItem } from "./CriterionCard";
 import { DeleteCriterionDialog, RenameCriterionDialog } from "./CriterionDialogs";
 import { orderAfterDropping, orderAfterMoving } from "./criteria_state";
+import { ModeMenu } from "./ModeMenu";
 import "../steps/steps.css";
 
 /** The requests of the list; each resolves with the reason it was refused, or null once done. */
@@ -40,42 +40,30 @@ interface AddCriterionProps {
 }
 
 /**
- * A link that opens the mode tiles; choosing one adds a criterion of that mode, and the tiles close once it is added. The open tiles
- * take the focus; Cancel gives it back to the link.
+ * A link that opens the short menu of the modes (ModeMenu); choosing one adds a criterion of that mode, and the menu closes once it
+ * is added. Escape gives the focus back to the link. A request the service refuses closes the menu too: the reason is said under the
+ * link, which takes the focus.
  */
 export function AddCriterion({ onAdd, disabledReason }: AddCriterionProps) {
   const [choosing, setChoosing] = useState(false);
   const { problem, setProblem, busy, send } = useDialogRequest(() => setChoosing(false));
-  const [focusLink, setFocusLink] = useState(false);
   const link = useRef<HTMLButtonElement>(null);
-  const chooser = useRef<HTMLDivElement>(null);
-  const titleId = useId();
   useEffect(() => {
-    if (choosing) chooser.current?.focus();
-    else if (focusLink) {
-      link.current?.focus();
-      setFocusLink(false);
-    }
-  }, [choosing]);
-  const cancel = () => {
+    if (problem === null) return;
     setChoosing(false);
-    setProblem(null);
-    setFocusLink(true);
-  };
-  if (!choosing) {
-    return (
-      <div className="add-criterion">
-        <button ref={link} type="button" className="link-button" disabled={disabledReason !== null} onClick={() => setChoosing(true)}>{messages.addCriterion}</button>
-      </div>
-    );
-  }
+    link.current?.focus();
+  }, [problem]);
   return (
-    <div ref={chooser} className="add-criterion add-criterion-open" tabIndex={-1} role="group" aria-labelledby={titleId}>
-      <p id={titleId} className="add-criterion-title">{messages.newCriterionModeTitle}</p>
-      <ModeStep mode="" onChoose={(mode) => void send(() => onAdd(mode))} disabledReason={busy ? messages.addingCriterion : disabledReason}
-                weatherDropZone={null} showsNote={false} showsDisabledReason={false} groupLabel={messages.newCriterionModeTitle} />
+    <div className="add-criterion">
+      <button ref={link} type="button" className="link-button" disabled={disabledReason !== null} aria-haspopup="menu" aria-expanded={choosing}
+              onClick={() => { setProblem(null); setChoosing(!choosing); }}>
+        {messages.addCriterion}
+      </button>
       {problem !== null && <p className="setting-error" role="alert">{problem}</p>}
-      <button type="button" className="link-button" disabled={busy} onClick={cancel}>{messages.cancel}</button>
+      {choosing && (
+        <ModeMenu anchor={link} onChoose={(mode) => void send(() => onAdd(mode))} onClose={() => setChoosing(false)}
+                  disabledReason={busy ? messages.addingCriterion : disabledReason} />
+      )}
     </div>
   );
 }

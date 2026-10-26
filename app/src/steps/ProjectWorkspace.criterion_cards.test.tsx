@@ -182,19 +182,27 @@ test("switch off the first of two criteria, delete the second: the one left is o
   expect(buttonIn(panel(), "Run analysis").disabled).toBe(false);
 });
 
-test("Add criterion with one criterion adds one of the chosen mode and selects it", async () => {
+test("Add criterion with one criterion opens a menu of the modes; choosing one adds a criterion of it, selected, its test surfaces open", async () => {
   await openChain([FACADES]);
   expect(cardNames()).toEqual(["Winter sun on facades"]);
+  togglePanelSection("Test surfaces");                             // closed by the user; the new criterion has no files to show
+  expect(openPanelSections()).toEqual(["Carving rule"]);
   act(() => buttonIn(stepRow("Criteria"), "Add criterion").click());
-  await act(async () => [...container().querySelectorAll<HTMLElement>(".add-criterion [role='radio']")].find((tile) => tile.textContent === "Daylight")!.click());
+  expect(container().querySelector('.add-criterion [role="radio"]')).toBeNull();
+  expect([...container().querySelectorAll('.add-criterion [role="menuitem"] .mode-menu-name')].map((name) => name.textContent))
+    .toEqual(["Angle rule", "Solar time-based", "Solar energy", "Solar usefulness", "Daylight", "Night cooling"]);
+  await act(async () => [...container().querySelectorAll<HTMLElement>('.add-criterion [role="menuitem"]')]
+    .find((item) => item.querySelector(".mode-menu-name")!.textContent === "Daylight")!.click());
   await settle();
   expect(service.requests).toContain("POST /criteria");
+  expect(container().querySelector('.add-criterion [role="menu"]')).toBeNull();
   expect(cardNames()).toEqual(["Winter sun on facades", "Daylight"]);
   expect(selectedCardName()).toBe("Daylight");
   expect(service.requests).toContain("GET /criteria/2/settings");
   expect(cardLine("Daylight")).toBe("Add test surfaces");
   expect(document.activeElement).toBe(selectButtonOf("Daylight"));
   expect(protectedFiles()).toEqual([]);
+  expect(openPanelSections()).toEqual(["Test surfaces", "Carving rule"]);
   openPanelSection("Mode");
   expect(panel().querySelector('[role="radio"][aria-checked="true"]')!.textContent).toBe("Daylight");
   // It has not run: its score points and sky dome are not asked for (the service has none).
