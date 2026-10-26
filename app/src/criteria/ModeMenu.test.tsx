@@ -20,7 +20,7 @@ function Harness({ disabledReason = null, onChoose = () => {} }: { disabledReaso
     <>
       <button ref={anchor} type="button" onClick={() => setOpen(true)}>Add criterion</button>
       <button type="button">Next control</button>
-      {open && <ModeMenu anchor={anchor} onChoose={onChoose} onClose={() => setOpen(false)} disabledReason={disabledReason} />}
+      {open && <ModeMenu id="mode-menu" anchor={anchor} onChoose={onChoose} onClose={() => setOpen(false)} disabledReason={disabledReason} />}
     </>
   );
 }
@@ -44,6 +44,9 @@ test("the menu has one item per mode in the order of the tiles: symbol, name and
   expect(items().map((item) => item.querySelector(".mode-menu-line")!.textContent)).toEqual(MODE_TILES.map((tile) => tile.one_line));
   expect(items().every((item) => item.querySelector("svg.mode-tile-symbol") !== null)).toBe(true);
   expect(items().some((item) => item.getAttribute("aria-disabled") === "true")).toBe(false);
+  // Each item is named by its mode and described by its one line.
+  expect(items().map((item) => item.getAttribute("aria-label"))).toEqual(MODE_TILES.map((tile) => tile.plain_name));
+  expect(items().map((item) => document.getElementById(item.getAttribute("aria-describedby")!)!.textContent)).toEqual(MODE_TILES.map((tile) => tile.one_line));
 });
 
 test("choosing an item reports the engine name of its mode", () => {
@@ -59,8 +62,8 @@ test("with a reason the items wait: marked, the reason written under them, and c
   rendered = renderForTest(<Harness disabledReason="A run of this project is in progress." onChoose={onChoose} />);
   click(openButton());
   expect(items().every((item) => item.getAttribute("aria-disabled") === "true")).toBe(true);
-  const reasonId = items()[0].getAttribute("aria-describedby")!;
-  expect(document.getElementById(reasonId)!.textContent).toBe("A run of this project is in progress.");
+  const described = items()[0].getAttribute("aria-describedby")!.split(" ").map((id) => document.getElementById(id)!.textContent);
+  expect(described).toEqual([MODE_TILES[0].one_line, "A run of this project is in progress."]);
   click(items()[1]);
   expect(onChoose).not.toHaveBeenCalled();
 });

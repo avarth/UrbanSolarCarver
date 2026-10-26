@@ -413,6 +413,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
               onRemoveFile={removeFile} disabledReason={inputsDisabledReason} weatherNeeded showsDisabledReason={false} />
   );
   const changeSettings = (values: Record<string, unknown>) => dispatch({ type: "values_changed", values });
+  // A criterion that is off (the chain skips it) needs no test surfaces nor weather file: its panel asks for neither.
+  const criterionOn = !(criterion?.bypassed ?? false);
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
       <InputsStep files={files} weatherLocation={weatherLocation} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
@@ -426,11 +428,11 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     criteria: (
       <CriteriaStep list={cards.list} load={selection.load} chainLine={cards.chainLine}
                     panelProblem={workspaceCriteria.panelProblem} panel={
-        <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} testSurfacesNeeded={!(criterion?.bypassed ?? false)} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
+        <CriterionPanel key={criterionId} {...panelSections} testSurfaces={criterionTestSurfaces} criterionOn={criterionOn} testSurfaceDrawingProblems={testSurfacesMesh.drawingProblems} onAddTestSurfaces={testSurfaceCalls.add}
                         onRemoveTestSurface={testSurfaceCalls.remove} otherTestSurfaces={filesOfOtherCriteria(criteria.criteria, criterionId)}
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
                         onChange={changeSettings} onChooseMode={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
-                        weatherDropZone={modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
+                        weatherDropZone={criterionOn && modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
                         carvingRule={resultSteps.carvingRule} scoreUnit={modeInfo?.score_unit} />

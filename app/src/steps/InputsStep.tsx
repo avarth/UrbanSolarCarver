@@ -7,6 +7,7 @@ import { useId, useRef, useState, type DragEvent } from "react";
 import { ApiError, failureTextOf, type InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
+import { Subheading } from "../settings_form/Subheading";
 import type { Bounds3 } from "../viewer/local_origin";
 import { sizeWarning } from "../viewer/size_check";
 import { formatNumber, formattedNumber } from "./format_numbers";
@@ -60,7 +61,7 @@ interface InputBoxProps {
   note?: string | null;
   /** The box's title, hint and add button in place of the role's (a criterion's test surfaces: the hint of its mode). */
   title?: string;
-  /** The title is for screen readers only: a section around the box says it already (a criterion's Test surfaces). */
+  /** The box has no heading, its title names it for screen readers: a section around the box says it already (a criterion's Test surfaces). */
   titleHidden?: boolean;
   hint?: string;
   addLabel?: string;
@@ -141,15 +142,16 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
       {isWeather && filled ? messages.replaceFile : addLabel ?? messages.addFiles}
     </button>
   );
+  const shownTitle = title ?? (isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role]);
   const boxClass = ["input-box", filled ? "input-box-filled" : "input-box-empty", dragging && !disabled ? "input-box-drop-target" : ""].join(" ");
   return (
-    <section className={boxClass} aria-labelledby={titleId}
+    <section className={boxClass} aria-labelledby={titleHidden ? undefined : titleId} aria-label={titleHidden ? shownTitle : undefined}
              onDragOver={(event) => { event.preventDefault(); if (!disabled) setDragging(true); }}
              onDragLeave={() => setDragging(false)} onDrop={drop}>
       <input ref={picker} type="file" hidden multiple={!isWeather} accept={isWeather ? WEATHER_FILE_TYPE : MESH_FILE_TYPES}
              onChange={(event) => { void add(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
       <div className="input-box-title-row">
-        <h3 id={titleId} className={titleHidden ? "input-box-title visually-hidden" : "input-box-title"}>{title ?? (isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role])}</h3>
+        {!titleHidden && <Subheading id={titleId} className="input-box-title">{shownTitle}</Subheading>}
         {filled ? addButton : badge !== null && <span className="input-box-required">{badge}</span>}
       </div>
       {!filled && (

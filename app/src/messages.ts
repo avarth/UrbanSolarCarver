@@ -349,6 +349,10 @@ export const messages = {
   // The folded sections of a criterion's panel, each saying in one line what it holds while it is closed
   panelSectionTitles: { test_surfaces: "Test surfaces", mode: "Mode", settings: "Settings", carving: "Carving rule" },
   noTestSurfacesYet: "None yet",
+  // The Mode section's line, closed, while the criterion's mode needs a weather file the project lacks
+  modeNeedsWeatherFileSummary: (plainModeName: string) => `${plainModeName}, needs a weather file`,
+  // Said to screen readers in the header of a closed section that has something to fix
+  sectionNeedsAttention: "Needs attention",
   twoFileNames: (firstName: string, secondName: string) => `${firstName}, ${secondName}`,
   fileCount: (count: number) => `${count} ${count === 1 ? "file" : "files"}`,
   startingValues: "Starting values",

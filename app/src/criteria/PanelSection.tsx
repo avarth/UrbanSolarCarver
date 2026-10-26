@@ -1,9 +1,11 @@
 // One folded section of a criterion's panel (CriterionPanel): a header button with the section's title and, while it is closed,
-// what it holds in one line, with a warning icon and in the warning colour when the section has something to fix; the content
-// only while it is open. The open sections belong to the workspace (usePanelSections), not to one criterion: they stay as they
+// what it holds in one line, with a warning icon and in the warning colour (and "Needs attention" for screen readers) when the
+// section has something to fix; the content only while it is open, its headings one level under the section's. The open sections belong to the workspace (usePanelSections), not to one criterion: they stay as they
 // are when another criterion is selected, and when the Criteria step is closed and opened again.
 import { useId, useState, type ReactNode } from "react";
+import { messages } from "../messages";
 import { WarningIcon } from "../settings_form/SettingField";
+import { SubheadingLevel } from "../settings_form/Subheading";
 import { DEFAULT_OPEN_SECTIONS, type PanelSectionId } from "./section_summaries";
 import "../steps/steps.css";
 
@@ -32,10 +34,13 @@ export function PanelSection({ id, title, summary, open, onToggle, problem, alwa
               {problem && <WarningIcon />}{summary}
             </span>
           )}
+          {!open && problem && <span className="visually-hidden">{messages.sectionNeedsAttention}</span>}
         </button>
       </h3>
-      {alwaysShown}
-      {open && <div id={contentId} className="panel-section-content">{children}</div>}
+      <SubheadingLevel.Provider value={4}>
+        {alwaysShown}
+        {open && <div id={contentId} className="panel-section-content">{children}</div>}
+      </SubheadingLevel.Provider>
     </section>
   );
 }

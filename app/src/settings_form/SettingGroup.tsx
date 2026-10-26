@@ -7,6 +7,7 @@ import { useId, useState } from "react";
 import type { FormState } from "./form_state";
 import type { SettingGroupView } from "./presentation";
 import { fieldErrorOf, SettingField, type SettingFieldExtras } from "./SettingField";
+import { Subheading } from "./Subheading";
 import "./settings_form.css";
 
 interface SettingGroupProps {
@@ -30,7 +31,7 @@ export function SettingGroup({ group, form, onChange, disabled = false, fieldExt
     <div className="setting-group">
       {group.essential.length > 0 && (
         <>
-          <h3 className="setting-group-title">{group.title}</h3>
+          <Subheading className="setting-group-title">{group.title}</Subheading>
           <div className="setting-group-essential">
             {group.essential.map((view) => <SettingField key={view.name} view={view} form={form} onChange={onChange} disabled={disabledField(view)} extras={fieldExtras[view.name]} />)}
           </div>

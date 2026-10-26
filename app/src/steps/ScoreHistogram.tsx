@@ -7,6 +7,7 @@
 // splits the bars by the compared scores alone: the slope limit is applied by the run.
 import { useId, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../messages";
+import { Subheading } from "../settings_form/Subheading";
 import { formattedNumber, groupedDigits, withUnit } from "./format_numbers";
 import { histogramBins, logAxisDecades, logAxisHeight, stackedBarHeights, type HistogramBin, type HistogramScale } from "./score_histogram";
 import "./steps.css";
@@ -159,7 +160,7 @@ export function ScoreHistogram({ comparedScores, kept, cutoff, carvingCutoff, cu
   return (
     <figure className={cutoffIsPreview ? "score-histogram score-histogram-preview" : "score-histogram"}>
       <div className="score-histogram-title-row">
-        <h3 id={titleId} className="score-histogram-title">{messages.histogramTitle}</h3>
+        <Subheading id={titleId} className="score-histogram-title">{messages.histogramTitle}</Subheading>
         <div className="segmented-switch" role="group" aria-label={messages.histogramScaleLabel}>
           {(["log", "linear"] as const).map((choice) => (
             <button key={choice} type="button" aria-pressed={scale === choice} onClick={() => setScale(choice)}>

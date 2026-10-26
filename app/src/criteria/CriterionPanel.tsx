@@ -2,9 +2,10 @@
 // ModeStep, with the weather box and the values a mode change reset), Settings (the analysis settings that are criterion keys,
 // SettingsStep) and Carving rule (CarvingStep, put together in result_steps.tsx). Run analysis is in the bar pinned under the step list
 // (CriteriaRunBar). The shared settings are in Site and grid. The open sections are the workspace's (usePanelSections); a section opens
-// when something it shows appears: no test surfaces (of a criterion that is on), a field with an error of the criterion's save, the
-// weather box or the values reset under the tiles. A criterion just selected shows them all as new. The notice of a new weather file is
-// under the Settings header, open or closed.
+// when something it shows appears: no test surfaces or the weather box under the tiles (of a criterion that is on), a field with an
+// error of the criterion's save, or the values reset under the tiles. A criterion just selected shows them all as new. A criterion
+// that is off needs neither test surfaces nor a weather file, and its closed Carving rule reads Off. The notice of a new weather file
+// is under the Settings header, open or closed.
 import { useLayoutEffect, useRef, type ReactNode } from "react";
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
@@ -22,8 +23,8 @@ import "../steps/steps.css";
 export interface CriterionPanelProps extends PanelSections {
   /** The criterion's test surface files, with their triangle counts. */
   testSurfaces: InputFileInfo[];
-  /** Whether the run needs the criterion's test surfaces; false while it is off (the chain skips it). Absent: true. */
-  testSurfacesNeeded?: boolean;
+  /** Whether the chain uses the criterion; while it is off it needs no test surfaces nor weather file. Absent: true. */
+  criterionOn?: boolean;
   /** The files of the test surfaces the 3D view cannot draw. */
   testSurfaceDrawingProblems?: string[];
   onAddTestSurfaces: (files: File[]) => Promise<string[]>;
@@ -55,11 +56,12 @@ export interface CriterionPanelProps extends PanelSections {
 export function CriterionPanel(props: CriterionPanelProps) {
   const { form, criterionKeys, onChange, disabledReason, openSections, onOpenSections } = props;
   const toFix = settingsToFixBySection({ fieldErrors: form.fieldErrors, stepErrors: props.stepErrors }, criterionKeys);
-  const hasWeatherBox = props.weatherDropZone !== null && props.weatherDropZone !== undefined && props.weatherDropZone !== false;
+  const criterionOn = props.criterionOn ?? true;
+  const needsWeatherFile = criterionOn && props.weatherDropZone !== null && props.weatherDropZone !== undefined && props.weatherDropZone !== false;
   // What a section has to fix: its summary is in the warning colour.
   const problems: Record<PanelSectionId, boolean> = {
-    test_surfaces: (props.testSurfacesNeeded ?? true) && props.testSurfaces.length === 0,
-    mode: hasWeatherBox || toFix.mode !== undefined,
+    test_surfaces: criterionOn && props.testSurfaces.length === 0,
+    mode: needsWeatherFile || toFix.mode !== undefined,
     settings: toFix.settings !== undefined,
     carving: toFix.carving !== undefined,
   };
@@ -75,9 +77,9 @@ export function CriterionPanel(props: CriterionPanelProps) {
 
   const summaries: Record<PanelSectionId, string> = {
     test_surfaces: testSurfacesSummary(props.testSurfaces.map((file) => file.name)),
-    mode: modeSummary(form.mode),
+    mode: needsWeatherFile ? messages.modeNeedsWeatherFileSummary(modeSummary(form.mode)) : modeSummary(form.mode),
     settings: criterionSettingsSummary(form, criterionKeys),
-    carving: carvingRuleSummary(form, props.scoreUnit),
+    carving: criterionOn ? carvingRuleSummary(form, props.scoreUnit) : messages.criterionOff,
   };
   // A closed section with settings to fix says how many, as a step row does.
   const section = (id: PanelSectionId, children: ReactNode, alwaysShown?: ReactNode) => {

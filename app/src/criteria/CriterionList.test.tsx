@@ -151,8 +151,10 @@ test("Add criterion under the last card opens a menu of the modes: six items in 
   const addButton = buttonNamed(rendered.container, "Add criterion");
   expect(addButton.compareDocumentPosition(cards()[2]) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   expect(menuItems()).toEqual([]);
+  expect(addButton.hasAttribute("aria-controls")).toBe(false);
   click(addButton);
   expect(addButton.getAttribute("aria-expanded")).toBe("true");
+  expect(document.getElementById(addButton.getAttribute("aria-controls")!)!.getAttribute("role")).toBe("menu");
   expect(rendered.container.querySelector('.add-criterion [role="radio"]')).toBeNull();     // no tile grid
   expect(menuItems().map((item) => [item.querySelector(".mode-menu-name")!.textContent, item.querySelector(".mode-menu-line")!.textContent])).toEqual([
     ["Angle rule", "A fixed plane from each facade"],

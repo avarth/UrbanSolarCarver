@@ -14,7 +14,7 @@ const box = () => rendered!.container.querySelector<HTMLElement>(".input-box")!;
 
 test("a criterion without test surfaces says what to add", () => {
   rendered = renderForTest(<ProtectsBox files={[]} mode="daylight" onAddFiles={async () => []} onRemoveFile={async () => null} disabledReason={null} />);
-  expect(box().querySelector("h3")!.textContent).toBe("Test surfaces");
+  expect(box().getAttribute("aria-label")).toBe("Test surfaces");
   expect(box().classList.contains("input-box-empty")).toBe(true);
   expect(box().querySelector(".input-box-hint")!.textContent).toBe("Windows or facades that need daylight.");
   expect(box().querySelector(".input-box-actions")!.textContent).toBe("Add test surfacesor drop them here");

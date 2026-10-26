@@ -1078,6 +1078,16 @@ test("Run analysis asks for the weather file a criterion that is on needs, namin
   expect(reasonOf(buttonIn(pinnedBar(), "Run analysis"))).toBe("Add a weather file to run Winter sun on facades");
 });
 
+test("a criterion that is off is not flagged for a missing weather file", async () => {
+  const withoutWeatherFile = (opened: ProjectDetail): ProjectDetail => ({ ...opened, inputs: { ...opened.inputs, weather: [] } });
+  await openChain([{ ...ROOFS, id: "1" }, { ...FACADES, id: "2", bypassed: true }], undefined, undefined, [], withoutWeatherFile);
+  await select("Winter sun on facades");
+  expect(panelSectionOpen("Mode")).toBe(false);
+  expect(panel().querySelector('.panel-section[data-section="mode"] .panel-section-summary')!.textContent).toBe("Solar time-based");
+  expect(panel().querySelector(".panel-section-summary-problem")).toBeNull();
+  expect(pinnedBar().textContent).not.toContain("weather file");
+});
+
 test("a shared setting refused by another criterion's settings is said in Site and grid with that criterion's name, on no criterion field", async () => {
   await openChain([FACADES, WINDOWS], undefined, (chain) => {
     chain.configErrorsOf = (values) => (values.voxel_size === 3 ? [{ field: "max_slope_deg", message: "Input should be less than 90" }] : null);
