@@ -1,16 +1,19 @@
 // An open project (UX 4): the step accordion in the left panel and the 3D view beside it. It holds what the steps share: the
-// input files, the settings form (the Mode step and the Settings step both change it), the stage status the step summaries
-// read, and the input meshes (input_meshes.ts) and the sun path (sun_path_request.ts) the 3D view draws. The steps that
-// start runs and show their results (Carving, Envelope and massing, Export) are put together in result_steps.tsx from these
-// and the app's run loop.
+// input files, the two settings forms (the shared settings and the first criterion's, shown to the steps as one: the Mode step
+// and the Settings step both change them), the stage status the step summaries read, and the input meshes (input_meshes.ts) and
+// the sun path (sun_path_request.ts) the 3D view draws. The steps that start runs and show their results (Carving, Envelope and
+// massing, Export) are put together in result_steps.tsx from these and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  addInput, ApiError, failureTextOf, getStageStatus, removeInput, serviceProblemOf,
+  addInput, ApiError, failureTextOf, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
   type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
+import { useCriteria } from "../criteria/use_criteria";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
-import { analysisDiffersFromStored, shownValue, useSettingsForm, type SaveOutcome } from "../settings_form/form_state";
+import {
+  analysisDiffersFromStored, bothForms, shownValue, splitSettings, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend,
+} from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf, SETTING_PRESENTATIONS } from "../settings_form/presentation";
 import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
@@ -34,6 +37,8 @@ import { analysisPeriodOf, useSunPathOfStoredPeriod } from "./sun_path_request";
 import { periodChangedSince, weatherChangeSuggestion, type WeatherFileChange } from "./weather_change_notice";
 
 const NO_SHIFT: Point3 = [0, 0, 0];
+// The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
+const FIRST_CRITERION_ID = "1";
 const STEPS_WITH_SOLID_MAX_VOLUME: readonly StepName[] = ["inputs", "mode", "settings"];
 // The layers each step shows by default (UX 8.2); the later steps add their result layers. The carved voxels start hidden, as
 // they cover the kept ones; the Layers menu shows them.
@@ -96,9 +101,29 @@ function inputProblemText(error: unknown, fileName: string): string {
 }
 
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
-  const { token, project, modes, warmUpState, runs, onServiceProblem } = props;
-  const formStart = useMemo(() => ({ schema: props.schema, modes, settings: project.settings, gridPlan: project.grid_plan }), []);
-  const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useSettingsForm(token, project.name, formStart);
+  const { token, project, modes, criterionKeys, warmUpState, runs, onServiceProblem } = props;
+  const criteria = useCriteria(token, project);
+  // The criterion whose settings the steps show: the first.
+  const criterionId = project.criteria?.[0]?.id ?? FIRST_CRITERION_ID;
+  // The project's settings are the shared ones with the first criterion's: each form starts from its own. The shared form takes
+  // the criterion's mode, which decides the settings it shows, but does not save it.
+  const formStarts = useMemo((): { shared: FormStart; criterion: FormStart } => {
+    const { shared, criterion } = splitSettings(project.settings, criterionKeys);
+    return {
+      shared: { schema: props.schema, modes, settings: { ...shared, mode: criterion.mode }, gridPlan: project.grid_plan, savesMode: false },
+      criterion: { schema: props.schema, modes, settings: criterion, gridPlan: null },
+    };
+  }, []);
+  // A criterion's save replaces its settings; a new mode may rename it, so its entry is kept.
+  const saveCriterionSettings: SettingsSend = async (formToken, projectName, values) => {
+    const entry = await updateCriterion(formToken, projectName, criterionId, { values });
+    criteria.applyReply(entry);
+    return entry;
+  };
+  const sharedForm = useSettingsForm(token, project.name, formStarts.shared, putSharedSettings);
+  const criterionForm = useSettingsForm(token, project.name, formStarts.criterion, saveCriterionSettings);
+  // The steps show the settings of both forms as one; each change goes to the form of its settings.
+  const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = bothForms(sharedForm, criterionForm, criterionKeys);
   const runActive = runs.activeRun?.project === project.name;
   // The uploads and removals of input files under way, each until its reply (and the save it may start) is in.
   const inputChangesUnderWay = useRef(new Set<Promise<unknown>>());
@@ -233,8 +258,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   };
   const afterInputsChanged = (role: InputRole) => {
     refreshStageStatus();
-    // The grid follows the maximum volume; a save of the unchanged settings brings its new plan.
-    if (role === "max_volume") dispatch({ type: "values_changed", values: {} });
+    // The grid follows the maximum volume; a save of the unchanged shared settings brings its new plan.
+    if (role === "max_volume") sharedForm.dispatch({ type: "values_changed", values: {} });
   };
 
   const addFilesOneByOne: AddInputFiles = async (role, chosenFiles) => {

@@ -31,7 +31,7 @@ test("a settings change saves; Run analysis starts a run; its events finish it; 
   type(voxelSizeField(), "2");
   await waitForTheSave();
   await settle();
-  expect(service.savedValues).toEqual([{ mode: "time-based", voxel_size: 2 }]);
+  expect(service.savedValues).toEqual([{ voxel_size: 2 }]);
   expect(service.count("GET /stage-status")).toBe(1);           // the save changed what the stages ran with
 
   await pressRunAnalysis();
@@ -71,10 +71,73 @@ test("a save the service refuses keeps Run analysis from starting a run, and say
   expect(notice()!.textContent).toContain("A run of this project is in progress, perhaps in another tab. Save again once it has ended.");
 
   await pressRunAnalysis();
-  expect(service.count("PUT /config")).toBe(2);                // Run analysis sent the change again first
+  expect(service.count("PUT /shared-settings")).toBe(2);       // Run analysis sent the change again first
   expect(service.runsStarted).toEqual([]);
   expect(FakeWebSocket.opened).toHaveLength(0);
   expect(notice()).not.toBeNull();
+});
+
+// The shared settings are saved with PUT shared-settings, the settings of the criterion (the mode among them) with PATCH criteria/1.
+const settingsSaves = () => service.requests.filter((request) => request.startsWith("PUT") || request.startsWith("PATCH"));
+const modeTiles = () => [...container().querySelectorAll<HTMLElement>('[role="radio"]')];
+const settingsSummaryText = () => stepRow("Settings").querySelector(".step-summary")!.textContent;
+
+test("saving the voxel size sends only shared settings", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN, { start_month: 3, north_deg: 10 }));
+  openStep("Settings");
+  type(voxelSizeField(), "2");
+  await waitForTheSave();
+  await settle();
+  expect(settingsSaves()).toEqual(["PUT /shared-settings"]);
+  expect(service.savedValues).toEqual([{ north_deg: 10, voxel_size: 2 }]);     // no mode, no setting of the criterion
+});
+
+test("saving the analysis period sends the criterion's settings", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN, { voxel_size: 2, threshold: { method: "cutoff", value: 1.5 } }));
+  openStep("Settings");
+  act(() => buttonIn(container(), "21 June").click());
+  await waitForTheSave();
+  await settle();
+  expect(settingsSaves()).toEqual(["PATCH /criteria/1"]);
+  expect(service.savedValues).toEqual([{ mode: "time-based", start_month: 6, end_month: 6, threshold: { method: "cutoff", value: 1.5 } }]);
+  expect(service.count("GET /stage-status")).toBe(1);           // the save changed what the analysis reads
+});
+
+test("a rejected criterion setting marks its field", async () => {
+  service = new FakeService(CARVED, CARVING);
+  service.configErrorsOf = (values) => (values.max_slope_deg === 100 ? [{ field: "max_slope_deg", message: "Input should be less than 90" }] : null);
+  await openWorkspace(service, project(CARVED, { threshold: { method: "cutoff", value: 1.5 } }));
+  openStep("Carving");
+  act(() => stepRow("Carving").querySelector<HTMLButtonElement>(".setting-fold")!.click());      // More carving settings
+  typeAndLeave(container().querySelector<HTMLInputElement>('[data-setting="max_slope_deg"] input[type="number"]')!, "100");
+  await waitForTheSave();
+  await settle();
+  expect(new Set(settingsSaves())).toEqual(new Set(["PATCH /criteria/1"]));
+  expect(service.savedValues).toEqual([]);
+  expect(container().querySelector('[data-setting="max_slope_deg"] .setting-error')!.textContent).toBe("Input should be less than 90");
+  expect(stepRow("Carving").querySelector(".step-summary")!.textContent).toBe("1 setting to fix");
+  expect(service.count("POST /runs")).toBe(0);
+});
+
+test("a mode change starts the criterion from the new mode's values", async () => {
+  service = new FakeService(NOTHING_RUN, null);
+  await openWorkspace(service, project(NOTHING_RUN, { voxel_size: 2, start_month: 3 }));
+  expect(settingsSummaryText()).toContain("21 Mar");
+  openStep("Mode");
+  act(() => modeTiles()[4].click());                                  // Daylight
+  await waitForTheSave();
+  await settle();
+  expect(settingsSaves()).toEqual(["PATCH /criteria/1"]);
+  expect(service.savedValues).toEqual([{ mode: "daylight" }]);         // not the period of Solar time-based, nor the shared voxel size
+  act(() => modeTiles()[1].click());                                  // Solar time-based again: its own period, not the one set before
+  await waitForTheSave();
+  await settle();
+  expect(settingsSaves()).toEqual(["PATCH /criteria/1", "PATCH /criteria/1"]);
+  expect(service.savedValues.at(-1)).toEqual({ mode: "time-based" });
+  expect(settingsSummaryText()).toContain("21 Dec");
+  expect(settingsSummaryText()).toContain("2 m");                // the shared voxel size stays
 });
 
 test("a page opened during a run it does not follow: Run analysis answered with up to date brings the carving the service holds", async () => {
@@ -148,7 +211,7 @@ test("a refused mode change locks Carving: the old mode's carving is not shown a
   expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   await waitForTheSave();
   await settle();
-  expect(service.count("PUT /config")).toBe(1);
+  expect(service.count("PATCH /criteria/1")).toBe(1);
   expect(service.savedValues).toEqual([]);                     // refused: config.yaml still says Solar time-based
   expect(stepRow("Carving").textContent).toContain("Settings changed since the analysis. Run the analysis again to update the carving.");
   expect(thresholdField().disabled).toBe(true);
@@ -253,7 +316,7 @@ test("while Carving is locked, Build envelope, Build massing and Carving's Build
   service.stages = { preprocessing: "out_of_date", thresholding: "out_of_date", exporting: "out_of_date", massing: "out_of_date" };
   await waitForTheSave();
   await settle();
-  expect(service.savedValues).toEqual([{ mode: "time-based", voxel_size: 2 }]);
+  expect(service.savedValues).toEqual([{ voxel_size: 2 }]);
   openStep("Envelope and massing");
   expect(buttonIn(buildPart("Building massing"), "Build massing").disabled).toBe(true);
   expect(service.count("POST /runs")).toBe(0);
@@ -277,7 +340,7 @@ test("while Carving is locked, a mesh format change is stored but builds nothing
   expect(formatField().textContent).toContain(lockReason);
   await act(async () => formatField().querySelector<HTMLInputElement>('input[value="obj"]')!.click());
   await settle();
-  expect(service.savedValues.at(-1)).toEqual({ mode: "time-based", final_mesh_format: "obj", voxel_size: 2 });
+  expect(service.savedValues.at(-1)).toEqual({ final_mesh_format: "obj", voxel_size: 2 });
   expect(service.count("POST /runs")).toBe(0);                  // a run would start with the analysis
 });
 

@@ -3,7 +3,7 @@
 // Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is written in).
 import { act, type ComponentProps } from "react";
 import { vi } from "vitest";
-import type { ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
+import type { CriterionEntry, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
@@ -54,7 +54,8 @@ export function json(body: unknown, status = 200): Response {
 }
 
 /**
- * The local service as the open project "p" uses it: it stores the settings, answers the stage status, starts runs (whose
+ * The local service as the open project "p" uses it: it stores the shared settings (PUT shared-settings) and those of criterion
+ * 1 (PATCH criteria/1), every stored body in savedValues, answers the stage status, starts runs (whose
  * events the test sends) and serves the run summary and the input meshes; everything else is not there (404).
  */
 export class FakeService {
@@ -83,6 +84,10 @@ export class FakeService {
   uploadedWeather = { location: "Golden, CO, USA", latitude: 39.74 };
   /** The reply of GET cold-period. */
   coldPeriodReply: unknown = { status: "none", period: null };
+  /** The modes whose starting values a criterion's settings are stored on top of (openWorkspace gives the workspace's). */
+  modes: ModeInfo[] = MODES;
+  /** The shared settings stored by the saves of this test, which a shared settings save is merged into. */
+  sharedSettings: Record<string, unknown> = {};
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -93,13 +98,27 @@ export class FakeService {
     const method = init?.method ?? "GET";
     const path = address.replace("/api/projects/p", "");
     this.requests.push(`${method} ${path}`);
-    if (method === "PUT" && path === "/config") {
+    if (method === "PUT" && path === "/shared-settings") {
+      if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
+      const { values } = JSON.parse(String(init!.body)) as { values: Record<string, unknown> };
+      const criterionSettings = Object.keys(values).filter((name) => CRITERION_KEYS.has(name));
+      const fieldErrors = criterionSettings.length > 0
+        ? criterionSettings.map((field) => ({ field, message: "A setting of one criterion, not shared by the criteria." })) : this.configErrorsOf(values);
+      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null }, 422);
+      this.savedValues.push(values);
+      this.sharedSettings = { ...this.sharedSettings, ...values };       // merged into the stored shared settings
+      return json({ settings: this.sharedSettings, grid_plan: null });
+    }
+    if (method === "PATCH" && path === "/criteria/1") {
       if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
       const { values } = JSON.parse(String(init!.body)) as { values: Record<string, unknown> };
       const fieldErrors = this.configErrorsOf(values);
-      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null }, 422);
+      if (fieldErrors !== null) return json({ field_errors: fieldErrors, grid_plan: null, criterion: "1" }, 422);
       this.savedValues.push(values);
-      return json({ settings: values, grid_plan: null });
+      // The criterion's settings are replaced, on top of the starting values of their mode, and it is named after a new mode.
+      const mode = String(values.mode);
+      const startingValues = this.modes.find((candidate) => candidate.name === mode)?.starting_values ?? {};
+      return json(criterionEntry({ ...startingValues, ...values }));
     }
     if (path === "/stage-status") return json({ stages: this.stages });
     if (method === "POST" && path === "/runs") {
@@ -131,12 +150,21 @@ export class FakeService {
   }
 }
 
+/** Criterion 1 of the project "p", with *settings* (the mode and its settings), as the service replies with it. */
+export function criterionEntry(settings: Record<string, unknown>): CriterionEntry {
+  return { id: "1", name: String(settings.mode), named_by_user: false, colour: "#4477aa", bypassed: false, test_surface_files: ["surfaces.obj"], settings };
+}
+
+/** The project "p" of one criterion; *settings* are flat, the shared ones with those of criterion 1, as GET project gives them. */
 export function project(stages: Record<PipelineStage, StageState>, settings: Record<string, unknown> = {}): ProjectDetail {
+  const flatSettings = { mode: "time-based", ...settings };
+  const criterionSettings = Object.fromEntries(Object.entries(flatSettings).filter(([name]) => CRITERION_KEYS.has(name)));
   return {
-    name: "p", created: "2026-10-17T09:00:00", modified: "2026-10-17T09:00:00", settings: { mode: "time-based", ...settings },
+    name: "p", created: "2026-10-17T09:00:00", modified: "2026-10-17T09:00:00", settings: flatSettings,
     inputs: { max_volume: [{ name: "volume.obj", triangle_count: 1 }], test_surfaces: [{ name: "surfaces.obj", triangle_count: 1 }],
               weather: [{ name: "weather.epw", triangle_count: 0 }] },
     joined_bounds: [[0, 0, 0], [1, 1, 0]], weather_location: "Golden, CO, USA", weather_latitude: 39.74, stage_status: { stages }, grid_plan: null,
+    criteria: [criterionEntry(criterionSettings)], criterion_status: { 1: stages },
   };
 }
 
@@ -178,6 +206,7 @@ export async function openWorkspace(
   { schema = SCHEMA, modes = MODES }: { schema?: typeof SCHEMA; modes?: ModeInfo[] } = {},
 ) {
   vi.stubGlobal("fetch", vi.fn(service.answer));
+  service.modes = modes;
   function Page() {
     const runs = useRunLoop("token", () => {});
     return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}

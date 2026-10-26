@@ -3,7 +3,7 @@
 // mode does not read), so the form sends the mode and the values the user set, never every field; the mode's starting values
 // and the schema defaults fill the rest, on the service as in the form.
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import { ApiError, putConfig, type ConfigErrorReply, type ConfigReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
+import { ApiError, type ConfigErrorReply, type GridPlanReply, type ModeInfo } from "../api_client/client";
 import { gridIsOverBudget } from "../steps/grid_budget";
 import { errorOfHiddenSetting, shownConfigErrorOf } from "./engine_errors";
 import { engineIgnoresIn } from "./engine_modes";
@@ -32,6 +32,11 @@ export interface SchemaProperty {
 
 export interface FormState {
   mode: string;
+  /**
+   * Whether a save sends the mode: the form of a criterion's settings does, the form of the shared settings does not (the mode is
+   * a criterion's setting), and follows the criterion's mode to know which settings it shows.
+   */
+  savesMode: boolean;
   /** The settings the user set, which are what a save sends besides the mode. */
   userValues: Record<string, unknown>;
   startingValuesByMode: Record<string, Record<string, unknown>>;
@@ -70,12 +75,24 @@ export interface FormStart {
   modes: ModeInfo[];                        // the reply of GET modes
   settings: Record<string, unknown>;        // the project's stored settings, as the service gives them
   gridPlan: GridPlanReply | null;
+  /** Whether a save sends the mode; true unless given (FormState.savesMode). */
+  savesMode?: boolean;
+}
+
+/**
+ * What a save answers: the settings stored (PUT shared-settings: the shared ones; PATCH criteria/{id}: the criterion's, the mode
+ * among them) and the grid it planned, which only a save of the shared settings plans.
+ */
+export interface SaveReply {
+  settings?: Record<string, unknown>;
+  grid_plan?: GridPlanReply | null;
 }
 
 export type FormAction =
   | { type: "values_changed"; values: Record<string, unknown> }
   | { type: "mode_chosen"; mode: string }
-  | { type: "save_succeeded"; reply: ConfigReply }
+  | { type: "mode_followed"; mode: string }
+  | { type: "save_succeeded"; reply: SaveReply }
   | { type: "save_rejected"; reply: ConfigErrorReply }
   | { type: "save_failed"; error: unknown }
   | { type: "project_opened"; start: FormStart };
@@ -87,7 +104,7 @@ function startingValuesOf(state: Pick<FormState, "startingValuesByMode" | "mode"
 }
 
 /** The form for a project's stored settings: the stored values that differ from the mode's starting values are the user's. */
-export function initialFormState({ schema, modes, settings, gridPlan }: FormStart): FormState {
+export function initialFormState({ schema, modes, settings, gridPlan, savesMode = true }: FormStart): FormState {
   const schemaProperties = (schema.properties ?? {}) as Record<string, SchemaProperty>;
   const startingValuesByMode = Object.fromEntries(modes.map((mode) => [mode.name, mode.starting_values]));
   const scoreKindByMode = Object.fromEntries(modes.map((mode) => [mode.name, mode.score_kind]));
@@ -101,7 +118,7 @@ export function initialFormState({ schema, modes, settings, gridPlan }: FormStar
   // Stored settings whose grid is over the budget (a larger maximum volume came after them) open with Voxel size to fix, as a
   // save of them would be refused; the message under the field is the step's own (SettingsStep), so the text here stays empty.
   const fieldErrors: Record<string, string> = gridIsOverBudget(gridPlan) ? { voxel_size: "" } : {};
-  return { mode, userValues, startingValuesByMode, scoreKindByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
+  return { mode, savesMode, userValues, startingValuesByMode, scoreKindByMode, schemaProperties, fieldErrors, stepErrors: [], gridPlan,
            pendingSave: false, changeCount: 0, saveFailure: null, carriedValues: {}, valuesResetByModeChange: null,
            stored: { mode, values: userValues }, storedAnalysisRevision: 0 };
 }
@@ -134,12 +151,19 @@ export function formReducer(state: FormState, action: FormAction): FormState {
                saveFailure: null, fieldErrors: {}, stepErrors: [], carriedValues: Object.fromEntries(carried),
                valuesResetByModeChange: refused.length > 0 ? { settings: refused, mode: action.mode } : null };
     }
+    case "mode_followed":
+      // The shared settings hold no mode: the stored ones are those of the criterion's mode too, and nothing is saved.
+      return { ...state, mode: action.mode, stored: { ...state.stored, mode: action.mode } };
     case "save_succeeded": {
-      // The reply gives the settings stored; without a mode in it (an older service), the form's are the ones sent.
+      // The reply gives the settings stored; without settings in it, the form's are the ones sent, and without a mode (the shared
+      // settings hold none) the form's mode is theirs.
       const { mode: storedMode, ...storedValues } = action.reply.settings ?? {};
-      const stored = typeof storedMode === "string" ? { mode: storedMode, values: storedValues } : { mode: state.mode, values: state.userValues };
+      const stored = { mode: typeof storedMode === "string" ? storedMode : state.mode,
+                       values: action.reply.settings === undefined ? state.userValues : storedValues };
       const analysisChanged = !sameAnalysisSettings(state, state.stored, stored);
-      return { ...state, gridPlan: action.reply.grid_plan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null, carriedValues: {},
+      // Only a save of the shared settings plans the grid: a criterion's leaves the last plan.
+      const gridPlan = action.reply.grid_plan === undefined ? state.gridPlan : action.reply.grid_plan;
+      return { ...state, gridPlan, fieldErrors: {}, stepErrors: [], pendingSave: false, saveFailure: null, carriedValues: {},
                stored, storedAnalysisRevision: state.storedAnalysisRevision + (analysisChanged ? 1 : 0) };
     }
     case "save_rejected": {
@@ -203,9 +227,9 @@ export function analysisDiffersFromStored(state: FormState): boolean {
   return !sameAnalysisSettings(state, state.stored, { mode: state.mode, values: state.userValues });
 }
 
-/** What a save sends: the mode and the settings the user set. */
+/** What a save sends: the settings the user set, and the mode when the form saves it. */
 export function valuesToSend(state: FormState): Record<string, unknown> {
-  return { ...state.userValues, mode: state.mode };
+  return state.savesMode ? { ...state.userValues, mode: state.mode } : { ...state.userValues };
 }
 
 /** The value a setting has without the user: the mode's starting value, else the schema default (null when it has none). */
@@ -255,7 +279,7 @@ interface SaveRequest {
  * Sends the latest values a delay after the last change. A reply is passed on only when no change has come since its request,
  * so an older save that answers late cannot overwrite the errors or grid plan of a newer one.
  */
-export function createConfigSaver(save: (values: Record<string, unknown>) => Promise<ConfigReply>, dispatch: (action: FormAction) => void,
+export function createConfigSaver(save: (values: Record<string, unknown>) => Promise<SaveReply>, dispatch: (action: FormAction) => void,
                                   delayMilliseconds = SAVE_DELAY_MILLISECONDS): ConfigSaver {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let latestChange = 0;
@@ -318,14 +342,17 @@ export function createConfigSaver(save: (values: Record<string, unknown>) => Pro
   };
 }
 
+/** Saves a form's values for the project: PUT shared-settings for the shared settings, PATCH criteria/{id} for a criterion's. */
+export type SettingsSend = (token: string, project: string, values: Record<string, unknown>) => Promise<SaveReply>;
+
 /**
- * The form of the open project: every change is saved with PUT config 400 ms after the last one. Opening another project starts
+ * The form of the open project: every change is saved with *send* 400 ms after the last one. Opening another project starts
  * its form from *start*, and a change still waiting is sent to the project it was made in, its reply not shown. *flushSave* sends
  * a waiting change at once and resolves, with how the save ended, when its reply is in the form, for a run that must use it (a
  * save that failed is sent again). *changeAndSave* makes a change and saves it with the changes before it at once, without the
  * delay (the carving threshold, whose run follows its save).
  */
-export function useSettingsForm(token: string, project: string, start: FormStart) {
+export function useSettingsForm(token: string, project: string, start: FormStart, send: SettingsSend) {
   const [form, dispatchToReact] = useReducer(formReducer, start, initialFormState);
   // The form after every action dispatched so far, ahead of the render that shows it, so a save made at once sends them all.
   const latestForm = useRef(form);
@@ -333,6 +360,9 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   const saver = useRef<ConfigSaver | null>(null);
   const currentToken = useRef(token);
   const formProject = useRef(project);
+  // The send of the latest render, used by the next save sent.
+  const currentSend = useRef(send);
+  currentSend.current = send;
 
   const dispatch = useCallback((action: FormAction) => {
     latestForm.current = formReducer(latestForm.current, action);
@@ -344,7 +374,7 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   }, [token]);
 
   useEffect(() => {
-    const projectSaver: ConfigSaver = createConfigSaver((values) => putConfig(currentToken.current, project, values),
+    const projectSaver: ConfigSaver = createConfigSaver((values) => currentSend.current(currentToken.current, project, values),
       (action) => { if (saver.current === projectSaver) dispatch(action); });
     saver.current = projectSaver;
     return () => {
@@ -379,4 +409,121 @@ export function useSettingsForm(token: string, project: string, start: FormStart
   // Drops a waiting or failed save, so the flush when the project closes sends nothing: for a project renamed, reset or deleted.
   const cancelSave = useCallback(() => saver.current?.cancel(), []);
   return { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm, pendingSave: form.pendingSave };
+}
+
+export type SettingsForm = ReturnType<typeof useSettingsForm>;
+
+/** Settings split into the shared ones and those of a criterion (the mode among them), by the criterion keys (GET criterion-keys). */
+export function splitSettings(values: Record<string, unknown>, criterionKeys: ReadonlySet<string>) {
+  const shared: Record<string, unknown> = {}, criterion: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(values)) (criterionKeys.has(name) ? criterion : shared)[name] = value;
+  return { shared, criterion };
+}
+
+/**
+ * The shared settings' form and a criterion's as one form, for the steps that show the settings of both: each setting's value,
+ * stored value and error are those of the form that owns it, the mode and its starting values the criterion's, the grid the
+ * shared form's. A change waits, the analysis settings differ from the stored ones, or a save failed when either form says so.
+ */
+export function combinedForm(shared: FormState, criterion: FormState): FormState {
+  return {
+    ...criterion,
+    userValues: { ...shared.userValues, ...criterion.userValues },
+    fieldErrors: { ...shared.fieldErrors, ...criterion.fieldErrors },
+    stepErrors: [...new Set([...shared.stepErrors, ...criterion.stepErrors])],
+    gridPlan: shared.gridPlan,
+    pendingSave: shared.pendingSave || criterion.pendingSave,
+    changeCount: shared.changeCount + criterion.changeCount,
+    saveFailure: shared.saveFailure ?? criterion.saveFailure,
+    stored: { mode: criterion.stored.mode, values: { ...shared.stored.values, ...criterion.stored.values } },
+    storedAnalysisRevision: shared.storedAnalysisRevision + criterion.storedAnalysisRevision,
+  };
+}
+
+// The outcomes that keep a run from starting come first: of two saves, the first of these that either ended with is told.
+const OUTCOMES_IN_ORDER: readonly SaveOutcome[] = ["failed", "refused", "overtaken", "saved", "none"];
+
+/** How the saves of the two forms ended, as one: the first of failed, refused, overtaken, saved, none that either ended with. */
+export function combinedSaveOutcome(outcomes: readonly SaveOutcome[]): SaveOutcome {
+  return OUTCOMES_IN_ORDER.find((outcome) => outcomes.includes(outcome)) ?? "none";
+}
+
+/** The actions the steps dispatch to the settings: changes, a mode, the field errors of a failed run. */
+export type StepFormAction = Extract<FormAction, { type: "values_changed" | "mode_chosen" | "save_rejected" }>;
+
+type FieldError = ConfigErrorReply["field_errors"][number];
+
+/**
+ * Field errors split by the form that owns the settings each names, read as the form reads them (shownConfigErrorOf): one naming
+ * settings of both forms goes to both, one naming none to the criterion's (a mode that needs a weather file).
+ */
+function splitFieldErrors(fieldErrors: readonly FieldError[], mode: string, criterionKeys: ReadonlySet<string>) {
+  const shared: FieldError[] = [], criterion: FieldError[] = [];
+  for (const error of fieldErrors) {
+    const named = shownConfigErrorOf(error.field, error.message, mode).settings;
+    if (named.some((name) => !criterionKeys.has(name))) shared.push(error);
+    if (named.length === 0 || named.some((name) => criterionKeys.has(name))) criterion.push(error);
+  }
+  return { shared, criterion };
+}
+
+/** The calls of the two forms as one, for the steps that show the settings of both. */
+export interface BothForms {
+  /** The form the steps show (combinedForm). */
+  form: FormState;
+  dispatch: (action: StepFormAction) => void;
+  flushSave: () => Promise<SaveOutcome>;
+  changeAndSave: (values: Record<string, unknown>) => Promise<SaveOutcome>;
+  cancelSave: () => void;
+  currentForm: () => FormState;
+}
+
+/**
+ * The shared settings' form and the selected criterion's as one: a change goes to the form of each setting it holds (an empty
+ * one, which asks for a new grid plan, to the shared form), a mode to the criterion's, which the shared form follows, and a failed
+ * run's field errors to the forms of the settings they name. Flushing flushes both; a change saved at once is saved by the form of
+ * its settings (the carving's empty commit by the criterion's), with the other form's waiting change flushed with it.
+ */
+export function bothForms(shared: SettingsForm, criterion: SettingsForm, criterionKeys: ReadonlySet<string>): BothForms {
+  const isEmpty = (values: Record<string, unknown>) => Object.keys(values).length === 0;
+  const dispatch = (action: StepFormAction) => {
+    switch (action.type) {
+      case "values_changed": {
+        const split = splitSettings(action.values, criterionKeys);
+        if (!isEmpty(split.shared) || isEmpty(split.criterion)) shared.dispatch({ type: "values_changed", values: split.shared });
+        if (!isEmpty(split.criterion)) criterion.dispatch({ type: "values_changed", values: split.criterion });
+        return;
+      }
+      case "mode_chosen":
+        criterion.dispatch(action);
+        shared.dispatch({ type: "mode_followed", mode: action.mode });
+        return;
+      case "save_rejected": {
+        // A run's errors; only the shared settings plan a grid.
+        const split = splitFieldErrors(action.reply.field_errors, criterion.currentForm().mode, criterionKeys);
+        if (split.shared.length > 0) shared.dispatch({ type: "save_rejected", reply: { ...action.reply, field_errors: split.shared } });
+        if (split.criterion.length > 0) criterion.dispatch({ type: "save_rejected", reply: { ...action.reply, field_errors: split.criterion, grid_plan: null } });
+        return;
+      }
+    }
+  };
+  const changeAndSave = async (values: Record<string, unknown>): Promise<SaveOutcome> => {
+    const split = splitSettings(values, criterionKeys);
+    const criterionSaves = !isEmpty(split.criterion) || isEmpty(split.shared);
+    return combinedSaveOutcome(await Promise.all([
+      isEmpty(split.shared) ? shared.flushSave() : shared.changeAndSave(split.shared),
+      criterionSaves ? criterion.changeAndSave(split.criterion) : criterion.flushSave(),
+    ]));
+  };
+  return {
+    form: combinedForm(shared.form, criterion.form),
+    dispatch,
+    flushSave: async () => combinedSaveOutcome(await Promise.all([shared.flushSave(), criterion.flushSave()])),
+    changeAndSave,
+    cancelSave: () => {
+      shared.cancelSave();
+      criterion.cancelSave();
+    },
+    currentForm: () => combinedForm(shared.currentForm(), criterion.currentForm()),
+  };
 }

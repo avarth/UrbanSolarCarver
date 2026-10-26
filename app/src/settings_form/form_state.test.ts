@@ -1,9 +1,10 @@
 import { act, createElement } from "react";
 import { afterEach, expect, test, vi } from "vitest";
-import { ApiError, type ConfigErrorReply, type ConfigReply, type ModeInfo } from "../api_client/client";
+import { ApiError, updateCriterion, type ConfigErrorReply, type ConfigReply, type ModeInfo } from "../api_client/client";
 import { renderForTest } from "../viewer_overlays/render_for_test";
 import {
-  analysisDiffersFromStored, createConfigSaver, defaultValue, formReducer, initialFormState, shownValue, useSettingsForm, valuesToSend, type FormAction,
+  analysisDiffersFromStored, bothForms, combinedForm, combinedSaveOutcome, createConfigSaver, defaultValue, formReducer, initialFormState, shownValue,
+  splitSettings, useSettingsForm, valuesToSend, type FormAction, type SettingsForm,
 } from "./form_state";
 
 const SCHEMA = {
@@ -150,13 +151,16 @@ test("a save that fails for another reason is kept for the caller to show", asyn
   expect(state.saveFailure).toBe(conflict);
 });
 
-test("the form of a project saves each change with PUT config 400 ms later", async () => {
+// The hook tests save through a criterion's route; the workspace gives the shared settings' form its own (putSharedSettings).
+const saveToCriterion1 = (token: string, project: string, values: Record<string, unknown>) => updateCriterion(token, project, "1", { values });
+
+test("the form of a project saves each change with the send it is given, 400 ms later", async () => {
   vi.useFakeTimers();
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ settings: { mode: "daylight", voxel_size: 2 }, grid_plan: GRID_PLAN })));
   vi.stubGlobal("fetch", fetchMock);
   let latest: ReturnType<typeof useSettingsForm> | null = null;
   function FormProbe() {
-    latest = useSettingsForm("launch token", "my project", { schema: SCHEMA, modes: MODES, settings: { mode: "daylight" }, gridPlan: null });
+    latest = useSettingsForm("launch token", "my project", { schema: SCHEMA, modes: MODES, settings: { mode: "daylight" }, gridPlan: null }, saveToCriterion1);
     return null;
   }
   const rendered = renderForTest(createElement(FormProbe));
@@ -166,7 +170,8 @@ test("the form of a project saves each change with PUT config 400 ms later", asy
   await act(() => vi.advanceTimersByTimeAsync(1));
   expect(fetchMock).toHaveBeenCalledOnce();
   const [address, request] = fetchMock.mock.calls[0];
-  expect(address).toBe("/api/projects/my%20project/config");
+  expect(address).toBe("/api/projects/my%20project/criteria/1");
+  expect(request.method).toBe("PATCH");
   expect(JSON.parse(request.body)).toEqual({ values: { voxel_size: 2, mode: "daylight" } });
   expect(latest!.form.gridPlan).toEqual(GRID_PLAN);
   expect(latest!.form.pendingSave).toBe(false);
@@ -261,7 +266,7 @@ test("a flush whose save a newer change overtook resolves with the newer change'
 function renderedForm(project: string, settings: Record<string, unknown>, schema: Record<string, unknown> = SCHEMA) {
   let latest: ReturnType<typeof useSettingsForm> | null = null;
   function FormProbe({ projectName, projectSettings }: { projectName: string; projectSettings: Record<string, unknown> }) {
-    latest = useSettingsForm("launch token", projectName, { schema, modes: MODES, settings: projectSettings, gridPlan: null });
+    latest = useSettingsForm("launch token", projectName, { schema, modes: MODES, settings: projectSettings, gridPlan: null }, saveToCriterion1);
     return null;
   }
   const rendered = renderForTest(createElement(FormProbe, { projectName: project, projectSettings: settings }));
@@ -281,7 +286,7 @@ test("opening another project shows its settings and sends it nothing; a change 
   await act(() => vi.advanceTimersByTimeAsync(100));
   form.openProject("second", { mode: "irradiance", voxel_size: 3 });
   await act(() => vi.advanceTimersByTimeAsync(1000));
-  expect(fetchMock.mock.calls.map(([address]) => address)).toEqual(["/api/projects/first/config"]);
+  expect(fetchMock.mock.calls.map(([address]) => address)).toEqual(["/api/projects/first/criteria/1"]);
   expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ values: { voxel_size: 2, mode: "daylight" } });
   expect(form.current().form.mode).toBe("irradiance");
   expect(form.current().form.userValues).toEqual({ voxel_size: 3 });
@@ -289,7 +294,7 @@ test("opening another project shows its settings and sends it nothing; a change 
   expect(form.current().pendingSave).toBe(false);
   act(() => form.current().dispatch({ type: "values_changed", values: { north_deg: 10 } }));
   await act(() => vi.advanceTimersByTimeAsync(400));
-  expect(fetchMock.mock.calls[1][0]).toBe("/api/projects/second/config");
+  expect(fetchMock.mock.calls[1][0]).toBe("/api/projects/second/criteria/1");
   form.unmount();
   vi.unstubAllGlobals();
 });
@@ -448,4 +453,135 @@ test("a stored setting the engine ignores in the mode is not sent again; one the
 test("a voxel size change sends the voxel size alone: the engine's sample spacing follows it (half the voxel size)", () => {
   const state = formReducer(storedProjectState({ mode: "daylight" }), { type: "values_changed", values: { voxel_size: 0.5 } });
   expect(valuesToSend(state)).toEqual({ mode: "daylight", voxel_size: 0.5 });
+});
+
+// The shared settings and those of one criterion are two forms (ProjectWorkspace): the shared one saves with PUT shared-settings,
+// the criterion's with PATCH criteria/{id}, and the steps show both as one until they are split on screen.
+const CRITERION_KEYS: ReadonlySet<string> = new Set(["mode", ...Object.keys(period(1, 1, 0, 1, 1, 0)), "threshold", "carve_fraction", "edge_taper"]);
+
+test("settings split into the shared ones and the criterion's by the criterion keys, the mode among the criterion's", () => {
+  expect(splitSettings({ mode: "daylight", voxel_size: 2, north_deg: 10, threshold: { method: "headtail" } }, CRITERION_KEYS))
+    .toEqual({ shared: { voxel_size: 2, north_deg: 10 }, criterion: { mode: "daylight", threshold: { method: "headtail" } } });
+});
+
+test("the shared settings' form sends no mode, and follows the criterion's mode without a save", () => {
+  let state = initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "time-based", voxel_size: 2 }, gridPlan: null, savesMode: false });
+  expect(valuesToSend(state)).toEqual({ voxel_size: 2 });
+  state = formReducer(state, { type: "mode_followed", mode: "daylight" });
+  expect(state.mode).toBe("daylight");
+  expect(state.pendingSave).toBe(false);
+  expect(state.changeCount).toBe(0);
+  expect(analysisDiffersFromStored(state)).toBe(false);          // the stored shared settings hold no mode
+  expect(valuesToSend(state)).toEqual({ voxel_size: 2 });
+});
+
+test("a reply without a mode stores its settings under the form's mode; one without a grid plan (a criterion's) keeps the grid planned", () => {
+  let shared = initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "time-based" }, gridPlan: null, savesMode: false });
+  shared = formReducer(shared, { type: "values_changed", values: { voxel_size: 2 } });
+  shared = formReducer(shared, { type: "save_succeeded", reply: { settings: { voxel_size: 2 }, grid_plan: GRID_PLAN } });
+  expect(shared.stored).toEqual({ mode: "time-based", values: { voxel_size: 2 } });
+  expect(shared.storedAnalysisRevision).toBe(1);
+  expect(shared.gridPlan).toEqual(GRID_PLAN);
+  let criterion = initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "daylight" }, gridPlan: GRID_PLAN });
+  criterion = formReducer(criterion, { type: "values_changed", values: { edge_taper: 0.2 } });
+  criterion = formReducer(criterion, { type: "save_succeeded", reply: { settings: { mode: "daylight", edge_taper: 0.2 } } });
+  expect(criterion.gridPlan).toEqual(GRID_PLAN);
+  expect(criterion.stored).toEqual({ mode: "daylight", values: { edge_taper: 0.2 } });
+});
+
+test("the form the steps show: each setting from the form that owns it, the shared form's grid, either form's change, error or failure", () => {
+  let shared = initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "time-based", voxel_size: 2 }, gridPlan: GRID_PLAN, savesMode: false });
+  let criterion = initialFormState({ schema: SCHEMA, modes: MODES, settings: { mode: "time-based", ...period(3, 21, 10, 12, 21, 14) }, gridPlan: null });
+  let shown = combinedForm(shared, criterion);
+  expect(shown.mode).toBe("time-based");
+  expect([shownValue(shown, "voxel_size"), shownValue(shown, "start_month"), shownValue(shown, "end_hour")]).toEqual([2, 3, 14]);
+  expect(shown.gridPlan).toEqual(GRID_PLAN);
+  expect([analysisDiffersFromStored(shown), shown.pendingSave]).toEqual([false, false]);
+
+  criterion = formReducer(criterion, { type: "values_changed", values: { start_month: 4 } });
+  shown = combinedForm(shared, criterion);
+  expect([analysisDiffersFromStored(shown), shown.pendingSave]).toEqual([true, true]);
+  criterion = formReducer(criterion, { type: "save_succeeded", reply: { settings: { mode: "time-based", ...period(4, 21, 10, 12, 21, 14) } } });
+  shown = combinedForm(shared, criterion);
+  expect([analysisDiffersFromStored(shown), shown.pendingSave, shown.storedAnalysisRevision]).toEqual([false, false, 1]);
+  expect(shown.gridPlan).toEqual(GRID_PLAN);
+
+  shared = formReducer(shared, { type: "values_changed", values: { voxel_size: 0.001 } });
+  expect(analysisDiffersFromStored(combinedForm(shared, criterion))).toBe(true);
+  shared = formReducer(shared, { type: "save_rejected", reply: { field_errors: [{ field: "voxel_size", message: "Input should be greater than 0.01" }], grid_plan: null } });
+  shown = combinedForm(shared, criterion);
+  expect(shown.fieldErrors).toEqual({ voxel_size: "Input should be greater than 0.01" });
+  expect(analysisDiffersFromStored(shown)).toBe(true);           // refused: the service still holds the voxel size before
+  const conflict = new ApiError(409, { detail: "A run of this project is in progress." });
+  criterion = formReducer(criterion, { type: "values_changed", values: { start_month: 5 } });
+  criterion = formReducer(criterion, { type: "save_failed", error: conflict });
+  expect(combinedForm(shared, criterion).saveFailure).toBe(conflict);
+});
+
+test("of the two forms' saves, the outcome that keeps a run from starting is the one told", () => {
+  expect(combinedSaveOutcome(["none", "none"])).toBe("none");
+  expect(combinedSaveOutcome(["saved", "none"])).toBe("saved");
+  expect(combinedSaveOutcome(["none", "saved"])).toBe("saved");
+  expect(combinedSaveOutcome(["saved", "refused"])).toBe("refused");
+  expect(combinedSaveOutcome(["refused", "failed"])).toBe("failed");
+  expect(combinedSaveOutcome(["overtaken", "saved"])).toBe("overtaken");
+});
+
+/** A form hook over the reducer, recording the saves asked of it. */
+function fakeFormHook(settings: Record<string, unknown>, savesMode = true) {
+  let state = initialFormState({ schema: SCHEMA, modes: MODES, settings, gridPlan: null, savesMode });
+  const calls: string[] = [];
+  const dispatch = (action: FormAction) => { state = formReducer(state, action); };
+  const hook: SettingsForm = {
+    get form() { return state; },
+    get pendingSave() { return state.pendingSave; },
+    dispatch,
+    flushSave: async () => { calls.push("flush"); return "none"; },
+    changeAndSave: async (values) => {
+      dispatch({ type: "values_changed", values });
+      calls.push(`save at once ${JSON.stringify(values)}`);
+      return "saved";
+    },
+    cancelSave: () => { calls.push("cancel"); },
+    currentForm: () => state,
+  };
+  return { hook, calls };
+}
+
+test("the two forms as one: each change goes to the form of its settings, a mode to the criterion's, which the shared form follows", () => {
+  const shared = fakeFormHook({ mode: "time-based", voxel_size: 2 }, false), criterion = fakeFormHook({ mode: "time-based" });
+  const forms = bothForms(shared.hook, criterion.hook, CRITERION_KEYS);
+  forms.dispatch({ type: "values_changed", values: { voxel_size: 3, start_month: 6 } });
+  expect(shared.hook.form.userValues).toEqual({ voxel_size: 3 });
+  expect(criterion.hook.form.userValues).toEqual({ start_month: 6 });
+  expect([shownValue(forms.currentForm(), "voxel_size"), shownValue(forms.currentForm(), "start_month")]).toEqual([3, 6]);
+  forms.dispatch({ type: "mode_chosen", mode: "daylight" });
+  expect([criterion.hook.form.mode, shared.hook.form.mode]).toEqual(["daylight", "daylight"]);
+  expect(shared.hook.form.changeCount).toBe(1);                // the voxel size: following the mode saves nothing
+  expect(valuesToSend(shared.hook.form)).toEqual({ voxel_size: 3 });
+  expect(valuesToSend(criterion.hook.form)).toEqual({ mode: "daylight" });
+});
+
+test("a run's field errors go to the form of the setting each names, one naming none to the criterion's", () => {
+  const shared = fakeFormHook({ mode: "time-based" }, false), criterion = fakeFormHook({ mode: "time-based" });
+  const forms = bothForms(shared.hook, criterion.hook, CRITERION_KEYS);
+  forms.dispatch({ type: "save_rejected", reply: { grid_plan: null, field_errors: [
+    { field: "voxel_size", message: "Input should be greater than 0.01" }, { field: "threshold.value", message: "Cutoff threshold must be >= 0" },
+    { field: null, message: "Value error, something the form cannot place" }] } });
+  expect(shared.hook.form.fieldErrors).toEqual({ voxel_size: "Input should be greater than 0.01" });
+  expect(shared.hook.form.stepErrors).toEqual([]);
+  expect(criterion.hook.form.fieldErrors).toEqual({ threshold: "Cutoff threshold must be >= 0" });
+  expect(criterion.hook.form.stepErrors).toEqual(["Something the form cannot place"]);
+});
+
+test("a change saved at once goes to the form of its settings, the other form's waiting change flushed; the carving's empty one to the criterion's", async () => {
+  const shared = fakeFormHook({ mode: "time-based" }, false), criterion = fakeFormHook({ mode: "time-based" });
+  const forms = bothForms(shared.hook, criterion.hook, CRITERION_KEYS);
+  expect(await forms.changeAndSave({ final_mesh_format: "obj" })).toBe("saved");
+  expect([shared.calls, criterion.calls]).toEqual([['save at once {"final_mesh_format":"obj"}'], ["flush"]]);
+  expect(await forms.changeAndSave({})).toBe("saved");
+  expect([shared.calls.at(-1), criterion.calls.at(-1)]).toEqual(["flush", "save at once {}"]);
+  expect(await forms.flushSave()).toBe("none");
+  forms.cancelSave();
+  expect([shared.calls.slice(-2), criterion.calls.slice(-2)]).toEqual([["flush", "cancel"], ["flush", "cancel"]]);
 });

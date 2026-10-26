@@ -6,7 +6,7 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { downloadWithToken, failureTextOf, serviceProblemOf } from "../api_client/client";
 import { messages } from "../messages";
-import { analysisDiffersFromStored, shownValue, type FormState, type FormAction, type SaveOutcome } from "../settings_form/form_state";
+import { analysisDiffersFromStored, shownValue, type FormState, type SaveOutcome, type StepFormAction } from "../settings_form/form_state";
 import type { Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import type { ViewerPaneProps } from "../viewer_overlays/ViewerPane";
@@ -112,7 +112,8 @@ export interface ResultStepsContext {
   form: FormState;
   /** The form after every action so far, read after a save is awaited. */
   currentForm: () => FormState;
-  dispatch: (action: FormAction) => void;
+  /** Changes the settings, each in the form that owns it (bothForms). */
+  dispatch: (action: StepFormAction) => void;
   flushSave: () => Promise<SaveOutcome>;
   changeAndSave: (values: Record<string, unknown>) => Promise<SaveOutcome>;
   isWeightedMode: boolean;
