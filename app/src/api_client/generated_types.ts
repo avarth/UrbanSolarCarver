@@ -238,11 +238,34 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Project Stage Status */
+        /**
+         * Project Stage Status
+         * @description The state of each stage, with the stored input files changed in the project folder (built into the joined files first) or missing from it.
+         */
         get: operations["project_stage_status"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/input-changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Dismiss Input Changes
+         * @description Forget the notices of stored input files changed in the project folder; a missing file stays listed until it is back or removed.
+         */
+        delete: operations["dismiss_input_changes"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1199,6 +1222,23 @@ export interface components {
             warm_up: components["schemas"]["WarmUpState"];
         };
         /**
+         * InputFileChange
+         * @description A stored input file changed in the project folder (a notice not dismissed yet) or missing from it.
+         */
+        InputFileChange: {
+            /** Role */
+            role: string;
+            /** File Name */
+            file_name: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "changed" | "missing";
+            /** Noticed */
+            noticed?: string | null;
+        };
+        /**
          * InputFileInfo
          * @description One uploaded input file as listed in the file lists of the inputs screen.
          */
@@ -1440,6 +1480,8 @@ export interface components {
                     [key: string]: "current" | "out_of_date" | "missing";
                 };
             };
+            /** Input Changes */
+            input_changes?: components["schemas"]["InputFileChange"][];
         };
         /**
          * StartRunReply
@@ -2126,6 +2168,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StageStatusReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_input_changes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
             /** @description Validation Error */

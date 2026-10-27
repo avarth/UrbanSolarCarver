@@ -282,6 +282,19 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         if active_project is not None and _same_project(active_project, name):
             raise RunConflict(active_project)
 
+    def refresh_changed_inputs(name: str) -> None:
+        """Build the stored files changed in the project folder into the joined files (stored_files.py), unless a run of the project
+        is active (the run reads them; its end asks again). A file that cannot be read is left for a run to report."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            active_project = folder_in_use.worker.active_project()
+            if active_project is not None and _same_project(active_project, name):
+                return
+            try:
+                store.refresh_changed_inputs(name)
+            except ProjectError as error:
+                _log.warning("Project '%s': a file changed in its folder was not built into the joined files: %s", name, error)
+
     @contextlib.contextmanager
     def writable_project(name: str):
         """Hold the project's lock and refuse (409) while a run of it is active; yields the store the change goes through."""
@@ -435,11 +448,22 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             store.rebuild_joined_test_surfaces_without_normals(name)
         except ProjectError:
             pass    # an uploaded file that cannot be read: the project still opens, so it can be removed; a run reports it
+        refresh_changed_inputs(name)
         return project_detail(store, name, criterion)
 
     @router.get("/projects/{name}/stage-status")
     def project_stage_status(name: str) -> StageStatusReply:
+        """The state of each stage, with the stored input files changed in the project folder (built into the joined files first) or missing from it."""
+        folder_in_use.store.open(name)      # 404 for an unknown project
+        refresh_changed_inputs(name)
         return stage_status_reply(folder_in_use.store, name)
+
+    @router.delete("/projects/{name}/input-changes", status_code=204, response_class=Response,
+                   responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}})
+    def dismiss_input_changes(name: str) -> Response:
+        """Forget the notices of stored input files changed in the project folder; a missing file stays listed until it is back or removed."""
+        folder_in_use.store.dismiss_input_changes(name)
+        return Response(status_code=204)
 
     @router.get("/projects/{name}/sun-path", responses={404: _CRITERION_RESPONSES[404]})
     def sun_path(name: str, criterion: str | None = Query(None, description=SUN_PATH_CRITERION_QUERY_DESCRIPTION)) -> SunPath:
@@ -561,6 +585,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """The studies of the project in order, and the metrics a study can show (those that need the weather file are not available
         without one)."""
         store = folder_in_use.store
+        store.open(name)        # 404 for an unknown project
+        refresh_changed_inputs(name)
         with store.project_lock(name):
             studies = []
             for study in store.studies(name):

@@ -3,6 +3,11 @@
 // engine gives them and have no entry here. A unit follows its number after a no-break space (\u00a0), as in format_numbers.ts.
 import { formattedNumber, groupedDigits, withUnit } from "./steps/format_numbers";
 
+// The words for an input role inside a sentence.
+const INPUT_ROLE_WORDS: Record<string, string> = {
+  max_volume: "maximum volume", test_surfaces: "test surface", context: "existing surroundings", terrain: "terrain", weather: "weather file",
+};
+
 const MONTH_ABBREVIATIONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
@@ -576,6 +581,13 @@ export const messages = {
   // The balance temperature strip: the names of its two handles, the two ends of the dead band.
   balanceLowerEnd: "Counts below",
   balanceUpperEnd: "Too warm above",
+
+  // Input files changed in the project folder from outside the app, or missing from it (the stage status lists them).
+  inputFileInRole: (fileName: string, role: string) => `${fileName} (${INPUT_ROLE_WORDS[role] ?? role})`,
+  inputFilesChangedInFolder: (files: string) =>
+    `Changed in the project folder: ${files}. The app now uses the new version; what was built on the old one is out of date.`,
+  inputFilesMissingFromFolder: (files: string) => `Missing from the project folder: ${files}. Put it back, or remove it here, before the next run.`,
+  dismissInputChanges: "OK",
 
   // The 3D view (8)
   layerNames: {

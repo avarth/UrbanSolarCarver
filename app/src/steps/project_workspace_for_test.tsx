@@ -3,7 +3,7 @@
 // Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is written in).
 import { act, useState, type ComponentProps } from "react";
 import { vi } from "vitest";
-import type { CriterionEntry, InputFileInfo, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
+import type { CriterionEntry, InputFileChange, InputFileInfo, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
@@ -100,6 +100,8 @@ export class FakeService {
   criterionTestSurfaceFiles: string[] = ["surfaces.obj"];
   /** Every stored test surface file, as GET inputs/test_surfaces lists them. */
   storedTestSurfaces: InputFileInfo[] = [{ name: "surfaces.obj", triangle_count: 1 }];
+  /** The input files changed in the project folder or missing from it, as the stage status lists them; DELETE input-changes drops the changed ones. */
+  inputChanges: InputFileChange[] = [];
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -151,7 +153,12 @@ export class FakeService {
     }
     if (method === "GET" && path === "/inputs/test_surfaces") return json(this.storedTestSurfaces);
     if (path === "/stage-status") {
-      return json({ stages: this.stages, criteria: { 1: { preprocessing: this.stages.preprocessing, thresholding: this.stages.thresholding } } });
+      return json({ stages: this.stages, criteria: { 1: { preprocessing: this.stages.preprocessing, thresholding: this.stages.thresholding } },
+                    input_changes: this.inputChanges });
+    }
+    if (method === "DELETE" && path === "/input-changes") {
+      this.inputChanges = this.inputChanges.filter((change) => change.state !== "changed");
+      return new Response(null, { status: 204 });
     }
     if (method === "POST" && path === "/runs") {
       await this.runStartsWaitFor;

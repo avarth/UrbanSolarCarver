@@ -24,7 +24,7 @@ from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig, resolve_grid_step
 from ..stage_settings import PIPELINE_STAGES, stage_folder, stages_needed_for, stages_to_rerun
-from . import test_surfaces
+from . import stored_files, test_surfaces
 from .api_models import ProjectJson, StageRecord, StageState, StageStatusReply
 from .criteria import active_criteria, criterion_run_folder, reads_weather_file
 from .projects import INPUTS_FOLDER, JOINED_FOLDER, REQUIRED_MESH_ROLES, RUN_FOLDER, WEATHER_FILE_NAME, WEATHER_ROLE, ProjectStore
@@ -121,9 +121,9 @@ def stage_status(store: ProjectStore, name: str) -> dict[str, StageState]:
 
 
 def stage_status_reply(store: ProjectStore, name: str) -> StageStatusReply:
-    """stage_status and criterion_status in one reply."""
+    """stage_status and criterion_status in one reply, with the stored input files changed in the folder or missing from it."""
     status = _project_status(store, name)
-    return StageStatusReply(stages=status.stages, criteria=status.criteria)
+    return StageStatusReply(stages=status.stages, criteria=status.criteria, input_changes=stored_files.input_changes(store, name))
 
 
 def _project_status(store: ProjectStore, name: str) -> _ProjectStatus:

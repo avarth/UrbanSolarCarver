@@ -43,6 +43,7 @@ import { testSurfaceGroupsOf, testSurfaceOwners } from "./test_surface_groups";
 import { plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type StepName } from "./step_summaries";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "./sun_path_request";
 import { useInputFiles } from "./use_input_files";
+import { InputChangesNotice } from "./InputChangesNotice";
 import { useKeptScroll } from "./use_kept_scroll";
 import { useStageStatus } from "./use_stage_status";
 import { periodChangedSince, weatherChangeSuggestion } from "./weather_change_notice";
@@ -151,14 +152,23 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // The steps show the settings of both forms as one; each change goes to the form of its settings.
   const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useBothForms(sharedForm, criterionForm, criterionKeys);
   const runActive = runs.activeRun?.project === project.name;
-  const { criterionStages, refreshStageStatus, shownAs, shownStages, everyCriterionCarved } = useStageStatus({
+  // Files changed in the project folder, found by a stage status read: their lists and meshes are asked for again (the input files'
+  // hook, set below), and so are the studies, which may now be out of date.
+  const reloadInputRoles = useRef<(roles: string[]) => void>(() => {});
+  const { criterionStages, refreshStageStatus, shownAs, shownStages, everyCriterionCarved, inputChanges, dismissChanges } = useStageStatus({
     token, project, criteria: criteria.criteria, form, runs, onServiceProblem,
+    onInputFilesChanged: (roles) => {
+      reloadInputRoles.current(roles);
+      void studies.refresh();
+    },
   });
   const [framingRequest, setFramingRequest] = useState(0);
   const frameAllInputs = () => setFramingRequest((count) => count + 1);
-  const { files, origin, weather, meshes, addFiles, removeFile, storeTestSurfaceFiles, followedInputChange, waitForInputChanges } = useInputFiles({
+  const { files, origin, weather, meshes, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, waitForInputChanges } = useInputFiles({
     token, project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs, onServiceProblem,
   });
+  reloadInputRoles.current = reloadRoles;
+  const inputChangesNotice = <InputChangesNotice changes={inputChanges} onDismiss={dismissChanges} />;
   useEffect(() => {
     props.onSettingsSaverReady?.({ flush: flushSave, cancel: cancelSave, waitForInputChanges });
     return () => props.onSettingsSaverReady?.(null);
@@ -382,7 +392,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const simulateView = (theme: ViewportTheme) => (
     <SimulateView project={project.name} studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
                   onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} onServiceProblem={onServiceProblem} studyView={studyView}
-                  theme={theme} />
+                  theme={theme} notice={inputChangesNotice} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
                            envelopeSeeThrough: studyView.geometry === "envelope", dimmedLayers: [] };
@@ -390,6 +400,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   return (
     <div className="workspace">
       <aside ref={panel} className="workspace-panel" hidden={props.mode === "simulate"} onScrollCapture={keepScroll}>
+        {inputChangesNotice}
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}
                        pinnedAction={saveFailureNotice === null && openStepAction === null ? null : <>{saveFailureNotice}{openStepAction}</>} />
       </aside>

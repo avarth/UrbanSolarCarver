@@ -293,6 +293,20 @@
   background: var(--colour-accent-soft);
 }
 .weather-change-notice p { margin: 0; }
+/* Input files changed in the project folder or missing from it: over Design's steps, and at the top of Simulate's studies panel. */
+.input-changes-notice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-out-of-date);
+  border-radius: var(--radius-large);
+  background: var(--colour-panel);
+  overflow-wrap: anywhere;
+}
+.input-changes-notice p { margin: 0; }
+.workspace-panel > .input-changes-notice { flex: none; margin: calc(var(--space-unit) * 3) calc(var(--space-unit) * 3) 0; }
 .weather-change-notice-buttons { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); }
 /* The fields with an error of a step that cannot be used yet, under the reason. */
 .settings-to-fix { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); margin-top: calc(var(--space-unit) * 3); }

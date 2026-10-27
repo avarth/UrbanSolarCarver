@@ -15,6 +15,7 @@ export type ConfigReply = Schemas["ConfigReply"];
 export type ConfigErrorReply = Schemas["ConfigErrorReply"];
 export type GridPlanReply = Schemas["GridPlanReply"];
 export type StageStatusReply = Schemas["StageStatusReply"];
+export type InputFileChange = Schemas["InputFileChange"];
 export type SunPath = Schemas["SunPath"];
 export type ColdPeriodReply = Schemas["ColdPeriodReply"];
 export type StartRunReply = Schemas["StartRunReply"];
@@ -208,6 +209,11 @@ export const getInputFiles = (token: string, project: string, role: string) =>
 
 export const getStageStatus = (token: string, project: string) =>
   requestJson<StageStatusReply>(token, `${projectPath(project)}/stage-status`);
+
+/** Forgets the notices of input files changed in the project folder; a missing file stays listed. */
+export async function dismissInputChanges(token: string, project: string): Promise<void> {
+  await send(token, `${projectPath(project)}/input-changes`, "DELETE");
+}
 
 /** The settings that belong to a criterion; every other setting is shared by the criteria. */
 export const getCriterionKeys = (token: string) => requestJson<string[]>(token, "/api/criterion-keys");

@@ -285,7 +285,8 @@ Each project is a folder in the projects folder:
 │                  and the joined meshes the engine reads (joined/, one test_surfaces_<id>.ply per criterion
 │                  and one study_surfaces_<id>.ply per study that lists files)
 ├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
-├── project.json   The project's record: the files you added with their triangle counts, the input revision,
+├── project.json   The project's record: the files you added with their triangle counts, size, time and digest,
+│                  the notices of files replaced in the folder, the input revision,
 │                  the example it came from (if any), the criteria with their own settings and test surface files,
 │                  the studies of Simulate, and one record per completed stage (with the settings that stage ran with)
 ├── run/           The engine's output: criteria/<id>/preprocessing and thresholding, criteria/chain.json,
@@ -294,6 +295,22 @@ Each project is a folder in the projects folder:
 ```
 
 `config.yaml` works outside the interface: its paths are relative to the project folder, so `usc run -c <project folder>/config.yaml` runs the same analysis from the command line (see [Criteria in a project](#criteria-in-a-project)). Thresholding also writes `scores_compared_with_cutoff.npy` in its folder (the values the cutoff is applied to, which the histogram draws). To delete a project, use Delete in its menu (see [Managing a project](#managing-a-project)), or delete its folder in the file manager.
+
+### Replacing a file in the project folder
+
+You can save a new version of an input file over the old one in `inputs/` (an export from Rhino saved over `inputs/test_surfaces/roofs.obj`, say), keeping its name. The app finds the change when the project is opened, when it asks for the stage status (after a save, a change of the inputs or a run, and whenever its window comes back to the front), when it lists the studies, and when a run or a simulation starts. A file that was added in the app is read again only when its size or modification time differs from what `project.json` recorded (`stored_files`); the same content saved again changes nothing.
+
+A file whose content changed is built into the joined files that use it, in place of the old version:
+
+- A test surface file: the joined files of the criteria and studies that list it. Those criteria are out of date, and the criteria after them have to carve again; the studies that list it are out of date.
+- The maximum volume, the context or the terrain: the role's joined file. Every stage and every study is out of date.
+- The weather file: every stage is out of date, and so are the studies whose metric reads it.
+
+A notice over the steps (and at the top of the Studies panel in Simulate) names each changed file, until you press **OK**. The 3D view loads its meshes again. A joined file that comes out the same (a file saved again with the same surfaces) changes nothing and gives no notice; for the context and the terrain, whose orientation nothing reads, a face turned the other way is the same face. While a run of the project is going, the app waits for it to end before it looks.
+
+A file of a project made before this check has no record. The first look builds its joined files and compares them with those the runs used, so a file replaced earlier is caught too. A weather file without a record is taken as it is.
+
+A file the app cannot read (a broken export, or one still being copied or locked by another program) is not built in and is tried again at the next look; the project still opens, and a run says which file it is. A file deleted from the folder is listed as missing. A run is refused while a file it reads is missing (a test surface file of a criterion that is on, or a file of another role), and a simulation while a file the studies read is missing, until you put it back or remove it in the app. A file added to the folder by hand, under a new name, is not seen: add it in the app.
 
 ## Security
 

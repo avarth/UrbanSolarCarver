@@ -510,16 +510,59 @@ def test_stage_status_summary_and_sky_dome_routes(projects_folder):
     client = build_client(projects_folder)[0]
     create_project_with_inputs(client, "p", "tilted_plane")
     assert client.get("/api/projects/p/stage-status").json() == {
-        "stages": {stage: "missing" for stage in PIPELINE_STAGES}, "criteria": {"1": {"preprocessing": "missing", "thresholding": "missing"}}}
+        "stages": {stage: "missing" for stage in PIPELINE_STAGES}, "criteria": {"1": {"preprocessing": "missing", "thresholding": "missing"}},
+        "input_changes": []}
     events = read_events(client, start_run(client)["run_id"])
     assert events[-1]["type"] == "run_finished"
     assert client.get("/api/projects/p/stage-status").json() == {
-        "stages": {stage: "current" for stage in PIPELINE_STAGES}, "criteria": {"1": {"preprocessing": "current", "thresholding": "current"}}}
+        "stages": {stage: "current" for stage in PIPELINE_STAGES}, "criteria": {"1": {"preprocessing": "current", "thresholding": "current"}},
+        "input_changes": []}
     assert client.get("/api/projects/p").json()["stage_status"]["criteria"] == {"1": {"preprocessing": "current", "thresholding": "current"}}
     summary = client.get("/api/projects/p/run/summary")
     assert summary.status_code == 200 and "carving" in summary.json() and "massing" in summary.json()
     assert client.get("/api/projects/p/run/sky-patches").status_code == 404
     assert client.get("/api/projects/p/run/score-points").status_code == 404
+
+
+def _replace_stored_file(projects_folder, relative_path, data):
+    """Overwrite a stored input file of project 'p' as a file manager does, with a later modification time."""
+    path = projects_folder / "p" / "inputs" / relative_path
+    later = path.stat().st_mtime_ns + 10 ** 9
+    path.write_bytes(data)
+    os.utime(path, ns=(later, later))
+
+
+def test_a_stage_status_read_finds_a_file_changed_in_the_folder_and_the_notice_is_dismissed(client_after_fake_run, projects_folder):
+    client = client_after_fake_run
+    _replace_stored_file(projects_folder, "test_surfaces/surface.ply", box_bytes([0, 0, 0], extents=(9, 9, 0.1)))
+    status = client.get("/api/projects/p/stage-status").json()
+    assert status["criteria"] == {"1": {"preprocessing": "out_of_date", "thresholding": "out_of_date"}}
+    change, = status["input_changes"]
+    assert {key: change[key] for key in ("role", "file_name", "state")} == {"role": "test_surfaces", "file_name": "surface.ply", "state": "changed"}
+    assert change["noticed"] is not None
+    assert client.get("/api/projects/p").json()["stage_status"]["input_changes"] == status["input_changes"]
+    assert client.delete("/api/projects/p/input-changes").status_code == 204
+    assert client.get("/api/projects/p/stage-status").json()["input_changes"] == []
+    assert client.delete("/api/projects/nothing/input-changes").status_code == 404
+
+
+def test_opening_a_project_and_listing_its_studies_find_a_file_changed_in_the_folder(client_after_fake_run, projects_folder):
+    client = client_after_fake_run
+    _replace_stored_file(projects_folder, "max_volume/volume.ply", box_bytes([0, 0, 5], extents=(12, 12, 10)))
+    assert client.get("/api/projects/p/studies").status_code == 200
+    detail = client.get("/api/projects/p").json()
+    assert [(change["role"], change["file_name"], change["state"]) for change in detail["stage_status"]["input_changes"]] == [
+        ("max_volume", "volume.ply", "changed")]
+    assert detail["joined_bounds"][1][0] == pytest.approx(6)
+
+
+def test_a_file_changed_in_the_folder_during_a_run_waits_for_the_run_to_end(client_with_blocking_run, projects_folder):
+    client, run_id = client_with_blocking_run
+    joined = projects_folder / "p" / "inputs" / "joined" / "test_surfaces_1.ply"
+    before = joined.read_bytes()
+    _replace_stored_file(projects_folder, "test_surfaces/surface.ply", box_bytes([0, 0, 0], extents=(9, 9, 0.1)))
+    assert client.get("/api/projects/p/stage-status").json()["input_changes"] == []
+    assert joined.read_bytes() == before
 
 
 def test_results_of_a_finished_run_are_served(client_with_inputs, tmp_path):

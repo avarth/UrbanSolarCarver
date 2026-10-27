@@ -57,12 +57,28 @@ class StudyEntry(BaseModel):
     test_surface_files: list[str] = Field(default_factory=list)     # file names in inputs/test_surfaces/
 
 
+class StoredFileRecord(BaseModel):
+    """A stored input file as it was when the service last read it (stored_files.py tells a file changed in the folder by it)."""
+    size: int                   # bytes
+    modified_ns: int            # modification time, nanoseconds since the epoch
+    digest: str                 # sha256 of the content, hex
+
+
+class ChangedFileNotice(BaseModel):
+    """A stored input file whose change in the project folder the service found and built into the joined files; shown until dismissed."""
+    role: str
+    file_name: str
+    noticed: str                # ISO 8601, UTC: when the service found the change
+
+
 class ProjectJson(BaseModel):
     """The content of a project's project.json."""
     name: str
     created: str                # ISO 8601, UTC
-    inputs_revision: int = 1    # raised by every upload and removal of an input file
+    inputs_revision: int = 1    # raised by every upload and removal of an input file, and a change in the folder (stored_files.py)
     input_files: dict[str, dict[str, int]] = Field(default_factory=dict)  # role -> file name -> triangle count
+    stored_files: dict[str, dict[str, StoredFileRecord]] = Field(default_factory=dict)  # role -> file name -> record
+    changed_files: list[ChangedFileNotice] = Field(default_factory=list)  # the changes found in the folder, not dismissed yet
     # "exporting" / "massing" -> record, run with the settings of the last criterion that is on (the criteria's own: criterion_records)
     stage_records: dict[str, StageRecord] = Field(default_factory=dict)
     example: str | None = None  # the example the project was made from (examples.json name); None for other projects and older ones
@@ -78,11 +94,20 @@ class ProjectJson(BaseModel):
 StageState = Literal["current", "out_of_date", "missing"]
 
 
+class InputFileChange(BaseModel):
+    """A stored input file changed in the project folder (a notice not dismissed yet) or missing from it."""
+    role: str
+    file_name: str
+    state: Literal["changed", "missing"]
+    noticed: str | None = None      # a changed one: when the service found the change (a later change of the file is another notice)
+
+
 class StageStatusReply(BaseModel):
     """Whether each pipeline stage of a project has output that matches the settings and inputs now."""
     stages: dict[str, StageState]   # stage name -> state, in pipeline order; preprocessing and thresholding sum up the criteria
     # criterion id -> "preprocessing" / "thresholding" -> state, for every criterion that is on, in chain order
     criteria: dict[str, dict[str, StageState]] = Field(default_factory=dict)
+    input_changes: list[InputFileChange] = Field(default_factory=list)  # the changed ones first, then the missing ones, by role and name
 
 
 class StartRunReply(BaseModel):

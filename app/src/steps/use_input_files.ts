@@ -4,7 +4,7 @@
 // wait for them before a rename, reset or delete of the project.
 import { useRef, useState } from "react";
 import {
-  addInput, removeInput, serviceProblemOf, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
+  addInput, getInputFiles, getProject, removeInput, serviceProblemOf, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
 import type { FormState, SettingsForm } from "../settings_form/form_state";
@@ -53,6 +53,11 @@ export interface InputFiles {
   removeFile: RemoveInputFile;
   /** The stored test surface files, as the service lists them after a change by a criterion: the 3D view loads them again. */
   storeTestSurfaceFiles: (stored: InputFileInfo[]) => void;
+  /**
+   * Asks for the files of *roles* again after the service built files changed in the project folder into the project: their
+   * lists (triangle counts) and meshes, and for a maximum volume or weather file the bounds, the place and the latitude.
+   */
+  reloadRoles: (roles: string[]) => void;
   /** Follows a request until its reply is in (the app waits for it before a rename, reset or delete of the project). */
   followedInputChange: <Reply>(change: Promise<Reply>) => Promise<Reply>;
   inputChangesUnderWay: { current: Set<Promise<unknown>> };
@@ -162,12 +167,34 @@ export function useInputFiles(context: InputFilesContext): InputFiles {
     setFiles((current) => ({ ...current, test_surfaces: stored }));
     setInputRevisions((current) => ({ ...current, test_surfaces: current.test_surfaces + 1 }));
   };
+  const reloadRoles = (roles: string[]) => {
+    for (const role of roles) {
+      if (role === "weather") {
+        weatherFileRevisionNow.current += 1;
+        setWeatherFileRevision(weatherFileRevisionNow.current);
+        continue;
+      }
+      getInputFiles(token, project.name, role).then((stored) => {
+        setFiles((current) => ({ ...current, [role]: stored }));
+        setInputRevisions((current) => ({ ...current, [role]: current[role as MeshRole] + 1 }));
+      }).catch(onServiceProblem);
+      if (role === "max_volume") sharedForm.dispatch({ type: "values_changed", values: {} });     // the new grid plan, as after an upload
+    }
+    // The bounds of the maximum volume and the weather file's place are in the project's detail only.
+    if (roles.includes("weather") || roles.includes("max_volume")) {
+      getProject(token, project.name).then((detail) => {
+        setJoinedBounds(detail.joined_bounds as Bounds3 | null);
+        setWeatherLocation(detail.weather_location);
+        setWeatherLatitude(detail.weather_latitude);
+      }).catch(onServiceProblem);
+    }
+  };
 
   return {
     files, joinedBounds, origin,
     weather: { location: weatherLocation, latitude: weatherLatitude, fileRevision: weatherFileRevision, fileChange: weatherFileChange,
                setFileChange: setWeatherFileChange },
-    inputRevisions, addFiles, removeFile, storeTestSurfaceFiles, followedInputChange, inputChangesUnderWay, waitForInputChanges,
+    inputRevisions, addFiles, removeFile, storeTestSurfaceFiles, reloadRoles, followedInputChange, inputChangesUnderWay, waitForInputChanges,
     meshes: { max_volume: maxVolume, test_surfaces: testSurfaces, context: contextMesh, terrain },
   };
 }

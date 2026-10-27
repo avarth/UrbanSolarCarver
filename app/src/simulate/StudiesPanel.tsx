@@ -37,6 +37,8 @@ export interface StudiesPanelProps {
   popover?: ReactNode;
   /** Why the studies could not be read; null when they were. */
   loadProblem?: string | null;
+  /** The notice of input files changed in the project folder or missing from it, at the top of the body. */
+  notice?: ReactNode;
 }
 
 /** The line under a study's name. */
@@ -99,6 +101,7 @@ export function StudiesPanel(props: StudiesPanelProps) {
       </div>
       {open && (
         <div id={bodyId} className="studies-panel-body">
+          {props.notice}
           {props.loadProblem != null && <p className="studies-panel-problem" role="alert">{props.loadProblem}</p>}
           {hasRun && (
             <ul className="study-list">

@@ -19,7 +19,7 @@ from typing import Callable
 from ..errors import ConfigError, InputError, RunCancelled, StageChainError
 from ..run_context import RunContext
 from ..stage_settings import PIPELINE_STAGES
-from . import simulation, test_surfaces
+from . import simulation, stored_files, test_surfaces
 from .api_models import StartRunReply
 from .projects import RUN_FOLDER, ProjectError, ProjectStore, naming_criterion
 from .stage_records import ANALYSIS_STAGES, RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_stages, run_settings
@@ -169,6 +169,8 @@ class RunWorker:
                 raise RunConflict(self._active.state.project)
             self._store.migrate_to_criteria(name)
             self._store.rebuild_joined_test_surfaces_without_normals(name)
+            self._store.refresh_changed_inputs(name)      # a file changed in the folder is run with, and dates what was built on the old one
+            stored_files.refuse_missing_files(self._store, name, "run")
             settings = run_settings(self._store, name)
             for criterion_id, criterion_settings in settings.criteria.items():
                 with naming_criterion(criterion_id):    # the refusal says whose settings it is
@@ -201,6 +203,8 @@ class RunWorker:
             if self._active is not None:
                 raise RunConflict(self._active.state.project)
             self._store.migrate_to_criteria(name)      # a project of an earlier version becomes a chain first, as before a pipeline run
+            self._store.refresh_changed_inputs(name)
+            stored_files.refuse_missing_files(self._store, name, "simulation")
             requests, refusals = [], []
             for study in self._store.studies(name):
                 reason = simulation.refusal_of(self._store, name, study)

@@ -28,7 +28,7 @@ from ..grid_planning import MAX_GRID_VOXELS, VoxelGridPlan, check_voxel_grid_bud
 from ..io import load_mesh, save_mesh
 from ..load_config import build_config, build_config_from_mode_starting_values
 from ..pydantic_schemas import UserConfig
-from . import test_surfaces, uploads
+from . import stored_files, test_surfaces, uploads
 from .api_models import (
     CarvingChainStep, ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply,
     ProjectJson, ProjectSummary, StudyEntry,
@@ -731,6 +731,7 @@ class ProjectStore:
                     upload_path.unlink(missing_ok=True)
             if uploaded_mesh is not None:
                 recorded_names[stored_name] = len(uploaded_mesh.faces)
+                stored_files.record_stored_file(project_json, test_surfaces.ROLE, stored_name, test_surfaces.stored_path(project_folder, stored_name))
             if stored_name not in entry.test_surface_files:
                 entry.test_surface_files.append(stored_name)
             write(project_folder, project_json, entry)
@@ -1032,6 +1033,7 @@ class ProjectStore:
                     raise ProjectError(f"The weather file must be an {WEATHER_EXTENSION} file.", status_code=422)
                 self._store_weather_file(project_folder, clean_name, data)
                 project_json.input_files[role] = {WEATHER_FILE_NAME: 0}
+                stored_files.record_stored_file(project_json, role, WEATHER_FILE_NAME, self._stored_file_path(project_folder, role, WEATHER_FILE_NAME))
             else:
                 if extension not in MESH_EXTENSIONS:
                     raise ProjectError(f"A mesh file must be one of {', '.join(MESH_EXTENSIONS)}.", status_code=422)
@@ -1070,6 +1072,7 @@ class ProjectStore:
                 if joined_temporary_path is not None:
                     joined_temporary_path.unlink(missing_ok=True)
             del project_json.input_files[role][file_name]
+            project_json.stored_files.get(role, {}).pop(file_name, None)
             if role in OPTIONAL_MESH_ROLES:
                 self._update_optional_paths(project_folder, name)
             project_json.inputs_revision += 1
@@ -1110,6 +1113,9 @@ class ProjectStore:
                 carved_on=datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 earlier_max_volume_files=replaced_files, max_volume_file=envelope_file_name)
             project_json.input_files["max_volume"] = {envelope_file_name: len(envelope.faces)}
+            project_json.stored_files["max_volume"] = {}
+            stored_files.record_stored_file(project_json, "max_volume", envelope_file_name,
+                                            self._stored_file_path(project_folder, "max_volume", envelope_file_name))
             project_json.carving_chain.append(chain_step)
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
@@ -1148,6 +1154,16 @@ class ProjectStore:
             project_json.inputs_revision += 1
             self.write_project_json(name, project_json)
             return True
+
+    def refresh_changed_inputs(self, name: str) -> bool:
+        """Build the stored files changed in the project folder from outside the app into the joined files, with a notice for each
+        (stored_files.py); whether project.json changed. Called when a project is opened, on a read of its stage status or studies,
+        and when a run or a simulation starts; raises ProjectError when a changed file cannot be read."""
+        return stored_files.refresh_changed_inputs(self, name)
+
+    def dismiss_input_changes(self, name: str) -> None:
+        """Forget the notices of stored files changed in the project folder."""
+        stored_files.dismiss_changes(self, name)
 
     def input_files(self, name: str, role: str) -> list[InputFileInfo]:
         """The uploaded files of a role sorted by name, with their triangle counts."""
@@ -1298,6 +1314,7 @@ class ProjectStore:
             if joined_temporary_path is not None:
                 joined_temporary_path.unlink(missing_ok=True)
         recorded_names[stored_name] = len(uploaded_mesh.faces)
+        stored_files.record_stored_file(project_json, role, stored_name, role_folder / stored_name)
 
     @staticmethod
     def _load_stored_meshes(project_folder: Path, role: str, file_names: list[str]) -> dict[str, trimesh.Trimesh]:

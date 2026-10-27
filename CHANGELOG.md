@@ -7,6 +7,18 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed (input files replaced in the project folder)
+
+- **A file saved over an input file in the project folder is now used.** Before, the engine went on reading the joined files
+  built at upload, and the stages and studies built on the old file stayed current, so a rerun gave the old result. The
+  service now records the size, modification time and content digest of each stored file in `project.json`, and compares the
+  folder with them when a project opens, on each stage status read, on the studies list and when a run or a simulation
+  starts. A changed file is built into the joined files that use it; the criteria, stages and studies built on the old one go
+  out of date. A notice names the file until it is dismissed (`DELETE /api/projects/{name}/input-changes`); the stage status
+  lists it under `input_changes`. A file missing from the folder is listed too and refuses a run or a simulation that reads it. The app asks
+  for the stage status again when its window comes back to the front. A project made before the records is checked once
+  against the joined files its runs used. See [Replacing a file in the project folder](docs/ui.md#replacing-a-file-in-the-project-folder).
+
 ### Added (Simulate)
 
 - **Simulate, a workspace beside the pipeline.** A **Design | Simulate** switch in the header opens a workspace that shows

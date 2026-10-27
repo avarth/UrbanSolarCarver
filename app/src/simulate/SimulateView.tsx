@@ -3,7 +3,7 @@
 // the bottom right corner (use_study_view.ts; the view draws its values, ProjectWorkspace gives them to ViewerPane). The studies are read when Simulate opens and again whenever a run ends while it is open: a simulation's results, or a run of
 // Design that changed what the studies trace. The simulation is a run of the app's run loop (origin "simulate"), one job at a time
 // with the runs of Design: Run waits while one of those goes on, and the studies cannot be changed while a run of the project does.
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { failureTextOf, serviceProblemOf, type CriterionEntry, type InputFileInfo, type StudySource } from "../api_client/client";
 import { messages } from "../messages";
 import type { ViewportTheme } from "../viewer/colour_scales";
@@ -34,9 +34,12 @@ interface SimulateViewProps {
   studyView: StudyViewHook;
   /** The viewport theme, which the target legend's colours follow. */
   theme?: ViewportTheme;
+  /** The notice of input files changed in the project folder or missing from it, at the top of the studies panel. */
+  notice?: ReactNode;
 }
 
-export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView, theme = "light" }: SimulateViewProps) {
+export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView, theme = "light",
+                               notice }: SimulateViewProps) {
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
   const popoverId = useId();
@@ -120,7 +123,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
                       onToggleSettings={(id) => {
                         if (popoverStudyId !== id) studies.select(id);       // the study whose settings are open is the one in the view
                         setPopoverStudyId(popoverStudyId === id ? null : id);
-                      }} loadProblem={studies.loadProblem} popover={popover}
+                      }} loadProblem={studies.loadProblem} popover={popover} notice={notice}
                       runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
       </div>
       <div className={`simulate-geometry-bar${shown === null ? "" : " simulate-geometry-bar-beside-popover"}`}>
