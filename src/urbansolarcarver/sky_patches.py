@@ -250,6 +250,21 @@ def sub_ray_directions(point_ids, patch_ids, side: int, cells: np.ndarray) -> np
     cos_alt = np.sqrt(np.clip(1.0 - sin_alt ** 2, 0.0, None))
     return np.stack([cos_alt * np.sin(az), cos_alt * np.cos(az), sin_alt], axis=1)
 
+def sky_emissivity_deficit(dewpoint_celsius: float, bliss_k: float, cos_zenith) -> np.ndarray:
+    """``1 - ε_dir``, the share of a surface's long-wave emission the clear sky
+    does not return, toward directions at the zenith cosines *cos_zenith*
+    (float64).
+
+    Eq. 1 (Martin & Berdahl) and Eq. 2 (Bliss) of
+    :func:`compute_radiative_cooling_weights`, in NumPy and per direction,
+    for the sun and sky check: ``(1 - ε_sky) ** (1 / (k cos θ))`` with
+    ε_sky clamped to [0, 0.999] and cos θ to at least 1e-3.
+    """
+    x = dewpoint_celsius / 100.0
+    eps_global = min(max(0.758 + 0.521 * x + 0.625 * x * x, 0.0), 0.999)
+    cos_zen = np.maximum(np.asarray(cos_zenith, dtype=np.float64), 1e-3)
+    return np.power(1.0 - eps_global, 1.0 / (bliss_k * cos_zen))
+
 def compute_radiative_cooling_weights(
     dewpoint_celsius: float,   # outdoor dew point in °C (input to Eq. 1)
     bliss_k: float,            # Bliss (1961) angular constant k (Eq. 2)

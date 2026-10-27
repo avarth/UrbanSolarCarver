@@ -17,13 +17,17 @@ device (:func:`dda_backend_available`), precompiles the kernels
 * the parity voxelizer used by :func:`voxelization.voxelize_solid_warp`;
 * the ground heights of a terrain mesh and the voxel centres on the context's
   surface, used by :mod:`context_geometry`, and the any-hit test of rays
-  against the context and terrain meshes (:func:`ray_tracing.mesh_blocks_rays`).
+  against the context and terrain meshes (:func:`ray_tracing.mesh_blocks_rays`);
+* the mesh visibility kernel of the sun and sky check (:mod:`solar_check`),
+  which traces rays against a triangle mesh's BVH (``wp.Mesh``) instead of
+  the voxel grid.
 
 All kernels live in this one module on purpose: Warp compiles a Python
 module as one unit and caches it on disk by module, so
 :func:`warmup_kernels` compiles them all at once.  The kernels exist only
 when Warp imports and initializes (``_warp_available``).  Their launch
-wrappers are in :mod:`ray_tracing` and :mod:`voxelization`.
+wrappers are in :mod:`ray_tracing`, :mod:`voxelization` and
+:mod:`solar_check`.
 
 References
 ----------
@@ -1109,3 +1113,197 @@ if _warp_available:
             near[i] = wp.uint8(1)
         else:
             near[i] = wp.uint8(0)
+
+    # ===================================================================
+    # Sun and sky check: visible weight per test point past a mesh
+    # ===================================================================
+    # A tolerated start inside a solid must leave it within this many
+    # surface tolerances along the ray: a low ray from a point under a
+    # voxel overhang that runs through the whole building is blocked.  A
+    # facade inside a skin of depth delta then loses the rays with
+    # cos(incidence) < delta / (10 * tolerance), at most about 1 % of its
+    # cosine-weighted sky.
+    CHECK_START_REACH = wp.constant(10.0)
+
+    @wp.func
+    def _check_next_event(mesh_id: wp.uint64, o: wp.vec3, d: wp.vec3, t_from: float, max_t: float):
+        """The next face a ray from *o* along *d* crosses beyond *t_from*:
+        its distance and 1.0 when the ray leaves the solid there (the back
+        of the face) or 0.0 when it enters; distance -1 when none."""
+        if t_from < max_t:
+            q = wp.mesh_query_ray(mesh_id, o + d * t_from, d, max_t - t_from)
+            if q.result:
+                leaving = float(0.0)
+                if wp.dot(q.normal, d) > 0.0:
+                    leaving = 1.0
+                return wp.vec2(t_from + q.t, leaving)
+        return wp.vec2(-1.0, 0.0)
+
+    @wp.func
+    def _check_step(t: float, min_hit: float):
+        """A distance just past *t*: the advance grows with *t*, as in the
+        voxelizer, so it stays above float32 rounding far from the origin."""
+        return t + wp.max(min_hit, t * 1.0e-6)
+
+    @wp.func
+    def _check_near_surface(mesh_id: wp.uint64, o: wp.vec3, n: wp.vec3, tolerance: float):
+        """1 when *o* lies within *tolerance* of the mesh's surface, at a
+        face that faces the same side as the test normal *n*: the test
+        surface then runs along the mesh's surface (a facade in the skin of
+        its envelope), rather than looking into the solid (ground under a
+        building)."""
+        q = wp.mesh_query_point_no_sign(mesh_id, o, tolerance)
+        near = int(0)
+        if q.result:
+            if (wp.length(wp.mesh_eval_position(mesh_id, q.face, q.u, q.v) - o) <= tolerance
+                    and wp.dot(wp.mesh_eval_face_normal(mesh_id, q.face), n) > 0.0):
+                near = 1
+        return near
+
+    @wp.func
+    def _check_start(mesh_id: wp.uint64, o: wp.vec3, d: wp.vec3, c: float, max_t: float,
+                     min_hit: float, tolerance: float, near_surface: int):
+        """Whether a ray starts inside the solid of a mesh, and the next
+        event after the start: (inside, distance, leaving).
+
+        Crossings within *min_hit* of the origin are ignored.  A start
+        inside counts as outside when the origin is within *tolerance* of
+        the mesh's surface at a face turned the test surface's way
+        (*near_surface*, :func:`_check_near_surface`) and the ray leaves the solid at
+        a height above the test surface's plane (``t * c``) of at most
+        *tolerance*, within ``CHECK_START_REACH * tolerance`` along the
+        ray: the test point is then in the skin of a mesh that lies a
+        little outside its test surface, and that exit is consumed.  A
+        point deeper inside is blocked."""
+        e = _check_next_event(mesh_id, o, d, 0.0, max_t)
+        for _skip in range(8):
+            if e[0] < 0.0 or e[0] > min_hit:
+                break
+            e = _check_next_event(mesh_id, o, d, _check_step(e[0], min_hit), max_t)
+        inside = int(0)
+        if e[0] >= 0.0 and e[1] > 0.5:
+            if near_surface == 1 and e[0] * c <= tolerance and e[0] <= CHECK_START_REACH * tolerance:
+                e = _check_next_event(mesh_id, o, d, _check_step(e[0], min_hit), max_t)
+            else:
+                inside = 1      # the exit stays the next event
+        return wp.vec3(float(inside), e[0], e[1])
+
+    @wp.func
+    def _check_solid_blocks(mesh_id: wp.uint64, o: wp.vec3, d: wp.vec3, c: float, max_t: float,
+                            min_hit: float, tolerance: float, near_surface: int):
+        """1 when a solid blocks the ray on its own: the ray starts inside it
+        (:func:`_check_start`) or crosses a face of it later."""
+        s = _check_start(mesh_id, o, d, c, max_t, min_hit, tolerance, near_surface)
+        blocks = int(0)
+        if s[0] > 0.5 or s[1] >= 0.0:
+            blocks = 1
+        return blocks
+
+    @wp.kernel
+    def mesh_visible_weight_kernel(
+        mesh_id: wp.uint64,                  # BVH of the mesh that blocks
+        has_mesh: int,                       # 0: no mesh
+        mesh_tolerance: float,               # the mesh's surface tolerance (m), see _check_start
+        clip_id: wp.uint64,                  # BVH of a solid the blocking mesh counts inside of only
+        has_clip: int,                       # 0: no clip solid
+        clip_tolerance: float,
+        surroundings_id: wp.uint64,          # BVH of surroundings that block on their own (neighbours, terrain)
+        has_surroundings: int,               # 0: none
+        surroundings_tolerance: float,
+        points: wp.array(dtype=wp.vec3),     # (P,) test points
+        normals: wp.array(dtype=wp.vec3),    # (P,) outward unit normals
+        directions: wp.array(dtype=wp.vec3),  # (D,) unit vectors toward the sun or sky
+        values: wp.array(dtype=float),       # (D,) value each direction carries
+        use_cosine: int,                     # 1: a direction counts value * cos(incidence)
+        d_start: int,                        # this launch's directions: [d_start, d_end)
+        d_end: int,
+        origin_offset: float,                # origin moved this far along the normal (m)
+        min_hit: float,                      # crossings closer than this to the origin are ignored (m)
+        max_t: float,                        # ray length (m)
+        out: wp.array(dtype=wp.float64),     # (P,) visible weight, accumulated across launches
+    ):
+        """Add the value of every direction in [d_start, d_end) that a test
+        point faces and sees past the mesh and the surroundings.
+
+        One thread per test point.  A ray is blocked where it is inside the
+        mesh's solid and, with a clip solid, inside the clip solid too: the
+        blocking mesh then counts only where it overlaps the clip (a carved
+        envelope that bulges past the maximum volume blocks nothing outside
+        it).  The surroundings block wherever the ray meets them.  Inside
+        and outside follow the faces' orientation (closed meshes with
+        outward normals); a start inside is judged by :func:`_check_start`,
+        with each mesh's own tolerance.
+        """
+        i = wp.tid()
+        n = normals[i]
+        o = points[i] + n * origin_offset
+        near_mesh = int(0)
+        near_clip = int(0)
+        near_surroundings = int(0)
+        if has_mesh != 0:
+            near_mesh = _check_near_surface(mesh_id, o, n, mesh_tolerance)
+        if has_clip != 0:
+            near_clip = _check_near_surface(clip_id, o, n, clip_tolerance)
+        if has_surroundings != 0:
+            near_surroundings = _check_near_surface(surroundings_id, o, n, surroundings_tolerance)
+        acc = wp.float64(0.0)
+        for k in range(d_start, d_end):
+            d = directions[k]
+            c = wp.dot(n, d)
+            if c <= 0.0:
+                continue
+            visible = int(1)
+            if has_mesh != 0:
+                sm = _check_start(mesh_id, o, d, c, max_t, min_hit, mesh_tolerance, near_mesh)
+                in_mesh = int(sm[0])
+                em = wp.vec2(sm[1], sm[2])
+                # The clip solid is read only once the ray is inside the
+                # mesh: a ray that never enters it costs no clip queries.
+                clip_ready = 1 - has_clip
+                in_clip = int(1)
+                ec = wp.vec2(-1.0, 0.0)
+                t_now = float(0.0)
+                refresh_mesh = int(0)
+                refresh_clip = int(0)
+                for _event in range(128):
+                    if in_mesh == 1 and clip_ready == 0:
+                        sc = _check_start(clip_id, o, d, c, max_t, min_hit, clip_tolerance, near_clip)
+                        in_clip = int(sc[0])
+                        ec = wp.vec2(sc[1], sc[2])
+                        clip_ready = 1
+                        for _catch_up in range(64):     # the clip's crossings up to here
+                            if ec[0] < 0.0 or ec[0] > t_now:
+                                break
+                            in_clip = 1 - int(ec[1])
+                            ec = _check_next_event(clip_id, o, d, _check_step(ec[0], min_hit), max_t)
+                    if in_mesh == 1 and in_clip == 1:
+                        visible = 0
+                        break
+                    if refresh_mesh == 1:
+                        em = _check_next_event(mesh_id, o, d, _check_step(em[0], min_hit), max_t)
+                        refresh_mesh = 0
+                    if refresh_clip == 1:
+                        ec = _check_next_event(clip_id, o, d, _check_step(ec[0], min_hit), max_t)
+                        refresh_clip = 0
+                    # Take the nearer of the next crossings; none left: visible.
+                    clip_next = clip_ready == 1 and has_clip != 0 and ec[0] >= 0.0
+                    if em[0] >= 0.0 and (not clip_next or em[0] <= ec[0]):
+                        t_now = em[0]
+                        in_mesh = 1 - int(em[1])
+                        refresh_mesh = 1
+                    elif clip_next:
+                        t_now = ec[0]
+                        in_clip = 1 - int(ec[1])
+                        refresh_clip = 1
+                    else:
+                        break
+            if visible == 1 and has_surroundings != 0:
+                if _check_solid_blocks(surroundings_id, o, d, c, max_t, min_hit, surroundings_tolerance,
+                                       near_surroundings) == 1:
+                    visible = 0
+            if visible == 1:
+                w = values[k]
+                if use_cosine != 0:
+                    w = w * c
+                acc = acc + wp.float64(w)
+        out[i] = out[i] + acc
