@@ -1,0 +1,16 @@
+/* Simulate's content over the 3D view (a card at the top left; the view stays visible and usable around it). */
+
+.simulate-view {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  box-sizing: border-box;
+  max-width: min(360px, calc(100% - 24px));
+  padding: calc(var(--space-unit) * 3);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+}
+
+.simulate-view p { margin: 0; }

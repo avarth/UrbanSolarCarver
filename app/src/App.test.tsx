@@ -26,8 +26,8 @@ vi.mock("./steps/ProjectWorkspace", async () => {
   const { createConfigSaver } = await import("./settings_form/form_state");
   const { putSharedSettings } = await import("./api_client/client");
   return {
-    ProjectWorkspace: ({ token, project, runs, criterionKeys, startSteps, onStepsChange, onSettingsSaverReady }: {
-      token: string; project: ProjectDetail; runs: RunLoop; criterionKeys: ReadonlySet<string>; startSteps?: WorkspaceSteps; onStepsChange?: (steps: WorkspaceSteps) => void;
+    ProjectWorkspace: ({ token, project, runs, criterionKeys, mode, startSteps, onStepsChange, onSettingsSaverReady }: {
+      token: string; project: ProjectDetail; runs: RunLoop; criterionKeys: ReadonlySet<string>; mode: string; startSteps?: WorkspaceSteps; onStepsChange?: (steps: WorkspaceSteps) => void;
       onSettingsSaverReady?: (saver: { flush: () => Promise<string>; cancel: () => void; waitForInputChanges: () => Promise<void> } | null) => void;
     }) => {
       workspaceSteps.runs = runs;
@@ -43,7 +43,7 @@ vi.mock("./steps/ProjectWorkspace", async () => {
           void saver.flush();
         };
       }, []);
-      return <div className="fake-workspace" data-run-refusal={runs.current?.refusal ?? ""} data-criterion-keys={[...criterionKeys].join(",")}>{project.modified}</div>;
+      return <div className="fake-workspace" data-run-refusal={runs.current?.refusal ?? ""} data-criterion-keys={[...criterionKeys].join(",")} data-mode={mode}>{project.modified}</div>;
     },
   };
 });
@@ -575,4 +575,65 @@ test("a rename or delete of the open project waits for its uploads under way, so
   await act(async () => endInputChanges());
   await settle();
   expect(service.requests).toContain("DELETE /api/projects/Plot%208?confirm_name=Plot%208");
+});
+
+const modeSwitch = () => page().querySelector<HTMLElement>(".top-bar .workspace-mode-switch");
+const modeButton = (name: string) => buttonNamed(name, modeSwitch()!);
+const workspaceMode = () => page().querySelector(".fake-workspace")!.getAttribute("data-mode");
+const modePressed = () => [...modeSwitch()!.querySelectorAll("button")].map((button) => [button.textContent, button.getAttribute("aria-pressed")]);
+
+test("the Design | Simulate switch shows only with an open project and sets the workspace's mode", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  expect(modeSwitch()).toBeNull();
+  await openPlot7();
+  expect(modeSwitch()!.getAttribute("role")).toBe("group");
+  expect(modeSwitch()!.getAttribute("aria-label")).toBe("Workspace mode");
+  expect(modePressed()).toEqual([["Design", "true"], ["Simulate", "false"]]);
+  expect(workspaceMode()).toBe("design");
+  click(modeButton("Simulate"));
+  expect(workspaceMode()).toBe("simulate");
+  expect(modePressed()).toEqual([["Design", "false"], ["Simulate", "true"]]);
+  click(buttonNamed("Projects"));
+  await settle();
+  expect(modeSwitch()).toBeNull();
+});
+
+test("another project opens in Design, whatever mode the last one was left in", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await openPlot7();
+  click(modeButton("Simulate"));
+  click(buttonNamed("Projects"));
+  await settle();
+  await openPlot7();
+  expect(workspaceMode()).toBe("design");
+  expect(modePressed()).toEqual([["Design", "true"], ["Simulate", "false"]]);
+});
+
+test("the mode survives renaming the project", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await openPlot7();
+  click(modeButton("Simulate"));
+  await chooseFromTopBarMenu("Rename");
+  type(dialog().querySelector("input")!, "Plot 8");
+  await act(async () => dialog().querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await settle();
+  expect(workspaceMounts).toEqual(["Plot 7", "Plot 8"]);
+  expect(workspaceMode()).toBe("simulate");
+  expect(modePressed()).toEqual([["Design", "false"], ["Simulate", "true"]]);
+});
+
+test("a reset of the open project to its example opens it in Design, as it opens at the first step", async () => {
+  const service = new FakeService();
+  await renderApp(service);
+  await openPlot7();
+  click(modeButton("Simulate"));
+  await chooseFromTopBarMenu("Reset to the example");
+  await act(async () => click(buttonNamed("Reset project", dialog())));
+  await settle();
+  expect(workspaceMounts).toEqual(["Plot 7", "Plot 7"]);
+  expect(workspaceMode()).toBe("design");
+  expect(modePressed()).toEqual([["Design", "true"], ["Simulate", "false"]]);
 });

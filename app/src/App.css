@@ -115,6 +115,9 @@
   border-right: 1px solid var(--colour-line);
 }
 
+/* Simulate hides the panel with the hidden attribute; the display above would otherwise win over the browser's display: none. */
+.workspace-panel[hidden] { display: none; }
+
 .workspace-view {
   position: relative;
   flex: 1;

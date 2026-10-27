@@ -19,6 +19,7 @@ import { ProjectMenu, type ProjectActions } from "./steps/ProjectMenu";
 import { moveAutoUpdateChoice } from "./steps/CarvingStep";
 import { ProjectWorkspace, type OpenProjectSettingsSaver, type WorkspaceSteps } from "./steps/ProjectWorkspace";
 import { useRunLoop } from "./steps/run_state";
+import { WorkspaceModeSwitch, type WorkspaceMode } from "./steps/WorkspaceModeSwitch";
 import { cpuChosenAtLaunch, exampleTitleOf, isWarmingUp, Spinner, StartScreen, type ProjectsFolderChange } from "./steps/StartScreen";
 import "./App.css";
 
@@ -120,6 +121,8 @@ export function App() {
   // The workspace is made again for a renamed project too, and then opens with the steps it had open; otherwise with Inputs.
   const openWorkspaceSteps = useRef<WorkspaceSteps | undefined>(undefined);
   const [workspaceStartSteps, setWorkspaceStartSteps] = useState<WorkspaceSteps | undefined>(undefined);
+  // Design or Simulate: kept here, like the steps, so that a renamed project (its workspace made again) stays in the mode it was in.
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("design");
   // The open project was deleted from the top bar: the start screen then takes the focus on its heading.
   const [focusStartScreenHeading, setFocusStartScreenHeading] = useState(false);
   const openProjectSettings = useRef<OpenProjectSettingsSaver | null>(null);
@@ -189,6 +192,7 @@ export function App() {
     try {
       setOpenProject(await request);
       setWorkspaceStartSteps(undefined);
+      setWorkspaceMode("design");
       setFocusStartScreenHeading(false);
       return null;
     } catch (error) {
@@ -256,6 +260,7 @@ export function App() {
         if (!isOpenProject(name)) return readStartScreenLists();
         setOpenProject(reset);
         setWorkspaceStartSteps(undefined);
+        setWorkspaceMode("design");
         setOpenProjectResets((resets) => resets + 1);
       });
     },
@@ -294,6 +299,7 @@ export function App() {
             <ProjectMenu projectName={openProject.name} exampleTitle={exampleTitleOf(openProject.example, examples)}
                          projectFolderPath={projectsFolder && projectFolderPath(projectsFolder.path, openProject.name)}
                          runActive={runActiveFor(openProject.name)} actions={projectActions} placement="top_bar" />
+            <WorkspaceModeSwitch mode={workspaceMode} onChange={setWorkspaceMode} />
             <button type="button" className="link-button" onClick={() => setOpenProject(null)}>{messages.projectsLink}</button>
           </>
         )}
@@ -311,7 +317,7 @@ export function App() {
       )}
       {openProject !== null && setup !== null && (
         <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes} criterionKeys={setup.criterionKeys}
-                          warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
+                          mode={workspaceMode} warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
                           onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
                           startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }} />
       )}

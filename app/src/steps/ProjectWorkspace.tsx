@@ -24,6 +24,7 @@ import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf } from "../settings_form/present
 import { sharedRefusalShown, splitSettings, useBothForms } from "../settings_form/two_forms";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
+import { SimulateView } from "../simulate/SimulateView";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
 import { boundsOf } from "./input_meshes";
@@ -37,9 +38,11 @@ import { testSurfaceGroupsOf, testSurfaceOwners } from "./test_surface_groups";
 import { plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type StepName } from "./step_summaries";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "./sun_path_request";
 import { useInputFiles } from "./use_input_files";
+import { useKeptScroll } from "./use_kept_scroll";
 import { useStageStatus } from "./use_stage_status";
 import { periodChangedSince, weatherChangeSuggestion } from "./weather_change_notice";
 import { projectViewStateOf } from "./workspace_view_state";
+import type { WorkspaceMode } from "./WorkspaceModeSwitch";
 
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
@@ -56,6 +59,8 @@ export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
 };
 
 interface ProjectWorkspaceProps {
+  /** Design: the steps beside the 3D view. Simulate: the steps are hidden and the view has the whole window. */
+  mode: WorkspaceMode;
   token: string;
   project: ProjectDetail;
   schema: Record<string, unknown>;
@@ -149,6 +154,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const [viewStep, setViewStep] = useState<StepName>(props.startSteps?.view ?? "inputs");
   useEffect(() => props.onStepsChange?.({ open: openStep, view: viewStep }), [openStep, viewStep]);
   const panel = useRef<HTMLElement>(null);
+  // In Simulate the panel is hidden, not unmounted (Design then finds its open step, folds and forms as left); its scroll is kept.
+  const keepScroll = useKeptScroll(panel, props.mode === "design");
   const [addFilesRequest, setAddFilesRequest] = useState(0);
   const [settingToFocus, setSettingToFocus] = useState<{ name: string } | null>(null);
 
@@ -351,7 +358,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   return (
     <div className="workspace">
-      <aside ref={panel} className="workspace-panel">
+      <aside ref={panel} className="workspace-panel" hidden={props.mode === "simulate"} onScrollCapture={keepScroll}>
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}
                        pinnedAction={saveFailureNotice === null && openStepAction === null ? null : <>{saveFailureNotice}{openStepAction}</>} />
       </aside>
@@ -362,7 +369,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={emptyViewContent} localOrigin={origin} mode={form.mode}
-                    analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer} />
+                    analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer}
+                    {...(props.mode === "simulate" ? { overlayContent: <SimulateView /> } : {})} />
       </section>
     </div>
   );

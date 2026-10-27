@@ -1,7 +1,7 @@
 // The open project against a fake service, shared by ProjectWorkspace.saves_and_runs.test.tsx and
 // ProjectWorkspace.view_and_results.test.tsx: the fake service, the project it serves, opening the workspace and finding its parts.
 // Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is written in).
-import { act, type ComponentProps } from "react";
+import { act, useState, type ComponentProps } from "react";
 import { vi } from "vitest";
 import type { CriterionEntry, InputFileInfo, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
@@ -11,6 +11,7 @@ import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_f
 import { ProjectWorkspace } from "./ProjectWorkspace";
 import { useRunLoop } from "./run_state";
 import type { PipelineStage, StageState } from "./step_summaries";
+import type { WorkspaceMode } from "./WorkspaceModeSwitch";
 
 export const SCHEMA = {
   properties: {
@@ -243,12 +244,18 @@ export async function openWorkspace(
   service.storedTestSurfaces = opened.inputs.test_surfaces ?? [];
   function Page() {
     const runs = useRunLoop("token", () => {});
+    const [mode, setMode] = useState<WorkspaceMode>("design");
+    changeMode = setMode;
     return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}
-                             onServiceProblem={() => {}} onShowProjects={() => {}} {...steps} />;
+                             mode={mode} onServiceProblem={() => {}} onShowProjects={() => {}} {...steps} />;
   }
   rendered = renderForTest(<Page />);
   await settle();
 }
+
+let changeMode: ((mode: WorkspaceMode) => void) | null = null;
+/** Switches the open workspace between Design and Simulate, as the top bar's switch does. */
+export const switchMode = (mode: WorkspaceMode) => act(() => changeMode!(mode));
 
 export const container = () => rendered!.container;
 export const dimmedLayers = () => [...FakeViewerScene.latest!.dimmed].sort();
