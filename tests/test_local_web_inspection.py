@@ -534,3 +534,35 @@ def test_a_file_replaced_by_hand_drops_its_kept_original(store_after_a_run):
     assert not _kept(store).exists()
     facades = next(entry for entry in project_inspection(store, "p").files if entry.file_name == "facades.obj")
     assert facades.original_kept is False and facades.surface_count == 3
+
+
+# ---- Fix round 2: the corner tolerance of the float32 formats ----
+
+def _grid_mesh(x_range, y_range, columns=7, rows=5):
+    """An open flat grid of triangles facing up with non-integer coordinates."""
+    import trimesh
+    xs, ys = np.linspace(*x_range, columns), np.linspace(*y_range, rows)
+    vertices = np.array([[x, y, 0.37] for y in ys for x in xs])
+    faces = []
+    for row in range(rows - 1):
+        for column in range(columns - 1):
+            first = row * columns + column
+            faces += [[first, first + 1, first + columns + 1], [first, first + columns + 1, first + columns]]
+    return trimesh.Trimesh(vertices=vertices, faces=faces, process=False)
+
+
+def test_a_glb_from_another_tool_with_odd_coordinates_is_saved(store):
+    store.add_input("p", "test_surfaces", "site.glb", _grid_mesh((-37.3, 62.7), (-12.1, 41.9)).export(file_type="glb"))
+    before = load_mesh(str(_stored(store, "site.glb")))
+    reply = save_turned_surfaces(store, "p", "site.glb", [0])
+    assert reply.triangle_count == len(before.faces)
+    after = load_mesh(str(_stored(store, "site.glb")))
+    assert after.face_normals[:, 2] == pytest.approx(-np.ones(len(after.faces)), abs=1e-6)
+    assert np.abs(np.sort(after.vertices, axis=0) - np.sort(before.vertices, axis=0)).max() < 1e-4      # float32 near the offset
+
+
+def test_an_stl_with_odd_coordinates_is_saved(store):
+    store.add_input("p", "test_surfaces", "site.stl", _grid_mesh((4_000.3, 4_100.3), (1_200.1, 1_254.1)).export(file_type="stl"))
+    reply = save_turned_surfaces(store, "p", "site.stl", [0])
+    assert reply.original_kept is True
+    assert load_mesh(str(_stored(store, "site.stl"))).face_normals[:, 2] == pytest.approx(-np.ones(reply.triangle_count), abs=1e-6)

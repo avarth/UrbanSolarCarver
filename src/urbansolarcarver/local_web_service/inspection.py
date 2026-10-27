@@ -27,7 +27,7 @@ import numpy as np
 import trimesh
 
 from ..errors import InputError
-from ..io import load_mesh, save_mesh
+from ..io import float32_resolution, load_mesh, save_mesh
 from . import stored_files, test_surfaces
 from .api_models import InspectedFile, InspectReply
 from .project_names import ProjectError
@@ -38,7 +38,7 @@ HEADER_ALIGNMENT_BYTES = 4      # the geometry header is padded so the arrays af
 FRAME_STEP_M = 1.0              # the frame of the geometry is the minimum corner of the bounds rounded down to this
 KEPT_FILE_COUNT = 32            # inspected files kept, the least recently used leaving first
 NORMAL_TOLERANCE = 1e-6         # how far a face normal of a saved file may be from the one expected
-POSITION_TOLERANCE_M = 1e-6     # how far a corner of a saved file may be from the one written
+POSITION_TOLERANCE_M = 1e-6     # how far a corner of a saved file may be from the one written (more for a float32 format: see _corner_tolerance)
 OBJ_DECIMALS = 10              # the decimals of a written OBJ: georeferenced coordinates keep their millimetres and more
 
 
@@ -280,11 +280,27 @@ def _write_turned_file(turned_mesh: trimesh.Trimesh, temporary_path: Path, file_
         raise refusal
     if not np.all(np.abs(reloaded.face_normals - expected_normals) <= NORMAL_TOLERANCE):
         raise refusal
-    if np.abs(reloaded.vertices[reloaded.faces] - turned_mesh.vertices[turned_mesh.faces]).max() > POSITION_TOLERANCE_M:
+    if np.abs(reloaded.vertices[reloaded.faces] - turned_mesh.vertices[turned_mesh.faces]).max() > _corner_tolerance(temporary_path, turned_mesh):
         raise refusal
     # The surfaces may differ from the ones before: two panels that were told apart only by facing opposite ways join into one
     # surface once one is turned, and that is a turn that holds.
     return _inspect_mesh(reloaded, file_name, test_surfaces.ROLE)
+
+
+def _corner_tolerance(path: Path, mesh: trimesh.Trimesh) -> float:
+    """How far a corner read back from the file just written may be from the one written, in metres.
+
+    OBJ and PLY are written at full precision: POSITION_TOLERANCE_M. GLB and STL hold float32, which cannot hold every coordinate
+    of a file made by another tool: the larger of that and twice the float32 spacing at the largest coordinate the writer stores,
+    which is relative to the whole-metre offset io.save_glb uses for GLB and absolute for STL."""
+    extension = path.suffix.lower()
+    if extension == ".glb":
+        coordinates = mesh.vertices - np.floor(mesh.vertices.min(axis=0))
+    elif extension == ".stl":
+        coordinates = mesh.vertices
+    else:
+        return POSITION_TOLERANCE_M
+    return max(POSITION_TOLERANCE_M, 2 * float32_resolution(coordinates))
 
 
 def _put_in_place(store: ProjectStore, name: str, project_folder: Path, file_name: str, new_path: Path) -> None:
