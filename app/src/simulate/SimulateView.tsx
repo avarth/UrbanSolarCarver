@@ -7,6 +7,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { failureTextOf, serviceProblemOf, type CriterionEntry, type InputFileInfo, type StudySource } from "../api_client/client";
 import { messages } from "../messages";
 import type { RunLoop } from "../steps/run_state";
+import { inputProblemText } from "../steps/InputsStep";
 import { RunProgress } from "../steps/RunProgress";
 import { TargetLegend } from "../viewer_overlays/TargetLegend";
 import { GeometrySwitch } from "./GeometrySwitch";
@@ -58,7 +59,27 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
       return failureTextOf(error);
     }
   };
-  const settingsButtonOf = (id: string) => [...view.current?.querySelectorAll<HTMLElement>(".study-row") ?? []]
+  /** Uploads the files one after another; resolves with a message per file that could not be added. The stored files are asked for
+   *  again after one was added, since the reply lists names only (a file of a stored name may have replaced it for a criterion too). */
+  const addFiles = async (id: string, files: File[]): Promise<string[]> => {
+    const problems: string[] = [];
+    let added = false;
+    for (const file of files) {
+      try {
+        await studies.addFile(id, file);
+        added = true;
+      } catch (error) {
+        if (serviceProblemOf(error) !== "other") {
+          onServiceProblem(error);
+          break;
+        }
+        problems.push(inputProblemText(error, file.name));
+      }
+    }
+    if (added) onStoredFilesChange();
+    return problems;
+  };
+  const settingsButtonOf =(id: string) => [...view.current?.querySelectorAll<HTMLElement>(".study-row") ?? []]
     .find((row) => row.dataset.studyId === id)?.querySelector<HTMLButtonElement>(".study-row-settings") ?? null;
   const closePopover = () => {
     const id = popoverStudyId;
@@ -71,6 +92,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
   const popover = shown === null ? null : (
     <StudyPopover key={shown.entry.id} id={popoverId} study={shown} metrics={studies.metrics} storedFiles={storedTestSurfaces}
                   disabledReason={editDisabledReason} onChange={(change) => attempt(() => studies.update(shown.entry.id, change))}
+                  onAddFiles={(files) => addFiles(shown.entry.id, files)}
                   onUseFile={(fileName) => attempt(() => studies.useFile(shown.entry.id, fileName))}
                   onRemoveFile={(fileName) => attempt(async () => {
                     await studies.removeFile(shown.entry.id, fileName);

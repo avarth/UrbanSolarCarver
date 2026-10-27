@@ -1,7 +1,7 @@
 // The settings of one study, in a popover beside the studies panel (simulate design, section 4): its name (a change renames it),
 // its metric (a select; the metrics whose inputs are missing are greyed with the reason), the analysis period when the metric has
 // one (the period control of the Criteria step), the metric's few mode settings in a fold, its test surface files (the files the
-// project stores, to use or take out; adding new files comes later) and Delete. Each change is saved at once: a text or number
+// project stores, to use or take out, and new files to add by the button or by dropping them) and Delete. Each change is saved at once: a text or number
 // field when it is left or Enter is pressed, the other controls on the change. The popover is a non-modal dialog: the view
 // around it stays usable; Escape and Close end it, and the focus goes back to the study's settings button.
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
@@ -23,6 +23,8 @@ interface StudyPopoverProps {
   disabledReason: string | null;
   /** Saves a change of the study; resolves with the reason it was refused, or null. */
   onChange: (change: StudyChange) => Promise<string | null>;
+  /** Uploads the files to the study; resolves with a message per file that could not be added (empty when all were). */
+  onAddFiles: (files: File[]) => Promise<string[]>;
   onUseFile: (fileName: string) => Promise<string | null>;
   onRemoveFile: (fileName: string) => Promise<string | null>;
   onDelete: () => Promise<string | null>;
@@ -112,7 +114,7 @@ function MoreSettings({ metric, settings, disabled, onChange }: { metric: string
   );
 }
 
-export function StudyPopover({ id, study, metrics, storedFiles, disabledReason, onChange, onUseFile, onRemoveFile, onDelete, onClose }: StudyPopoverProps) {
+export function StudyPopover({ id, study, metrics, storedFiles, disabledReason, onChange, onAddFiles, onUseFile, onRemoveFile, onDelete, onClose }: StudyPopoverProps) {
   const { entry } = study;
   const settings = entry.settings ?? {};
   const files = entry.test_surface_files ?? [];
@@ -178,7 +180,7 @@ export function StudyPopover({ id, study, metrics, storedFiles, disabledReason, 
       <div className="study-files" role="group" aria-labelledby={filesTitleId}>
         <p id={filesTitleId} className="study-files-title">{messages.studyTestSurfaces}</p>
         <ProtectsBox files={files.map((name) => storedFiles.find((file) => file.name === name) ?? { name, triangle_count: 0 })} mode=""
-                     hint={messages.studyNoTestSurfaces} onRemoveFile={onRemoveFile} disabledReason={disabledReason}
+                     hint={messages.studyNoTestSurfaces} onAddFiles={onAddFiles} onRemoveFile={onRemoveFile} disabledReason={disabledReason}
                      otherFiles={storedFiles.map((file) => file.name).filter((name) => !files.includes(name))} onUseFile={onUseFile}
                      otherFilesTitle={messages.useFileOfProject} />
       </div>

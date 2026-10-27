@@ -381,7 +381,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   });
   const simulateView = (
     <SimulateView project={project.name} studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
-                  onStoredFilesChange={() => void testSurfaceCalls.reloadStoredFiles()} onServiceProblem={onServiceProblem} studyView={studyView} />
+                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} onServiceProblem={onServiceProblem} studyView={studyView} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
                            envelopeSeeThrough: studyView.geometry === "envelope", dimmedLayers: [] };

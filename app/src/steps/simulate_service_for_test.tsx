@@ -3,7 +3,7 @@
 // FakeViewerScene itself and calls startWorkspaceTest and endWorkspaceTest.
 import { act } from "react";
 import type { CriterionEntry, MetricInfo, StudyEntry, StudyWithState } from "../api_client/client";
-import { ChainService, CURRENT, FACADES, openChainWith, type CriterionStages } from "./chain_service_for_test";
+import { ChainService, CURRENT, FACADES, OUT_OF_DATE, openChainWith, type CriterionStages } from "./chain_service_for_test";
 import { buttonIn, container, json, settle, switchMode } from "./project_workspace_for_test";
 import type { PipelineStage, StageState } from "./step_summaries";
 
@@ -39,7 +39,7 @@ export function study(id: string, metric: string, files: string[], state: StudyW
 
 /**
  * The service of a project with studies: it keeps each study with its state, answers the studies routes (list, add from a metric or
- * like a criterion, change, delete, order, the use and removal of stored test surface files) and starts a simulation (POST simulate,
+ * like a criterion, change, delete, order, the upload, use and removal of test surface files) and starts a simulation (POST simulate,
  * whose events the test sends); every other request goes to ChainService.
  */
 export class SimulateService extends ChainService {
@@ -52,6 +52,10 @@ export class SimulateService extends ChainService {
   simulationsStarted = 0;
   /** The body of every PATCH studies/{id}, with the id. */
   readonly studyPatches: { id: string; body: Record<string, unknown> }[] = [];
+  /** The stored files an upload replaced (the name of a stored file with other content). */
+  readonly replacedFiles: string[] = [];
+  /** The reason an uploaded test surface file is refused with (422); null: it is taken. */
+  uploadRefusal: string | null = null;
   /** GET studies/{id}/values: the packed values of each study's last result; a study without them has none (404). */
   valuesOf: Record<string, ArrayBuffer> = {};
 
@@ -118,6 +122,19 @@ export class SimulateService extends ChainService {
       return new Response(null, { status: 204 });
     }
     const files = found.entry.test_surface_files ?? [];
+    if (method === "POST" && part === "test-surfaces") {
+      if (this.uploadRefusal !== null) return json({ detail: this.uploadRefusal }, 422);
+      const uploaded = ((init!.body as FormData).get("file") as File).name;
+      if (this.storedTestSurfaces.some((file) => file.name === uploaded)) {
+        // The same name with other content replaces the stored file: everything that lists it is out of date.
+        this.replacedFiles.push(uploaded);
+        for (const user of this.entries.filter((candidate) => candidate.test_surface_files?.includes(uploaded))) this.criterionStages[user.id] = OUT_OF_DATE;
+        this.studies = this.studies.map((each) => (each.entry.test_surface_files?.includes(uploaded) && each.state === "current" ? { ...each, state: "out_of_date" } : each));
+      } else {
+        this.storedTestSurfaces = [...this.storedTestSurfaces, { name: uploaded, triangle_count: 1 }];
+      }
+      return replace({ ...found.entry, test_surface_files: files.includes(uploaded) ? files : [...files, uploaded] }, found.state === "refused" ? "not_run" : undefined);
+    }
     const name = decodeURIComponent(fileName ?? "");
     if (method === "PUT" && part === "test-surfaces") return replace({ ...found.entry, test_surface_files: [...files, name] }, "not_run");
     if (method === "DELETE" && part === "test-surfaces") return replace({ ...found.entry, test_surface_files: files.filter((each) => each !== name) });

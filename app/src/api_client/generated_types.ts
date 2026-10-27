@@ -587,6 +587,26 @@ export interface paths {
         patch: operations["update_study"];
         trace?: never;
     };
+    "/api/projects/{name}/studies/{study_id}/test-surfaces": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Study Test Surface
+         * @description Add an uploaded test surface file to a study (multipart, as a criterion's); a stored file of that name is replaced.
+         */
+        post: operations["add_study_test_surface"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/studies/{study_id}/test-surfaces/{file_name}": {
         parameters: {
             query?: never;
@@ -883,6 +903,11 @@ export interface components {
         };
         /** Body_add_input */
         Body_add_input: {
+            /** File */
+            file: string;
+        };
+        /** Body_add_study_test_surface */
+        Body_add_study_test_surface: {
             /** File */
             file: string;
         };
@@ -2990,6 +3015,60 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateStudyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyEntry"];
+                };
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    add_study_test_surface: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                study_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_add_study_test_surface"];
             };
         };
         responses: {

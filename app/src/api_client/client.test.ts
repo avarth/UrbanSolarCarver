@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import {
-  addCriterion, addCriterionTestSurface, deleteCriterion, duplicateCriterion, getCarvedByCriterion, getCriterionKeys, getCriterionSettings, getSkyPatches,
+  addCriterion, addCriterionTestSurface, addStudyTestSurface, deleteCriterion, duplicateCriterion, getCarvedByCriterion, getCriterionKeys, getCriterionSettings, getSkyPatches,
   getSunPath, putSharedSettings, removeCriterionTestSurface, reorderCriteria, reuseTestSurface, updateCriterion,
   ApiError, addInput, chooseProjectsFolder, deleteProject, failureTextOf, getHealth, getInputFiles, getProjectsFolder, getScorePoints, openProjectFolder,
   projectDownloadUrl,
@@ -193,6 +193,16 @@ test("a test surface goes up to a criterion as multipart form data in the field 
   await addCriterionTestSurface("secret", "demo", "2", new File(["o"], "roofs.obj"));
   const [address, options] = fetchStub.mock.calls[0];
   expect(address).toBe("/api/projects/demo/criteria/2/test-surfaces");
+  expect(options!.method).toBe("POST");
+  expect(((options!.body as FormData).get("file") as File).name).toBe("roofs.obj");
+  expect(new Headers(options!.headers).has("Content-Type")).toBe(false);
+});
+
+test("a test surface goes up to a study as multipart form data in the field named file", async () => {
+  const fetchStub = answerWith(JSON.stringify({ id: "3" }));
+  await addStudyTestSurface("secret", "demo", "3", new File(["o"], "roofs.obj"));
+  const [address, options] = fetchStub.mock.calls[0];
+  expect(address).toBe("/api/projects/demo/studies/3/test-surfaces");
   expect(options!.method).toBe("POST");
   expect(((options!.body as FormData).get("file") as File).name).toBe("roofs.obj");
   expect(new Headers(options!.headers).has("Content-Type")).toBe(false);

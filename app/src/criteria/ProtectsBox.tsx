@@ -2,7 +2,7 @@
 // criterion brings no new words) for screen readers only, as the panel's section around it has that title, with its files. While it has none the box offers to add test surfaces, with a hint of what its
 // mode may protect (mode_tiles.json, protects_hint; hints only). With several criteria, the stored files the others use and this
 // one does not follow under "Use a file from another criterion", each with a Use button (the file is stored once). A study's popover
-// (Simulate) draws the box too, without adding: its files, and the project's stored files to use.
+// (Simulate) draws the box too: its files, to add to, and the project's stored files to use.
 import type { InputFileInfo } from "../api_client/client";
 import { messages } from "../messages";
 import { InputBox } from "../steps/InputsStep";
@@ -15,8 +15,8 @@ interface ProtectsBoxProps {
   /** The criterion's mode, whose hint the empty box gives. */
   mode: string;
   /**
-   * Adds the files to the criterion; resolves with a message per file that could not be added (empty when all were). Absent: the box
-   * offers the stored files only (a study's, until studies upload files of their own).
+   * Adds the files to the criterion (or study); resolves with a message per file that could not be added (empty when all were).
+   * Absent: the box offers no adding.
    */
   onAddFiles?: (files: File[]) => Promise<string[]>;
   /** The line of the empty box in place of the mode's hint. */

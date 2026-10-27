@@ -287,6 +287,14 @@ export async function deleteStudy(token: string, project: string, studyId: strin
 export const reorderStudies = (token: string, project: string, ids: string[]) =>
   requestJson<StudyEntry[]>(token, `${projectPath(project)}/studies/order`, "PUT", { ids });
 
+/** Uploads a test surface file to the study (multipart, as a criterion's); a stored file of that name is replaced for every criterion and study that lists it. */
+export async function addStudyTestSurface(token: string, project: string, studyId: string, file: File): Promise<StudyEntry> {
+  const form = new FormData();
+  form.append("file", file);
+  const reply = await send(token, `${studyPath(project, studyId)}/test-surfaces`, "POST", form);    // the browser sets the multipart boundary
+  return reply.json();
+}
+
 /** Lets the study use a test surface file that is stored already (not a React hook, whatever the name says). */
 export const useStudyTestSurface = (token: string, project: string, studyId: string, fileName: string) =>
   requestJson<StudyEntry>(token, `${studyPath(project, studyId)}/test-surfaces/${encodeURIComponent(fileName)}`, "PUT");

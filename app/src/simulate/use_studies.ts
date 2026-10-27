@@ -4,7 +4,8 @@
 // and changes nothing; a failed read keeps what was shown and says why (loadProblem).
 import { useRef, useState } from "react";
 import {
-  addStudy, deleteStudy, failureTextOf, getStudies, removeStudyTestSurface, reorderStudies, serviceProblemOf, updateStudy, useStudyTestSurface,
+  addStudy, addStudyTestSurface, deleteStudy, failureTextOf, getStudies, removeStudyTestSurface, reorderStudies, serviceProblemOf, updateStudy,
+  useStudyTestSurface,
   type MetricInfo, type StudyChange, type StudyEntry, type StudySource, type StudyWithState,
 } from "../api_client/client";
 
@@ -23,6 +24,8 @@ export interface StudiesHook {
   remove: (id: string) => Promise<void>;
   /** Puts the studies in the order of *ids* (every id once). */
   reorder: (ids: string[]) => Promise<void>;
+  /** Uploads a test surface file to the study (one file; a stored file of that name is replaced). */
+  addFile: (id: string, file: File) => Promise<StudyEntry>;
   /** Lets the study use a stored test surface file. */
   useFile: (id: string, fileName: string) => Promise<StudyEntry>;
   removeFile: (id: string, fileName: string) => Promise<StudyEntry>;
@@ -95,6 +98,7 @@ export function useStudies(token: string, project: string, onServiceProblem: (er
       const byId = new Map(latest.current.studies.map((study) => [study.entry.id, study]));
       commit({ studies: entries.map((entry) => ({ ...(byId.get(entry.id) ?? newStudy(entry)), entry })) });
     },
+    addFile: (id, file) => changeEntry(addStudyTestSurface(token, project, id, file)),
     useFile: (id, fileName) => changeEntry(useStudyTestSurface(token, project, id, fileName)),
     removeFile: (id, fileName) => changeEntry(removeStudyTestSurface(token, project, id, fileName)),
     refresh,

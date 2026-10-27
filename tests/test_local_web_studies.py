@@ -448,3 +448,61 @@ def test_study_test_surface_routes(client_with_inputs):
     removed = client.delete(f"/api/projects/p/studies/{empty['id']}/test-surfaces/{file_name}")
     assert removed.status_code == 200 and removed.json()["test_surface_files"] == []
     assert client.delete(f"/api/projects/p/studies/{empty['id']}/test-surfaces/{file_name}").status_code == 404
+
+
+def test_a_study_takes_a_new_file_that_no_criterion_uses(project_with_inputs):
+    store, name = project_with_inputs
+    study = store.add_study(name, from_criterion="1")
+    criterion_joined = test_surfaces.content_digest(test_surfaces.joined_path(store.open(name), "1"))
+    revision = store.read_project_json(name).inputs_revision
+    roof = box_bytes([20, 0, 0], extents=(2, 2, 0.1))
+    taken = store.add_study_test_surface(name, study.id, "roof.ply", roof)
+    assert sorted(taken.test_surface_files) == ["roof.ply", "surface.ply"]
+    assert _stored_files(store, name) == ["roof.ply", "surface.ply"]
+    assert test_surfaces.users_of(store.read_project_json(name), "roof.ply") == [f"study:{study.id}"]
+    assert _width(_study_joined(store, name, study.id)) == pytest.approx(24)
+    assert test_surfaces.content_digest(test_surfaces.joined_path(store.open(name), "1")) == criterion_joined    # the criterion is left alone
+    assert store.read_project_json(name).criteria[0].test_surface_files == ["surface.ply"]
+    assert store.read_project_json(name).inputs_revision == revision
+    assert not any(path.name.endswith(".tmp.ply") for path in (store.open(name) / "inputs" / "joined").iterdir())
+    again = store.add_study_test_surface(name, study.id, "ROOF.ply", roof)       # the same name in other letters, the same content
+    assert sorted(again.test_surface_files) == ["roof.ply", "surface.ply"] and _stored_files(store, name) == ["roof.ply", "surface.ply"]
+    same_content = store.add_study_test_surface(name, study.id, "copy.ply", roof)    # another name, the same content
+    assert sorted(same_content.test_surface_files) == ["roof.ply", "surface.ply"] and _stored_files(store, name) == ["roof.ply", "surface.ply"]
+    with pytest.raises(ProjectError) as refused:
+        store.add_study_test_surface(name, "9", "other.ply", box_bytes([0, 0, 0]))
+    assert refused.value.status_code == 404
+    with pytest.raises(ProjectError) as refused:
+        store.add_study_test_surface(name, study.id, "notes.txt", b"not a mesh")
+    assert refused.value.status_code == 422
+    assert _stored_files(store, name) == ["roof.ply", "surface.ply"]
+
+
+def test_a_new_file_with_a_stored_name_and_new_content_makes_criteria_and_studies_that_use_it_out_of_date(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_study(name, from_criterion="1")
+    on_its_own = store.add_study(name, metric="sky_view")
+    store.add_study_test_surface(name, on_its_own.id, "roof.ply", box_bytes([20, 0, 0], extents=(2, 2, 0.1)))
+    criterion_before = test_surfaces.fingerprint(store.open(name), "1")
+    study_before = test_surfaces.content_digest(_study_joined(store, name, "1"))
+    roof_before = test_surfaces.content_digest(_study_joined(store, name, on_its_own.id))
+    store.add_study_test_surface(name, on_its_own.id, "surface.ply", box_bytes([0, 0, 0], extents=(9, 6, 0.1)))     # a stored name, other content
+    assert test_surfaces.fingerprint(store.open(name), "1") != criterion_before
+    assert _width(test_surfaces.joined_path(store.open(name), "1")) == pytest.approx(9)
+    assert test_surfaces.content_digest(_study_joined(store, name, "1")) != study_before
+    assert _width(_study_joined(store, name, "1")) == pytest.approx(9)
+    assert test_surfaces.content_digest(_study_joined(store, name, on_its_own.id)) != roof_before
+    assert sorted(store.studies(name)[1].test_surface_files) == ["roof.ply", "surface.ply"]
+    assert _stored_files(store, name) == ["roof.ply", "surface.ply"]
+
+
+def test_study_test_surface_upload_route(client_with_inputs):
+    client = client_with_inputs
+    study = client.post("/api/projects/p/studies", json={"metric": "sky_view"}).json()
+    url = f"/api/projects/p/studies/{study['id']}/test-surfaces"
+    added = client.post(url, files={"file": ("roof.ply", box_bytes([20, 0, 0], extents=(2, 2, 0.1)), "application/octet-stream")})
+    assert added.status_code == 200 and added.json()["test_surface_files"] == ["roof.ply"]
+    assert client.get("/api/projects/p/studies").json()["studies"][0]["entry"]["test_surface_files"] == ["roof.ply"]
+    missing = client.post("/api/projects/p/studies/9/test-surfaces", files={"file": ("a.ply", box_bytes([0, 0, 0]), "application/octet-stream")})
+    assert missing.status_code == 404
+    assert client.post(url, files={"file": ("notes.txt", b"x", "text/plain")}).status_code == 422

@@ -598,6 +598,13 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             store.delete_study(name, study_id)
         return Response(status_code=204)
 
+    @router.post("/projects/{name}/studies/{study_id}/test-surfaces", responses=_STUDY_RESPONSES)
+    def add_study_test_surface(name: str, study_id: str, file: UploadFile = File(...)) -> StudyEntry:
+        """Add an uploaded test surface file to a study (multipart, as a criterion's); a stored file of that name is replaced."""
+        data = file.file.read()
+        with writable_project(name) as store:
+            return store.add_study_test_surface(name, study_id, file.filename or "", data)
+
     @router.put("/projects/{name}/studies/{study_id}/test-surfaces/{file_name}", responses=_STUDY_RESPONSES)
     def use_study_test_surface(name: str, study_id: str, file_name: str) -> StudyEntry:
         """Let a study use a test surface file that is stored already (404 when it is not)."""

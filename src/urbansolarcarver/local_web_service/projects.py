@@ -679,24 +679,45 @@ class ProjectStore:
         is told by the fingerprint of each joined file. ProjectError: 404 for an unknown criterion, 422 for a file that is not a
         readable mesh. Nothing on disk or in project.json changes unless the whole upload succeeds.
         """
+        return self._add_uploaded_test_surface(
+            name, file_name, data, lambda project_json: find_criterion(project_json, criterion_id), lambda entry: entry.id,
+            lambda project_folder, project_json, entry: self._write_after_test_surface_change(name, project_folder, project_json, entry))
+
+    def add_study_test_surface(self, name: str, study_id: str, file_name: str, data: bytes) -> StudyEntry:
+        """Add an uploaded test surface file to the study *study_id*: the upload of add_criterion_test_surface, so a stored file of
+        that name with other content is replaced for every criterion and study that lists it.
+
+        The joined file of the study is built again, and so are those of the criteria and studies that list a replaced file; the
+        criteria the study does not list are left alone. ProjectError: 404 for an unknown study, 422 for a file that is not a
+        readable mesh.
+        """
+        return self._add_uploaded_test_surface(
+            name, file_name, data, lambda project_json: find_study(project_json, study_id), lambda entry: test_surfaces.study_key(entry.id),
+            lambda _project_folder, project_json, _entry: self.write_project_json(name, project_json))
+
+    def _add_uploaded_test_surface(self, name: str, file_name: str, data: bytes, find_user, key_of, write):
+        """The upload of add_criterion_test_surface and add_study_test_surface. *find_user*(project_json) is the criterion or study the
+        file goes to, *key_of*(it) its key for build_joined_files, and *write*(project_folder, project_json, it) writes project.json
+        once the files are in place."""
         clean_name = sanitize_file_name(file_name)
         if Path(clean_name).suffix.lower() not in MESH_EXTENSIONS:
             raise ProjectError(f"A mesh file must be one of {', '.join(MESH_EXTENSIONS)}.", status_code=422)
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
-            entry = find_criterion(project_json, criterion_id)
+            entry = find_user(project_json)
             recorded_names = project_json.input_files.setdefault(test_surfaces.ROLE, {})
             stored_name, upload_path, uploaded_mesh = test_surfaces.accept_upload(project_folder, recorded_names, clean_name, data)
             try:
                 if uploaded_mesh is None and stored_name in entry.test_surface_files:
-                    return entry        # the criterion already uses a file with this content
-                replaced_for = test_surfaces.criteria_using(project_json.criteria, stored_name) if uploaded_mesh is not None else []
-                file_names = {criterion.id: criterion.test_surface_files for criterion in replaced_for}
+                    return entry        # it already lists a file with this content
+                file_names = {}
                 if uploaded_mesh is not None:
+                    file_names = {criterion.id: criterion.test_surface_files
+                                  for criterion in test_surfaces.criteria_using(project_json.criteria, stored_name)}
                     file_names.update({test_surfaces.study_key(study.id): study.test_surface_files
                                        for study in project_json.studies if stored_name in study.test_surface_files})
-                file_names[entry.id] = sorted({*entry.test_surface_files, stored_name})
+                file_names[key_of(entry)] = sorted({*entry.test_surface_files, stored_name})
                 joined_files = test_surfaces.build_joined_files(
                     project_folder, file_names, {stored_name: uploaded_mesh} if uploaded_mesh is not None else None)
                 try:
@@ -712,7 +733,7 @@ class ProjectStore:
                 recorded_names[stored_name] = len(uploaded_mesh.faces)
             if stored_name not in entry.test_surface_files:
                 entry.test_surface_files.append(stored_name)
-            self._write_after_test_surface_change(name, project_folder, project_json, entry)
+            write(project_folder, project_json, entry)
             return entry
 
     def use_test_surface(self, name: str, criterion_id: str, file_name: str) -> CriterionEntry:

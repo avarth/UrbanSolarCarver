@@ -189,7 +189,6 @@ test("a study's settings take the focus, use a stored file, and Escape gives the
   expect(settingsButton.getAttribute("aria-controls")).toBe(studyPopover()!.id);
   expect(document.activeElement).toBe(studyPopover()!.querySelector('input[type="text"]'));
   expect(selectedStudyName()).toBe("Sky view factor");
-  expect(studyPopover()!.querySelector(".input-add")).toBeNull();       // no new files yet: the project's stored ones only
   await act(async () => buttonIn(studyPopover()!, "Use").click());
   await settle();
   expect(simulateService.requests).toContain("PUT /studies/1/test-surfaces/facades.obj");
@@ -200,6 +199,56 @@ test("a study's settings take the focus, use a stored file, and Escape gives the
   expect(studyPopover()).toBeNull();
   expect(document.activeElement).toBe(settingsButton);
   expect(settingsButton.getAttribute("aria-expanded")).toBe("false");
+});
+
+/** Chooses the files in the popover's file input, as the user does with the add button. */
+async function chooseStudyFiles(...files: File[]) {
+  const picker = studyPopover()!.querySelector<HTMLInputElement>('input[type="file"]')!;
+  Object.defineProperty(picker, "files", { value: files, configurable: true });
+  act(() => picker.dispatchEvent(new Event("change", { bubbles: true })));
+  await settle();
+}
+const popoverFiles = () => [...studyPopover()!.querySelectorAll(".input-file-name")].map((name) => name.textContent);
+
+test("the popover's files box takes a new file and lists it on the study", async () => {
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sky_view", [], "refused", "Add test surfaces")]; });
+  await openStudySettings("Sky view factor");
+  expect(buttonIn(studyPopover()!, "Add test surfaces")).toBeDefined();
+  await chooseStudyFiles(new File(["v 0 0 0"], "roof.obj"));
+  expect(simulateService.requests).toContain("POST /studies/1/test-surfaces");
+  expect(simulateService.requests.some((request) => request.startsWith("POST /inputs/") || request.startsWith("POST /criteria/"))).toBe(false);
+  expect(popoverFiles()).toEqual(["roof.obj"]);
+  expect(studyLine("Sky view factor")).toBe("Not run yet");
+  expect(simulateService.requests).toContain("GET /inputs/test_surfaces");           // the stored files are asked for again
+  expect(simulateService.storedFileCount("roof.obj")).toBe(1);
+  expect(studyPopover()!.querySelector(".input-box-problem")).toBeNull();
+});
+
+test("a new file with a stored name replaces it: the criteria and studies that list it follow the new content", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sky_view", [], "refused", "Add test surfaces"), study("2", "sky_view", ["facades.obj"], "current")];
+  });
+  await openStudySettings("Sky view factor");
+  const statusReads = simulateService.count("GET /stage-status");
+  await chooseStudyFiles(new File(["v 0 0 1"], "facades.obj"));
+  expect(simulateService.replacedFiles).toEqual(["facades.obj"]);
+  expect(popoverFiles()).toEqual(["facades.obj"]);
+  expect(simulateService.storedFileCount("facades.obj")).toBe(1);
+  expect(simulateService.count("GET /stage-status")).toBe(statusReads + 1);          // the criterion that lists it is out of date
+  expect(simulateService.count("GET /studies")).toBeGreaterThan(1);
+  expect(studyLine("Sky view factor")).toBe("Not run yet");
+});
+
+test("a file the service refuses is named with its reason, and the study keeps what it had", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sky_view", [], "refused", "Add test surfaces")];
+    service.uploadRefusal = "It is not a readable mesh.";
+  });
+  await openStudySettings("Sky view factor");
+  await chooseStudyFiles(new File(["x"], "broken.obj"));
+  expect(studyPopover()!.querySelector(".input-box-problem")!.textContent).toContain("broken.obj");
+  expect(studyPopover()!.querySelector(".input-box-problem")!.textContent).toContain("It is not a readable mesh.");
+  expect(popoverFiles()).toEqual([]);
 });
 
 // Results on the view: the selected study's values on the geometry shown, the geometry switch, the target legend and the result card.
