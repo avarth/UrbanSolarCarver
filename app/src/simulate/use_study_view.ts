@@ -2,7 +2,7 @@
 // after each run), the geometry shown and Change (kept across studies), the target (saved with the study), and what the view, the
 // legend and the result card draw from them. One study at a time: the values of another study are not drawn once one is selected.
 // The statistics are computed once per set of values and geometry; the share at the target once per target.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, getStudyValues, serviceProblemOf } from "../api_client/client";
 import type { RunLoop } from "../steps/run_state";
 import type { StageState } from "../steps/step_summaries";
@@ -39,14 +39,21 @@ export interface StudyViewHook {
   setChange: (change: boolean) => void;
   available: StudyGeometry[];
   outOfDateInDesign: StudyGeometry[];
+  /** Geometries Design has built that the selected study's last result does not have: they wait for a new run of the study. */
+  waitingForStudy: StudyGeometry[];
+  /** The selected study is out of date: the view's stamp says so. */
+  studyOutOfDate: boolean;
   /** What the 3D view draws; null without a selected study whose values have the geometry shown. */
   view: StudyView | null;
   /** The legend and the result card; null when the view draws nothing. */
   legend: { label: string; unit: string; range: [number, number]; mode: "value" | "change"; hasLoss: boolean; target: number | null; disabled: boolean } | null;
   card: { geometry: StudyGeometry; unit: string; statistics: StudyStatistics; baseline: StudyStatistics | null } | null;
-  /** Shows the target at once and saves it with the selected study. */
+  /** Shows the target at once and saves it with the selected study once the gesture ends. */
   setTarget: (target: number | null) => void;
 }
+
+/** How long after the last change of the target it is saved: a held arrow key is one save, of the value it ended on. */
+export const TARGET_SAVE_DELAY_MILLISECONDS = 300;
 
 export function useStudyView({ token, project, studies, active, runs, envelopeBuilt, massingBuilt, envelopeStage, massingStage, editDisabled,
                                onServiceProblem }: StudyViewSource): StudyViewHook {
@@ -79,10 +86,13 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   const available: StudyGeometry[] = ["max_volume", ...(envelopeBuilt ? ["envelope" as const] : []), ...(massingBuilt ? ["massing" as const] : [])];
   const outOfDateInDesign: StudyGeometry[] = [...(envelopeStage === "out_of_date" ? ["envelope" as const] : []),
                                               ...(massingStage === "out_of_date" ? ["massing" as const] : [])];
-  const geometry = available.includes(chosenGeometry) ? chosenGeometry : "max_volume";
+  const values = hasResult && loaded !== null && loaded.id === selectedId ? loaded.values : null;
+  // A geometry Design built after the study's last run has no values in it: its segment waits for a new run, and the view shows the
+  // maximum volume meanwhile (the choice is kept for the studies that have it).
+  const waitingForStudy = values === null ? [] : available.filter((each) => values.values[each] === undefined);
+  const geometry = available.includes(chosenGeometry) && !waitingForStudy.includes(chosenGeometry) ? chosenGeometry : "max_volume";
   const change = chosenChange && geometry !== "max_volume";
 
-  const values = hasResult && loaded !== null && loaded.id === selectedId ? loaded.values : null;
   const shown = values?.values[geometry] ?? null;
   const baselineValues = values?.values.max_volume ?? null;
   const target = selected === null ? null : savingTarget?.id === selectedId ? savingTarget.target : selected.entry.target ?? null;
@@ -105,19 +115,38 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
   const unit = values?.header.unit ?? "";
   const label = studies.metrics.find((metric) => metric.name === selected?.entry.metric)?.label ?? "";
   const drawn = values !== null && shown !== null && selected !== null;
-  const setTarget = (next: number | null) => {
-    if (selectedId === null) return;
-    const id = selectedId;
-    setSavingTarget({ id, target: next });
+  // The target shows at once; it is saved once a gesture ends: TARGET_SAVE_DELAY_MILLISECONDS after the last change (a drag gives
+  // one change, at its release; held or repeated keys many). The saves go one after another, so the service applies them in order.
+  const latestStudies = useRef(studies);
+  latestStudies.current = studies;
+  const pendingSave = useRef<{ id: string; target: number | null; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const saves = useRef<Promise<unknown>>(Promise.resolve());
+  const save = (id: string, next: number | null) => {
     const done = () => setSavingTarget((saving) => (saving?.id === id && saving.target === next ? null : saving));
-    studies.update(id, { target: next }).then(done, (error: unknown) => {
+    saves.current = saves.current.then(() => latestStudies.current.update(id, { target: next })).then(done, (error: unknown) => {
       done();
       if (serviceProblemOf(error) !== "other") onServiceProblem(error);
     });
   };
+  const flushSave = () => {
+    const pending = pendingSave.current;
+    if (pending === null) return;
+    clearTimeout(pending.timer);
+    pendingSave.current = null;
+    save(pending.id, pending.target);
+  };
+  useEffect(() => flushSave, []);         // a target still waiting is saved when the workspace closes
+  const setTarget = (next: number | null) => {
+    if (selectedId === null) return;
+    if (pendingSave.current !== null && pendingSave.current.id !== selectedId) flushSave();
+    if (pendingSave.current !== null) clearTimeout(pendingSave.current.timer);
+    setSavingTarget({ id: selectedId, target: next });
+    pendingSave.current = { id: selectedId, target: next, timer: setTimeout(flushSave, TARGET_SAVE_DELAY_MILLISECONDS) };
+  };
 
   return {
-    geometry, setGeometry, change, setChange, available, outOfDateInDesign, setTarget,
+    geometry, setGeometry, change, setChange, available, outOfDateInDesign, waitingForStudy, setTarget,
+    studyOutOfDate: active && selected?.state === "out_of_date",
     view: drawn ? { values, geometry, change, target, unit, dimmed: selected.state === "out_of_date" } : null,
     legend: drawn ? {
       label, unit, target, disabled: editDisabled, mode: change ? "change" : "value", hasLoss: changeScale?.hasLoss ?? false,

@@ -99,7 +99,8 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
                       runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
       </div>
       <div className="simulate-geometry-bar">
-        <GeometrySwitch available={studyView.available} outOfDateInDesign={studyView.outOfDateInDesign} value={studyView.geometry}
+        <GeometrySwitch available={studyView.available} outOfDateInDesign={studyView.outOfDateInDesign} waitingForStudy={studyView.waitingForStudy}
+                        value={studyView.geometry}
                         change={studyView.change} onChange={studyView.setGeometry} onChangeToggle={studyView.setChange} />
       </div>
       {legend !== null && (

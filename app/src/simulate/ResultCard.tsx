@@ -1,6 +1,6 @@
 // The result card in the bottom right corner of Simulate's view (simulate design, section 3): for the selected study on the geometry
 // shown, the mean, the lowest tenth (10th percentile) and, with a target, the share of points at or above it; each with the
-// maximum volume's value in brackets, which the heading names: "mean 3.6 h (4.1)".
+// maximum volume's value in brackets, which the heading names: "mean 3.6 h (4.1)". A result without test points shows no card.
 import { messages } from "../messages";
 import { formatPercent, formattedNumber, withUnit } from "../steps/format_numbers";
 import type { StudyGeometry, StudyStatistics } from "./study_values";
@@ -16,6 +16,7 @@ export interface ResultCardProps {
 const percentOf = (share: number) => formatPercent(Math.round(share * 100));
 
 export function ResultCard({ geometry, unit, statistics, baseline }: ResultCardProps) {
+  if (Number.isNaN(statistics.mean)) return null;        // a result without test points has nothing to say
   const besideIt = (value: string | null) => (baseline === null || value === null ? "" : ` (${value})`);
   const lines = [
     messages.resultMean(withUnit(formattedNumber(statistics.mean), unit)) + besideIt(baseline && formattedNumber(baseline.mean)),

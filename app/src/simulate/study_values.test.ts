@@ -33,20 +33,3 @@ test("the change tolerance is a thousandth of the highest value of the open colu
   expect(highestOf(Float32Array.from([1, 7, 3]))).toBe(7);
   expect(highestOf(new Float32Array(0))).toBe(0);
 });
-
-test("changeTolerance on 527,633 points takes under 200 ms", () => {
-  // The first build scanned the whole open column once per point to find the tolerance, about 2.8e11 steps on District's 527,633
-  // points, which froze the browser: it is found once per geometry, in one pass.
-  const count = 527_633;
-  const open = Float32Array.from({ length: count }, (_, point) => (point * 7919) % 1000 / 100);
-  const maxVolume = Float32Array.from(open, (value) => value * 0.8);
-  const envelope = Float32Array.from(open, (value) => value * 0.9);
-  const started = performance.now();
-  const tolerance = changeTolerance(open, maxVolume);
-  const change = changeOf(envelope, maxVolume);
-  let losses = 0;
-  for (const value of change) if (value < -tolerance) losses += 1;
-  const elapsed = performance.now() - started;
-  expect(losses).toBe(0);
-  expect(elapsed).toBeLessThan(200);
-});

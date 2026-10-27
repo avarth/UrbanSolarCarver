@@ -16,12 +16,24 @@ const changeToggle = () => container().querySelector<HTMLButtonElement>(".geomet
 const describedBy = (element: HTMLElement) => (element.getAttribute("aria-describedby") ?? "").split(" ").filter(Boolean)
   .map((id) => document.getElementById(id)!.textContent);
 
-function renderSwitch(available: StudyGeometry[], outOfDateInDesign: StudyGeometry[], value: StudyGeometry = "max_volume", change = false) {
+function renderSwitch(available: StudyGeometry[], outOfDateInDesign: StudyGeometry[], value: StudyGeometry = "max_volume", change = false,
+                      waitingForStudy: StudyGeometry[] = []) {
   const onChange = vi.fn(), onChangeToggle = vi.fn();
-  rendered = renderForTest(<GeometrySwitch available={available} outOfDateInDesign={outOfDateInDesign} value={value} change={change}
-                                           onChange={onChange} onChangeToggle={onChangeToggle} />);
+  rendered = renderForTest(<GeometrySwitch available={available} outOfDateInDesign={outOfDateInDesign} waitingForStudy={waitingForStudy} value={value}
+                                           change={change} onChange={onChange} onChangeToggle={onChangeToggle} />);
   return { onChange, onChangeToggle };
 }
+
+test("a geometry built after the study last ran waits for a new run of the study, with the reason", () => {
+  const { onChange } = renderSwitch(["max_volume", "envelope", "massing"], ["envelope"], "max_volume", false, ["envelope"]);
+  expect(segment("Envelope").getAttribute("aria-disabled")).toBe("true");
+  expect(segment("Envelope").title).toBe("Run the study again to see it on the envelope");
+  expect(describedBy(segment("Envelope"))).toEqual(["Run the study again to see it on the envelope"]);
+  expect(segment("Envelope").querySelector(".geometry-switch-stale")).toBeNull();      // the reason it waits says enough
+  click(segment("Envelope"));
+  expect(onChange).not.toHaveBeenCalled();
+  expect(segment("Massing").getAttribute("aria-disabled")).toBeNull();
+});
 
 test("the geometry switch offers Envelope and Massing only once built and marks one out of date in Design", () => {
   const { onChange } = renderSwitch(["max_volume"], []);

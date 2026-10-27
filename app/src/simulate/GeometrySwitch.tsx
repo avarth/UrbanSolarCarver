@@ -1,6 +1,7 @@
 // The geometry switch at the top centre of Simulate's view (simulate design, section 3): Max volume | Envelope | Massing, the
 // geometry the selected study's values are shown on. Envelope and Massing wait, with the reason as their tooltip, until Design has
-// built them; one Design shows out of date is marked so. Beside it Change, which colours each point by its change from the maximum
+// built them, and while the selected study's last result does not have them (it ran before they were built); one Design shows out
+// of date is marked so. Beside it Change, which colours each point by its change from the maximum
 // volume (the baseline), and so waits on the maximum volume itself. The segments are toggle buttons in a labelled group; a button
 // that waits stays focusable (aria-disabled), so its tooltip and reason can be reached.
 import { useId } from "react";
@@ -12,6 +13,8 @@ export interface GeometrySwitchProps {
   available: readonly StudyGeometry[];
   /** The geometries Design shows out of date. */
   outOfDateInDesign: readonly StudyGeometry[];
+  /** Built geometries the selected study's last result does not have: they wait for a new run of the study. */
+  waitingForStudy?: readonly StudyGeometry[];
   value: StudyGeometry;
   /** Colour by the change from the maximum volume. */
   change: boolean;
@@ -19,10 +22,11 @@ export interface GeometrySwitchProps {
   onChangeToggle: (change: boolean) => void;
 }
 
-export function GeometrySwitch({ available, outOfDateInDesign, value, change, onChange, onChangeToggle }: GeometrySwitchProps) {
+export function GeometrySwitch({ available, outOfDateInDesign, waitingForStudy = [], value, change, onChange, onChangeToggle }: GeometrySwitchProps) {
   const id = useId();
   const segments = STUDY_GEOMETRIES.map((geometry) => {
-    const waitReason = geometry === "max_volume" || available.includes(geometry) ? null : messages.buildGeometryFirst[geometry];
+    const waitReason = geometry === "max_volume" ? null : !available.includes(geometry) ? messages.buildGeometryFirst[geometry]
+      : waitingForStudy.includes(geometry) ? messages.runStudyAgainFor[geometry] : null;
     const outOfDate = waitReason === null && outOfDateInDesign.includes(geometry);
     return { geometry, waitReason, outOfDate, note: waitReason ?? (outOfDate ? messages.outOfDateInDesign : null), noteId: `${id}-${geometry}` };
   });

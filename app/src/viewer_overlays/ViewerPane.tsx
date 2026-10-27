@@ -3,7 +3,7 @@
 // The maximum volume is a light solid in Inputs, Mode and Settings and a ghost, off by default, in the later steps. Result
 // layers that are out of date, or being replaced by a run, are dimmed (UX 6.3), and while one of them is shown a stamp at the top
 // of the view says so ("Out of date", or "Updating" during a run); a thin bar along the top shows a run's progress. In Simulate
-// the selected study's values are one more layer, dimmed with the stamp when the study is out of date.
+// the selected study's values are one more layer, dimmed when the study is out of date, and the stamp shows while it is.
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
@@ -101,8 +101,10 @@ export interface ViewerPaneProps {
   mode?: string | null;
   /** The analysis (preprocessing) is current: it was made in the mode the form shows. */
   analysisCurrent?: boolean;
-  /** The study Simulate shows, drawn as the study_values layer (dimmed, with the stamp, when out of date); null for none. */
+  /** The study Simulate shows, drawn as the study_values layer (dimmed when out of date); null for none. */
   study?: StudyView | null;
+  /** The study selected in Simulate is out of date: the stamp shows, whether or not its values are drawn. */
+  studyOutOfDate?: boolean;
   /** The envelope is drawn see-through even without the building massing (Simulate's envelope). */
   envelopeSeeThrough?: boolean;
 }
@@ -140,7 +142,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
-                             analysisCurrent = false, study = null, envelopeSeeThrough = false }: ViewerPaneProps) {
+                             analysisCurrent = false, study = null, studyOutOfDate = false, envelopeSeeThrough = false }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
@@ -230,13 +232,21 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   useEffect(() => scene?.setLayer("building_massing", massing && buildingMassingLayer(massing.clone())), [scene, massing]);
   useEffect(() => scene?.setEnvelopeSeeThrough(envelopeSeeThrough), [scene, envelopeSeeThrough]);
 
-  // The study's patches are placed once per set of values; a change of geometry, Change or target colours them again. The scene
-  // disposes the layer it replaces (its geometry and material; the corners stay, held here).
+  // The study's patches are placed once per set of values and made into a layer once per geometry (the scene disposes the layer it
+  // replaces: its geometry and material; the corners stay, held here); a new target or Change recolours that layer in place.
   const studyValues = study?.values ?? null;
   const studyCorners = useMemo(() => (studyValues === null ? null : patchCorners(studyValues, localOrigin)), [studyValues, originKey]);
   const drawnStudy = study !== null && study.values.values[study.geometry] !== undefined ? study : null;
-  useEffect(() => scene?.setLayer("study_values", drawnStudy && studyCorners && studyValuesLayer(drawnStudy, studyCorners)),
-            [scene, studyCorners, drawnStudy?.geometry, drawnStudy?.change, drawnStudy?.target]);
+  const studyLayer = useRef<THREE.Object3D | null>(null);
+  useEffect(() => {
+    studyLayer.current = drawnStudy && studyCorners && studyValuesLayer(drawnStudy, studyCorners);
+    scene?.setLayer("study_values", studyLayer.current);
+  }, [scene, studyCorners, drawnStudy?.geometry]);
+  useEffect(() => {
+    if (drawnStudy === null || studyLayer.current === null) return;
+    studyLayer.current.userData.recolour(drawnStudy);
+    scene?.redraw();
+  }, [drawnStudy?.change, drawnStudy?.target]);
   const studyDimmed = drawnStudy?.dimmed ?? false;
   useEffect(() => scene?.setLayerDimmed("study_values", studyDimmed), [scene, studyDimmed]);
 
@@ -312,7 +322,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
           thinningStep: carvedVoxelsOfCriteria?.thinningStep ?? 1 }
       : undefined,
   };
-  const dimmedResultShown = dimmedLayers.some(shown) || (studyDimmed && shown("study_values"));
+  const dimmedResultShown = dimmedLayers.some(shown) || studyOutOfDate;
   const progressPercent = runProgress === null ? 0 : Math.round(runProgress * 100);
   const progressBar = runProgress !== null && (
     <div className="viewer-run-progress" role="progressbar" aria-label={messages.runProgress} aria-valuemin={0} aria-valuemax={100}

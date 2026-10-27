@@ -6,7 +6,7 @@ import {
 } from "./layers";
 import { decodeStudyValues, patchCorners } from "../simulate/study_values_decoder";
 import { studyValuesOf } from "../simulate/study_values_for_test";
-import { changeRamp, cividis } from "./colour_scales";
+import { changeRamp, cividis, colourToken } from "./colour_scales";
 import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
@@ -175,8 +175,11 @@ function studyView(change: boolean, target: number | null) {
   return { view: { values, geometry: "envelope" as const, change, target, unit: "h", dimmed: false }, corners: patchCorners(values, [0, 0, 0]) };
 }
 
+const BELOW_TARGET = "#8e7b88", BELOW_TARGET_ON_DARK = "#6e5f6a", CONTEXT = "#b9c1c4", TERRAIN = "#cfc8b8", PANEL = "#ffffff";
+
 function setColourTokens() {
-  for (const [name, colour] of [["context", "#b9c1c4"], ["carved", "#c8553d"], ["storey-low", "#dfe6ea"], ["accent", "#2f5d7c"]]) {
+  for (const [name, colour] of [["context", CONTEXT], ["terrain", TERRAIN], ["panel", PANEL], ["carved", "#c8553d"], ["storey-low", "#dfe6ea"],
+                                ["accent", "#2f5d7c"], ["below-target", BELOW_TARGET], ["below-target-on-dark", BELOW_TARGET_ON_DARK]]) {
     document.documentElement.style.setProperty(`--colour-${name}`, colour);       // jsdom has no theme tokens
   }
 }
@@ -201,9 +204,48 @@ test("the study values layer colours each point's patch by its value, cividis fr
   const geometry = (layer as THREE.Mesh).geometry;
   expect(geometry.getAttribute("position").count).toBe(4 * 4);
   expect(Array.from(geometry.index!.array.slice(0, 6))).toEqual([0, 1, 2, 0, 2, 3]);
-  expect(patchColours(layer)).toEqual([hexOf("#b9c1c4"), hexOf(cividis(0.5)), hexOf(cividis(1)), hexOf("#b9c1c4")]);
+  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(cividis(0.5)), hexOf(cividis(1)), hexOf(BELOW_TARGET)]);
   expect(patchColours(studyValuesLayer({ ...view, target: null }, corners))[0]).toBe(hexOf(cividis(0)));
   expect(layer.userData.summary).toBe("4 points");
+});
+
+test("points below the target are in a muted colour of their own, not the grey of the surroundings, terrain or volumes", () => {
+  setColourTokens();
+  expect([CONTEXT, TERRAIN, PANEL]).not.toContain(BELOW_TARGET);
+  const { view, corners } = studyView(false, 1.5);
+  const layer = studyValuesLayer(view, corners);
+  layer.userData.applyTheme("dark");           // as the scene does on the dark viewport
+  expect(patchColours(layer)[0]).toBe(hexOf(BELOW_TARGET_ON_DARK));
+  expect([CONTEXT, TERRAIN, PANEL]).not.toContain(BELOW_TARGET_ON_DARK);
+});
+
+test("a new target or Change recolours the same layer in place", () => {
+  setColourTokens();
+  const { view, corners } = studyView(false, 1.5);
+  const layer = studyValuesLayer(view, corners);
+  const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
+  const version = colours.version;
+  layer.userData.recolour({ ...view, target: 3 });
+  expect(patchColours(layer)).toEqual([hexOf(BELOW_TARGET), hexOf(BELOW_TARGET), hexOf(cividis(1)), hexOf(BELOW_TARGET)]);
+  expect(colours.version).toBeGreaterThan(version);          // uploaded again
+  layer.userData.recolour({ ...view, change: true });
+  expect(patchColours(layer)[0]).toBe(hexOf("#c8553d"));
+});
+
+test("changeTolerance on 527,633 points takes under 200 ms: the Change view of that many points is drawn in under 200 ms", () => {
+  // The first build scanned the whole open column once per point to find the change tolerance while colouring the change, about
+  // 2.8e11 steps on District's 527,633 points, which froze the browser. This times that path: the layer with Change on.
+  setColourTokens();
+  colourToken("accent");       // jsdom's first getComputedStyle takes about 80 ms once (a browser's is warm): not the path timed
+  const count = 527_633;
+  const open = Array.from({ length: count }, (_, point) => ((point * 7919) % 1000) / 100);
+  const values = decodeStudyValues(studyValuesOf({ open, max_volume: open.map((value) => value * 0.8), envelope: open.map((value) => value * 0.9) }));
+  const corners = patchCorners(values, [0, 0, 0]);
+  const started = performance.now();
+  const layer = studyValuesLayer({ values, geometry: "envelope", change: true, target: null, unit: "h", dimmed: false }, corners);
+  const elapsed = performance.now() - started;
+  expect(layer.userData.summary).toBe("527 633 points");
+  expect(elapsed).toBeLessThan(200);
 });
 
 test("with Change the layer colours the change from the maximum volume on the change ramp, losses in the carved colour", () => {

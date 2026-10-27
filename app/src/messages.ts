@@ -88,6 +88,7 @@ export const messages = {
   geometrySwitch: "Geometry",
   studyGeometries: { max_volume: "Max volume", envelope: "Envelope", massing: "Massing" },
   buildGeometryFirst: { envelope: "Build the envelope first", massing: "Build the massing first" },
+  runStudyAgainFor: { envelope: "Run the study again to see it on the envelope", massing: "Run the study again to see it on the massing" },
   outOfDateInDesign: "Out of date in Design",
   changeToggle: "Change",
   changeToggleHint: "Colours each point by its change from the maximum volume",

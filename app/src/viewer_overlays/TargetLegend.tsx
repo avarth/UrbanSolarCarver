@@ -106,7 +106,7 @@ export function TargetLegend({ label, unit, range, target, onTargetChange, mode,
            onLostPointerCapture={valueMode ? endDrag : undefined}>
         {valueMode && shown !== null && (
           <span className="target-legend-below" aria-hidden="true"
-                style={{ width: `${shareOf(shown) * 100}%`, background: colourToken("context") }} />
+                style={{ width: `${shareOf(shown) * 100}%`, background: colourToken("below-target") }} />
         )}
         {valueMode && (
           <div ref={mark} role="slider" tabIndex={disabled ? -1 : 0} className="target-legend-mark" data-empty={shown === null ? "true" : undefined}

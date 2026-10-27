@@ -62,6 +62,10 @@
   --colour-context: #b9c1c4;
   --colour-terrain: #cfc8b8;
 
+  /* Simulate: a study's points below its target, a muted mauve apart from the greys of the surroundings, terrain and volumes */
+  --colour-below-target: #8e7b88;
+  --colour-below-target-on-dark: #6e5f6a;
+
   /* The building massing: storeys run from the low colour (the ground storey) to the high colour (the top storey) */
   --colour-storey-low: #dfe6ea;
   --colour-storey-high: #2f5d7c;

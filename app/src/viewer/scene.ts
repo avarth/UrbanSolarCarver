@@ -228,6 +228,11 @@ export class ViewerScene {
     this.refreshLayers();
   }
 
+  /** Draws the frame again: a layer changed in place (the study's values recoloured for a new target). */
+  redraw(): void {
+    this.requestRender();
+  }
+
   /** Draws the envelope see-through whether or not the building massing is shown (Simulate, the study's values on the envelope). */
   setEnvelopeSeeThrough(seeThrough: boolean): void {
     this.envelopeSeeThrough = seeThrough;

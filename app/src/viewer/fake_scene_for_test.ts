@@ -71,6 +71,12 @@ export class FakeViewerScene {
 
   setSkyDomeOpacity(_opacity: number): void {}
 
+  /** How many times the pane asked for the frame to be drawn again (a layer changed in place). */
+  redraws = 0;
+  redraw(): void {
+    this.redraws += 1;
+  }
+
   /** Whether the pane asked for the envelope see-through on its own (Simulate); false until it asks. */
   envelopeSeeThrough = false;
   setEnvelopeSeeThrough(seeThrough: boolean): void {

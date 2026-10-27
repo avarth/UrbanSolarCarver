@@ -76,6 +76,12 @@ export function changeRamp(t: number): string {
   return mixedColour(colourToken("storey-low"), colourToken("accent"), t);
 }
 
+/** The change ramp at *steps* evenly spaced shares from 0 to 1 (changeRamp's colours), its two tokens read once. */
+export function changeRampStops(steps: number): string[] {
+  const low = colourToken("storey-low"), high = colourToken("accent");
+  return Array.from({ length: steps }, (_, step) => mixedColour(low, high, step / (steps - 1)));
+}
+
 /** The colour of a storey (0 for the ground storey) of the building massing: the storey ramp, from light grey to slate (UX 10.1). */
 export function storeyColour(storeyIndex: number, storeyCount: number): string {
   return mixedColour(colourToken("storey-low"), colourToken("storey-high"), storeyCount > 1 ? storeyIndex / (storeyCount - 1) : 0);

@@ -20,6 +20,13 @@ test("the result card shows the geometry's values with the maximum volume's besi
   expect(lines()).toEqual(["mean 3.6 h (4.1)", "lowest tenth 0.9 h (1.2)", "at target 92 % (85)"]);
 });
 
+test("a result without test points shows no card, not a mean of NaN", () => {
+  rendered = renderForTest(<ResultCard geometry="envelope" unit="h" statistics={{ mean: NaN, lowestTenth: NaN, shareAtTarget: null }}
+                                       baseline={{ mean: NaN, lowestTenth: NaN, shareAtTarget: null }} />);
+  expect(rendered.container.querySelector(".result-card")).toBeNull();
+  expect(rendered.container.textContent).not.toContain("NaN");
+});
+
 test("without a target the card has two lines; on the maximum volume no values beside them", () => {
   rendered = renderForTest(<ResultCard geometry="max_volume" unit="kWh/m²" statistics={{ mean: 412.4, lowestTenth: 120, shareAtTarget: null }} baseline={null} />);
   expect(heading()).toBe("Max volume");

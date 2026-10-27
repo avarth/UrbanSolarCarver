@@ -5,7 +5,9 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
+import type * as THREE from "three";
 import { studyValuesOf } from "../simulate/study_values_for_test";
+import { TARGET_SAVE_DELAY_MILLISECONDS } from "../simulate/use_study_view";
 import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import {
   CARVING, ENVELOPE, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf,
@@ -217,6 +219,11 @@ async function selectStudy(name: string) {
   await settle();
 }
 
+const waitForTargetSave = async () => {
+  await act(async () => { await vi.advanceTimersByTimeAsync(TARGET_SAVE_DELAY_MILLISECONDS + 50); });
+  await settle();
+};
+
 function pointerOnTargetBar(type: "pointerdown" | "pointermove" | "pointerup", clientX: number) {
   act(() => { targetBar().dispatchEvent(new PointerEvent(type, { bubbles: true, clientX, pointerId: 1, button: 0 })); });
 }
@@ -301,7 +308,9 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
     service.valuesOf = { 1: studyValuesOf({ open: [8, 8, 8, 8], max_volume: [0, 2, 6, 8] }) };
   });
   await selectStudy("Sun hours, 21 Dec");
-  const layerBefore = scene().layers.get("study_values");
+  const layer = scene().layers.get("study_values")!;
+  const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
+  const coloursVersion = colours.version, redraws = scene().redraws;
   // jsdom lays nothing out: the bar is 200 px wide, 0 to 8 h, 25 px an hour.
   targetBar().getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 12, right: 200, bottom: 12, x: 0, y: 0, toJSON: () => ({}) });
   pointerOnTargetBar("pointerdown", 100);
@@ -310,19 +319,68 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   expect(simulateService.studyPatches).toEqual([]);         // nothing saved while dragging
   pointerOnTargetBar("pointerup", 125);
   await settle();
-  expect(simulateService.studyPatches).toEqual([{ id: "1", body: { target: 5 } }]);
+  // Shown at once: the mark, the card, and the same layer recoloured in place (points below the target muted).
   expect(targetMark().getAttribute("aria-valuenow")).toBe("5");
   expect(cardLines()).toEqual(["mean 4 h", "lowest tenth 0.6 h", "at target 50 %"]);
-  expect(scene().layers.get("study_values")).not.toBe(layerBefore);      // drawn again with the points below the target muted
+  expect(scene().layers.get("study_values")).toBe(layer);
+  expect(colours.version).toBeGreaterThan(coloursVersion);
+  expect(scene().redraws).toBeGreaterThan(redraws);
+  await waitForTargetSave();
+  expect(simulateService.studyPatches).toEqual([{ id: "1", body: { target: 5 } }]);
   expect(studyLine("Sun hours, 21 Dec")).toBe("facades.obj");             // the target leaves the result current
 
+  // Several key presses, as a held arrow key gives: the mark moves at each, and the target is saved once, at the value it ended on.
   act(() => targetMark().focus());
-  act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })); });
-  await settle();
-  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { target: 5.08 } });
+  for (let press = 0; press < 3; press++) {
+    act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(50); });
+  }
+  expect(targetMark().getAttribute("aria-valuenow")).toBe("5.24");
+  expect(simulateService.studyPatches).toHaveLength(1);
+  await waitForTargetSave();
+  expect(simulateService.studyPatches).toEqual([{ id: "1", body: { target: 5 } }, { id: "1", body: { target: 5.24 } }]);
+  expect(scene().layers.get("study_values")).toBe(layer);
+
   act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true })); });
-  await settle();
+  await waitForTargetSave();
   expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { target: null } });
+  expect(simulateService.studyPatches).toHaveLength(3);
   expect(targetMark().getAttribute("aria-valuetext")).toBe("No target");
   expect(cardLines()).toHaveLength(2);
+});
+
+test("a study run before the envelope was built waits on Envelope with the reason, shows the maximum volume, and keeps the stamp", async () => {
+  await openSimulate(undefined, (service) => {
+    service.summary = BUILT_ENVELOPE;
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current"), study("2", "sky_view", ["facades.obj"], "out_of_date")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 2], envelope: [3, 4] }),
+                         2: studyValuesOf({ open: [90, 90, 90], max_volume: [40, 50, 60] }, "%") };       // no envelope column
+  }, { exporting: "current" });
+  await selectStudy("Sun hours, 21 Dec");
+  act(() => geometrySegment("Envelope").click());
+  await settle();
+  expect(scene().visibleLayers.has("envelope")).toBe(true);
+
+  await selectStudy("Sky view factor");
+  expect(geometrySegment("Envelope").getAttribute("aria-disabled")).toBe("true");
+  expect(geometrySegment("Envelope").title).toBe("Run the study again to see it on the envelope");
+  expect(reasonOf(geometrySegment("Envelope"))).toBe("Run the study again to see it on the envelope");
+  expect(geometrySegment("Max volume").getAttribute("aria-pressed")).toBe("true");
+  expect([...scene().visibleLayers].sort()).toEqual(["max_volume", "study_values"]);
+  expect(studyLayerSummary()).toBe("3 points");
+  expect(scene().dimmed.has("study_values")).toBe(true);
+  expect(stamp()!.textContent).toContain("Out of date");
+  expect(cardLines()).toEqual(["mean 50 %", "lowest tenth 42 %"]);
+
+  // The first study has the envelope: the choice comes back.
+  await selectStudy("Sun hours, 21 Dec");
+  expect(geometrySegment("Envelope").getAttribute("aria-pressed")).toBe("true");
+  expect(stamp()).toBeNull();
+});
+
+test("the stamp shows while the selected study is out of date, even before its values are drawn", async () => {
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sun_hours", ["facades.obj"], "out_of_date")]; });     // no values
+  await selectStudy("Sun hours, 21 Dec");
+  expect(studyLayerSummary()).toBeNull();
+  expect(stamp()!.textContent).toContain("Out of date");
 });

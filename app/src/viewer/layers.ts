@@ -8,7 +8,7 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 import type { SkyDome } from "../api_client/client";
 import { messages } from "../messages";
 import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, type StudyView } from "../simulate/study_values";
-import { changeRamp, cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
+import { changeRamp, changeRampStops, cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
 import type { CarvedVoxels } from "./carved_by_criterion_decoder";
 import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
@@ -444,19 +444,12 @@ export function carvedByCriterionLayer({ voxels, colours, voxelSize }: CarvedByC
 // The study of Simulate ------------------------------------------------------------------------------------------------------
 
 const CHANGE_RAMP_STEPS = 256;
-const CORNERS_OF_TRIANGLES = [0, 1, 2, 0, 2, 3];
 
-/**
- * The selected study's test point patches on the geometry shown (*corners*: study_values_decoder.patchCorners), unlit so the colours
- * read as the legend's. By value: cividis from 0 to the highest value of the geometry shown, the points below the target in the
- * context's muted grey. By change from the maximum volume: the change ramp from no change to the largest gain, a loss in the carved
- * colour, a change within the tolerance none. The patches lie on test surfaces, so they are pulled forward in depth as those are.
- */
-export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.Object3D {
+/** Writes each point's colour into its four corners of *colours*, as studyValuesLayer describes. */
+function paintStudyValues(colours: Float32Array, view: StudyView, theme: ViewportTheme): void {
   const { values: studyValues, geometry: shownGeometry, change, target } = view;
   const shown = studyValues.values[shownGeometry];
   const count = shown.length;
-  const colours = new Float32Array(count * 4 * 3);
   const paint = (point: number, colour: THREE.Color) => {
     for (let at = point * 12; at < point * 12 + 12; at += 3) {
       colours[at] = colour.r;
@@ -468,7 +461,7 @@ export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.
     const changes = changeOf(shown, studyValues.values.max_volume);
     const tolerance = changeTolerance(studyValues.values[OPEN_COLUMN], studyValues.values.max_volume);
     const highest = highestOf(changes);
-    const ramp = Array.from({ length: CHANGE_RAMP_STEPS }, (_, step) => new THREE.Color(changeRamp(step / (CHANGE_RAMP_STEPS - 1))));
+    const ramp = changeRampStops(CHANGE_RAMP_STEPS).map((colour) => new THREE.Color(colour));
     const loss = new THREE.Color(changeRamp(-1));
     for (let point = 0; point < count; point++) {
       const value = changes[point];
@@ -478,25 +471,64 @@ export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.
   } else {
     const highest = highestOf(shown);
     const span = highest > 0 ? highest : 1;
-    const belowTarget = new THREE.Color(colourToken("context"));
+    const belowTarget = new THREE.Color(colourToken(theme === "dark" ? "below-target-on-dark" : "below-target"));
     for (let point = 0; point < count; point++) {
       const value = shown[point];
       paint(point, target !== null && value < target ? belowTarget : CIVIDIS_COLOURS[Math.min(255, Math.max(0, Math.floor((value / span) * 256)))]);
     }
   }
+}
+
+/**
+ * The selected study's test point patches on the geometry shown (*corners*: study_values_decoder.patchCorners), unlit so the colours
+ * read as the legend's. By value: cividis from 0 to the highest value of the geometry shown, the points below the target in one
+ * muted mauve (apart from the greys of the surroundings and volumes; a darker one on the dark viewport). By change from the maximum
+ * volume: the change ramp from no change to the largest gain, a loss in the carved colour, a change within the tolerance none. The
+ * patches lie on test surfaces, so they are pulled forward in depth as those are. A new target or Change of the same values and
+ * geometry recolours the patches in place (userData.recolour), as the viewport theme does (userData.applyTheme).
+ */
+export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.Object3D {
+  const count = view.values.values[view.geometry].length;
+  const colours = new Float32Array(count * 4 * 3);
+  const drawn = { view, theme: "light" as ViewportTheme };
+  paintStudyValues(colours, view, drawn.theme);
+  // Two triangles per patch, around its corners in order: 0 1 2 and 0 2 3.
   const index = new Uint32Array(count * 6);
-  for (let point = 0; point < count; point++) {
-    for (let vertex = 0; vertex < 6; vertex++) index[point * 6 + vertex] = point * 4 + CORNERS_OF_TRIANGLES[vertex];
+  for (let point = 0, at = 0; point < count; point++, at += 6) {
+    const first = point * 4;
+    index[at] = first;
+    index[at + 1] = first + 1;
+    index[at + 2] = first + 2;
+    index[at + 3] = first;
+    index[at + 4] = first + 2;
+    index[at + 5] = first + 3;
   }
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(corners, 3));
-  geometry.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+  const positions = new THREE.BufferAttribute(corners, 3);
+  const colourAttribute = new THREE.BufferAttribute(colours, 3);
+  geometry.setAttribute("position", positions);
+  geometry.setAttribute("color", colourAttribute);
   geometry.setIndex(new THREE.BufferAttribute(index, 1));
-  geometry.computeBoundingSphere();
+  // The sphere around the corners' box: one pass over the points where computeBoundingSphere takes two.
+  geometry.boundingSphere = new THREE.Box3().setFromBufferAttribute(positions).getBoundingSphere(new THREE.Sphere());
   const material = layerMaterial(new THREE.MeshBasicMaterial({
     vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
   }));
   const patches = new THREE.Mesh(geometry, material);
+  const repaint = () => {
+    paintStudyValues(colours, drawn.view, drawn.theme);
+    colourAttribute.needsUpdate = true;
+  };
+  /** *next* has the same values and geometry as the view the layer was made for: its target or Change differ. */
+  patches.userData.recolour = (next: StudyView) => {
+    drawn.view = next;
+    repaint();
+  };
+  patches.userData.applyTheme = (theme: ViewportTheme) => {
+    if (theme === drawn.theme) return;
+    drawn.theme = theme;
+    repaint();
+  };
   patches.userData.summary = messages.studyPointCount(count);
   return patches;
 }
