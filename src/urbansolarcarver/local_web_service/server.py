@@ -34,12 +34,12 @@ from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
-from . import folder_picker, user_preferences
+from . import folder_picker, simulation, user_preferences
 from .api_models import (
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
     CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
-    UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, UpdateStudyRequest,
+    UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
 )
 from .carve_further import carve_further
 from .criteria import active_criteria, find_criterion
@@ -54,7 +54,7 @@ from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_carved_by_criterion, build_score_points
 from .stage_records import stage_status_reply
-from .studies import NOT_SENT, metric_infos
+from .studies import NOT_SENT, find_study, metric_infos, study_folder
 
 _log = logging.getLogger(__name__)
 API_PREFIX = "/api"
@@ -562,7 +562,12 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         without one)."""
         store = folder_in_use.store
         with store.project_lock(name):
-            return StudiesReply(studies=store.studies(name), metrics=metric_infos(store.weather_file_path(name) is not None))
+            studies = []
+            for study in store.studies(name):
+                state, reason = simulation.study_state(store, name, study)
+                studies.append(StudyWithState(entry=study, state=state, reason=reason,
+                                              geometries=simulation.result_geometries(store, name, study.id)))
+            return StudiesReply(studies=studies, metrics=metric_infos(store.weather_file_path(name) is not None))
 
     @router.post("/projects/{name}/studies", responses={**_STUDY_RESPONSES, 404: {"model": ErrorDetailReply, "description": "There is no such criterion."}})
     def add_study(name: str, request: AddStudyRequest) -> StudyEntry:
@@ -604,6 +609,27 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         """Take a test surface file out of a study; the stored file goes to the recycle bin when no criterion or study lists it."""
         with writable_project(name) as store:
             return store.remove_study_test_surface(name, study_id, file_name)
+
+    @router.get("/projects/{name}/studies/{study_id}/values", response_class=Response,
+                responses={200: {"content": {"application/octet-stream": {}}}, 404: _STUDY_RESPONSES[404]})
+    def study_values(name: str, study_id: str) -> Response:
+        """The test point patches of the study's last result and the values of each column (layout in simulation.study_values);
+        404 for an unknown study or one without a result."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            find_study(store.read_project_json(name), study_id)
+            values = simulation.study_values(study_folder(store.open(name), study_id))
+        if values is None:
+            raise ProjectError(f"The study '{study_id}' has no result yet.", status_code=404)
+        return Response(values, media_type="application/octet-stream", headers=NO_CACHE)
+
+    @router.post("/projects/{name}/simulate", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, **_ERROR_RESPONSES})
+    def simulate(name: str) -> StartRunReply:
+        """Run every study that can run, one job of the run worker (stage "simulate"); its events are read as a run's. 409 while any
+        run or simulation is active, 422 when no study can run (the message names each study and why)."""
+        with folder_in_use.folder_lock:     # not while the projects folder is being switched
+            state = folder_in_use.worker.start_simulation(name)
+        return StartRunReply(status="started", run_id=state.run_id, stages=state.stages, criterion_stages={})
 
     @router.post("/projects/{name}/criteria/{criterion_id}/test-surfaces", responses=_CRITERION_RESPONSES)
     def add_criterion_test_surface(name: str, criterion_id: str, file: UploadFile = File(...)) -> CriterionEntry:

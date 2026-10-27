@@ -516,6 +516,143 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/studies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Studies
+         * @description The studies of the project in order, and the metrics a study can show (those that need the weather file are not available
+         *     without one).
+         */
+        get: operations["list_studies"];
+        put?: never;
+        /**
+         * Add Study
+         * @description Add a study from a metric (its default period and settings, no test surface files), or like a criterion (its metric, period,
+         *     mode settings and test surface file names). Neither or both is 422.
+         */
+        post: operations["add_study"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/studies/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Reorder Studies
+         * @description Put the studies in the order of *ids*, which names each study once (else 422).
+         */
+        put: operations["reorder_studies"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/studies/{study_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Study
+         * @description Remove a study and move its results folder to the recycle bin; its id is not used again.
+         */
+        delete: operations["delete_study"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Study
+         * @description Change the name, metric, settings or target of a study; what is not sent stays. A new metric resets the settings to its
+         *     defaults (the keys both have keep their values); *values* then change settings. A target of null removes the target.
+         */
+        patch: operations["update_study"];
+        trace?: never;
+    };
+    "/api/projects/{name}/studies/{study_id}/test-surfaces/{file_name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Use Study Test Surface
+         * @description Let a study use a test surface file that is stored already (404 when it is not).
+         */
+        put: operations["use_study_test_surface"];
+        post?: never;
+        /**
+         * Remove Study Test Surface
+         * @description Take a test surface file out of a study; the stored file goes to the recycle bin when no criterion or study lists it.
+         */
+        delete: operations["remove_study_test_surface"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/studies/{study_id}/values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Study Values
+         * @description The test point patches of the study's last result and the values of each column (layout in simulation.study_values);
+         *     404 for an unknown study or one without a result.
+         */
+        get: operations["study_values"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate
+         * @description Run every study that can run, one job of the run worker (stage "simulate"); its events are read as a run's. 409 while any
+         *     run or simulation is active, 422 when no study can run (the message names each study and why).
+         */
+        post: operations["simulate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/criteria/{criterion_id}/test-surfaces": {
         parameters: {
             query?: never;
@@ -729,6 +866,16 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AddStudyRequest
+         * @description The body of a request to add a study: from a metric (its defaults), or like a criterion (its metric, period, mode settings and files).
+         */
+        AddStudyRequest: {
+            /** Metric */
+            metric?: string | null;
+            /** From Criterion */
+            from_criterion?: string | null;
+        };
         /** Body_add_criterion_test_surface */
         Body_add_criterion_test_surface: {
             /** File */
@@ -1067,6 +1214,26 @@ export interface components {
             storeys_built: number;
         };
         /**
+         * MetricInfo
+         * @description One metric the Simulate workspace can show, with what the page needs to offer it.
+         */
+        MetricInfo: {
+            /** Name */
+            name: string;
+            /** Label */
+            label: string;
+            /** Unit */
+            unit: string;
+            /** Needs Epw */
+            needs_epw: boolean;
+            /** Available */
+            available: boolean;
+            /** Default Settings */
+            default_settings: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * MissingInputsReply
          * @description The body of a run request that lacks input files.
          */
@@ -1200,6 +1367,14 @@ export interface components {
             new_name: string;
         };
         /**
+         * ReorderStudiesRequest
+         * @description The body of a reorder of the studies: the id of every study once, in the new order.
+         */
+        ReorderStudiesRequest: {
+            /** Ids */
+            ids: string[];
+        };
+        /**
          * RunSummary
          * @description What the finished stages of a run report; a part is None when its stage has no output.
          *
@@ -1269,6 +1444,59 @@ export interface components {
             produce?: string[];
         };
         /**
+         * StudiesReply
+         * @description The studies of a project with their state, and the metrics a study can show.
+         */
+        StudiesReply: {
+            /** Studies */
+            studies: components["schemas"]["StudyWithState"][];
+            /** Metrics */
+            metrics: components["schemas"]["MetricInfo"][];
+        };
+        /**
+         * StudyEntry
+         * @description One study of the Simulate workspace, as project.json keeps it: a metric on test surfaces over a period, apart from the criteria.
+         */
+        StudyEntry: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Named By User
+             * @default false
+             */
+            named_by_user: boolean;
+            /** Colour */
+            colour: string;
+            /** Metric */
+            metric: string;
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            };
+            /** Target */
+            target?: number | null;
+            /** Test Surface Files */
+            test_surface_files?: string[];
+        };
+        /**
+         * StudyWithState
+         * @description A study with the state of its last result (simulation.study_state).
+         */
+        StudyWithState: {
+            entry: components["schemas"]["StudyEntry"];
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "current" | "out_of_date" | "not_run" | "refused";
+            /** Reason */
+            reason?: string | null;
+            /** Geometries */
+            geometries?: string[];
+        };
+        /**
          * SunMarker
          * @description The sun at one whole hour of the analysis period.
          */
@@ -1315,6 +1543,22 @@ export interface components {
             values?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * UpdateStudyRequest
+         * @description The body of a study change: what is not sent stays as it is; target null means no target.
+         */
+        UpdateStudyRequest: {
+            /** Name */
+            name?: string | null;
+            /** Metric */
+            metric?: string | null;
+            /** Values */
+            values?: {
+                [key: string]: unknown;
+            } | null;
+            /** Target */
+            target?: number | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -2526,6 +2770,437 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CriterionEntry"][];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    list_studies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudiesReply"];
+                };
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_study: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddStudyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyEntry"];
+                };
+            };
+            /** @description There is no such criterion. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    reorder_studies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderStudiesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyEntry"][];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    delete_study: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                study_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    update_study: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                study_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStudyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyEntry"];
+                };
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    use_study_test_surface: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                study_id: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyEntry"];
+                };
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    remove_study_test_surface: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                study_id: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyEntry"];
+                };
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    study_values: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                study_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description There is no such study. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartRunReply"];
+                };
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
             /** @description A run of this project is active. */

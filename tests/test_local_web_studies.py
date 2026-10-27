@@ -238,7 +238,7 @@ def test_study_routes(client_with_inputs):
     assert added.status_code == 200 and added.json()["id"] == "1" and added.json()["name"] == "Sun hours, 21 Dec"
     like = client.post("/api/projects/p/studies", json={"from_criterion": "1"})
     assert like.status_code == 200 and like.json()["metric"] == "sky_component" and like.json()["test_surface_files"] == ["surface.ply"]
-    assert [study["id"] for study in client.get("/api/projects/p/studies").json()["studies"]] == ["1", "2"]
+    assert [study["entry"]["id"] for study in client.get("/api/projects/p/studies").json()["studies"]] == ["1", "2"]
 
     assert client.post("/api/projects/p/studies", json={}).status_code == 422
     assert client.post("/api/projects/p/studies", json={"metric": "sun_hours", "from_criterion": "1"}).status_code == 422
@@ -253,12 +253,12 @@ def test_study_routes(client_with_inputs):
     assert client.patch("/api/projects/p/studies/9", json={"name": "x"}).status_code == 404
 
     assert client.put("/api/projects/p/studies/order", json={"ids": ["2", "1"]}).status_code == 200
-    assert [study["id"] for study in client.get("/api/projects/p/studies").json()["studies"]] == ["2", "1"]
+    assert [study["entry"]["id"] for study in client.get("/api/projects/p/studies").json()["studies"]] == ["2", "1"]
     assert client.put("/api/projects/p/studies/order", json={"ids": ["2"]}).status_code == 422
 
     assert client.delete("/api/projects/p/studies/1").status_code == 204
     assert client.delete("/api/projects/p/studies/1").status_code == 404
-    assert [study["id"] for study in client.get("/api/projects/p/studies").json()["studies"]] == ["2"]
+    assert [study["entry"]["id"] for study in client.get("/api/projects/p/studies").json()["studies"]] == ["2"]
     assert client.get("/api/projects/nope/studies").status_code == 404
 
 

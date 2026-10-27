@@ -393,9 +393,21 @@ class MetricInfo(BaseModel):
     default_settings: dict              # the period and the mode settings a new study of this metric starts with
 
 
+StudyState = Literal["current", "out_of_date", "not_run", "refused"]
+
+
+class StudyWithState(BaseModel):
+    """A study with the state of its last result (simulation.study_state)."""
+    entry: StudyEntry
+    # refused: it cannot run (reason says why); not_run: no result; out_of_date: a file or setting it was computed from changed
+    state: StudyState
+    reason: str | None = None
+    geometries: list[str] = Field(default_factory=list)    # the geometries of the last result: max_volume, then envelope, massing when built
+
+
 class StudiesReply(BaseModel):
-    """The studies of a project and the metrics a study can show."""
-    studies: list[StudyEntry]
+    """The studies of a project with their state, and the metrics a study can show."""
+    studies: list[StudyWithState]
     metrics: list[MetricInfo]
 
 

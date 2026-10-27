@@ -1,7 +1,8 @@
-"""The run worker: one pipeline run at a time on a background thread, with an event log the browser reads.
+"""The run worker: one job at a time, a pipeline run or a simulation, on a background thread, with an event log the browser reads.
 
 ``RunWorker.start`` chooses the stages (see ``stage_records``), removes their records, and starts a thread that
-calls the engine. The thread appends events to the run's ``RunState``; the WebSocket handler reads them with
+calls the engine. ``RunWorker.start_simulation`` starts a thread that runs the studies that can run (simulation.py); it never
+reads or writes a stage record. Either thread appends events to the job's ``RunState``; the WebSocket handler reads them with
 ``RunState.wait_for_events``, which also serves a reader that connects after the run began or finished.
 Importing this module does not import torch: the engine and the compute session are imported when the first run starts.
 """
@@ -15,10 +16,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from ..errors import ConfigError, RunCancelled, StageChainError
+from ..errors import ConfigError, InputError, RunCancelled, StageChainError
 from ..run_context import RunContext
 from ..stage_settings import PIPELINE_STAGES
-from . import test_surfaces
+from . import simulation, test_surfaces
 from .api_models import StartRunReply
 from .projects import RUN_FOLDER, ProjectError, ProjectStore, naming_criterion
 from .stage_records import ANALYSIS_STAGES, RunSettings, StageChoice, choose_stages, forget_stages, missing_inputs, record_stages, run_settings
@@ -39,6 +40,13 @@ class RunConflict(ProjectError):
 
     def __init__(self, project: str):
         super().__init__(f"A run of project '{project}' is active. Wait for it to finish or cancel it.", status_code=409)
+
+
+class NoStudyCanRun(ProjectError):
+    """A simulation has no study that can run; the message names each study and why it cannot."""
+
+    def __init__(self, message: str):
+        super().__init__(message, status_code=422)
 
 
 class MissingInputs(ProjectError):
@@ -105,7 +113,8 @@ class _ActiveRun:
 
 
 class RunWorker:
-    """Runs the pipeline for one project at a time; the compute session is created at the first run and kept."""
+    """Runs one job at a time, a pipeline run or a simulation, of any project; the compute session is created at the first job and
+    kept. ``_start_lock`` makes the check of ``_active`` and its setting one step; the job's thread clears ``_active`` when it ends."""
 
     def __init__(self, store: ProjectStore, device: str, handle_request: Callable | None = None,
                  session_factory: Callable[[str], object] | None = None):
@@ -183,20 +192,51 @@ class RunWorker:
             thread.start()
             return StartRunReply(status="started", run_id=state.run_id, stages=choice.stages, criterion_stages=choice.criterion_stages)
 
-    def _run(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> None:
-        """The thread body: run the engine, record the stages on success, and end the event log with one final event.
+    def start_simulation(self, name: str) -> RunState:
+        """Start a simulation of the project's studies that can run (simulation.refusal_of), one engine request each, in list order.
 
-        Whatever goes wrong while finishing, the worker is released and the readers get a final event: a run that
+        Raises RunConflict when any job is active, NoStudyCanRun (422) when no study can run, ProjectError 404 for an unknown project.
+        """
+        with self._store.project_lock(name), self._start_lock:
+            if self._active is not None:
+                raise RunConflict(self._active.state.project)
+            requests, refusals = [], []
+            for study in self._store.studies(name):
+                reason = simulation.refusal_of(self._store, name, study)
+                if reason is None:
+                    requests.append((study.id, simulation.study_request(self._store, name, study, self._device)))
+                else:
+                    refusals.append((study, reason))
+            if not requests:
+                raise NoStudyCanRun(simulation.no_study_can_run_message(refusals))
+            state = RunState(uuid.uuid4().hex, name, [simulation.SIMULATE_STAGE])
+            context = RunContext()
+            forwarder = _StudyEventsForwarder(state, context)
+            thread = threading.Thread(
+                target=self._run_job, args=(state, context, forwarder, lambda: self._final_event_of_simulation(context, requests, forwarder)),
+                name=f"simulate-{state.run_id}", daemon=True)
+            self._run_states[state.run_id] = state
+            self._active = _ActiveRun(state, context, thread)
+            thread.start()
+            return state
+
+    def _run(self, state: RunState, context: RunContext, choice: StageChoice, settings: RunSettings) -> None:
+        """The thread body of a pipeline run: run the engine and record the stages on success (see _run_job)."""
+        self._run_job(state, context, _IssuesForwarder(state, context), lambda: self._final_event_of_run(state, context, choice, settings))
+
+    def _run_job(self, state: RunState, context: RunContext, forwarder, final_event_of_job: Callable[[], dict]) -> None:
+        """The thread body of a job: run it, forward its progress and issues as events, and end the event log with one final event.
+
+        Whatever goes wrong while finishing, the worker is released and the readers get a final event: a job that
         could not end would block every later start.
         """
-        issues_forwarder = _IssuesForwarder(state, context)
-        context.on_progress = issues_forwarder.forward_progress
+        context.on_progress = forwarder.forward_progress
         final_event = None
         try:
-            final_event = self._final_event_of_run(state, context, choice, settings)
-            issues_forwarder.forward_new_issues()
+            final_event = final_event_of_job()
+            forwarder.forward_new_issues()
         except Exception as error:
-            _log.exception("Finishing a run of project '%s' failed", state.project)
+            _log.exception("Finishing a job of project '%s' failed", state.project)
             if final_event is None:
                 final_event = _run_failed_event(type(error).__name__, str(error))
         finally:
@@ -222,6 +262,26 @@ class RunWorker:
                 {"field": field_error.field, "message": field_error.message} for field_error in error.errors])
         except Exception as error:
             _log.exception("A run of project '%s' failed", state.project)
+            return _run_failed_event(type(error).__name__, str(error))
+
+    def _final_event_of_simulation(self, context: RunContext, requests: list, forwarder: _StudyEventsForwarder) -> dict:
+        """Run each study's request and give the event that ends the simulation. A study the engine refuses (too many test points,
+        settings it does not accept) becomes an issue of that study and the others still run; a cancel or another error ends it."""
+        try:
+            if self._session is None:
+                self._session = self._create_session()
+            handler = self._handler()
+            for study_id, request in requests:
+                forwarder.start_study(study_id)
+                try:
+                    handler(request, self._session, context)
+                except (InputError, ConfigError) as error:
+                    forwarder.refused_by_the_engine(type(error).__name__, str(error))
+            return {"type": "run_finished", "stages": [simulation.SIMULATE_STAGE], "files": []}
+        except RunCancelled:
+            return {"type": "run_cancelled"}
+        except Exception as error:
+            _log.exception("A simulation failed")
             return _run_failed_event(type(error).__name__, str(error))
 
     def _release_session_memory(self) -> None:
@@ -300,6 +360,50 @@ class _IssuesForwarder:
                 criterion = self._criterion if stage in ANALYSIS_STAGES else None
             self._state.emit({"type": "issue", "stage": stage, "criterion": criterion, "code": issue.code, "message": issue.message})
         self._issues_sent = len(self._context.issues)
+
+
+class _StudyEventsForwarder:
+    """Turns the progress and issues of a simulation's engine requests into events that name the study being run.
+
+    The engine reports a study's progress and issues under the stage ``check``; the events name the stage ``simulate`` and the
+    study, and no criterion (``criterion`` is None, as in the events of a pipeline stage that belongs to none).
+    """
+
+    def __init__(self, state: RunState, context: RunContext):
+        self._state = state
+        self._context = context
+        self._issues_sent = 0
+        self._study: str | None = None
+        self._lock = threading.Lock()   # progress can be reported from the engine's own threads
+
+    def start_study(self, study_id: str) -> None:
+        with self._lock:
+            self._send_new_issues()
+            self._study = study_id
+
+    def forward_progress(self, _stage: str | None, done: int, total: int) -> None:
+        with self._lock:
+            self._send_new_issues()
+            self._state.emit({"type": "stage_progress", "stage": simulation.SIMULATE_STAGE, "criterion": None, "study": self._study,
+                              "done": done, "total": total})
+
+    def forward_new_issues(self) -> None:
+        with self._lock:
+            self._send_new_issues()
+
+    def refused_by_the_engine(self, code: str, message: str) -> None:
+        with self._lock:
+            self._send_new_issues()
+            self._emit_issue(code, message)
+
+    def _send_new_issues(self) -> None:
+        for issue in self._context.issues[self._issues_sent:]:
+            self._emit_issue(issue.code, issue.message)
+        self._issues_sent = len(self._context.issues)
+
+    def _emit_issue(self, code: str, message: str) -> None:
+        self._state.emit({"type": "issue", "stage": simulation.SIMULATE_STAGE, "criterion": None, "study": self._study,
+                          "code": code, "message": message})
 
 
 def _run_failed_event(error_type: str, message: str, field_errors: list[dict] | None = None) -> dict:
