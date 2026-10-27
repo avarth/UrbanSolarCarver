@@ -24,8 +24,11 @@ METRIC_MODE_SETTING_KEYS: Mapping[str, tuple[str, ...]] = {
     "useful_solar_energy": ("balance_temperature", "balance_offset", "include_harm"),
     "cooling_sky": ("dew_point_celsius", "bliss_k"),
 }
+# The settings of a metric that sums over a period: the period and the clock its hours are read in (a stored study without
+# time_basis reads it as "standard", the CheckSettings default).
+PERIOD_SETTING_KEYS = (*PERIOD_KEYS, "time_basis")
 # Every key a study's settings can hold.
-STUDY_SETTING_KEYS = (*PERIOD_KEYS, "balance_temperature", "balance_offset", "include_harm", "dew_point_celsius", "bliss_k")
+STUDY_SETTING_KEYS = (*PERIOD_SETTING_KEYS, "balance_temperature", "balance_offset", "include_harm", "dew_point_celsius", "bliss_k")
 MONTH_ABBREVIATIONS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 NOT_SENT = object()     # an update that does not mention the target (None means: no target)
 # A weather file name for the validation of settings, which does not read the file.
@@ -57,19 +60,21 @@ def checked_study_name(name: str) -> str:
 
 
 def settings_keys_of(metric: str) -> tuple[str, ...]:
-    """The keys of the settings of a study of this metric: the period when the metric needs one, and its mode settings."""
+    """The keys of the settings of a study of this metric: the period and its time basis when the metric needs a period, and its
+    mode settings."""
     spec = CHECK_METRICS[metric]
-    return (*(PERIOD_KEYS if spec.needs_period else ()), *METRIC_MODE_SETTING_KEYS.get(metric, ()))
+    return (*(PERIOD_SETTING_KEYS if spec.needs_period else ()), *METRIC_MODE_SETTING_KEYS.get(metric, ()))
 
 
 def default_study_settings(metric: str) -> dict:
-    """The settings a new study of this metric starts with: the starting period of the mode the metric takes it from, and the
-    defaults of the mode settings it reads (the field defaults of CheckSettings)."""
+    """The settings a new study of this metric starts with: the starting period of the mode the metric takes it from with the
+    standard time basis, and the defaults of the mode settings it reads (the field defaults of CheckSettings)."""
     spec = CHECK_METRICS[metric]
     settings: dict = {}
     if spec.needs_period:
         starting = MODES[spec.period_from_mode].starting_values
         settings.update({key: starting[key] for key in PERIOD_KEYS})
+        settings["time_basis"] = CheckSettings.model_fields["time_basis"].default
     for key in METRIC_MODE_SETTING_KEYS.get(metric, ()):
         settings[key] = CheckSettings.model_fields[key].default
     return settings

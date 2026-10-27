@@ -44,15 +44,12 @@ from typing import Dict, NamedTuple, Optional, Union
 
 import numpy as np
 
-from .check_settings import CHECK_METRICS, CheckSettings
+from .check_files import POINTS_FILE, SUMMARY_FILE, VALUES_FILE, file_fingerprint, run_geometry_files
+from .check_settings import CHECK_METRICS, CheckSettings, settings_digest
 from .compute_device import resolve_compute_device, warp_device_name
 from .run_context import active_context, report_issue, report_progress
-from .stage_settings import stage_folder
 
 CHECK_FOLDER = "check"
-POINTS_FILE = "check_points.npz"
-VALUES_FILE = "check_values.npz"
-SUMMARY_FILE = "check_summary.json"
 # The geometry the other columns are compared with in the summary.
 BASELINE = "max_volume"
 # The column traced with none of the geometries (the blocking meshes still block).
@@ -417,15 +414,6 @@ def _statistics(values: np.ndarray, baseline: Optional[np.ndarray], tolerance: f
     return stats
 
 
-def file_fingerprint(path) -> Optional[dict]:
-    """The path, size and modification time of a file, which the summary records for each file the check read;
-    None for no path."""
-    if path is None:
-        return None
-    status = Path(path).stat()
-    return {"path": str(path), "size": status.st_size, "modified_ns": status.st_mtime_ns}
-
-
 def solar_check(
     test_surfaces,
     geometries,
@@ -565,46 +553,20 @@ def load_solar_check(folder: Union[str, Path]) -> Optional[SolarCheckResult]:
 
 # --- the geometries of a run ---------------------------------------------------------------------------------------
 
-def _read_manifest(folder: Path) -> Optional[dict]:
-    path = folder / "manifest.json"
-    if not path.is_file():
-        return None
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-def _voxel_size_of(run_folder: Path, stage_manifest: dict) -> Optional[float]:
-    """The voxel size of the preprocessing run a result was built on, through its thresholding run; None when the
-    chain is broken (a later run replaced one of them)."""
-    thresholding = _read_manifest(stage_folder(run_folder, "thresholding"))
-    preprocessing = _read_manifest(stage_folder(run_folder, "preprocessing"))
-    if (thresholding is None or preprocessing is None or stage_manifest.get("upstream_run_id") != thresholding.get("run_id")
-            or thresholding.get("upstream_run_id") != preprocessing.get("run_id")):
-        return None
-    return float(preprocessing["voxel_size"])
-
-
 def run_geometries(max_volume_path, run_folder=None, fallback_voxel_size: float = 1.0) -> list:
     """The geometries of a run to check: the maximum volume, and the carved envelope and the building massing of
     *run_folder* when they were built (none without a run folder).
 
     The envelope and the massing are clipped by the maximum volume, with the voxel size of the analysis they were
-    built from as their surface tolerance (*fallback_voxel_size* when the chain of manifests is broken).
+    built from as their surface tolerance (*fallback_voxel_size* when the chain of manifests does not tell it;
+    :func:`check_files.run_geometry_files`, which the service reads too).
     """
     from .io import load_mesh
     max_volume = load_mesh(str(max_volume_path))
     geometries = [CheckGeometry("max_volume", "Maximum volume", max_volume, path=str(max_volume_path))]
-    if run_folder is None:
-        return geometries
-    run_folder = Path(run_folder)
-    for name, label, stage in (("envelope", "Carved envelope", "exporting"), ("massing", "Building massing", "massing")):
-        folder = stage_folder(run_folder, stage)
-        manifest = _read_manifest(folder)
-        if manifest is None or not (folder / manifest["mesh_path"]).is_file():
-            continue
-        mesh_path = folder / manifest["mesh_path"]
-        voxel_size = _voxel_size_of(run_folder, manifest) or float(fallback_voxel_size)
-        geometries.append(CheckGeometry(name, label, load_mesh(str(mesh_path)), clip=max_volume,
-                                        surface_tolerance=voxel_size, path=str(mesh_path)))
+    for found in run_geometry_files(run_folder, fallback_voxel_size):
+        geometries.append(CheckGeometry(found.name, found.label, load_mesh(str(found.path)), clip=max_volume,
+                                        surface_tolerance=found.surface_tolerance, path=str(found.path)))
     return geometries
 
 
@@ -651,14 +613,14 @@ def simulate_study(
     ``test_surface``, ``max_volume``, ``geometries`` (the envelope's and
     massing's meshes, only those built), ``weather``, ``context``,
     ``terrain`` (each :func:`file_fingerprint`, None when absent) and
-    ``settings_digest`` (the sha256 of the settings' JSON, sorted keys).
+    ``settings_digest`` (:func:`check_settings.settings_digest`: the
+    settings without the weather file's path, which ``weather`` records).
 
     Raises
     ------
     InputError
         When the test surfaces would need more than :data:`MAX_CHECK_POINTS` points at the settings' spacing.
     """
-    import hashlib
     from .io import load_mesh, load_optional_mesh
     geometries = run_geometries(max_volume_path, run_folder, voxel_size)
     max_volume = geometries[0]
@@ -667,7 +629,7 @@ def simulate_study(
     loaded = [(path, load_optional_mesh(path, name)) for path, name in ((context_path, "context"), (terrain_path, "terrain"))]
     blocking = [mesh for _path, mesh in loaded if mesh is not None]
     frame = np.round(max_volume.mesh.bounds[0], 6)
-    digest = hashlib.sha256(json.dumps(settings.model_dump(), sort_keys=True).encode("utf-8")).hexdigest()
+    digest = settings_digest(settings)
     fingerprints = {
         "test_surface": file_fingerprint(test_surface_path),
         "max_volume": file_fingerprint(max_volume_path),

@@ -416,13 +416,21 @@ def test_simulate_study_records_the_fingerprints_and_the_settings_digest(tmp_pat
     assert saved["context"] == file_fingerprint(context) and saved["context"]["size"] > 0
     assert saved["terrain"] is None and saved["weather"] is None and saved["geometries"] == {}
     assert saved["settings_digest"] == hashlib.sha256(
-        json.dumps(settings.model_dump(), sort_keys=True).encode("utf-8")).hexdigest()
+        json.dumps(settings.model_dump(exclude={"epw_path"}), sort_keys=True).encode("utf-8")).hexdigest()
     assert result.summary["inputs"]["blocking"] == [saved["context"]]
     # The digest follows the settings and the context follows the file.
     other = simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=2.0, rays_per_patch=4),
                            out_dir=tmp_path / "other", device="cpu")
     assert other.summary["fingerprints"]["settings_digest"] != saved["settings_digest"]
     assert other.summary["fingerprints"]["context"] is None
+
+
+def test_the_settings_digest_leaves_out_where_the_weather_file_is():
+    from urbansolarcarver.check_settings import settings_digest
+    period = dict(start_month=12, start_day=21, start_hour=10, end_month=12, end_day=21, end_hour=14)
+    here = settings_digest(_settings("sun_hours", epw_path="C:/a/weather.epw", **period))
+    assert here == settings_digest(_settings("sun_hours", epw_path="D:/moved/weather.epw", **period))
+    assert here != settings_digest(_settings("sun_hours", epw_path="C:/a/weather.epw", **{**period, "end_hour": 13}))
 
 
 def test_simulate_study_refuses_too_many_points_with_the_spacing_that_fits(tmp_path, monkeypatch):

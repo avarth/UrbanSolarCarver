@@ -39,7 +39,7 @@ def test_add_a_study_from_a_metric_takes_its_defaults_and_name(project_with_inpu
     study = store.add_study(name, metric="sun_hours")
     assert (study.id, study.name, study.named_by_user, study.colour) == ("1", "Sun hours, 21 Dec", False, CRITERION_COLOURS[0])
     assert study.metric == "sun_hours" and study.test_surface_files == [] and study.target is None
-    assert study.settings == PERIOD_21_DEC
+    assert study.settings == {**PERIOD_21_DEC, "time_basis": "standard"}
     assert store.studies(name) == [study]
     benefit = store.add_study(name, metric="useful_solar_energy")
     assert benefit.id == "2" and benefit.colour == CRITERION_COLOURS[1]
@@ -89,6 +89,15 @@ def test_add_a_study_like_a_criterion_copies_metric_period_settings_and_files(pr
     assert unknown.value.status_code == 404
 
 
+def test_a_study_like_a_criterion_copies_its_time_basis(project_with_inputs):
+    store, name = _with_weather(project_with_inputs)
+    criterion = store.add_criterion(name, "time-based", "Sun on the square")
+    store.update_criterion(name, criterion.id, values={**criterion.settings, "time_basis": "daylight_saving"})
+    study = store.add_study(name, from_criterion=criterion.id)
+    assert study.metric == "sun_hours" and study.settings["time_basis"] == "daylight_saving"
+    assert store.add_study(name, metric="sun_hours").settings["time_basis"] == "standard"
+
+
 def test_study_from_criterion_takes_only_the_keys_the_metric_reads(project_with_inputs):
     store, name = project_with_inputs
     entry = store.criteria(name)[0]
@@ -122,7 +131,7 @@ def test_changing_metric_or_period_renames_a_study_the_user_did_not_name(project
     named = store.update_study(name, study.id, name="  My facade  ")
     assert (named.name, named.named_by_user) == ("My facade", True)
     kept = store.update_study(name, study.id, metric="sun_hours")
-    assert kept.name == "My facade" and kept.settings == PERIOD_21_DEC     # reset to the new metric's defaults
+    assert kept.name == "My facade" and kept.settings == {**PERIOD_21_DEC, "time_basis": "standard"}    # reset to the new metric's defaults
     assert store.studies(name) == [kept]
 
 
@@ -228,7 +237,7 @@ def test_study_routes(client_with_inputs):
     assert set(metrics) == {"sun_hours", "solar_energy", "useful_solar_energy", "sky_component", "cooling_sky", "sky_view"}
     assert metrics["sun_hours"]["available"] is False and metrics["sun_hours"]["needs_epw"] is True      # no weather file yet
     assert metrics["sky_component"]["available"] is True
-    assert metrics["sun_hours"]["default_settings"] == PERIOD_21_DEC and metrics["sky_view"]["default_settings"] == {}
+    assert metrics["sun_hours"]["default_settings"] == {**PERIOD_21_DEC, "time_basis": "standard"} and metrics["sky_view"]["default_settings"] == {}
     assert {"label", "unit"} <= set(metrics["sun_hours"])
     upload = client.post("/api/projects/p/inputs/weather", files={"file": ("golden.epw", GOLDEN_EPW.read_bytes(), "application/octet-stream")})
     assert upload.status_code == 200

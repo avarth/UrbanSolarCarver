@@ -200,6 +200,7 @@ class RunWorker:
         with self._store.project_lock(name), self._start_lock:
             if self._active is not None:
                 raise RunConflict(self._active.state.project)
+            self._store.migrate_to_criteria(name)      # a project of an earlier version becomes a chain first, as before a pipeline run
             requests, refusals = [], []
             for study in self._store.studies(name):
                 reason = simulation.refusal_of(self._store, name, study)
@@ -266,7 +267,8 @@ class RunWorker:
 
     def _final_event_of_simulation(self, context: RunContext, requests: list, forwarder: _StudyEventsForwarder) -> dict:
         """Run each study's request and give the event that ends the simulation. A study the engine refuses (too many test points,
-        settings it does not accept) becomes an issue of that study and the others still run; a cancel or another error ends it."""
+        settings it does not accept) becomes an issue of that study and is kept as its refusal (simulation.record_refusal), and the
+        others still run; a study that runs loses an earlier refusal. A cancel or another error ends the simulation."""
         try:
             if self._session is None:
                 self._session = self._create_session()
@@ -277,6 +279,9 @@ class RunWorker:
                     handler(request, self._session, context)
                 except (InputError, ConfigError) as error:
                     forwarder.refused_by_the_engine(type(error).__name__, str(error))
+                    simulation.record_refusal(request, str(error))
+                else:
+                    simulation.forget_refusal(request)
             return {"type": "run_finished", "stages": [simulation.SIMULATE_STAGE], "files": []}
         except RunCancelled:
             return {"type": "run_cancelled"}

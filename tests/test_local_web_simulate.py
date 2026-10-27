@@ -13,13 +13,13 @@ import trimesh
 
 from local_web_test_support import (
     GOLDEN_EPW, WaitsForCancel, box_bytes, change_settings, wait_until_finished, write_envelope_as_exported, write_fake_chain_run,
-    write_fake_stage_output,
+    write_earlier_version_project, write_fake_stage_output,
 )
 from test_local_web_server import build_client, create_project_with_inputs, read_events, start_run, upload
 from urbansolarcarver import solar_check
 from urbansolarcarver.engine_requests import handle_engine_request
-from urbansolarcarver.errors import InputError
 from urbansolarcarver.local_web_service import simulation
+from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.run_worker import RunConflict
 from urbansolarcarver.local_web_service.stage_records import stage_status_reply
 
@@ -88,11 +88,6 @@ def service(tmp_path):
     return client, worker, engine
 
 
-def test_the_result_file_names_are_the_engines():
-    assert (simulation.SUMMARY_FILE, simulation.VALUES_FILE, simulation.POINTS_FILE) == \
-        (solar_check.SUMMARY_FILE, solar_check.VALUES_FILE, solar_check.POINTS_FILE)
-
-
 def test_simulate_runs_every_study_that_can_run_and_names_the_ones_that_cannot(service):
     client, worker, engine = service
     store = worker.store
@@ -129,22 +124,116 @@ def test_a_study_whose_metric_needs_the_missing_weather_file_is_refused(service)
     assert state_of(store, "p", sun_hours) == ("not_run", None)
 
 
-def test_a_study_the_engine_refuses_is_reported_and_the_others_still_run(service):
-    client, worker, engine = service
+def test_a_study_the_engine_refuses_stays_refused_until_its_inputs_change_and_the_others_still_run(service, monkeypatch):
+    client, worker, _engine = service
     store = worker.store
-    first, second = add_study(store, "p"), add_study(store, "p")
-
-    def refuses_the_first(request, session, context):
-        if request.out_dir.endswith(first):
-            raise InputError("The test surfaces would need about 3,000,000 test points.")
-        return engine(request, session, context)
-    worker._handle_request = refuses_the_first
+    store.add_input("p", "test_surfaces", "small.ply", plane_bytes(size=2.0))
+    large, small = add_study(store, "p"), add_study(store, "p", files=("small.ply",))
+    monkeypatch.setattr(solar_check, "MAX_CHECK_POINTS", 50)     # the 6 m plane has 144 points at 0.5 m, the 2 m plane 16
     events = simulate_and_wait(worker)
     assert events[-1]["type"] == "run_finished"
     issues = [event for event in events if event["type"] == "issue"]
-    assert [(issue["stage"], issue["study"], issue["code"]) for issue in issues] == [("simulate", first, "InputError")]
-    assert "3,000,000" in issues[0]["message"]
-    assert state_of(store, "p", first) == ("not_run", None) and state_of(store, "p", second) == ("current", None)
+    assert [(issue["stage"], issue["study"], issue["code"]) for issue in issues] == [("simulate", large, "InputError")]
+    state, reason = state_of(store, "p", large)
+    assert state == "refused" and reason == issues[0]["message"] and "A spacing of" in reason
+    assert state_of(store, "p", small) == ("current", None)
+    listed = {study["entry"]["id"]: study for study in client.get("/api/projects/p/studies").json()["studies"]}
+    assert (listed[large]["state"], listed[large]["reason"]) == ("refused", reason)
+    assert simulation.study_state(ProjectStore(store.projects_folder), "p", store.studies("p")[0]) == ("refused", reason)  # read from disk
+
+    store.write_shared_settings("p", {"voxel_size": 2.0})     # a spacing of 1 m: 36 points
+    assert state_of(store, "p", large) == ("not_run", None)
+    assert state_of(store, "p", small) == ("out_of_date", None)
+    assert simulate_and_wait(worker)[-1]["type"] == "run_finished"
+    assert state_of(store, "p", large) == ("current", None)
+    assert not (store.open("p") / "simulate" / large / "refusal.json").exists()
+
+
+def test_deleting_a_refused_study_removes_its_refusal(service, monkeypatch):
+    _client, worker, _engine = service
+    store = worker.store
+    study = add_study(store, "p")
+    monkeypatch.setattr(solar_check, "MAX_CHECK_POINTS", 50)
+    simulate_and_wait(worker)
+    assert (store.open("p") / "simulate" / study / "refusal.json").is_file()
+    store.delete_study("p", study)
+    assert not (store.open("p") / "simulate" / study).exists()
+
+
+def test_a_moved_project_keeps_its_weather_study_current(service):
+    _client, worker, _engine = service
+    store = worker.store
+    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    study = add_study(store, "p", metric="sun_hours")
+    simulate_and_wait(worker)
+    assert state_of(store, "p", study) == ("current", None)
+    store.rename_project("p", "moved")
+    assert state_of(store, "moved", study) == ("current", None)
+
+
+def test_the_rays_per_patch_are_those_of_the_first_criterion_that_is_on(service):
+    _client, worker, _engine = service
+    store = worker.store
+    study = store.add_study("p", metric="sky_view")
+    first = store.criteria("p")[0]
+    store.update_criterion("p", first.id, values={**first.settings, "rays_per_patch": 1})
+    second = store.add_criterion("p", "daylight")
+    store.update_criterion("p", second.id, values={**second.settings, "rays_per_patch": 9})
+    assert simulation.study_settings(store, "p", study).rays_per_patch == 1        # the first is on
+    store.update_criterion("p", first.id, bypassed=True)
+    settings = simulation.study_settings(store, "p", study)
+    assert settings.rays_per_patch == 9 and settings.min_altitude == 5.0
+    store.update_criterion("p", second.id, bypassed=True)
+    assert simulation.study_settings(store, "p", study).rays_per_patch == 1        # none is on: the first
+    with store.project_lock("p"):
+        project_json = store.read_project_json("p")
+        project_json.criteria = []
+        store.write_project_json("p", project_json)
+    assert simulation.study_settings(store, "p", study).rays_per_patch == 4        # no criterion
+
+
+def test_a_study_takes_its_time_basis_from_its_own_settings(service):
+    _client, worker, _engine = service
+    store = worker.store
+    store.add_input("p", "weather", "golden.epw", GOLDEN_EPW.read_bytes())
+    study = store.add_study("p", metric="sun_hours")
+    assert simulation.study_settings(store, "p", study).time_basis == "standard"
+    store.update_study("p", study.id, values={"time_basis": "solar"})
+    assert simulation.study_settings(store, "p", store.studies("p")[0]).time_basis == "solar"
+    with store.project_lock("p"):       # as a study stored before time_basis was a study setting
+        project_json = store.read_project_json("p")
+        project_json.studies[0].settings.pop("time_basis")
+        store.write_project_json("p", project_json)
+    assert simulation.study_settings(store, "p", store.studies("p")[0]).time_basis == "standard"
+
+
+def test_a_project_of_an_earlier_version_is_migrated_before_a_simulation(tmp_path):
+    client, worker = build_client(tmp_path / "projects", handle_request=CheckEngine())
+    write_earlier_version_project(worker.store, "old", stages=())
+    assert worker.store.read_project_json("old").criteria == []
+    reply = client.post("/api/projects/old/simulate")
+    assert reply.status_code == 422 and reply.json()["detail"] == "Add a study to run."
+    assert [criterion.id for criterion in worker.store.criteria("old")] == ["1"]
+
+
+def test_a_result_traced_with_the_voxel_size_its_manifests_record_stays_current(service):
+    _client, worker, _engine = service
+    store = worker.store
+    project_folder = store.open("p")
+    run_folder = project_folder / "run"
+    write_fake_chain_run(store, "p", ["1"])
+    write_envelope_as_exported(project_folder)
+    shutil.rmtree(run_folder / "massing")
+    upstream = json.loads((run_folder / "exporting" / "manifest.json").read_text(encoding="utf-8"))["upstream_run_id"]
+    (run_folder / "thresholding").mkdir()      # the single-run layout, whose preprocessing records a voxel size of 2 m
+    (run_folder / "thresholding" / "manifest.json").write_text(json.dumps({"run_id": upstream, "upstream_run_id": "pre"}), encoding="utf-8")
+    (run_folder / "preprocessing").mkdir()
+    (run_folder / "preprocessing" / "manifest.json").write_text(json.dumps({"run_id": "pre", "voxel_size": 2.0}), encoding="utf-8")
+    study = add_study(store, "p")
+    simulate_and_wait(worker)
+    summary = json.loads((project_folder / "simulate" / study / "check_summary.json").read_text(encoding="utf-8"))
+    assert summary["columns"]["envelope"]["surface_tolerance_m"] == 2.0 and simulation.tracing_voxel_size(store, "p") == 1.0
+    assert state_of(store, "p", study) == ("current", None)
 
 
 def test_simulate_is_refused_while_a_pipeline_run_is_active_and_the_reverse(tmp_path):

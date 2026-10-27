@@ -9,6 +9,8 @@ list them without importing torch or Warp.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Dict, Literal, Mapping, Optional
 
@@ -190,6 +192,13 @@ class CheckSettings(BaseModel):
             values["time_basis"] = "standard"
         values.update(changes)
         return build_check_settings({name: value for name, value in values.items() if name in cls.model_fields})
+
+
+def settings_digest(settings: CheckSettings) -> str:
+    """The sha256 of the settings' JSON (sorted keys) without the weather file's path, which a result records apart (with its
+    size and time), so moving the project's folder leaves the digest as it was."""
+    values = settings.model_dump(exclude={"epw_path"})
+    return hashlib.sha256(json.dumps(values, sort_keys=True).encode("utf-8")).hexdigest()
 
 
 def build_check_settings(values: Mapping[str, object]) -> CheckSettings:

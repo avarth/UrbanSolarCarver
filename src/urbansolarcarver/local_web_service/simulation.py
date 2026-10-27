@@ -3,59 +3,67 @@
 A simulation is a job of the run worker (``RunWorker.start_simulation``) of one stage, ``simulate``, outside the pipeline's stages:
 it sends one ``check`` request per study that can run and never reads or writes a stage record. A study's result is in
 ``simulate/<id>`` (``check_points.npz``, ``check_values.npz`` and, written last, ``check_summary.json``); the summary records the
-files and settings it was computed from (``solar_check.simulate_study``), which ``study_state`` compares with the files now.
-This module reads the result files itself: importing ``solar_check`` imports torch, which the service does not import until a run.
+files and settings it was computed from (``solar_check.simulate_study``), which ``study_state`` compares with the files now. A study
+the engine refused leaves ``refusal.json`` there instead, with the message and the same record of what it was given.
+The file names and the lookup of a run's geometries are ``check_files``'s, which the engine uses too; this module does not import
+``solar_check``, which imports torch.
 """
 from __future__ import annotations
 
-import hashlib
 import json
 import struct
 from pathlib import Path
 
 import numpy as np
 
-from ..check_settings import CHECK_METRICS, CheckSettings, build_check_settings
+from ..check_files import POINTS_FILE, SUMMARY_FILE, VALUES_FILE, run_geometry_files
+from ..check_settings import CHECK_METRICS, CheckSettings, build_check_settings, settings_digest
 from ..engine_requests import CheckRequest
 from ..errors import ConfigError
 from ..pydantic_schemas import UserConfig, resolve_grid_step
-from ..stage_settings import stage_folder
 from .api_models import StudyEntry, StudyState
-from .criteria import OPTIONAL_SERVICE_PATHS, SERVICE_PATHS
+from .criteria import OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria
 from .projects import RUN_FOLDER, ProjectStore
 from .stage_records import envelope_voxel_size
 from .studies import joined_study_surfaces_path, study_folder
 
 SIMULATE_STAGE = "simulate"     # the one stage of a simulation, not one of PIPELINE_STAGES
-# The result files as solar_check names them (a test compares them).
-POINTS_FILE = "check_points.npz"
-VALUES_FILE = "check_values.npz"
-SUMMARY_FILE = "check_summary.json"
+REFUSAL_FILE = "refusal.json"   # in simulate/<id>: the engine refused the study with these inputs
 OPEN_COLUMN = "open"            # the column without any geometry; the others are geometries
 HEADER_ALIGNMENT_BYTES = 4      # the values header is padded so the float32 arrays after it start aligned
-# The settings of the check that come from the project's settings, not the study's: the shared ones and, for those a criterion
-# holds (time_basis, min_altitude, rays_per_patch), the first criterion's.
-PROJECT_SETTING_KEYS = ("north_deg", "time_basis", "min_altitude", "ray_length", "rays_per_patch")
-# The geometries a run builds and the stage folder whose manifest names each one's mesh, as solar_check.run_geometries reads them.
-BUILT_GEOMETRY_STAGES = (("envelope", "exporting"), ("massing", "massing"))
+# The check settings that come from the project's shared settings; the spacing comes from voxel_size and grid_step.
+SHARED_SETTING_KEYS = ("north_deg", "ray_length")
+# The rays per sky patch when the project has no criterion to take them from.
+DEFAULT_RAYS_PER_PATCH = CheckSettings.model_fields["rays_per_patch"].default
+# The input files a result records by key (fingerprints in the summary), besides the geometries of the run.
+RECORDED_FILE_KEYS = ("test_surface", "max_volume", "weather", "context", "terrain")
 ADD_TEST_SURFACES = "Add test surfaces"
 ADD_MAX_VOLUME = "Add a maximum volume"
 ADD_WEATHER_FILE = "Add a weather file"
 NO_STUDY = "Add a study to run."
 
 
+def _rays_criterion(store: ProjectStore, name: str) -> str | None:
+    """The criterion whose rays_per_patch the studies trace with: the first that is on, the first when none is, None without one."""
+    criteria = store.criteria(name)
+    chosen = (active_criteria(criteria) or criteria or [None])[0]
+    return chosen.id if chosen is not None else None
+
+
 def study_settings(store: ProjectStore, name: str, study: StudyEntry) -> CheckSettings:
-    """The check settings of a study: the project's (PROJECT_SETTING_KEYS, and the test point spacing of the carving), the
-    study's metric and settings, and the weather file when the metric reads one and the project has it.
+    """The check settings of a study: north and ray length from the shared settings, the test point spacing of the carving,
+    rays_per_patch of the first criterion that is on (the first criterion when none is, 4 without one), the study's metric and
+    settings (the period, its time basis, the mode settings), and the weather file when the metric reads one and the project has
+    it. The lowest sun altitude is CheckSettings' default.
 
     Raises ConfigError, naming the fields, when they are not valid (a metric that needs the weather file and has none among them).
     """
-    project_settings = store.read_settings(name)
+    criterion_id = _rays_criterion(store, name)
+    project_settings = store.read_settings(name, criterion_id)
     voxel_size = float(project_settings.get("voxel_size") or UserConfig.model_fields["voxel_size"].default)
-    values = {key: project_settings[key] for key in PROJECT_SETTING_KEYS if project_settings.get(key) is not None}
+    values = {key: project_settings[key] for key in SHARED_SETTING_KEYS if project_settings.get(key) is not None}
+    values["rays_per_patch"] = (project_settings.get("rays_per_patch") if criterion_id is not None else None) or DEFAULT_RAYS_PER_PATCH
     spec = CHECK_METRICS.get(study.metric)
-    if study.metric != "sun_hours":
-        values.pop("time_basis", None)      # the other metrics read the weather file's hours, in local standard time
     weather_path = store.weather_file_path(name)
     if spec is not None and spec.needs_epw and weather_path is not None:
         values["epw_path"] = str(weather_path)
@@ -65,8 +73,8 @@ def study_settings(store: ProjectStore, name: str, study: StudyEntry) -> CheckSe
 
 
 def tracing_voxel_size(store: ProjectStore, name: str) -> float:
-    """The surface tolerance of the envelope and the massing: the voxel size the envelope on disk was built with, the project's
-    voxel size when that is not known."""
+    """The surface tolerance of the envelope and the massing when the run folder's manifests do not tell it: the voxel size the
+    envelope on disk was built with, the project's voxel size when that is not known."""
     built = envelope_voxel_size(store, name)
     if built is not None:
         return float(built)
@@ -106,19 +114,37 @@ def study_request(store: ProjectStore, name: str, study: StudyEntry, device: str
 
 
 def study_state(store: ProjectStore, name: str, study: StudyEntry) -> tuple[StudyState, str | None]:
-    """The state of a study and, when it is refused, why (refusal_of).
+    """The state of a study and, when it is refused, why.
 
+    ``refused`` when refusal_of says so, or when the engine refused it with the inputs it would be given now (refusal.json);
     ``not_run`` without a result; ``out_of_date`` when a file the result was computed from changed (its size or time), appeared or
-    went (the envelope or the massing built or removed), when its settings changed, or when the envelope's voxel size did; else
-    ``current``.
+    went (the envelope or the massing built or removed), when its settings changed, or when the surface tolerance of a geometry
+    did; else ``current``.
     """
     reason = refusal_of(store, name, study)
     if reason is not None:
         return "refused", reason
-    summary = read_summary(study_folder(store.open(name), study.id))
+    folder = study_folder(store.open(name), study.id)
+    inputs_now = _inputs_of_request(study_request(store, name, study))
+    refusal = _read_json(folder / REFUSAL_FILE)
+    if refusal is not None and refusal.get("inputs") == inputs_now:
+        return "refused", str(refusal.get("message", ""))
+    summary = read_summary(folder)
     if summary is None:
         return "not_run", None
-    return ("out_of_date" if _is_out_of_date(summary, study_request(store, name, study)) else "current"), None
+    return ("out_of_date" if _inputs_of_summary(summary) != inputs_now else "current"), None
+
+
+def record_refusal(request: CheckRequest, message: str) -> None:
+    """Keep the engine's refusal of a study with what it was given, so study_state shows it until one of those changes."""
+    folder = Path(request.out_dir)
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / REFUSAL_FILE).write_text(json.dumps({"message": message, "inputs": _inputs_of_request(request)}), encoding="utf-8")
+
+
+def forget_refusal(request: CheckRequest) -> None:
+    """Remove the refusal of a study the engine has now run."""
+    (Path(request.out_dir) / REFUSAL_FILE).unlink(missing_ok=True)
 
 
 def result_geometries(store: ProjectStore, name: str, study_id: str) -> list[str]:
@@ -130,72 +156,66 @@ def result_geometries(store: ProjectStore, name: str, study_id: str) -> list[str
     return [column for column in summary.get("columns", {}) if column != OPEN_COLUMN]
 
 
+def _read_json(path: Path) -> dict | None:
+    try:
+        content = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return content if isinstance(content, dict) else None
+
+
 def read_summary(folder: Path) -> dict | None:
     """The summary of the result in *folder*; None when one of its three files is missing or the summary cannot be read."""
     if not all((folder / file_name).is_file() for file_name in (POINTS_FILE, VALUES_FILE, SUMMARY_FILE)):
         return None
-    try:
-        summary = json.loads((folder / SUMMARY_FILE).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    return summary if isinstance(summary, dict) else None
+    return _read_json(folder / SUMMARY_FILE)
 
 
-def _file_state(path: str | Path | None) -> tuple[int, int] | None:
-    """The size and modification time of a file, None when there is no path or no file."""
+def _file_state(path: str | Path | None) -> list[int] | None:
+    """The size and modification time of a file, None when there is no path or no file (a list, as JSON reads it back)."""
     if path is None:
         return None
     try:
         status = Path(path).stat()
     except OSError:
         return None
-    return status.st_size, status.st_mtime_ns
+    return [status.st_size, status.st_mtime_ns]
 
 
-def _recorded_state(fingerprint) -> tuple[int, int] | None:
-    """The size and time a summary recorded for a file (solar_check.file_fingerprint), None for none."""
+def _recorded_state(fingerprint) -> list[int] | None:
+    """The size and time a summary recorded for a file (check_files.file_fingerprint), None for none. The path is left out, so
+    moving the project's folder keeps a result current."""
     if not isinstance(fingerprint, dict):
         return None
-    return fingerprint.get("size"), fingerprint.get("modified_ns")
+    return [fingerprint.get("size"), fingerprint.get("modified_ns")]
 
 
-def _built_geometry_paths(run_folder: Path) -> dict[str, Path]:
-    """The meshes of the envelope and the massing that the run folder has now, by geometry name, as run_geometries finds them."""
-    paths = {}
-    for geometry, stage in BUILT_GEOMETRY_STAGES:
-        folder = stage_folder(run_folder, stage)
-        try:
-            manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        mesh_name = manifest.get("mesh_path") if isinstance(manifest, dict) else None
-        if isinstance(mesh_name, str) and (folder / mesh_name).is_file():
-            paths[geometry] = folder / mesh_name
-    return paths
-
-
-def _is_out_of_date(summary: dict, request: CheckRequest) -> bool:
-    """Whether the result of *summary* differs from what *request* would compute now."""
-    fingerprints = summary.get("fingerprints")
-    if not isinstance(fingerprints, dict):
-        return True
+def _inputs_of_request(request: CheckRequest) -> dict:
+    """What a result of *request* would be computed from, in the form _inputs_of_summary gives (plain JSON values): the settings
+    digest, the size and time of each input file, and of each geometry the run folder has built with its surface tolerance, found
+    as the engine finds them (check_files.run_geometry_files)."""
     settings = CheckSettings(**request.settings)
-    digest = hashlib.sha256(json.dumps(settings.model_dump(), sort_keys=True).encode("utf-8")).hexdigest()
-    if fingerprints.get("settings_digest") != digest:
-        return True
-    files_now = {"test_surface": request.test_surface_path, "max_volume": request.max_volume_path,
-                 "weather": settings.epw_path if settings.spec.needs_epw else None,
-                 "context": request.context_path, "terrain": request.terrain_path}
-    if any(_recorded_state(fingerprints.get(key)) != _file_state(path) for key, path in files_now.items()):
-        return True
-    recorded_geometries = fingerprints.get("geometries")
-    built = _built_geometry_paths(Path(request.run_folder))
-    if not isinstance(recorded_geometries, dict) or set(recorded_geometries) != set(built):
-        return True
-    if any(_recorded_state(recorded_geometries[geometry]) != _file_state(path) for geometry, path in built.items()):
-        return True
-    columns = summary.get("columns", {})
-    return any(columns.get(geometry, {}).get("surface_tolerance_m") != request.voxel_size for geometry in built)
+    paths = {"test_surface": request.test_surface_path, "max_volume": request.max_volume_path,
+             "weather": settings.epw_path if settings.spec.needs_epw else None,
+             "context": request.context_path, "terrain": request.terrain_path}
+    geometries = run_geometry_files(request.run_folder, request.voxel_size)
+    return {"settings_digest": settings_digest(settings),
+            "files": {key: _file_state(paths[key]) for key in RECORDED_FILE_KEYS},
+            "geometries": {geometry.name: _file_state(geometry.path) for geometry in geometries},
+            "surface_tolerances": {geometry.name: float(geometry.surface_tolerance) for geometry in geometries}}
+
+
+def _inputs_of_summary(summary: dict) -> dict | None:
+    """What the result of *summary* was computed from, as _inputs_of_request gives it; None when the summary does not record it."""
+    fingerprints = summary.get("fingerprints")
+    columns = summary.get("columns")
+    if not isinstance(fingerprints, dict) or not isinstance(fingerprints.get("geometries"), dict) or not isinstance(columns, dict):
+        return None
+    geometries = fingerprints["geometries"]
+    return {"settings_digest": fingerprints.get("settings_digest"),
+            "files": {key: _recorded_state(fingerprints.get(key)) for key in RECORDED_FILE_KEYS},
+            "geometries": {name: _recorded_state(fingerprint) for name, fingerprint in geometries.items()},
+            "surface_tolerances": {name: (columns.get(name) or {}).get("surface_tolerance_m") for name in geometries}}
 
 
 def study_values(folder: Path) -> bytes | None:
