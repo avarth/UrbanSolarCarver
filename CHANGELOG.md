@@ -7,6 +7,40 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (Simulate)
+
+- **Simulate, a workspace beside the pipeline.** A **Design | Simulate** switch in the header opens a workspace that shows
+  how much sun, solar energy or sky reaches the test surfaces on meshes, before (the maximum volume) and after (the carved
+  envelope and the massing, each clipped by the maximum volume). The context and terrain block in every geometry. It changes
+  no criterion, setting or pipeline step and runs nothing until **Run** is pressed. See [Simulate](docs/simulate.md).
+- **Studies.** A study is a metric, a period and test surface files, kept in `project.json` under `studies` apart from the
+  criteria. The metrics are sun hours (h), solar energy and useful solar energy (kWh/m²), overcast sky component, cooling sky
+  and sky view factor (%); the sky metrics are a percentage of an unobstructed horizontal surface and ground reflection is
+  left out. **Add study** offers **Like *criterion*** shortcuts (the metric, period, mode settings and files are copied, no
+  link is kept) and the plain metrics. A study can use a test surface file the project stores already and add files of its
+  own; a stored file stays while a criterion or a study lists it.
+- **Fixed choices.** One sun position per hour, Tregenza's 145 sky patches traced with the carving's jittered sub-rays at the
+  project's rays per patch (the first criterion that is on), test points at the carving's spacing, at most 2 million points
+  per study (the message names the spacing that fits), lowest sun altitude 5 degrees. The time basis is a setting of sun
+  hours.
+- **The view.** A Studies panel with a settings popover per study; a geometry switch (Max volume, Envelope, Massing) and a
+  **Change** toggle that colours each point by its change from the maximum volume; a legend with a draggable target saved with
+  the study (arrow keys move it, Delete clears it), points below it in a muted colour of their own; a result card with the
+  mean, the lowest tenth and the share of points at the target, the maximum volume's value in brackets; the **Out of date**
+  stamp.
+- **Service.** Routes under `/projects/{name}/studies` (list with state, add from a metric or a criterion, update, delete,
+  order, test surface files), `POST /projects/{name}/simulate` and `GET /projects/{name}/studies/{id}/values`. A simulation
+  is a job of the run worker (stage `simulate`, outside the pipeline's stages), one job at a time with Design runs. A study
+  is current, out of date (its settings, files, weather file, context, terrain, maximum volume or a geometry mesh changed),
+  not run or refused. Results are in `<project>/simulate/<id>/` (`check_points.npz`, `check_values.npz`,
+  `check_summary.json`; `refusal.json` for a refused study) and show again when the project is reopened.
+- **Engine.** The engine request `check` runs one study (`solar_check.simulate_study`); the metrics and settings are in
+  `check_settings.py`, the files without torch in `check_files.py`. The summary records fingerprints of its inputs, with the
+  settings digest left without the weather file's path. An unreadable manifest of the envelope or the massing leaves that
+  geometry out with the issue `geometry_manifest_unusable`.
+- Not built yet: studies on other designs, snapshots, CSV export, side-by-side views, a command-line command and a
+  Grasshopper component.
+
 ### Added (chained carvings, engine)
 
 - **Criteria in sequence on one voxel grid.** A config with a `criteria:` list carves several criteria one after the

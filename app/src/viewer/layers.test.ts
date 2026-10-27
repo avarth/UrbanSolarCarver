@@ -232,9 +232,11 @@ test("a new target or Change recolours the same layer in place", () => {
   expect(patchColours(layer)[0]).toBe(hexOf("#c8553d"));
 });
 
-test("changeTolerance on 527,633 points takes under 200 ms: the Change view of that many points is drawn in under 200 ms", () => {
+test("changeTolerance on 527,633 points takes under 1 s: the Change view of that many points is drawn in under 1 s", () => {
   // The first build scanned the whole open column once per point to find the change tolerance while colouring the change, about
   // 2.8e11 steps on District's 527,633 points, which froze the browser. This times that path: the layer with Change on.
+  // The bound is 1 s, not 200 ms: it passes alone in 77 to 90 ms but took 329 ms in a full run under load, and the O(N²) path
+  // it guards takes seconds, so 1 s still tells them apart.
   setColourTokens();
   colourToken("accent");       // jsdom's first getComputedStyle takes about 80 ms once (a browser's is warm): not the path timed
   const count = 527_633;
@@ -245,7 +247,7 @@ test("changeTolerance on 527,633 points takes under 200 ms: the Change view of t
   const layer = studyValuesLayer({ values, geometry: "envelope", change: true, target: null, unit: "h", dimmed: false }, corners);
   const elapsed = performance.now() - started;
   expect(layer.userData.summary).toBe("527 633 points");
-  expect(elapsed).toBeLessThan(200);
+  expect(elapsed).toBeLessThan(1000);
 });
 
 test("with Change the layer colours the change from the maximum volume on the change ramp, losses in the carved colour", () => {

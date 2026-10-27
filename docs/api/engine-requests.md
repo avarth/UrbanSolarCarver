@@ -40,7 +40,7 @@ The reply holds `stage_folders` (stage name to folder, only for the stages that 
 | `max_volume_path` | The mesh file of the maximum volume |
 | `out_dir` | Where `check_summary.json`, `check_points.npz` and `check_values.npz` are written |
 | `settings` | `CheckSettings` values (`metric`, the period, `sample_spacing`, `rays_per_patch`, ...); an invalid one is a `ConfigError` reply |
-| `run_folder` | Optional run folder: its built envelope (`exporting`) and massing are added as columns, found through their manifests and clipped by the maximum volume |
+| `run_folder` | Optional run folder: its built envelope (`exporting`) and massing are added as columns, found through their manifests and clipped by the maximum volume. A manifest that exists but cannot be read or names no mesh leaves its geometry out, with the issue `geometry_manifest_unusable` naming the geometry and the file |
 | `context_path`, `terrain_path` | Optional mesh files that block in every column; a file without triangles is ignored with an issue |
 | `voxel_size` | Surface tolerance of the envelope and massing when the run folder does not record the voxel size they were built with (default 1.0) |
 | `device` | `auto` (default), `cpu` or `cuda` |

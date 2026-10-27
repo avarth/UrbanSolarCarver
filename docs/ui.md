@@ -263,6 +263,18 @@ The view has a compass, an axis gizmo (the three lettered axes, drawn straight o
 
 The ground aid button cycles through three states: off, a ground grid with a scale bar, and a compass ring on the ground around the scene (ticks every 10 degrees, the letters N, E, S and W every 90 degrees, rotated by the north direction). The button names the aid it switches to, and the choice is remembered in the browser. The compass ring, the sun path and the sky dome are centred on, and sized to, everything loaded (the maximum volume and the test surfaces together). Framing the model leaves out the surroundings and the terrain, which can reach far beyond the site.
 
+## Simulate
+
+The switch **Design | Simulate** in the header, next to the project name, opens a workspace beside the pipeline that checks how much sun, solar energy or sky reaches the test surfaces once the maximum volume stands and once the carved envelope or the massing stands. [Simulate](simulate.md) explains the metrics and what they block. Simulate changes no criterion, setting or pipeline step, and runs nothing until you press **Run**.
+
+- Simulate hides the five steps and gives the 3D view the whole window. Switching back to Design returns to the step you left, with its folds and scroll position kept.
+- The **Studies** panel floats over the top left of the view and collapses to an icon. Each row is a study: a colour swatch, its name and a line (its test surface files, **Out of date**, **Not run yet** or why it cannot run). Pressing a row puts that study on the view; only one is shown at a time. Its settings button opens a popover with the name, the metric, the analysis period, **More settings**, the test surface files and **Delete study**. Changes are saved at once.
+- **Add study** lists the criteria as **Like *name*** (the metric of its mode, its period, mode settings and files, copied) and the metrics (a metric that needs a weather file is greyed without one). **Run** runs every study that can run, on the maximum volume and on the envelope and the massing when they are built.
+- One job runs at a time. While a Design run is going Run says "A Design run is in progress", and while a simulation is going Design's run buttons say so.
+- At the top centre, **Max volume | Envelope | Massing** chooses the geometry the values are shown on (the last two wait until Design has built them), and **Change** colours each point by its change from the maximum volume.
+- The legend along the bottom shows the scale in the study's unit with a **target** you drag (arrow keys move it, Delete clears it); points below it are drawn in a muted colour. The result card in the bottom right corner gives the mean, the lowest tenth and the share of points at the target, with the maximum volume's value in brackets.
+- A result whose inputs changed stays on the view, dimmed, with the **Out of date** stamp. Reopening the project shows the last results.
+
 ## Where projects are kept
 
 Each project is a folder in the projects folder:
@@ -270,13 +282,15 @@ Each project is a folder in the projects folder:
 ```
 <projects folder>/<project name>/
 ├── inputs/        The files you added (max_volume/, test_surfaces/, context/, terrain/, weather.epw)
-│                  and the joined meshes the engine reads (joined/, one test_surfaces_<id>.ply per criterion)
+│                  and the joined meshes the engine reads (joined/, one test_surfaces_<id>.ply per criterion
+│                  and one study_surfaces_<id>.ply per study that lists files)
 ├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
 ├── project.json   The project's record: the files you added with their triangle counts, the input revision,
 │                  the example it came from (if any), the criteria with their own settings and test surface files,
-│                  and one record per completed stage (with the settings that stage ran with)
-└── run/           The engine's output: criteria/<id>/preprocessing and thresholding, criteria/chain.json,
-                   exporting/ and massing/
+│                  the studies of Simulate, and one record per completed stage (with the settings that stage ran with)
+├── run/           The engine's output: criteria/<id>/preprocessing and thresholding, criteria/chain.json,
+│                  exporting/ and massing/
+└── simulate/      The results of the studies, one folder per study (see Simulate)
 ```
 
 `config.yaml` works outside the interface: its paths are relative to the project folder, so `usc run -c <project folder>/config.yaml` runs the same analysis from the command line (see [Criteria in a project](#criteria-in-a-project)). Thresholding also writes `scores_compared_with_cutoff.npy` in its folder (the values the cutoff is applied to, which the histogram draws). To delete a project, use Delete in its menu (see [Managing a project](#managing-a-project)), or delete its folder in the file manager.
