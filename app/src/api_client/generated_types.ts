@@ -774,6 +774,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect Inputs
+         * @description The summary of each mesh file of the project (inspection.py); allowed while a run is active.
+         */
+        get: operations["inspect_inputs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/inspect/test_surfaces/{file_name}/geometry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Inspect Test Surface Geometry
+         * @description The triangles of a test surface file with the surface of each (layout in inspection.inspection_geometry).
+         */
+        get: operations["inspect_test_surface_geometry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/inspect/test_surfaces/{file_name}/turn": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Turn Test Surfaces
+         * @description Turn surfaces of a test surface file the other way and save the file, keeping its original (inspection.save_turned_surfaces).
+         */
+        post: operations["turn_test_surfaces"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/inspect/test_surfaces/{file_name}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Test Surface Original
+         * @description Put the original of a test surface file back in place of the saved one (inspection.restore_original).
+         */
+        post: operations["restore_test_surface_original"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/run/summary": {
         parameters: {
             query?: never;
@@ -1265,6 +1345,48 @@ export interface components {
             weather_latitude: number | null;
         };
         /**
+         * InspectReply
+         * @description The mesh files of a project in the order max volume, test surfaces, context, terrain, then by file name.
+         */
+        InspectReply: {
+            /** Files */
+            files: components["schemas"]["InspectedFile"][];
+        };
+        /**
+         * InspectedFile
+         * @description What the Inspect workspace shows of one input mesh file (inspection.py).
+         */
+        InspectedFile: {
+            /** Role */
+            role: string;
+            /** File Name */
+            file_name: string;
+            /** Triangle Count */
+            triangle_count: number;
+            /** Area M2 */
+            area_m2: number;
+            /** Bounds */
+            bounds: number[][];
+            /** Body Count */
+            body_count: number;
+            /** Closed Body Count */
+            closed_body_count: number;
+            /** Surface Count */
+            surface_count?: number | null;
+            /**
+             * Flippable
+             * @default false
+             */
+            flippable: boolean;
+            /**
+             * Original Kept
+             * @default false
+             */
+            original_kept: boolean;
+            /** Problem */
+            problem?: string | null;
+        };
+        /**
          * MassingSummary
          * @description The numbers massing reports for the run summary of the envelope and massing screen, and its mesh file for Export.
          */
@@ -1594,6 +1716,14 @@ export interface components {
             period_path: number[][];
             /** Markers */
             markers: components["schemas"]["SunMarker"][];
+        };
+        /**
+         * TurnSurfacesRequest
+         * @description The surfaces of a test surface file to turn the other way and save (their numbers in the geometry of the file).
+         */
+        TurnSurfacesRequest: {
+            /** Surfaces */
+            surfaces: number[];
         };
         /**
          * UpdateCriterionRequest
@@ -3609,6 +3739,200 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    inspect_inputs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectReply"];
+                };
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    inspect_test_surface_geometry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": unknown;
+                };
+            };
+            /** @description There is no such project or file. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    turn_test_surfaces: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TurnSurfacesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectedFile"];
+                };
+            };
+            /** @description There is no such project or file. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The turned file did not load as turned, so nothing was saved. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    restore_test_surface_original: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                file_name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InspectedFile"];
+                };
+            };
+            /** @description There is no such project or file, or no original is kept. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };

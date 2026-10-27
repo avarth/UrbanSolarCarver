@@ -33,6 +33,9 @@ export type StudyWithState = Schemas["StudyWithState"];
 export type StudyEntry = Schemas["StudyEntry"];
 export type MetricInfo = Schemas["MetricInfo"];
 /** What a new study starts from: a metric (its defaults, no files), or a criterion (its metric, period, mode settings and files). */
+export type InspectedFile = Schemas["InspectedFile"];
+export type InspectReply = Schemas["InspectReply"];
+
 export type StudySource = { metric: string } | { from_criterion: string };
 /** A change of a study: what is not given stays; a target of null removes the target. */
 export type StudyChange = Schemas["UpdateStudyRequest"];
@@ -315,6 +318,26 @@ export const startSimulation = (token: string, project: string) => requestJson<S
 export async function getStudyValues(token: string, project: string, studyId: string): Promise<ArrayBuffer> {
   return (await send(token, `${studyPath(project, studyId)}/values`)).arrayBuffer();
 }
+
+// Inspect: what each input file holds, and the orientation of the test surfaces (turn a surface, restore the original).
+function testSurfaceInspectPath(project: string, fileName: string): string {
+  return `${projectPath(project)}/inspect/test_surfaces/${encodeURIComponent(fileName)}`;
+}
+
+export const getInspection = (token: string, project: string) => requestJson<InspectReply>(token, `${projectPath(project)}/inspect`);
+
+/** The triangles of a test surfaces file with the surface each belongs to, as the service packs them (binary). */
+export async function getInspectionGeometry(token: string, project: string, fileName: string): Promise<ArrayBuffer> {
+  return (await send(token, `${testSurfaceInspectPath(project, fileName)}/geometry`)).arrayBuffer();
+}
+
+/** Turns the given surfaces of a test surfaces file over (the service keeps the original on the first turn). */
+export const turnSurfaces = (token: string, project: string, fileName: string, surfaces: number[]) =>
+  requestJson<InspectedFile>(token, `${testSurfaceInspectPath(project, fileName)}/turn`, "POST", { surfaces });
+
+/** Puts the kept original of a test surfaces file back. */
+export const restoreOriginal = (token: string, project: string, fileName: string) =>
+  requestJson<InspectedFile>(token, `${testSurfaceInspectPath(project, fileName)}/restore`, "POST");
 
 export const getSunPath = (token: string, project: string, criterionId?: string) =>
   requestJson<SunPath>(token, forCriterion(`${projectPath(project)}/sun-path`, criterionId));

@@ -399,7 +399,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   return (
     <div className="workspace">
-      <aside ref={panel} className="workspace-panel" hidden={props.mode === "simulate"} onScrollCapture={keepScroll}>
+      <aside ref={panel} className="workspace-panel" hidden={props.mode !== "design"} onScrollCapture={keepScroll}>
         {inputChangesNotice}
         <StepAccordion steps={steps} openStep={openStep} onOpenStep={openTheStep}
                        pinnedAction={saveFailureNotice === null && openStepAction === null ? null : <>{saveFailureNotice}{openStepAction}</>} />

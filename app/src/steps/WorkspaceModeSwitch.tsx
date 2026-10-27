@@ -1,10 +1,10 @@
-// The Design | Simulate switch of the top bar: Design is the pipeline (the steps beside the 3D view), Simulate gives the view the whole
-// window for the studies. A pair of toggle buttons, the pressed one is the mode in use.
+// The Design / Simulate / Inspect switch of the top bar: Design is the pipeline (the steps beside the 3D view), Simulate and Inspect give the view the whole
+// window (the studies; the orientation of the test surfaces). A group of toggle buttons, the pressed one is the mode in use.
 import { messages } from "../messages";
 
-export type WorkspaceMode = "design" | "simulate";
+export type WorkspaceMode = "design" | "simulate" | "inspect";
 
-const MODES: WorkspaceMode[] = ["design", "simulate"];
+const MODES: WorkspaceMode[] = ["design", "simulate", "inspect"];
 
 export function WorkspaceModeSwitch({ mode, onChange }: { mode: WorkspaceMode; onChange: (mode: WorkspaceMode) => void }) {
   return (

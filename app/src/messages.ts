@@ -67,7 +67,7 @@ export const messages = {
   versionLine: (version: string) => `Version ${version}`,
   projectsLink: "Projects",
   workspaceModeLabel: "Workspace mode",
-  workspaceModes: { design: "Design", simulate: "Simulate" },
+  workspaceModes: { design: "Design", simulate: "Simulate", inspect: "Inspect" },
 
   // Simulate: the studies panel over the 3D view, a study's popover and Run (simulate design, sections 3, 4 and 7)
   studiesTitle: "Studies",
