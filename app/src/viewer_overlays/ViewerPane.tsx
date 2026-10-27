@@ -4,6 +4,8 @@
 // layers that are out of date, or being replaced by a run, are dimmed (UX 6.3), and while one of them is shown a stamp at the top
 // of the view says so ("Out of date", or "Updating" during a run); a thin bar along the top shows a run's progress. In Simulate
 // the selected study's values are one more layer, dimmed when the study is out of date, and the stamp shows while it is.
+// In Inspect the orientation of the test surfaces is one more layer, which replaces the test surfaces in the view; a click on a surface
+// is reported, and a request to frame a box moves the camera.
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
@@ -14,8 +16,9 @@ import { colourToken, keptScoreRange } from "../viewer/colour_scales";
 import type { StudyView } from "../simulate/study_values";
 import { patchCorners } from "../simulate/study_values_decoder";
 import {
-  buildingMassingLayer, carvedByCriterionLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer, skyDomeLayer,
-  splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, terrainLayer, testSurfacesLayer, volumeOutline, type MaxVolumeAppearance, type VolumeOutline,
+  buildingMassingLayer, carvedByCriterionLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, inspectSurfacesLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer,
+  skyDomeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
+  type VolumeOutline,
 } from "../viewer/layers";
 import type { Point3 } from "../viewer/local_origin";
 import { DEFAULT_SKY_DOME_OPACITY, ViewerScene, type CameraState, type GroundAid, type LayerName, type ViewportTheme } from "../viewer/scene";
@@ -58,6 +61,16 @@ export interface TestSurfaceGroup {
   off: boolean;                 // the criterion is switched off: its entry says so
   shown: boolean;               // its entry is checked
   geometry: THREE.BufferGeometry | null;      // the files drawn in its colour; null when it has none, or is not shown
+}
+
+/** What Inspect shows: the files as the surface orientation layer draws them, and what the view reports back. */
+export interface InspectView {
+  files: InspectLayerFile[];
+  arrows: boolean;
+  /** A click on a surface of a file. */
+  onSurfaceClick: (fileName: string, surface: number) => void;
+  /** The box to bring into view (local coordinates); a new *request* number moves the camera, the same one does not. */
+  frame: { min: Point3; max: Point3; request: number } | null;
 }
 
 export interface ViewerPaneProps {
@@ -107,6 +120,8 @@ export interface ViewerPaneProps {
   studyOutOfDate?: boolean;
   /** The envelope is drawn see-through even without the building massing (Simulate's envelope). */
   envelopeSeeThrough?: boolean;
+  /** Inspect: while set, the test surfaces are hidden and the surface orientation layer is shown in their place. */
+  inspect?: InspectView | null;
 }
 
 const NO_CAMERA: CameraState = { yawDegrees: 0, elevationDegrees: 90, metresPerPixel: 0 };
@@ -142,7 +157,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
-                             analysisCurrent = false, study = null, studyOutOfDate = false, envelopeSeeThrough = false }: ViewerPaneProps) {
+                             analysisCurrent = false, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
@@ -217,7 +232,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   // Each carved voxel in the colour of the criterion that removed it, whose id the layer names; the layer is drawn again when a colour
   // changes. It is a layer of up to a million cubes that starts hidden: it is built (and the voxels listed, thinned to the cap of the
   // score points) only while it is shown, and dropped when it is hidden again.
-  const isVisible = (name: LayerName) => visibleByChoice[name] ?? shownByDefault.includes(name);
+  const isVisible = (name: LayerName) => visibleByChoice[name] ?? (name === "inspect_surfaces" || shownByDefault.includes(name));
   const showsCarvedByCriterion = carvedByCriterion !== null && isVisible("carved_by_criterion");
   const carvedVoxelsOfCriteria = useMemo(() => (carvedByCriterion !== null && showsCarvedByCriterion ? carvedVoxelsByCriterion(carvedByCriterion, localOrigin) : null),
                                          [carvedByCriterion, showsCarvedByCriterion, originKey]);
@@ -250,10 +265,34 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   const studyDimmed = drawnStudy?.dimmed ?? false;
   useEffect(() => scene?.setLayerDimmed("study_values", studyDimmed), [scene, studyDimmed]);
 
+  // Inspect: the surface orientation is made once per set of files (the scene disposes the layer it replaces); a click is mapped to its
+  // file and surface by that layer, and goes to the newest onSurfaceClick.
+  const inspectFiles = inspect !== null && inspect.files.length > 0 ? inspect.files : null;
+  const inspectArrows = inspect?.arrows ?? false;
+  const inspecting = inspect !== null;
+  const inspectLayer = useRef<THREE.Object3D | null>(null);
+  useEffect(() => {
+    inspectLayer.current = inspectFiles && inspectSurfacesLayer(inspectFiles, { arrows: inspectArrows });
+    scene?.setLayer("inspect_surfaces", inspectLayer.current);
+  }, [scene, inspectFiles, inspectArrows]);
+  const onSurfaceClick = useRef(inspect?.onSurfaceClick);
+  useEffect(() => { onSurfaceClick.current = inspect?.onSurfaceClick; }, [inspect?.onSurfaceClick]);
+  useEffect(() => {
+    if (!scene || !inspecting) return;
+    return scene.onLayerClick("inspect_surfaces", (intersection) => {
+      const hit: { fileName: string; surface: number } | null = inspectLayer.current?.userData.fileAndSurfaceOf(intersection) ?? null;
+      if (hit) onSurfaceClick.current?.(hit.fileName, hit.surface);
+    });
+  }, [scene, inspecting]);
+  const inspectFrame = inspect?.frame ?? null;
+  useEffect(() => {
+    if (inspectFrame) scene?.frameBox(inspectFrame.min, inspectFrame.max);
+  }, [scene, inspectFrame?.request]);
+
   const present: LayerName[] = [];
   if (maxVolume) present.push("max_volume");
-  // A layer whose criteria are all hidden stays listed, so they can be shown again.
-  if (testSurfaces.some(({ geometry, shown }) => geometry !== null || !shown)) present.push("test_surfaces");
+  // A layer whose criteria are all hidden stays listed, so they can be shown again. In Inspect the orientation layer takes their place.
+  if (!inspecting && testSurfaces.some(({ geometry, shown }) => geometry !== null || !shown)) present.push("test_surfaces");
   if (context) present.push("context");
   if (terrain) present.push("terrain");
   if (voxels) present.push("kept_voxels", "carved_voxels");
@@ -263,12 +302,14 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
   if (envelope) present.push("envelope");
   if (massing) present.push("building_massing");
   if (drawnStudy) present.push("study_values");
+  if (inspectFiles) present.push("inspect_surfaces");
   const visibilityKey = present.map((name) => `${name}:${isVisible(name)}`).join(",");
   const dimmedKey = dimmedLayers.join(",");
 
   useEffect(() => {
     for (const name of present) scene?.setLayerVisible(name, isVisible(name));
-  }, [scene, visibilityKey]);
+    if (inspecting) scene?.setLayerVisible("test_surfaces", false);
+  }, [scene, visibilityKey, inspecting]);
 
   // A slot keeps its dimmed state when its layer is replaced, so new data of a layer still out of date stays dimmed.
   useEffect(() => {

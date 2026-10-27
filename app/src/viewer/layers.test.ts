@@ -1,7 +1,9 @@
 import { expect, test } from "vitest";
 import * as THREE from "three";
+import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import {
-  buildingMassingLayer, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, LAYER_NAMES, maxVolumeLayer, terrainLayer, keptColumnTops, pointSizeForVoxel, splitScorePoints,
+  applyLayerAppearance, buildingMassingLayer, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer, terrainLayer,
+  keptColumnTops, pointSizeForVoxel, splitScorePoints, type InspectLayerFile,
   storeyOfPart, studyValuesLayer, testSurfacesLayer, volumeOutline,
 } from "./layers";
 import { decodeStudyValues, patchCorners } from "../simulate/study_values_decoder";
@@ -267,4 +269,158 @@ test("study values are drawn in front of the test surfaces they lie on, unlit, a
   expect([material.polygonOffset, material.polygonOffsetFactor, material.polygonOffsetUnits]).toEqual([true, -2, -8]);
   expect(material.side).toBe(THREE.DoubleSide);
   expect(Array.from(corners)).toEqual(Array.from(before));
+});
+
+// The surface orientation layer of Inspect -----------------------------------------------------------------------------------------
+
+/** Three triangles in two surfaces: triangles 0 and 1 are surface 0 (a unit square in the x-y plane, 1 m^2), triangle 2 is surface 1 (a 4 m^2 wall). */
+function inspectFile(overrides: Partial<InspectLayerFile> = {}): InspectLayerFile {
+  return {
+    fileName: "facades.obj",
+    corners: Float32Array.from([0, 0, 0, 1, 0, 0, 1, 1, 0,   0, 0, 0, 1, 1, 0, 0, 1, 0,   5, 0, 0, 7, 0, 0, 5, 0, 2]),
+    surfaceOfTriangle: Uint32Array.from([0, 0, 1]),
+    surfaces: [{ centre: [0.5, 0.5, 0], normal: [0, 0, 1], area: 1 }, { centre: [5.5, 0, 0.5], normal: [0, -1, 0], area: 4 }],
+    turned: new Set<number>(),
+    selected: true,
+    ...overrides,
+  };
+}
+
+const SURFACE_BACK = "#c2610a", SURFACE_BACK_ON_DARK = "#f0a050", TEST_SURFACE_ON_DARK = "#6fa0c4";
+
+function setInspectColourTokens() {
+  setColourTokens();
+  for (const [name, colour] of [["surface-back", SURFACE_BACK], ["surface-back-on-dark", SURFACE_BACK_ON_DARK], ["test-surface-on-dark", TEST_SURFACE_ON_DARK],
+                                ["ink", "#1f2a30"], ["ink-on-dark", "#e6ecee"]]) {
+    document.documentElement.style.setProperty(`--colour-${name}`, colour);
+  }
+}
+
+/** The front and back meshes of a file of an inspect layer. */
+function meshesOf(layer: THREE.Object3D, fileIndex = 0): { front: THREE.Mesh; back: THREE.Mesh } {
+  const meshes = layer.children[fileIndex].children.filter((child): child is THREE.Mesh => child instanceof THREE.Mesh && !(child instanceof LineSegments2));
+  const front = meshes.find((mesh) => (mesh.material as THREE.Material).side === THREE.FrontSide)!;
+  const back = meshes.find((mesh) => (mesh.material as THREE.Material).side === THREE.BackSide)!;
+  return { front, back };
+}
+
+const indexOf = (mesh: THREE.Mesh) => Array.from(mesh.geometry.index!.array);
+const colourOf = (mesh: THREE.Mesh) => (mesh.material as THREE.MeshLambertMaterial).color.getHexString();
+
+test("the surface orientation layer is the last of the layers and draws each file as a front mesh and a back mesh on one geometry", () => {
+  setInspectColourTokens();
+  expect(LAYER_NAMES[LAYER_NAMES.length - 1]).toBe("inspect_surfaces");
+  const layer = inspectSurfacesLayer([inspectFile()], { arrows: false });
+  const { front, back } = meshesOf(layer);
+  expect(front.geometry).toBe(back.geometry);
+  expect(front.geometry.getAttribute("position").count).toBe(9);
+  expect(layer.userData.summary).toBe("2 surfaces");
+  expect(colourOf(front)).toBe("2f5d7c");
+  expect(colourOf(back)).toBe(hexOf(SURFACE_BACK));
+});
+
+test("the colours follow the viewport theme: the front in the test surface colour of the theme, the back in the orange that reads on it", () => {
+  setInspectColourTokens();
+  const layer = inspectSurfacesLayer([inspectFile()], { arrows: true });
+  const { front, back } = meshesOf(layer);
+  layer.userData.applyTheme("dark");
+  expect(colourOf(front)).toBe(hexOf(TEST_SURFACE_ON_DARK));
+  expect(colourOf(back)).toBe(hexOf(SURFACE_BACK_ON_DARK));
+  layer.userData.applyTheme("light");
+  expect(colourOf(front)).toBe("2f5d7c");
+  expect(colourOf(back)).toBe(hexOf(SURFACE_BACK));
+});
+
+test("the back colour has a token for the light viewport and one for the dark viewport, each apart from the test surface colour it is seen against", async () => {
+  const { readFileSync } = await import("node:fs");
+  const tokens = readFileSync("src/theme/tokens.css", "utf8");
+  const token = (name: string) => tokens.match(new RegExp(`--colour-${name}:\\s*(#[0-9a-fA-F]{6})`))![1].toLowerCase();
+  expect(token("surface-back")).not.toBe(token("accent"));
+  expect(token("surface-back-on-dark")).not.toBe(token("test-surface-on-dark"));
+  expect(token("surface-back")).not.toBe(token("surface-back-on-dark"));
+});
+
+test("a turned surface has the winding of its triangles swapped in the index, and no other surface does", () => {
+  setInspectColourTokens();
+  const { front } = meshesOf(inspectSurfacesLayer([inspectFile()], { arrows: false }));
+  expect(indexOf(front)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+  const turned = meshesOf(inspectSurfacesLayer([inspectFile({ turned: new Set([1]) })], { arrows: false }));
+  expect(indexOf(turned.front)).toEqual([0, 1, 2, 3, 4, 5, 6, 8, 7]);
+  const bothTurned = meshesOf(inspectSurfacesLayer([inspectFile({ turned: new Set([0, 1]) })], { arrows: false }));
+  expect(indexOf(bothTurned.back)).toEqual([0, 2, 1, 3, 5, 4, 6, 8, 7]);
+});
+
+test("a file that is not selected is drawn at 35 % strength, a selected one at full strength, and both can be dimmed", () => {
+  setInspectColourTokens();
+  const layer = inspectSurfacesLayer([inspectFile(), inspectFile({ fileName: "roofs.obj", selected: false })], { arrows: true });
+  const opacities = (fileIndex: number) => layer.children[fileIndex].children.map((child) => ((child as THREE.Mesh).material as THREE.Material).opacity);
+  expect(opacities(0).every((opacity) => opacity === 1)).toBe(true);
+  expect(opacities(1).every((opacity) => opacity === 0.35)).toBe(true);
+  expect(layer.children[1].children.length).toBe(layer.children[0].children.length);
+  applyLayerAppearance(layer, 0.35, 1);
+  expect(opacities(0)[0]).toBeCloseTo(0.35);
+  expect(opacities(1)[0]).toBeCloseTo(0.35 * 0.35);
+});
+
+test("there is one arrow per surface, and none without arrows", () => {
+  setInspectColourTokens();
+  const files = [inspectFile(), inspectFile({ fileName: "roofs.obj" })];
+  expect(inspectSurfacesLayer(files, { arrows: true }).userData.arrowCount).toBe(4);
+  const without = inspectSurfacesLayer(files, { arrows: false });
+  expect(without.userData.arrowCount).toBe(0);
+  expect(without.children.flatMap((file) => file.children).some((child) => child instanceof LineSegments2)).toBe(false);
+});
+
+/** The shaft of each arrow of a file: the first of the five segments the arrow is drawn with. */
+function shaftsOf(layer: THREE.Object3D, fileIndex = 0): { from: number[]; to: number[] }[] {
+  const lines = layer.children[fileIndex].children.find((child) => child instanceof LineSegments2) as LineSegments2;
+  const starts = lines.geometry.getAttribute("instanceStart"), ends = lines.geometry.getAttribute("instanceEnd");
+  const segments = Array.from({ length: starts.count }, (_, at) => ({ from: [starts.getX(at), starts.getY(at), starts.getZ(at)], to: [ends.getX(at), ends.getY(at), ends.getZ(at)] }));
+  return segments.filter((_, at) => at % 5 === 0);
+}
+
+test("an arrow runs from the centre of its surface along the normal, negated when the surface is turned; 0.3 sqrt(area) m long, at least 1 m, at most 10 m", () => {
+  setInspectColourTokens();
+  const small = { centre: [0, 0, 0] as [number, number, number], normal: [0, 0, 1] as [number, number, number], area: 4 };      // 0.6 m: raised to 1 m
+  const middle = { centre: [10, 0, 0] as [number, number, number], normal: [1, 0, 0] as [number, number, number], area: 100 };        // 3 m
+  const huge = { centre: [0, 20, 0] as [number, number, number], normal: [0, 1, 0] as [number, number, number], area: 1_000_000 };    // 300 m: capped to 10 m
+  const file = inspectFile({ surfaces: [small, middle, huge], surfaceOfTriangle: Uint32Array.from([0, 1, 2]), turned: new Set([1]) });
+  const shafts = shaftsOf(inspectSurfacesLayer([file], { arrows: true }));
+  expect(shafts).toHaveLength(3);
+  const reach = (shaft: { from: number[]; to: number[] }) => shaft.to.map((value, axis) => Math.round((value - shaft.from[axis]) * 1000) / 1000);
+  expect(shafts[0].from).toEqual([0, 0, 0]);
+  expect(reach(shafts[0])).toEqual([0, 0, 1]);
+  expect(shafts[1].from).toEqual([10, 0, 0]);
+  expect(reach(shafts[1])).toEqual([-3, 0, 0]);       // turned: against the normal
+  expect(reach(shafts[2])).toEqual([0, 10, 0]);
+});
+
+test("fileAndSurfaceOf maps the triangle that was hit to its file and surface, and anything else to null", () => {
+  setInspectColourTokens();
+  const layer = inspectSurfacesLayer([inspectFile(), inspectFile({ fileName: "roofs.obj", surfaceOfTriangle: Uint32Array.from([1, 1, 0]) })], { arrows: true });
+  const hit = (object: THREE.Object3D, faceIndex: number | undefined) => ({ object, faceIndex, distance: 1, point: new THREE.Vector3() }) as THREE.Intersection;
+  expect(layer.userData.fileAndSurfaceOf(hit(meshesOf(layer, 0).front, 0))).toEqual({ fileName: "facades.obj", surface: 0 });
+  expect(layer.userData.fileAndSurfaceOf(hit(meshesOf(layer, 0).back, 2))).toEqual({ fileName: "facades.obj", surface: 1 });
+  expect(layer.userData.fileAndSurfaceOf(hit(meshesOf(layer, 1).front, 0))).toEqual({ fileName: "roofs.obj", surface: 1 });
+  expect(layer.userData.fileAndSurfaceOf(hit(meshesOf(layer, 1).back, 2))).toEqual({ fileName: "roofs.obj", surface: 0 });
+  expect(layer.userData.fileAndSurfaceOf(hit(new THREE.Mesh(), 0))).toBeNull();
+  expect(layer.userData.fileAndSurfaceOf(hit(meshesOf(layer, 0).front, undefined))).toBeNull();
+});
+
+test("an arrow cannot be hit: the arrow lines take no part in a ray cast", () => {
+  setInspectColourTokens();
+  const layer = inspectSurfacesLayer([inspectFile()], { arrows: true });
+  const lines = layer.children[0].children.find((child) => child instanceof LineSegments2) as LineSegments2;
+  const hits: THREE.Intersection[] = [];
+  lines.raycast(new THREE.Raycaster(new THREE.Vector3(0.5, 0.5, 5), new THREE.Vector3(0, 0, -1)), hits);
+  expect(hits).toEqual([]);
+});
+
+test("the surface orientation layer leaves the corners it is given as they are, and is drawn in front of the faces it lies on", () => {
+  setInspectColourTokens();
+  const file = inspectFile();
+  const before = Array.from(file.corners);
+  const { front, back } = meshesOf(inspectSurfacesLayer([file], { arrows: false }));
+  expect(Array.from(file.corners)).toEqual(before);
+  for (const mesh of [front, back]) expect((mesh.material as THREE.Material).polygonOffsetFactor).toBeLessThan(0);
 });

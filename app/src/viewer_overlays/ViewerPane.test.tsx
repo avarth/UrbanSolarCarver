@@ -7,7 +7,8 @@ import type { ScorePoints } from "../viewer/score_points_decoder";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
 import { Legend } from "./Legend";
 import { click, renderForTest, type RenderedOverlay } from "./render_for_test";
-import { NO_VIEWER_RESULTS, ViewerPane, type TestSurfaceGroup, type ViewerPaneProps } from "./ViewerPane";
+import type { InspectLayerFile } from "../viewer/layers";
+import { NO_VIEWER_RESULTS, ViewerPane, type InspectView, type TestSurfaceGroup, type ViewerPaneProps } from "./ViewerPane";
 
 vi.mock("../viewer/scene", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene,
@@ -310,4 +311,115 @@ test("a dimmed carved-by-criterion layer is drawn dimmed, and the stamp says so 
   rendered = renderForTest(<ViewerPane {...viewCarvedBy(["carved_by_criterion"])} dimmedLayers={["carved_by_criterion"]} />);
   expect(FakeViewerScene.latest!.dimmed.has("carved_by_criterion")).toBe(true);
   expect(rendered.container.querySelector(".viewer-out-of-date")).not.toBeNull();
+});
+
+// Inspect: the surface orientation layer -------------------------------------------------------------------------------------------
+
+/** One file of two surfaces: triangles 0 and 1 are surface 0, triangle 2 is surface 1. */
+const inspectFile = (overrides: Partial<InspectLayerFile> = {}): InspectLayerFile => ({
+  fileName: "facades.obj",
+  corners: Float32Array.from([0, 0, 0, 1, 0, 0, 1, 1, 0,   0, 0, 0, 1, 1, 0, 0, 1, 0,   5, 0, 0, 7, 0, 0, 5, 0, 2]),
+  surfaceOfTriangle: Uint32Array.from([0, 0, 1]),
+  surfaces: [{ centre: [0.5, 0.5, 0], normal: [0, 0, 1], area: 1 }, { centre: [5.5, 0, 0.5], normal: [0, -1, 0], area: 4 }],
+  turned: new Set<number>(),
+  selected: true,
+  ...overrides,
+});
+
+const inspectView = (overrides: Partial<InspectView> = {}): InspectView =>
+  ({ files: [inspectFile()], arrows: true, onSurfaceClick: vi.fn(), frame: null, ...overrides });
+
+const inspectingView = (inspect: InspectView | null, extra: Partial<ViewerPaneProps> = {}): ViewerPaneProps =>
+  ({ ...testSurfacesView([group("1", "#4477aa", BOX())]), inspect, ...extra });
+
+/** What a click on triangle *triangle* of the first mesh of file *fileIndex* hits. */
+function hitOn(fileIndex: number, triangle: number): THREE.Intersection {
+  const mesh = FakeViewerScene.latest!.layers.get("inspect_surfaces")!.children[fileIndex].children[0];
+  return { object: mesh, faceIndex: triangle, distance: 1, point: new THREE.Vector3() } as THREE.Intersection;
+}
+
+test("with inspect set the surface orientation layer is shown and the test surfaces are hidden; without it they are back", () => {
+  rendered = renderForTest(<ViewerPane {...inspectingView(null)} />);
+  const scene = FakeViewerScene.latest!;
+  expect(scene.layersWithObjects()).toEqual(["test_surfaces"]);
+  expect(scene.visibleLayers.has("test_surfaces")).toBe(true);
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView())} />);
+  expect(scene.layersWithObjects()).toContain("inspect_surfaces");
+  expect(scene.visibleLayers.has("inspect_surfaces")).toBe(true);
+  expect(scene.visibleLayers.has("test_surfaces")).toBe(false);
+  openLayersMenu();
+  expect(menuEntries().map((item) => item.querySelector("label")!.textContent)).toEqual(["Surface orientation"]);
+  rendered.rerender(<ViewerPane {...inspectingView(null)} />);
+  expect(scene.layers.get("inspect_surfaces") ?? null).toBeNull();
+  expect(scene.visibleLayers.has("test_surfaces")).toBe(true);
+  expect(menuEntries().map((item) => item.querySelector("label")!.textContent)).toEqual(["Test surfaces"]);
+});
+
+test("the surface orientation layer can be hidden in the layers menu, and is not hidden by the step's default layers", () => {
+  rendered = renderForTest(<ViewerPane {...inspectingView(inspectView(), { shownByDefault: [] })} />);
+  const scene = FakeViewerScene.latest!;
+  expect(scene.visibleLayers.has("inspect_surfaces")).toBe(true);
+  openLayersMenu();
+  click(menuEntries()[0].querySelector("input")!);
+  expect(scene.visibleLayers.has("inspect_surfaces")).toBe(false);
+});
+
+test("a click the scene reports on a surface calls onSurfaceClick with its file and surface number; a click on no surface calls nothing", () => {
+  const onSurfaceClick = vi.fn();
+  const files = [inspectFile(), inspectFile({ fileName: "roofs.obj", surfaceOfTriangle: Uint32Array.from([1, 1, 0]) })];
+  rendered = renderForTest(<ViewerPane {...inspectingView(inspectView({ files, onSurfaceClick }))} />);
+  const scene = FakeViewerScene.latest!;
+  scene.clickLayer("inspect_surfaces", hitOn(0, 2));
+  expect(onSurfaceClick).toHaveBeenLastCalledWith("facades.obj", 1);
+  scene.clickLayer("inspect_surfaces", hitOn(1, 0));
+  expect(onSurfaceClick).toHaveBeenLastCalledWith("roofs.obj", 1);
+  onSurfaceClick.mockClear();
+  scene.clickLayer("inspect_surfaces", { object: new THREE.Mesh(), faceIndex: 0, distance: 1, point: new THREE.Vector3() } as THREE.Intersection);
+  expect(onSurfaceClick).not.toHaveBeenCalled();
+});
+
+test("a click goes to the newest onSurfaceClick, and to none once inspect is cleared", () => {
+  const first = vi.fn(), second = vi.fn();
+  const files = [inspectFile()];
+  rendered = renderForTest(<ViewerPane {...inspectingView(inspectView({ files, onSurfaceClick: first }))} />);
+  const scene = FakeViewerScene.latest!;
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, onSurfaceClick: second }))} />);
+  scene.clickLayer("inspect_surfaces", hitOn(0, 0));
+  expect(first).not.toHaveBeenCalled();
+  expect(second).toHaveBeenCalledWith("facades.obj", 0);
+  expect(scene.clickListenerCount("inspect_surfaces")).toBe(1);        // one listener, not one per render
+  rendered.rerender(<ViewerPane {...inspectingView(null)} />);
+  expect(scene.clickListenerCount("inspect_surfaces")).toBe(0);
+});
+
+test("the layer is drawn again for new files and for the arrows, and not for a new click handler", () => {
+  const files = [inspectFile()];
+  rendered = renderForTest(<ViewerPane {...inspectingView(inspectView({ files, arrows: false }))} />);
+  const scene = FakeViewerScene.latest!;
+  const first = scene.layers.get("inspect_surfaces");
+  expect(first!.userData.arrowCount).toBe(0);
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, arrows: false, onSurfaceClick: vi.fn() }))} />);
+  expect(scene.layers.get("inspect_surfaces")).toBe(first);
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, arrows: true }))} />);
+  const withArrows = scene.layers.get("inspect_surfaces");
+  expect(withArrows).not.toBe(first);
+  expect(withArrows!.userData.arrowCount).toBe(2);
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files: [inspectFile({ turned: new Set([1]) })], arrows: true }))} />);
+  expect(scene.layers.get("inspect_surfaces")).not.toBe(withArrows);
+});
+
+test("a new frame request moves the camera to the box once; the same request, or none, does not", () => {
+  const frame = (request: number) => ({ min: [0, 0, 0] as [number, number, number], max: [10, 5, 3] as [number, number, number], request });
+  const files = [inspectFile()];
+  rendered = renderForTest(<ViewerPane {...inspectingView(inspectView({ files, frame: null }))} />);
+  const scene = FakeViewerScene.latest!;
+  expect(scene.framedBoxes).toEqual([]);
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, frame: frame(1) }))} />);
+  expect(scene.framedBoxes).toEqual([{ min: [0, 0, 0], max: [10, 5, 3] }]);
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, frame: frame(1) }))} />);
+  expect(scene.framedBoxes).toHaveLength(1);
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, frame: frame(2) }))} />);
+  expect(scene.framedBoxes).toHaveLength(2);
+  rendered.rerender(<ViewerPane {...inspectingView(inspectView({ files, frame: null }))} />);
+  expect(scene.framedBoxes).toHaveLength(2);
 });

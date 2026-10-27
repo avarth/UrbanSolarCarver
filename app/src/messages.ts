@@ -603,6 +603,7 @@ export const messages = {
     envelope: "Carved envelope",
     building_massing: "Building massing",
     study_values: "Study values",
+    inspect_surfaces: "Surface orientation",
   },
   // The entry of a criterion under "Test surfaces" in the layers menu (two or more criteria): its name, marked when it is switched off.
   testSurfacesOfCriterion: (criterionName: string, off: boolean) => (off ? `${criterionName} (off)` : criterionName),
@@ -616,6 +617,7 @@ export const messages = {
   storeyCount: (count: number) => `${count} ${count === 1 ? "storey" : "storeys"}`,
   sunPathDays: (dayCount: number) => `${dayCount} ${dayCount === 1 ? "day" : "days"}`,
   skyPatchCount: (count: number) => `${count} patches`,
+  inspectSurfaceCount: (count: number) => `${groupedDigits(count)} ${count === 1 ? "surface" : "surfaces"}`,
   studyPointCount: (count: number) => `${groupedDigits(count)} ${count === 1 ? "point" : "points"}`,
   outOfDate: "out of date",
   viewEmpty: "3D view, empty.",

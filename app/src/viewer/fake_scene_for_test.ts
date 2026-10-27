@@ -4,6 +4,7 @@
 //     ...(await importOriginal<typeof import("../viewer/scene")>()), ViewerScene: (await import("../viewer/fake_scene_for_test")).FakeViewerScene }));
 import type * as THREE from "three";
 import { vi } from "vitest";
+import type { Point3 } from "./local_origin";
 import type { CameraState, GroundAid, LayerName, ViewportTheme } from "./scene";
 import type { Hemisphere } from "./sky_dome";
 
@@ -84,6 +85,30 @@ export class FakeViewerScene {
   }
   setViewportTheme(_theme: ViewportTheme): void {}
   frameAll(): void {}
+
+  /** The boxes the pane asked the camera to frame, in order. */
+  framedBoxes: { min: Point3; max: Point3 }[] = [];
+  frameBox(min: Point3, max: Point3): void {
+    this.framedBoxes.push({ min, max });
+  }
+
+  private readonly clickListeners = new Map<LayerName, Set<(intersection: THREE.Intersection) => void>>();
+  onLayerClick(name: LayerName, listener: (intersection: THREE.Intersection) => void): () => void {
+    const listeners = this.clickListeners.get(name) ?? new Set();
+    listeners.add(listener);
+    this.clickListeners.set(name, listeners);
+    return () => { listeners.delete(listener); };
+  }
+
+  /** Clicks the view as the user would, with *intersection* as what the click hit in the layer *name*. */
+  clickLayer(name: LayerName, intersection: THREE.Intersection): void {
+    for (const listener of [...(this.clickListeners.get(name) ?? [])]) listener(intersection);
+  }
+
+  /** How many listeners are waiting for a click on the layer *name*. */
+  clickListenerCount(name: LayerName): number {
+    return this.clickListeners.get(name)?.size ?? 0;
+  }
   viewTop(): void {}
 
   onCameraChange(_listener: (camera: CameraState) => void): () => void {

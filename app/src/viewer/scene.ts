@@ -1,7 +1,8 @@
 // The 3D view (UX 8): a three.js scene with Z up in local coordinates, one ground aid (the ground grid, the compass ring or
 // neither, R2 2), and one slot per layer.
-// Orbit with the left mouse button, pan with the right, zoom with the wheel. Camera moves of frameAll and viewTop take 400 ms,
-// and are instant under prefers-reduced-motion. No React here: the overlays (viewer_overlays/) read the camera through
+// Orbit with the left mouse button, pan with the right, zoom with the wheel. A click (a press and release within 5 px and 400 ms)
+// goes to the listeners of onLayerClick. Camera moves of frameAll, frameBox and viewTop take 400 ms, and are instant under
+// prefers-reduced-motion. No React here: the overlays (viewer_overlays/) read the camera through
 // onCameraChange and call the methods below.
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -11,6 +12,7 @@ import { colourToken, viewportBackground, type ViewportTheme } from "./colour_sc
 import { northDirection } from "./compass";
 import { compassRing } from "./compass_ring";
 import { groundGrid, groundGridSpacing } from "./ground_grid";
+import type { Point3 } from "./local_origin";
 import { LAYER_NAMES, SURROUNDING_LAYERS, applyLayerAppearance, disposeLayer, type LayerName } from "./layers";
 import type { Hemisphere } from "./sky_dome";
 import { fitTextSpritesToView } from "./text_sprite";
@@ -47,6 +49,8 @@ const DIMMED_DESATURATION = 1;
 export const DEFAULT_SKY_DOME_OPACITY = 0.6;
 const FIELD_OF_VIEW_DEGREES = 35;
 const FRAME_MARGIN = 1.1;
+const CLICK_MAX_PIXELS = 5;                 // a press that moved further is an orbit drag
+const CLICK_MAX_MILLISECONDS = 400;
 const TOP_VIEW_TILT_RADIANS = 1e-3;         // a hair off straight down, so "up" on the screen is defined and points north
 const FIRST_VIEW_DIRECTION = new THREE.Vector3(-0.5, -0.9, 0.75).normalize();     // from the south-south-west, above
 const EMPTY_SCENE_RADIUS_METRES = 60;
@@ -81,6 +85,12 @@ interface LayerSlot {
   object: THREE.Object3D | null;
   visible: boolean;
   dimmed: boolean;
+}
+
+interface Press {
+  x: number;
+  y: number;
+  time: number;
 }
 
 interface CameraMove {
@@ -132,6 +142,8 @@ export class ViewerScene {
   private cameraMove: CameraMove | null = null;
   private frameRequest: number | null = null;
   private pendingHover: { x: number; y: number } | null = null;
+  private press: Press | null = null;
+  private readonly clickListeners = new Map<LayerName, Set<(intersection: THREE.Intersection) => void>>();
 
   constructor(container: HTMLElement) {
     this.container = container;
@@ -162,6 +174,9 @@ export class ViewerScene {
     container.appendChild(this.hoverLabel);
     canvas.addEventListener("pointermove", (event) => this.queueHover(event));
     canvas.addEventListener("pointerleave", () => { this.pendingHover = null; this.hoverLabel.style.display = "none"; });
+    canvas.addEventListener("pointerdown", (event) => { this.press = event.button === 0 ? { x: event.clientX, y: event.clientY, time: performance.now() } : null; });
+    canvas.addEventListener("pointercancel", () => { this.press = null; });
+    canvas.addEventListener("pointerup", (event) => this.released(event));
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(container);
@@ -255,8 +270,13 @@ export class ViewerScene {
   /** Moves the camera, in its current direction, so every visible layer fits the view. */
   frameAll(instant = false): void {
     const { centre, radius } = this.contentSphere();
-    const direction = this.camera.position.clone().sub(this.controls.target).normalize();
-    this.moveCamera(centre, direction.multiplyScalar(this.fittingDistance(radius)), instant);
+    this.frameSphere(centre, radius, instant);
+  }
+
+  /** Moves the camera, in its current direction, so the box from *min* to *max* (local coordinates) fits the view, as frameAll does for the layers. */
+  frameBox(min: Point3, max: Point3): void {
+    const sphere = new THREE.Box3(new THREE.Vector3(...min), new THREE.Vector3(...max)).getBoundingSphere(new THREE.Sphere());
+    this.frameSphere(sphere.center, Math.max(sphere.radius, 0.5));
   }
 
   /** Looks straight down on everything visible, with north up the screen. */
@@ -272,6 +292,18 @@ export class ViewerScene {
     this.cameraListeners.add(listener);
     listener(this.cameraState());
     return () => this.cameraListeners.delete(listener);
+  }
+
+  /**
+   * Calls *listener* with the nearest mesh hit in the layer *name* whenever the view is clicked: the left button pressed and released
+   * within 5 px and 400 ms, which an orbit drag is not. A click that hits nothing of the layer, or a hidden layer, calls nothing.
+   * Returns the function that stops the calls.
+   */
+  onLayerClick(name: LayerName, listener: (intersection: THREE.Intersection) => void): () => void {
+    const listeners = this.clickListeners.get(name) ?? new Set();
+    listeners.add(listener);
+    this.clickListeners.set(name, listeners);
+    return () => { listeners.delete(listener); };
   }
 
   describe(): string {
@@ -296,6 +328,11 @@ export class ViewerScene {
   }
 
   // ------------------------------------------------------------------------------------------------------------------------
+
+  private frameSphere(centre: THREE.Vector3, radius: number, instant = false): void {
+    const direction = this.camera.position.clone().sub(this.controls.target).normalize();
+    this.moveCamera(centre, direction.multiplyScalar(this.fittingDistance(radius)), instant);
+  }
 
   private refreshLayers(): void {
     const envelope = this.slots.get("envelope")!, massing = this.slots.get("building_massing")!;
@@ -470,6 +507,26 @@ export class ViewerScene {
       this.hoverLabel.textContent = label;
       this.hoverLabel.style.left = `${pointer.x + 12}px`;
       this.hoverLabel.style.top = `${pointer.y + 12}px`;
+    }
+  }
+
+  private released(event: PointerEvent): void {
+    const press = this.press;
+    this.press = null;
+    if (!press || event.button !== 0) return;
+    const moved = Math.hypot(event.clientX - press.x, event.clientY - press.y);
+    if (moved > CLICK_MAX_PIXELS || performance.now() - press.time > CLICK_MAX_MILLISECONDS) return;
+    const bounds = this.renderer.domElement.getBoundingClientRect();
+    if (bounds.width === 0 || bounds.height === 0) return;
+    this.camera.updateMatrixWorld();          // the camera may have moved since the last frame
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(new THREE.Vector2(((event.clientX - bounds.left) / bounds.width) * 2 - 1, -((event.clientY - bounds.top) / bounds.height) * 2 + 1), this.camera);
+    for (const [name, listeners] of this.clickListeners) {
+      const slot = this.slots.get(name)!;
+      if (!slot.object || !slot.visible || listeners.size === 0) continue;
+      slot.object.updateMatrixWorld(true);
+      const hit = raycaster.intersectObject(slot.object, true).find((intersection) => intersection.object instanceof THREE.Mesh);
+      if (hit) for (const listener of [...listeners]) listener(hit);
     }
   }
 

@@ -38,6 +38,7 @@
   --colour-ready: #3f8f5a;
   --colour-error: #a3271c;
   --colour-out-of-date: #8a5a00;     /* the Out of date stamp on the 3D view */
+  --colour-surface-back: #c2610a;    /* the back of a test surface in Inspect (the front is the accent); an orange that reads on both viewports */
 
   --colour-viewport-light: #e3e8e7;
   --colour-viewport-dark: #22303a;
@@ -56,6 +57,7 @@
   --colour-muted-on-dark: #a9b6bc;
   --colour-line-on-dark: #3b4b56;
   --colour-test-surface-on-dark: #6fa0c4;
+  --colour-surface-back-on-dark: #f0a050;
   --colour-out-of-date-on-dark: #f2b632;
 
   /* The existing surroundings (neutral grey massing) and the terrain (a ground surface) */

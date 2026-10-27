@@ -17,11 +17,11 @@ import type { SunPathObjects } from "./sun_path";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
 export type LayerName = "max_volume" | "test_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "carved_by_criterion" | "sun_path" |
-  "sky_dome" | "envelope" | "building_massing" | "study_values";
+  "sky_dome" | "envelope" | "building_massing" | "study_values" | "inspect_surfaces";
 
-/** The layers in the order of UX 8.2, which the layers menu and the accessible name follow; then the study of Simulate. */
+/** The layers in the order of UX 8.2, which the layers menu and the accessible name follow; then the study of Simulate and the surface orientation of Inspect. */
 export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
-  "sun_path", "sky_dome", "envelope", "building_massing", "study_values"];
+  "sun_path", "sky_dome", "envelope", "building_massing", "study_values", "inspect_surfaces"];
 
 /** The layers that can reach far beyond the site (a city model, a terrain kilometres wide): the camera frames the rest. */
 export const SURROUNDING_LAYERS: readonly LayerName[] = ["context", "terrain"];
@@ -531,6 +531,125 @@ export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.
   };
   patches.userData.summary = messages.studyPointCount(count);
   return patches;
+}
+
+// The surface orientation of Inspect ------------------------------------------------------------------------------------------
+
+/** A test surfaces file as Inspect draws it: corners and surface centres already relative to the scene's local origin. */
+export interface InspectLayerFile {
+  fileName: string;
+  corners: Float32Array;               // three corners (x, y, z) per triangle
+  surfaceOfTriangle: Uint32Array;      // the surface number of each triangle
+  surfaces: { centre: Point3; normal: Point3; area: number }[];
+  turned: ReadonlySet<number>;         // the surfaces drawn turned: the winding of their triangles swapped
+  selected: boolean;                   // the file the Files panel has selected; the others are drawn faint
+}
+
+const UNSELECTED_FILE_OPACITY = 0.35;
+const ARROW_LENGTH_PER_ROOT_METRE = 0.3;        // of the square root of the surface's area
+const ARROW_LENGTH_RANGE_METRES: [number, number] = [1, 10];
+const ARROW_HEAD_SHARE = 0.25;                   // the barbs' length, of the arrow's
+const ARROW_HEAD_SPREAD = 0.4;                   // how far a barb leans out, of its length
+const ARROW_SEGMENTS = 5;                        // the shaft and four barbs
+const ARROW_LINE_PIXELS = 2;
+
+/** The triangles of the file in the index, those of a turned surface with their last two corners swapped. */
+function inspectIndex(file: InspectLayerFile): Uint32Array {
+  const count = file.surfaceOfTriangle.length;
+  const index = new Uint32Array(count * 3);
+  for (let triangle = 0; triangle < count; triangle++) {
+    const at = triangle * 3;
+    const turned = file.turned.has(file.surfaceOfTriangle[triangle]);
+    index[at] = at;
+    index[at + 1] = turned ? at + 2 : at + 1;
+    index[at + 2] = turned ? at + 1 : at + 2;
+  }
+  return index;
+}
+
+/** The segments of one arrow from *centre* along *normal* (negated when *turned*), as six numbers per segment appended to *segments*. */
+function addArrow(segments: number[], centre: Point3, normal: Point3, area: number, turned: boolean): void {
+  const direction = new THREE.Vector3(...normal);
+  if (direction.lengthSq() === 0) return;
+  direction.normalize();
+  if (turned) direction.negate();
+  const length = Math.min(ARROW_LENGTH_RANGE_METRES[1], Math.max(ARROW_LENGTH_RANGE_METRES[0], ARROW_LENGTH_PER_ROOT_METRE * Math.sqrt(area)));
+  const tail = new THREE.Vector3(...centre);
+  const tip = tail.clone().addScaledVector(direction, length);
+  // Two directions across the arrow, for four barbs leaning back from the tip: seen from the side or from the end, the head reads.
+  const across = Math.abs(direction.z) < 0.9 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0);
+  const first = direction.clone().cross(across).normalize();
+  const second = direction.clone().cross(first);
+  segments.push(...tail.toArray(), ...tip.toArray());
+  const headLength = ARROW_HEAD_SHARE * length;
+  for (const side of [first, second, first.clone().negate(), second.clone().negate()]) {
+    const barb = tip.clone().addScaledVector(direction, -headLength).addScaledVector(side, ARROW_HEAD_SPREAD * headLength);
+    segments.push(...tip.toArray(), ...barb.toArray());
+  }
+}
+
+/**
+ * The orientation of test surfaces files in Inspect (UX 8.2): each file is two meshes on one geometry, the front faces in the test
+ * surface colour and the back faces in the orange of --colour-surface-back, so which way each surface faces shows at a glance. A
+ * surface in *turned* is drawn turned, its triangles wound the other way in the index. A file that is not selected is drawn at 35 %
+ * strength. With *arrows*, one arrow per surface runs from its centre along its normal (against it when turned), 0.3 sqrt(area) m
+ * long, from 1 m to 10 m; the arrows take no part in picking. userData.fileAndSurfaceOf(intersection) names the file and the
+ * surface that a hit on one of the meshes landed on, or null for anything else. Like the test surfaces, the meshes are pulled
+ * forward in depth, since they lie on the faces of a context model or of the maximum volume.
+ */
+export function inspectSurfacesLayer(files: readonly InspectLayerFile[], options: { arrows: boolean }): THREE.Object3D {
+  const layer = new THREE.Group();
+  const filesOfMeshes = new Map<THREE.Object3D, InspectLayerFile>();
+  const fronts: THREE.MeshLambertMaterial[] = [], backs: THREE.MeshLambertMaterial[] = [];
+  const arrowMaterials: LineMaterial[] = [];
+  let surfaceCount = 0, arrowCount = 0;
+  for (const file of files) {
+    const opacity = file.selected ? 1 : UNSELECTED_FILE_OPACITY;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new THREE.BufferAttribute(file.corners, 3);
+    geometry.setAttribute("position", positions);
+    geometry.setIndex(new THREE.BufferAttribute(inspectIndex(file), 1));
+    geometry.boundingSphere = new THREE.Box3().setFromBufferAttribute(positions).getBoundingSphere(new THREE.Sphere());
+    const front = solidMaterial(colourToken("accent"), opacity, THREE.FrontSide, true);
+    const back = solidMaterial(colourToken("surface-back"), opacity, THREE.BackSide, true);
+    fronts.push(front);
+    backs.push(back);
+    const group = new THREE.Group();
+    group.name = file.fileName;
+    for (const material of [front, back]) {
+      const mesh = new THREE.Mesh(geometry, material);
+      filesOfMeshes.set(mesh, file);
+      group.add(mesh);
+    }
+    surfaceCount += file.surfaces.length;
+    if (options.arrows && file.surfaces.length > 0) {
+      const segments: number[] = [];
+      file.surfaces.forEach(({ centre, normal, area }, surface) => addArrow(segments, centre, normal, area, file.turned.has(surface)));
+      const material = layerMaterial(new LineMaterial({ color: colourToken("ink"), linewidth: ARROW_LINE_PIXELS, worldUnits: false }), opacity);
+      const arrows = new LineSegments2(new LineSegmentsGeometry().setPositions(segments), material);
+      arrows.raycast = () => {};
+      arrowMaterials.push(material);
+      arrowCount += segments.length / (ARROW_SEGMENTS * 6);
+      group.add(arrows);
+    }
+    layer.add(group);
+  }
+  layer.userData.summary = messages.inspectSurfaceCount(surfaceCount);
+  layer.userData.arrowCount = arrowCount;
+  layer.userData.applyTheme = (theme: ViewportTheme) => {
+    const dark = theme === "dark";
+    fronts.forEach((material) => material.color.set(colourToken(dark ? "test-surface-on-dark" : "accent")));
+    backs.forEach((material) => material.color.set(colourToken(dark ? "surface-back-on-dark" : "surface-back")));
+    arrowMaterials.forEach((material) => material.color.set(inkColour(theme)));
+  };
+  layer.userData.fileAndSurfaceOf = (intersection: THREE.Intersection): { fileName: string; surface: number } | null => {
+    const file = filesOfMeshes.get(intersection.object);
+    const triangle = intersection.faceIndex;
+    if (!file || triangle === undefined || triangle === null) return null;
+    const surface = file.surfaceOfTriangle[triangle];
+    return surface === undefined ? null : { fileName: file.fileName, surface };
+  };
+  return layer;
 }
 
 // Sun path and sky dome ------------------------------------------------------------------------------------------------------
