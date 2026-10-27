@@ -16,7 +16,7 @@
         <link rel="prev" href="../getting-started/configuration/">
       
       
-        <link rel="next" href="../modes/">
+        <link rel="next" href="../simulate/">
       
       
         
@@ -704,6 +704,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#simulate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simulate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-projects-are-kept" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -751,6 +762,33 @@
   
 </nav>
       
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1000,7 +1038,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -1022,14 +1060,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
+              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_11">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1677,6 +1715,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#simulate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simulate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#where-projects-are-kept" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2061,17 +2110,30 @@
 <h2 id="the-3d-view">The 3D view<a class="headerlink" href="#the-3d-view" title="Permanent link">&para;</a></h2>
 <p>The view has a compass, an axis gizmo (the three lettered axes, drawn straight on the viewport) and a legend for the coloured layers. The <strong>Layers</strong> menu switches the maximum volume, the test surfaces, the existing surroundings (neutral grey massing) and the terrain (a ground surface), both shown in every step, the kept and carved voxels (with several criteria also the carved voxels by criterion), the sun path, the sky dome, the carved envelope and the building massing. Buttons frame the whole model, show the top view and switch between a light and a dark viewport (remembered in the browser).</p>
 <p>The ground aid button cycles through three states: off, a ground grid with a scale bar, and a compass ring on the ground around the scene (ticks every 10 degrees, the letters N, E, S and W every 90 degrees, rotated by the north direction). The button names the aid it switches to, and the choice is remembered in the browser. The compass ring, the sun path and the sky dome are centred on, and sized to, everything loaded (the maximum volume and the test surfaces together). Framing the model leaves out the surroundings and the terrain, which can reach far beyond the site.</p>
+<h2 id="simulate">Simulate<a class="headerlink" href="#simulate" title="Permanent link">&para;</a></h2>
+<p>The switch <strong>Design | Simulate</strong> in the header, next to the project name, opens a workspace beside the pipeline that checks how much sun, solar energy or sky reaches the test surfaces once the maximum volume stands and once the carved envelope or the massing stands. <a href="../simulate/">Simulate</a> explains the metrics and what they block. Simulate changes no criterion, setting or pipeline step, and runs nothing until you press <strong>Run</strong>.</p>
+<ul>
+<li>Simulate hides the five steps and gives the 3D view the whole window. Switching back to Design returns to the step you left, with its folds and scroll position kept.</li>
+<li>The <strong>Studies</strong> panel floats over the top left of the view and collapses to an icon. Each row is a study: a colour swatch, its name and a line (its test surface files, <strong>Out of date</strong>, <strong>Not run yet</strong> or why it cannot run). Pressing a row puts that study on the view; only one is shown at a time. Its settings button opens a popover with the name, the metric, the analysis period, <strong>More settings</strong>, the test surface files and <strong>Delete study</strong>. Changes are saved at once.</li>
+<li><strong>Add study</strong> lists the criteria as <strong>Like <em>name</em></strong> (the metric of its mode, its period, mode settings and files, copied) and the metrics (a metric that needs a weather file is greyed without one). <strong>Run</strong> runs every study that can run, on the maximum volume and on the envelope and the massing when they are built.</li>
+<li>One job runs at a time. While a Design run is going Run says "A Design run is in progress", and while a simulation is going Design's run buttons say so.</li>
+<li>At the top centre, <strong>Max volume | Envelope | Massing</strong> chooses the geometry the values are shown on (the last two wait until Design has built them), and <strong>Change</strong> colours each point by its change from the maximum volume.</li>
+<li>The legend along the bottom shows the scale in the study's unit with a <strong>target</strong> you drag (arrow keys move it, Delete clears it); points below it are drawn in a muted colour. The result card in the bottom right corner gives the mean, the lowest tenth and the share of points at the target, with the maximum volume's value in brackets.</li>
+<li>A result whose inputs changed stays on the view, dimmed, with the <strong>Out of date</strong> stamp. Reopening the project shows the last results.</li>
+</ul>
 <h2 id="where-projects-are-kept">Where projects are kept<a class="headerlink" href="#where-projects-are-kept" title="Permanent link">&para;</a></h2>
 <p>Each project is a folder in the projects folder:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>&lt;projects folder&gt;/&lt;project name&gt;/
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── inputs/        The files you added (max_volume/, test_surfaces/, context/, terrain/, weather.epw)
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│                  and the joined meshes the engine reads (joined/, one test_surfaces_&lt;id&gt;.ply per criterion)
-<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── project.json   The project&#39;s record: the files you added with their triangle counts, the input revision,
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│                  the example it came from (if any), the criteria with their own settings and test surface files,
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│                  and one record per completed stage (with the settings that stage ran with)
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>└── run/           The engine&#39;s output: criteria/&lt;id&gt;/preprocessing and thresholding, criteria/chain.json,
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>                   exporting/ and massing/
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│                  and the joined meshes the engine reads (joined/, one test_surfaces_&lt;id&gt;.ply per criterion
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│                  and one study_surfaces_&lt;id&gt;.ply per study that lists files)
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>├── project.json   The project&#39;s record: the files you added with their triangle counts, the input revision,
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│                  the example it came from (if any), the criteria with their own settings and test surface files,
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│                  the studies of Simulate, and one record per completed stage (with the settings that stage ran with)
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>├── run/           The engine&#39;s output: criteria/&lt;id&gt;/preprocessing and thresholding, criteria/chain.json,
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>│                  exporting/ and massing/
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>└── simulate/      The results of the studies, one folder per study (see Simulate)
 </code></pre></div>
 <p><code>config.yaml</code> works outside the interface: its paths are relative to the project folder, so <code>usc run -c &lt;project folder&gt;/config.yaml</code> runs the same analysis from the command line (see <a href="#criteria-in-a-project">Criteria in a project</a>). Thresholding also writes <code>scores_compared_with_cutoff.npy</code> in its folder (the values the cutoff is applied to, which the histogram draws). To delete a project, use Delete in its menu (see <a href="#managing-a-project">Managing a project</a>), or delete its folder in the file manager.</p>
 <h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>

@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -699,7 +726,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -721,14 +748,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
+              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_11">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_12">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1204,6 +1231,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.engine_requests.CheckRequest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CheckRequest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.engine_requests.IssueReply" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1230,6 +1268,17 @@
     <span class="md-ellipsis">
       
         StageReply
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.engine_requests.CheckReply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CheckReply
       
     </span>
   </a>
@@ -1495,6 +1544,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.engine_requests.CheckRequest" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CheckRequest
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.engine_requests.IssueReply" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1521,6 +1581,17 @@
     <span class="md-ellipsis">
       
         StageReply
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.engine_requests.CheckReply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CheckReply
       
     </span>
   </a>
@@ -1675,6 +1746,50 @@
 <p>The reply holds <code>stage_folders</code> (stage name to folder, only for the stages that ran in this call), <code>manifest</code> (the manifest of the last of them), <code>issues</code>, and <code>export_path</code> (exporting), <code>plates_path</code>, <code>mesh_path</code> (the OBJ) and <code>export_mesh_path</code> (the plates in <code>final_mesh_format</code>) (massing) for the stages that produced them.</p>
 <p><strong><code>preprocessing</code>, <code>thresholding</code>, <code>exporting</code>, <code>massing</code></strong> run one stage. They need <code>config</code>; every stage but preprocessing also needs <code>from</code>, the upstream stage's folder or manifest. <code>out_dir</code> defaults to <code>&lt;config out_dir&gt;/&lt;stage&gt;</code>. <code>thresholding</code> also takes <code>after</code>, the previous criterion's thresholding folder or <code>manifest.json</code> (<code>StageRequest.after</code>): the stage then decides only among the voxels that criterion kept, and <code>out_dir</code> may not be that criterion's own folder. The reply has <code>issues</code> and <code>manifest</code>, <code>export_path</code> (exporting) or <code>plates_path</code>, <code>mesh_path</code> and <code>export_mesh_path</code> (massing).</p>
 <p><strong><code>run_pipeline</code></strong> runs preprocessing, thresholding and exporting into <code>out_dir</code> (default: the config's <code>out_dir</code>); Grasshopper definitions saved before <code>run</code> existed still send it. <strong><code>simulate_weights</code></strong> writes a simulated-weights file (<code>epw</code>, <code>archetype</code>, <code>out</code>, optional <code>internal_gains_w_m2</code> and <code>eps</code>) and replies with <code>artifact</code> and <code>preview</code>. <strong><code>ping</code></strong> replies with the process id (<code>pid</code>) and <code>features</code>, a list of what this engine supports beyond the first version (<code>run_after</code>: the <code>after</code> key of <code>run</code>), so a client can tell an older engine.</p>
+<p><strong><code>check</code></strong> runs one Simulate study: the sun and sky check (<code>solar_check.simulate_study</code>) of a test surface file against the project's geometries, written to <code>out_dir</code>. It samples the test surface in the maximum volume's local frame (its minimum corner rounded to 1 µm, as preprocessing does) and traces every sun or sky direction against each geometry with Warp, without a carving run.</p>
+<table>
+<thead>
+<tr>
+<th>Request key</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_surface_path</code></td>
+<td>The mesh file of the test surfaces</td>
+</tr>
+<tr>
+<td><code>max_volume_path</code></td>
+<td>The mesh file of the maximum volume</td>
+</tr>
+<tr>
+<td><code>out_dir</code></td>
+<td>Where <code>check_summary.json</code>, <code>check_points.npz</code> and <code>check_values.npz</code> are written</td>
+</tr>
+<tr>
+<td><code>settings</code></td>
+<td><code>CheckSettings</code> values (<code>metric</code>, the period, <code>sample_spacing</code>, <code>rays_per_patch</code>, ...); an invalid one is a <code>ConfigError</code> reply</td>
+</tr>
+<tr>
+<td><code>run_folder</code></td>
+<td>Optional run folder: its built envelope (<code>exporting</code>) and massing are added as columns, found through their manifests and clipped by the maximum volume. A manifest that exists but cannot be read or names no mesh leaves its geometry out, with the issue <code>geometry_manifest_unusable</code> naming the geometry and the file</td>
+</tr>
+<tr>
+<td><code>context_path</code>, <code>terrain_path</code></td>
+<td>Optional mesh files that block in every column; a file without triangles is ignored with an issue</td>
+</tr>
+<tr>
+<td><code>voxel_size</code></td>
+<td>Surface tolerance of the envelope and massing when the run folder does not record the voxel size they were built with (default 1.0)</td>
+</tr>
+<tr>
+<td><code>device</code></td>
+<td><code>auto</code> (default), <code>cpu</code> or <code>cuda</code></td>
+</tr>
+</tbody>
+</table>
+<p>The columns are <code>open</code> (no geometry), <code>max_volume</code>, then <code>envelope</code> and <code>massing</code> when built; the summary compares them with <code>max_volume</code>. Progress is reported per kernel launch under the stage <code>check</code>, and a cancel raises <code>RunCancelled</code> between launches. More than 2 million test points (<code>solar_check.MAX_CHECK_POINTS</code>, estimated from the test surfaces' area and <code>sample_spacing</code>) is an <code>InputError</code> naming the spacing that fits. The summary records under <code>fingerprints</code> what the result was computed from: <code>test_surface</code>, <code>max_volume</code>, <code>geometries</code> (the envelope's and massing's meshes, only those built), <code>weather</code> (only for a metric that reads it), <code>context</code> and <code>terrain</code> (each <code>{path, size, modified_ns}</code>, or null) and <code>settings_digest</code> (sha256 of the settings' JSON, sorted keys, without <code>epw_path</code>, which <code>weather</code> records), so a client can tell that a result is out of date. The reply has <code>summary_path</code> and <code>issues</code>.</p>
 <p>Keys a command does not use are ignored. Reply fields that are None are left out.</p>
 <h2 id="replies">Replies<a class="headerlink" href="#replies" title="Permanent link">&para;</a></h2>
 <p>Every reply to a run or stage command has <code>issues</code>, a list of <code>{stage, code, message}</code>. An error reply has <code>error</code> (the text), <code>error_type</code> (the exception class name; <code>MalformedEngineRequest</code> for a malformed request) and, for a <code>ConfigError</code>, <code>config_errors</code>, a list of <code>{field, message}</code>.</p>
@@ -1995,6 +2110,57 @@ mapping or the path of a YAML file holding one.</p>
 
 
 
+<h3 id="urbansolarcarver.engine_requests.CheckRequest" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <code>CheckRequest</code>
+
+
+<a href="#urbansolarcarver.engine_requests.CheckRequest" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="urbansolarcarver.engine_requests._EngineRequest">_EngineRequest</span></code></p>
+
+
+
+        <p>Run one Simulate study (:func:<code>urbansolarcarver.solar_check.simulate_study</code>) into <em>out_dir</em>.</p>
+<p>The columns are <code>open</code>, <code>max_volume</code> (<em>max_volume_path</em>) and, when built, <code>envelope</code> and <code>massing</code> from
+<em>run_folder</em>.  <em>context_path</em> and <em>terrain_path</em> block in every column.  <em>settings</em> are CheckSettings values.
+<em>voxel_size</em> is the envelope's and massing's surface tolerance when their run folder does not record it.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
 <h3 id="urbansolarcarver.engine_requests.IssueReply" class="doc doc-heading">
 <code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <code>IssueReply</code>
 
@@ -2106,6 +2272,54 @@ the produced files, and the issues of the run.</p>
 
 
         <p>What one stage (or the legacy <code>run_pipeline</code> command) produced.</p>
+
+
+
+
+
+
+
+
+
+
+
+<div class="doc doc-children">
+
+
+
+
+
+
+
+
+
+
+
+
+  </div>
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-class">
+
+
+
+<h3 id="urbansolarcarver.engine_requests.CheckReply" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-class"></code>            <code>CheckReply</code>
+
+
+<a href="#urbansolarcarver.engine_requests.CheckReply" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+            <p class="doc doc-class-bases">
+              Bases: <code><span title="pydantic.BaseModel">BaseModel</span></code></p>
+
+
+
+        <p>Where the check wrote its summary, and the issues of the request.</p>
 
 
 

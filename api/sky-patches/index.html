@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -699,7 +726,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -721,14 +748,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
+              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_11">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_12">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1001,6 +1028,17 @@
     <span class="md-ellipsis">
       
         sub_ray_directions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.sky_emissivity_deficit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sky_emissivity_deficit
       
     </span>
   </a>
@@ -1418,6 +1456,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#urbansolarcarver.sky_patches.sky_emissivity_deficit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        sky_emissivity_deficit
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#urbansolarcarver.sky_patches.compute_radiative_cooling_weights" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1701,6 +1750,30 @@ drawn from a hash of the sample point, the patch and <code>k</code>: the same
 point and patch give the same directions on every run, device and batch
 size, and neighbouring points draw different ones, so their rays do not
 line up into bands.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.sky_patches.sky_emissivity_deficit" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">sky_emissivity_deficit</span><span class="p">(</span><span class="n">dewpoint_celsius</span><span class="p">,</span> <span class="n">bliss_k</span><span class="p">,</span> <span class="n">cos_zenith</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.sky_patches.sky_emissivity_deficit" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p><code>1 - ε_dir</code>, the share of a surface's long-wave emission the clear sky
+does not return, toward directions at the zenith cosines <em>cos_zenith</em>
+(float64).</p>
+<p>Eq. 1 (Martin &amp; Berdahl) and Eq. 2 (Bliss) of
+:func:<code>compute_radiative_cooling_weights</code>, in NumPy and per direction,
+for the sun and sky check: <code>(1 - ε_sky) ** (1 / (k cos θ))</code> with
+ε_sky clamped to [0, 0.999] and cos θ to at least 1e-3.</p>
 
 
     </div>

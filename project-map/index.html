@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../simulate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../modes/" class="md-nav__link">
         
   
@@ -723,6 +750,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#sun-and-sky-check-simulate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sun and sky check (Simulate)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -884,7 +922,7 @@
         
           
         
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_11" >
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
         
           
           <div class="md-nav__link md-nav__container">
@@ -906,14 +944,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
+              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="false">
-          <label class="md-nav__title" for="__nav_11">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1418,6 +1456,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#sun-and-sky-check-simulate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sun and sky check (Simulate)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1683,6 +1732,29 @@
 </tr>
 </tbody>
 </table>
+<h3 id="sun-and-sky-check-simulate">Sun and sky check (Simulate)<a class="headerlink" href="#sun-and-sky-check-simulate" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check_settings.py</code></td>
+<td>The metrics of the check (<code>CHECK_METRICS</code>: sun hours, solar energy, useful solar energy, overcast sky component, cooling sky, sky view factor, each with its unit, whether it reads the weather file and which mode's starting period it takes), the metric each carving mode starts with (<code>DEFAULT_CHECK_METRIC</code>), <code>CheckSettings</code> (period, time basis, lowest sun altitude, rays per patch, sample spacing, ...) with <code>for_config</code>, <code>settings_digest</code> (sha256 of the settings without the weather file's path) and <code>build_check_settings</code>. Standard library and Pydantic only, so the service lists the metrics without importing torch.</td>
+</tr>
+<tr>
+<td><code>solar_check.py</code></td>
+<td>The check itself. <strong><code>check_directions</code></strong>: the sun positions of the period (one an hour), or Tregenza's 145 sky patches traced with the carving's jittered sub-rays, each with its value. <strong><code>evaluate_test_points</code></strong>: traces the directions of every test point against a closed mesh with Warp's BVH ray queries, an envelope or massing clipped by the maximum volume, the context and terrain blocking in every geometry. <strong><code>solar_check</code></strong> and <strong><code>simulate_study</code></strong>: sample the test points at the carving's spacing (at most <code>MAX_CHECK_POINTS</code>, 2 million), trace every geometry and write <code>check_points.npz</code>, <code>check_values.npz</code> and <code>check_summary.json</code> with the fingerprints of what the result came from. Behind the engine request <code>check</code>.</td>
+</tr>
+<tr>
+<td><code>check_files.py</code></td>
+<td>The files of the sun and sky check without torch: the result file names, <code>file_fingerprint</code>, and <code>run_geometry_files</code> (the envelope and massing a run folder has built, with the surface tolerance from their manifests), which <code>solar_check.run_geometries</code> and the service both use.</td>
+</tr>
+</tbody>
+</table>
 <h3 id="configuration">Configuration<a class="headerlink" href="#configuration" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1745,7 +1817,7 @@
 </tr>
 <tr>
 <td><code>engine_requests.py</code></td>
-<td>The request core every transport uses. <strong><code>parse_engine_request</code></strong> validates a message into a typed request (<code>run</code>, the stage commands, <code>run_pipeline</code>, <code>simulate_weights</code>, <code>ping</code>); <strong><code>config_for_engine_request</code></strong> builds its config from a YAML path or from the mode's starting values plus overrides; A <code>run</code> request also carries <code>trace_criteria</code> and <code>threshold_from_criterion</code> (chain files) and <code>after</code> (one criterion, started at thresholding), and the <code>ping</code> reply lists the engine's <code>features</code> (<code>run_after</code>). <strong><code>handle_engine_request</code></strong> runs it in a run context and returns a typed reply with the run's <code>issues</code>; <strong><code>answer_engine_message</code></strong> does all of this for dict transports and turns any failure into an error reply with <code>error_type</code> and, for config errors, <code>config_errors</code>. Does not import torch until a request runs.</td>
+<td>The request core every transport uses. <strong><code>parse_engine_request</code></strong> validates a message into a typed request (<code>run</code>, the stage commands, <code>run_pipeline</code>, <code>simulate_weights</code>, <code>check</code>, <code>ping</code>); <strong><code>config_for_engine_request</code></strong> builds its config from a YAML path or from the mode's starting values plus overrides. The <code>check</code> request runs one Simulate study (see <a href="../api/engine-requests/">Engine requests</a>). A <code>run</code> request also carries <code>trace_criteria</code> and <code>threshold_from_criterion</code> (chain files) and <code>after</code> (one criterion, started at thresholding), and the <code>ping</code> reply lists the engine's <code>features</code> (<code>run_after</code>). <strong><code>handle_engine_request</code></strong> runs it in a run context and returns a typed reply with the run's <code>issues</code>; <strong><code>answer_engine_message</code></strong> does all of this for dict transports and turns any failure into an error reply with <code>error_type</code> and, for config errors, <code>config_errors</code>. Does not import torch until a request runs.</td>
 </tr>
 <tr>
 <td><code>daemon.py</code></td>
@@ -1788,7 +1860,15 @@
 </tr>
 <tr>
 <td><code>local_web_service/test_surfaces.py</code></td>
-<td>Test surface files stored once in <code>inputs/test_surfaces/</code> and compared by content, the joined file of each criterion (<code>inputs/joined/test_surfaces_&lt;id&gt;.ply</code>), and the fingerprint of a joined file that the stage records use.</td>
+<td>Test surface files stored once in <code>inputs/test_surfaces/</code> and compared by content, the joined file of each criterion (<code>inputs/joined/test_surfaces_&lt;id&gt;.ply</code>) and of each study that lists files (<code>inputs/joined/study_surfaces_&lt;id&gt;.ply</code>), <code>users_of</code> (the criteria and studies that list a file; a stored file goes to the recycle bin when none does), and the fingerprint of a joined file that the stage records use.</td>
+</tr>
+<tr>
+<td><code>local_web_service/studies.py</code></td>
+<td>The studies of the Simulate workspace (<code>StudyEntry</code>, kept in <code>project.json</code> under <code>studies</code> beside the criteria): default names ("Sun hours, 21 Dec"), the settings a metric starts with and accepts (<code>STUDY_SETTING_KEYS</code>), a study like a criterion, and the results folder <code>simulate/&lt;id&gt;</code>. The store methods (<code>add_study</code>, <code>update_study</code>, <code>delete_study</code>, <code>reorder_studies</code>, <code>use_study_test_surface</code>, <code>remove_study_test_surface</code>) write <code>project.json</code> and the study's joined test surface file only, never <code>config.yaml</code>, <code>inputs_revision</code> or a stage record.</td>
+</tr>
+<tr>
+<td><code>local_web_service/simulation.py</code></td>
+<td>Running the studies: a study's check settings (north, ray length and carving spacing from the shared settings, rays per patch of the first criterion that is on, the study's metric, period, time basis and mode settings), its <code>check</code> engine request, why it cannot run (<code>refusal_of</code>), the engine's refusal of a study kept in <code>simulate/&lt;id&gt;/refusal.json</code> until its inputs change, its state (<code>study_state</code>: current, out of date when a file, setting or surface tolerance it was computed from changed, not run, refused) and the binary of its patches and values for the 3D view. Reads the result files through <code>check_files.py</code>, so it does not import torch.</td>
 </tr>
 <tr>
 <td><code>local_web_service/migration.py</code></td>
@@ -1800,7 +1880,7 @@
 </tr>
 <tr>
 <td><code>local_web_service/run_worker.py</code></td>
-<td>Runs a project in a background thread in two phases (analysis, then envelope and massing), publishes progress events that name their criterion, refuses a run without test surfaces in a criterion that is on, and handles cancel.</td>
+<td>Runs a project in a background thread in two phases (analysis, then envelope and massing), publishes progress events that name their criterion, refuses a run without test surfaces in a criterion that is on, and handles cancel. Runs a simulation of the studies (<code>start_simulation</code>, stage <code>simulate</code>) as the same kind of job: one job at a time, the same events and cancel, no stage record touched.</td>
 </tr>
 <tr>
 <td><code>local_web_service/run_summary.py</code>, <code>score_points.py</code></td>
@@ -1824,6 +1904,58 @@
 </tr>
 </tbody>
 </table>
+<p><strong>Routes for studies</strong> (Simulate; all under <code>/api</code>; the writes hold the project's lock and answer 409 while a run of the project is active; an unknown study id is a 404 that names the id):</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /projects/{name}/studies</code></td>
+<td>The studies in order, each with its <code>state</code> (<code>current</code>, <code>out_of_date</code>, <code>not_run</code>, <code>refused</code> with its <code>reason</code>) and the geometries its last result has, and the metrics with their availability, unit and default settings</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/studies</code></td>
+<td>Add a study; body <code>metric</code> (its default period, no files) or <code>from_criterion</code> (the criterion's metric, period, mode settings and file names). Neither or both is a 422. Returns the <code>StudyEntry</code></td>
+</tr>
+<tr>
+<td><code>PATCH /projects/{name}/studies/{id}</code></td>
+<td>Change <code>name</code>, <code>metric</code>, <code>values</code> (the study's settings) or <code>target</code> (<code>null</code> removes it). A new metric resets the settings to its defaults and keeps the values both metrics have</td>
+</tr>
+<tr>
+<td><code>DELETE /projects/{name}/studies/{id}</code></td>
+<td>Delete a study (204), move its results folder to the recycle bin and the stored test surface files no criterion or study lists</td>
+</tr>
+<tr>
+<td><code>PUT /projects/{name}/studies/order</code></td>
+<td>Reorder; body <code>ids</code>, every id once</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/studies/{id}/test-surfaces</code></td>
+<td>Upload a test surface file to a study (multipart <code>file</code>)</td>
+</tr>
+<tr>
+<td><code>PUT /projects/{name}/studies/{id}/test-surfaces/{file}</code></td>
+<td>Use a file the project stores</td>
+</tr>
+<tr>
+<td><code>DELETE /projects/{name}/studies/{id}/test-surfaces/{file}</code></td>
+<td>Remove a file from a study</td>
+</tr>
+<tr>
+<td><code>POST /projects/{name}/simulate</code></td>
+<td>Run every study that can run as one job of the run worker (stage <code>simulate</code>, outside the pipeline's stages); events are read as a run's. 409 while any run or simulation is active, 422 when no study can run (the message names each study and why)</td>
+</tr>
+<tr>
+<td><code>GET /projects/{name}/studies/{id}/values</code></td>
+<td>The test point patches of the last result and the values of each geometry as one binary (layout in <code>simulation.study_values</code>); 404 without a result</td>
+</tr>
+</tbody>
+</table>
+<p>None of these changes <code>inputs_revision</code>, <code>config.yaml</code> or a stage record.</p>
 <p><strong>Routes for criteria</strong> (all under <code>/api</code>; the writes hold the project's lock and answer 409 while a run of the project is active; an unknown criterion id is a 404 that names the id):</p>
 <table>
 <thead>
@@ -1896,7 +2028,7 @@
 </tbody>
 </table>
 <p><code>POST /projects/{name}/runs</code> answers with <code>criterion_stages</code> besides <code>stages</code>, and refuses with a 422 (<code>missing_inputs</code>) when no criterion is on or a criterion that is on has no test surfaces.</p>
-<p><code>app/</code> holds the front-end source (<code>src/steps/</code> the five steps: <code>InputsStep.tsx</code>, <code>SiteAndGridStep.tsx</code>, the result steps and the export, with <code>ActionMenu.tsx</code>, the menu of a project and of a criterion row, <code>menu_popup.ts</code>, the placement and keys of a popup menu that <code>ActionMenu.tsx</code> and the mode menu share, and <code>CriteriaRunBar.tsx</code>, the Run analysis and Build buttons pinned under the Criteria step; <code>src/criteria/</code> the criteria hook and its helpers (<code>use_criteria.ts</code>, <code>criteria_state.ts</code>), the Criteria step, the criterion list and its rows (<code>CriterionList.tsx</code>, <code>CriterionCard.tsx</code>) and their dialogs, <code>ModeMenu.tsx</code>, the short menu of modes behind Add criterion, the criterion panel with <code>PanelSection.tsx</code>, its folded sections, and <code>section_summaries.ts</code>, the one-line summary of each section, and its Test surfaces box; <code>src/settings_form/</code> the settings, with <code>two_forms.ts</code> for the shared and the criterion settings held side by side; <code>src/viewer/</code> and <code>src/viewer_overlays/</code> the 3D view, with <code>carved_by_criterion_decoder.ts</code> for the carved-by-criterion layer; <code>src/api_client/</code> the typed client). See <a href="../ui/#rebuilding-the-front-end-after-changing-app">Browser UI</a> for building it.</p>
+<p><code>app/</code> holds the front-end source (<code>src/simulate/</code> the Simulate workspace: <code>SimulateView.tsx</code>, what it puts over the 3D view, <code>StudiesPanel.tsx</code> and <code>AddStudyMenu.tsx</code>, the Studies panel and its Add study menu, <code>StudyPopover.tsx</code>, a study's settings, <code>GeometrySwitch.tsx</code> and <code>ResultCard.tsx</code>, the geometry switch with Change and the result card, <code>use_studies.ts</code> and <code>use_study_view.ts</code>, the studies and the study on the view (geometry, Change, target, legend, card), and <code>study_values.ts</code> with <code>study_values_decoder.ts</code>, the statistics and the reader of the values binary; <code>src/viewer_overlays/TargetLegend.tsx</code> is its legend with the draggable target; <code>src/steps/</code> the five steps: <code>InputsStep.tsx</code>, <code>SiteAndGridStep.tsx</code>, the result steps and the export, with <code>ActionMenu.tsx</code>, the menu of a project and of a criterion row, <code>menu_popup.ts</code>, the placement and keys of a popup menu that <code>ActionMenu.tsx</code> and the mode menu share, and <code>CriteriaRunBar.tsx</code>, the Run analysis and Build buttons pinned under the Criteria step; <code>src/criteria/</code> the criteria hook and its helpers (<code>use_criteria.ts</code>, <code>criteria_state.ts</code>), the Criteria step, the criterion list and its rows (<code>CriterionList.tsx</code>, <code>CriterionCard.tsx</code>) and their dialogs, <code>ModeMenu.tsx</code>, the short menu of modes behind Add criterion, the criterion panel with <code>PanelSection.tsx</code>, its folded sections, and <code>section_summaries.ts</code>, the one-line summary of each section, and its Test surfaces box; <code>src/settings_form/</code> the settings, with <code>two_forms.ts</code> for the shared and the criterion settings held side by side; <code>src/viewer/</code> and <code>src/viewer_overlays/</code> the 3D view, with <code>carved_by_criterion_decoder.ts</code> for the carved-by-criterion layer; <code>src/api_client/</code> the typed client). See <a href="../ui/#rebuilding-the-front-end-after-changing-app">Browser UI</a> for building it.</p>
 <h2 id="grasshopper-plugin-grasshopper">Grasshopper plugin (<code>grasshopper/</code>)<a class="headerlink" href="#grasshopper-plugin-grasshopper" title="Permanent link">&para;</a></h2>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>grasshopper/
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── USC_GHplugin/       27 .ghuser components (copy into the GH User Objects folder)
@@ -1942,7 +2074,7 @@ tuned defaults commented at the bottom.</p>
 <a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>├── test_daemon.py           Daemon survives misbehaving clients and failing requests
 <a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>├── test_engine_requests.py  Request parsing, configs from starting values, replies and real runs through the request core
 <a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>├── test_exporting.py        Exporting stage: mesh placement, diagnostics, run report
-<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>├── test_local_web_*.py      The browser UI service: packaging and build hash, projects, criteria, test surfaces, stage records, run worker, earlier-project migration, run summaries, score points, HTTP routes and security
+<a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a>├── test_local_web_*.py      The browser UI service: packaging and build hash, projects, criteria, test surfaces, studies, simulations, stage records, run worker, earlier-project migration, run summaries, score points, HTTP routes and security
 <a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a>├── test_floor_plates.py     Floor-plate geometry: facades, faces, bays, floors, outlines, prisms
 <a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a>├── test_massing_stage.py    Massing stage end to end on synthetic scenes
 <a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a>├── test_meshing.py          Cubic and smoothed meshing, pruning, diffusion, Taubin polish, cleanup
@@ -1960,20 +2092,21 @@ tuned defaults commented at the bottom.</p>
 <a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a>├── test_sequencer.py        run_pipeline: produce, start_from, collected issues, progress, cancel
 <a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>├── test_setup_env.py        setup_env.py: choosing the PyTorch wheel index for the driver
 <a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a>├── test_session.py          CarverSession caching and the session_cache decorator
-<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>├── test_sky_matrix_folder.py  Sky matrices in their own temporary folder: concurrent runs, nothing left behind
-<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
-<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>│                            steady-state closure, attribution, shoebox expansion, artifact I/O
-<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>├── test_stage_chain.py      Run IDs, upstream checks, relative manifest paths
-<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>├── test_stage_outputs.py    Outputs cleared before a stage, manifest written last, run report sections
-<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a>├── test_stage_settings.py   Per-stage settings models and stages_to_rerun
-<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>├── test_surface_sampling.py  Test-surface sampling: coplanarity, boundary samples, edge taper, degenerate faces
-<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>├── test_typologies.py       End-to-end carving checks on procedural urban typologies
-<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
-<a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a>├── test_util.py             Diagnostics helpers and the grid memory estimate
-<a id="__codelineno-3-49" name="__codelineno-3-49" href="#__codelineno-3-49"></a>├── test_version.py          The version in pyproject.toml, the package, the CLI and CITATION.cff
-<a id="__codelineno-3-50" name="__codelineno-3-50" href="#__codelineno-3-50"></a>├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
-<a id="__codelineno-3-51" name="__codelineno-3-51" href="#__codelineno-3-51"></a>├── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
-<a id="__codelineno-3-52" name="__codelineno-3-52" href="#__codelineno-3-52"></a>└── test_weather_file.py     The cached EPW reader: re-read on a changed file, copies for each caller
+<a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>├── test_solar_check.py      The sun and sky check: sub-ray directions, unobstructed values, the infinite wall, sun hours against a ray-box test, a mesh&#39;s own facades, clipping by the maximum volume, context and terrain blocking, the check&#39;s settings, files and fingerprints, too many points, solar energy against Ladybug&#39;s radiation
+<a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a>├── test_sky_matrix_folder.py  Sky matrices in their own temporary folder: concurrent runs, nothing left behind
+<a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a>├── test_simulated_weights.py  5R1C engine: oracle regression vs RC_BuildingSimulator,
+<a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a>│                            steady-state closure, attribution, shoebox expansion, artifact I/O
+<a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a>├── test_stage_chain.py      Run IDs, upstream checks, relative manifest paths
+<a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a>├── test_stage_outputs.py    Outputs cleared before a stage, manifest written last, run report sections
+<a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a>├── test_stage_settings.py   Per-stage settings models and stages_to_rerun
+<a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a>├── test_surface_sampling.py  Test-surface sampling: coplanarity, boundary samples, edge taper, degenerate faces
+<a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a>├── test_typologies.py       End-to-end carving checks on procedural urban typologies
+<a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a>├── test_usc_gh.py           grasshopper/usc_gh.py parts that run without Rhino (engine_module, show_issues, run_stages, PLY, daemon calls)
+<a id="__codelineno-3-49" name="__codelineno-3-49" href="#__codelineno-3-49"></a>├── test_util.py             Diagnostics helpers and the grid memory estimate
+<a id="__codelineno-3-50" name="__codelineno-3-50" href="#__codelineno-3-50"></a>├── test_version.py          The version in pyproject.toml, the package, the CLI and CITATION.cff
+<a id="__codelineno-3-51" name="__codelineno-3-51" href="#__codelineno-3-51"></a>├── test_voxelization.py     Voxelization: invariants, Warp parity voxelizer, grid budget, cavity filling
+<a id="__codelineno-3-52" name="__codelineno-3-52" href="#__codelineno-3-52"></a>├── test_warp_kernels.py     Warp availability, the error when Warp cannot run, kernel warmup
+<a id="__codelineno-3-53" name="__codelineno-3-53" href="#__codelineno-3-53"></a>└── test_weather_file.py     The cached EPW reader: re-read on a changed file, copies for each caller
 </code></pre></div>
 
 

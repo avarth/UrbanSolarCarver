@@ -1,0 +1,1733 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="GPU-accelerated solar envelope generation for urban design">
+      
+      
+      
+        <link rel="canonical" href="https://avarth.github.io/UrbanSolarCarver/simulate/">
+      
+      
+        <link rel="prev" href="../ui/">
+      
+      
+        <link rel="next" href="../modes/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.6">
+    
+    
+      
+        <title>Simulate - Urban Solar Carver</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.484c7ddc.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#simulate" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="Urban Solar Carver" class="md-header__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Urban Solar Carver
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Simulate
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="amber" data-md-color-accent="deep-orange"  aria-hidden="true"  type="radio" name="__palette" id="__palette_1">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="Urban Solar Carver" class="md-nav__button md-logo" aria-label="Urban Solar Carver" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    Urban Solar Carver
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/avarth/UrbanSolarCarver" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    avarth/UrbanSolarCarver
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting Started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/quick-start/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Quick Start
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ui/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser UI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulate
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#design-and-simulate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design and Simulate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Studies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-simulate-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Simulate fixes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#geometry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-legend-the-target-and-the-result-card" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The legend, the target and the result card
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-date" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of date
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-results-are-kept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the results are kept
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#not-there-yet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Not there yet
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../modes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving Modes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../criteria/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Chained carvings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../massing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Floor-plate massing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../grasshopper/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Grasshopper Plugin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-map/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project Map
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../testing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running the Tests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_12" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../api/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_12">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/pipeline/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/carving/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Carving
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/ray-tracing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Ray Tracing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/geometry/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Geometry
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sky-patches/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sky Patches
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/sun/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sun Vectors
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/scoring/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scoring
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/simulated-weights/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulated Weights
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/io/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    I/O
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/session/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Session
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/engine-requests/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Engine Requests
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/daemon/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Daemon
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/cli/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    CLI
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#design-and-simulate" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Design and Simulate
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#studies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Studies
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#metrics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Metrics
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-simulate-fixes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What Simulate fixes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#geometry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Geometry
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-legend-the-target-and-the-result-card" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The legend, the target and the result card
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#out-of-date" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Out of date
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-the-results-are-kept" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where the results are kept
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#not-there-yet" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Not there yet
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="simulate">Simulate<a class="headerlink" href="#simulate" title="Permanent link">&para;</a></h1>
+<p>A carving protects sun, sky or solar energy on test surfaces. <strong>Simulate</strong> shows how much of it reaches each test point once the maximum volume stands (before) and once the carved envelope or the building massing stands (after), so you can see whether the carving did what it should. It is a quick check while designing, inside the browser UI. It traces triangle meshes, not voxels, and it does not replace a check of the finished design with an external tool.</p>
+<p>Simulate is a workspace beside the pipeline. It changes no criterion, no shared setting and no pipeline step, and it starts nothing by itself: a study runs only when you press <strong>Run</strong>.</p>
+<h2 id="design-and-simulate">Design and Simulate<a class="headerlink" href="#design-and-simulate" title="Permanent link">&para;</a></h2>
+<p>The switch <strong>Design | Simulate</strong> in the header, next to the project name, changes the workspace. Simulate hides the steps and gives the 3D view the whole window. Design shows the step you left, with its folds and scroll position. The Layers menu and the viewer tools are the same in both. The context and the terrain are drawn in Simulate; the test surfaces of criteria and of other studies are not, only those of the selected study.</p>
+<h2 id="studies">Studies<a class="headerlink" href="#studies" title="Permanent link">&para;</a></h2>
+<p>A study is a metric on test surface files over a period. The <strong>Studies</strong> panel floats over the top left of the 3D view and collapses to an icon. Each row has a colour swatch, the study's name and one line: its test surface files while its result is current, otherwise <strong>Out of date</strong>, <strong>Not run yet</strong> or the reason it cannot run (for example <strong>Add test surfaces</strong>). Pressing a row selects the study for the view: <strong>one study is on the view at a time</strong>, and its test surfaces are the ones coloured. The settings button of a row opens its popover.</p>
+<p><strong>Add study</strong> offers two kinds of entries in one menu:</p>
+<ul>
+<li><strong>Like <em>criterion name</em></strong> makes a study from a criterion: the metric of its mode (see the table below), its period, the mode settings the metric reads and a copy of its test surface files. No link to the criterion is kept; changing the criterion later does not change the study.</li>
+<li>A <strong>metric</strong> makes a study with the metric's default period and no test surface files. A metric that needs the weather file is greyed until the project has one.</li>
+</ul>
+<p>The popover of a study holds:</p>
+<table>
+<thead>
+<tr>
+<th>Control</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Name</td>
+<td>A study is named from its metric and period, for example "Sun hours, 21 Dec" or "Useful solar energy, 15 Oct to 15 Apr". Typing a name keeps it from then on</td>
+</tr>
+<tr>
+<td>Metric</td>
+<td>One of the metrics below. Changing it resets the settings to those of the new metric and keeps the values both metrics have</td>
+</tr>
+<tr>
+<td>Analysis period</td>
+<td>The same control as in the Criteria step. Shown for the metrics that sum over a period</td>
+</tr>
+<tr>
+<td>More settings</td>
+<td>The few settings the metric reads: balance temperature, dead band and harm for useful solar energy; dew point and Bliss coefficient for the cooling sky; the time basis (standard, daylight saving or solar time) for sun hours</td>
+</tr>
+<tr>
+<td>Test surfaces</td>
+<td>The files the study uses. You can add new files (button or drop) or use a file the project stores already, for example a criterion's. A stored file is kept while a criterion or a study lists it and goes to the recycle bin when none does</td>
+</tr>
+<tr>
+<td>Delete study</td>
+<td>Removes the study and moves its results to the recycle bin. Its number is not used again</td>
+</tr>
+</tbody>
+</table>
+<p>Every change is saved at once. The studies are stored in <code>project.json</code> under <code>studies</code>, apart from the criteria. They cannot be changed while a Design run or a simulation is going.</p>
+<h2 id="metrics">Metrics<a class="headerlink" href="#metrics" title="Permanent link">&para;</a></h2>
+<p>Each carving mode has a metric of the same quantity, which "Like <em>criterion</em>" takes. Any metric whose inputs exist can be chosen for a study.</p>
+<table>
+<thead>
+<tr>
+<th>Metric</th>
+<th>Unit</th>
+<th>Carving mode it matches</th>
+<th>Weather file</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sun hours</td>
+<td>h</td>
+<td>Solar time-based</td>
+<td>needed</td>
+</tr>
+<tr>
+<td>Solar energy</td>
+<td>kWh/m²</td>
+<td>Solar energy</td>
+<td>needed</td>
+</tr>
+<tr>
+<td>Useful solar energy</td>
+<td>kWh/m²</td>
+<td>Solar usefulness</td>
+<td>needed</td>
+</tr>
+<tr>
+<td>Overcast sky component</td>
+<td>%</td>
+<td>Daylight</td>
+<td>not needed</td>
+</tr>
+<tr>
+<td>Cooling sky</td>
+<td>%</td>
+<td>Night cooling</td>
+<td>not needed</td>
+</tr>
+<tr>
+<td>Sky view factor</td>
+<td>%</td>
+<td>Angle rule</td>
+<td>not needed</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>Sun hours</strong>: hours of direct sun in the period. Each hour counts the sun position of that hour, and a position counts 1 h when it is above 5° altitude and in front of the test surface (no cosine of incidence). The 5° is the same for every study: "Like <em>criterion</em>" does not copy the minimum altitude of a time-based criterion, so a study counts the sun above 5° whatever the criterion's minimum altitude. The time basis says which clock the hours are read in; it is a setting of sun hours only. A new study starts at 21 December, 10 to 14 h.</li>
+<li><strong>Solar energy</strong> and <strong>Useful solar energy</strong>: direct and diffuse energy that reaches the surface in the period, from the weather file's Perez sky and the cosine of incidence. Useful solar energy counts the hours that need heating, with the balance temperature, dead band and weights of Solar usefulness. Ground reflection is left out. A new study starts with the whole year (solar energy) or 15 October to 15 April, 7 to 19 h (useful solar energy).</li>
+<li><strong>Overcast sky component</strong>: light from a CIE overcast sky. On a vertical facade this is the vertical sky component, at most 39.6 %.</li>
+<li><strong>Cooling sky</strong>: the long-wave cooling potential toward the clear night sky that the surface sees, from the dew point and the Bliss coefficient.</li>
+<li><strong>Sky view factor</strong>: the cosine-weighted share of the view taken by the sky. An unobstructed horizontal surface has 100 %, an unobstructed wall 50 %.</li>
+</ul>
+<p>The three sky metrics are a percentage of what an unobstructed horizontal surface receives. Study names, units and the per-study defaults are listed by <code>GET /projects/{name}/studies</code>.</p>
+<h2 id="what-simulate-fixes">What Simulate fixes<a class="headerlink" href="#what-simulate-fixes" title="Permanent link">&para;</a></h2>
+<p>These choices are not settings:</p>
+<ul>
+<li><strong>Sky</strong>: Tregenza's 145 patches. Each patch is traced with jittered sub-rays, as the carving traces them, at the project's rays per patch (the value of the first criterion that is on, 4 when the project has no criterion). One ray per patch would leave gaps of about 12° between the rays and show banding.</li>
+<li><strong>Sun</strong>: one position per hour.</li>
+<li><strong>Test points</strong>: sampled on the study's test surfaces at the carving's spacing (the grid step of the shared settings, else half the voxel size). A study with more than 2 million test points is refused, and the message gives the spacing that fits.</li>
+<li><strong>Blocking</strong>: the context and the terrain of the project block in every geometry.</li>
+<li><strong>North and ray length</strong> come from the shared settings.</li>
+</ul>
+<h2 id="geometry">Geometry<a class="headerlink" href="#geometry" title="Permanent link">&para;</a></h2>
+<p>The geometry switch at the top centre of the view chooses what the values are shown on. While a study's settings are open it moves to the right of the popover, and on windows narrower than 1000 px it sits at the top right, with the popover under the studies panel:</p>
+<table>
+<thead>
+<tr>
+<th>Geometry</th>
+<th>What blocks</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Max volume</strong></td>
+<td>The maximum volume mesh as you added it (not its voxels)</td>
+</tr>
+<tr>
+<td><strong>Envelope</strong></td>
+<td>The envelope mesh that <strong>Build envelope</strong> wrote, clipped by the maximum volume</td>
+</tr>
+<tr>
+<td><strong>Massing</strong></td>
+<td>The building massing mesh, clipped by the maximum volume</td>
+</tr>
+</tbody>
+</table>
+<p>The context and the terrain block in all three. With several criteria the envelope is the result of the whole chain. <strong>Envelope</strong> and <strong>Massing</strong> wait, with the reason as a tooltip, until Design has built them, and also when the selected study ran before they were built (the tooltip says to run the study again). A geometry that Design shows out of date is marked; Simulate still traces the mesh on disk.</p>
+<p><strong>Change</strong> colours each test point by its change from the maximum volume (the baseline) on the geometry shown: gains on a ramp from no change to the largest gain, losses in the colour the carving uses for carved voxels, a change smaller than a thousandth of the highest value without any geometry as none. Change waits while Max volume is shown.</p>
+<h2 id="run">Run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h2>
+<p><strong>Run</strong> runs every study that can run, for every geometry that is built: the maximum volume always, the envelope and the massing when they exist. Switching the geometry afterwards needs no new run. A study that cannot run says why on its row (no test surface files, no maximum volume, no weather file for a metric that needs one, a setting the engine refuses). One that the engine refuses, for example for too many test points, keeps its message until its inputs change, and the other studies still run.</p>
+<p>There is one job at a time. While a Design run is going, Run shows "A Design run is in progress" and waits; while a simulation is going, Design's run buttons say so. Nothing is queued. The progress shows under Run with a Cancel button.</p>
+<h2 id="the-legend-the-target-and-the-result-card">The legend, the target and the result card<a class="headerlink" href="#the-legend-the-target-and-the-result-card" title="Permanent link">&para;</a></h2>
+<p>The legend along the bottom of the view shows the selected study's scale in its unit: cividis from 0 to the highest value of the geometry shown. In the Change view it shows the change ramp, and the loss colour when some point lost.</p>
+<p>The <strong>target</strong> is a mark on the legend. Drag it, or focus it and use the arrow keys (1 % of the range), Page Up and Page Down (10 %) and Home and End; Delete clears it. The target is saved with the study, once per drag. Points below the target are drawn in one muted colour of their own, apart from the scale. The target does not apply to the Change view.</p>
+<p>The <strong>result card</strong> in the bottom right corner is for the selected study on the geometry shown. It gives:</p>
+<ul>
+<li>the mean,</li>
+<li>the lowest tenth (10th percentile),</li>
+<li>with a target, the share of points at or above it.</li>
+</ul>
+<p>On Envelope and Massing each line has the maximum volume's value in brackets, for example "mean 3.6 h (4.1)".</p>
+<h2 id="out-of-date">Out of date<a class="headerlink" href="#out-of-date" title="Permanent link">&para;</a></h2>
+<p>A result is <strong>out of date</strong> when any of these changed since it was computed: the study's settings (including its metric and period), its test surface files, the weather file, the context, the terrain, the maximum volume, or the envelope or massing mesh it traced (including one built or removed). The surface tolerance of the envelope and massing, which follows the voxel size they were built with, counts too. So do the shared settings a study reads: north, the ray length, the test point spacing (the voxel size and the grid step) and the rays per patch of the first criterion that is on. Turning a criterion on or off in Design can therefore make every study out of date. The result stays on the view, dimmed, with the <strong>Out of date</strong> stamp at the top of the view, and the row says "Out of date". Nothing reruns by itself: press <strong>Run</strong>. Moving the project folder does not make a result out of date. Changing the target does not either.</p>
+<h2 id="where-the-results-are-kept">Where the results are kept<a class="headerlink" href="#where-the-results-are-kept" title="Permanent link">&para;</a></h2>
+<p>Each study's results are in <code>&lt;project&gt;/simulate/&lt;study number&gt;/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check_points.npz</code></td>
+<td>The test points, their normals, the corners of the square patch each draws and the frame the coordinates are relative to</td>
+</tr>
+<tr>
+<td><code>check_values.npz</code></td>
+<td>One value per point for each geometry (<code>open</code> with no geometry, <code>max_volume</code>, then <code>envelope</code> and <code>massing</code> when traced)</td>
+</tr>
+<tr>
+<td><code>check_summary.json</code></td>
+<td>The metric, unit, settings, and for each geometry its mesh, triangle count, surface tolerance and statistics, and what the result was computed from. It is written last, so a folder without it has no result</td>
+</tr>
+<tr>
+<td><code>refusal.json</code></td>
+<td>Only for a study the engine refused: the message and the inputs it was refused with</td>
+</tr>
+</tbody>
+</table>
+<p>Reopening the project shows the last results. The studies also use <code>inputs/joined/study_surfaces_&lt;number&gt;.ply</code>, the joined test surface file of a study, beside the criteria's.</p>
+<p>The service routes are under <code>/projects/{name}/studies</code> and <code>POST /projects/{name}/simulate</code>; the engine request is <code>check</code> (see <a href="../api/engine-requests/#commands">Engine requests</a>).</p>
+<h2 id="not-there-yet">Not there yet<a class="headerlink" href="#not-there-yet" title="Permanent link">&para;</a></h2>
+<p>These belong to a later milestone:</p>
+<ul>
+<li>studies on other designs (meshes added for Simulate only),</li>
+<li>snapshots of results,</li>
+<li>CSV export of the values,</li>
+<li>side-by-side views with linked cameras,</li>
+<li>a command-line command and a Grasshopper component for the check.</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.sections", "navigation.expand", "navigation.indexes", "content.code.copy", "toc.follow"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.79ae519e.min.js"></script>
+      
+    
+  </body>
+</html>

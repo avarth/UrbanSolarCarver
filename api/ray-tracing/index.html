@@ -461,6 +461,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../simulate/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Simulate
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../modes/" class="md-nav__link">
         
   
@@ -699,7 +726,7 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_11" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_12" checked>
         
           
           <div class="md-nav__link md-nav__container">
@@ -721,14 +748,14 @@
             </a>
             
               
-              <label class="md-nav__link " for="__nav_11" id="__nav_11_label" tabindex="">
+              <label class="md-nav__link " for="__nav_12" id="__nav_12_label" tabindex="">
                 <span class="md-nav__icon md-icon"></span>
               </label>
             
           </div>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_11_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_11">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_12_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_12">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1072,6 +1099,17 @@
     <span class="md-ellipsis">
       
         require_dda_backend
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.mesh_visible_weight_kernel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_visible_weight_kernel
       
     </span>
   </a>
@@ -1643,6 +1681,17 @@
     <span class="md-ellipsis">
       
         require_dda_backend
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#urbansolarcarver.warp_kernels.mesh_visible_weight_kernel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        mesh_visible_weight_kernel
       
     </span>
   </a>
@@ -3280,13 +3329,17 @@ device (:func:<code>dda_backend_available</code>), precompiles the kernels
 <li>the parity voxelizer used by :func:<code>voxelization.voxelize_solid_warp</code>;</li>
 <li>the ground heights of a terrain mesh and the voxel centres on the context's
   surface, used by :mod:<code>context_geometry</code>, and the any-hit test of rays
-  against the context and terrain meshes (:func:<code>ray_tracing.mesh_blocks_rays</code>).</li>
+  against the context and terrain meshes (:func:<code>ray_tracing.mesh_blocks_rays</code>);</li>
+<li>the mesh visibility kernel of the sun and sky check (:mod:<code>solar_check</code>),
+  which traces rays against a triangle mesh's BVH (<code>wp.Mesh</code>) instead of
+  the voxel grid.</li>
 </ul>
 <p>All kernels live in this one module on purpose: Warp compiles a Python
 module as one unit and caches it on disk by module, so
 :func:<code>warmup_kernels</code> compiles them all at once.  The kernels exist only
 when Warp imports and initializes (<code>_warp_available</code>).  Their launch
-wrappers are in :mod:<code>ray_tracing</code> and :mod:<code>voxelization</code>.</p>
+wrappers are in :mod:<code>ray_tracing</code>, :mod:<code>voxelization</code> and
+:mod:<code>solar_check</code>.</p>
 
 
 <details class="references" open>
@@ -3440,6 +3493,36 @@ and, for the CPU, Warp's CPU backend can compile kernels.</p>
         <p>Raise WarpBackendUnavailableError unless the Warp DDA backend can run
 on <em>device</em>.  Ray tracing has no other backend; the error says why
 Warp cannot run and how to repair the installation.</p>
+
+
+    </div>
+
+</div>
+
+<div class="doc doc-object doc-function">
+
+
+<h3 id="urbansolarcarver.warp_kernels.mesh_visible_weight_kernel" class="doc doc-heading">
+<code class="doc-symbol doc-symbol-heading doc-symbol-function"></code>            <code class="highlight language-python"><span class="n">mesh_visible_weight_kernel</span><span class="p">(</span><span class="n">mesh_id</span><span class="p">,</span> <span class="n">has_mesh</span><span class="p">,</span> <span class="n">mesh_tolerance</span><span class="p">,</span> <span class="n">clip_id</span><span class="p">,</span> <span class="n">has_clip</span><span class="p">,</span> <span class="n">clip_tolerance</span><span class="p">,</span> <span class="n">blocking_id</span><span class="p">,</span> <span class="n">has_blocking</span><span class="p">,</span> <span class="n">blocking_tolerance</span><span class="p">,</span> <span class="n">points</span><span class="p">,</span> <span class="n">normals</span><span class="p">,</span> <span class="n">directions</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">use_cosine</span><span class="p">,</span> <span class="n">sub_side</span><span class="p">,</span> <span class="n">patch_cells</span><span class="p">,</span> <span class="n">patch_ids</span><span class="p">,</span> <span class="n">d_start</span><span class="p">,</span> <span class="n">d_end</span><span class="p">,</span> <span class="n">origin_offset</span><span class="p">,</span> <span class="n">min_hit</span><span class="p">,</span> <span class="n">max_t</span><span class="p">,</span> <span class="n">out</span><span class="p">)</span></code>
+
+<a href="#urbansolarcarver.warp_kernels.mesh_visible_weight_kernel" class="headerlink" title="Permanent link">&para;</a></h3>
+
+
+    <div class="doc doc-contents ">
+
+        <p>Add the value of every direction in [d_start, d_end) that a test
+point faces and sees past the mesh and the blocking meshes.</p>
+<p>One thread per test point.  With sub_side &gt; 1, direction k is
+sub-ray k % sub_side**2 of patch patch_ids[k], drawn for test point
+i as the carving draws it (_sky_sub_ray_direction, see the note
+above _lowbias32).  A ray is blocked where it is inside the
+mesh's solid and, with a clip solid, inside the clip solid too: the
+mesh then counts only where it overlaps the clip (a carved
+envelope that bulges past the maximum volume blocks nothing outside
+it).  The blocking meshes block wherever the ray meets them.  Inside
+and outside follow the faces' orientation (closed meshes with
+outward normals); a start inside is judged by :func:<code>_check_start</code>,
+with each mesh's own tolerance.</p>
 
 
     </div>
