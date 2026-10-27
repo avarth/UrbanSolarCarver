@@ -24,7 +24,7 @@ import { hemisphereOfLatitude } from "../settings_form/analysis_period";
 import { shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf } from "../settings_form/presentation";
 import { sharedRefusalShown, splitSettings, useBothForms } from "../settings_form/two_forms";
-import type { LayerName } from "../viewer/scene";
+import type { LayerName, ViewportTheme } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { SimulateView } from "../simulate/SimulateView";
 import type { StudyGeometry } from "../simulate/study_values";
@@ -379,9 +379,10 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     token, project: project.name, studies, active: simulating, runs, envelopeBuilt: designResults?.envelope != null, massingBuilt: designResults?.massing != null,
     envelopeStage: shownStages.exporting, massingStage: shownStages.massing, editDisabled: runActive, onServiceProblem,
   });
-  const simulateView = (
+  const simulateView = (theme: ViewportTheme) => (
     <SimulateView project={project.name} studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
-                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} onServiceProblem={onServiceProblem} studyView={studyView} />
+                  onStoredFilesChange={() => { void testSurfaceCalls.reloadStoredFiles(); refreshStageStatus(); }} onServiceProblem={onServiceProblem} studyView={studyView}
+                  theme={theme} />
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
                            envelopeSeeThrough: studyView.geometry === "envelope", dimmedLayers: [] };

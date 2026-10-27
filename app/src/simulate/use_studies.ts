@@ -92,11 +92,13 @@ export function useStudies(token: string, project: string, onServiceProblem: (er
       await deleteStudy(token, project, id);
       const { studies, selectedId } = latest.current;
       commit({ studies: studies.filter((study) => study.entry.id !== id), selectedId: selectedId === id ? null : selectedId });
+      void refresh();       // a read asked for before the delete may answer after it with the study still in its list: this one replaces it
     },
     reorder: async (ids) => {
       const entries = await reorderStudies(token, project, ids);
       const byId = new Map(latest.current.studies.map((study) => [study.entry.id, study]));
       commit({ studies: entries.map((entry) => ({ ...(byId.get(entry.id) ?? newStudy(entry)), entry })) });
+      void refresh();       // as in remove: a read asked for before the new order may answer after it
     },
     addFile: (id, file) => changeEntry(addStudyTestSurface(token, project, id, file)),
     useFile: (id, fileName) => changeEntry(useStudyTestSurface(token, project, id, fileName)),

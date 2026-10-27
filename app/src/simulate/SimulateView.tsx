@@ -6,6 +6,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { failureTextOf, serviceProblemOf, type CriterionEntry, type InputFileInfo, type StudySource } from "../api_client/client";
 import { messages } from "../messages";
+import type { ViewportTheme } from "../viewer/colour_scales";
 import type { RunLoop } from "../steps/run_state";
 import { inputProblemText } from "../steps/InputsStep";
 import { RunProgress } from "../steps/RunProgress";
@@ -31,9 +32,11 @@ interface SimulateViewProps {
   onServiceProblem: (error: unknown) => void;
   /** The selected study on the view: the geometry switch, the target legend and the result card. */
   studyView: StudyViewHook;
+  /** The viewport theme, which the target legend's colours follow. */
+  theme?: ViewportTheme;
 }
 
-export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView }: SimulateViewProps) {
+export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView, theme = "light" }: SimulateViewProps) {
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
   const popoverId = useId();
@@ -120,14 +123,15 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
                       }} loadProblem={studies.loadProblem} popover={popover}
                       runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
       </div>
-      <div className="simulate-geometry-bar">
+      <div className={`simulate-geometry-bar${shown === null ? "" : " simulate-geometry-bar-beside-popover"}`}>
         <GeometrySwitch available={studyView.available} outOfDateInDesign={studyView.outOfDateInDesign} waitingForStudy={studyView.waitingForStudy}
                         value={studyView.geometry}
                         change={studyView.change} onChange={studyView.setGeometry} onChangeToggle={studyView.setChange} />
       </div>
+      {studyView.waitingForRun && <p className="viewer-overlay study-view-note" role="status">{messages.studyShownWhenRunEnds}</p>}
       {legend !== null && (
         <TargetLegend label={legend.label} unit={legend.unit} range={legend.range} target={legend.target} mode={legend.mode} hasLoss={legend.hasLoss}
-                      disabled={legend.disabled} onTargetChange={studyView.setTarget} />
+                      disabled={legend.disabled} theme={theme} onTargetChange={studyView.setTarget} />
       )}
       {card !== null && <ResultCard geometry={card.geometry} unit={card.unit} statistics={card.statistics} baseline={card.baseline} />}
     </>

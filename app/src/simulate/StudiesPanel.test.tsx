@@ -1,7 +1,7 @@
 import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import type { StudyWithState } from "../api_client/client";
-import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
+import { addStyleSheetForTest, click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
 import { StudiesPanel, type StudiesPanelProps } from "./StudiesPanel";
 
 let rendered: RenderedOverlay | null = null;
@@ -95,4 +95,20 @@ test("an Add study the service refuses says why", async () => {
   await act(async () => container().querySelector<HTMLButtonElement>('[role="menuitem"]')!.click());
   expect(onAdd).toHaveBeenCalledExactlyOnceWith({ metric: "sky_view" });
   expect(container().querySelector('[role="alert"]')!.textContent).toBe("There is no criterion '9'.");
+});
+
+test("a refused study's reason wraps in its row and is the row line's title, so its last words are read; other lines stay on one line", () => {
+  const reason = "The test surfaces are too far from the maximum volume to sample the sky. A spacing of 2 m or more fits.";
+  const removeStyles = addStyleSheetForTest("src/simulate/simulate.css");
+  try {
+    rendered = renderForTest(<StudiesPanel {...panelProps({ studies: [study("1", "Sky view factor", [], "refused", reason), study("2", "Sun hours, 21 Dec", ["facades.obj"], "current")] })} />);
+    const [refused, current] = [...container().querySelectorAll<HTMLElement>(".study-row-line")];
+    expect(refused.textContent).toBe(reason);
+    expect(refused.title).toBe(reason);
+    expect(getComputedStyle(refused).whiteSpace).toBe("normal");
+    expect(getComputedStyle(current).whiteSpace).toBe("nowrap");
+    expect(current.title).toBe("facades.obj");
+  } finally {
+    removeStyles();
+  }
 });

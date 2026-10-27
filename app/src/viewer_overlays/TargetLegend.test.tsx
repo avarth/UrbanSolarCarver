@@ -100,3 +100,19 @@ test("the change scale has no target, and names losses when there are some", () 
   expect(mark()).toBeNull();
   expect(container().querySelector(".target-legend-loss")!.textContent).toBe("Loss");
 });
+
+test("the part below the target takes the colour the view gives those points on the viewport's theme", () => {
+  document.documentElement.style.setProperty("--colour-below-target", "#8e7b88");        // jsdom has no theme tokens
+  document.documentElement.style.setProperty("--colour-below-target-on-dark", "#6e5f6a");
+  try {
+    const colourOf = (hex: string) => { const probe = document.createElement("span"); probe.style.background = hex; return probe.style.background; };
+    const below = () => container().querySelector<HTMLElement>(".target-legend-below")!;
+    rendered = renderForTest(<TargetLegend label="Sun hours" unit="h" range={[0, 8]} target={3} onTargetChange={() => {}} mode="value" />);
+    expect(below().style.background).toBe(colourOf("#8e7b88"));
+    rendered.rerender(<TargetLegend label="Sun hours" unit="h" range={[0, 8]} target={3} onTargetChange={() => {}} mode="value" theme="dark" />);
+    expect(below().style.background).toBe(colourOf("#6e5f6a"));
+  } finally {
+    document.documentElement.style.removeProperty("--colour-below-target");
+    document.documentElement.style.removeProperty("--colour-below-target-on-dark");
+  }
+});

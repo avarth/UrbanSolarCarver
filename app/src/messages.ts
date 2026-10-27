@@ -99,6 +99,7 @@ export const messages = {
   changeLegend: (unit: string) => `Change from max volume (${unit})`,
   changeLoss: "Loss",
   resultCard: "Result",
+  studyShownWhenRunEnds: "Shown when the run ends",
   resultMean: (value: string) => `mean ${value}`,
   resultLowestTenth: (value: string) => `lowest tenth ${value}`,
   resultAtTarget: (value: string) => `at target ${value}`,

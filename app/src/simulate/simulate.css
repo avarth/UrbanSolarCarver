@@ -69,6 +69,8 @@
 .study-row-text { display: flex; flex-direction: column; min-width: 0; }
 .study-row-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .study-row-line { overflow: hidden; color: var(--colour-muted); font-size: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+/* The reason a study is refused is read whole: its last words say what to do. */
+.study-row-line-refused { white-space: normal; text-overflow: clip; overflow-wrap: anywhere; }
 
 .studies-panel-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
 .studies-panel-actions .run-button-area { flex: 1 1 6rem; }
@@ -110,6 +112,9 @@
    waits (not built yet) is greyed; one out of date in Design has a dot in the stamp's colour. The out-of-date stamp of the view goes
    under the switch. */
 .simulate-geometry-bar { position: absolute; top: 12px; left: 50%; z-index: 4; transform: translateX(-50%); }
+/* While a study's popover is open the bar starts to the right of it (12 px, the panel 280, 8, the popover 340, 12), so the switch stays
+   in reach: the popover would cover a bar centred on a window narrower than about 1640 px. */
+.simulate-geometry-bar-beside-popover { left: calc(12px + 280px + 8px + 340px + 12px); transform: none; }
 .geometry-switch { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
 .geometry-switch-segments {
   display: flex;
@@ -147,6 +152,12 @@
 .geometry-switch-stale { width: 6px; height: 6px; border-radius: 50%; background: var(--colour-out-of-date); }
 .viewer-pane:has(.simulate-geometry-bar) .viewer-out-of-date { top: 56px; }
 
+/* What stands where the legend goes while the selected study's values wait for the run to end. */
+.study-view-note { bottom: calc(var(--overlay-gap) + 40px); left: 50%; transform: translateX(-50%); margin: 0; padding: 8px 12px; }
+@media (max-width: 900px) {
+  .study-view-note { bottom: calc(var(--overlay-gap) + 150px); }
+}
+
 /* The result card in the bottom right corner; the legend of the view (the massing's storeys) goes above it. */
 .result-card { right: var(--overlay-gap); bottom: var(--overlay-gap); width: 220px; padding: 8px 12px; }
 .result-card h3 { margin: 0 0 4px; font-size: var(--text-secondary); font-weight: 600; }
@@ -154,13 +165,14 @@
 .result-card ul { margin: 0; padding: 0; list-style: none; font-variant-numeric: tabular-nums; }
 .viewer-pane:has(.result-card) .viewer-legend { bottom: 124px; }
 
-@media (max-width: 900px) {
-  .simulate-geometry-bar { top: 56px; right: 12px; left: auto; transform: none; }
+/* Up to 1000 px the bar goes to the top right, under the toolbar, and the popover goes under the panel instead of beside it, so the
+   two do not meet; the bar stays where it is whether a popover is open or not. */
+@media (max-width: 1000px) {
+  .simulate-geometry-bar, .simulate-geometry-bar-beside-popover { top: 56px; right: 12px; left: auto; transform: none; }
   .viewer-pane:has(.simulate-geometry-bar) .viewer-out-of-date { top: 100px; }
+  .study-popover { position: static; width: auto; max-height: 60vh; margin-top: calc(var(--space-unit) * 2); }
 }
 
-/* Narrow windows: the popover goes under the panel instead of beside it. */
 @media (max-width: 720px) {
   .studies-panel { width: min(280px, calc(100vw - 48px)); }
-  .study-popover { position: static; width: auto; max-height: 60vh; margin-top: calc(var(--space-unit) * 2); }
 }

@@ -7,7 +7,7 @@
 import { useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
-import { changeRamp, cividis, colourToken } from "../viewer/colour_scales";
+import { changeRamp, cividis, colourToken, type ViewportTheme } from "../viewer/colour_scales";
 import "./overlays.css";
 
 export interface TargetLegendProps {
@@ -24,6 +24,8 @@ export interface TargetLegendProps {
   hasLoss?: boolean;
   /** The target cannot be changed now (a run of the project). */
   disabled?: boolean;
+  /** The viewport theme: the part below the target takes the colour the view gives those points on it. */
+  theme?: ViewportTheme;
 }
 
 const RAMP_STOPS = 11;
@@ -40,7 +42,7 @@ function keptInRange(value: number, [low, high]: [number, number]): number {
   return Number(Math.min(high, Math.max(low, value)).toPrecision(SIGNIFICANT_DIGITS));
 }
 
-export function TargetLegend({ label, unit, range, target, onTargetChange, mode, hasLoss = false, disabled = false }: TargetLegendProps) {
+export function TargetLegend({ label, unit, range, target, onTargetChange, mode, hasLoss = false, disabled = false, theme = "light" }: TargetLegendProps) {
   const bar = useRef<HTMLDivElement>(null);
   const mark = useRef<HTMLDivElement>(null);
   // While a drag goes on, the mark follows the pointer; the target is given at the release. The ref has the latest move, which a
@@ -106,7 +108,7 @@ export function TargetLegend({ label, unit, range, target, onTargetChange, mode,
            onLostPointerCapture={valueMode ? endDrag : undefined}>
         {valueMode && shown !== null && (
           <span className="target-legend-below" aria-hidden="true"
-                style={{ width: `${shareOf(shown) * 100}%`, background: colourToken("below-target") }} />
+                style={{ width: `${shareOf(shown) * 100}%`, background: colourToken(theme === "dark" ? "below-target-on-dark" : "below-target") }} />
         )}
         {valueMode && (
           <div ref={mark} role="slider" tabIndex={disabled ? -1 : 0} className="target-legend-mark" data-empty={shown === null ? "true" : undefined}

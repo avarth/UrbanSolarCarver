@@ -95,8 +95,8 @@ export interface ViewerPaneProps {
   missingLayers?: readonly LayerName[];
   /** How far the run under way is, 0 to 1; null without a run. */
   runProgress?: number | null;
-  /** Shown over the view (the run report). */
-  overlayContent?: ReactNode;
+  /** Shown over the view (the run report). A function is given the viewport theme (Simulate's legend colours follow it). */
+  overlayContent?: ReactNode | ((theme: ViewportTheme) => ReactNode);
   /** The mode the form shows. */
   mode?: string | null;
   /** The analysis (preprocessing) is current: it was made in the mode the form shows. */
@@ -323,6 +323,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
       : undefined,
   };
   const dimmedResultShown = dimmedLayers.some(shown) || studyOutOfDate;
+  const overlay = typeof overlayContent === "function" ? overlayContent(theme) : overlayContent;
   const progressPercent = runProgress === null ? 0 : Math.round(runProgress * 100);
   const progressBar = runProgress !== null && (
     <div className="viewer-run-progress" role="progressbar" aria-label={messages.runProgress} aria-valuemin={0} aria-valuemax={100}
@@ -338,7 +339,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
           <p className="viewer-unavailable" role="status">{messages.viewerNeedsWebGl}</p>
           {centreContent}
         </div>
-        {overlayContent}
+        {overlay}
       </div>
     );
   }
@@ -363,7 +364,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
         </div>
       )}
       {centreContent && <div className="viewer-centre" data-viewport-theme={theme}>{centreContent}</div>}
-      {overlayContent}
+      {overlay}
     </div>
   );
 }

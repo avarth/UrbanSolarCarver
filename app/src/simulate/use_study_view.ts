@@ -43,6 +43,8 @@ export interface StudyViewHook {
   waitingForStudy: StudyGeometry[];
   /** The selected study is out of date: the view's stamp says so. */
   studyOutOfDate: boolean;
+  /** The selected study has a result whose values are not read during a run: the view says they are shown when it ends. */
+  waitingForRun: boolean;
   /** What the 3D view draws; null without a selected study whose values have the geometry shown. */
   view: StudyView | null;
   /** The legend and the result card; null when the view draws nothing. */
@@ -146,6 +148,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
 
   return {
     geometry, setGeometry, change, setChange, available, outOfDateInDesign, waitingForStudy, setTarget,
+    waitingForRun: active && running && hasResult && values === null,
     studyOutOfDate: active && selected?.state === "out_of_date",
     view: drawn ? { values, geometry, change, target, unit, dimmed: selected.state === "out_of_date" } : null,
     legend: drawn ? {

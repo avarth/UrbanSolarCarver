@@ -433,3 +433,57 @@ test("the stamp shows while the selected study is out of date, even before its v
   expect(studyLayerSummary()).toBeNull();
   expect(stamp()!.textContent).toContain("Out of date");
 });
+
+test("while a study's popover is open the geometry switch moves to the right of it, so the popover does not cover the switch", async () => {
+  await openSimulate(undefined, (service) => { service.studies = [study("1", "sun_hours", ["facades.obj"], "current")]; });
+  const bar = () => container().querySelector<HTMLElement>(".simulate-geometry-bar")!;
+  expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
+  await openStudySettings("Sun hours, 21 Dec");
+  expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(true);
+  act(() => studyPopover()!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })));
+  expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
+});
+
+test("the part of the legend below the target takes the colour the view gives those points on the viewport's theme", async () => {
+  const [lightColour, darkColour] = ["#8e7b88", "#6e5f6a"];
+  document.documentElement.style.setProperty("--colour-below-target", lightColour);        // jsdom has no theme tokens
+  document.documentElement.style.setProperty("--colour-below-target-on-dark", darkColour);
+  try {
+    await openSimulate(undefined, (service) => {
+      service.studies = [{ ...study("1", "sun_hours", ["facades.obj"], "current"), entry: { ...study("1", "sun_hours", ["facades.obj"]).entry, target: 2 } }];
+      service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }) };
+    });
+    await selectStudy("Sun hours, 21 Dec");
+    const below = () => container().querySelector<HTMLElement>(".target-legend-below")!;
+    const swatch = (hex: string) => { const probe = document.createElement("span"); probe.style.background = hex; return probe.style.background; };
+    expect(below().style.background).toBe(swatch(lightColour));
+    act(() => container().querySelector<HTMLButtonElement>('button[aria-label="Dark viewport"]')!.click());
+    expect(below().style.background).toBe(swatch(darkColour));
+  } finally {
+    document.documentElement.style.removeProperty("--colour-below-target");
+    document.documentElement.style.removeProperty("--colour-below-target-on-dark");
+    window.localStorage.clear();
+  }
+});
+
+test("during a run, a study whose values are not read yet says they are shown when the run ends", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current"), study("2", "sky_view", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }), 2: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%") };
+  });
+  const note = () => container().querySelector(".study-view-note");
+  await selectStudy("Sun hours, 21 Dec");
+  expect(note()).toBeNull();
+  await act(async () => runButton().click());
+  await settle();
+  expect(note()).toBeNull();                               // the first study's values are on the view already
+  expect(studyLayerSummary()).toBe("3 points");
+  await selectStudy("Sky view factor");
+  expect(studyLayerSummary()).toBeNull();
+  expect(note()!.textContent).toBe("Shown when the run ends");
+  expect(note()!.getAttribute("role")).toBe("status");
+  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["simulate"], files: [] });
+  await settle();
+  expect(note()).toBeNull();
+  expect(studyLayerSummary()).toBe("2 points");
+});

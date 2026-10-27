@@ -111,7 +111,7 @@ export function StudiesPanel(props: StudiesPanelProps) {
                       <span className="study-row-swatch" style={{ background: colour }} aria-hidden="true" />
                       <span className="study-row-text">
                         <span className="study-row-name">{name}</span>
-                        <span className={`study-row-line study-row-line-${study.state}`}>{studyLine(study)}</span>
+                        <span className={`study-row-line study-row-line-${study.state}`} title={studyLine(study)}>{studyLine(study)}</span>
                       </span>
                     </button>
                     <button type="button" className="study-row-settings" aria-label={messages.studySettingsOf(name)} title={messages.studySettingsOf(name)}
