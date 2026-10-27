@@ -3,13 +3,15 @@ import json
 
 import pytest
 import send2trash
+import trimesh
 
-from local_web_test_support import GOLDEN_EPW, FakeRecycleBin
+from local_web_test_support import GOLDEN_EPW, FakeRecycleBin, box_bytes
 from test_local_web_server import client, client_with_blocking_run, client_with_inputs, projects_folder     # noqa: F401  (fixtures)
+from urbansolarcarver.local_web_service import test_surfaces
 from urbansolarcarver.local_web_service.criteria import CRITERION_COLOURS
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
 from urbansolarcarver.local_web_service.studies import (
-    STUDY_SETTING_KEYS, default_study_name, study_from_criterion,
+    STUDY_SETTING_KEYS, default_study_name, joined_study_surfaces_path, study_from_criterion,
 )
 
 PERIOD_21_DEC = {"start_month": 12, "start_day": 21, "start_hour": 10, "end_month": 12, "end_day": 21, "end_hour": 14}
@@ -264,3 +266,160 @@ def test_study_changes_are_refused_while_a_run_is_active(client_with_blocking_ru
     client, _run_id = client_with_blocking_run
     assert client.post("/api/projects/p/studies", json={"metric": "sky_view"}).status_code == 409
     assert client.get("/api/projects/p/studies").status_code == 200
+
+
+# A study's test surfaces: files from the project's shared store.
+
+def _study_joined(store, name, study_id):
+    return store.open(name) / joined_study_surfaces_path(study_id)
+
+
+def _stored_files(store, name):
+    return sorted(path.name for path in (store.open(name) / "inputs" / "test_surfaces").iterdir())
+
+
+def _width(path):
+    bounds = trimesh.load(path, force="mesh").bounds
+    return bounds[1][0] - bounds[0][0]
+
+
+def _with_recycle_bin(monkeypatch):
+    recycle_bin = FakeRecycleBin()
+    monkeypatch.setattr(send2trash, "send2trash", recycle_bin)
+    return recycle_bin
+
+
+def test_users_of_lists_the_criteria_and_the_studies_that_list_a_file(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_criterion(name, "daylight")
+    store.add_study(name, from_criterion="1")
+    store.add_study(name, metric="sky_view")
+    project_json = store.read_project_json(name)
+    assert test_surfaces.users_of(project_json, "surface.ply") == ["criterion:1", "study:1"]
+    assert test_surfaces.users_of(project_json, "other.ply") == []
+    assert joined_study_surfaces_path("3") == "inputs/joined/study_surfaces_3.ply"
+
+
+def test_a_file_a_study_uses_stays_when_its_criterion_is_deleted(project_with_inputs, monkeypatch):
+    store, name = project_with_inputs
+    recycle_bin = _with_recycle_bin(monkeypatch)
+    store.add_criterion(name, "daylight")
+    store.add_study(name, from_criterion="1")
+    store.delete_criterion(name, "1")
+    assert recycle_bin.files == [] and _stored_files(store, name) == ["surface.ply"]
+    assert [file.name for file in store.input_files(name, "test_surfaces")] == ["surface.ply"]
+    assert store.studies(name)[0].test_surface_files == ["surface.ply"]
+    assert _study_joined(store, name, "1").is_file()
+
+
+def test_a_file_a_study_uses_stays_when_it_is_taken_out_of_the_criterion(project_with_inputs, monkeypatch):
+    store, name = project_with_inputs
+    recycle_bin = _with_recycle_bin(monkeypatch)
+    store.add_study(name, from_criterion="1")
+    store.remove_input(name, "test_surfaces", "surface.ply")      # the old form for a project's only criterion
+    assert recycle_bin.files == [] and _stored_files(store, name) == ["surface.ply"]
+    assert [file.name for file in store.input_files(name, "test_surfaces")] == ["surface.ply"]
+    assert store.criteria(name)[0].test_surface_files == [] and not test_surfaces.joined_path(store.open(name), "1").exists()
+    assert _study_joined(store, name, "1").is_file()
+
+
+def test_a_file_a_criterion_uses_stays_when_the_study_is_deleted(project_with_inputs, monkeypatch):
+    store, name = project_with_inputs
+    recycle_bin = _with_recycle_bin(monkeypatch)
+    store.add_study(name, from_criterion="1")
+    criterion_joined_before = test_surfaces.fingerprint(store.open(name), "1")
+    store.delete_study(name, "1")
+    assert recycle_bin.files == [] and _stored_files(store, name) == ["surface.ply"]
+    assert store.criteria(name)[0].test_surface_files == ["surface.ply"]
+    assert not _study_joined(store, name, "1").exists()
+    assert test_surfaces.fingerprint(store.open(name), "1") == criterion_joined_before
+
+
+def test_a_file_nothing_uses_any_more_goes_to_the_recycle_bin(project_with_inputs, monkeypatch):
+    store, name = project_with_inputs
+    recycle_bin = _with_recycle_bin(monkeypatch)
+    stored = store.open(name) / "inputs" / "test_surfaces"
+    store.add_study(name, from_criterion="1")
+    store.add_study(name, from_criterion="1")
+    store.remove_criterion_test_surface(name, "1", "surface.ply")
+    store.remove_study_test_surface(name, "1", "surface.ply")
+    assert recycle_bin.files == []                                  # study 2 still lists it
+    store.delete_study(name, "2")
+    assert recycle_bin.files == [stored / "surface.ply"] and _stored_files(store, name) == []
+    assert store.input_files(name, "test_surfaces") == []
+    assert not _study_joined(store, name, "1").exists() and not _study_joined(store, name, "2").exists()
+
+
+def test_a_study_joins_its_files_and_has_no_joined_file_without_any(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_criterion_test_surface(name, "1", "roof.ply", box_bytes([20, 0, 0], extents=(2, 2, 0.1)))
+    revision = store.read_project_json(name).inputs_revision
+    criterion_fingerprint = test_surfaces.fingerprint(store.open(name), "1")
+    empty = store.add_study(name, metric="sky_view")
+    assert empty.test_surface_files == [] and not _study_joined(store, name, empty.id).exists()
+    like = store.add_study(name, from_criterion="1")
+    assert sorted(like.test_surface_files) == ["roof.ply", "surface.ply"]
+    assert _width(_study_joined(store, name, like.id)) == pytest.approx(24)        # surface.ply spans x -3..3, roof.ply 19..21
+    assert not any(path.name.endswith(".tmp.ply") for path in (store.open(name) / "inputs" / "joined").iterdir())
+    only_roof = store.use_study_test_surface(name, empty.id, "roof.ply")
+    assert only_roof.test_surface_files == ["roof.ply"] and _width(_study_joined(store, name, empty.id)) == pytest.approx(2)
+    assert store.use_study_test_surface(name, empty.id, "roof.ply").test_surface_files == ["roof.ply"]      # again: no change
+    both = store.use_study_test_surface(name, empty.id, "surface.ply")
+    assert sorted(both.test_surface_files) == ["roof.ply", "surface.ply"]
+    assert _width(_study_joined(store, name, empty.id)) == pytest.approx(24)
+    store.remove_study_test_surface(name, empty.id, "surface.ply")
+    assert _width(_study_joined(store, name, empty.id)) == pytest.approx(2)
+    assert store.remove_study_test_surface(name, empty.id, "roof.ply").test_surface_files == []
+    assert not _study_joined(store, name, empty.id).exists()
+    assert store.read_project_json(name).inputs_revision == revision
+    assert test_surfaces.fingerprint(store.open(name), "1") == criterion_fingerprint
+
+
+def test_a_study_refuses_a_file_that_is_not_stored_or_not_listed(project_with_inputs):
+    store, name = project_with_inputs
+    study = store.add_study(name, metric="sky_view")
+    for call in (lambda: store.use_study_test_surface(name, study.id, "missing.ply"),
+                 lambda: store.use_study_test_surface(name, "9", "surface.ply"),
+                 lambda: store.remove_study_test_surface(name, study.id, "surface.ply"),
+                 lambda: store.remove_study_test_surface(name, "9", "surface.ply")):
+        with pytest.raises(ProjectError) as refused:
+            call()
+        assert refused.value.status_code == 404
+    assert store.studies(name)[0].test_surface_files == [] and not _study_joined(store, name, study.id).exists()
+
+
+def test_replacing_a_stored_file_rebuilds_the_joined_file_of_a_study_that_uses_it(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_study(name, from_criterion="1")
+    store.add_study(name, metric="sky_view")        # lists nothing: no joined file
+    study_before = test_surfaces.content_digest(_study_joined(store, name, "1"))
+    assert _width(_study_joined(store, name, "1")) == pytest.approx(6)
+    store.add_criterion_test_surface(name, "1", "surface.ply", box_bytes([0, 0, 0], extents=(9, 6, 0.1)))
+    assert test_surfaces.content_digest(_study_joined(store, name, "1")) != study_before
+    assert _width(_study_joined(store, name, "1")) == pytest.approx(9)
+    assert _width(test_surfaces.joined_path(store.open(name), "1")) == pytest.approx(9)
+    assert not _study_joined(store, name, "2").exists()
+
+
+def test_replacing_a_stored_file_only_a_study_lists_rebuilds_the_study(project_with_inputs):
+    store, name = project_with_inputs
+    store.add_criterion(name, "daylight")
+    store.add_study(name, from_criterion="1")
+    store.remove_criterion_test_surface(name, "1", "surface.ply")
+    store.add_criterion_test_surface(name, "2", "surface.ply", box_bytes([0, 0, 0], extents=(9, 6, 0.1)))
+    assert _width(_study_joined(store, name, "1")) == pytest.approx(9)
+
+
+def test_study_test_surface_routes(client_with_inputs):
+    client = client_with_inputs
+    study = client.post("/api/projects/p/studies", json={"from_criterion": "1"}).json()
+    empty = client.post("/api/projects/p/studies", json={"metric": "sky_view"}).json()
+    assert study["test_surface_files"] and empty["test_surface_files"] == []
+    file_name = study["test_surface_files"][0]
+    used = client.put(f"/api/projects/p/studies/{empty['id']}/test-surfaces/{file_name}")
+    assert used.status_code == 200 and used.json()["test_surface_files"] == [file_name]
+    assert client.put(f"/api/projects/p/studies/{empty['id']}/test-surfaces/missing.ply").status_code == 404
+    assert client.put(f"/api/projects/p/studies/9/test-surfaces/{file_name}").status_code == 404
+    removed = client.delete(f"/api/projects/p/studies/{empty['id']}/test-surfaces/{file_name}")
+    assert removed.status_code == 200 and removed.json()["test_surface_files"] == []
+    assert client.delete(f"/api/projects/p/studies/{empty['id']}/test-surfaces/{file_name}").status_code == 404

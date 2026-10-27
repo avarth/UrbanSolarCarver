@@ -19,9 +19,10 @@ import trimesh
 from ..errors import InputError
 from ..io import load_mesh
 from . import uploads
-from .api_models import CriterionEntry
+from .api_models import CriterionEntry, ProjectJson
 from .criteria import default_criterion_name, joined_test_surfaces_path
 from .project_names import ProjectError
+from .studies import joined_study_surfaces_path
 
 ROLE = "test_surfaces"
 STORED_FOLDER = "inputs/test_surfaces"
@@ -37,9 +38,24 @@ def content_digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+STUDY_KEY_PREFIX = "study:"     # a key of build_joined_files that names a study; any other key is a criterion id
+
+
+def study_key(study_id: str) -> str:
+    """The key of a study in build_joined_files and install_joined_files."""
+    return f"{STUDY_KEY_PREFIX}{study_id}"
+
+
 def joined_path(project_folder: Path, criterion_id: str) -> Path:
     """The joined test surface file of a criterion (it may not exist: a criterion without test surfaces has none)."""
     return Path(project_folder) / joined_test_surfaces_path(criterion_id)
+
+
+def joined_path_of_key(project_folder: Path, key: str) -> Path:
+    """The joined file a key of build_joined_files stands for: a criterion id, or ``study:<id>`` (study_key) for a study."""
+    if key.startswith(STUDY_KEY_PREFIX):
+        return Path(project_folder) / joined_study_surfaces_path(key[len(STUDY_KEY_PREFIX):])
+    return joined_path(project_folder, key)
 
 
 def fingerprint(project_folder: Path, criterion_id: str) -> str | None:
@@ -56,6 +72,12 @@ def stored_path(project_folder: Path, file_name: str) -> Path:
 def criteria_using(criteria: list[CriterionEntry], file_name: str) -> list[CriterionEntry]:
     """The criteria that list this stored file."""
     return [criterion for criterion in criteria if file_name in criterion.test_surface_files]
+
+
+def users_of(project_json: ProjectJson, file_name: str) -> list[str]:
+    """Every entry that lists this stored file: ``criterion:<id>`` for each criterion, then ``study:<id>`` for each study."""
+    return [*(f"criterion:{criterion.id}" for criterion in project_json.criteria if file_name in criterion.test_surface_files),
+            *(f"study:{study.id}" for study in project_json.studies if file_name in study.test_surface_files)]
 
 
 def follow_default_name(entry: CriterionEntry) -> bool:
@@ -124,33 +146,34 @@ def load_stored_meshes(project_folder: Path, file_names: list[str]) -> dict[str,
 
 def build_joined_files(project_folder: Path, file_names_by_criterion: dict[str, list[str]],
                        new_meshes: dict[str, trimesh.Trimesh] | None = None) -> dict[str, Path | None]:
-    """Write the joined file of each criterion (id -> its file names) into a new temporary file; the paths by id.
+    """Write the joined file of each criterion or study (key -> its file names) into a new temporary file; the paths by key.
 
-    The meshes are joined in file name order; a name in *new_meshes* is taken from there (a file not stored yet, or about to
-    be replaced), any other is read from the stored file once however many criteria use it. A criterion without files gets
-    None: its joined file is to be removed. Nothing in the project changes; on an error the temporary files are removed.
+    A key is a criterion id or ``study:<id>`` (study_key). The meshes are joined in file name order; a name in *new_meshes* is
+    taken from there (a file not stored yet, or about to be replaced), any other is read from the stored file once however many
+    criteria and studies use it. An entry without files gets None: its joined file is to be removed. Nothing in the project
+    changes; on an error the temporary files are removed.
     """
     meshes_by_name = dict(new_meshes or {})
     stored_names = {name for names in file_names_by_criterion.values() for name in names if name not in meshes_by_name}
     meshes_by_name.update(load_stored_meshes(project_folder, list(stored_names)))
     temporary_paths: dict[str, Path | None] = {}
     try:
-        for criterion_id, file_names in file_names_by_criterion.items():
-            temporary_paths[criterion_id] = _write_temporary_joined_file(
-                project_folder, criterion_id, [meshes_by_name[file_name] for file_name in sorted(file_names)])
+        for key, file_names in file_names_by_criterion.items():
+            temporary_paths[key] = _write_temporary_joined_file(
+                project_folder, key, [meshes_by_name[file_name] for file_name in sorted(file_names)])
     except BaseException:
         remove_temporary_files(temporary_paths)
         raise
     return temporary_paths
 
 
-def _write_temporary_joined_file(project_folder: Path, criterion_id: str, meshes: list[trimesh.Trimesh]) -> Path | None:
-    """The joined meshes of a criterion in a temporary file with a unique name (concurrent builds never share one); None for none."""
+def _write_temporary_joined_file(project_folder: Path, key: str, meshes: list[trimesh.Trimesh]) -> Path | None:
+    """The joined meshes of a criterion or study in a temporary file with a unique name (concurrent builds never share one); None for none."""
     if not meshes:
         return None
     joined_folder = Path(project_folder) / JOINED_FOLDER
     joined_folder.mkdir(parents=True, exist_ok=True)
-    descriptor, temporary_name = tempfile.mkstemp(dir=joined_folder, prefix=f"test_surfaces_{criterion_id}-", suffix=".tmp.ply")
+    descriptor, temporary_name = tempfile.mkstemp(dir=joined_folder, prefix=f"{joined_path_of_key(project_folder, key).stem}-", suffix=".tmp.ply")
     os.close(descriptor)
     temporary_path = Path(temporary_name)
     try:
@@ -162,12 +185,12 @@ def _write_temporary_joined_file(project_folder: Path, criterion_id: str, meshes
 
 
 def install_joined_files(project_folder: Path, temporary_paths: dict[str, Path | None]) -> None:
-    """Move each built joined file into place, or remove the joined file of a criterion that has no file left (None)."""
-    for criterion_id, temporary_path in temporary_paths.items():
+    """Move each built joined file into place, or remove the joined file of a criterion or study that has no file left (None)."""
+    for key, temporary_path in temporary_paths.items():
         if temporary_path is None:
-            joined_path(project_folder, criterion_id).unlink(missing_ok=True)
+            joined_path_of_key(project_folder, key).unlink(missing_ok=True)
         else:
-            os.replace(temporary_path, joined_path(project_folder, criterion_id))
+            os.replace(temporary_path, joined_path_of_key(project_folder, key))
 
 
 def remove_temporary_files(temporary_paths: dict[str, Path | None]) -> None:

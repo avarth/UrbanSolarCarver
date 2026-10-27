@@ -41,7 +41,7 @@ from .criteria import (
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
 from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, discard_file, discard_folder, move_to_recycle_bin
-from .studies import NOT_SENT, append_study, change_study, checked_metric, default_study_settings, find_study, study_folder, study_from_criterion
+from .studies import NOT_SENT, append_study, change_study, checked_metric, default_study_settings, find_study, joined_study_surfaces_path, study_folder, study_from_criterion
 
 CONFIG_FILE_NAME = "config.yaml"
 INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/context", "inputs/terrain", "inputs/joined")
@@ -499,7 +499,8 @@ class ProjectStore:
         """Remove a criterion, its run folder (run/criteria/<id>/) and its joined test surface file; 404 for an unknown one, and
         ProjectError(422) for the only one (a project holds at least one criterion). Nothing changes then.
 
-        The stored test surface files that no other criterion uses go to the recycle bin (discard_file). Its id is not used again.
+        The stored test surface files that no other criterion and no study uses go to the recycle bin (discard_file). Its id is not
+        used again.
         The criteria left keep their switches: one left that is bypassed stays so (a run then refuses to start until it is on).
         """
         with self.project_lock(name):
@@ -515,7 +516,7 @@ class ProjectStore:
             project_json.criteria = [criterion for criterion in project_json.criteria if criterion.id != removed.id]
             project_json.criterion_records.pop(removed.id, None)
             unused_files = [file_name for file_name in removed.test_surface_files
-                            if not test_surfaces.criteria_using(project_json.criteria, file_name)]
+                            if not test_surfaces.users_of(project_json, file_name)]
             for file_name in unused_files:
                 project_json.input_files.get(test_surfaces.ROLE, {}).pop(file_name, None)
             self._rewrite_chain(name, project_folder, project_json)
@@ -556,19 +557,22 @@ class ProjectStore:
         """Add a study at the end of the list: of *metric* with its default period and settings and no test surface files, or like
         the criterion *from_criterion* (study_from_criterion; no link to it is kept).
 
-        Named by its metric and period, and given the next palette colour. Only project.json changes: not the criteria, config.yaml,
-        inputs_revision or a stage record. ProjectError: 422 for an unknown metric or for neither or both arguments, 404 for an
-        unknown criterion.
+        Named by its metric and period, and given the next palette colour. A study with test surface files gets its joined file
+        (inputs/joined/study_surfaces_<id>.ply). Otherwise only project.json changes: not the criteria, config.yaml, inputs_revision
+        or a stage record. ProjectError: 422 for an unknown metric or for neither or both arguments, 404 for an unknown criterion.
         """
         if (metric is None) == (from_criterion is None):
             raise ProjectError("Give either a metric or a criterion to copy.", status_code=422)
         with self.project_lock(name):
+            project_folder = self.open(name)
             project_json = self.read_project_json(name)
             if metric is not None:
                 study_metric, settings, files = checked_metric(metric), default_study_settings(metric), []
             else:
                 study_metric, settings, files = study_from_criterion(find_criterion(project_json, from_criterion))
             entry = append_study(project_json, study_metric, settings, files)
+            if entry.test_surface_files:
+                self._join_test_surfaces(project_folder, {test_surfaces.study_key(entry.id): sorted(entry.test_surface_files)})
             self.write_project_json(name, project_json)
             return entry
 
@@ -585,16 +589,22 @@ class ProjectStore:
             return entry
 
     def delete_study(self, name: str, study_id: str) -> None:
-        """Remove a study and move its results folder (simulate/<id>) to the recycle bin; 404 for an unknown one. Its id is not used
-        again. A folder that cannot be moved (a program has it open) stays, and the study is gone from the list all the same."""
+        """Remove a study, its joined test surface file and its results folder (simulate/<id>, to the recycle bin); 404 for an unknown
+        one. Its id is not used again. The stored test surface files that no criterion and no other study uses go to the recycle bin
+        too. A folder or file that cannot be moved (a program has it open) stays, and the study is gone from the list all the same."""
         with self.project_lock(name):
             project_folder = self.open(name)
             project_json = self.read_project_json(name)
             removed = find_study(project_json, study_id)
             project_json.studies = [study for study in project_json.studies if study.id != removed.id]
+            unused_files = [file_name for file_name in removed.test_surface_files if not test_surfaces.users_of(project_json, file_name)]
+            for file_name in unused_files:
+                project_json.input_files.get(test_surfaces.ROLE, {}).pop(file_name, None)
             self.write_project_json(name, project_json)
+            (project_folder / joined_study_surfaces_path(removed.id)).unlink(missing_ok=True)
             with contextlib.suppress(OSError):
                 discard_folder(study_folder(project_folder, removed.id))
+            self._discard_test_surface_files(project_folder, unused_files)
 
     def reorder_studies(self, name: str, ids: list[str]) -> None:
         """Put the studies in the order of *ids*, which names each study once; ProjectError 422 otherwise."""
@@ -606,11 +616,65 @@ class ProjectStore:
             project_json.studies = [by_id[study_id] for study_id in ids]
             self.write_project_json(name, project_json)
 
+    def use_study_test_surface(self, name: str, study_id: str, file_name: str) -> StudyEntry:
+        """Add a stored test surface file to the study *study_id* and build its joined file again.
+
+        ProjectError 404 for an unknown study or a file that is not stored. A file the study has already changes nothing. Only the
+        study changes: not inputs_revision and not the joined file of a criterion.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            entry = find_study(project_json, study_id)
+            if file_name not in project_json.input_files.get(test_surfaces.ROLE, {}):
+                raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{file_name}'.", status_code=404)
+            if file_name in entry.test_surface_files:
+                return entry
+            self._join_test_surfaces(project_folder, {test_surfaces.study_key(entry.id): sorted({*entry.test_surface_files, file_name})})
+            entry.test_surface_files.append(file_name)
+            self.write_project_json(name, project_json)
+            return entry
+
+    def remove_study_test_surface(self, name: str, study_id: str, file_name: str) -> StudyEntry:
+        """Take a test surface file out of the study *study_id* and build its joined file again (none when no file is left).
+
+        The stored file stays for the criteria and studies that list it and goes to the recycle bin when none does (discard_file).
+        ProjectError 404 for an unknown study or a file the study does not list. Nothing is removed unless the joined file could
+        be built.
+        """
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            entry = find_study(project_json, study_id)
+            if file_name not in entry.test_surface_files:
+                raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{file_name}' in the study '{entry.name}'.", status_code=404)
+            remaining_names = [other for other in entry.test_surface_files if other != file_name]
+            unused = test_surfaces.users_of(project_json, file_name) == [f"study:{entry.id}"]
+            self._join_test_surfaces(project_folder, {test_surfaces.study_key(entry.id): sorted(remaining_names)})
+            if unused:
+                project_json.input_files[test_surfaces.ROLE].pop(file_name, None)
+            entry.test_surface_files = remaining_names
+            self.write_project_json(name, project_json)
+            if unused:
+                self._discard_test_surface_files(project_folder, [file_name])
+            return entry
+
+    @staticmethod
+    def _join_test_surfaces(project_folder: Path, file_names_by_key: dict[str, list[str]]) -> None:
+        """Build the joined files of the criteria and studies in *file_names_by_key* (test_surfaces.build_joined_files says how it is
+        keyed) and move them into place; none changes unless every one could be built."""
+        joined_files = test_surfaces.build_joined_files(project_folder, file_names_by_key)
+        try:
+            test_surfaces.install_joined_files(project_folder, joined_files)
+        finally:
+            test_surfaces.remove_temporary_files(joined_files)
+
     def add_criterion_test_surface(self, name: str, criterion_id: str, file_name: str, data: bytes) -> CriterionEntry:
         """Add an uploaded test surface file to the criterion *criterion_id* (test_surfaces.accept_upload says which stored file it is).
 
         A file with the content of a stored one is that one; a file with the name of a stored one and other content replaces
-        it in every criterion that uses it. The joined file of each criterion that gets another file is built again. A criterion
+        it in every criterion and study that uses it. The joined file of each criterion that gets another file, and of each study
+        that lists a replaced file, is built again. A criterion
         the user did not name takes its default name from its first file. inputs_revision does not change: what goes out of date
         is told by the fingerprint of each joined file. ProjectError: 404 for an unknown criterion, 422 for a file that is not a
         readable mesh. Nothing on disk or in project.json changes unless the whole upload succeeds.
@@ -629,6 +693,9 @@ class ProjectStore:
                     return entry        # the criterion already uses a file with this content
                 replaced_for = test_surfaces.criteria_using(project_json.criteria, stored_name) if uploaded_mesh is not None else []
                 file_names = {criterion.id: criterion.test_surface_files for criterion in replaced_for}
+                if uploaded_mesh is not None:
+                    file_names.update({test_surfaces.study_key(study.id): study.test_surface_files
+                                       for study in project_json.studies if stored_name in study.test_surface_files})
                 file_names[entry.id] = sorted({*entry.test_surface_files, stored_name})
                 joined_files = test_surfaces.build_joined_files(
                     project_folder, file_names, {stored_name: uploaded_mesh} if uploaded_mesh is not None else None)
@@ -673,7 +740,7 @@ class ProjectStore:
     def remove_criterion_test_surface(self, name: str, criterion_id: str, file_name: str) -> CriterionEntry:
         """Take a test surface file out of the criterion *criterion_id* and build its joined file again (none when no file is left).
 
-        The stored file stays for the criteria that use it and goes to the recycle bin when no criterion uses it any more
+        The stored file stays for the criteria and studies that use it and goes to the recycle bin when none does any more
         (discard_file). ProjectError 404 for an unknown criterion or a file the criterion does not use. Nothing is removed unless
         the joined file could be built.
         """
@@ -684,7 +751,7 @@ class ProjectStore:
             if file_name not in entry.test_surface_files:
                 raise ProjectError(f"There is no {test_surfaces.ROLE} file named '{file_name}' in the criterion '{entry.name}'.", status_code=404)
             remaining_names = [other for other in entry.test_surface_files if other != file_name]
-            unused = len(test_surfaces.criteria_using(project_json.criteria, file_name)) == 1
+            unused = test_surfaces.users_of(project_json, file_name) == [f"criterion:{entry.id}"]
             joined_files = test_surfaces.build_joined_files(project_folder, {entry.id: remaining_names})
             try:
                 test_surfaces.install_joined_files(project_folder, joined_files)
@@ -700,7 +767,7 @@ class ProjectStore:
 
     @staticmethod
     def _discard_test_surface_files(project_folder: Path, file_names: list[str]) -> None:
-        """Send stored test surface files that no criterion uses to the recycle bin (discard_file), once project.json no longer lists them."""
+        """Send stored test surface files that no criterion and no study uses to the recycle bin (discard_file), once project.json no longer lists them."""
         for file_name in file_names:
             with contextlib.suppress(OSError):      # a program has the file open: it stays, project.json no longer lists it
                 discard_file(test_surfaces.stored_path(project_folder, file_name))

@@ -17,6 +17,7 @@ from .criteria import colour_of_criterion
 from .project_names import ProjectError
 
 SIMULATE_FOLDER = "simulate"        # in the project folder; the results of a study are in simulate/<id>
+JOINED_STUDY_SURFACES_PATH = "inputs/joined/study_surfaces_{id}.ply"     # beside the criteria's test_surfaces_<id>.ply, never the same name
 PERIOD_KEYS = ("start_month", "start_day", "start_hour", "end_month", "end_day", "end_hour")
 # The mode settings each metric reads besides the period; a metric not listed reads none.
 METRIC_MODE_SETTING_KEYS: Mapping[str, tuple[str, ...]] = {
@@ -34,6 +35,11 @@ _VALIDATION_WEATHER_FILE = "weather.epw"
 def study_folder(project_folder: Path, study_id: str) -> Path:
     """The folder of a study's results, <project>/simulate/<id>."""
     return Path(project_folder) / SIMULATE_FOLDER / study_id
+
+
+def joined_study_surfaces_path(study_id: str) -> str:
+    """The joined test surface file of a study, relative to the project folder."""
+    return JOINED_STUDY_SURFACES_PATH.format(id=study_id)
 
 
 def checked_metric(metric: str) -> str:

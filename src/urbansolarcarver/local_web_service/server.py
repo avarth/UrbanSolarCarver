@@ -593,6 +593,18 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             store.delete_study(name, study_id)
         return Response(status_code=204)
 
+    @router.put("/projects/{name}/studies/{study_id}/test-surfaces/{file_name}", responses=_STUDY_RESPONSES)
+    def use_study_test_surface(name: str, study_id: str, file_name: str) -> StudyEntry:
+        """Let a study use a test surface file that is stored already (404 when it is not)."""
+        with writable_project(name) as store:
+            return store.use_study_test_surface(name, study_id, file_name)
+
+    @router.delete("/projects/{name}/studies/{study_id}/test-surfaces/{file_name}", responses=_STUDY_RESPONSES)
+    def remove_study_test_surface(name: str, study_id: str, file_name: str) -> StudyEntry:
+        """Take a test surface file out of a study; the stored file goes to the recycle bin when no criterion or study lists it."""
+        with writable_project(name) as store:
+            return store.remove_study_test_surface(name, study_id, file_name)
+
     @router.post("/projects/{name}/criteria/{criterion_id}/test-surfaces", responses=_CRITERION_RESPONSES)
     def add_criterion_test_surface(name: str, criterion_id: str, file: UploadFile = File(...)) -> CriterionEntry:
         """Add an uploaded test surface file to a criterion (multipart, as the inputs upload)."""
