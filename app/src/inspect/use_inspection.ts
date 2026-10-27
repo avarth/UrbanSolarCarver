@@ -1,26 +1,36 @@
 // The inspection of the open project's input files (Inspect, inspect design sections 3, 5 and 6): the summary of each mesh file, the
 // geometry of each test surface file with the surface of each triangle, the file the Files panel selects, flip mode and the arrows,
 // and the turns staged per file until Save. The inspection is read, with the geometries of every test surface file, when Inspect
-// opens and after each save or restore. Save sends one request per file with all its turns; the turns stay drawn until the file's
-// new geometry is in, so the view does not show the old orientation in between. A refused request leaves the turns as they were and
-// says why (problem). useInspectView gives the view what it draws, kept the same between renders that change none of it (the view
-// draws the layer again whenever its files change).
+// opens and after each save or restore.
+// Save sends one request per file with all its staged turns, which then leave the staged ones: they are being written, no longer
+// turns not saved. They stay drawn until the file's new geometry is in, so the view does not show the old orientation in between,
+// and a surface turned while they are written is staged on top of them. A second save of a file waits for the one under way, so no
+// turn is sent twice. A refused request puts its turns back with those staged and says why (problem).
+// Staged turns hold for the file they were made on: a file read again with other triangles, surfaces or bounds (replaced by hand)
+// has its surfaces numbered anew, so its staged turns are dropped, and the panel says so.
+// useInspectView gives the view what it draws, kept the same between renders that change none of it (the view draws the layer again
+// whenever its files change).
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   failureTextOf, getInspection, getInspectionGeometry, restoreOriginal, serviceProblemOf, turnSurfaces, type InspectedFile, type InspectReply,
 } from "../api_client/client";
+import { messages } from "../messages";
 import type { InspectLayerFile } from "../viewer/layers";
 import { toLocal, type Point3 } from "../viewer/local_origin";
 import type { InspectView } from "../viewer_overlays/ViewerPane";
 import { decodeInspectGeometry, localCorners, localSurfaces, type InspectGeometry } from "./inspect_geometry_decoder";
 
 export const TEST_SURFACES_ROLE = "test_surfaces";
+// Bounds read again that differ by more than this (relative to the coordinate, at least 1 m) belong to another file.
+const SAME_BOUNDS_TOLERANCE = 1e-6;
 
 /** A file of the inspection: its role and its name (a name may be used in two roles). */
 interface FileKey {
   role: string;
   fileName: string;
 }
+
+type Turns = ReadonlyMap<string, ReadonlySet<number>>;
 
 export interface InspectionHook {
   /** The last inspection read; null until the first one is in. */
@@ -38,7 +48,9 @@ export interface InspectionHook {
   arrows: boolean;
   setArrows: (on: boolean) => void;
   /** The surfaces turned and not saved, by file name; a file without turns is not listed. */
-  turned: ReadonlyMap<string, ReadonlySet<number>>;
+  turned: Turns;
+  /** The surfaces the view draws turned: those staged, on top of those being written. */
+  drawnTurned: Turns;
   /** A click on a surface in the view: in flip mode on the selected file it turns the surface, otherwise it selects its file. */
   clickSurface: (fileName: string, surface: number) => void;
   toggleSurface: (fileName: string, surface: number) => void;
@@ -46,19 +58,25 @@ export interface InspectionHook {
   flipAll: (fileName: string) => void;
   discard: (fileName: string) => void;
   discardAll: () => void;
-  /** Writes the file's turns; resolves with why it could not, or null once written (or with nothing to write). */
+  /**
+   * Writes the file's staged turns, after a save or restore of the file under way; resolves with why it could not, or null once
+   * written (or with nothing to write).
+   */
   save: (fileName: string) => Promise<string | null>;
   /** Writes the turns of every file, one after another; resolves with the first reason one could not be written, or null. */
   saveAll: () => Promise<string | null>;
-  /** Puts the file's kept original back; resolves with why it could not, or null. */
+  /** Puts the file's kept original back, dropping its staged turns; resolves with why it could not, or null. */
   restore: (fileName: string) => Promise<string | null>;
-  /** Some file has turns not saved. */
+  /** Some file has turns staged and not sent. */
   unsaved: boolean;
   /** A save or restore is under way: the panel's buttons that send one wait. */
   busy: boolean;
-  /** Why the inspection could not be read, or the last save or restore failed; null otherwise. */
+  /** Why the inspection could not be read, the last save or restore failed, or staged turns were dropped; null otherwise. */
   problem: string | null;
 }
+
+/** What staged turns were made on: a file read again without the same is another file. */
+type FileShape = Pick<InspectedFile, "triangle_count" | "surface_count" | "bounds">;
 
 interface InspectionState {
   reply: InspectReply | null;
@@ -67,15 +85,41 @@ interface InspectionState {
   frameRequest: number;
   flipMode: boolean;
   arrows: boolean;
-  turned: ReadonlyMap<string, ReadonlySet<number>>;
-  busy: boolean;
+  turned: Turns;
+  /** The shape of each file with staged turns, as it was when its first turn was staged. */
+  stagedOn: ReadonlyMap<string, FileShape>;
+  /** The turns being written, by file (a restore under way: none); a file is listed while its request and the read after it go on. */
+  sending: Turns;
   problem: string | null;
 }
 
 const NO_GEOMETRIES: ReadonlyMap<string, InspectGeometry> = new Map();
-const NO_TURNS: ReadonlyMap<string, ReadonlySet<number>> = new Map();
+const NO_TURNS: Turns = new Map();
 
 const isKeyOf = (key: FileKey | null, file: InspectedFile) => key !== null && key.role === file.role && key.fileName === file.file_name;
+
+function sameShape(file: FileShape, other: FileShape): boolean {
+  const near = (first: number, second: number) => Math.abs(first - second) <= SAME_BOUNDS_TOLERANCE * Math.max(1, Math.abs(first));
+  return file.triangle_count === other.triangle_count && (file.surface_count ?? null) === (other.surface_count ?? null)
+    && file.bounds.every((corner, index) => corner.every((value, axis) => near(value, other.bounds[index][axis])));
+}
+
+/** The surfaces of *surfaces* turned once more by each of *by*. */
+function toggledBy(surfaces: ReadonlySet<number>, by: Iterable<number>): Set<number> {
+  const next = new Set(surfaces);
+  for (const surface of by) {
+    if (!next.delete(surface)) next.add(surface);
+  }
+  return next;
+}
+
+/** *turns* with the file's surfaces replaced; a file of no surfaces is taken out. */
+function withTurns(turns: Turns, fileName: string, surfaces: ReadonlySet<number> | null): Turns {
+  const next = new Map(turns);
+  if (surfaces === null || surfaces.size === 0) next.delete(fileName);
+  else next.set(fileName, surfaces);
+  return next;
+}
 
 interface InspectionOptions {
   token: string;
@@ -90,7 +134,8 @@ interface InspectionOptions {
 
 export function useInspection({ token, project, active, onSaved, onServiceProblem = () => {} }: InspectionOptions): InspectionHook {
   const [state, setState] = useState<InspectionState>({
-    reply: null, geometries: NO_GEOMETRIES, selectedKey: null, frameRequest: 0, flipMode: false, arrows: false, turned: NO_TURNS, busy: false, problem: null,
+    reply: null, geometries: NO_GEOMETRIES, selectedKey: null, frameRequest: 0, flipMode: false, arrows: false, turned: NO_TURNS,
+    stagedOn: new Map(), sending: NO_TURNS, problem: null,
   });
   // The latest state, read by calls that wait for a reply while another change arrives.
   const latest = useRef(state);
@@ -100,6 +145,8 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
   };
   // Only the last read asked for is shown: an earlier one that answers later has older files.
   const readsAskedFor = useRef(0);
+  // The save or restore under way of each file, which a later save of the file waits for.
+  const underWay = useRef(new Map<string, Promise<string | null>>());
 
   const fileOf = (key: FileKey | null) => latest.current.reply?.files.find((file) => isKeyOf(key, file)) ?? null;
   const testSurfaceFile = (fileName: string) => fileOf({ role: TEST_SURFACES_ROLE, fileName });
@@ -108,25 +155,33 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
     return failureTextOf(error);
   };
 
-  const refresh = async () => {
+  /** Reads the inspection; *also* is committed with it (in the same render), and on its own when the read fails or is outrun. */
+  const refresh = async (also: () => Partial<InspectionState> = () => ({})) => {
     const read = ++readsAskedFor.current;
     try {
       const reply = await getInspection(token, project);
       const readable = reply.files.filter((file) => file.role === TEST_SURFACES_ROLE && file.problem == null);
       const buffers = await Promise.all(readable.map((file) => getInspectionGeometry(token, project, file.file_name)));
-      if (read !== readsAskedFor.current) return;
-      const { selectedKey, flipMode, turned } = latest.current;
+      if (read !== readsAskedFor.current) return commit(also());
+      const { selectedKey, flipMode, turned, stagedOn } = latest.current;
       const kept = reply.files.some((file) => isKeyOf(selectedKey, file));
-      const names = new Set(readable.map((file) => file.file_name));
+      const readableNow = new Map(readable.map((file) => [file.file_name, file]));
+      // Turns of a file gone or changed are dropped; only a change is said (a file gone leaves its row, which says enough).
+      const changed = [...turned.keys()].filter((fileName) => {
+        const now = readableNow.get(fileName), before = stagedOn.get(fileName);
+        return now !== undefined && before !== undefined && !sameShape(now, before);
+      });
+      const keptTurns = [...turned].filter(([fileName]) => readableNow.has(fileName) && !changed.includes(fileName));
       commit({
-        reply, problem: null,
+        reply, problem: changed.length > 0 ? messages.stagedTurnsDropped : null,
         geometries: new Map(readable.map((file, index) => [file.file_name, decodeInspectGeometry(buffers[index])])),
         selectedKey: kept ? selectedKey : null, flipMode: kept && flipMode,
-        turned: new Map([...turned].filter(([fileName]) => names.has(fileName))),
+        turned: new Map(keptTurns), stagedOn: new Map([...stagedOn].filter(([fileName]) => keptTurns.some(([kept]) => kept === fileName))),
+        ...also(),
       });
     } catch (error) {
-      if (read !== readsAskedFor.current) return;
-      commit({ problem: failed(error) });
+      if (read !== readsAskedFor.current) return commit(also());
+      commit({ problem: failed(error), ...also() });
     }
   };
 
@@ -135,20 +190,18 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
     else if (latest.current.flipMode) commit({ flipMode: false });
   }, [active]);
 
-  const setTurns = (fileName: string, surfaces: ReadonlySet<number>) => {
-    const turned = new Map(latest.current.turned);
-    if (surfaces.size === 0) turned.delete(fileName);
-    else turned.set(fileName, surfaces);
-    commit({ turned });
+  /** The staged turns of the file become *surfaces*; the file's shape is noted with its first turn and forgotten with its last. */
+  const stagedTurns = (fileName: string, surfaces: ReadonlySet<number>): Partial<InspectionState> => {
+    const stagedOn = new Map(latest.current.stagedOn);
+    const file = testSurfaceFile(fileName);
+    if (surfaces.size === 0) stagedOn.delete(fileName);
+    else if (!stagedOn.has(fileName) && file !== null) stagedOn.set(fileName, file);
+    return { turned: withTurns(latest.current.turned, fileName, surfaces), stagedOn };
   };
-  const toggled = (surfaces: ReadonlySet<number>, surface: number) => {
-    const next = new Set(surfaces);
-    if (!next.delete(surface)) next.add(surface);
-    return next;
-  };
+  const setTurns = (fileName: string, surfaces: ReadonlySet<number>) => commit(stagedTurns(fileName, surfaces));
   const toggleSurface = (fileName: string, surface: number) => {
     if (!testSurfaceFile(fileName)?.flippable) return;
-    setTurns(fileName, toggled(latest.current.turned.get(fileName) ?? new Set(), surface));
+    setTurns(fileName, toggledBy(latest.current.turned.get(fileName) ?? new Set(), [surface]));
   };
   const select = (file: InspectedFile | null, frame = true) => {
     const { selectedKey, flipMode, frameRequest } = latest.current;
@@ -160,34 +213,59 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
     });
   };
 
-  /** Sends *request* for the file; once it is answered the inspection is read again, then the file's turns are dropped. */
-  const change = async (fileName: string, request: () => Promise<InspectedFile>): Promise<string | null> => {
-    commit({ busy: true, problem: null });
-    try {
-      await request();
-    } catch (error) {
-      const problem = failed(error);
-      commit({ busy: false, problem });
-      return problem;
-    }
-    onSaved();
-    try {
-      await refresh();
-    } finally {
-      setTurns(fileName, new Set());
-      commit({ busy: false });
+  /** Waits for the save or restore of the file under way, if any; resolves with why it failed, or null. */
+  const waitForFile = async (fileName: string): Promise<string | null> => {
+    for (let running = underWay.current.get(fileName); running !== undefined; running = underWay.current.get(fileName)) {
+      const reason = await running;
+      if (reason !== null) return reason;
     }
     return null;
   };
-  const save = (fileName: string) => {
-    const surfaces = [...(latest.current.turned.get(fileName) ?? [])].sort((first, second) => first - second);
-    if (surfaces.length === 0) return Promise.resolve(null);
-    return change(fileName, () => turnSurfaces(token, project, fileName, surfaces));
+  /**
+   * Sends *request* for the file: *sent* (the turns it writes) leave the staged turns, which become *stagedNow*, and are drawn as
+   * being written. Once it is answered the inspection is read again, and the file's new geometry comes in with *sent* no longer drawn
+   * on top. A refusal puts *sent* back on top of the turns staged since.
+   */
+  const change = (fileName: string, sent: ReadonlySet<number>, stagedNow: ReadonlySet<number>, request: () => Promise<InspectedFile>) => {
+    commit({ ...stagedTurns(fileName, stagedNow), sending: new Map(latest.current.sending).set(fileName, sent), problem: null });
+    const notSending = () => ({ sending: withTurns(latest.current.sending, fileName, null) });
+    const running = (async (): Promise<string | null> => {
+      try {
+        await request();
+      } catch (error) {
+        const problem = failed(error);
+        commit({ ...stagedTurns(fileName, toggledBy(latest.current.turned.get(fileName) ?? new Set(), sent)), ...notSending(), problem });
+        return problem;
+      }
+      onSaved();
+      await refresh(notSending);
+      return null;
+    })();
+    underWay.current.set(fileName, running);
+    void running.finally(() => {
+      if (underWay.current.get(fileName) === running) underWay.current.delete(fileName);
+    });
+    return running;
+  };
+  const save = async (fileName: string): Promise<string | null> => {
+    const reason = await waitForFile(fileName);
+    if (reason !== null) return reason;
+    const sent = latest.current.turned.get(fileName) ?? new Set<number>();
+    if (sent.size === 0) return null;
+    const surfaces = [...sent].sort((first, second) => first - second);
+    return change(fileName, sent, new Set(), () => turnSurfaces(token, project, fileName, surfaces));
   };
 
-  const { reply, geometries, selectedKey, frameRequest, flipMode, arrows, turned, busy, problem } = state;
+  const { reply, geometries, selectedKey, frameRequest, flipMode, arrows, turned, sending, problem } = state;
+  const drawnTurned = useMemo(() => {
+    if (sending.size === 0) return turned;
+    const drawn = new Map(turned);
+    for (const [fileName, surfaces] of sending) drawn.set(fileName, toggledBy(turned.get(fileName) ?? new Set(), surfaces));
+    return drawn;
+  }, [turned, sending]);
   return {
-    reply, geometries, frameRequest, flipMode, arrows, turned, busy, problem,
+    reply, geometries, frameRequest, flipMode, arrows, turned, drawnTurned, problem,
+    busy: sending.size > 0,
     selected: reply?.files.find((file) => isKeyOf(selectedKey, file)) ?? null,
     select: (file) => select(file),
     setFlipMode: (on) => commit({ flipMode: on && (fileOf(latest.current.selectedKey)?.flippable ?? false) }),
@@ -201,21 +279,23 @@ export function useInspection({ token, project, active, onSaved, onServiceProble
     flipAll: (fileName) => {
       const count = latest.current.geometries.get(fileName)?.header.surface_count ?? testSurfaceFile(fileName)?.surface_count ?? 0;
       if (!testSurfaceFile(fileName)?.flippable) return;
-      let surfaces = latest.current.turned.get(fileName) ?? new Set<number>();
-      for (let surface = 0; surface < count; surface++) surfaces = toggled(surfaces, surface);
-      setTurns(fileName, surfaces);
+      setTurns(fileName, toggledBy(latest.current.turned.get(fileName) ?? new Set(), Array.from({ length: count }, (_, surface) => surface)));
     },
     discard: (fileName) => setTurns(fileName, new Set()),
-    discardAll: () => commit({ turned: NO_TURNS }),
+    discardAll: () => commit({ turned: NO_TURNS, stagedOn: new Map() }),
     save,
     saveAll: async () => {
-      for (const fileName of [...latest.current.turned.keys()]) {
+      for (const fileName of new Set([...underWay.current.keys(), ...latest.current.turned.keys()])) {
         const reason = await save(fileName);
         if (reason !== null) return reason;
       }
       return null;
     },
-    restore: (fileName) => change(fileName, () => restoreOriginal(token, project, fileName)),
+    restore: async (fileName) => {
+      const reason = await waitForFile(fileName);
+      if (reason !== null) return reason;
+      return change(fileName, new Set(), new Set(), () => restoreOriginal(token, project, fileName));
+    },
     unsaved: turned.size > 0,
   };
 }
@@ -233,8 +313,8 @@ export function useInspectView(inspection: InspectionHook, origin: Point3, activ
   const { selected } = inspection;
   const selectedName = selected === null ? null : selected.role === TEST_SURFACES_ROLE ? selected.file_name : "";
   const files = useMemo((): InspectLayerFile[] => local.map((file) => ({
-    ...file, turned: inspection.turned.get(file.fileName) ?? new Set<number>(), selected: selectedName === null || file.fileName === selectedName,
-  })), [local, inspection.turned, selectedName]);
+    ...file, turned: inspection.drawnTurned.get(file.fileName) ?? new Set<number>(), selected: selectedName === null || file.fileName === selectedName,
+  })), [local, inspection.drawnTurned, selectedName]);
   const bounds = selected?.bounds;
   // Made anew for each request only: a file selected by a click on the view (no request) leaves the camera where it is.
   const frame = useMemo(() => (bounds === undefined ? null

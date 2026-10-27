@@ -38,11 +38,11 @@ const facadesGeometry = () => packedInspectGeometry([0, 0, 0], [0, 0, 0, 1, 0, 0
   [0, 0, 1], [{ centre: [0.5, 0.5, 0], normal: [0, 0, 1], area: 1 }, { centre: [5.7, 0, 0.7], normal: [0, -1, 0], area: 2 }]);
 const boxGeometry = () => packedInspectGeometry([0, 0, 0], [0, 0, 0, 1, 0, 0, 0, 1, 0], [0], [{ centre: [0.3, 0.3, 0], normal: [0, 0, -1], area: 0.5 }]);
 
-/** Opens the project with FILES as its input files, *beforeInspect* done in Design, then switches to Inspect. */
-async function openInspect(beforeInspect: () => Promise<void> = async () => {}): Promise<FakeService> {
+/** Opens the project with *files* (FILES) as its input files, *beforeInspect* done in Design, then switches to Inspect. */
+async function openInspect(beforeInspect: () => Promise<void> = async () => {}, files: InspectedFile[] = FILES): Promise<FakeService> {
   const service = new FakeService(NOTHING_RUN, null);
-  service.inspection = FILES;
-  service.inspectGeometries = { "facades.obj": facadesGeometry(), "box.obj": boxGeometry() };
+  service.inspection = files;
+  service.inspectGeometries = { "facades.obj": facadesGeometry(), "box.obj": boxGeometry(), "roofs.obj": boxGeometry() };
   const opened = project(NOTHING_RUN);
   opened.inputs = { ...opened.inputs, test_surfaces: [{ name: "facades.obj", triangle_count: 3 }, { name: "box.obj", triangle_count: 12 }] };
   await openWorkspace(service, opened);
@@ -163,6 +163,94 @@ test("Save sends the turned surfaces once, then asks for the stage status, the s
   expect(service.count("POST /inspect/test_surfaces/facades.obj/restore")).toBe(1);
   expect(counts()).toEqual({ stages: saved.stages + 1, stored: saved.stored + 1, inspection: saved.inspection + 1, geometry: saved.geometry + 1 });
   expect(button("Restore original")).toBeUndefined();
+  expect(service.turnRequests).toHaveLength(1);
+});
+
+/** Holds the replies to turns until the returned function is called. */
+function holdTurnReplies(service: FakeService): () => Promise<void> {
+  let release = () => {};
+  service.turnsAnswerWhen = new Promise((resolve) => { release = resolve; });
+  return async () => {
+    release();
+    await settle();
+    await settle();
+  };
+}
+
+test("leaving Inspect while a save is under way sends it once and asks nothing: its turns are no longer turns not saved", async () => {
+  const service = await openInspect();
+  const release = holdTurnReplies(service);
+  await selectFile("facades.obj");
+  await press(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  await press(button("Save"));
+  expect(service.turnRequests).toHaveLength(1);
+  expect(turnedLine("facades.obj")).toBeNull();
+  expect(drawnIndex("facades.obj")).toEqual([0, 1, 2, 3, 4, 5, 6, 8, 7]);     // drawn turned while it is written
+  expect(button("Restore original")).toBeUndefined();
+
+  await switchMode("design");
+  expect(dialog()).toBeNull();
+  expect(stepsPanel().hidden).toBe(false);
+  await release();
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1] } }]);
+});
+
+test("a surface turned while a save is under way stays staged after it; leaving then sends only that one", async () => {
+  const service = await openInspect();
+  const release = holdTurnReplies(service);
+  await selectFile("facades.obj");
+  await press(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  await press(button("Save"));
+  clickTriangle("facades.obj", 0);
+  expect(turnedLine("facades.obj")).toBe("1 surface turned, not saved");
+  expect(drawnIndex("facades.obj")).toEqual([0, 2, 1, 3, 5, 4, 6, 8, 7]);     // the one being written and the one staged
+
+  await release();
+  expect(turnedLine("facades.obj")).toBe("1 surface turned, not saved");
+  expect(drawnIndex("facades.obj")).toEqual([0, 2, 1, 3, 5, 4, 6, 7, 8]);     // the same geometry here, with surface 0 staged
+  await switchMode("design");
+  await press(buttonIn(dialog()!, "Save"));
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1] } }, { fileName: "facades.obj", body: { surfaces: [0] } }]);
+  expect(stepsPanel().hidden).toBe(false);
+});
+
+test("the dialog's Save waits for a save of the file under way, then sends the turns staged since, once", async () => {
+  const service = await openInspect();
+  const release = holdTurnReplies(service);
+  await selectFile("facades.obj");
+  await press(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  await press(button("Save"));
+  clickTriangle("facades.obj", 0);
+  await switchMode("design");
+  await press(buttonIn(dialog()!, "Save"));
+  expect(service.turnRequests).toHaveLength(1);           // the first save's reply is held: the dialog's waits for it
+  await release();
+  expect(service.turnRequests).toEqual([{ fileName: "facades.obj", body: { surfaces: [1] } }, { fileName: "facades.obj", body: { surfaces: [0] } }]);
+  expect(dialog()).toBeNull();
+  expect(stepsPanel().hidden).toBe(false);
+});
+
+test("turns staged on a file that has changed when the inspection is read again are dropped, and the panel says so", async () => {
+  const roofs = summary("test_surfaces", "roofs.obj", { triangle_count: 1, area_m2: 0.5, surface_count: 1, flippable: true });
+  const service = await openInspect(undefined, [...FILES, roofs]);
+  await selectFile("facades.obj");
+  await press(button("Flip mode"));
+  clickTriangle("facades.obj", 2);
+  await selectFile("roofs.obj");
+  await press(button("Flip mode"));
+  clickTriangle("roofs.obj", 0);
+  // facades.obj is replaced by hand: the service builds it again, and its surface numbers mean other surfaces.
+  service.inspection = service.inspection.map((file) => (file.file_name === "facades.obj" ? { ...file, triangle_count: 4 } : file));
+
+  await press(buttonIn(fileRow("roofs.obj"), "Save"));
+  expect(service.turnRequests).toEqual([{ fileName: "roofs.obj", body: { surfaces: [0] } }]);
+  expect(turnedLine("facades.obj")).toBeNull();
+  expect(plain(filesPanel().querySelector(".files-panel-problem"))).toBe("The file changed, so its turns not saved were dropped.");
+  await switchMode("design");
+  expect(dialog()).toBeNull();
   expect(service.turnRequests).toHaveLength(1);
 });
 

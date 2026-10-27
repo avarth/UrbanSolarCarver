@@ -130,6 +130,7 @@ export const messages = {
   discardTurns: "Discard",
   restoreOriginal: "Restore original",
   closedAsWhole: "This file is closed as a whole, so its surfaces cannot be flipped.",
+  stagedTurnsDropped: "The file changed, so its turns not saved were dropped.",
   saveTurnsBeforeLeaving: "Save the turned surfaces before leaving Inspect?",
   stayInInspect: "Stay",
   newProject: "New project",

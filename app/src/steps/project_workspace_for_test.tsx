@@ -109,6 +109,8 @@ export class FakeService {
   inspectGeometries: Record<string, ArrayBuffer> = {};
   /** The file and the body of every POST inspect/test_surfaces/{file}/turn. */
   readonly turnRequests: { fileName: string; body: unknown }[] = [];
+  /** While set, a POST inspect/test_surfaces/{file}/turn gets its reply only once this promise resolves. */
+  turnsAnswerWhen: Promise<void> | null = null;
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -195,8 +197,9 @@ export class FakeService {
   };
 
   /** The routes of one test surface file in Inspect: its geometry, a turn of its surfaces (refused while saves are), its restore. */
-  private answerInspect(method: string, fileName: string, route: string, init?: RequestInit): Response {
-    const file = this.inspection.find((candidate) => candidate.role === "test_surfaces" && candidate.file_name === fileName);
+  private async answerInspect(method: string, fileName: string, route: string, init?: RequestInit): Promise<Response> {
+    const fileNow = () => this.inspection.find((candidate) => candidate.role === "test_surfaces" && candidate.file_name === fileName);
+    const file = fileNow();
     if (file === undefined) return json({ detail: "Not found" }, 404);
     if (method === "GET" && route === "geometry") return new Response(this.inspectGeometries[fileName].slice(0));
     if (method !== "POST") return json({ detail: "Not found" }, 404);
@@ -204,11 +207,13 @@ export class FakeService {
     if (route === "turn") {
       if (!file.flippable) return json({ detail: `The test surfaces file '${fileName}' is closed as a whole.` }, 422);
       this.turnRequests.push({ fileName, body: JSON.parse(String(init!.body)) });
+      await this.turnsAnswerWhen;
     } else if (!file.original_kept) {
       return json({ detail: "No original is kept." }, 404);
     }
-    const changed = { ...file, original_kept: route === "turn" };
-    this.inspection = this.inspection.map((candidate) => (candidate === file ? changed : candidate));
+    // The file as it is now: a test may change it while the reply is held.
+    const changed = { ...fileNow()!, original_kept: route === "turn" };
+    this.inspection = this.inspection.map((candidate) => (candidate.role === "test_surfaces" && candidate.file_name === fileName ? changed : candidate));
     return json(changed);
   }
 
