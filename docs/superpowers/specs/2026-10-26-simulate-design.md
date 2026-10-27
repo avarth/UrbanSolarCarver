@@ -95,7 +95,7 @@ As in the first build: the carving mode's quantity by default, any metric whose 
 | Solar energy (incident) | irradiance | kWh/m² | yes |
 | Useful solar energy | benefit | kWh/m² | yes |
 | Sky component, overcast (vertical sky component on a facade) | daylight | % | no |
-| Cooling sky | radiative_cooling | % | yes |
+| Cooling sky | radiative_cooling | % | no |
 | Sky view factor | tilted_plane | % | no |
 
 Definitions, normalisation (sky metrics as a percentage of an unobstructed horizontal surface) and the incidence cosine are as in

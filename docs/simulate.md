@@ -43,7 +43,7 @@ Each carving mode has a metric of the same quantity, which "Like *criterion*" ta
 | Cooling sky | % | Night cooling | not needed |
 | Sky view factor | % | Angle rule | not needed |
 
-- **Sun hours**: hours of direct sun in the period. Each hour counts the sun position of that hour, and a position counts 1 h when it is above 5° altitude and in front of the test surface (no cosine of incidence). The time basis says which clock the hours are read in; it is a setting of sun hours only. A new study starts at 21 December, 10 to 14 h.
+- **Sun hours**: hours of direct sun in the period. Each hour counts the sun position of that hour, and a position counts 1 h when it is above 5° altitude and in front of the test surface (no cosine of incidence). The 5° is the same for every study: "Like *criterion*" does not copy the minimum altitude of a time-based criterion, so a study counts the sun above 5° whatever the criterion's minimum altitude. The time basis says which clock the hours are read in; it is a setting of sun hours only. A new study starts at 21 December, 10 to 14 h.
 - **Solar energy** and **Useful solar energy**: direct and diffuse energy that reaches the surface in the period, from the weather file's Perez sky and the cosine of incidence. Useful solar energy counts the hours that need heating, with the balance temperature, dead band and weights of Solar usefulness. Ground reflection is left out. A new study starts with the whole year (solar energy) or 15 October to 15 April, 7 to 19 h (useful solar energy).
 - **Overcast sky component**: light from a CIE overcast sky. On a vertical facade this is the vertical sky component, at most 39.6 %.
 - **Cooling sky**: the long-wave cooling potential toward the clear night sky that the surface sees, from the dew point and the Bliss coefficient.
@@ -63,7 +63,7 @@ These choices are not settings:
 
 ## Geometry
 
-The geometry switch at the top centre of the view chooses what the values are shown on:
+The geometry switch at the top centre of the view chooses what the values are shown on. While a study's settings are open it moves to the right of the popover, and on windows narrower than 1000 px it sits at the top right, with the popover under the studies panel:
 
 | Geometry | What blocks |
 |---|---|
@@ -97,7 +97,7 @@ On Envelope and Massing each line has the maximum volume's value in brackets, fo
 
 ## Out of date
 
-A result is **out of date** when any of these changed since it was computed: the study's settings (including its metric and period), its test surface files, the weather file, the context, the terrain, the maximum volume, or the envelope or massing mesh it traced (including one built or removed). The surface tolerance of the envelope and massing, which follows the voxel size they were built with, counts too. The result stays on the view, dimmed, with the **Out of date** stamp at the top of the view, and the row says "Out of date". Nothing reruns by itself: press **Run**. Moving the project folder does not make a result out of date. Changing the target does not either.
+A result is **out of date** when any of these changed since it was computed: the study's settings (including its metric and period), its test surface files, the weather file, the context, the terrain, the maximum volume, or the envelope or massing mesh it traced (including one built or removed). The surface tolerance of the envelope and massing, which follows the voxel size they were built with, counts too. So do the shared settings a study reads: north, the ray length, the test point spacing (the voxel size and the grid step) and the rays per patch of the first criterion that is on. Turning a criterion on or off in Design can therefore make every study out of date. The result stays on the view, dimmed, with the **Out of date** stamp at the top of the view, and the row says "Out of date". Nothing reruns by itself: press **Run**. Moving the project folder does not make a result out of date. Changing the target does not either.
 
 ## Where the results are kept
 
@@ -118,7 +118,7 @@ The service routes are under `/projects/{name}/studies` and `POST /projects/{nam
 
 These belong to a later milestone:
 
-- studies on other designs (meshes added for Simulate only) and on any geometry,
+- studies on other designs (meshes added for Simulate only),
 - snapshots of results,
 - CSV export of the values,
 - side-by-side views with linked cameras,

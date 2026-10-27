@@ -17,12 +17,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   criteria. The metrics are sun hours (h), solar energy and useful solar energy (kWh/m²), overcast sky component, cooling sky
   and sky view factor (%); the sky metrics are a percentage of an unobstructed horizontal surface and ground reflection is
   left out. **Add study** offers **Like *criterion*** shortcuts (the metric, period, mode settings and files are copied, no
-  link is kept) and the plain metrics. A study can use a test surface file the project stores already and add files of its
+  link is kept) and the plain metrics. The time basis (standard, daylight saving or solar time) is a setting of sun hours,
+  chosen per study. A study can use a test surface file the project stores already and add files of its
   own; a stored file stays while a criterion or a study lists it.
 - **Fixed choices.** One sun position per hour, Tregenza's 145 sky patches traced with the carving's jittered sub-rays at the
   project's rays per patch (the first criterion that is on), test points at the carving's spacing, at most 2 million points
-  per study (the message names the spacing that fits), lowest sun altitude 5 degrees. The time basis is a setting of sun
-  hours.
+  per study (the message names the spacing that fits), lowest sun altitude 5 degrees.
 - **The view.** A Studies panel with a settings popover per study; a geometry switch (Max volume, Envelope, Massing) and a
   **Change** toggle that colours each point by its change from the maximum volume; a legend with a draggable target saved with
   the study (arrow keys move it, Delete clears it), points below it in a muted colour of their own; a result card with the
