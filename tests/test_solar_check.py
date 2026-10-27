@@ -293,12 +293,12 @@ def test_check_of_a_run_compares_the_maximum_volume_with_the_envelope_and_the_ma
     from _stage_scene import daylight_cube_config
     from urbansolarcarver.api import run_pipeline
     from urbansolarcarver.check_settings import CheckSettings
-    from urbansolarcarver.solar_check import load_solar_check, run_geometries, solar_check
+    from urbansolarcarver.solar_check import load_solar_check, simulate_study
     config = daylight_cube_config(tmp_path)
     run_pipeline(config, config.out_dir, produce=("exporting", "massing"))
-    geometries = run_geometries(config.max_volume_path, config.out_dir, config.voxel_size)
-    result = solar_check(config.test_surface_path, geometries, CheckSettings.for_config(config),
-                         sampling_frame=geometries[0].mesh.bounds[0], out_dir=tmp_path / "run" / "check", device="cpu")
+    result = simulate_study(config.test_surface_path, config.max_volume_path, CheckSettings.for_config(config),
+                            run_folder=config.out_dir, out_dir=tmp_path / "run" / "check", voxel_size=config.voxel_size,
+                            device="cpu")
     assert list(result.values) == ["open", "max_volume", "envelope", "massing"]
     # The check samples the points the analysis did.
     np.testing.assert_allclose(result.points.points, np.load(tmp_path / "run" / "preprocessing" / "test_points.npy"),
@@ -317,6 +317,7 @@ def test_check_of_a_run_compares_the_maximum_volume_with_the_envelope_and_the_ma
     loaded = load_solar_check(tmp_path / "run" / "check")
     np.testing.assert_allclose(loaded.values["envelope"], result.values["envelope"], rtol=1e-6)
     np.testing.assert_allclose(loaded.points.quads, result.points.quads, atol=1e-4)
+    assert set(summary["fingerprints"]["geometries"]) == {"envelope", "massing"}
 
 
 @REQUIRES_WARP_CPU
@@ -357,6 +358,83 @@ def test_a_list_of_context_and_terrain_files_is_joined_and_both_block(tmp_path):
     assert both.values["open"].max() == 0.0                         # the cover over the point blocks the whole sky
     assert both.summary["blocking_triangles"] == 24
     assert len(both.summary["inputs"]["blocking"]) == 2
+
+
+# --- one study of Simulate ---------------------------------------------------------------------------------
+
+def _study_files(tmp_path):
+    """A 10 m cube as the maximum volume, a wall panel 1 m east of it as the test surface (facing east), a block
+    beside that as the context."""
+    from urbansolarcarver.io import save_mesh
+    save_mesh(_box([0, 0, 0], [10, 10, 10]), str(tmp_path / "max_volume.ply"))
+    wall = trimesh.Trimesh(vertices=[[11, 0, 0], [11, 6, 0], [11, 6, 6], [11, 0, 6]], faces=[[0, 1, 2], [0, 2, 3]])
+    save_mesh(wall, str(tmp_path / "test_surface.ply"))
+    save_mesh(_box([20, -5, 0], [25, 15, 30]), str(tmp_path / "context.ply"))
+    return tmp_path / "test_surface.ply", tmp_path / "max_volume.ply", tmp_path / "context.ply"
+
+
+@REQUIRES_WARP_CPU
+def test_simulate_study_without_a_run_has_only_the_maximum_volume(tmp_path):
+    from urbansolarcarver.solar_check import SUMMARY_FILE, simulate_study
+    surface, max_volume, _context = _study_files(tmp_path)
+    result = simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=2.0, rays_per_patch=1),
+                            out_dir=tmp_path / "study", device="cpu")
+    assert list(result.values) == ["open", "max_volume"]
+    assert list(result.summary["columns"]) == ["open", "max_volume"] and result.summary["baseline"] == "max_volume"
+    assert result.summary["fingerprints"]["geometries"] == {}
+    # The wall faces away from the cube: the cube hides nothing of its sky.
+    assert result.values["max_volume"].mean() <= result.values["open"].mean() + 1e-6
+    assert (tmp_path / "study" / SUMMARY_FILE).is_file()
+
+
+@REQUIRES_WARP_CPU
+def test_simulate_study_samples_in_the_maximum_volumes_frame_rounded_to_a_micrometre(tmp_path):
+    from urbansolarcarver.solar_check import sample_test_surfaces, simulate_study
+    surface, max_volume, _context = _study_files(tmp_path)
+    shifted = trimesh.load(str(max_volume))
+    shifted.apply_translation([0.1234567, 0.2345674, 0.3])
+    shifted.export(str(max_volume))
+    settings = _settings("sky_view", sample_spacing=2.0, rays_per_patch=1)
+    result = simulate_study(surface, max_volume, settings, out_dir=tmp_path / "study", device="cpu")
+    frame = np.round(trimesh.load(str(max_volume)).bounds[0], 6)
+    expected = sample_test_surfaces(str(surface), 2.0, frame)
+    np.testing.assert_allclose(result.points.points, expected.points, atol=1e-8)
+
+
+@REQUIRES_WARP_CPU
+def test_simulate_study_records_the_fingerprints_and_the_settings_digest(tmp_path):
+    import hashlib
+    from urbansolarcarver.solar_check import file_fingerprint, simulate_study
+    surface, max_volume, context = _study_files(tmp_path)
+    settings = _settings("sky_view", sample_spacing=2.0, rays_per_patch=1)
+    result = simulate_study(surface, max_volume, settings, context_path=str(context), out_dir=tmp_path / "study",
+                            device="cpu")
+    saved = json.loads((tmp_path / "study" / "check_summary.json").read_text(encoding="utf-8"))["fingerprints"]
+    assert saved == result.summary["fingerprints"]
+    assert saved["test_surface"] == file_fingerprint(surface)
+    assert saved["max_volume"] == file_fingerprint(max_volume)
+    assert saved["context"] == file_fingerprint(context) and saved["context"]["size"] > 0
+    assert saved["terrain"] is None and saved["weather"] is None and saved["geometries"] == {}
+    assert saved["settings_digest"] == hashlib.sha256(
+        json.dumps(settings.model_dump(), sort_keys=True).encode("utf-8")).hexdigest()
+    assert result.summary["inputs"]["blocking"] == [saved["context"]]
+    # The digest follows the settings and the context follows the file.
+    other = simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=2.0, rays_per_patch=4),
+                           out_dir=tmp_path / "other", device="cpu")
+    assert other.summary["fingerprints"]["settings_digest"] != saved["settings_digest"]
+    assert other.summary["fingerprints"]["context"] is None
+
+
+def test_simulate_study_refuses_too_many_points_with_the_spacing_that_fits(tmp_path, monkeypatch):
+    from urbansolarcarver import solar_check
+    from urbansolarcarver.errors import InputError
+    surface, max_volume, _context = _study_files(tmp_path)
+    monkeypatch.setattr(solar_check, "MAX_CHECK_POINTS", 100)
+    # 36 m² at 0.5 m would be 144 points: 0.6 m fits (100 points).
+    with pytest.raises(InputError, match=r"0\.6 m or more") as refused:
+        solar_check.simulate_study(surface, max_volume, _settings("sky_view", sample_spacing=0.5),
+                                   out_dir=tmp_path / "study", device="cpu")
+    assert "144" in str(refused.value) and not (tmp_path / "study").exists()
 
 
 # --- Ladybug's incident radiation ------------------------------------------------------------------------------

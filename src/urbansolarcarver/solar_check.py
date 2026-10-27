@@ -60,6 +60,8 @@ OPEN_VARIANT = "open"
 # The surface tolerance of drawn geometry (maximum volume, the blocking meshes), in meters: test surfaces drawn
 # on it within this distance count as on its surface.
 EXACT_SURFACE_TOLERANCE = 0.05
+# The most test points a check samples: more would not fit the memory of the traced values (P points by D directions).
+MAX_CHECK_POINTS = 2_000_000
 # Rays per kernel launch, about: keeps every launch well under the GPU watchdog's time limit.
 _RAYS_PER_LAUNCH = 1 << 25
 # Hits closer than this to a ray's origin are ignored (m).
@@ -433,6 +435,7 @@ def solar_check(
     sampling_frame=None,
     out_dir: Union[str, Path, None] = None,
     device=None,
+    summary_extra: Optional[dict] = None,
 ) -> SolarCheckResult:
     """The check's metric per test point for each of *geometries*, and with none of them ("open").
 
@@ -463,6 +466,8 @@ def solar_check(
     out_dir : path, optional
     device : optional
         ``'auto'`` (default), ``'cpu'`` or ``'cuda'``.
+    summary_extra : dict, optional
+        Keys added to the summary as they are (see :func:`simulate_study`).
     """
     geometries = list(geometries)
     names = [geometry.name for geometry in geometries]
@@ -523,6 +528,7 @@ def solar_check(
         },
         "blocking_triangles": int(len(blocking_mesh.faces)) if blocking_mesh is not None else 0,
         "columns": column_summaries,
+        **(summary_extra or {}),
     }
 
     folder = None
@@ -600,3 +606,80 @@ def run_geometries(max_volume_path, run_folder=None, fallback_voxel_size: float 
         geometries.append(CheckGeometry(name, label, load_mesh(str(mesh_path)), clip=max_volume,
                                         surface_tolerance=voxel_size, path=str(mesh_path)))
     return geometries
+
+
+# --- one study of Simulate -----------------------------------------------------------------------------------------
+
+def _refuse_too_many_points(test_surfaces, spacing: float) -> None:
+    """Raise InputError when sampling *test_surfaces* every *spacing* m would give more than
+    :data:`MAX_CHECK_POINTS` points (estimated from their area), naming the spacing that fits."""
+    from .errors import InputError
+    area = float(test_surfaces.area)
+    estimate = area / (spacing * spacing)
+    if estimate <= MAX_CHECK_POINTS:
+        return
+    fitting = math.ceil(math.sqrt(area / MAX_CHECK_POINTS) * 100.0) / 100.0
+    raise InputError(
+        f"The test surfaces ({area:,.0f} m²) would need about {estimate:,.0f} test points at a spacing of "
+        f"{spacing:g} m; a check takes at most {MAX_CHECK_POINTS:,}. A spacing of {fitting:g} m or more fits.")
+
+
+def simulate_study(
+    test_surface_path,
+    max_volume_path,
+    settings: CheckSettings,
+    *,
+    run_folder=None,
+    context_path=None,
+    terrain_path=None,
+    out_dir,
+    voxel_size: float = 1.0,
+    device=None,
+) -> SolarCheckResult:
+    """Run one Simulate study: the check of the test surface file against a project's geometries, written to *out_dir*.
+
+    The columns are "open", ``max_volume``, and the carved ``envelope`` and
+    ``massing`` of *run_folder* when their manifests exist
+    (:func:`run_geometries`; *voxel_size* is their surface tolerance when
+    the manifests do not record it).  The context and terrain files block in
+    every column.  The test points are sampled in the maximum volume's
+    frame, its minimum corner rounded to 1 µm, as preprocessing samples
+    them.
+
+    The summary also records under ``fingerprints`` what the result was
+    computed from, so the service can tell when it is out of date:
+    ``test_surface``, ``max_volume``, ``geometries`` (the envelope's and
+    massing's meshes, only those built), ``weather``, ``context``,
+    ``terrain`` (each :func:`file_fingerprint`, None when absent) and
+    ``settings_digest`` (the sha256 of the settings' JSON, sorted keys).
+
+    Raises
+    ------
+    InputError
+        When the test surfaces would need more than :data:`MAX_CHECK_POINTS` points at the settings' spacing.
+    """
+    import hashlib
+    from .io import load_mesh, load_optional_mesh
+    geometries = run_geometries(max_volume_path, run_folder, voxel_size)
+    max_volume = geometries[0]
+    test_surfaces = load_mesh(str(test_surface_path))
+    _refuse_too_many_points(test_surfaces, settings.sample_spacing)
+    loaded = [(path, load_optional_mesh(path, name)) for path, name in ((context_path, "context"), (terrain_path, "terrain"))]
+    blocking = [mesh for _path, mesh in loaded if mesh is not None]
+    frame = np.round(max_volume.mesh.bounds[0], 6)
+    digest = hashlib.sha256(json.dumps(settings.model_dump(), sort_keys=True).encode("utf-8")).hexdigest()
+    fingerprints = {
+        "test_surface": file_fingerprint(test_surface_path),
+        "max_volume": file_fingerprint(max_volume_path),
+        "geometries": {geometry.name: file_fingerprint(geometry.path) for geometry in geometries[1:]},
+        "weather": file_fingerprint(settings.epw_path) if settings.spec.needs_epw else None,
+        "context": file_fingerprint(context_path),
+        "terrain": file_fingerprint(terrain_path),
+        "settings_digest": digest,
+    }
+    # The meshes are passed loaded, so the summary's inputs are named here: the files read, those with triangles only.
+    inputs = {"test_surfaces": fingerprints["test_surface"],
+              "blocking": [file_fingerprint(path) for path, mesh in loaded if mesh is not None],
+              "weather": fingerprints["weather"]}
+    return solar_check(test_surfaces, geometries, settings, blocking=blocking, sampling_frame=frame, out_dir=out_dir,
+                       device=device, summary_extra={"inputs": inputs, "fingerprints": fingerprints})

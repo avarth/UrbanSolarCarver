@@ -32,6 +32,21 @@ The reply holds `stage_folders` (stage name to folder, only for the stages that 
 
 **`run_pipeline`** runs preprocessing, thresholding and exporting into `out_dir` (default: the config's `out_dir`); Grasshopper definitions saved before `run` existed still send it. **`simulate_weights`** writes a simulated-weights file (`epw`, `archetype`, `out`, optional `internal_gains_w_m2` and `eps`) and replies with `artifact` and `preview`. **`ping`** replies with the process id (`pid`) and `features`, a list of what this engine supports beyond the first version (`run_after`: the `after` key of `run`), so a client can tell an older engine.
 
+**`check`** runs one Simulate study: the sun and sky check (`solar_check.simulate_study`) of a test surface file against the project's geometries, written to `out_dir`. It samples the test surface in the maximum volume's local frame (its minimum corner rounded to 1 µm, as preprocessing does) and traces every sun or sky direction against each geometry with Warp, without a carving run.
+
+| Request key | Meaning |
+|-------------|---------|
+| `test_surface_path` | The mesh file of the test surfaces |
+| `max_volume_path` | The mesh file of the maximum volume |
+| `out_dir` | Where `check_summary.json`, `check_points.npz` and `check_values.npz` are written |
+| `settings` | `CheckSettings` values (`metric`, the period, `sample_spacing`, `rays_per_patch`, ...); an invalid one is a `ConfigError` reply |
+| `run_folder` | Optional run folder: its built envelope (`exporting`) and massing are added as columns, found through their manifests and clipped by the maximum volume |
+| `context_path`, `terrain_path` | Optional mesh files that block in every column; a file without triangles is ignored with an issue |
+| `voxel_size` | Surface tolerance of the envelope and massing when the run folder does not record the voxel size they were built with (default 1.0) |
+| `device` | `auto` (default), `cpu` or `cuda` |
+
+The columns are `open` (no geometry), `max_volume`, then `envelope` and `massing` when built; the summary compares them with `max_volume`. Progress is reported per kernel launch under the stage `check`, and a cancel raises `RunCancelled` between launches. More than 2 million test points (`solar_check.MAX_CHECK_POINTS`, estimated from the test surfaces' area and `sample_spacing`) is an `InputError` naming the spacing that fits. The summary records under `fingerprints` what the result was computed from: `test_surface`, `max_volume`, `geometries` (the envelope's and massing's meshes, only those built), `weather` (only for a metric that reads it), `context` and `terrain` (each `{path, size, modified_ns}`, or null) and `settings_digest` (sha256 of the settings' JSON, sorted keys), so a client can tell that a result is out of date. The reply has `summary_path` and `issues`.
+
 Keys a command does not use are ignored. Reply fields that are None are left out.
 
 ## Replies

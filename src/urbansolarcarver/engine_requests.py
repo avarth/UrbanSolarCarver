@@ -120,7 +120,26 @@ class SimulateWeightsRequest(_EngineRequest):
     eps: float = 1.0
 
 
-_REQUEST_MODELS = (PingRequest, RunRequest, StageRequest, RunPipelineRequest, SimulateWeightsRequest)
+class CheckRequest(_EngineRequest):
+    """Run one Simulate study (:func:`urbansolarcarver.solar_check.simulate_study`) into *out_dir*.
+
+    The columns are ``open``, ``max_volume`` (*max_volume_path*) and, when built, ``envelope`` and ``massing`` from
+    *run_folder*.  *context_path* and *terrain_path* block in every column.  *settings* are CheckSettings values.
+    *voxel_size* is the envelope's and massing's surface tolerance when their run folder does not record it.
+    """
+    cmd: Literal["check"]
+    test_surface_path: str
+    out_dir: str
+    settings: Dict[str, Any]
+    max_volume_path: str
+    run_folder: Optional[str] = None
+    context_path: Optional[str] = None
+    terrain_path: Optional[str] = None
+    voxel_size: float = 1.0
+    device: str = "auto"
+
+
+_REQUEST_MODELS = (PingRequest, RunRequest, StageRequest, RunPipelineRequest, SimulateWeightsRequest, CheckRequest)
 EngineRequest = typing.Annotated[Union[_REQUEST_MODELS], Field(discriminator="cmd")]
 _ENGINE_REQUEST_ADAPTER = TypeAdapter(EngineRequest)
 _COMMANDS = frozenset(name for model in _REQUEST_MODELS
@@ -172,6 +191,13 @@ class SimulateWeightsReply(BaseModel):
     preview: Optional[str] = None
 
 
+class CheckReply(BaseModel):
+    """Where the check wrote its summary, and the issues of the request."""
+    status: Literal["ok"] = "ok"
+    summary_path: str
+    issues: List[IssueReply]
+
+
 class ConfigFieldErrorReply(BaseModel):
     field: Optional[str]
     message: str
@@ -186,7 +212,7 @@ class ErrorReply(BaseModel):
     config_errors: Optional[List[ConfigFieldErrorReply]] = None
 
 
-EngineReply = Union[PingReply, RunReply, StageReply, SimulateWeightsReply, ErrorReply]
+EngineReply = Union[PingReply, RunReply, StageReply, SimulateWeightsReply, CheckReply, ErrorReply]
 
 
 # ---- Parsing and config ------------------------------------------------------
@@ -255,6 +281,8 @@ def handle_engine_request(request: EngineRequest, session, context: Optional[Run
     context = context if context is not None else RunContext()
     try:
         with run_context(context):
+            if isinstance(request, CheckRequest):
+                return _check(request, context)
             # The config is built inside the run context, so the issues its
             # validators report reach the reply.
             if isinstance(request, RunRequest) and request.config is not None and is_chain_file(request.config):
@@ -343,6 +371,21 @@ def _run_stage(request: StageRequest, config: user_config, context: RunContext) 
                           issues=_issue_replies(context))
     result = api.exporting(request.upstream_output, config, out_dir)
     return StageReply(export_path=str(result.export_path), issues=_issue_replies(context))
+
+
+def _check(request: CheckRequest, context: RunContext) -> CheckReply:
+    """Run the study; progress goes to the context's callback per kernel launch and a cancel raises RunCancelled
+    between launches (solar_check.evaluate_test_points)."""
+    from .check_settings import build_check_settings
+    from .run_context import stage_context
+    from .solar_check import SUMMARY_FILE, simulate_study
+    settings = build_check_settings(request.settings)
+    context.raise_if_cancelled()
+    with stage_context("check"):
+        simulate_study(request.test_surface_path, request.max_volume_path, settings, run_folder=request.run_folder,
+                       context_path=request.context_path, terrain_path=request.terrain_path, out_dir=request.out_dir,
+                       voxel_size=request.voxel_size, device=request.device)
+    return CheckReply(summary_path=str(Path(request.out_dir) / SUMMARY_FILE), issues=_issue_replies(context))
 
 
 def _simulate_weights(request: SimulateWeightsRequest) -> SimulateWeightsReply:

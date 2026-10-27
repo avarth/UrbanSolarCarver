@@ -475,3 +475,64 @@ def test_a_run_request_on_a_chain_file_applies_shared_overrides_and_start_from(t
     assert set(reply["stage_folders"]) == {"thresholding", "exporting"}
     assert reply["export_path"].endswith(".obj")
     assert bad["status"] == "error" and bad["error_type"] == "ConfigError"
+
+
+# ---- check ----------------------------------------------------------------------
+
+def _check_message(tmp_path, **changes):
+    import trimesh
+    from urbansolarcarver.io import save_mesh
+    cube = trimesh.creation.box(extents=[10, 10, 10])
+    cube.apply_translation([5, 5, 5])
+    save_mesh(cube, str(tmp_path / "max_volume.ply"))
+    wall = trimesh.Trimesh(vertices=[[11, 0, 0], [11, 6, 0], [11, 6, 6], [11, 0, 6]], faces=[[0, 1, 2], [0, 2, 3]])
+    save_mesh(wall, str(tmp_path / "test_surface.ply"))
+    return {"cmd": "check", "test_surface_path": str(tmp_path / "test_surface.ply"),
+            "max_volume_path": str(tmp_path / "max_volume.ply"), "out_dir": str(tmp_path / "study"),
+            "settings": {"metric": "sky_view", "sample_spacing": 2.0, "rays_per_patch": 1}, "device": "cpu", **changes}
+
+
+def test_check_request_round_trips_and_is_in_the_engine_reply_union(tmp_path):
+    from pydantic import TypeAdapter
+    from urbansolarcarver.engine_requests import CheckReply, CheckRequest, EngineReply
+    message = _check_message(tmp_path, context_path="c.ply", terrain_path="t.ply", run_folder="run", voxel_size=2.0)
+    request = parse_engine_request(message)
+    assert isinstance(request, CheckRequest)
+    assert request.model_dump(exclude_none=True) == message
+    defaults = parse_engine_request({k: v for k, v in message.items() if k not in
+                                     ("context_path", "terrain_path", "run_folder", "voxel_size", "device")})
+    assert (defaults.run_folder, defaults.context_path, defaults.terrain_path, defaults.voxel_size, defaults.device) == (
+        None, None, None, 1.0, "auto")
+    reply = TypeAdapter(EngineReply).validate_python({"status": "ok", "summary_path": "s.json", "issues": []})
+    assert isinstance(reply, CheckReply)
+    with pytest.raises(MalformedEngineRequest, match="Missing required keys for 'check'"):
+        parse_engine_request({"cmd": "check", "out_dir": "x"})
+
+
+def test_a_check_request_writes_the_study_and_reports_its_progress(tmp_path):
+    from urbansolarcarver.run_context import RunContext
+    seen = []
+    context = RunContext(on_progress=lambda stage, done, total: seen.append((stage, done, total)))
+    session = _CountingSession()
+    reply = handle_engine_request(parse_engine_request(_check_message(tmp_path)), session, context=context)
+    assert reply.status == "ok" and reply.issues == []
+    assert Path(reply.summary_path) == tmp_path / "study" / "check_summary.json" and Path(reply.summary_path).is_file()
+    assert seen and all(stage == "check" for stage, _done, _total in seen) and seen[-1][1] == seen[-1][2]
+    assert session.release_calls == 1
+
+
+def test_a_cancelled_check_request_raises_run_cancelled_and_writes_no_summary(tmp_path):
+    from urbansolarcarver.errors import RunCancelled
+    from urbansolarcarver.run_context import RunContext
+    context = RunContext()
+    context.cancel()
+    with pytest.raises(RunCancelled):
+        handle_engine_request(parse_engine_request(_check_message(tmp_path)), _CountingSession(), context=context)
+    assert not (tmp_path / "study" / "check_summary.json").exists()
+
+
+def test_a_check_request_with_invalid_settings_gets_a_config_error_reply(tmp_path):
+    message = _check_message(tmp_path, settings={"metric": "sun_hours"})
+    with CarverSession(device="cpu") as session:
+        reply = answer_engine_message(message, session)
+    assert reply["status"] == "error" and reply["error_type"] == "ConfigError" and reply["config_errors"]
