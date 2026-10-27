@@ -6,7 +6,9 @@
 // run conditions and cards are in use_workspace_criteria.ts. The parts that start runs and show their results (the criterion's
 // carving rule, Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop. In Simulate the
 // steps are hidden and the studies (use_studies.ts) are shown over the view (SimulateView), the selected one's values drawn on the
-// geometry Simulate shows (use_study_view.ts).
+// geometry Simulate shows (use_study_view.ts). In Inspect the steps are hidden too and the Files panel (InspectView) is shown over the
+// view, which draws the orientation of the test surfaces (use_inspection.ts); turns not saved are reported to the app, which asks
+// before Inspect is left.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
@@ -19,6 +21,9 @@ import { sectionOfSetting } from "../criteria/section_summaries";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
+import { InspectView } from "../inspect/InspectView";
+import type { InspectTurns } from "../inspect/UnsavedTurnsDialog";
+import { useInspection, useInspectView } from "../inspect/use_inspection";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude } from "../settings_form/analysis_period";
 import { shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend } from "../settings_form/form_state";
@@ -69,9 +74,11 @@ const LAYERS_SHOWN_IN_SIMULATE: Record<StudyGeometry, readonly LayerName[]> = {
   envelope: ["envelope", "context", "terrain", "study_values"],
   massing: ["building_massing", "context", "terrain", "study_values"],
 };
+// The layers Inspect shows by default, besides the orientation of the test surfaces: the other inputs, the maximum volume as a ghost.
+const LAYERS_SHOWN_IN_INSPECT: readonly LayerName[] = ["max_volume", "context", "terrain"];
 
 interface ProjectWorkspaceProps {
-  /** Design: the steps beside the 3D view. Simulate: the steps are hidden and the view has the whole window. */
+  /** Design: the steps beside the 3D view. Simulate and Inspect: the steps are hidden and the view has the whole window. */
   mode: WorkspaceMode;
   token: string;
   project: ProjectDetail;
@@ -94,6 +101,10 @@ interface ProjectWorkspaceProps {
   startSteps?: WorkspaceSteps;
   /** Told the open step and the step the view shows whenever either changes. */
   onStepsChange?: (steps: WorkspaceSteps) => void;
+  /** Told whether Inspect holds turned surfaces not saved, whenever that changes (false once the workspace closes). */
+  onInspectUnsavedChange?: (unsaved: boolean) => void;
+  /** Given what saves or drops the turns not saved once the workspace is open, and null when it closes. */
+  onInspectTurnsReady?: (turns: InspectTurns | null) => void;
 }
 
 /** The step open in the panel (null when all are closed) and the step whose layers the 3D view shows: the last one opened. */
@@ -242,6 +253,28 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     token, project: project.name, criteria, criterionId, refreshStageStatus, followed: followedInputChange, onServiceProblem,
     onStoredFiles: storeTestSurfaceFiles,
   });
+  // Inspect: the inspection of the input files, read when Inspect opens. A save or restore writes a stored test surface file, which
+  // the stage status (the criteria and studies that list it go out of date) and the meshes Design draws follow.
+  const inspecting = props.mode === "inspect";
+  const inspection = useInspection({
+    token, project: project.name, active: inspecting, onServiceProblem,
+    onSaved: () => {
+      refreshStageStatus();
+      void testSurfaceCalls.reloadStoredFiles();
+    },
+  });
+  const inspectView = useInspectView(inspection, origin, inspecting);
+  const latestInspection = useRef(inspection);
+  latestInspection.current = inspection;
+  useEffect(() => props.onInspectUnsavedChange?.(inspection.unsaved), [inspection.unsaved]);
+  useEffect(() => {
+    props.onInspectTurnsReady?.({ saveAll: () => latestInspection.current.saveAll(), discardAll: () => latestInspection.current.discardAll() });
+    return () => {
+      props.onInspectTurnsReady?.(null);
+      props.onInspectUnsavedChange?.(false);
+    };
+  }, []);
+
   // The criterion's files as stored, in its order; a file just added shows once the stored files have been asked for again.
   const criterionTestSurfaces = criterion === null ? files.test_surfaces
     : (criterion.test_surface_files ?? []).flatMap((name) => files.test_surfaces.filter((file) => file.name === name));
@@ -396,6 +429,12 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   );
   const simulateViewer = { overlayContent: simulateView, study: studyView.view, studyOutOfDate: studyView.studyOutOfDate,
                            envelopeSeeThrough: studyView.geometry === "envelope", dimmedLayers: [] };
+  // Inspect draws the inputs as Design does, the orientation of the test surfaces in place of the test surfaces, and no results.
+  const inspectViewer = {
+    overlayContent: <InspectView inspection={inspection} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inputChangesNotice} />,
+    dimmedLayers: [],
+  };
+  const shownByDefault = simulating ? LAYERS_SHOWN_IN_SIMULATE[studyView.geometry] : inspecting ? LAYERS_SHOWN_IN_INSPECT : LAYERS_SHOWN_IN_STEP[viewStep];
 
   return (
     <div className="workspace">
@@ -408,12 +447,11 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
                     criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere}
-                    maxVolumeAppearance={simulating || STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
-                    shownByDefault={simulating ? LAYERS_SHOWN_IN_SIMULATE[studyView.geometry] : LAYERS_SHOWN_IN_STEP[viewStep]}
-                    northDegrees={northDegrees} framingRequest={framingRequest}
+                    maxVolumeAppearance={!inspecting && (simulating || STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep)) ? "solid" : "ghost"}
+                    shownByDefault={shownByDefault} northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={props.mode === "design" && emptyViewContent} localOrigin={origin} mode={form.mode}
-                    analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer}
-                    {...(simulating ? simulateViewer : {})} />
+                    analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer} inspect={inspectView}
+                    {...(simulating ? simulateViewer : {})} {...(inspecting ? inspectViewer : {})} />
       </section>
     </div>
   );

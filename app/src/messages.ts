@@ -108,6 +108,30 @@ export const messages = {
   resultMean: (value: string) => `mean ${value}`,
   resultLowestTenth: (value: string) => `lowest tenth ${value}`,
   resultAtTarget: (value: string) => `at target ${value}`,
+
+  // Inspect: the Files panel over the 3D view, a file's summary, flipping its surfaces (inspect design, sections 3, 5 and 6). The
+  // titles of the roles are the layers' (layerNames).
+  inspectFilesTitle: "Files",
+  inspectArrows: "Arrows",
+  inspectFileLine: (triangles: number, areaSquareMetres: number) =>
+    `${groupedDigits(triangles)} triangles, ${withUnit(formattedNumber(areaSquareMetres), "m²")}`,
+  surfacesTurnedNotSaved: (count: number) =>
+    (count === 1 ? "1 surface turned, not saved" : `${groupedDigits(count)} surfaces turned, not saved`),
+  // The coordinates come formatted (formattedNumber): x, y and z, each from its minimum to its maximum.
+  inspectBounds: (xMin: string, xMax: string, yMin: string, yMax: string, zMin: string, zMax: string) =>
+    `Bounds: x ${xMin} to ${xMax}, y ${yMin} to ${yMax}, z ${zMin} to ${withUnit(zMax, "m")}`,
+  georeferencedCoordinates: (kilometres: number) => `Georeferenced coordinates, about ${withUnit(groupedDigits(Math.round(kilometres)), "km")} from 0.`,
+  inspectClosedBodies: (closed: number, bodies: number) => `Closed bodies: ${groupedDigits(closed)} of ${groupedDigits(bodies)}`,
+  inspectSurfaces: (count: number) => `Surfaces: ${groupedDigits(count)}`,
+  inspectViewOrigin: (x: string, y: string, z: string) => `The view is drawn around x ${x}, y ${y}, z ${z}.`,
+  flipMode: "Flip mode",
+  flipAll: "Flip all",
+  saveTurns: "Save",
+  discardTurns: "Discard",
+  restoreOriginal: "Restore original",
+  closedAsWhole: "This file is closed as a whole, so its surfaces cannot be flipped.",
+  saveTurnsBeforeLeaving: "Save the turned surfaces before leaving Inspect?",
+  stayInInspect: "Stay",
   newProject: "New project",
   projectNameLabel: "Project name",
   projectNameHint: "Up to 64 letters, numbers, spaces, hyphens or underscores.",

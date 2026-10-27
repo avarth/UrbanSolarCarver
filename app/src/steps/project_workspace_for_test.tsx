@@ -3,8 +3,9 @@
 // Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is written in).
 import { act, useState, type ComponentProps } from "react";
 import { vi } from "vitest";
-import type { CriterionEntry, InputFileChange, InputFileInfo, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
+import type { CriterionEntry, InputFileChange, InputFileInfo, InspectedFile, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
+import { useLeavingInspect } from "../inspect/UnsavedTurnsDialog";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
 import { FakeViewerScene, pretendTheBrowserHasWebGl } from "../viewer/fake_scene_for_test";
 import { renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
@@ -102,6 +103,12 @@ export class FakeService {
   storedTestSurfaces: InputFileInfo[] = [{ name: "surfaces.obj", triangle_count: 1 }];
   /** The input files changed in the project folder or missing from it, as the stage status lists them; DELETE input-changes drops the changed ones. */
   inputChanges: InputFileChange[] = [];
+  /** The input mesh files as GET inspect summarises them (Inspect); POST turn and restore change whether a file's original is kept. */
+  inspection: InspectedFile[] = [];
+  /** The packed geometry of each test surface file (GET inspect/test_surfaces/{file}/geometry; packedInspectGeometry). */
+  inspectGeometries: Record<string, ArrayBuffer> = {};
+  /** The file and the body of every POST inspect/test_surfaces/{file}/turn. */
+  readonly turnRequests: { fileName: string; body: unknown }[] = [];
 
   constructor(stages: Record<PipelineStage, StageState>, carving: typeof CARVING | null) {
     this.stages = stages;
@@ -178,11 +185,32 @@ export class FakeService {
                     weather_latitude: this.uploadedWeather.latitude });
     }
     if (path.startsWith("/cold-period")) return json(this.coldPeriodReply);
+    if (method === "GET" && path === "/inspect") return json({ files: this.inspection });
+    const inspected = /^\/inspect\/test_surfaces\/([^/]+)\/(geometry|turn|restore)$/.exec(path);
+    if (inspected !== null) return this.answerInspect(method, decodeURIComponent(inspected[1]), inspected[2], init);
     if (path.startsWith("/inputs/")) return new Response(this.inputFileContents[path] ?? TRIANGLE_OBJ);
     if (path === "/run/files/exporting/export.obj" && this.summary.envelope?.mesh_file === "export.obj") return new Response(TRIANGLE_OBJ);
     if (path === "/run/files/massing/plates.obj" && this.massingOnDisk) return new Response(TRIANGLE_OBJ);
     return json({ detail: "Not found" }, 404);
   };
+
+  /** The routes of one test surface file in Inspect: its geometry, a turn of its surfaces (refused while saves are), its restore. */
+  private answerInspect(method: string, fileName: string, route: string, init?: RequestInit): Response {
+    const file = this.inspection.find((candidate) => candidate.role === "test_surfaces" && candidate.file_name === fileName);
+    if (file === undefined) return json({ detail: "Not found" }, 404);
+    if (method === "GET" && route === "geometry") return new Response(this.inspectGeometries[fileName].slice(0));
+    if (method !== "POST") return json({ detail: "Not found" }, 404);
+    if (this.refuseSavesWith !== null) return json({ detail: "A run of this project is in progress." }, this.refuseSavesWith);
+    if (route === "turn") {
+      if (!file.flippable) return json({ detail: `The test surfaces file '${fileName}' is closed as a whole.` }, 422);
+      this.turnRequests.push({ fileName, body: JSON.parse(String(init!.body)) });
+    } else if (!file.original_kept) {
+      return json({ detail: "No original is kept." }, 404);
+    }
+    const changed = { ...file, original_kept: route === "turn" };
+    this.inspection = this.inspection.map((candidate) => (candidate === file ? changed : candidate));
+    return json(changed);
+  }
 
   count(request: string): number {
     return this.requests.filter((made) => made === request).length;
@@ -192,6 +220,23 @@ export class FakeService {
 /** Criterion 1 of the project "p", with *settings* (the mode and its settings), as the service replies with it. */
 export function criterionEntry(settings: Record<string, unknown>, testSurfaceFiles: string[] = ["surfaces.obj"]): CriterionEntry {
   return { id: "1", name: String(settings.mode), named_by_user: false, colour: "#4477aa", bypassed: false, test_surface_files: testSurfaceFiles, settings };
+}
+
+/**
+ * The geometry of a test surface file as the service packs it (inspect_geometry_decoder.ts): uint32 header length; the header as
+ * JSON padded with spaces to a multiple of 4; float32 the corners of each triangle; uint32 the surface number of each triangle.
+ */
+export function packedInspectGeometry(frame: [number, number, number], corners: number[], surfaceOfTriangle: number[],
+                                      surfaces: { centre: number[]; normal: number[]; area: number }[]): ArrayBuffer {
+  let headerText = JSON.stringify({ frame, triangle_count: surfaceOfTriangle.length, surface_count: surfaces.length, surfaces });
+  headerText += " ".repeat((4 - (headerText.length % 4)) % 4);
+  const headerBytes = new TextEncoder().encode(headerText);
+  const buffer = new ArrayBuffer(4 + headerBytes.length + corners.length * 4 + surfaceOfTriangle.length * 4);
+  new DataView(buffer).setUint32(0, headerBytes.length, true);
+  new Uint8Array(buffer, 4, headerBytes.length).set(headerBytes);
+  new Float32Array(buffer, 4 + headerBytes.length, corners.length).set(corners);
+  new Uint32Array(buffer, 4 + headerBytes.length + corners.length * 4, surfaceOfTriangle.length).set(surfaceOfTriangle);
+  return buffer;
 }
 
 /** The project "p" of one criterion; *settings* are flat, the shared ones with those of criterion 1, as GET project gives them. */
@@ -252,16 +297,24 @@ export async function openWorkspace(
   function Page() {
     const runs = useRunLoop("token", () => {});
     const [mode, setMode] = useState<WorkspaceMode>("design");
-    changeMode = setMode;
-    return <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}
-                             mode={mode} onServiceProblem={() => {}} onShowProjects={() => {}} {...steps} />;
+    // As the app's switch: leaving Inspect with turns not saved asks first (UnsavedTurnsDialog).
+    const leaving = useLeavingInspect(mode, runs.activeRun?.project === opened.name ? "A run is in progress" : null);
+    changeMode = (next) => leaving.leave(() => setMode(next));
+    return (
+      <>
+        <ProjectWorkspace token="token" project={opened} schema={schema} modes={modes} criterionKeys={CRITERION_KEYS} warmUpState="ready" runs={runs}
+                          mode={mode} onServiceProblem={() => {}} onShowProjects={() => {}} onInspectUnsavedChange={leaving.onUnsavedChange}
+                          onInspectTurnsReady={leaving.onTurnsReady} {...steps} />
+        {leaving.dialog}
+      </>
+    );
   }
   rendered = renderForTest(<Page />);
   await settle();
 }
 
 let changeMode: ((mode: WorkspaceMode) => void) | null = null;
-/** Switches the open workspace between Design and Simulate, as the top bar's switch does. */
+/** Switches the open workspace between Design, Simulate and Inspect, as the top bar's switch does (leaving Inspect may ask first). */
 export const switchMode = (mode: WorkspaceMode) => act(() => changeMode!(mode));
 
 export const container = () => rendered!.container;

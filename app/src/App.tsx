@@ -4,13 +4,15 @@
 // at a time as the engine runs them, so a run goes on being followed while the start screen or another project is open. The
 // projects folder and the project menus (on the start screen and on the project name in the top bar) send their requests here:
 // a rename keeps the open project open under its new name and on its open step, a delete of it returns to the start screen, a
-// reset opens it afresh.
+// reset opens it afresh. Leaving Inspect with turned surfaces not saved, by the switch or the Projects link, asks first
+// (UnsavedTurnsDialog).
 import { useEffect, useRef, useState } from "react";
 import {
   chooseProjectsFolder, createProject, createProjectFromExample, deleteProject, failureTextOf, getExamples, getHealth, getModes, getProject, getProjectsFolder,
   getCriterionKeys, getSchema, listProjects, openProjectFolder, readTokenFromLaunchUrl, renameProject, resetProjectToExample, serviceProblemOf,
   type ExampleInfo, type HealthReply, type ModeInfo, type ProjectDetail, type ProjectsFolderReply, type ProjectSummary,
 } from "./api_client/client";
+import { useLeavingInspect } from "./inspect/UnsavedTurnsDialog";
 import { messages, type MessagePart } from "./messages";
 import type { SaveOutcome } from "./settings_form/form_state";
 import { MessageParts } from "./settings_form/SettingTooltip";
@@ -128,6 +130,9 @@ export function App() {
   const openProjectSettings = useRef<OpenProjectSettingsSaver | null>(null);
   const engineCheck = useRef<(() => void) | null>(null);
   const runs = useRunLoop(accessToken, (error) => handleServiceProblem(error));
+  // Save in the dialog waits, as Save in the Files panel does, while a run of the open project goes on.
+  const openProjectRunActive = openProject !== null && runs.activeRun !== null && sameProjectName(runs.activeRun.project, openProject.name);
+  const leavingInspect = useLeavingInspect(workspaceMode, openProjectRunActive ? messages.runInProgress : null);
 
   /** A failed request: a lost token is said at once; a missing engine only once GET health finds none either. */
   const handleServiceProblem = (error: unknown) => {
@@ -299,8 +304,10 @@ export function App() {
             <ProjectMenu projectName={openProject.name} exampleTitle={exampleTitleOf(openProject.example, examples)}
                          projectFolderPath={projectsFolder && projectFolderPath(projectsFolder.path, openProject.name)}
                          runActive={runActiveFor(openProject.name)} actions={projectActions} placement="top_bar" />
-            <WorkspaceModeSwitch mode={workspaceMode} onChange={setWorkspaceMode} />
-            <button type="button" className="link-button" onClick={() => setOpenProject(null)}>{messages.projectsLink}</button>
+            <WorkspaceModeSwitch mode={workspaceMode} onChange={(mode) => {
+              if (mode !== workspaceMode) leavingInspect.leave(() => setWorkspaceMode(mode));
+            }} />
+            <button type="button" className="link-button" onClick={() => leavingInspect.leave(() => setOpenProject(null))}>{messages.projectsLink}</button>
           </>
         )}
         <span className="top-bar-device">{health && <DeviceStatus warmUp={health.warm_up} />}</span>
@@ -319,8 +326,10 @@ export function App() {
         <ProjectWorkspace key={`${openProject.name}/${openProjectResets}`} token={accessToken} project={openProject} schema={setup.schema} modes={setup.modes} criterionKeys={setup.criterionKeys}
                           mode={workspaceMode} warmUpState={health?.warm_up.state ?? null} runs={runs} onServiceProblem={handleServiceProblem}
                           onShowProjects={() => setOpenProject(null)} onSettingsSaverReady={(saver) => { openProjectSettings.current = saver; }}
-                          startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }} />
+                          startSteps={workspaceStartSteps} onStepsChange={(steps) => { openWorkspaceSteps.current = steps; }}
+                          onInspectUnsavedChange={leavingInspect.onUnsavedChange} onInspectTurnsReady={leavingInspect.onTurnsReady} />
       )}
+      {leavingInspect.dialog}
     </div>
   );
 }
