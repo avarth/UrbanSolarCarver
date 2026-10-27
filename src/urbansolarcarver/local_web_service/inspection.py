@@ -3,14 +3,20 @@
 A surface (a body, for the other roles) is the triangles joined by shared edges in the mesh ``load_mesh`` returns: with
 ``fix_normals`` for the maximum volume and the test surfaces, as stored for context and terrain (as ProjectStore reads them).
 A test surface file whose mesh is closed as a whole cannot be flipped: ``load_mesh`` turns every closed body outward again.
+Saving flips writes the file again in its own format, checks that ``load_mesh`` reads the written file as the turned mesh, and only
+then puts it in place of the stored file; the file as it was is kept first, so Restore original can put it back.
 
 Reading a file takes seconds for a large mesh, so a file is inspected once and the result is kept until its size or modification
 time changes. A kept mesh is shared by every reader; whoever turns faces does it on a copy.
 """
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import shutil
 import struct
+import tempfile
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -20,17 +26,18 @@ import numpy as np
 import trimesh
 
 from ..errors import InputError
-from ..io import load_mesh
-from . import test_surfaces
+from ..io import load_mesh, save_mesh
+from . import stored_files, test_surfaces
 from .api_models import InspectedFile, InspectReply
 from .project_names import ProjectError
-from .projects import INPUTS_FOLDER, MESH_ROLES, OPTIONAL_MESH_ROLES, ProjectStore
+from .projects import MESH_ROLES, OPTIONAL_MESH_ROLES, ProjectStore
 
-# Where the original of a test surface file is kept from its first flip until it is restored (the file name is kept as stored).
-ORIGINALS_FOLDER = f"{INPUTS_FOLDER}/originals/{test_surfaces.ROLE}"
+ORIGINALS_FOLDER = test_surfaces.ORIGINALS_FOLDER
 HEADER_ALIGNMENT_BYTES = 4      # the geometry header is padded so the arrays after it start aligned
 FRAME_STEP_M = 1.0              # the frame of the geometry is the minimum corner of the bounds rounded down to this
 KEPT_FILE_COUNT = 32            # inspected files kept, the least recently used leaving first
+NORMAL_TOLERANCE = 1e-6         # how far a face normal of a saved file may be from the one expected
+OBJ_DECIMALS = 10               # the decimals of a written OBJ: georeferenced coordinates keep their millimetres and more
 
 
 @dataclass(frozen=True)
@@ -56,12 +63,16 @@ def inspect_file(path: Path, role: str) -> FileInspection:
             return found
     mesh = load_mesh(str(path), fix_normals=role not in OPTIONAL_MESH_ROLES)
     inspected = _inspect_mesh(mesh, Path(path).name, role)
+    _keep(key, inspected)
+    return inspected
+
+
+def _keep(key: tuple[str, int, int], inspected: FileInspection) -> None:
     with _kept_lock:
         _kept[key] = inspected
         _kept.move_to_end(key)
         while len(_kept) > KEPT_FILE_COUNT:
             _kept.popitem(last=False)
-    return inspected
 
 
 def project_inspection(store: ProjectStore, name: str) -> InspectReply:
@@ -84,9 +95,82 @@ def project_inspection(store: ProjectStore, name: str) -> InspectReply:
                 files.append(_unreadable_summary(role, file_name, error))
                 continue
             if role == test_surfaces.ROLE:
-                summary = summary.model_copy(update={"original_kept": (project_folder / ORIGINALS_FOLDER / file_name).is_file()})
+                summary = _with_original_kept(summary, project_folder)
             files.append(summary)
     return InspectReply(files=files)
+
+
+def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surfaces: list[int]) -> InspectedFile:
+    """Turn the surfaces numbered *surfaces* of the stored test surface file *file_name* the other way and save the file.
+
+    The file is written again in its own format with those surfaces turned (a surface is turned as a whole), read back with
+    ``load_mesh``, and replaces the stored file only when it reads as the same triangles with the turned surfaces' normals
+    negated and the others' unchanged, and as the same surfaces. Before the first save the stored file is copied to
+    ``inputs/originals/test_surfaces/`` and stays there until Restore original, an upload that replaces the file, or the file's
+    removal. The save has the effects of an upload (stored_files.build_in_test_surface_file): the joined files of the criteria and
+    studies that list the file are built again and the criteria and studies go out of date by them; there is no changed-file
+    notice and inputs_revision does not change. Returns the file's summary.
+
+    ProjectError: 404 for a file that is not stored, 422 for a file that cannot be read, that is closed as a whole, or for no
+    surface or one that does not exist, 500 when the written file does not read as turned (nothing is saved then). The caller
+    refuses it during a run.
+    """
+    with store.project_lock(name):
+        project_folder = store.open(name)
+        path = store.input_file_path(name, test_surfaces.ROLE, file_name)
+        inspected = _inspect_or_refuse(path, test_surfaces.ROLE)
+        if not inspected.summary.flippable:
+            raise ProjectError("This file is closed as a whole, and the loader always turns its bodies outward, so its surfaces cannot be flipped.",
+                               status_code=422)
+        surface_count = int(inspected.summary.surface_count)
+        turned_surfaces = sorted(set(surfaces))
+        if not turned_surfaces or turned_surfaces[0] < 0 or turned_surfaces[-1] >= surface_count:
+            raise ProjectError(f"Name at least one surface of the file, numbered from 0 to {surface_count - 1}; got {surfaces}.", status_code=422)
+        mesh = inspected.mesh
+        is_turned = np.isin(inspected.surface_of_face, turned_surfaces)
+        faces = mesh.faces.copy()       # the mesh is shared: the turned one is a mesh of its own
+        faces[is_turned] = faces[is_turned][:, ::-1]
+        turned_mesh = trimesh.Trimesh(vertices=mesh.vertices.copy(), faces=faces, process=False)
+        expected_normals = np.where(is_turned[:, None], -mesh.face_normals, mesh.face_normals)
+        temporary_path = _temporary_path_beside(path)
+        try:
+            written = _write_turned_file(turned_mesh, temporary_path, file_name, inspected, expected_normals)
+            original_path = test_surfaces.original_path(project_folder, file_name)
+            original_is_new = not original_path.is_file()
+            if original_is_new:
+                _copy_atomically(path, original_path)
+            try:
+                _put_in_place(store, name, project_folder, file_name, temporary_path)
+            except BaseException:
+                if original_is_new:
+                    original_path.unlink(missing_ok=True)
+                raise
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        status = path.stat()
+        _keep((str(path), status.st_size, status.st_mtime_ns), written)      # the file just checked is what is stored now
+        return _summary_of_stored_file(store, name, project_folder, file_name)
+
+
+def restore_original(store: ProjectStore, name: str, file_name: str) -> InspectedFile:
+    """Put the original kept before the first saved flip of the test surface file *file_name* back in place of the stored file.
+
+    It has the effects of a save (save_turned_surfaces), and the kept original is removed. ProjectError 404 for a file that is not
+    stored or has no kept original. The caller refuses it during a run."""
+    with store.project_lock(name):
+        project_folder = store.open(name)
+        path = store.input_file_path(name, test_surfaces.ROLE, file_name)
+        original_path = test_surfaces.original_path(project_folder, file_name)
+        if not original_path.is_file():
+            raise ProjectError(f"No original is kept for the {test_surfaces.ROLE} file '{file_name}'.", status_code=404)
+        temporary_path = _temporary_path_beside(path)
+        try:
+            shutil.copy2(original_path, temporary_path)
+            _put_in_place(store, name, project_folder, file_name, temporary_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)
+        original_path.unlink(missing_ok=True)
+        return _summary_of_stored_file(store, name, project_folder, file_name)
 
 
 def inspection_geometry(store: ProjectStore, name: str, file_name: str) -> bytes:
@@ -123,6 +207,105 @@ def inspection_geometry(store: ProjectStore, name: str, file_name: str) -> bytes
     header_bytes = json.dumps(header).encode("utf-8")
     header_bytes += b" " * (-len(header_bytes) % HEADER_ALIGNMENT_BYTES)
     return b"".join([struct.pack("<I", len(header_bytes)), header_bytes, corners.tobytes(), surface_numbers.astype("<u4").tobytes()])
+
+
+def _with_original_kept(summary: InspectedFile, project_folder: Path) -> InspectedFile:
+    return summary.model_copy(update={"original_kept": test_surfaces.original_path(project_folder, summary.file_name).is_file()})
+
+
+def _summary_of_stored_file(store: ProjectStore, name: str, project_folder: Path, file_name: str) -> InspectedFile:
+    path = store.input_file_path(name, test_surfaces.ROLE, file_name)
+    return _with_original_kept(_inspect_or_refuse(path, test_surfaces.ROLE).summary, project_folder)
+
+
+def _temporary_path_beside(path: Path) -> Path:
+    """A new empty file next to *path* with its extension (the format of a file follows it), for the caller to write and remove."""
+    descriptor, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=f"{path.stem}-", suffix=f".tmp{path.suffix}")
+    os.close(descriptor)
+    return Path(temporary_name)
+
+
+def _copy_atomically(source: Path, target: Path) -> None:
+    """Copy *source* to *target* (in a folder made if needed) so that *target* is there whole or not at all."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(dir=target.parent, prefix=f"{target.stem}-", suffix=".tmp")
+    os.close(descriptor)
+    try:
+        shutil.copy2(source, temporary_name)
+        os.replace(temporary_name, target)
+    except BaseException:
+        Path(temporary_name).unlink(missing_ok=True)
+        raise
+
+
+def _write_mesh_in_its_format(mesh: trimesh.Trimesh, path: Path) -> None:
+    """Write *mesh* to *path* in the format its extension names, with the precision of the coordinates kept.
+
+    The vertices are as ``load_mesh`` returned them. Vertices at one position that the loader kept apart (panels that meet along
+    an edge, told apart by their normals) have to stay apart, and vertices it merged have to stay merged: the loader merges on
+    position and, when the file has them, vertex normals, so an OBJ or PLY is written with the vertex normals of the mesh, which are
+    equal on a merged vertex and differ between panels that meet at an angle. PLY is float64 (test_surfaces.write_joined_ply), OBJ
+    has OBJ_DECIMALS decimals, GLB keeps georeferenced coordinates through io.save_mesh, and STL is float32 as it always is.
+    """
+    extension = path.suffix.lower()
+    if extension == ".ply":
+        test_surfaces.write_joined_ply([mesh], path)
+    elif extension == ".obj":
+        path.write_text(trimesh.exchange.obj.export_obj(mesh, include_normals=True, digits=OBJ_DECIMALS), encoding="utf-8")
+    elif extension == ".glb":
+        save_mesh(mesh, str(path))
+    else:
+        mesh.export(str(path), file_type=extension.lstrip("."))
+
+
+def _write_turned_file(turned_mesh: trimesh.Trimesh, temporary_path: Path, file_name: str, before: FileInspection,
+                       expected_normals: np.ndarray) -> FileInspection:
+    """Write *turned_mesh* to *temporary_path* and check that ``load_mesh`` reads it as the triangles of *before*, with the
+    expected face normals and the same surfaces; the inspection of what was read, named *file_name*.
+
+    ProjectError 500 when the file cannot be written, or reads as other triangles, other normals or other surfaces."""
+    try:
+        _write_mesh_in_its_format(turned_mesh, temporary_path)
+    except Exception as error:      # the exporters fail with many kinds of error
+        raise ProjectError(f"The turned file could not be written: {error}", status_code=500) from error
+    refusal = ProjectError("The turned file did not load as turned, so nothing was saved.", status_code=500)
+    try:
+        reloaded = load_mesh(str(temporary_path))
+    except InputError as error:
+        raise refusal from error
+    if len(reloaded.faces) != len(before.mesh.faces):
+        raise refusal
+    if not np.all(np.abs(reloaded.face_normals - expected_normals) <= NORMAL_TOLERANCE):
+        raise refusal
+    after = _inspect_mesh(reloaded, file_name, test_surfaces.ROLE)
+    if not np.array_equal(after.surface_of_face, before.surface_of_face):
+        raise refusal
+    return after
+
+
+def _put_in_place(store: ProjectStore, name: str, project_folder: Path, file_name: str, new_path: Path) -> None:
+    """Replace the stored test surface file *file_name* by the file *new_path* (moved), build it into the joined files and write
+    project.json. If any of that fails the stored file is the one it was, the joined files are built from it again as far as that
+    can be done, and the error is raised."""
+    stored_path = test_surfaces.stored_path(project_folder, file_name)
+    backup_path = _temporary_path_beside(stored_path)
+    replaced = False
+    try:
+        shutil.copy2(stored_path, backup_path)
+        project_json = store.read_project_json(name)
+        try:
+            os.replace(new_path, stored_path)
+            replaced = True
+            stored_files.build_in_test_surface_file(project_folder, project_json, file_name)
+            store.write_project_json(name, project_json)
+        except BaseException:
+            if replaced:
+                os.replace(backup_path, stored_path)
+                with contextlib.suppress(Exception):        # the joined files follow the stored file again, if they can
+                    stored_files.build_in_test_surface_file(project_folder, store.read_project_json(name), file_name)
+            raise
+    finally:
+        backup_path.unlink(missing_ok=True)
 
 
 def _inspect_or_refuse(path: Path, role: str) -> FileInspection:

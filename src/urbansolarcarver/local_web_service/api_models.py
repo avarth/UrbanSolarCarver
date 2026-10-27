@@ -117,6 +117,11 @@ class InspectedFile(BaseModel):
     problem: str | None = None          # why the file cannot be read (the counts are then zero); None for a file that is read
 
 
+class TurnSurfacesRequest(BaseModel):
+    """The surfaces of a test surface file to turn the other way and save (their numbers in the geometry of the file)."""
+    surfaces: list[int] = Field(min_length=1)
+
+
 class InspectReply(BaseModel):
     """The mesh files of a project in the order max volume, test surfaces, context, terrain, then by file name."""
     files: list[InspectedFile]

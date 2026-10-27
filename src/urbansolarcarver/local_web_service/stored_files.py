@@ -118,15 +118,41 @@ def _not_read(role: str, file_names: str, error: OSError) -> ProjectError:
     return ProjectError(f"The {ROLE_WORDS.get(role, role)} file '{file_names}' in the project folder could not be read: {error}", status_code=422)
 
 
+def build_in_test_surface_file(project_folder: Path, project_json: ProjectJson, file_name: str) -> None:
+    """Build into the joined files a test surface file the service has just replaced (a saved flip, a restored original): the joined
+    file of every criterion and study that lists it is built again and installed, whether it differs or not, its triangle count is
+    renewed and so is its record.
+
+    It has the effects of an upload through the app: the criteria and studies that list the file go out of date by their joined
+    files, and no notice is made, inputs_revision does not change. The caller writes project.json. Nothing is installed unless every
+    joined file could be built (ProjectError 422 for a stored file that cannot be read).
+    """
+    path = test_surfaces.stored_path(project_folder, file_name)
+    meshes = test_surfaces.load_stored_meshes(project_folder, [file_name])
+    file_names_by_key = _users_of_files(project_json, [file_name])
+    joined_files = test_surfaces.build_joined_files(project_folder, file_names_by_key, meshes)
+    try:
+        test_surfaces.install_joined_files(project_folder, joined_files)
+    finally:
+        test_surfaces.remove_temporary_files(joined_files)
+    project_json.input_files[test_surfaces.ROLE][file_name] = len(meshes[file_name].faces)
+    record_stored_file(project_json, test_surfaces.ROLE, file_name, path)
+
+
+def _users_of_files(project_json: ProjectJson, file_names: list[str]) -> dict[str, list[str]]:
+    """The criteria and studies (keys of test_surfaces.build_joined_files) that list any of *file_names*, with all the files each lists."""
+    users = {criterion.id: criterion.test_surface_files for criterion in project_json.criteria}
+    users.update({test_surfaces.study_key(study.id): study.test_surface_files for study in project_json.studies})
+    return {key: names for key, names in users.items() if set(names) & set(file_names)}
+
+
 def _join_test_surfaces_again(project_folder: Path, project_json: ProjectJson, file_names: list[str]) -> list[str]:
     """Build again the joined files of the criteria and studies that list any of *file_names*; the names of those files listed by a
     joined file that came out different (only those joined files are replaced)."""
     meshes = test_surfaces.load_stored_meshes(project_folder, file_names)
     for file_name, mesh in meshes.items():
         project_json.input_files[test_surfaces.ROLE][file_name] = len(mesh.faces)
-    users = {criterion.id: criterion.test_surface_files for criterion in project_json.criteria}
-    users.update({test_surfaces.study_key(study.id): study.test_surface_files for study in project_json.studies})
-    file_names_by_key = {key: names for key, names in users.items() if set(names) & set(file_names)}
+    file_names_by_key = _users_of_files(project_json, file_names)
     joined_files = test_surfaces.build_joined_files(project_folder, file_names_by_key, meshes)
     try:
         different = {key: path for key, path in joined_files.items()

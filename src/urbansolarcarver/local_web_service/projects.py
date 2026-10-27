@@ -730,6 +730,7 @@ class ProjectStore:
                 if upload_path is not None:
                     upload_path.unlink(missing_ok=True)
             if uploaded_mesh is not None:
+                test_surfaces.original_path(project_folder, stored_name).unlink(missing_ok=True)      # the kept original is of the file replaced
                 recorded_names[stored_name] = len(uploaded_mesh.faces)
                 stored_files.record_stored_file(project_json, test_surfaces.ROLE, stored_name, test_surfaces.stored_path(project_folder, stored_name))
             if stored_name not in entry.test_surface_files:
@@ -789,10 +790,13 @@ class ProjectStore:
 
     @staticmethod
     def _discard_test_surface_files(project_folder: Path, file_names: list[str]) -> None:
-        """Send stored test surface files that no criterion and no study uses to the recycle bin (discard_file), once project.json no longer lists them."""
+        """Send stored test surface files that no criterion and no study uses to the recycle bin (discard_file), once project.json no longer lists them.
+        The original kept from a saved flip of a file goes with it."""
         for file_name in file_names:
             with contextlib.suppress(OSError):      # a program has the file open: it stays, project.json no longer lists it
                 discard_file(test_surfaces.stored_path(project_folder, file_name))
+            with contextlib.suppress(OSError):
+                test_surfaces.original_path(project_folder, file_name).unlink(missing_ok=True)
 
     def _write_after_test_surface_change(self, name: str, project_folder: Path, project_json: ProjectJson, entry: CriterionEntry) -> None:
         """Write project.json after the test surfaces of *entry* changed, and config.yaml too when its default name followed them."""

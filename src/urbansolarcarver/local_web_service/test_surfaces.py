@@ -27,6 +27,8 @@ from .studies import joined_study_surfaces_path
 ROLE = "test_surfaces"
 STORED_FOLDER = "inputs/test_surfaces"
 JOINED_FOLDER = "inputs/joined"
+# Where the original of a file is kept from its first flip in Inspect until it is restored (the file name is kept as stored).
+ORIGINALS_FOLDER = f"inputs/originals/{ROLE}"
 
 
 def content_digest(path: Path) -> str:
@@ -67,6 +69,11 @@ def fingerprint(project_folder: Path, criterion_id: str) -> str | None:
 def stored_path(project_folder: Path, file_name: str) -> Path:
     """Where a stored test surface file is."""
     return Path(project_folder) / STORED_FOLDER / file_name
+
+
+def original_path(project_folder: Path, file_name: str) -> Path:
+    """Where the original of a stored test surface file is kept after a flip was saved (it may not exist)."""
+    return Path(project_folder) / ORIGINALS_FOLDER / file_name
 
 
 def criteria_using(criteria: list[CriterionEntry], file_name: str) -> list[CriterionEntry]:

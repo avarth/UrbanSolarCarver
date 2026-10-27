@@ -3,15 +3,20 @@ import json
 import os
 import struct
 import time
+from pathlib import Path
 
 import numpy as np
 import pytest
 
-from local_web_test_support import GOLDEN_EPW, box_bytes
-from test_local_web_server import build_client, create_project, upload
+from local_web_test_support import GOLDEN_EPW, box_bytes, write_fake_chain_run
+from test_local_web_server import build_client, client_with_blocking_run, create_project, projects_folder, upload  # noqa: F401 (fixtures)
+from urbansolarcarver.io import load_mesh
 from urbansolarcarver.local_web_service import inspection
 from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
-from urbansolarcarver.local_web_service.inspection import ORIGINALS_FOLDER, inspection_geometry, project_inspection
+from urbansolarcarver.local_web_service.inspection import (
+    ORIGINALS_FOLDER, inspection_geometry, project_inspection, restore_original, save_turned_surfaces,
+)
+from urbansolarcarver.local_web_service.stage_records import criterion_status, stage_status_reply
 
 PANEL_SIZE = 6.0
 
@@ -223,3 +228,209 @@ def test_the_district_example_is_inspected_within_seconds(store, example_project
     elapsed = time.perf_counter() - started
     assert any(entry.role == "test_surfaces" for entry in reply.files)
     assert elapsed < 5
+
+
+# ---- Saving turned surfaces and restoring the original ----
+
+CLOSED_MESSAGE = "This file is closed as a whole, and the loader always turns its bodies outward, so its surfaces cannot be flipped."
+UNDONE_MESSAGE = "The turned file did not load as turned, so nothing was saved."
+
+
+@pytest.fixture
+def store_after_a_run(store):
+    store.add_input("p", "max_volume", "volume.ply", box_bytes([0, 0, 5]))
+    store.add_input("p", "test_surfaces", "facades.obj", obj_panels([0, 20]))
+    write_fake_chain_run(store, "p", ["1"])
+    return store
+
+
+def _stored(store, file_name="facades.obj"):
+    return store.input_file_path("p", "test_surfaces", file_name)
+
+
+def _kept(store, file_name="facades.obj"):
+    return store.open("p") / ORIGINALS_FOLDER / file_name
+
+
+def _normals_by_surface(path):
+    """The face normals of the file as the loader makes them and the surface of each face (inspected as stored)."""
+    inspected = inspection.inspect_file(path, "test_surfaces")
+    return inspected.mesh.face_normals, inspected.surface_of_face
+
+
+def test_turned_surfaces_are_saved_and_hold_through_the_loader(store_after_a_run):
+    store = store_after_a_run
+    revision = store.read_project_json("p").inputs_revision
+    assert criterion_status(store, "p")["1"]["preprocessing"] == "current"
+    reply = save_turned_surfaces(store, "p", "facades.obj", [0])
+    assert reply.file_name == "facades.obj" and reply.original_kept is True and reply.surface_count == 2 and reply.flippable is True
+    mesh = load_mesh(str(_stored(store)))
+    _, surfaces = _normals_by_surface(_stored(store))
+    assert mesh.face_normals[surfaces == 0] == pytest.approx(np.array([[0, 0, -1.0]] * 2), abs=1e-6)
+    assert mesh.face_normals[surfaces == 1] == pytest.approx(np.array([[0, 0, 1.0]] * 2), abs=1e-6)
+    assert criterion_status(store, "p")["1"]["preprocessing"] == "out_of_date"
+    assert stage_status_reply(store, "p").input_changes == []
+    project_json = store.read_project_json("p")
+    assert project_json.inputs_revision == revision and project_json.changed_files == []
+    assert project_json.input_files["test_surfaces"]["facades.obj"] == 4
+    assert store.refresh_changed_inputs("p") is False
+    joined = load_mesh(str(store.open("p") / "inputs" / "joined" / "test_surfaces_1.ply"))
+    assert sorted(joined.face_normals[:, 2].round(6).tolist()) == [-1, -1, 1, 1]
+
+
+def test_panels_with_coinciding_edges_stay_two_surfaces(store):
+    obj = "\n".join(["v 0 0 0", "v 6 0 0", "v 6 6 0", "v 0 6 0", "v 0 0 0", "v 6 0 0", "v 6 0 6", "v 0 0 6", "vn 0 0 1", "vn 0 -1 0",
+                     "f 1//1 2//1 3//1", "f 1//1 3//1 4//1", "f 5//2 6//2 7//2", "f 5//2 7//2 8//2"]) + "\n"
+    store.add_input("p", "test_surfaces", "corner.obj", obj.encode())
+    assert project_inspection(store, "p").files[0].surface_count == 2
+    reply = save_turned_surfaces(store, "p", "corner.obj", [1])
+    assert reply.surface_count == 2
+    normals, surfaces = _normals_by_surface(_stored(store, "corner.obj"))
+    assert normals[surfaces == 0] == pytest.approx(np.array([[0, 0, 1.0]] * 2), abs=1e-6)
+    assert normals[surfaces == 1] == pytest.approx(np.array([[0, 1.0, 0]] * 2), abs=1e-6)
+
+
+def test_quads_keep_their_triangle_count(store):
+    lines = ["v 0 0 0", "v 4 0 0", "v 4 4 0", "v 0 4 0",
+             "v 10 0 0", "v 13 0 0", "v 14 3 0", "v 11.5 5 0", "v 9 3 0",
+             "f 1 2 3 4", "f 5 6 7 8 9"]
+    store.add_input("p", "test_surfaces", "mixed.obj", ("\n".join(lines) + "\n").encode())
+    before = len(load_mesh(str(_stored(store, "mixed.obj"))).faces)
+    assert before == 5
+    reply = save_turned_surfaces(store, "p", "mixed.obj", [1])
+    assert reply.triangle_count == before
+    assert len(load_mesh(str(_stored(store, "mixed.obj"))).faces) == before
+    assert store.read_project_json("p").input_files["test_surfaces"]["mixed.obj"] == before
+
+
+def test_a_save_keeps_georeferenced_coordinates(store):
+    store.add_input("p", "test_surfaces", "site.obj", obj_panels([0], x_origin=4_500_000.123456, z=12.345678))
+    before = load_mesh(str(_stored(store, "site.obj")))
+    save_turned_surfaces(store, "p", "site.obj", [0])
+    after = load_mesh(str(_stored(store, "site.obj")))
+    assert len(after.faces) == len(before.faces)
+    assert after.vertices.shape == before.vertices.shape
+    assert np.abs(after.vertices[np.lexsort(after.vertices.T)] - before.vertices[np.lexsort(before.vertices.T)]).max() < 1e-6
+    assert after.face_normals[:, 2] == pytest.approx([-1, -1], abs=1e-6)
+
+
+@pytest.mark.parametrize("extension", [".ply", ".stl", ".glb"])
+def test_the_other_formats_are_saved_in_their_own_format(store, extension):
+    import trimesh
+    vertices = [[0, 0, 0], [6, 0, 0], [6, 6, 0], [0, 6, 0], [20, 0, 0], [26, 0, 0], [26, 6, 0], [20, 6, 0]]
+    mesh = trimesh.Trimesh(vertices=vertices, faces=[[0, 1, 2], [0, 2, 3], [4, 5, 6], [4, 6, 7]], process=False)
+    store.add_input("p", "test_surfaces", f"panels{extension}", mesh.export(file_type=extension.lstrip(".")))
+    reply = save_turned_surfaces(store, "p", f"panels{extension}", [0])
+    assert reply.surface_count == 2 and reply.triangle_count == 4
+    normals, surfaces = _normals_by_surface(_stored(store, f"panels{extension}"))
+    assert sorted(normals[:, 2].round(6).tolist()) == [-1, -1, 1, 1]
+    assert normals[surfaces == 0][:, 2].tolist() == pytest.approx([-1, -1])
+
+
+def test_a_file_closed_as_a_whole_cannot_be_turned(store):
+    store.add_input("p", "test_surfaces", "block.obj", obj_box())
+    before = _stored(store, "block.obj").read_bytes()
+    with pytest.raises(ProjectError) as refused:
+        save_turned_surfaces(store, "p", "block.obj", [0])
+    assert refused.value.status_code == 422 and str(refused.value) == CLOSED_MESSAGE
+    assert _stored(store, "block.obj").read_bytes() == before
+    assert not _kept(store, "block.obj").exists()
+
+
+def test_a_save_that_the_loader_would_undo_writes_nothing(store_after_a_run, monkeypatch):
+    store = store_after_a_run
+    before = _stored(store).read_bytes()
+    monkeypatch.setattr(inspection, "_write_mesh_in_its_format", lambda mesh, path: Path(path).write_bytes(before))
+    with pytest.raises(ProjectError) as undone:
+        save_turned_surfaces(store, "p", "facades.obj", [0])
+    assert undone.value.status_code == 500 and str(undone.value) == UNDONE_MESSAGE
+    assert _stored(store).read_bytes() == before
+    assert not _kept(store).exists()
+    assert sorted(path.name for path in _stored(store).parent.iterdir()) == ["facades.obj"]
+    assert criterion_status(store, "p")["1"]["preprocessing"] == "current"
+
+
+def test_the_original_is_kept_once_and_restored_byte_for_byte(store_after_a_run):
+    store = store_after_a_run
+    original = _stored(store).read_bytes()
+    save_turned_surfaces(store, "p", "facades.obj", [0])
+    first_saved = _stored(store).read_bytes()
+    assert first_saved != original and _kept(store).read_bytes() == original
+    reply = save_turned_surfaces(store, "p", "facades.obj", [1])
+    assert reply.original_kept is True
+    assert _stored(store).read_bytes() not in (original, first_saved)
+    assert _kept(store).read_bytes() == original
+    write_fake_chain_run(store, "p", ["1"])
+    assert criterion_status(store, "p")["1"]["preprocessing"] == "current"
+    reply = restore_original(store, "p", "facades.obj")
+    assert reply.original_kept is False and reply.triangle_count == 4
+    assert _stored(store).read_bytes() == original
+    assert not _kept(store).exists()
+    assert criterion_status(store, "p")["1"]["preprocessing"] == "out_of_date"
+    assert stage_status_reply(store, "p").input_changes == []
+    assert store.refresh_changed_inputs("p") is False
+    with pytest.raises(ProjectError) as nothing_kept:
+        restore_original(store, "p", "facades.obj")
+    assert nothing_kept.value.status_code == 404
+
+
+def test_an_upload_with_the_same_name_drops_the_kept_original(store_after_a_run):
+    store = store_after_a_run
+    save_turned_surfaces(store, "p", "facades.obj", [0])
+    assert _kept(store).is_file()
+    store.add_criterion_test_surface("p", "1", "facades.obj", obj_panels([0, 20, 40]))
+    assert not _kept(store).exists()
+    assert project_inspection(store, "p").files[1].original_kept is False
+
+
+def test_a_discarded_file_drops_its_kept_original(store_after_a_run):
+    store = store_after_a_run
+    save_turned_surfaces(store, "p", "facades.obj", [0])
+    assert _kept(store).is_file()
+    store.remove_criterion_test_surface("p", "1", "facades.obj")
+    assert not _kept(store).exists()
+
+
+def test_a_turn_outside_the_surfaces_is_422(store_after_a_run):
+    store = store_after_a_run
+    before = _stored(store).read_bytes()
+    for surfaces in ([2], [-1], [0, 5], []):
+        with pytest.raises(ProjectError) as refused:
+            save_turned_surfaces(store, "p", "facades.obj", surfaces)
+        assert refused.value.status_code == 422
+    assert _stored(store).read_bytes() == before and not _kept(store).exists()
+
+
+def test_a_file_that_is_not_stored_is_404(store_after_a_run):
+    with pytest.raises(ProjectError) as refused:
+        save_turned_surfaces(store_after_a_run, "p", "nothing.obj", [0])
+    assert refused.value.status_code == 404
+    with pytest.raises(ProjectError) as refused:
+        restore_original(store_after_a_run, "p", "nothing.obj")
+    assert refused.value.status_code == 404
+
+
+def test_the_routes_turn_and_restore(tmp_path):
+    client, _ = build_client(tmp_path / "projects")
+    create_project(client)
+    assert upload(client, "p", "test_surfaces", ("facades.obj", obj_panels([0, 20]))).status_code == 200
+    turned = client.post("/api/projects/p/inspect/test_surfaces/facades.obj/turn", json={"surfaces": [1]})
+    assert turned.status_code == 200 and turned.json()["original_kept"] is True
+    assert client.get("/api/projects/p/inspect").json()["files"][0]["original_kept"] is True
+    for body in ({"surfaces": []}, {"surfaces": [9]}, {"surfaces": ["a"]}, {}):
+        assert client.post("/api/projects/p/inspect/test_surfaces/facades.obj/turn", json=body).status_code == 422
+    assert client.post("/api/projects/p/inspect/test_surfaces/nothing.obj/turn", json={"surfaces": [0]}).status_code == 404
+    restored = client.post("/api/projects/p/inspect/test_surfaces/facades.obj/restore")
+    assert restored.status_code == 200 and restored.json()["original_kept"] is False
+    assert client.post("/api/projects/p/inspect/test_surfaces/facades.obj/restore").status_code == 404
+
+
+def test_turning_during_a_run_is_409(client_with_blocking_run, projects_folder):
+    client, _ = client_with_blocking_run
+    stored = projects_folder / "p" / "inputs" / "test_surfaces" / "surface.ply"
+    before = stored.read_bytes()
+    turn = client.post("/api/projects/p/inspect/test_surfaces/surface.ply/turn", json={"surfaces": [0]})
+    assert turn.status_code == 409
+    assert client.post("/api/projects/p/inspect/test_surfaces/surface.ply/restore").status_code == 409
+    assert stored.read_bytes() == before
+    assert not (projects_folder / "p" / ORIGINALS_FOLDER).exists()

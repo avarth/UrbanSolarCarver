@@ -37,8 +37,8 @@ from ..stage_settings import PIPELINE_STAGES
 from . import folder_picker, inspection, simulation, user_preferences
 from .api_models import (
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
-    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail,
-    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
+    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail,
+    ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
 )
 from .carve_further import carve_further
@@ -729,6 +729,21 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     def inspect_test_surface_geometry(name: str, file_name: str) -> Response:
         """The triangles of a test surface file with the surface of each (layout in inspection.inspection_geometry)."""
         return Response(inspection.inspection_geometry(folder_in_use.store, name, file_name), media_type="application/octet-stream", headers=NO_CACHE)
+
+    @router.post("/projects/{name}/inspect/test_surfaces/{file_name}/turn",
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project or file."}, **_ERROR_RESPONSES,
+                            500: {"model": ErrorDetailReply, "description": "The turned file did not load as turned, so nothing was saved."}})
+    def turn_test_surfaces(name: str, file_name: str, request: TurnSurfacesRequest) -> InspectedFile:
+        """Turn surfaces of a test surface file the other way and save the file, keeping its original (inspection.save_turned_surfaces)."""
+        with writable_project(name) as store:
+            return inspection.save_turned_surfaces(store, name, file_name, request.surfaces)
+
+    @router.post("/projects/{name}/inspect/test_surfaces/{file_name}/restore",
+                 responses={404: {"model": ErrorDetailReply, "description": "There is no such project or file, or no original is kept."}, **_ERROR_RESPONSES})
+    def restore_test_surface_original(name: str, file_name: str) -> InspectedFile:
+        """Put the original of a test surface file back in place of the saved one (inspection.restore_original)."""
+        with writable_project(name) as store:
+            return inspection.restore_original(store, name, file_name)
 
     @router.get("/projects/{name}/run/summary")
     def run_summary(name: str) -> RunSummary:
