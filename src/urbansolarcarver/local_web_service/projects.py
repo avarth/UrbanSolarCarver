@@ -31,7 +31,7 @@ from ..pydantic_schemas import UserConfig
 from . import test_surfaces, uploads
 from .api_models import (
     CarvingChainStep, ColdPeriodDates, ColdPeriodReply, ConfigReply, CriterionEntry, ExampleProject, GridPlanReply, InputFileInfo, InputFilesReply,
-    ProjectJson, ProjectSummary,
+    ProjectJson, ProjectSummary, StudyEntry,
 )
 from .criteria import (
     CRITERIA_FOLDER, OPTIONAL_SERVICE_PATHS, SERVICE_PATHS, active_criteria, append_criterion, chain_config_document, chain_config_text, checked_colour,
@@ -40,7 +40,8 @@ from .criteria import (
 )
 from .example_catalog import read_examples
 from .project_names import PROJECT_JSON_FILE_NAME, ProjectError, check_not_a_windows_device_name, validate_project_name
-from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, discard_file, move_to_recycle_bin
+from .project_removal import ProjectRemovalRefused, check_project_folder_can_be_removed, discard_file, discard_folder, move_to_recycle_bin
+from .studies import NOT_SENT, append_study, change_study, checked_metric, default_study_settings, find_study, study_folder, study_from_criterion
 
 CONFIG_FILE_NAME = "config.yaml"
 INPUT_ROLE_FOLDERS = ("inputs/max_volume", "inputs/test_surfaces", "inputs/context", "inputs/terrain", "inputs/joined")
@@ -546,6 +547,64 @@ class ProjectStore:
                 raise ProjectError("The new order must list every criterion once.", status_code=422)
             project_json.criteria = [by_id[criterion_id] for criterion_id in ids]
             self._rewrite_chain(name, project_folder, project_json)
+
+    def studies(self, name: str) -> list[StudyEntry]:
+        """The studies of a project in the order shown."""
+        return self.read_project_json(name).studies
+
+    def add_study(self, name: str, *, metric: str | None = None, from_criterion: str | None = None) -> StudyEntry:
+        """Add a study at the end of the list: of *metric* with its default period and settings and no test surface files, or like
+        the criterion *from_criterion* (study_from_criterion; no link to it is kept).
+
+        Named by its metric and period, and given the next palette colour. Only project.json changes: not the criteria, config.yaml,
+        inputs_revision or a stage record. ProjectError: 422 for an unknown metric or for neither or both arguments, 404 for an
+        unknown criterion.
+        """
+        if (metric is None) == (from_criterion is None):
+            raise ProjectError("Give either a metric or a criterion to copy.", status_code=422)
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
+            if metric is not None:
+                study_metric, settings, files = checked_metric(metric), default_study_settings(metric), []
+            else:
+                study_metric, settings, files = study_from_criterion(find_criterion(project_json, from_criterion))
+            entry = append_study(project_json, study_metric, settings, files)
+            self.write_project_json(name, project_json)
+            return entry
+
+    def update_study(self, project: str, study_id: str, /, *, name: str | None = None, metric: str | None = None,
+                     values: dict | None = None, target: object = NOT_SENT) -> StudyEntry:
+        """Change a study of the project *project*; what is not given stays (change_study says how). ProjectError 404 for an
+        unknown study, 422 for a name that is empty, an unknown metric, or settings that are not valid for the metric; nothing
+        changes then."""
+        with self.project_lock(project):
+            project_json = self.read_project_json(project)
+            entry = find_study(project_json, study_id)
+            change_study(entry, name=name, metric=metric, values=values, target=target)
+            self.write_project_json(project, project_json)
+            return entry
+
+    def delete_study(self, name: str, study_id: str) -> None:
+        """Remove a study and move its results folder (simulate/<id>) to the recycle bin; 404 for an unknown one. Its id is not used
+        again. A folder that cannot be moved (a program has it open) stays, and the study is gone from the list all the same."""
+        with self.project_lock(name):
+            project_folder = self.open(name)
+            project_json = self.read_project_json(name)
+            removed = find_study(project_json, study_id)
+            project_json.studies = [study for study in project_json.studies if study.id != removed.id]
+            self.write_project_json(name, project_json)
+            with contextlib.suppress(OSError):
+                discard_folder(study_folder(project_folder, removed.id))
+
+    def reorder_studies(self, name: str, ids: list[str]) -> None:
+        """Put the studies in the order of *ids*, which names each study once; ProjectError 422 otherwise."""
+        with self.project_lock(name):
+            project_json = self.read_project_json(name)
+            by_id = {study.id: study for study in project_json.studies}
+            if len(ids) != len(by_id) or set(ids) != set(by_id):
+                raise ProjectError("The new order must list every study once.", status_code=422)
+            project_json.studies = [by_id[study_id] for study_id in ids]
+            self.write_project_json(name, project_json)
 
     def add_criterion_test_surface(self, name: str, criterion_id: str, file_name: str, data: bytes) -> CriterionEntry:
         """Add an uploaded test surface file to the criterion *criterion_id* (test_surfaces.accept_upload says which stored file it is).

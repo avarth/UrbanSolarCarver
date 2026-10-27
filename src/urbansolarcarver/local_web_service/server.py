@@ -39,7 +39,7 @@ from .api_models import (
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
     CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
-    UpdateCriterionRequest,
+    UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, UpdateStudyRequest,
 )
 from .carve_further import carve_further
 from .criteria import active_criteria, find_criterion
@@ -54,6 +54,7 @@ from .run_summary import build_run_summary, build_sky_dome, sun_path_for_config
 from .run_worker import MissingInputs, RunConflict, RunWorker
 from .score_points import build_carved_by_criterion, build_score_points
 from .stage_records import stage_status_reply
+from .studies import NOT_SENT, metric_infos
 
 _log = logging.getLogger(__name__)
 API_PREFIX = "/api"
@@ -73,6 +74,10 @@ _ERROR_RESPONSES = {
 }
 _CRITERION_RESPONSES = {
     404: {"model": ErrorDetailReply, "description": "There is no such criterion."},
+    **_ERROR_RESPONSES,
+}
+_STUDY_RESPONSES = {
+    404: {"model": ErrorDetailReply, "description": "There is no such study."},
     **_ERROR_RESPONSES,
 }
 _CONFIG_OR_MESSAGE_ERROR = {
@@ -550,6 +555,43 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
         with writable_project(name) as store:
             store.reorder_criteria(name, request.ids)
             return store.criteria(name)
+
+    @router.get("/projects/{name}/studies", responses={404: _STUDY_RESPONSES[404]})
+    def list_studies(name: str) -> StudiesReply:
+        """The studies of the project in order, and the metrics a study can show (those that need the weather file are not available
+        without one)."""
+        store = folder_in_use.store
+        with store.project_lock(name):
+            return StudiesReply(studies=store.studies(name), metrics=metric_infos(store.weather_file_path(name) is not None))
+
+    @router.post("/projects/{name}/studies", responses={**_STUDY_RESPONSES, 404: {"model": ErrorDetailReply, "description": "There is no such criterion."}})
+    def add_study(name: str, request: AddStudyRequest) -> StudyEntry:
+        """Add a study from a metric (its default period and settings, no test surface files), or like a criterion (its metric, period,
+        mode settings and test surface file names). Neither or both is 422."""
+        with writable_project(name) as store:
+            return store.add_study(name, metric=request.metric, from_criterion=request.from_criterion)
+
+    @router.put("/projects/{name}/studies/order", responses={409: _ERROR_RESPONSES[409], 422: _ERROR_RESPONSES[422]})
+    def reorder_studies(name: str, request: ReorderStudiesRequest) -> list[StudyEntry]:
+        """Put the studies in the order of *ids*, which names each study once (else 422)."""
+        with writable_project(name) as store:
+            store.reorder_studies(name, request.ids)
+            return store.studies(name)
+
+    @router.patch("/projects/{name}/studies/{study_id}", responses=_STUDY_RESPONSES)
+    def update_study(name: str, study_id: str, request: UpdateStudyRequest) -> StudyEntry:
+        """Change the name, metric, settings or target of a study; what is not sent stays. A new metric resets the settings to its
+        defaults (the keys both have keep their values); *values* then change settings. A target of null removes the target."""
+        target = request.target if "target" in request.model_fields_set else NOT_SENT
+        with writable_project(name) as store:
+            return store.update_study(name, study_id, name=request.name, metric=request.metric, values=request.values, target=target)
+
+    @router.delete("/projects/{name}/studies/{study_id}", status_code=204, response_class=Response, responses=_STUDY_RESPONSES)
+    def delete_study(name: str, study_id: str) -> Response:
+        """Remove a study and move its results folder to the recycle bin; its id is not used again."""
+        with writable_project(name) as store:
+            store.delete_study(name, study_id)
+        return Response(status_code=204)
 
     @router.post("/projects/{name}/criteria/{criterion_id}/test-surfaces", responses=_CRITERION_RESPONSES)
     def add_criterion_test_surface(name: str, criterion_id: str, file: UploadFile = File(...)) -> CriterionEntry:

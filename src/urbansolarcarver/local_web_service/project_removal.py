@@ -11,6 +11,7 @@ from __future__ import annotations
 import ctypes
 import ntpath
 import os
+import shutil
 import stat
 import sys
 from pathlib import Path
@@ -134,6 +135,19 @@ def discard_file(path: Path) -> None:
         _check_folder_has_a_recycle_bin(path.parent)
     except ProjectRemovalRefused:
         path.unlink()
+        return
+    send2trash.send2trash(str(path))
+
+
+def discard_folder(path: Path) -> None:
+    """Move a folder to the recycle bin or trash, or delete it on a drive that has none, as discard_file does for a file; nothing
+    for a folder that is not there. OSError when neither works (the folder then stays)."""
+    if not path.is_dir():
+        return
+    try:
+        _check_folder_has_a_recycle_bin(path.parent)
+    except ProjectRemovalRefused:
+        shutil.rmtree(path)
         return
     send2trash.send2trash(str(path))
 

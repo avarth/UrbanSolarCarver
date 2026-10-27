@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class StageRecord(BaseModel):
@@ -44,6 +44,19 @@ class CriterionEntry(BaseModel):
     settings: dict = Field(default_factory=dict)    # the criterion's own settings as stored, without the paths the service owns
 
 
+class StudyEntry(BaseModel):
+    """One study of the Simulate workspace, as project.json keeps it: a metric on test surfaces over a period, apart from the criteria."""
+    # Assigned by the service from ProjectJson.next_study_id, never reused; names the results folder simulate/<id>, so digits only.
+    id: str = Field(pattern=r"^[0-9]+$")
+    name: str
+    named_by_user: bool = False         # False: the name follows the metric and the period (see studies.py)
+    colour: str                         # "#RRGGBB", from the criteria palette
+    metric: str                         # a key of check_settings.CHECK_METRICS
+    settings: dict = Field(default_factory=dict)    # the period and the mode settings the metric reads (studies.STUDY_SETTING_KEYS)
+    target: float | None = Field(None, allow_inf_nan=False)     # in the metric's unit
+    test_surface_files: list[str] = Field(default_factory=list)     # file names in inputs/test_surfaces/
+
+
 class ProjectJson(BaseModel):
     """The content of a project's project.json."""
     name: str
@@ -58,6 +71,8 @@ class ProjectJson(BaseModel):
     next_criterion_id: int = 1  # the id the next criterion gets
     # criterion id -> "preprocessing" / "thresholding" -> record; the stage records of the criteria
     criterion_records: dict[str, dict[str, StageRecord]] = Field(default_factory=dict)
+    studies: list[StudyEntry] = Field(default_factory=list)     # the studies of the Simulate workspace, in the order shown
+    next_study_id: int = 1      # the id the next study gets
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -341,6 +356,47 @@ class UpdateCriterionRequest(BaseModel):
 class CriterionOrderRequest(BaseModel):
     """The body of a reorder: the id of every criterion once, in the new carving order."""
     ids: list[str]
+
+
+class AddStudyRequest(BaseModel):
+    """The body of a request to add a study: from a metric (its defaults), or like a criterion (its metric, period, mode settings and files)."""
+    metric: str | None = None
+    from_criterion: str | None = None   # the id of a criterion
+
+    @model_validator(mode="after")
+    def _exactly_one(self) -> "AddStudyRequest":
+        if (self.metric is None) == (self.from_criterion is None):
+            raise ValueError("Give either a metric or a criterion to copy, not both and not neither.")
+        return self
+
+
+class UpdateStudyRequest(BaseModel):
+    """The body of a study change: what is not sent stays as it is; target null means no target."""
+    name: str | None = None
+    metric: str | None = None
+    values: dict | None = None          # the metric's settings among studies.STUDY_SETTING_KEYS; they change those keys only
+    target: float | None = Field(None, allow_inf_nan=False)
+
+
+class ReorderStudiesRequest(BaseModel):
+    """The body of a reorder of the studies: the id of every study once, in the new order."""
+    ids: list[str]
+
+
+class MetricInfo(BaseModel):
+    """One metric the Simulate workspace can show, with what the page needs to offer it."""
+    name: str
+    label: str
+    unit: str
+    needs_epw: bool
+    available: bool                     # its inputs exist: the weather file when it needs one
+    default_settings: dict              # the period and the mode settings a new study of this metric starts with
+
+
+class StudiesReply(BaseModel):
+    """The studies of a project and the metrics a study can show."""
+    studies: list[StudyEntry]
+    metrics: list[MetricInfo]
 
 
 class StartRunRequest(BaseModel):
