@@ -1,4 +1,4 @@
-"""The sun and shade check (solar_check, check_settings): sky cells, analytic
+"""The sun and shade check (solar_check, check_settings): sky directions and sub-rays, analytic
 values of unobstructed and half-obstructed surfaces, sun hours against an
 independent ray-box test, test surfaces on and in a mesh, clipping by the
 maximum volume, the check of a run, context and terrain, and Ladybug's
@@ -41,38 +41,45 @@ def _box(lower, upper):
     return box
 
 
-# --- sky cells -------------------------------------------------------------------------------------------------
+# --- sky directions and sub-rays -------------------------------------------------------------------------------
 
-@pytest.mark.parametrize("side", [1, 2, 3])
-def test_sky_cells_cover_the_hemisphere_in_equal_parts_of_each_patch(side):
-    from urbansolarcarver.solar_check import sky_cells
-    cells = sky_cells("tregenza", side)
-    assert len(cells.directions) == 145 * side * side
-    assert cells.solid_angles.sum() == pytest.approx(2 * math.pi, rel=1e-12)
-    assert len(cells.patch_solid_angles) == 145
-    np.testing.assert_allclose(np.bincount(cells.patch_index, weights=cells.solid_angles), cells.patch_solid_angles,
-                               rtol=1e-12)
-    np.testing.assert_allclose(np.linalg.norm(cells.directions, axis=1), 1.0, rtol=1e-12)
-    assert (cells.directions[:, 2] > 0).all()
-
-
-def test_one_cell_per_patch_is_ladybugs_patch_and_finer_cells_stay_in_their_patch():
+@pytest.mark.parametrize("rays", [1, 4, 16])
+def test_sky_directions_are_ladybugs_patches_and_each_sub_ray_carries_a_share_of_its_patch(rays):
     from ladybug.viewsphere import ViewSphere, view_sphere
-    from urbansolarcarver.solar_check import sky_cells
-    centres = view_sphere.tregenza_dome_vectors
-    rows = ViewSphere.TREGENZA_PATCHES_PER_ROW
-    coefficients = ViewSphere.TREGENZA_COEFFICIENTS
-    one = sky_cells("tregenza", 1)
-    np.testing.assert_allclose(one.directions, [[v.x, v.y, v.z] for v in centres], atol=1e-12)
-    np.testing.assert_allclose(one.patch_solid_angles, np.repeat(coefficients, list(rows) + [1]), rtol=1e-8)  # Ladybug rounds them to 10 digits
-    # The middle cell of a 3 x 3 split lies within half a degree of Ladybug's patch centre.
-    three = sky_cells("tregenza", 3)
-    middle = three.directions[4::9]
-    angle = np.degrees(np.arccos(np.clip(np.sum(middle * one.directions, axis=1), -1.0, 1.0)))
-    assert angle[:-1].max() < 0.6
+    from urbansolarcarver.solar_check import check_directions
+    side = math.isqrt(rays)
+    centres = np.array([[v.x, v.y, v.z] for v in view_sphere.tregenza_dome_vectors])
+    solid_angles = np.repeat(ViewSphere.TREGENZA_COEFFICIENTS, list(ViewSphere.TREGENZA_PATCHES_PER_ROW) + [1])
+    directions = check_directions(_settings("sky_view", rays_per_patch=rays))
+    assert directions.sub_side == side
+    np.testing.assert_array_equal(directions.patch_ids, np.repeat(np.arange(145), rays))
+    np.testing.assert_allclose(directions.directions, np.repeat(centres, rays, axis=0), atol=1e-7)
+    # Ladybug rounds its solid angles to 10 digits; the sub-rays of a patch share its value equally.
+    np.testing.assert_allclose(directions.values * math.pi * rays, np.repeat(solid_angles, rays), rtol=1e-8)
 
 
-# --- unobstructed and analytic cases ---------------------------------------------------------------------------
+@REQUIRES_WARP_CPU
+def test_sub_rays_of_the_check_are_the_carvings_jittered_directions():
+    """A box 2 mm wide 100 m out along one of the carving's sub-rays (sky_patches.sub_ray_directions) takes
+    exactly that sub-ray's value from the test point whose index the hash was given: the kernel traced it to
+    within 1e-5 rad."""
+    from urbansolarcarver.sky_patches import sub_ray_directions, tregenza_patch_cells
+    from urbansolarcarver.solar_check import check_directions, evaluate_test_points
+    directions = check_directions(_settings("sky_view", rays_per_patch=4))
+    # Four test points at one place, so only the point id tells their sub-rays apart; the last is checked.
+    points, normals = np.zeros((4, 3)), np.tile(UP, (4, 1))
+    point_id = 3
+    expected = sub_ray_directions([point_id] * 145, np.arange(145), 2, tregenza_patch_cells())
+    assert len(expected) == len(directions.directions) == 580
+    origin = np.array([0.0, 0.0, 0.01])           # the default origin offset along the normal
+    free = evaluate_test_points(points, normals, directions, device="cpu")
+    for slot in (3, 77, 301, 452, 577):           # the lowest row, middle rows and the zenith cap
+        box = trimesh.creation.box(extents=[2e-3] * 3)
+        box.apply_translation(origin + 100.0 * expected[slot])
+        shaded = evaluate_test_points(points, normals, directions, box, device="cpu")
+        drop = free[point_id] - shaded[point_id]
+        assert drop == pytest.approx(directions.values[slot] * expected[slot, 2] * directions.scale, rel=1e-4)
+
 
 def _overcast_vertical_share():
     """CIE overcast illuminance on an unobstructed vertical surface over that on a horizontal one:
@@ -81,20 +88,37 @@ def _overcast_vertical_share():
 
 
 @REQUIRES_WARP_CPU
-@pytest.mark.parametrize("rays", [1, 4, 9])
-def test_unobstructed_horizontal_and_vertical_sky_metrics(rays):
+@pytest.mark.parametrize("rays", [1, 4, 16])
+def test_more_sub_rays_keep_the_unobstructed_values(rays):
     points, normals = [[0, 0, 0], [5, 0, 0]], [UP, EAST]
     sky_view = _evaluate("sky_view", points, normals, rays_per_patch=rays)
     overcast = _evaluate("sky_component", points, normals, rays_per_patch=rays)
     cooling = _evaluate("cooling_sky", points, normals, rays_per_patch=rays)
-    assert sky_view[0] == pytest.approx(100.0, abs=1e-4)   # float32 values
-    assert overcast[0] == pytest.approx(100.0, abs=1e-4)
-    assert cooling[0] == pytest.approx(100.0, abs=1e-4)
-    # Tregenza's patches are 12 degrees apart: a wall's value is within 0.25 of the analytic one at any ray count.
-    assert sky_view[1] == pytest.approx(50.0, abs=0.25)
-    assert overcast[1] == pytest.approx(100.0 * _overcast_vertical_share(), abs=0.25)
+    # Patch centres sum to the normaliser exactly; jittered sub-rays to it on average.
+    exact = 1e-4 if rays == 1 else 0.5
+    assert sky_view[0] == pytest.approx(100.0, abs=exact)
+    assert overcast[0] == pytest.approx(100.0, abs=exact)
+    assert cooling[0] == pytest.approx(100.0, abs=exact)
+    # Tregenza's patches are 12 degrees apart: a wall's value is within 0.5 of the analytic one at any ray count.
+    assert sky_view[1] == pytest.approx(50.0, abs=0.5)
+    assert overcast[1] == pytest.approx(100.0 * _overcast_vertical_share(), abs=0.5)
     # The cooling sky is brightest at the zenith, so a wall sees well under half of it.
     assert 10.0 < cooling[1] < 40.0
+
+
+@REQUIRES_WARP_CPU
+def test_sub_rays_see_a_thin_mast_that_patch_centres_miss():
+    """A mast 0.3 m wide, 40 m from the point at azimuth 4°: 4° or more from every patch centre's azimuth
+    (0, 12, 15, 20, 30 and 60° apart in the rows it rises through), so no centre ray meets it."""
+    azimuth = math.radians(4.0)
+    centre = 40.0 * np.array([math.sin(azimuth), math.cos(azimuth)])
+    mast = _box([centre[0] - 0.15, centre[1] - 0.15, -1.0], [centre[0] + 0.15, centre[1] + 0.15, 100.0])
+    blocked = {}
+    for rays in (1, 16):
+        free = _evaluate("sky_view", [[0, 0, 0]], [UP], rays_per_patch=rays)[0]
+        blocked[rays] = 1.0 - _evaluate("sky_view", [[0, 0, 0]], [UP], mast, rays_per_patch=rays)[0] / free
+    assert blocked[1] == 0.0
+    assert blocked[16] > 0.0
 
 
 @REQUIRES_WARP_CPU
@@ -112,7 +136,9 @@ def test_sky_view_factor_beside_an_infinite_wall(height):
 @REQUIRES_WARP_CPU
 def test_a_roof_over_a_point_blocks_its_whole_sky():
     roof = _box([-1000.0, -1000.0, 3.0], [1000.0, 1000.0, 4.0])
-    assert _evaluate("sky_view", [[0, 0, 0]], [UP], roof)[0] == 0.0
+    # Patch centres: jittered sub-rays reach down to the horizon and some pass under the roof's edge, 0.17° up.
+    assert _evaluate("sky_view", [[0, 0, 0]], [UP], roof, rays_per_patch=1)[0] == 0.0
+    assert _evaluate("sky_view", [[0, 0, 0]], [UP], roof, rays_per_patch=4)[0] < 0.01
 
 
 def _ray_hits_box(origin, directions, lower, upper):
@@ -321,7 +347,8 @@ def test_a_list_of_context_and_terrain_files_is_joined_and_both_block(tmp_path):
     save_mesh(roof_over_it, str(tmp_path / "terrain.obj"))
     save_mesh(wall_east, str(tmp_path / "context.obj"))
     building = [CheckGeometry("max_volume", "Building", _box([-20, -50, -5], [-10, 50, -1]))]
-    settings = CheckSettings(metric="sky_view", sample_spacing=1.0)
+    # Patch centres, which all meet the cover; jittered sub-rays within 1.7° of the horizon pass under its edge.
+    settings = CheckSettings(metric="sky_view", sample_spacing=1.0, rays_per_patch=1)
     free = solar_check(point, building, settings, device="cpu").values["open"]
     context_only = solar_check(point, building, settings, blocking=[tmp_path / "context.obj"], device="cpu")
     both = solar_check(point, building, settings, blocking=[str(tmp_path / "context.obj"), tmp_path / "terrain.obj"],

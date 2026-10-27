@@ -1207,14 +1207,17 @@ if _warp_available:
         clip_id: wp.uint64,                  # BVH of a solid the blocking mesh counts inside of only
         has_clip: int,                       # 0: no clip solid
         clip_tolerance: float,
-        surroundings_id: wp.uint64,          # BVH of surroundings that block on their own (neighbours, terrain)
-        has_surroundings: int,               # 0: none
-        surroundings_tolerance: float,
+        blocking_id: wp.uint64,              # BVH of meshes that block on their own (context, terrain)
+        has_blocking: int,                   # 0: none
+        blocking_tolerance: float,
         points: wp.array(dtype=wp.vec3),     # (P,) test points
         normals: wp.array(dtype=wp.vec3),    # (P,) outward unit normals
         directions: wp.array(dtype=wp.vec3),  # (D,) unit vectors toward the sun or sky
         values: wp.array(dtype=float),       # (D,) value each direction carries
         use_cosine: int,                     # 1: a direction counts value * cos(incidence)
+        sub_side: int,                       # > 1: direction k is a sky sub-ray slot (see below); else directions[k]
+        patch_cells: wp.array(dtype=wp.vec4),  # extent of each sky patch (sub_side > 1)
+        patch_ids: wp.array(dtype=int),      # (D,) sky patch of each direction (sub_side > 1)
         d_start: int,                        # this launch's directions: [d_start, d_end)
         d_end: int,
         origin_offset: float,                # origin moved this far along the normal (m)
@@ -1223,13 +1226,16 @@ if _warp_available:
         out: wp.array(dtype=wp.float64),     # (P,) visible weight, accumulated across launches
     ):
         """Add the value of every direction in [d_start, d_end) that a test
-        point faces and sees past the mesh and the surroundings.
+        point faces and sees past the mesh and the blocking meshes.
 
-        One thread per test point.  A ray is blocked where it is inside the
+        One thread per test point.  With sub_side > 1, direction k is
+        sub-ray k % sub_side**2 of patch patch_ids[k], drawn for test point
+        i as the carving draws it (_sky_sub_ray_direction, see the note
+        above _lowbias32).  A ray is blocked where it is inside the
         mesh's solid and, with a clip solid, inside the clip solid too: the
-        blocking mesh then counts only where it overlaps the clip (a carved
+        mesh then counts only where it overlaps the clip (a carved
         envelope that bulges past the maximum volume blocks nothing outside
-        it).  The surroundings block wherever the ray meets them.  Inside
+        it).  The blocking meshes block wherever the ray meets them.  Inside
         and outside follow the faces' orientation (closed meshes with
         outward normals); a start inside is judged by :func:`_check_start`,
         with each mesh's own tolerance.
@@ -1239,16 +1245,20 @@ if _warp_available:
         o = points[i] + n * origin_offset
         near_mesh = int(0)
         near_clip = int(0)
-        near_surroundings = int(0)
+        near_blocking = int(0)
         if has_mesh != 0:
             near_mesh = _check_near_surface(mesh_id, o, n, mesh_tolerance)
         if has_clip != 0:
             near_clip = _check_near_surface(clip_id, o, n, clip_tolerance)
-        if has_surroundings != 0:
-            near_surroundings = _check_near_surface(surroundings_id, o, n, surroundings_tolerance)
+        if has_blocking != 0:
+            near_blocking = _check_near_surface(blocking_id, o, n, blocking_tolerance)
+        sub = sub_side * sub_side
         acc = wp.float64(0.0)
         for k in range(d_start, d_end):
             d = directions[k]
+            if sub_side > 1:
+                pid = patch_ids[k]
+                d = _sky_sub_ray_direction(patch_cells[pid], sub_side, i, pid, k - (k // sub) * sub)
             c = wp.dot(n, d)
             if c <= 0.0:
                 continue
@@ -1297,9 +1307,9 @@ if _warp_available:
                         refresh_clip = 1
                     else:
                         break
-            if visible == 1 and has_surroundings != 0:
-                if _check_solid_blocks(surroundings_id, o, d, c, max_t, min_hit, surroundings_tolerance,
-                                       near_surroundings) == 1:
+            if visible == 1 and has_blocking != 0:
+                if _check_solid_blocks(blocking_id, o, d, c, max_t, min_hit, blocking_tolerance,
+                                       near_blocking) == 1:
                     visible = 0
             if visible == 1:
                 w = values[k]

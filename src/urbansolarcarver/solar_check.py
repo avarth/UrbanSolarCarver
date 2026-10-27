@@ -12,12 +12,16 @@ edge beyond the true surface bias the values.
 
 The metrics and their settings are in :mod:`check_settings`.  Directions
 (:func:`check_directions`) are the sun positions of the period for sun
-hours, and otherwise cells of Tregenza's 145 sky patches, each split into
-``n x n`` cells of equal solid angle (``n`` the square root of
-``rays_per_patch``) with one ray through each cell centre.  A direction carries a value: an
-hour share for sun hours, the patch's radiation share for the solar
-energies (Ladybug sky matrix, Perez), or an analytic sky weight for the
-sky metrics, which are normalised by an unobstructed horizontal surface.
+hours, and otherwise Tregenza's 145 sky patches.  With ``rays_per_patch``
+1 a patch is traced through Ladybug's patch centre; above 1 it is traced as
+the carving traces it, through ``rays_per_patch`` jittered sub-rays, one in
+each cell of equal solid angle, placed by a hash of the test point's index,
+the patch and the cell (:func:`sky_patches.sub_ray_directions`).  A
+direction carries a value: an hour share for sun hours, the patch's
+radiation for the solar energies (Ladybug sky matrix, Perez), or an
+analytic sky weight for the sky metrics, which are normalised by an
+unobstructed horizontal surface; a sub-ray carries an equal share of its
+patch's value.
 
 :func:`evaluate_test_points` traces every direction a test point faces
 against a mesh with Warp's BVH ray queries
@@ -62,76 +66,19 @@ _RAYS_PER_LAUNCH = 1 << 25
 _MIN_HIT = 1e-3
 
 
-class SkyCells(NamedTuple):
-    """Directions through the cells of a sky subdivision (:func:`sky_cells`)."""
-    directions: np.ndarray           # (C, 3) float64 unit vectors, z up, +Y north before north_deg
-    solid_angles: np.ndarray         # (C,) float64 solid angle of each cell (sr); they sum to 2 pi
-    patch_index: np.ndarray          # (C,) int, the patch each cell belongs to
-    patch_solid_angles: np.ndarray   # (patches,) float64
-
-
-def sky_cells(density: str = "tregenza", cells_per_side: int = 2) -> SkyCells:
-    """Split each patch of the Tregenza sky into ``cells_per_side**2`` cells of equal solid angle.
-
-    The patches are those of Ladybug's ViewSphere, in its order: rows of
-    equal altitude from the horizon up (bands of 12°), the patches of a row starting at azimuth 0 (+Y)
-    clockwise, then the zenith cap.  A patch spans its row's band and
-    360° / count of azimuth around its centre; it is split in equal steps
-    of sin(altitude) and of azimuth, so its cells have equal solid angles,
-    and the zenith cap in rings of equal solid angle, each in equal
-    azimuth sectors.  With ``cells_per_side`` 1 the directions are
-    Ladybug's patch centres, so a check with one ray per patch matches
-    Ladybug's incident radiation for the same sky matrix.
-    """
-    from ladybug.viewsphere import ViewSphere, view_sphere
-    if density != "tregenza":
-        raise ValueError(f"sky_cells: density must be 'tregenza', got {density!r}")
-    rows, band_deg = ViewSphere.TREGENZA_PATCHES_PER_ROW, 90.0 / 7.5
-    centres = view_sphere.tregenza_dome_vectors
-    n = int(cells_per_side)
-    if n < 1:
-        raise ValueError(f"sky_cells: cells_per_side must be at least 1, got {cells_per_side}")
-    band = math.radians(band_deg)
-    steps = (np.arange(n) + 0.5) / n
-    directions, omegas, patches, patch_omegas = [], [], [], []
-    patch = 0
-    for row, count in enumerate(rows):
-        s0, s1 = math.sin(row * band), math.sin((row + 1) * band)
-        width = 2.0 * math.pi / count
-        patch_omegas.extend([width * (s1 - s0)] * count)
-        sin_alt = s0 + steps * (s1 - s0)                                    # (n,)
-        centre_az = np.arange(count) * width                                 # (count,)
-        az = centre_az[:, None] + (steps - 0.5)[None, :] * width             # (count, n)
-        alt_grid = np.broadcast_to(np.arcsin(sin_alt)[None, :, None], (count, n, n))
-        az_grid = np.broadcast_to(az[:, None, :], (count, n, n))
-        directions.append(np.stack([np.cos(alt_grid) * np.sin(az_grid), np.cos(alt_grid) * np.cos(az_grid),
-                                    np.sin(alt_grid)], axis=-1).reshape(-1, 3))
-        omegas.append(np.full(count * n * n, width * (s1 - s0) / (n * n)))
-        patches.append(np.repeat(np.arange(patch, patch + count), n * n))
-        patch += count
-    s0 = math.sin(len(rows) * band)
-    cap_omega = 2.0 * math.pi * (1.0 - s0)
-    patch_omegas.append(cap_omega)
-    sin_alt = s0 + steps * (1.0 - s0)
-    alt_grid, az_grid = np.meshgrid(np.arcsin(sin_alt), steps * 2.0 * math.pi, indexing="ij")
-    directions.append(np.stack([np.cos(alt_grid) * np.sin(az_grid), np.cos(alt_grid) * np.cos(az_grid),
-                                np.sin(alt_grid)], axis=-1).reshape(-1, 3))
-    omegas.append(np.full(n * n, cap_omega / (n * n)))
-    patches.append(np.full(n * n, patch))
-    directions = np.concatenate(directions)
-    if n == 1:
-        directions = np.array([[v.x, v.y, v.z] for v in centres], dtype=np.float64)
-    directions /= np.linalg.norm(directions, axis=1, keepdims=True)
-    return SkyCells(directions, np.concatenate(omegas), np.concatenate(patches), np.asarray(patch_omegas))
-
-
 class CheckDirections(NamedTuple):
-    """The directions of a check and what each carries (:func:`check_directions`)."""
+    """The directions of a check and what each carries (:func:`check_directions`).
+
+    With ``sub_side`` above 1, direction ``j`` is a slot: sub-ray
+    ``j % sub_side**2`` of patch ``patch_ids[j]``, whose direction the kernel
+    draws per test point (``directions`` then holds the patch centre)."""
     directions: np.ndarray   # (D, 3) float32 unit vectors toward the sun or the sky, model coordinates
     values: np.ndarray       # (D,) float64 value of each direction
     use_cosine: bool         # a visible direction adds value * cos(incidence), else value
     scale: float             # the visible sum times this is the metric (100 / horizontal sum for %, else 1)
     unit: str
+    patch_ids: Optional[np.ndarray] = None   # (D,) int32 sky patch of each direction; None for the sun
+    sub_side: int = 1                        # sub-rays per patch = sub_side**2; 1 traces `directions`
 
 
 def check_directions(settings: CheckSettings) -> CheckDirections:
@@ -140,17 +87,25 @@ def check_directions(settings: CheckSettings) -> CheckDirections:
     * sun_hours: the sun positions of the period at ``sun_steps_per_hour``,
       above ``min_altitude``, each worth 1 / ``sun_steps_per_hour`` h, no
       cosine.
-    * solar_energy, useful_solar_energy: the sky cells, each carrying its
-      patch's cumulative radiation (kWh/m², Ladybug sky matrix over the
-      period's hours, as in irradiance and benefit carving) times its share
-      of the patch's solid angle; with the cosine, a visible sum is the
-      energy the surface receives.
-    * sky_component: CIE overcast luminance (1 + 2 sin α) / 3 times the
-      cell's solid angle; cooling_sky: the cell's solid angle times the
-      clear sky's emissivity deficit (:func:`sky_patches.sky_emissivity_deficit`);
-      sky_view: the solid angle over π.  These are percentages of an
-      unobstructed horizontal surface: ``scale`` is 100 over the cosine-
-      weighted sum of every cell for a normal pointing up.
+    * solar_energy, useful_solar_energy: the sky patches, each carrying its
+      cumulative radiation (kWh/m², Ladybug sky matrix over the period's
+      hours, as in irradiance and benefit carving); with the cosine, a
+      visible sum is the energy the surface receives.
+    * sky_component: CIE overcast luminance (1 + 2 sin α) / 3 at the patch
+      centre times the patch's solid angle; cooling_sky: the solid angle
+      times the clear sky's emissivity deficit at the centre
+      (:func:`sky_patches.sky_emissivity_deficit`); sky_view: the solid
+      angle over π.  These are percentages of an unobstructed horizontal
+      surface: ``scale`` is 100 over the cosine-weighted sum of every patch
+      for a normal pointing up, the cosine taken at the patch centre for one
+      ray per patch and as its mean over the patch for sub-rays, so that
+      jittered sub-rays reach 100 on average.
+
+    The sky patches are not turned by ``north_deg``: as in the carving, they
+    lie in the model's frame and the radiation of each is computed for the
+    turned sky (:func:`sky_patches.compute_EPW_based_weights`).  With
+    ``rays_per_patch`` above 1 each patch becomes ``rays_per_patch`` slots
+    that share its value equally (``patch_ids``, ``sub_side``).
     """
     spec = CHECK_METRICS[settings.metric]
     if settings.metric == "sun_hours":
@@ -168,21 +123,33 @@ def check_directions(settings: CheckSettings) -> CheckDirections:
         values = np.full(len(suns), 1.0 / settings.sun_steps_per_hour)
         return CheckDirections(suns.astype(np.float32), values, False, 1.0, spec.unit)
 
-    cells = sky_cells(settings.sky_density, math.isqrt(settings.rays_per_patch))
-    sin_alt = cells.directions[:, 2]
+    from ladybug.viewsphere import view_sphere
+    from .sky_patches import tregenza_patch_cells
+    side = math.isqrt(settings.rays_per_patch)
+    sub = side * side
+    centres = np.array([[v.x, v.y, v.z] for v in view_sphere.tregenza_dome_vectors], dtype=np.float64)
+    cells = tregenza_patch_cells()
+    solid_angles = (cells[:, 1] - cells[:, 0]) * (cells[:, 3] - cells[:, 2])
+    sin_alt = centres[:, 2]
+
+    def slots(values, scale):
+        patch_ids = np.repeat(np.arange(len(centres), dtype=np.int32), sub)
+        return CheckDirections(centres[patch_ids].astype(np.float32), values[patch_ids] / sub, True, scale,
+                               spec.unit, patch_ids, side)
+
     if settings.metric in ("solar_energy", "useful_solar_energy"):
-        values = _patch_radiation(settings)[cells.patch_index] * (
-            cells.solid_angles / cells.patch_solid_angles[cells.patch_index])
-        return CheckDirections(cells.directions.astype(np.float32), values, True, 1.0, spec.unit)
+        return slots(_patch_radiation(settings), 1.0)
     if settings.metric == "sky_component":
-        values = cells.solid_angles * (1.0 + 2.0 * sin_alt) / 3.0
+        values = solid_angles * (1.0 + 2.0 * sin_alt) / 3.0
     elif settings.metric == "cooling_sky":
         from .sky_patches import sky_emissivity_deficit
-        values = cells.solid_angles * sky_emissivity_deficit(settings.dew_point_celsius, settings.bliss_k, sin_alt)
+        values = solid_angles * sky_emissivity_deficit(settings.dew_point_celsius, settings.bliss_k, sin_alt)
     else:   # sky_view
-        values = cells.solid_angles / math.pi
-    horizontal = float(np.sum(values * np.clip(sin_alt, 0.0, None)))
-    return CheckDirections(cells.directions.astype(np.float32), values, True, 100.0 / horizontal, spec.unit)
+        values = solid_angles / math.pi
+    # Sub-rays are uniform in solid angle over their patch, so sin(altitude) averages (low + high) / 2 there.
+    horizontal_cosine = sin_alt if side == 1 else (cells[:, 0] + cells[:, 1]) / 2.0
+    horizontal = float(np.sum(values * horizontal_cosine))
+    return slots(values, 100.0 / horizontal)
 
 
 def _patch_radiation(settings: CheckSettings) -> np.ndarray:
@@ -227,7 +194,10 @@ def evaluate_test_points(
     Every direction in front of a point (positive cosine to its normal)
     that nothing blocks adds its value, times the cosine when
     ``directions.use_cosine``; the sum is multiplied by
-    ``directions.scale``.  A ray is blocked where it runs inside the
+    ``directions.scale``.  With ``directions.sub_side`` above 1 a sky
+    direction is traced as the carving's jittered sub-ray of its patch, the
+    hash taking the point's index in *points* as its point id, and the
+    cosine is that of the sub-ray.  A ray is blocked where it runs inside the
     mesh's solid and, with *clip_mesh*, inside that solid too: a carved
     envelope or massing is clipped by the maximum volume this way, so the
     part of a voxel or smoothed surface that lies past the maximum volume
@@ -286,6 +256,16 @@ def evaluate_test_points(
     wp_normals = wp.array(normals.astype(np.float32), dtype=wp.vec3, device=wp_device)
     wp_dirs = wp.array(np.ascontiguousarray(directions.directions, dtype=np.float32), dtype=wp.vec3, device=wp_device)
     wp_values = wp.array(np.asarray(directions.values, dtype=np.float32), dtype=float, device=wp_device)
+    # Sky sub-rays: the kernel draws each slot's direction from the patch's extent, the point's index here and
+    # the slot's place in its patch, as the carving does.  With sub_side 1 the arrays are placeholders.
+    sub_side = int(directions.sub_side)
+    if sub_side > 1:
+        from .sky_patches import tregenza_patch_cells
+        cells, patch_ids = tregenza_patch_cells(), directions.patch_ids
+    else:
+        cells, patch_ids = np.zeros((1, 4)), np.zeros(1)
+    wp_cells = wp.array(cells.astype(np.float32), dtype=wp.vec4, device=wp_device)
+    wp_patch_ids = wp.array(np.asarray(patch_ids, dtype=np.int32), dtype=int, device=wp_device)
     out = wp.zeros(num_points, dtype=wp.float64, device=wp_device)
 
     def _bvh(trimesh_mesh):
@@ -317,6 +297,7 @@ def evaluate_test_points(
         wp.launch(
             mesh_visible_weight_kernel, dim=num_points, device=wp_device,
             inputs=[*mesh_args, wp_points, wp_normals, wp_dirs, wp_values, int(directions.use_cosine),
+                    sub_side, wp_cells, wp_patch_ids,
                     start, min(start + chunk, num_dirs), float(origin_offset), _MIN_HIT, float(ray_length), out],
         )
         wp.synchronize_device(wp_device)
