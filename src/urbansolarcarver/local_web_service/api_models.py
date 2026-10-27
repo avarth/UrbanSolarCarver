@@ -102,6 +102,25 @@ class InputFileChange(BaseModel):
     noticed: str | None = None      # a changed one: when the service found the change (a later change of the file is another notice)
 
 
+class InspectedFile(BaseModel):
+    """What the Inspect workspace shows of one input mesh file (inspection.py)."""
+    role: str
+    file_name: str
+    triangle_count: int
+    area_m2: float
+    bounds: list[list[float]]           # [[xmin, ymin, zmin], [xmax, ymax, zmax]]
+    body_count: int                     # the groups of triangles joined by shared edges
+    closed_body_count: int              # the bodies with no open edge
+    surface_count: int | None = None    # the same groups for a test surface file; None for other roles
+    flippable: bool = False             # a test surface file that is open somewhere; False when closed as a whole and for other roles
+    original_kept: bool = False         # a test surface file whose original from before a flip is kept
+
+
+class InspectReply(BaseModel):
+    """The mesh files of a project in the order max volume, test surfaces, context, terrain, then by file name."""
+    files: list[InspectedFile]
+
+
 class StageStatusReply(BaseModel):
     """Whether each pipeline stage of a project has output that matches the settings and inputs now."""
     stages: dict[str, StageState]   # stage name -> state, in pipeline order; preprocessing and thresholding sum up the criteria

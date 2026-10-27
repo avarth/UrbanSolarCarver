@@ -34,10 +34,10 @@ from ..errors import ConfigError
 from ..mode_registry import MODES
 from ..pydantic_schemas import UserConfig
 from ..stage_settings import PIPELINE_STAGES
-from . import folder_picker, simulation, user_preferences
+from . import folder_picker, inspection, simulation, user_preferences
 from .api_models import (
     CancelRunReply, ColdPeriodReply, ConfigErrorReply, ConfigReply, ConfigValuesRequest, CreateCriterionRequest, CreateProjectRequest,
-    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, MissingInputsReply, ModeInfo, ProjectDetail,
+    CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, SunPath,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
 )
@@ -718,6 +718,17 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             await websocket.close()
         except WebSocketDisconnect:
             return      # the browser left; the run goes on and a new connection reads its events from the start
+
+    @router.get("/projects/{name}/inspect", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}, 422: _ERROR_RESPONSES[422]})
+    def inspect_inputs(name: str) -> InspectReply:
+        """The summary of each mesh file of the project (inspection.py); allowed while a run is active."""
+        return inspection.project_inspection(folder_in_use.store, name)
+
+    @router.get("/projects/{name}/inspect/test_surfaces/{file_name}/geometry", response_class=Response,
+                responses={200: {"content": {"application/octet-stream": {}}}, 404: {"model": ErrorDetailReply, "description": "There is no such project or file."}})
+    def inspect_test_surface_geometry(name: str, file_name: str) -> Response:
+        """The triangles of a test surface file with the surface of each (layout in inspection.inspection_geometry)."""
+        return Response(inspection.inspection_geometry(folder_in_use.store, name, file_name), media_type="application/octet-stream", headers=NO_CACHE)
 
     @router.get("/projects/{name}/run/summary")
     def run_summary(name: str) -> RunSummary:
