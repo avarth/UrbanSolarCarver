@@ -196,8 +196,16 @@ export let service: ChainService;
 export async function openChain(entries: CriterionEntry[], stages: Record<string, CriterionStages> = Object.fromEntries(entries.map((entry) => [entry.id, CURRENT])),
                                 prepare: (service: ChainService) => void = () => {}, unlistedTestSurfaceFiles: string[] = [],
                                 adjust: (opened: ProjectDetail) => ProjectDetail = (opened) => opened, steps: Parameters<typeof openWorkspace>[2] = {}) {
-  service = new ChainService(entries, { ...stages });
-  prepare(service);
+  await openChainWith(new ChainService(entries, { ...stages }), entries, stages, prepare, unlistedTestSurfaceFiles, adjust, steps);
+}
+
+/** openChain against *chainService* (a ChainService made with these entries and stages, or a subclass of it). */
+export async function openChainWith<Service extends ChainService>(
+  chainService: Service, entries: CriterionEntry[], stages: Record<string, CriterionStages>, prepare: (service: Service) => void = () => {},
+  unlistedTestSurfaceFiles: string[] = [], adjust: (opened: ProjectDetail) => ProjectDetail = (opened) => opened, steps: Parameters<typeof openWorkspace>[2] = {},
+) {
+  service = chainService;
+  prepare(chainService);
   service.stages = { ...CARVED, ...summedStages(stages) };
   service.summaryCriteria = entries.filter((entry) => !entry.bypassed).map((entry, index) => carvingSummaryOf(entry, [61, 80, 90][index]));
   const files = [...new Set([...entries.flatMap((entry) => entry.test_surface_files ?? []), ...unlistedTestSurfaceFiles])].map((name) => ({ name, triangle_count: 1 }));

@@ -4,7 +4,8 @@
 // selected criterion's, shown in its panel; the steps read them as one), the stage status the step summaries read
 // (use_stage_status.ts, workspace_view_state.ts), and the sun path (sun_path_request.ts) the 3D view draws. The criteria's selection,
 // run conditions and cards are in use_workspace_criteria.ts. The parts that start runs and show their results (the criterion's
-// carving rule, Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop.
+// carving rule, Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop. In Simulate the
+// steps are hidden and the studies (use_studies.ts) are shown over the view (SimulateView).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
@@ -25,6 +26,7 @@ import { sharedRefusalShown, splitSettings, useBothForms } from "../settings_for
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { SimulateView } from "../simulate/SimulateView";
+import { useStudies } from "../simulate/use_studies";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
 import { boundsOf } from "./input_meshes";
@@ -103,6 +105,8 @@ export interface OpenProjectSettingsSaver {
 export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const { token, project, modes, criterionKeys, warmUpState, runs, onServiceProblem } = props;
   const criteria = useCriteria(token, project);
+  // The studies of Simulate, kept while Design is shown (the selection stays); SimulateView reads them when Simulate opens.
+  const studies = useStudies(token, project.name, onServiceProblem);
   // The criterion whose settings the criterion form holds: the selected one, once its settings are in (a card just selected waits
   // for GET criteria/{id}/settings). Its panel, its results and the run's check of its test surfaces follow it. A project that lists
   // none (its migration failed) still has the settings of one.
@@ -345,6 +349,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   useEffect(() => {
     if (addFilesRequest > 0) panel.current?.querySelector<HTMLButtonElement>(".inputs-step .input-add")?.focus();
   }, [addFilesRequest]);
+  // Shown in Design only: its "Add files" leads to the Inputs step, which Simulate hides.
   const hasNoMeshInputs = files.max_volume.length === 0 && files.test_surfaces.length === 0;
   const emptyViewContent = hasNoMeshInputs && (
     <div className="viewer-empty-state">
@@ -354,6 +359,11 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
       </button>
       <button type="button" className="link-button" onClick={props.onShowProjects}>{messages.orTryAnExample}</button>
     </div>
+  );
+
+  const simulateView = (
+    <SimulateView project={project.name} studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
+                  onStoredFilesChange={() => void testSurfaceCalls.reloadStoredFiles()} onServiceProblem={onServiceProblem} />
   );
 
   return (
@@ -368,9 +378,9 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                     hemisphere={sceneSphere}
                     maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
                     shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
-                    centreContent={emptyViewContent} localOrigin={origin} mode={form.mode}
+                    centreContent={props.mode === "design" && emptyViewContent} localOrigin={origin} mode={form.mode}
                     analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer}
-                    {...(props.mode === "simulate" ? { overlayContent: <SimulateView /> } : {})} />
+                    {...(props.mode === "simulate" ? { overlayContent: simulateView } : {})} />
       </section>
     </div>
   );

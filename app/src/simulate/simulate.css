@@ -1,16 +1,113 @@
-/* Simulate's content over the 3D view (a card at the top left; the view stays visible and usable around it). */
+/* Simulate's content over the 3D view: the studies panel at the top left, collapsible to its icon button, and the popover of a study's
+   settings beside it. The view stays visible and usable around both. */
 
 .simulate-view {
   position: absolute;
   top: 12px;
   left: 12px;
-  box-sizing: border-box;
-  max-width: min(360px, calc(100% - 24px));
-  padding: calc(var(--space-unit) * 3);
-  background: var(--colour-panel);
+  z-index: 5;
+  max-width: calc(100% - 24px);
   color: var(--colour-ink);
-  border: 1px solid var(--colour-line);
-  border-radius: var(--radius-large);
 }
 
-.simulate-view p { margin: 0; }
+.studies-panel {
+  position: relative;
+  box-sizing: border-box;
+  width: 280px;
+  max-width: 100%;
+  padding: calc(var(--space-unit) * 2);
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 12%, transparent);
+}
+.studies-panel-collapsed { width: auto; padding: var(--space-unit); }
+
+.studies-panel-header { display: flex; align-items: center; gap: calc(var(--space-unit) * 2); }
+.studies-panel-title { margin: 0; font-size: var(--text-body); font-weight: 600; }
+
+.studies-panel-toggle,
+.study-row-settings,
+.study-popover-close {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--colour-ink);
+  cursor: pointer;
+}
+.studies-panel-toggle:hover, .study-row-settings:hover, .study-popover-close:hover,
+.study-row-settings[aria-expanded="true"] { background: var(--colour-accent-soft); }
+
+.studies-panel-body { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); margin-top: calc(var(--space-unit) * 2); }
+.studies-panel-body p { margin: 0; }
+.studies-panel-problem { color: var(--colour-error); font-size: var(--text-secondary); }
+
+.study-list { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; padding: 0; list-style: none; }
+.study-row { display: flex; align-items: center; gap: var(--space-unit); border: 1px solid transparent; border-radius: var(--radius-small); }
+.study-row[aria-current="true"] { border-color: var(--colour-accent); background: var(--colour-accent-soft); }
+.study-row-select {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: calc(var(--space-unit) * 2);
+  min-width: 0;
+  padding: var(--space-unit) calc(var(--space-unit) * 2);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.study-row-swatch { flex: none; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--colour-ink) 25%, transparent); }
+.study-row-text { display: flex; flex-direction: column; min-width: 0; }
+.study-row-name { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.study-row-line { overflow: hidden; color: var(--colour-muted); font-size: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; }
+
+.studies-panel-actions { display: flex; flex-wrap: wrap; align-items: flex-start; gap: calc(var(--space-unit) * 2); }
+.studies-panel-actions .run-button-area { flex: 1 1 6rem; }
+
+.add-study-menu [role="menuitem"] { display: flex; justify-content: space-between; gap: calc(var(--space-unit) * 3); }
+.add-study-menu-unit { color: var(--colour-muted); }
+
+/* The popover of a study: beside the panel, as tall as the window lets it be, scrolling inside. */
+.study-popover {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+  width: 340px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+  padding: calc(var(--space-unit) * 3);
+  background: var(--colour-panel);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+}
+.study-popover-header { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.study-popover-header h3 { margin: 0; font-size: var(--text-body); font-weight: 600; }
+.study-popover p { margin: 0; }
+
+.study-field { display: flex; flex-direction: column; gap: var(--space-unit); }
+.study-field-value { display: flex; align-items: center; gap: var(--space-unit); }
+.study-field-check { flex-direction: row; align-items: center; }
+.study-more-settings { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.study-more-settings > summary { cursor: pointer; }
+.study-more-settings[open] > summary { margin-bottom: calc(var(--space-unit) * 2); }
+.study-files-title { font-weight: 600; }
+
+/* Narrow windows: the popover goes under the panel instead of beside it. */
+@media (max-width: 720px) {
+  .studies-panel { width: min(280px, calc(100vw - 48px)); }
+  .study-popover { position: static; width: auto; max-height: 60vh; margin-top: calc(var(--space-unit) * 2); }
+}

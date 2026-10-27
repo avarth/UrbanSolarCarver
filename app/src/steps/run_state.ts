@@ -7,9 +7,10 @@
 // massing: the progress of each is kept under its own key (progressKey), so two criteria's stages do not overwrite each other.
 //
 // useRunLoop runs one pipeline at a time, as the engine does: it starts a run, follows its events and keeps the last run's
-// state, for any project, so a run goes on being followed while another project is open.
+// state, for any project, so a run goes on being followed while another project is open. A simulation of the studies (Simulate's
+// Run) is one more job of the same loop, of one stage, "simulate", whose events name the study being run.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, cancelRun, failureTextOf, serviceProblemOf, startRun } from "../api_client/client";
+import { ApiError, cancelRun, failureTextOf, serviceProblemOf, startRun, startSimulation as postSimulation } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
 import { messages } from "../messages";
 import type { PipelineStage } from "./step_summaries";
@@ -49,13 +50,19 @@ export interface RunState {
   lostConnectionCode: number | null;
   startedAt: number;
   endedAt: number | null;
+  /** In a simulation, the id of the study the engine is running (from its progress events); absent in a pipeline run. */
+  study?: string | null;
 }
 
-const STAGE_DISPLAY_NAMES: Record<PipelineStage, string> = {
+/** The one stage of a simulation (Simulate's Run), outside the pipeline stages. */
+export const SIMULATE_STAGE = "simulate";
+
+const STAGE_DISPLAY_NAMES: Record<PipelineStage | typeof SIMULATE_STAGE, string> = {
   preprocessing: "Sun analysis",
   thresholding: "Carving",
   exporting: "Envelope mesh",
   massing: "Building massing",
+  simulate: "Simulation",
 };
 
 export function stageDisplayName(stage: string): string {
@@ -130,7 +137,7 @@ export function runReducer(state: RunState, event: RunEvent, now = Date.now()): 
         if (index < position) stages[earlier] = { ...stages[earlier], state: "done" };
       });
       stages[key] = { state: "running", done: event.done, total: event.total };
-      return { ...state, stages };
+      return event.study === undefined ? { ...state, stages } : { ...state, stages, study: event.study };
     }
     case "issue":
       return { ...state, issues: [...state.issues, { stage: event.stage, code: event.code, message: event.message }] };
@@ -204,9 +211,23 @@ export function runProgressShare(state: RunState): number {
 /**
  * The button that started a run: its progress and outcome are shown under it (UX 6.3). "build" is Carving's Build envelope and
  * massing, which opens the Envelope and massing step and shows its run there; "build_envelope" and "build_massing" are the
- * buttons of that step's two parts (R2 5).
+ * buttons of that step's two parts (R2 5). "simulate" is Simulate's Run: a simulation of the studies, which shares the engine with
+ * the pipeline runs (one job at a time) but none of their stages.
  */
-export type RunOrigin = "settings_run_analysis" | "carving_run_analysis" | "carving_update" | "build" | "build_envelope" | "build_massing" | "export_format";
+export type RunOrigin = "settings_run_analysis" | "carving_run_analysis" | "carving_update" | "build" | "build_envelope" | "build_massing" | "export_format"
+  | "simulate";
+
+/** The run of *project* the steps of Design follow (the last run's record, unless it was a simulation); null otherwise. */
+export function pipelineRecordOf(runs: Pick<RunLoop, "current">, project: string): RunRecord | null {
+  const record = runs.current;
+  return record !== null && record.project === project && record.origin !== "simulate" ? record : null;
+}
+
+/** Why a run cannot start now: a simulation or a run of the pipeline is starting or under way; null when none is. */
+export function activeRunReason(activeRun: RunLoop["activeRun"]): string | null {
+  if (activeRun === null) return null;
+  return activeRun.origin === "simulate" ? messages.simulationInProgress : messages.runInProgress;
+}
 
 export interface RunRecord {
   /** Counts the runs asked for in this page, so each one is followed once. */
@@ -251,6 +272,11 @@ export interface RunLoop {
   notice: RunNotice | null;
   /** Brings *produce* up to date; resolves at the run's last event. */
   start: (project: string, produce: string[], origin: RunOrigin, options?: RunStartOptions) => Promise<RunOutcome>;
+  /**
+   * Runs the studies of *project* (POST simulate) as a run of origin "simulate", followed through the same events; resolves at its
+   * last event. It changes no pipeline stage, so the stage status of the project is not taken as stale while it runs.
+   */
+  startSimulation: (project: string) => Promise<RunOutcome>;
   cancel: () => void;
   /**
    * Made before a request about *project* (its stage status), it tells when the reply comes whether the reply still holds: not
@@ -365,23 +391,54 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
       showNotice(project, origin, messages.resultsUpToDate);
       return "up_to_date";
     }
-    const runId = reply.run_id;
-    show({ serial, project, origin, runId, state: initialRunState(runOrderOf(reply.stages, reply.criterion_stages, options.chainOrder)), refusal: null,
-           isSuperseded });
-    return new Promise<RunOutcome>((resolve) => {
-      stopEvents.current = subscribeToRunEvents(runId, token, (event) => {
-        const record = latestRecord.current!;
-        const state = runReducer(record.state, event);
-        if (state === record.state) return;
-        show({ ...record, state });
-        if (state.final === null) return;
-        stopEvents.current?.();
-        stopEvents.current = null;
-        release();
-        if (event.type === "connection_lost") reportProblem.current(problemOfLostConnection(event.code));
-        resolve(state.final);
-      });
+    show({ serial, project, origin, runId: reply.run_id, state: initialRunState(runOrderOf(reply.stages, reply.criterion_stages, options.chainOrder)),
+           refusal: null, isSuperseded });
+    return followEvents(reply.run_id);
+  }, [token]);
+
+  /** Follows the events of the run shown last until its last event, then lets the next run start. */
+  const followEvents = (runId: string) => new Promise<RunOutcome>((resolve) => {
+    stopEvents.current = subscribeToRunEvents(runId, token, (event) => {
+      const record = latestRecord.current!;
+      const state = runReducer(record.state, event);
+      if (state === record.state) return;
+      show({ ...record, state });
+      if (state.final === null) return;
+      stopEvents.current?.();
+      stopEvents.current = null;
+      release();
+      if (event.type === "connection_lost") reportProblem.current(problemOfLostConnection(event.code));
+      resolve(state.final);
     });
+  });
+
+  // A simulation holds the engine as a run does, but is not a run of the project's stages: busyProject and the count of the
+  // project's runs stay as they were, so a stage status read meanwhile still holds.
+  const startSimulation = useCallback(async (project: string): Promise<RunOutcome> => {
+    const origin: RunOrigin = "simulate";
+    if (busy.current) {
+      showNotice(project, origin, messages.runInProgress);
+      return "not_started";
+    }
+    busy.current = true;
+    setActiveRun({ project, origin });
+    const serial = ++runsAskedFor.current;
+    let reply;
+    try {
+      reply = await postSimulation(token, project);
+    } catch (error) {
+      release();
+      if (serviceProblemOf(error) !== "other") reportProblem.current(error);
+      else show({ serial, project, origin, runId: null, state: initialRunState([]), refusal: failureTextOf(error) });
+      return "not_started";
+    }
+    if (reply.run_id === null) {
+      release();
+      showNotice(project, origin, messages.resultsUpToDate);
+      return "up_to_date";
+    }
+    show({ serial, project, origin, runId: reply.run_id, state: initialRunState(reply.stages), refusal: null });
+    return followEvents(reply.run_id);
   }, [token]);
 
   const cancel = useCallback(() => {
@@ -398,10 +455,10 @@ export function useRunLoop(token: string, onServiceProblem: (error: unknown) => 
 
   const forget = useCallback((project: string) => {
     const record = latestRecord.current;
-    if (record === null || record.project.toLowerCase() !== project.toLowerCase() || busyProject.current !== null) return;
+    if (record === null || record.project.toLowerCase() !== project.toLowerCase() || busy.current) return;
     latestRecord.current = null;
     setCurrent(null);
   }, []);
 
-  return { current, activeRun, notice, start, cancel, replyStillHolds, forget };
+  return { current, activeRun, notice, start, startSimulation, cancel, replyStillHolds, forget };
 }

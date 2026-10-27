@@ -27,6 +27,14 @@ export type CriterionEntry = Schemas["CriterionEntry"];
 export type CriterionCarvingSummary = Schemas["CriterionCarvingSummary"];
 export type ChainSummary = Schemas["ChainSummary"];
 export type CriterionSettingsReply = Schemas["CriterionSettingsReply"];
+export type StudiesReply = Schemas["StudiesReply"];
+export type StudyWithState = Schemas["StudyWithState"];
+export type StudyEntry = Schemas["StudyEntry"];
+export type MetricInfo = Schemas["MetricInfo"];
+/** What a new study starts from: a metric (its defaults, no files), or a criterion (its metric, period, mode settings and files). */
+export type StudySource = { metric: string } | { from_criterion: string };
+/** A change of a study: what is not given stays; a target of null removes the target. */
+export type StudyChange = Schemas["UpdateStudyRequest"];
 
 export const TOKEN_HEADER = "X-USC-Token";
 const TOKEN_QUERY_PARAMETER = "token";
@@ -254,6 +262,45 @@ export const reuseTestSurface = (token: string, project: string, criterionId: st
 
 export const removeCriterionTestSurface = (token: string, project: string, criterionId: string, fileName: string) =>
   requestJson<CriterionEntry>(token, `${criterionPath(project, criterionId)}/test-surfaces/${encodeURIComponent(fileName)}`, "DELETE");
+
+// The studies of the Simulate workspace (apart from the criteria) --------------------------------------------------------------
+
+function studyPath(project: string, studyId: string): string {
+  return `${projectPath(project)}/studies/${encodeURIComponent(studyId)}`;
+}
+
+/** The studies in order with the state of their results, and the metrics a study can show. */
+export const getStudies = (token: string, project: string) => requestJson<StudiesReply>(token, `${projectPath(project)}/studies`);
+
+/** Adds a study at the end. */
+export const addStudy = (token: string, project: string, source: StudySource) =>
+  requestJson<StudyEntry>(token, `${projectPath(project)}/studies`, "POST", source);
+
+export const updateStudy = (token: string, project: string, studyId: string, change: StudyChange) =>
+  requestJson<StudyEntry>(token, studyPath(project, studyId), "PATCH", change);
+
+export async function deleteStudy(token: string, project: string, studyId: string): Promise<void> {
+  await send(token, studyPath(project, studyId), "DELETE");
+}
+
+/** Puts the studies in the order of *ids*, which has each study once; the reply is the list in that order. */
+export const reorderStudies = (token: string, project: string, ids: string[]) =>
+  requestJson<StudyEntry[]>(token, `${projectPath(project)}/studies/order`, "PUT", { ids });
+
+/** Lets the study use a test surface file that is stored already (not a React hook, whatever the name says). */
+export const useStudyTestSurface = (token: string, project: string, studyId: string, fileName: string) =>
+  requestJson<StudyEntry>(token, `${studyPath(project, studyId)}/test-surfaces/${encodeURIComponent(fileName)}`, "PUT");
+
+export const removeStudyTestSurface = (token: string, project: string, studyId: string, fileName: string) =>
+  requestJson<StudyEntry>(token, `${studyPath(project, studyId)}/test-surfaces/${encodeURIComponent(fileName)}`, "DELETE");
+
+/** Runs the studies that can run, as one run of the run worker (stage "simulate"); its events are read as a run's. */
+export const startSimulation = (token: string, project: string) => requestJson<StartRunReply>(token, `${projectPath(project)}/simulate`, "POST");
+
+/** The test point patches of the study's last result and the values of each geometry, as the service packs them (binary). */
+export async function getStudyValues(token: string, project: string, studyId: string): Promise<ArrayBuffer> {
+  return (await send(token, `${studyPath(project, studyId)}/values`)).arrayBuffer();
+}
 
 export const getSunPath = (token: string, project: string, criterionId?: string) =>
   requestJson<SunPath>(token, forCriterion(`${projectPath(project)}/sun-path`, criterionId));

@@ -1,9 +1,10 @@
 // The events of a run, over the service's WebSocket.
 
 export type RunEvent =
-  // criterion: the id of the criterion the stage belongs to; null for exporting and massing, and for an issue raised before any stage began
-  | { type: "stage_progress"; stage: string | null; criterion: string | null; done: number; total: number }
-  | { type: "issue"; stage: string | null; criterion: string | null; code: string; message: string }     // stage null: raised before any stage began (the config loading)
+  // criterion: the id of the criterion the stage belongs to; null for exporting and massing, and for an issue raised before any stage began.
+  // study: in a simulation (stage "simulate"), the id of the study being run; absent in a pipeline run.
+  | { type: "stage_progress"; stage: string | null; criterion: string | null; study?: string | null; done: number; total: number }
+  | { type: "issue"; stage: string | null; criterion: string | null; study?: string | null; code: string; message: string }     // stage null: raised before any stage began (the config loading)
   | { type: "run_finished"; stages: string[]; files: string[] }
   | { type: "run_cancelled" }
   | { type: "run_failed"; error_type: string; message: string; field_errors: { field: string | null; message: string }[] }

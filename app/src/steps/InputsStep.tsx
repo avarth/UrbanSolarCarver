@@ -49,7 +49,8 @@ interface InputBoxProps {
   weatherLocation: string | null;
   /** The weather box's line: which modes need the file. */
   weatherHint: string;
-  onAddFiles: AddInputFiles;
+  /** Absent: the box offers no adding (no button, no drop), only its files and their removal (a study's stored files). */
+  onAddFiles?: AddInputFiles;
   onRemoveFile: RemoveInputFile;
   /** Why files cannot be added or removed now (a run is in progress); null when they can. */
   disabledReason: string | null;
@@ -109,9 +110,10 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
   const hint = hintGiven ?? (role === "weather" ? weatherHint : MESH_HINTS[role]);
   const badge = isWeather ? messages.weatherFileExtension : OPTIONAL_MESH_ROLES.includes(role) ? null : messages.requiredInput;
 
+  const adds = onAddFiles !== undefined;
   const add = async (chosen: File[]) => {
     const toAdd = isWeather ? chosen.slice(0, 1) : chosen;     // one weather file per project
-    if (disabled || toAdd.length === 0) return;
+    if (disabled || toAdd.length === 0 || onAddFiles === undefined) return;
     setBusy(true);
     setProblems([]);
     try {
@@ -137,19 +139,24 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
     void add(Array.from(event.dataTransfer.files));
   };
 
-  const addButton = (
+  const addButton = adds && (
     <button type="button" className="input-add" disabled={disabled} onClick={() => picker.current?.click()}>
       {isWeather && filled ? messages.replaceFile : addLabel ?? messages.addFiles}
     </button>
   );
   const shownTitle = title ?? (isWeather && weatherNeeded ? messages.weatherFileNeededTitle : TITLES[role]);
   const boxClass = ["input-box", filled ? "input-box-filled" : "input-box-empty", dragging && !disabled ? "input-box-drop-target" : ""].join(" ");
+  const dropHandlers = adds ? {
+    onDragOver: (event: DragEvent) => { event.preventDefault(); if (!disabled) setDragging(true); },
+    onDragLeave: () => setDragging(false),
+    onDrop: drop,
+  } : {};
   return (
-    <section className={boxClass} aria-labelledby={titleHidden ? undefined : titleId} aria-label={titleHidden ? shownTitle : undefined}
-             onDragOver={(event) => { event.preventDefault(); if (!disabled) setDragging(true); }}
-             onDragLeave={() => setDragging(false)} onDrop={drop}>
-      <input ref={picker} type="file" hidden multiple={!isWeather} accept={isWeather ? WEATHER_FILE_TYPE : MESH_FILE_TYPES}
-             onChange={(event) => { void add(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
+    <section className={boxClass} aria-labelledby={titleHidden ? undefined : titleId} aria-label={titleHidden ? shownTitle : undefined} {...dropHandlers}>
+      {adds && (
+        <input ref={picker} type="file" hidden multiple={!isWeather} accept={isWeather ? WEATHER_FILE_TYPE : MESH_FILE_TYPES}
+               onChange={(event) => { void add(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
+      )}
       <div className="input-box-title-row">
         {!titleHidden && <Subheading id={titleId} className="input-box-title">{shownTitle}</Subheading>}
         {filled ? addButton : badge !== null && <span className="input-box-required">{badge}</span>}
@@ -157,7 +164,7 @@ export function InputBox({ role, files, weatherLocation, weatherHint, onAddFiles
       {!filled && (
         <>
           <p className="input-box-hint">{hint}</p>
-          <div className="input-box-actions">{addButton}<span className="input-box-drop-hint">{messages.orDropThemHere}</span></div>
+          {adds && <div className="input-box-actions">{addButton}<span className="input-box-drop-hint">{messages.orDropThemHere}</span></div>}
         </>
       )}
       {filled && (

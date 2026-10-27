@@ -177,3 +177,36 @@ test("a start refused for a criterion's settings names the criterion; one refuse
   expect(loop().current!.missingInputs).toEqual(["test_surfaces:3"]);
   unmount();
 });
+
+test("a simulation holds the loop as a run does, names the study it runs, and leaves the project's stage status standing", async () => {
+  const fetchSpy = replyWith({ status: "started", run_id: "s1", stages: ["simulate"], criterion_stages: {} });
+  vi.stubGlobal("fetch", fetchSpy);
+  const { loop, unmount } = renderedLoop();
+  const askedBefore = loop().replyStillHolds("p");
+  let outcome: Promise<RunOutcome> | null = null;
+  await act(async () => { outcome = loop().startSimulation("p"); });
+  expect(fetchSpy).toHaveBeenCalledWith("/api/projects/p/simulate", expect.objectContaining({ method: "POST" }));
+  expect(loop().activeRun).toEqual({ project: "p", origin: "simulate" });
+  let second: RunOutcome | null = null;
+  await act(async () => { second = await loop().start("p", ["thresholding"], "carving_update"); });
+  expect(second).toBe("not_started");
+  FakeWebSocket.opened[0].send({ type: "stage_progress", stage: "simulate", criterion: null, study: "2", done: 1, total: 4 });
+  expect(loop().current!.state.study).toBe("2");
+  act(() => loop().forget("p"));
+  expect(loop().current).not.toBeNull();       // not during the simulation
+  FakeWebSocket.opened[0].send({ type: "run_finished", stages: ["simulate"], files: [] });
+  expect(await outcome).toBe("finished");
+  expect(askedBefore()).toBe(true);
+  unmount();
+});
+
+test("a simulation the service refuses keeps its words at Run", async () => {
+  vi.stubGlobal("fetch", replyWith({ detail: "No study can run: Sun hours, 21 Dec: Add test surfaces." }, 422));
+  const { loop, unmount } = renderedLoop();
+  let outcome: RunOutcome | null = null;
+  await act(async () => { outcome = await loop().startSimulation("p"); });
+  expect(outcome).toBe("not_started");
+  expect(loop().activeRun).toBeNull();
+  expect(loop().current).toMatchObject({ origin: "simulate", refusal: "No study can run: Sun hours, 21 Dec: Add test surfaces." });
+  unmount();
+});

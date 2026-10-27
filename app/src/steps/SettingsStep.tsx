@@ -21,6 +21,8 @@ import "./steps.css";
 
 export interface RunAnalysisConditions {
   runActive: boolean;
+  /** The run under way is a simulation (Simulate's Run), which the reason names; absent: false. */
+  simulationActive?: boolean;
   maxVolumeFiles: number;
   /** The test surface files of the criterion shown. */
   testSurfaceFiles: number;
@@ -71,7 +73,7 @@ export function shownLabelOf(settingName: string, mode: string): string {
 /** Why Run analysis cannot start, the first of: a run, the inputs, the weather file, a setting, the warm-up; null when it can. */
 export function runAnalysisBlocker(conditions: RunAnalysisConditions): string | null {
   const { form } = conditions;
-  if (conditions.runActive) return messages.runInProgress;
+  if (conditions.runActive) return conditions.simulationActive === true ? messages.simulationInProgress : messages.runInProgress;
   if (conditions.noCriterionOn === true) return messages.turnOnCriterionToRun;
   const hasMaxVolume = conditions.maxVolumeFiles > 0, hasTestSurfaces = conditions.testSurfaceFiles > 0;
   const criterionName = conditions.shownIn === "criteria" ? conditions.shownCriterionName ?? null : null;

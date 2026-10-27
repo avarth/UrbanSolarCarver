@@ -8,7 +8,7 @@ import { useEffect, useId, useState } from "react";
 import { messages } from "../messages";
 import { presentedSettingOf } from "../settings_form/presentation";
 import { formatNumber } from "./format_numbers";
-import { criterionOfKey, stageDisplayName, stageOfKey, type RunLoop, type RunOrigin, type RunRecord, type RunState } from "./run_state";
+import { criterionOfKey, SIMULATE_STAGE, stageDisplayName, stageOfKey, type RunLoop, type RunOrigin, type RunRecord, type RunState } from "./run_state";
 import { shownLabelOf } from "./SettingsStep";
 import "./steps.css";
 
@@ -42,8 +42,17 @@ function stageLabel(key: string, criterionNameOf: (id: string) => string | null)
   return criterionName === null ? stageName : messages.criterionStage(criterionName, stageName);
 }
 
-function StageList({ state, onCancel, criterionNameOf }: { state: RunState; onCancel: () => void; criterionNameOf: (id: string) => string | null }) {
+interface StageListProps {
+  state: RunState;
+  onCancel: () => void;
+  criterionNameOf: (id: string) => string | null;
+  studyNameOf: (id: string) => string | null;
+}
+
+function StageList({ state, onCancel, criterionNameOf, studyNameOf }: StageListProps) {
   const elapsedSeconds = useElapsedSeconds(state);
+  // A simulation's one stage is named by the study the engine is running, once its progress has named one.
+  const studyName = state.study == null ? null : studyNameOf(state.study);
   return (
     <div className="run-progress-stages">
       <ol aria-label={messages.runProgress}>
@@ -52,7 +61,7 @@ function StageList({ state, onCancel, criterionNameOf }: { state: RunState; onCa
           const isRayTracing = progress.state === "running" && progress.total > 1;
           return (
             <li key={key} className={`run-stage run-stage-${progress.state}`}>
-              <span className="run-stage-name">{stageLabel(key, criterionNameOf)}</span>
+              <span className="run-stage-name">{stageOfKey(key) === SIMULATE_STAGE && studyName !== null ? studyName : stageLabel(key, criterionNameOf)}</span>
               <span className="run-stage-state">{isRayTracing ? messages.rayBatches(progress.done, progress.total) : messages.stageStates[progress.state]}</span>
             </li>
           );
@@ -168,9 +177,12 @@ interface RunProgressProps {
   criterionNames?: Readonly<Record<string, string>>;
   /** The warnings fold behind one line, so a bar that holds the progress stays short; absent: they are listed. */
   foldWarnings?: boolean;
+  /** The names of the studies, by id: a simulation's progress names the study being run. */
+  studyNames?: Readonly<Record<string, string>>;
 }
 
-export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames, shownCriterionId, criterionKeys, foldWarnings = false }: RunProgressProps) {
+export function RunProgress({ runs, project, origin, mode, onGoToSetting, criterionNames, shownCriterionId, criterionKeys, foldWarnings = false,
+                              studyNames }: RunProgressProps) {
   const record = runs.current;
   const isThisButton = record !== null && record.project === project && record.origin === origin;
   const notice = runs.notice !== null && runs.notice.project === project && runs.notice.origin === origin ? runs.notice.message : null;
@@ -181,7 +193,8 @@ export function RunProgress({ runs, project, origin, mode, onGoToSetting, criter
       {isThisButton && notice === null && (
         <>
           {record.state.final === null && record.refusal === null
-            ? <StageList state={record.state} onCancel={runs.cancel} criterionNameOf={(id) => criterionNames?.[id] ?? null} />
+            ? <StageList state={record.state} onCancel={runs.cancel} criterionNameOf={(id) => criterionNames?.[id] ?? null}
+                         studyNameOf={(id) => studyNames?.[id] ?? null} />
             : <RunEnded record={record} mode={mode} onGoToSetting={onGoToSetting} shownCriterionId={shownCriterionId} criterionNames={criterionNames}
                         criterionKeys={criterionKeys} />}
           {record.state.issues.length > 0 && <RunIssues key={record.serial} issues={record.state.issues} folded={foldWarnings} />}

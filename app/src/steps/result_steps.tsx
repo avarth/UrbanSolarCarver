@@ -19,7 +19,10 @@ import { exportDownloads, ExportStep, type ExportDownload } from "./ExportStep";
 import { RunProgress, type GoToSetting } from "./RunProgress";
 import { RunReportPanel } from "./RunReportPanel";
 import { runAnalysisAfterSaving, RunAnalysisButton, SettingsToFix } from "./SettingsStep";
-import { criterionProgressOf, runProgressShare, runStages, stageRunState, type RunFailure, type RunLoop, type RunOrigin, type RunOutcome, type RunRecord } from "./run_state";
+import {
+  activeRunReason, criterionProgressOf, pipelineRecordOf, runProgressShare, runStages, stageRunState, type RunFailure, type RunLoop, type RunOrigin, type RunOutcome,
+  type RunRecord,
+} from "./run_state";
 import { useResultsFollowingRun, useRunResults, type RunResults } from "./run_results";
 import type { PipelineStage, StageState, StepName } from "./step_summaries";
 import { createThresholdUpdateQueue } from "./threshold_queue";
@@ -35,8 +38,8 @@ const PIPELINE_STAGES: readonly PipelineStage[] = ["preprocessing", "thresholdin
 /** The stages each criterion runs on its own; exporting and massing read the whole chain. */
 const ANALYSIS_OF_CRITERION: readonly PipelineStage[] = ["preprocessing", "thresholding"];
 
-/** The step whose summary counts the warnings of a run started by each button. */
-const STEP_OF_ORIGIN: Record<RunOrigin, StepName> = {
+/** The step whose summary counts the warnings of a run started by each button (a simulation's are Simulate's). */
+const STEP_OF_ORIGIN: Record<Exclude<RunOrigin, "simulate">, StepName> = {
   settings_run_analysis: "site_and_grid",
   carving_run_analysis: "criteria",
   carving_update: "criteria",
@@ -239,7 +242,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   const [runReportOpen, setRunReportOpen] = useState(false);
   const [downloadProblem, setDownloadProblem] = useState<string | null>(null);
   const [fetchesUnderWay, setFetchesUnderWay] = useState<Partial<Record<PipelineStage, number>>>({});
-  const record: RunRecord | null = runs.current?.project === project ? runs.current : null;
+  const record: RunRecord | null = pipelineRecordOf(runs, project);
   const running = record !== null && record.state.final === null && record.refusal === null;
 
   useResultsFollowingRun(record, reloadResults, (endedRun) => {
@@ -415,7 +418,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                    analysisOutOfDate={analysisOutOfDate}
                    carvingDimmed={isStageDimmed("thresholding", record, ownStages, stagesBeingFetched, context.criterionId)}
                    autoUpdate={autoUpdate} onAutoUpdateChange={setAutoUpdate}
-                   thresholdDisabledReason={otherRunActive ? messages.runInProgress : null} settingsDisabledReason={settingsDisabledReason}
+                   thresholdDisabledReason={otherRunActive ? activeRunReason(runs.activeRun) : null} settingsDisabledReason={settingsDisabledReason}
                    runBlocker={runBlocker ?? carvingWaitReason} onChange={changeSettings}
                    onThresholdCommit={submitThreshold}
                    onCarvingSettingCommit={() => { if (thresholdView !== null) submitThreshold({}); }}
@@ -446,7 +449,7 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
                               hasRunReport={stages.exporting !== "missing" || stages.massing !== "missing"} onOpenRunReport={() => setRunReportOpen(true)} />
     ),
     export: (
-      <ExportStep form={form} disabledReason={runs.activeRun !== null ? messages.runInProgress : null} formatRunReason={formatRunReason}
+      <ExportStep form={form} disabledReason={activeRunReason(runs.activeRun)} formatRunReason={formatRunReason}
                   onFormatChange={(format) => void changeMeshFormat(format)}
                   downloads={exportDownloads({ project, meshFormat, envelopeFile: results.summary?.envelope?.mesh_file ?? null, envelope: stages.exporting,
                                                massingFile: results.summary?.massing?.export_mesh_file ?? null, massing: stages.massing,
@@ -458,7 +461,9 @@ export function useResultSteps(context: ResultStepsContext): ResultSteps {
   // The 3D view follows the step: a part written by a run that then failed is not drawn, as its stage is not recorded.
   const viewerResults: RunResults = { ...results, envelope: envelopeBuilt ? results.envelope : null, massing: massingBuilt ? results.massing : null };
   const warningsOfStep: Partial<Record<StepName, number>> = {};
-  if (record !== null && record.state.final !== null && record.state.issues.length > 0) warningsOfStep[STEP_OF_ORIGIN[record.origin]] = record.state.issues.length;
+  if (record !== null && record.origin !== "simulate" && record.state.final !== null && record.state.issues.length > 0) {
+    warningsOfStep[STEP_OF_ORIGIN[record.origin]] = record.state.issues.length;
+  }
 
   return {
     content,

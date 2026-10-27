@@ -8,7 +8,7 @@ import { messages } from "../messages";
 import type { FormStart, FormState, SettingsForm } from "../settings_form/form_state";
 import { splitSettings, type StepFormAction } from "../settings_form/two_forms";
 import type { ResultSteps, ResultStepsContext } from "../steps/result_steps";
-import { criterionProgressOf, runningCriterion, type RunFailure, type RunLoop } from "../steps/run_state";
+import { criterionProgressOf, pipelineRecordOf, runningCriterion, type RunFailure, type RunLoop } from "../steps/run_state";
 import { runAnalysisBlocker, stepOfSetting } from "../steps/SettingsStep";
 import type { StageState, StepName } from "../steps/step_summaries";
 import {
@@ -126,7 +126,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
       focusField();
       return;
     }
-    const failure = runs.current?.project === project ? runs.current.state.failure : null;
+    const failure = pipelineRecordOf(runs, project)?.state.failure ?? null;
     selection.showCriterion(criterionId, () => {
       if (failure?.criterion === criterionId) markRunErrors(failure.field_errors);
       focusField();
@@ -142,7 +142,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   const modeOf = (entry: CriterionEntry) => (entry.id === criterion?.id ? form.mode : entry.settings?.mode);
   const needingWeatherFile = active.filter((entry) => source.modes.find((mode) => mode.name === modeOf(entry))?.needs_epw);
   const runConditions = {
-    runActive: runs.activeRun !== null, maxVolumeFiles: source.maxVolumeFiles,
+    runActive: runs.activeRun !== null, simulationActive: runs.activeRun?.origin === "simulate", maxVolumeFiles: source.maxVolumeFiles,
     testSurfaceFiles: criterion === null ? source.testSurfaceFiles : criterion.bypassed ? 1 : (criterion.test_surface_files ?? []).length,
     otherCriterionWithoutTestSurfaces: protectingNothing.find((entry) => entry.id !== criterion?.id)?.name ?? null,
     noCriterionOn: criteria.criteria.length > 0 && active.length === 0,
@@ -199,7 +199,7 @@ export function useWorkspaceCriteria(source: WorkspaceCriteriaSource): Workspace
   };
 
   // A start refused because criteria that are on protect nothing selects the first of them; its panel asks for test surfaces.
-  const record = runs.current?.project === project ? runs.current : null;
+  const record = pipelineRecordOf(runs, project);
   const panelProblem = useRefusalSelection({
     record, criteria: criteria.criteria, selectedId: criteria.selectedId, shownCriterion: criterion, showCriterion: (id) => selection.showCriterion(id),
   });
