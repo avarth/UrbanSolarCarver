@@ -5,7 +5,8 @@
 // (use_stage_status.ts, workspace_view_state.ts), and the sun path (sun_path_request.ts) the 3D view draws. The criteria's selection,
 // run conditions and cards are in use_workspace_criteria.ts. The parts that start runs and show their results (the criterion's
 // carving rule, Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop. In Simulate the
-// steps are hidden and the studies (use_studies.ts) are shown over the view (SimulateView).
+// steps are hidden and the studies (use_studies.ts) are shown over the view (SimulateView), the selected one's values drawn on the
+// geometry Simulate shows (use_study_view.ts).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
@@ -26,7 +27,9 @@ import { sharedRefusalShown, splitSettings, useBothForms } from "../settings_for
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { SimulateView } from "../simulate/SimulateView";
+import type { StudyGeometry } from "../simulate/study_values";
 import { useStudies } from "../simulate/use_studies";
+import { useStudyView } from "../simulate/use_study_view";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
 import { boundsOf } from "./input_meshes";
@@ -58,6 +61,12 @@ export const LAYERS_SHOWN_IN_STEP: Record<StepName, readonly LayerName[]> = {
   criteria: ["max_volume", "test_surfaces", "context", "terrain", "sun_path", "kept_voxels", "sky_dome"],
   envelope_and_massing: ["context", "terrain", "envelope", "building_massing"],
   export: ["context", "terrain", "envelope", "building_massing"],
+};
+// The layers Simulate shows by default, for each geometry its study values are shown on.
+const LAYERS_SHOWN_IN_SIMULATE: Record<StudyGeometry, readonly LayerName[]> = {
+  max_volume: ["max_volume", "context", "terrain", "study_values"],
+  envelope: ["envelope", "context", "terrain", "study_values"],
+  massing: ["building_massing", "context", "terrain", "study_values"],
 };
 
 interface ProjectWorkspaceProps {
@@ -361,10 +370,20 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     </div>
   );
 
+  // Simulate draws the selected study's values on the geometry it shows, with Design's layers of that geometry and its own choice of
+  // them: the maximum volume solid, the envelope see-through; the criteria's test surfaces off, the surroundings on. A study out of
+  // date is dimmed with the stamp; Design's out of date parts are not (the geometry switch marks them).
+  const simulating = props.mode === "simulate";
+  const designResults = resultSteps.viewer.results;
+  const studyView = useStudyView({
+    token, project: project.name, studies, active: simulating, runs, envelopeBuilt: designResults?.envelope != null, massingBuilt: designResults?.massing != null,
+    envelopeStage: shownStages.exporting, massingStage: shownStages.massing, editDisabled: runActive, onServiceProblem,
+  });
   const simulateView = (
     <SimulateView project={project.name} studies={studies} criteria={criteria.criteria} storedTestSurfaces={files.test_surfaces} runs={runs}
-                  onStoredFilesChange={() => void testSurfaceCalls.reloadStoredFiles()} onServiceProblem={onServiceProblem} />
+                  onStoredFilesChange={() => void testSurfaceCalls.reloadStoredFiles()} onServiceProblem={onServiceProblem} studyView={studyView} />
   );
+  const simulateViewer = { overlayContent: simulateView, study: studyView.view, envelopeSeeThrough: studyView.geometry === "envelope", dimmedLayers: [] };
 
   return (
     <div className="workspace">
@@ -376,11 +395,12 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
         <ViewerPane maxVolume={maxVolume} testSurfaces={testSurfaceGroups} onTestSurfacesShownChange={setTestSurfacesShown}
                     criteria={active.map(({ id, name, colour }) => ({ id, name, colour }))} context={contextMesh.geometry} terrain={terrainMesh.geometry} sunPath={sunPath}
                     hemisphere={sceneSphere}
-                    maxVolumeAppearance={STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
-                    shownByDefault={LAYERS_SHOWN_IN_STEP[viewStep]} northDegrees={northDegrees} framingRequest={framingRequest}
+                    maxVolumeAppearance={simulating || STEPS_WITH_SOLID_MAX_VOLUME.includes(viewStep) ? "solid" : "ghost"}
+                    shownByDefault={simulating ? LAYERS_SHOWN_IN_SIMULATE[studyView.geometry] : LAYERS_SHOWN_IN_STEP[viewStep]}
+                    northDegrees={northDegrees} framingRequest={framingRequest}
                     centreContent={props.mode === "design" && emptyViewContent} localOrigin={origin} mode={form.mode}
                     analysisCurrent={(ownStages ?? shownStages).preprocessing === "current"} {...resultSteps.viewer}
-                    {...(props.mode === "simulate" ? { overlayContent: simulateView } : {})} />
+                    {...(simulating ? simulateViewer : {})} />
       </section>
     </div>
   );

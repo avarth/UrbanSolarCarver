@@ -1,5 +1,5 @@
-// The data colours of the 3D view (UX 10.1): cividis for scores, the sun ramp for sky patch weights, the storey ramp for the
-// building massing. The theme colours and the ends of the storey ramp live in theme/tokens.css and are read from there.
+// The data colours of the 3D view (UX 10.1): cividis for scores and study values, the sun ramp for sky patch weights, the storey
+// ramp for the building massing, the change ramp for a study's change from the maximum volume. The theme colours and the ends of the storey ramp live in theme/tokens.css and are read from there.
 
 export type ViewportTheme = "light" | "dark";
 
@@ -65,6 +65,15 @@ function mixedColour(from: string, to: string, t: number): string {
 /** The sky dome ramp: the viewport background at 0, the sun colour at 1. */
 export function sunRamp(t: number, viewportTheme: ViewportTheme): string {
   return mixedColour(viewportBackground(viewportTheme), colourToken("sun"), t);
+}
+
+/**
+ * The change ramp of Simulate's Change (a study's change from the maximum volume): light grey at no change, the accent colour at the
+ * largest gain. A loss (t below 0), which carving cannot give but a massing can, is drawn in the carved colour.
+ */
+export function changeRamp(t: number): string {
+  if (t < 0) return colourToken("carved");
+  return mixedColour(colourToken("storey-low"), colourToken("accent"), t);
 }
 
 /** The colour of a storey (0 for the ground storey) of the building massing: the storey ramp, from light grey to slate (UX 10.1). */

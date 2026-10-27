@@ -5,6 +5,7 @@ import { act } from "react";
 import type { CriterionEntry, MetricInfo, StudyEntry, StudyWithState } from "../api_client/client";
 import { ChainService, CURRENT, FACADES, openChainWith, type CriterionStages } from "./chain_service_for_test";
 import { buttonIn, container, json, settle, switchMode } from "./project_workspace_for_test";
+import type { PipelineStage, StageState } from "./step_summaries";
 
 const PERIOD = { start_month: 12, start_day: 21, start_hour: 10, end_month: 12, end_day: 21, end_hour: 14, time_basis: "standard" };
 
@@ -51,6 +52,8 @@ export class SimulateService extends ChainService {
   simulationsStarted = 0;
   /** The body of every PATCH studies/{id}, with the id. */
   readonly studyPatches: { id: string; body: Record<string, unknown> }[] = [];
+  /** GET studies/{id}/values: the packed values of each study's last result; a study without them has none (404). */
+  valuesOf: Record<string, ArrayBuffer> = {};
 
   constructor(entries: CriterionEntry[], criterionStages: Record<string, CriterionStages>) {
     super(entries, criterionStages);
@@ -92,6 +95,14 @@ export class SimulateService extends ChainService {
       this.studies = this.studies.map((each) => (each.entry.id === id ? { ...each, entry, state } : each));
       return json(entry);
     };
+    if (method === "GET" && part === "values") {
+      const values = this.valuesOf[id];
+      return values === undefined ? json({ detail: `The study '${id}' has no result yet.` }, 404) : new Response(values);
+    }
+    if (method === "PATCH" && part === undefined && Object.keys(body).length === 1 && "target" in body) {
+      this.studyPatches.push({ id, body });
+      return replace({ ...found.entry, target: body.target as number | null }, found.state);       // the target changes no result
+    }
     if (method === "PATCH" && part === undefined) {
       this.studyPatches.push({ id, body });
       if (body.name === "") return json({ detail: "A study needs a name." }, 422);
@@ -119,13 +130,18 @@ export let simulateService: SimulateService;
 
 /**
  * Opens the project "p" of these criteria (each carved) in Simulate; *prepare* sets what the service holds before the page asks
- * (its studies, whether it has a weather file).
+ * (its studies, whether it has a weather file, the run summary); *designStages* are the states of Design's stages besides the
+ * carving's (the envelope's "exporting" and the massing's).
  */
-export async function openSimulate(entries: CriterionEntry[] = [FACADES], prepare: (service: SimulateService) => void = () => {}) {
+export async function openSimulate(entries: CriterionEntry[] = [FACADES], prepare: (service: SimulateService) => void = () => {},
+                                   designStages: Partial<Record<PipelineStage, StageState>> = {}) {
   const stages = Object.fromEntries(entries.map((entry) => [entry.id, CURRENT]));
   simulateService = new SimulateService(entries, { ...stages });
-  await openChainWith(simulateService, entries, stages, prepare, [], (opened) => (simulateService.hasWeatherFile ? opened
-    : { ...opened, inputs: { ...opened.inputs, weather: [] } }));
+  await openChainWith(simulateService, entries, stages, prepare, [], (opened) => {
+    simulateService.stages = { ...simulateService.stages, ...designStages };
+    const withStages = { ...opened, stage_status: { stages: simulateService.stages } };
+    return simulateService.hasWeatherFile ? withStages : { ...withStages, inputs: { ...withStages.inputs, weather: [] } };
+  });
   await switchMode("simulate");
   await settle();
 }

@@ -1,5 +1,6 @@
 // What Simulate puts over the 3D view: the studies panel (StudiesPanel) with the popover of a study's settings (StudyPopover) and
-// Run. The studies are read when Simulate opens and again whenever a run ends while it is open: a simulation's results, or a run of
+// Run; the geometry switch at the top centre, and for the selected study the target legend along the bottom and the result card in
+// the bottom right corner (use_study_view.ts; the view draws its values, ProjectWorkspace gives them to ViewerPane). The studies are read when Simulate opens and again whenever a run ends while it is open: a simulation's results, or a run of
 // Design that changed what the studies trace. The simulation is a run of the app's run loop (origin "simulate"), one job at a time
 // with the runs of Design: Run waits while one of those goes on, and the studies cannot be changed while a run of the project does.
 import { useEffect, useId, useRef, useState } from "react";
@@ -7,9 +8,13 @@ import { failureTextOf, serviceProblemOf, type CriterionEntry, type InputFileInf
 import { messages } from "../messages";
 import type { RunLoop } from "../steps/run_state";
 import { RunProgress } from "../steps/RunProgress";
+import { TargetLegend } from "../viewer_overlays/TargetLegend";
+import { GeometrySwitch } from "./GeometrySwitch";
+import { ResultCard } from "./ResultCard";
 import { StudiesPanel } from "./StudiesPanel";
 import { StudyPopover } from "./StudyPopover";
 import type { StudiesHook } from "./use_studies";
+import type { StudyViewHook } from "./use_study_view";
 import "./simulate.css";
 
 interface SimulateViewProps {
@@ -23,9 +28,11 @@ interface SimulateViewProps {
   /** A study let a file go, which the project may then no longer store: the stored files are asked for again. */
   onStoredFilesChange: () => void;
   onServiceProblem: (error: unknown) => void;
+  /** The selected study on the view: the geometry switch, the target legend and the result card. */
+  studyView: StudyViewHook;
 }
 
-export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem }: SimulateViewProps) {
+export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView }: SimulateViewProps) {
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
   const popoverId = useId();
@@ -78,16 +85,28 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
   );
   const studyNames = Object.fromEntries(studies.studies.map((study) => [study.entry.id, study.entry.name]));
 
+  const { legend, card } = studyView;
   return (
-    <div ref={view} className="simulate-view">
-      <StudiesPanel studies={studies.studies} selectedId={studies.selectedId} criteria={criteria} metrics={studies.metrics}
-                    runDisabledReason={runDisabledReason} editDisabledReason={editDisabledReason} popoverStudyId={shown === null ? null : popoverStudyId}
-                    popoverId={popoverId} onSelect={studies.select} onAdd={add} onRun={() => void runs.startSimulation(project)}
-                    onToggleSettings={(id) => {
-                      if (popoverStudyId !== id) studies.select(id);       // the study whose settings are open is the one in the view
-                      setPopoverStudyId(popoverStudyId === id ? null : id);
-                    }} loadProblem={studies.loadProblem} popover={popover}
-                    runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
-    </div>
+    <>
+      <div ref={view} className="simulate-view">
+        <StudiesPanel studies={studies.studies} selectedId={studies.selectedId} criteria={criteria} metrics={studies.metrics}
+                      runDisabledReason={runDisabledReason} editDisabledReason={editDisabledReason} popoverStudyId={shown === null ? null : popoverStudyId}
+                      popoverId={popoverId} onSelect={studies.select} onAdd={add} onRun={() => void runs.startSimulation(project)}
+                      onToggleSettings={(id) => {
+                        if (popoverStudyId !== id) studies.select(id);       // the study whose settings are open is the one in the view
+                        setPopoverStudyId(popoverStudyId === id ? null : id);
+                      }} loadProblem={studies.loadProblem} popover={popover}
+                      runFeedback={<RunProgress runs={runs} project={project} origin="simulate" mode="" onGoToSetting={() => {}} studyNames={studyNames} foldWarnings />} />
+      </div>
+      <div className="simulate-geometry-bar">
+        <GeometrySwitch available={studyView.available} outOfDateInDesign={studyView.outOfDateInDesign} value={studyView.geometry}
+                        change={studyView.change} onChange={studyView.setGeometry} onChangeToggle={studyView.setChange} />
+      </div>
+      {legend !== null && (
+        <TargetLegend label={legend.label} unit={legend.unit} range={legend.range} target={legend.target} mode={legend.mode} hasLoss={legend.hasLoss}
+                      disabled={legend.disabled} onTargetChange={studyView.setTarget} />
+      )}
+      {card !== null && <ResultCard geometry={card.geometry} unit={card.unit} statistics={card.statistics} baseline={card.baseline} />}
+    </>
   );
 }

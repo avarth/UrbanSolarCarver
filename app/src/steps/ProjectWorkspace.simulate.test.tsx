@@ -5,9 +5,11 @@
 import { act } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
+import { studyValuesOf } from "../simulate/study_values_for_test";
+import { FakeViewerScene } from "../viewer/fake_scene_for_test";
 import {
-  NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf, settle,
-  startWorkspaceTest, stepRow, switchMode,
+  CARVING, ENVELOPE, NOTHING_RUN, FakeService, buttonIn, container, endWorkspaceTest, openStep, openWorkspace, pinnedBar, pressRunAnalysis, project, reasonOf,
+  settle, startWorkspaceTest, stepRow, switchMode,
 } from "./project_workspace_for_test";
 import {
   addStudyButton, addStudyMenuItems, chooseAddStudy, openSimulate, openStudySettings, runButton, selectedStudyName, simulateService, study,
@@ -196,4 +198,131 @@ test("a study's settings take the focus, use a stored file, and Escape gives the
   expect(studyPopover()).toBeNull();
   expect(document.activeElement).toBe(settingsButton);
   expect(settingsButton.getAttribute("aria-expanded")).toBe("false");
+});
+
+// Results on the view: the selected study's values on the geometry shown, the geometry switch, the target legend and the result card.
+
+const scene = () => FakeViewerScene.latest!;
+const studyLayerSummary = () => scene().layers.get("study_values")?.userData.summary ?? null;
+const geometrySegment = (label: string) => [...container().querySelectorAll<HTMLButtonElement>(".geometry-switch-segment")]
+  .find((button) => button.textContent === label)!;
+const targetMark = () => container().querySelector<HTMLElement>('.target-legend [role="slider"]')!;
+const targetBar = () => container().querySelector<HTMLElement>(".target-legend-bar")!;
+const cardLines = () => [...container().querySelectorAll(".result-card-line")].map((line) => line.textContent);
+const stamp = () => container().querySelector(".viewer-out-of-date");
+const BUILT_ENVELOPE = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
+
+async function selectStudy(name: string) {
+  act(() => studyRow(name).querySelector<HTMLButtonElement>(".study-row-select")!.click());
+  await settle();
+}
+
+function pointerOnTargetBar(type: "pointerdown" | "pointermove" | "pointerup", clientX: number) {
+  act(() => { targetBar().dispatchEvent(new PointerEvent(type, { bubbles: true, clientX, pointerId: 1, button: 0 })); });
+}
+
+test("selecting another study draws its values; only one study is drawn", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current"), study("2", "sky_view", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }), 2: studyValuesOf({ open: [90, 90], max_volume: [40, 60] }, "%") };
+  });
+  expect(studyLayerSummary()).toBeNull();          // no study selected yet
+  await selectStudy("Sun hours, 21 Dec");
+  expect(simulateService.requests).toContain("GET /studies/1/values");
+  expect(studyLayerSummary()).toBe("3 points");
+  expect(scene().visibleLayers.has("study_values")).toBe(true);
+  expect(cardLines()).toEqual(["mean 2 h", "lowest tenth 1.2 h"]);
+  await selectStudy("Sky view factor");
+  expect(simulateService.requests).toContain("GET /studies/2/values");
+  expect(studyLayerSummary()).toBe("2 points");      // the one layer now holds the second study's values
+  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sky view factor (%)");
+  expect(stamp()).toBeNull();
+  // A study that has not run has nothing to draw.
+  await chooseAddStudy("Cooling sky");
+  expect(simulateService.requests).not.toContain("GET /studies/3/values");
+  expect(studyLayerSummary()).toBeNull();
+  expect(container().querySelector(".result-card")).toBeNull();
+  expect(container().querySelector(".target-legend")).toBeNull();
+});
+
+test("an out of date study's values stay drawn, dimmed, with the stamp", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "out_of_date"), study("2", "sky_view", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 2] }), 2: studyValuesOf({ open: [90], max_volume: [40] }, "%") };
+  });
+  await selectStudy("Sun hours, 21 Dec");
+  expect(studyLayerSummary()).toBe("2 points");
+  expect(scene().dimmed.has("study_values")).toBe(true);
+  expect(stamp()!.textContent).toContain("Out of date");
+  await selectStudy("Sky view factor");
+  expect(scene().dimmed.has("study_values")).toBe(false);
+  expect(stamp()).toBeNull();
+});
+
+test("the geometry shown uses Design's layers, without the criteria's test surfaces; Envelope once built, marked out of date in Design", async () => {
+  await openSimulate(undefined, (service) => {
+    service.summary = BUILT_ENVELOPE;
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 2], envelope: [3, 4] }) };
+  }, { exporting: "out_of_date" });
+  await selectStudy("Sun hours, 21 Dec");
+  expect(geometrySegment("Envelope").getAttribute("aria-disabled")).toBeNull();
+  expect(geometrySegment("Envelope").title).toBe("Out of date in Design");
+  expect(geometrySegment("Massing").getAttribute("aria-disabled")).toBe("true");
+  expect(geometrySegment("Massing").title).toBe("Build the massing first");
+  expect([...scene().visibleLayers].sort()).toEqual(["max_volume", "study_values"]);
+  expect(scene().dimmed.size).toBe(0);         // the envelope out of date in Design is not dimmed here: the switch says so
+  expect(scene().envelopeSeeThrough).toBe(false);
+
+  act(() => geometrySegment("Envelope").click());
+  await settle();
+  expect([...scene().visibleLayers].sort()).toEqual(["envelope", "study_values"]);
+  expect(scene().envelopeSeeThrough).toBe(true);
+  expect(cardLines()).toEqual(["mean 3.5 h (1.5)", "lowest tenth 3.1 h (1.1)"]);
+  expect(stamp()).toBeNull();
+
+  // Back in Design the steps' layers and the envelope's own look come back, without the study.
+  await switchMode("design");
+  expect(scene().envelopeSeeThrough).toBe(false);
+  expect(studyLayerSummary()).toBeNull();
+  expect(container().querySelector(".geometry-switch")).toBeNull();
+  // Simulate again: the same study on the same geometry, its values read again (they are let go in Design).
+  const reads = simulateService.count("GET /studies/1/values");
+  await switchMode("simulate");
+  await settle();
+  expect(simulateService.count("GET /studies/1/values")).toBe(reads + 1);
+  expect(geometrySegment("Envelope").getAttribute("aria-pressed")).toBe("true");
+  expect(studyLayerSummary()).toBe("2 points");
+});
+
+test("dragging the target mark or pressing arrow keys moves the target and saves it with the study", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [8, 8, 8, 8], max_volume: [0, 2, 6, 8] }) };
+  });
+  await selectStudy("Sun hours, 21 Dec");
+  const layerBefore = scene().layers.get("study_values");
+  // jsdom lays nothing out: the bar is 200 px wide, 0 to 8 h, 25 px an hour.
+  targetBar().getBoundingClientRect = () => ({ left: 0, width: 200, top: 0, height: 12, right: 200, bottom: 12, x: 0, y: 0, toJSON: () => ({}) });
+  pointerOnTargetBar("pointerdown", 100);
+  pointerOnTargetBar("pointermove", 120);
+  pointerOnTargetBar("pointermove", 125);
+  expect(simulateService.studyPatches).toEqual([]);         // nothing saved while dragging
+  pointerOnTargetBar("pointerup", 125);
+  await settle();
+  expect(simulateService.studyPatches).toEqual([{ id: "1", body: { target: 5 } }]);
+  expect(targetMark().getAttribute("aria-valuenow")).toBe("5");
+  expect(cardLines()).toEqual(["mean 4 h", "lowest tenth 0.6 h", "at target 50 %"]);
+  expect(scene().layers.get("study_values")).not.toBe(layerBefore);      // drawn again with the points below the target muted
+  expect(studyLine("Sun hours, 21 Dec")).toBe("facades.obj");             // the target leaves the result current
+
+  act(() => targetMark().focus());
+  act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true })); });
+  await settle();
+  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { target: 5.08 } });
+  act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true, cancelable: true })); });
+  await settle();
+  expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { target: null } });
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("No target");
+  expect(cardLines()).toHaveLength(2);
 });

@@ -123,6 +123,7 @@ export class ViewerScene {
   private theme: ViewportTheme = "light";
   private northDegrees = 0;
   private skyDomeOpacity = DEFAULT_SKY_DOME_OPACITY;
+  private envelopeSeeThrough = false;
   private groundAid: GroundAid = "grid";
   private sceneHemisphere: Hemisphere | null = null;
   private grid: THREE.Group | null = null;
@@ -227,6 +228,12 @@ export class ViewerScene {
     this.refreshLayers();
   }
 
+  /** Draws the envelope see-through whether or not the building massing is shown (Simulate, the study's values on the envelope). */
+  setEnvelopeSeeThrough(seeThrough: boolean): void {
+    this.envelopeSeeThrough = seeThrough;
+    this.refreshLayers();
+  }
+
   setViewportTheme(theme: ViewportTheme): void {
     this.theme = theme;
     this.scene.background = new THREE.Color(viewportBackground(theme));
@@ -287,7 +294,7 @@ export class ViewerScene {
 
   private refreshLayers(): void {
     const envelope = this.slots.get("envelope")!, massing = this.slots.get("building_massing")!;
-    envelope.object?.userData.setSeeThrough?.(envelope.visible && massing.visible && massing.object !== null);
+    envelope.object?.userData.setSeeThrough?.(this.envelopeSeeThrough || (envelope.visible && massing.visible && massing.object !== null));
     for (const [name, slot] of this.slots) {
       if (!slot.object) continue;
       slot.object.visible = slot.visible;

@@ -2,8 +2,11 @@ import { expect, test } from "vitest";
 import * as THREE from "three";
 import {
   buildingMassingLayer, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, LAYER_NAMES, maxVolumeLayer, terrainLayer, keptColumnTops, pointSizeForVoxel, splitScorePoints,
-  storeyOfPart, testSurfacesLayer, volumeOutline,
+  storeyOfPart, studyValuesLayer, testSurfacesLayer, volumeOutline,
 } from "./layers";
+import { decodeStudyValues, patchCorners } from "../simulate/study_values_decoder";
+import { studyValuesOf } from "../simulate/study_values_for_test";
+import { changeRamp, cividis } from "./colour_scales";
 import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
@@ -163,4 +166,61 @@ test("test surfaces are drawn in front of a context or maximum volume face they 
     expect(surfaces.polygonOffsetUnits).toBeLessThan(other.polygonOffsetUnits);
   }
   expect(surfaces.polygonOffsetFactor).toBeLessThan(0);      // toward the camera, not only less far back
+});
+
+// The study values of Simulate --------------------------------------------------------------------------------------------------
+
+function studyView(change: boolean, target: number | null) {
+  const values = decodeStudyValues(studyValuesOf({ open: [4, 4, 4, 4], max_volume: [1, 1, 1, 1], envelope: [0, 2, 4, 1.0005] }));
+  return { view: { values, geometry: "envelope" as const, change, target, unit: "h", dimmed: false }, corners: patchCorners(values, [0, 0, 0]) };
+}
+
+function setColourTokens() {
+  for (const [name, colour] of [["context", "#b9c1c4"], ["carved", "#c8553d"], ["storey-low", "#dfe6ea"], ["accent", "#2f5d7c"]]) {
+    document.documentElement.style.setProperty(`--colour-${name}`, colour);       // jsdom has no theme tokens
+  }
+}
+
+/** The colour of each point's patch, as "rrggbb" (all four corners of a patch have it). */
+function patchColours(layer: THREE.Object3D): string[] {
+  const colours = (layer as THREE.Mesh).geometry.getAttribute("color");
+  return Array.from({ length: colours.count / 4 }, (_, point) => {
+    const corners = [0, 1, 2, 3].map((corner) => new THREE.Color().fromBufferAttribute(colours as THREE.BufferAttribute, point * 4 + corner).getHexString());
+    expect(new Set(corners).size).toBe(1);
+    return corners[0];
+  });
+}
+
+const hexOf = (colour: string) => new THREE.Color(colour).getHexString();
+
+test("the study values layer colours each point's patch by its value, cividis from 0 to the highest, below the target muted", () => {
+  setColourTokens();
+  const { view, corners } = studyView(false, 1.5);
+  const layer = studyValuesLayer(view, corners);
+  expect(LAYER_NAMES).toContain("study_values");
+  const geometry = (layer as THREE.Mesh).geometry;
+  expect(geometry.getAttribute("position").count).toBe(4 * 4);
+  expect(Array.from(geometry.index!.array.slice(0, 6))).toEqual([0, 1, 2, 0, 2, 3]);
+  expect(patchColours(layer)).toEqual([hexOf("#b9c1c4"), hexOf(cividis(0.5)), hexOf(cividis(1)), hexOf("#b9c1c4")]);
+  expect(patchColours(studyValuesLayer({ ...view, target: null }, corners))[0]).toBe(hexOf(cividis(0)));
+  expect(layer.userData.summary).toBe("4 points");
+});
+
+test("with Change the layer colours the change from the maximum volume on the change ramp, losses in the carved colour", () => {
+  setColourTokens();
+  const { view, corners } = studyView(true, 3);
+  // Changes -1, 1, 3 and 0.0005: a loss, a third of the largest gain, the largest gain, and less than the tolerance (0.004), none.
+  expect(patchColours(studyValuesLayer(view, corners))).toEqual([hexOf("#c8553d"), hexOf(changeRamp(1 / 3)), hexOf("#2f5d7c"), hexOf("#dfe6ea")]);
+});
+
+test("study values are drawn in front of the test surfaces they lie on, unlit, and leave the corners they are given as they are", () => {
+  setColourTokens();
+  const { view, corners } = studyView(false, null);
+  const before = Float32Array.from(corners);
+  const layer = studyValuesLayer(view, corners) as THREE.Mesh;
+  const material = layer.material as THREE.MeshBasicMaterial;
+  expect(material).toBeInstanceOf(THREE.MeshBasicMaterial);
+  expect([material.polygonOffset, material.polygonOffsetFactor, material.polygonOffsetUnits]).toEqual([true, -2, -8]);
+  expect(material.side).toBe(THREE.DoubleSide);
+  expect(Array.from(corners)).toEqual(Array.from(before));
 });

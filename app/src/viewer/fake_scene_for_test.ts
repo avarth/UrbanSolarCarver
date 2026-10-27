@@ -70,6 +70,12 @@ export class FakeViewerScene {
   }
 
   setSkyDomeOpacity(_opacity: number): void {}
+
+  /** Whether the pane asked for the envelope see-through on its own (Simulate); false until it asks. */
+  envelopeSeeThrough = false;
+  setEnvelopeSeeThrough(seeThrough: boolean): void {
+    this.envelopeSeeThrough = seeThrough;
+  }
   setViewportTheme(_theme: ViewportTheme): void {}
   frameAll(): void {}
   viewTop(): void {}

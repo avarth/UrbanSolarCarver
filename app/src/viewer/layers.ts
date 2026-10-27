@@ -7,7 +7,8 @@ import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
 import type { SkyDome } from "../api_client/client";
 import { messages } from "../messages";
-import { cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
+import { changeOf, changeTolerance, highestOf, OPEN_COLUMN, type StudyView } from "../simulate/study_values";
+import { changeRamp, cividis, colourToken, storeyColour, sunRamp, type ViewportTheme } from "./colour_scales";
 import type { CarvedVoxels } from "./carved_by_criterion_decoder";
 import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
@@ -16,11 +17,11 @@ import type { SunPathObjects } from "./sun_path";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
 export type LayerName = "max_volume" | "test_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "carved_by_criterion" | "sun_path" |
-  "sky_dome" | "envelope" | "building_massing";
+  "sky_dome" | "envelope" | "building_massing" | "study_values";
 
-/** The layers in the order of UX 8.2, which the layers menu and the accessible name follow. */
+/** The layers in the order of UX 8.2, which the layers menu and the accessible name follow; then the study of Simulate. */
 export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
-  "sun_path", "sky_dome", "envelope", "building_massing"];
+  "sun_path", "sky_dome", "envelope", "building_massing", "study_values"];
 
 /** The layers that can reach far beyond the site (a city model, a terrain kilometres wide): the camera frames the rest. */
 export const SURROUNDING_LAYERS: readonly LayerName[] = ["context", "terrain"];
@@ -438,6 +439,66 @@ export function carvedByCriterionLayer({ voxels, colours, voxelSize }: CarvedByC
   const layer = voxelObject(voxels.centres, voxelSize, Array.from(voxels.criterionIndex, (criterion) => colourOf[criterion] ?? carvedColour), "#ffffff", 1);
   layer.userData.summary = messages.voxelCount(voxels.carvedCount);
   return layer;
+}
+
+// The study of Simulate ------------------------------------------------------------------------------------------------------
+
+const CHANGE_RAMP_STEPS = 256;
+const CORNERS_OF_TRIANGLES = [0, 1, 2, 0, 2, 3];
+
+/**
+ * The selected study's test point patches on the geometry shown (*corners*: study_values_decoder.patchCorners), unlit so the colours
+ * read as the legend's. By value: cividis from 0 to the highest value of the geometry shown, the points below the target in the
+ * context's muted grey. By change from the maximum volume: the change ramp from no change to the largest gain, a loss in the carved
+ * colour, a change within the tolerance none. The patches lie on test surfaces, so they are pulled forward in depth as those are.
+ */
+export function studyValuesLayer(view: StudyView, corners: Float32Array): THREE.Object3D {
+  const { values: studyValues, geometry: shownGeometry, change, target } = view;
+  const shown = studyValues.values[shownGeometry];
+  const count = shown.length;
+  const colours = new Float32Array(count * 4 * 3);
+  const paint = (point: number, colour: THREE.Color) => {
+    for (let at = point * 12; at < point * 12 + 12; at += 3) {
+      colours[at] = colour.r;
+      colours[at + 1] = colour.g;
+      colours[at + 2] = colour.b;
+    }
+  };
+  if (change) {
+    const changes = changeOf(shown, studyValues.values.max_volume);
+    const tolerance = changeTolerance(studyValues.values[OPEN_COLUMN], studyValues.values.max_volume);
+    const highest = highestOf(changes);
+    const ramp = Array.from({ length: CHANGE_RAMP_STEPS }, (_, step) => new THREE.Color(changeRamp(step / (CHANGE_RAMP_STEPS - 1))));
+    const loss = new THREE.Color(changeRamp(-1));
+    for (let point = 0; point < count; point++) {
+      const value = changes[point];
+      const share = Math.abs(value) <= tolerance || highest <= 0 ? 0 : value / highest;
+      paint(point, value < -tolerance ? loss : ramp[Math.round(Math.min(1, share) * (CHANGE_RAMP_STEPS - 1))]);
+    }
+  } else {
+    const highest = highestOf(shown);
+    const span = highest > 0 ? highest : 1;
+    const belowTarget = new THREE.Color(colourToken("context"));
+    for (let point = 0; point < count; point++) {
+      const value = shown[point];
+      paint(point, target !== null && value < target ? belowTarget : CIVIDIS_COLOURS[Math.min(255, Math.max(0, Math.floor((value / span) * 256)))]);
+    }
+  }
+  const index = new Uint32Array(count * 6);
+  for (let point = 0; point < count; point++) {
+    for (let vertex = 0; vertex < 6; vertex++) index[point * 6 + vertex] = point * 4 + CORNERS_OF_TRIANGLES[vertex];
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.BufferAttribute(corners, 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colours, 3));
+  geometry.setIndex(new THREE.BufferAttribute(index, 1));
+  geometry.computeBoundingSphere();
+  const material = layerMaterial(new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8,
+  }));
+  const patches = new THREE.Mesh(geometry, material);
+  patches.userData.summary = messages.studyPointCount(count);
+  return patches;
 }
 
 // Sun path and sky dome ------------------------------------------------------------------------------------------------------
