@@ -723,6 +723,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Where projects are kept">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#replacing-a-file-in-the-project-folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Replacing a file in the project folder
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1734,6 +1751,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Where projects are kept">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#replacing-a-file-in-the-project-folder" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Replacing a file in the project folder
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2128,14 +2162,26 @@
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│                  and the joined meshes the engine reads (joined/, one test_surfaces_&lt;id&gt;.ply per criterion
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>│                  and one study_surfaces_&lt;id&gt;.ply per study that lists files)
 <a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>├── project.json   The project&#39;s record: the files you added with their triangle counts, the input revision,
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│                  the example it came from (if any), the criteria with their own settings and test surface files,
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│                  the studies of Simulate, and one record per completed stage (with the settings that stage ran with)
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>├── run/           The engine&#39;s output: criteria/&lt;id&gt;/preprocessing and thresholding, criteria/chain.json,
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>│                  exporting/ and massing/
-<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>└── simulate/      The results of the studies, one folder per study (see Simulate)
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>├── project.json   The project&#39;s record: the files you added with their triangle counts, size, time and digest,
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>│                  the notices of files replaced in the folder, the input revision,
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>│                  the example it came from (if any), the criteria with their own settings and test surface files,
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>│                  the studies of Simulate, and one record per completed stage (with the settings that stage ran with)
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>├── run/           The engine&#39;s output: criteria/&lt;id&gt;/preprocessing and thresholding, criteria/chain.json,
+<a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>│                  exporting/ and massing/
+<a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>└── simulate/      The results of the studies, one folder per study (see Simulate)
 </code></pre></div>
 <p><code>config.yaml</code> works outside the interface: its paths are relative to the project folder, so <code>usc run -c &lt;project folder&gt;/config.yaml</code> runs the same analysis from the command line (see <a href="#criteria-in-a-project">Criteria in a project</a>). Thresholding also writes <code>scores_compared_with_cutoff.npy</code> in its folder (the values the cutoff is applied to, which the histogram draws). To delete a project, use Delete in its menu (see <a href="#managing-a-project">Managing a project</a>), or delete its folder in the file manager.</p>
+<h3 id="replacing-a-file-in-the-project-folder">Replacing a file in the project folder<a class="headerlink" href="#replacing-a-file-in-the-project-folder" title="Permanent link">&para;</a></h3>
+<p>You can save a new version of an input file over the old one in <code>inputs/</code> (an export from Rhino saved over <code>inputs/test_surfaces/roofs.obj</code>, say), keeping its name. The app finds the change when the project is opened, when it asks for the stage status (after a save, a change of the inputs or a run, and whenever its window comes back to the front), when it lists the studies, and when a run or a simulation starts. A file that was added in the app is read again only when its size or modification time differs from what <code>project.json</code> recorded (<code>stored_files</code>); the same content saved again changes nothing.</p>
+<p>A file whose content changed is built into the joined files that use it, in place of the old version:</p>
+<ul>
+<li>A test surface file: the joined files of the criteria and studies that list it. Those criteria are out of date, and the criteria after them have to carve again; the studies that list it are out of date.</li>
+<li>The maximum volume, the context or the terrain: the role's joined file. Every stage and every study is out of date.</li>
+<li>The weather file: every stage is out of date, and so are the studies whose metric reads it.</li>
+</ul>
+<p>A notice over the steps (and at the top of the Studies panel in Simulate) names each changed file, until you press <strong>OK</strong>. The 3D view loads its meshes again. A joined file that comes out the same (a file saved again with the same surfaces) changes nothing and gives no notice; for the context and the terrain, whose orientation nothing reads, a face turned the other way is the same face. While a run of the project is going, the app waits for it to end before it looks.</p>
+<p>A file of a project made before this check has no record. The first look builds its joined files and compares them with those the runs used, so a file replaced earlier is caught too. A weather file without a record is taken as it is.</p>
+<p>A file the app cannot read (a broken export, or one still being copied or locked by another program) is not built in and is tried again at the next look; the project still opens, and a run says which file it is. A file deleted from the folder is listed as missing. A run is refused while a file it reads is missing (a test surface file of a criterion that is on, or a file of another role), and a simulation while a file the studies read is missing, until you put it back or remove it in the app. A file added to the folder by hand, under a new name, is not seen: add it in the app.</p>
 <h2 id="security">Security<a class="headerlink" href="#security" title="Permanent link">&para;</a></h2>
 <p>The service listens on <code>127.0.0.1</code> only and checks the <code>Host</code> header of every request, which stops a web page on another site from reaching it. Every request to the API needs the token of the launch, which only the printed and opened address carries, and the service takes no file path from the browser: it derives every folder from a validated project name, and the folder picker is shown by the service on this computer.</p>
 <h2 id="without-a-cuda-enabled-gpu">Without a CUDA-enabled GPU<a class="headerlink" href="#without-a-cuda-enabled-gpu" title="Permanent link">&para;</a></h2>

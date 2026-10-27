@@ -1863,6 +1863,10 @@
 <td>Test surface files stored once in <code>inputs/test_surfaces/</code> and compared by content, the joined file of each criterion (<code>inputs/joined/test_surfaces_&lt;id&gt;.ply</code>) and of each study that lists files (<code>inputs/joined/study_surfaces_&lt;id&gt;.ply</code>), <code>users_of</code> (the criteria and studies that list a file; a stored file goes to the recycle bin when none does), and the fingerprint of a joined file that the stage records use.</td>
 </tr>
 <tr>
+<td><code>local_web_service/stored_files.py</code></td>
+<td>Input files replaced in the project folder from outside the app: the record of each stored file in <code>project.json</code> (<code>stored_files</code>: size, modification time, sha256), <code>refresh_changed_inputs</code> (a changed file builds again the joined files that use it; a joined file that comes out different replaces the old one, dates what was built on it and leaves a notice in <code>changed_files</code>), <code>input_changes</code> for the stage status, and the refusal of a run while a recorded file is missing.</td>
+</tr>
+<tr>
 <td><code>local_web_service/studies.py</code></td>
 <td>The studies of the Simulate workspace (<code>StudyEntry</code>, kept in <code>project.json</code> under <code>studies</code> beside the criteria): default names ("Sun hours, 21 Dec"), the settings a metric starts with and accepts (<code>STUDY_SETTING_KEYS</code>), a study like a criterion, and the results folder <code>simulate/&lt;id&gt;</code>. The store methods (<code>add_study</code>, <code>update_study</code>, <code>delete_study</code>, <code>reorder_studies</code>, <code>use_study_test_surface</code>, <code>remove_study_test_surface</code>) write <code>project.json</code> and the study's joined test surface file only, never <code>config.yaml</code>, <code>inputs_revision</code> or a stage record.</td>
 </tr>
