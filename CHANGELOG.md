@@ -7,6 +7,35 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added (Inspect)
+
+- **Inspect, a third workspace.** The header switch is now **Design | Simulate | Inspect**. Inspect shows which way every test
+  surface faces and lets you turn the ones that face the wrong way, and it summarises each input mesh file. It runs no engine
+  step and changes nothing until **Save** or **Restore original** is pressed. See [Inspect](docs/inspect.md).
+- **Two-sided test surfaces and arrows.** In Inspect a test surface is drawn in the test surface colour on the side its normal
+  points to and in orange on the back, so a surface the wrong way round shows orange from outside. **Arrows** draws one arrow
+  per surface along its normal. The **Surface orientation** layer is in the Layers menu.
+- **The Files panel.** The maximum volume, test surface, surroundings and terrain files, each with its triangle count and
+  area. Selecting a file frames it, draws the other test surface files faint and opens its bounds (with a note for
+  georeferenced coordinates), its closed bodies out of its bodies and, for a test surface file, its surfaces. A file that
+  cannot be read is listed with its problem.
+- **Flipping.** **Flip mode** turns the whole surface under a click (the triangles joined by shared edges, as the engine's
+  loader reads the file; a single triangle would be turned back at the next load), **Flip all** turns every surface. A test
+  surface file that is closed as a whole cannot be flipped, since the loader turns closed bodies outward. Turns are staged;
+  **Save** writes the file once in its own format (OBJ at 10 decimals, PLY float64, GLB and STL float32), reads it back with
+  the engine's loader and saves nothing if the turns or coordinates did not hold. OBJ groups, materials and texture
+  coordinates and PLY colours are not kept in a saved file. **Discard** drops the turns. Leaving Inspect with turns not saved
+  asks Save, Discard or Stay; turns staged on a file that changed meanwhile are dropped with a message.
+- **Restore original.** Before the first save the file is kept in `inputs/originals/test_surfaces/`; Restore original puts it
+  back byte for byte. An upload of a file with that name, removing the file, or replacing it by hand in the project folder
+  drops the kept original.
+- **Effects of a save.** Save and Restore original act like an upload: the joined files of the criteria and studies that list
+  the file are built again and those criteria and studies go out of date; no "changed in the project folder" notice is given.
+  Both are refused (409) while a run of the project is active.
+- **Service.** `local_web_service/inspection.py` and the routes `GET /projects/{name}/inspect`,
+  `GET /projects/{name}/inspect/test_surfaces/{file}/geometry`, `POST .../turn` and `POST .../restore`. A file is read once and
+  kept until its size or modification time changes. No engine function is added.
+
 ### Fixed (input files replaced in the project folder)
 
 - **A file saved over an input file in the project folder is now used.** Before, the engine went on reading the joined files

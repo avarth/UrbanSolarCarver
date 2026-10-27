@@ -40,6 +40,7 @@ Each stage reads the previous stage's manifest, so you can re-run thresholding w
 - **[Carving Modes](modes.md)**: the 6 analysis modes (tilted_plane, time-based, irradiance, benefit, daylight, radiative_cooling)
 - **[Simulated Weights](simulated-weights.md)**: the building-simulation engine behind benefit mode's simulated weights
 - **[Simulate](simulate.md)**: the browser workspace that checks how much sun, solar energy or sky reaches test points on the maximum volume, the envelope and the massing
+- **[Inspect](inspect.md)**: the browser workspace that shows which way the test surfaces face, flips the ones that face the wrong way, and summarises each input mesh file
 - **[Grasshopper Plugin](grasshopper.md)**: Rhino 3D integration, component list, daemon setup
 - **[Project Map](project-map.md)**: every file and directory in the repository
 - **[API Reference](api/index.md)**: function signatures, parameters, and return types (generated from docstrings)

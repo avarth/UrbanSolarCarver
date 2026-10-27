@@ -34,6 +34,7 @@ nav:
     - Configuration: getting-started/configuration.md
   - Browser UI: ui.md
   - Simulate: simulate.md
+  - Inspect: inspect.md
   - Carving Modes: modes.md
   - Chained carvings: criteria.md
   - Floor-plate massing: massing.md

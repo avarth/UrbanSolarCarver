@@ -275,6 +275,16 @@ The switch **Design | Simulate** in the header, next to the project name, opens 
 - The legend along the bottom shows the scale in the study's unit with a **target** you drag (arrow keys move it, Delete clears it); points below it are drawn in a muted colour. The result card in the bottom right corner gives the mean, the lowest tenth and the share of points at the target, with the maximum volume's value in brackets.
 - A result whose inputs changed stays on the view, dimmed, with the **Out of date** stamp. Reopening the project shows the last results.
 
+## Inspect
+
+The switch **Design | Simulate | Inspect** in the header also opens Inspect, a workspace beside the pipeline that shows which way the test surfaces face and summarises the input mesh files. [Inspect](inspect.md) explains it in full. It runs no engine step, and only **Save** and **Restore original** change a file.
+
+- Inspect hides the five steps and gives the 3D view the whole window. Switching back returns to the step you left.
+- The **Files** panel floats over the top left of the view and collapses to an icon. It lists the maximum volume, test surface, surroundings and terrain files, each with its triangle count and area; pressing a row frames the file, draws the other test surface files faint and opens its bounds, closed bodies and (for test surfaces) surface count. A file the app cannot read is listed with its problem.
+- Test surfaces are drawn two-sided: the side the normal points to in the test surface colour, the back side in orange, so a surface the wrong way round shows orange from outside. **Arrows** draws one arrow per surface along its normal.
+- On a test surface file, **Flip mode** turns the whole surface under a click (a second click turns it back) and **Flip all** turns every surface. Turns are staged and shown at once; **Save** writes the file once in its own format, **Discard** drops the turns, and **Restore original** puts back the file as it was before the first save. A file that is closed as a whole cannot be flipped.
+- Save and Restore original act like an upload: the criteria and studies that list the file go out of date. They wait while a run of the project is going. Leaving Inspect with turns not saved asks Save, Discard or Stay.
+
 ## Where projects are kept
 
 Each project is a folder in the projects folder:
@@ -283,7 +293,8 @@ Each project is a folder in the projects folder:
 <projects folder>/<project name>/
 ├── inputs/        The files you added (max_volume/, test_surfaces/, context/, terrain/, weather.epw)
 │                  and the joined meshes the engine reads (joined/, one test_surfaces_<id>.ply per criterion
-│                  and one study_surfaces_<id>.ply per study that lists files)
+│                  and one study_surfaces_<id>.ply per study that lists files), and originals/test_surfaces/,
+│                  the test surface files as they were before Inspect first saved a flip of them
 ├── config.yaml    The settings, a normal USC chain file (shared settings, then the criteria that are on)
 ├── project.json   The project's record: the files you added with their triangle counts, size, time and digest,
 │                  the notices of files replaced in the folder, the input revision,
