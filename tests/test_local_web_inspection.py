@@ -10,7 +10,7 @@ import pytest
 from local_web_test_support import GOLDEN_EPW, box_bytes
 from test_local_web_server import build_client, create_project, upload
 from urbansolarcarver.local_web_service import inspection
-from urbansolarcarver.local_web_service.projects import ProjectStore
+from urbansolarcarver.local_web_service.projects import ProjectError, ProjectStore
 from urbansolarcarver.local_web_service.inspection import ORIGINALS_FOLDER, inspection_geometry, project_inspection
 
 PANEL_SIZE = 6.0
@@ -140,6 +140,49 @@ def test_an_unchanged_file_is_read_once(store_with_files, monkeypatch):
     monkeypatch.setattr(inspection, "load_mesh", lambda *args, **kwargs: pytest.fail("the file was read again"))
     project_inspection(store_with_files, "p")
     inspection_geometry(store_with_files, "p", "facades.obj")
+
+
+def test_two_closed_bodies_touching_along_an_edge_are_both_closed(store):
+    import trimesh
+    first = trimesh.creation.box(extents=(4, 4, 4))
+    first.apply_translation((2, 2, 2))
+    second = trimesh.creation.box(extents=(4, 4, 4))
+    second.apply_translation((6, 6, 2))     # shares the vertical edge x = 4, y = 4 with the first
+    store.add_input("p", "context", "pair.ply", trimesh.util.concatenate([first, second]).export(file_type="ply"))
+    (entry,) = project_inspection(store, "p").files
+    assert entry.body_count == 2
+    assert entry.closed_body_count == 2
+
+
+def _overwrite(store, role, file_name, data: bytes) -> None:
+    path = store.input_file_path("p", role, file_name)
+    old_time = path.stat().st_mtime_ns
+    path.write_bytes(data)
+    os.utime(path, ns=(old_time + 10 ** 9, old_time + 10 ** 9))
+
+
+def test_an_unreadable_file_is_listed_with_its_problem_and_the_others_as_usual(store_with_files):
+    _overwrite(store_with_files, "context", "town.ply", b"this is not a mesh")
+    volume, facades, town = project_inspection(store_with_files, "p").files
+    assert town.file_name == "town.ply" and town.role == "context"
+    assert town.problem and not town.problem.startswith("load_mesh:")
+    assert (town.triangle_count, town.area_m2, town.bounds, town.body_count, town.closed_body_count) == (0, 0, [[0, 0, 0], [0, 0, 0]], 0, 0)
+    assert town.surface_count is None and town.flippable is False and town.original_kept is False
+    assert volume.problem is None and volume.triangle_count == 12
+    assert facades.problem is None and facades.surface_count == 2
+
+
+def test_the_geometry_of_an_unreadable_file_is_422_and_of_a_deleted_file_404(store_with_files):
+    _overwrite(store_with_files, "test_surfaces", "facades.obj", b"")
+    with pytest.raises(ProjectError) as refused:
+        inspection_geometry(store_with_files, "p", "facades.obj")
+    assert refused.value.status_code == 422
+    assert next(entry for entry in project_inspection(store_with_files, "p").files if entry.file_name == "facades.obj").problem
+    store_with_files.input_file_path("p", "test_surfaces", "facades.obj").unlink()
+    assert [entry.file_name for entry in project_inspection(store_with_files, "p").files] == ["volume.ply", "town.ply"]
+    with pytest.raises(ProjectError) as missing:
+        inspection_geometry(store_with_files, "p", "facades.obj")
+    assert missing.value.status_code == 404
 
 
 def test_the_original_is_reported_when_it_is_kept(store_with_files):

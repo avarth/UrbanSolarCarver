@@ -67,8 +67,8 @@ def inspect_file(path: Path, role: str) -> FileInspection:
 def project_inspection(store: ProjectStore, name: str) -> InspectReply:
     """The summary of each mesh file of project *name*, by role (max volume, test surfaces, context, terrain) then file name.
 
-    A recorded file that is not in the folder any more is left out (the stage status reports it as missing). ProjectError 422
-    for a file that cannot be read; 404 for an unknown project."""
+    A recorded file that is not in the folder any more is left out (the stage status reports it as missing). A file that cannot be
+    read is listed with its ``problem`` and zero counts, the others as usual. ProjectError 404 for an unknown project."""
     project_folder = store.open(name)
     with store.project_lock(name):
         file_names = {role: sorted(store.read_project_json(name).input_files.get(role, {})) for role in MESH_ROLES}
@@ -78,7 +78,11 @@ def project_inspection(store: ProjectStore, name: str) -> InspectReply:
             path = store._stored_file_path(project_folder, role, file_name)
             if not path.is_file():
                 continue
-            summary = _inspect_or_refuse(path, role).summary
+            try:
+                summary = inspect_file(path, role).summary
+            except (InputError, OSError) as error:
+                files.append(_unreadable_summary(role, file_name, error))
+                continue
             if role == test_surfaces.ROLE:
                 summary = summary.model_copy(update={"original_kept": (project_folder / ORIGINALS_FOLDER / file_name).is_file()})
             files.append(summary)
@@ -125,7 +129,17 @@ def _inspect_or_refuse(path: Path, role: str) -> FileInspection:
     try:
         return inspect_file(path, role)
     except (InputError, OSError) as error:
-        raise ProjectError(f"The {role} file '{path.name}' cannot be read: {str(error).removeprefix('load_mesh: ')}", status_code=422) from error
+        raise ProjectError(f"The {role} file '{path.name}' cannot be read: {_reason(error)}", status_code=422) from error
+
+
+def _reason(error: Exception) -> str:
+    return str(error).removeprefix("load_mesh: ")
+
+
+def _unreadable_summary(role: str, file_name: str, error: Exception) -> InspectedFile:
+    """The entry of a file that cannot be read: its problem and nothing counted."""
+    return InspectedFile(role=role, file_name=file_name, triangle_count=0, area_m2=0.0, bounds=[[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]],
+                         body_count=0, closed_body_count=0, problem=_reason(error))
 
 
 def _inspect_mesh(mesh: trimesh.Trimesh, file_name: str, role: str) -> FileInspection:
@@ -146,14 +160,14 @@ def _inspect_mesh(mesh: trimesh.Trimesh, file_name: str, role: str) -> FileInspe
 
 
 def _open_bodies(mesh: trimesh.Trimesh, body_of_face: np.ndarray) -> np.ndarray:
-    """The numbers of the bodies that have an edge which is not shared by exactly two faces running opposite ways (as
-    ``Trimesh.is_watertight`` takes it, for each body)."""
+    """The numbers of the bodies that have an edge which is not shared by exactly two of the body's own faces running opposite
+    ways (as ``Trimesh.is_watertight`` takes it for the body alone). Two closed bodies that touch along an edge are both closed."""
     edges = mesh.edges                                  # directed, three per face
     unique_of_edge = mesh.edges_unique_inverse
-    faces_per_edge = np.bincount(unique_of_edge)
+    edge_count = int(unique_of_edge.max()) + 1
+    body_of_edge = body_of_face[np.arange(len(edges)) // 3].astype(np.int64)
+    edge_in_body, group_of_edge = np.unique(body_of_edge * edge_count + unique_of_edge, return_inverse=True)
     direction = np.where(edges[:, 0] < edges[:, 1], 1.0, -1.0)
-    unbalanced = np.bincount(unique_of_edge, weights=direction) != 0
-    open_edge = (faces_per_edge != 2) | unbalanced
-    body_of_edge = np.zeros(len(faces_per_edge), dtype=np.int64)
-    body_of_edge[unique_of_edge] = body_of_face[np.arange(len(edges)) // 3]
-    return np.unique(body_of_edge[open_edge])
+    faces_per_group = np.bincount(group_of_edge)
+    unbalanced = np.bincount(group_of_edge, weights=direction) != 0
+    return np.unique(edge_in_body[(faces_per_group != 2) | unbalanced] // edge_count)

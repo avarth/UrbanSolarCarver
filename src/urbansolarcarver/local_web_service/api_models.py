@@ -114,6 +114,7 @@ class InspectedFile(BaseModel):
     surface_count: int | None = None    # the same groups for a test surface file; None for other roles
     flippable: bool = False             # a test surface file that is open somewhere; False when closed as a whole and for other roles
     original_kept: bool = False         # a test surface file whose original from before a flip is kept
+    problem: str | None = None          # why the file cannot be read (the counts are then zero); None for a file that is read
 
 
 class InspectReply(BaseModel):
