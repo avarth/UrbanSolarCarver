@@ -1,16 +1,15 @@
 // An open project (UX 4, spec 7.1): the step accordion in the left panel (Inputs, Site and grid, Criteria, Envelope and massing,
-// Export) and the 3D view beside it. It holds what the steps share: the input files, the criteria (useCriteria) and their cards'
-// requests, the two settings forms (the shared settings, shown in Site and grid, and the selected criterion's, shown in its panel;
-// the steps read them as one), the stage status the step summaries read, and the input meshes (input_meshes.ts) and the sun path
-// (sun_path_request.ts) the 3D view draws. The criteria's selection, run conditions and cards are in use_workspace_criteria.ts.
-// The parts that start runs and show their results (the criterion's carving rule, Envelope and massing, Export) are put together
-// in result_steps.tsx from these and the app's run loop.
+// Export) and the 3D view beside it. It holds what the steps share: the input files and their meshes (use_input_files.ts), the
+// criteria (useCriteria) and their cards' requests, the two settings forms (the shared settings, shown in Site and grid, and the
+// selected criterion's, shown in its panel; the steps read them as one), the stage status the step summaries read
+// (use_stage_status.ts, workspace_view_state.ts), and the sun path (sun_path_request.ts) the 3D view draws. The criteria's selection,
+// run conditions and cards are in use_workspace_criteria.ts. The parts that start runs and show their results (the criterion's
+// carving rule, Envelope and massing, Export) are put together in result_steps.tsx from these and the app's run loop.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  addInput, getStageStatus, putSharedSettings, removeInput, serviceProblemOf, updateCriterion,
-  type CriterionEntry, type HealthReply, type InputFileInfo, type InputFilesReply, type ModeInfo, type ProjectDetail,
+  putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
-import { activeCriteria, filesOfOtherCriteria, stagesByCriterionOf, type StagesByCriterion } from "../criteria/criteria_state";
+import { filesOfOtherCriteria } from "../criteria/criteria_state";
 import { CriteriaStep } from "../criteria/CriteriaStep";
 import { CriterionPanel } from "../criteria/CriterionPanel";
 import { usePanelSections } from "../criteria/PanelSection";
@@ -19,32 +18,28 @@ import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
 import { listedWithAnd, messages } from "../messages";
-import { hemisphereOfLatitude, seasonsOfLatitude, type Hemisphere } from "../settings_form/analysis_period";
-import {
-  analysisDiffersFromStored, shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend,
-} from "../settings_form/form_state";
+import { hemisphereOfLatitude } from "../settings_form/analysis_period";
+import { shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend } from "../settings_form/form_state";
 import { ANALYSIS_PERIOD_FIELDS, fieldSettingOf } from "../settings_form/presentation";
 import { sharedRefusalShown, splitSettings, useBothForms } from "../settings_form/two_forms";
-import { localOrigin, type Bounds3, type Point3 } from "../viewer/local_origin";
 import type { LayerName } from "../viewer/scene";
 import { sceneHemisphere } from "../viewer/sky_dome";
 import { ViewerPane } from "../viewer_overlays/ViewerPane";
 import { useColdPeriod } from "./cold_period_request";
-import { boundsOf, useInputGeometry, type MeshRole } from "./input_meshes";
-import { carvedByNote, InputBox, inputProblemText, InputsStep, type AddInputFiles, type InputRole, type RemoveInputFile } from "./InputsStep";
+import { boundsOf } from "./input_meshes";
+import { carvedByNote, InputBox, InputsStep, type InputRole } from "./InputsStep";
 import { ANALYSIS_STAGES, useResultSteps } from "./result_steps";
 import type { RunLoop } from "./run_state";
-import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, settingsToFixByStep, stepOfSetting } from "./SettingsStep";
+import { RunAnalysisButton, runAnalysisAfterSaving, SaveFailureNotice, saveFailureTextOf, SettingsToFix, stepOfSetting } from "./SettingsStep";
 import { SiteAndGridStep } from "./SiteAndGridStep";
 import { StepAccordion, type AccordionStep } from "./StepAccordion";
 import { testSurfaceGroupsOf, testSurfaceOwners } from "./test_surface_groups";
-import {
-  plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type PipelineStage, type ProjectViewState, type StageState, type StepName,
-} from "./step_summaries";
+import { plainModeName, STEP_NAMES, stepMark, stepNotUsableYet, stepSummary, type StepName } from "./step_summaries";
 import { analysisPeriodOf, useSunPathOfStoredPeriod } from "./sun_path_request";
-import { periodChangedSince, weatherChangeSuggestion, type WeatherFileChange } from "./weather_change_notice";
-
-const NO_SHIFT: Point3 = [0, 0, 0];
+import { useInputFiles } from "./use_input_files";
+import { useStageStatus } from "./use_stage_status";
+import { periodChangedSince, weatherChangeSuggestion } from "./weather_change_notice";
+import { projectViewStateOf } from "./workspace_view_state";
 
 // The id the service gives the first criterion of a project (a new one's, or an earlier version's made a chain of one).
 const FIRST_CRITERION_ID = "1";
@@ -138,47 +133,21 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   // The steps show the settings of both forms as one; each change goes to the form of its settings.
   const { form, dispatch, flushSave, cancelSave, changeAndSave, currentForm } = useBothForms(sharedForm, criterionForm, criterionKeys);
   const runActive = runs.activeRun?.project === project.name;
-  // The uploads and removals of input files under way, each until its reply (and the save it may start) is in.
-  const inputChangesUnderWay = useRef(new Set<Promise<unknown>>());
-  const waitForInputChanges = async () => {
-    await Promise.allSettled(inputChangesUnderWay.current);
-  };
-  const followedInputChange = <Reply,>(change: Promise<Reply>): Promise<Reply> => {
-    inputChangesUnderWay.current.add(change);
-    void change.finally(() => inputChangesUnderWay.current.delete(change)).catch(() => {});
-    return change;
-  };
+  const { criterionStages, refreshStageStatus, shownAs, shownStages, everyCriterionCarved } = useStageStatus({
+    token, project, criteria: criteria.criteria, form, runs, onServiceProblem,
+  });
+  const [framingRequest, setFramingRequest] = useState(0);
+  const frameAllInputs = () => setFramingRequest((count) => count + 1);
+  const { files, origin, weather, meshes, addFiles, removeFile, storeTestSurfaceFiles, followedInputChange, waitForInputChanges } = useInputFiles({
+    token, project, modes, currentForm, sharedForm, refreshStageStatus, onInputsLoaded: frameAllInputs, onServiceProblem,
+  });
   useEffect(() => {
     props.onSettingsSaverReady?.({ flush: flushSave, cancel: cancelSave, waitForInputChanges });
     return () => props.onSettingsSaverReady?.(null);
   }, []);
-  const [files, setFiles] = useState<Record<InputRole, InputFileInfo[]>>({
-    max_volume: project.inputs.max_volume ?? [], test_surfaces: project.inputs.test_surfaces ?? [], context: project.inputs.context ?? [],
-    terrain: project.inputs.terrain ?? [], weather: project.inputs.weather ?? [],
-  });
-  const [joinedBounds, setJoinedBounds] = useState<Bounds3 | null>(project.joined_bounds as Bounds3 | null);
-  const [weatherLocation, setWeatherLocation] = useState(project.weather_location);
-  const [weatherLatitude, setWeatherLatitude] = useState(project.weather_latitude);
-  const [inputRevisions, setInputRevisions] = useState<Record<MeshRole, number>>({ max_volume: 0, test_surfaces: 0, context: 0, terrain: 0 });
-  // Goes up whenever the weather file is added, replaced or removed: the service keeps one name for it, so its file list may not change.
-  const [weatherFileRevision, setWeatherFileRevision] = useState(0);
-  const weatherFileRevisionNow = useRef(0);
-  // The weather file added or replaced last in this session, for the notice over the criterion's settings; null before one, and
-  // once it is dismissed.
-  const [weatherFileChange, setWeatherFileChange] = useState<WeatherFileChange | null>(null);
-  // The hemisphere of the last weather file the project had with seasons, kept across a removal and across a file within the tropics
-  // or without a latitude: what the period was likely chosen for.
-  const hemisphereOfLastWeatherFile = useRef<Hemisphere>(hemisphereOfLatitude(project.weather_latitude));
-  const [stages, setStages] = useState(project.stage_status.stages as Record<PipelineStage, StageState>);
-  const [criterionStages, setCriterionStages] = useState<StagesByCriterion>(() => stagesByCriterionOf(project.criterion_status));
-  // The stored analysis settings (FormState.storedAnalysisRevision) the last stage status used was asked for after.
-  const [revisionOfStageStatus, setRevisionOfStageStatus] = useState(0);
-  const storedAnalysisRevision = useRef(form.storedAnalysisRevision);
-  storedAnalysisRevision.current = form.storedAnalysisRevision;
   const [openStep, setOpenStep] = useState<StepName | null>(props.startSteps?.open ?? "inputs");
   const [viewStep, setViewStep] = useState<StepName>(props.startSteps?.view ?? "inputs");
   useEffect(() => props.onStepsChange?.({ open: openStep, view: viewStep }), [openStep, viewStep]);
-  const [framingRequest, setFramingRequest] = useState(0);
   const panel = useRef<HTMLElement>(null);
   const [addFilesRequest, setAddFilesRequest] = useState(0);
   const [settingToFocus, setSettingToFocus] = useState<{ name: string } | null>(null);
@@ -186,13 +155,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const modeInfo = modes.find((candidate) => candidate.name === form.mode);
   const modeNeedsWeatherFile = modeInfo?.needs_epw ?? false;
   const hasWeatherFile = files.weather.length > 0;
-  const origin = joinedBounds === null ? NO_SHIFT : localOrigin(joinedBounds);
-  const frameAllInputs = () => setFramingRequest((count) => count + 1);
-  const maxVolumeMesh = useInputGeometry(token, project.name, "max_volume", files.max_volume, origin, inputRevisions.max_volume, frameAllInputs, onServiceProblem);
-  const testSurfacesMesh = useInputGeometry(token, project.name, "test_surfaces", files.test_surfaces, origin, inputRevisions.test_surfaces, frameAllInputs,
-                                        onServiceProblem);
-  const contextMesh = useInputGeometry(token, project.name, "context", files.context, origin, inputRevisions.context, frameAllInputs, onServiceProblem);
-  const terrainMesh = useInputGeometry(token, project.name, "terrain", files.terrain, origin, inputRevisions.terrain, frameAllInputs, onServiceProblem);
+  const maxVolumeMesh = meshes.max_volume, testSurfacesMesh = meshes.test_surfaces, contextMesh = meshes.context, terrainMesh = meshes.terrain;
   const maxVolume = maxVolumeMesh.geometry, testSurfaces = testSurfacesMesh.geometry;
   // The bounds of the maximum volume and the test surfaces loaded so far: the sun path and the sky dome are drawn around them (R2 2)
   const inputsBounds = useMemo(() => boundsOf([maxVolume, testSurfaces]), [maxVolume, testSurfaces]);
@@ -222,138 +185,32 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const sceneSphere = useMemo(() => (inputsBounds === null ? null : sceneHemisphere(inputsBounds)), [inputsBounds]);
   const northDegrees = Number(shownValue(form, "north_deg") ?? 0);
 
-  // A stage status read across a run of this project says "missing" for results still on screen: such a reply is not used
-  // (RunLoop.replyStillHolds), and the run's end asks again. *completedStages*: the stages a run just completed are current at
-  // once, so their layers are not dimmed until the reply.
-  const refreshStageStatus = (completedStages: readonly string[] = []) => {
-    if (completedStages.length > 0) {
-      const completed = Object.fromEntries(completedStages.map((stage) => [stage, "current"]));
-      setStages((current) => ({ ...current, ...completed }));
-      const completedOfCriteria = Object.fromEntries(completedStages.filter((stage) => stage === "preprocessing" || stage === "thresholding")
-        .map((stage) => [stage, "current"]));
-      setCriterionStages((current) => Object.fromEntries(Object.entries(current).map(([id, ofCriterion]) => [id, { ...ofCriterion, ...completedOfCriteria }])));
-    }
-    const replyStillHolds = runs.replyStillHolds(project.name);
-    const revisionAsked = storedAnalysisRevision.current;
-    getStageStatus(token, project.name).then((reply) => {
-      if (!replyStillHolds()) return;
-      setStages(reply.stages as Record<PipelineStage, StageState>);
-      setCriterionStages(stagesByCriterionOf(reply.criteria));
-      setRevisionOfStageStatus((revision) => Math.max(revision, revisionAsked));
-    }).catch(onServiceProblem);
-  };
-
-  // The stage status describes the stored settings. While the form's mode or analysis settings are not those (a save waits or
-  // was refused), or a save changed them and the stage status since is still to come, the analysis is out of date for the
-  // settings shown: every stage counts as out of date, so the carving rule is locked and its results are dimmed (UX 5.5), and no
-  // carving change can start the analysis of a mode the form does not show.
-  const analysisOfOtherSettings = analysisDiffersFromStored(form) || revisionOfStageStatus < form.storedAnalysisRevision;
-  const shownAs = <Stage extends string>(stagesOf: Record<Stage, StageState>): Record<Stage, StageState> => (analysisOfOtherSettings
-    ? Object.fromEntries(Object.entries(stagesOf).map(([stage, state]) => [stage, state === "current" ? "out_of_date" : state])) as Record<Stage, StageState>
-    : stagesOf);
-  const shownStages = shownAs(stages);
-  // Criteria's pinned Build envelope and massing waits until every criterion that is on has a current carving (disabled, with the reason,
-  // while the settings shown differ from those it was made with).
-  const everyCriterionCarved = activeCriteria(criteria.criteria).length > 0
-    && activeCriteria(criteria.criteria).every((criterion) => criterionStages[criterion.id]?.thresholding === "current");
-
-  // A save changes what the stages were run with; its reply is in once no save waits.
-  useEffect(() => {
-    if (form.changeCount > 0 && !form.pendingSave) refreshStageStatus();
-  }, [form.pendingSave]);
-
   useEffect(() => {
     if (form.saveFailure !== null && serviceProblemOf(form.saveFailure) !== "other") onServiceProblem(form.saveFailure);
   }, [form.saveFailure]);
 
   // The sun path of the stored period (UX 8.2), as soon as the weather file and the period are there, before any run.
   const sunPath = useSunPathOfStoredPeriod({ token, project: project.name, form, hasWeatherFile, northDegrees, criterionId: resultsCriterionId, onServiceProblem });
-  const { coldPeriod, answeredWeatherFileRevision } = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision, onServiceProblem });
+  const { coldPeriod, answeredWeatherFileRevision } = useColdPeriod({ token, project: project.name, form, hasWeatherFile, weatherFileRevision: weather.fileRevision, onServiceProblem });
   const modeReadsPeriod = modeInfo?.needs_period ?? false;
   const periodShown = analysisPeriodOf(form, modeReadsPeriod);
-  const weatherChangeSuggestionNow = weatherChangeSuggestion(weatherFileChange, {
+  const weatherChangeSuggestionNow = weatherChangeSuggestion(weather.fileChange, {
     mode: form.mode, modeReadsPeriod, period: periodShown, coldPeriod, answeredWeatherFileRevision,
   });
   // Once the period is not the one the new file came with, the notice has nothing more to say about it, even if the period comes back.
-  const weatherChangeOutlived = weatherFileChange !== null && periodChangedSince(weatherFileChange, periodShown);
+  const weatherChangeOutlived = weather.fileChange !== null && periodChangedSince(weather.fileChange, periodShown);
   useEffect(() => {
-    if (weatherChangeOutlived) setWeatherFileChange(null);
+    if (weatherChangeOutlived) weather.setFileChange(null);
   }, [weatherChangeOutlived]);
 
   const inputsDisabledReason = runActive ? messages.runInProgress : null;
   const inputRolesWithFiles = (Object.keys(files) as InputRole[]).filter((role) => files[role].length > 0);
 
-  const applyFilesReply = (reply: InputFilesReply) => {
-    setFiles((current) => ({ ...current, [reply.role]: reply.files }));
-    setJoinedBounds(reply.joined_bounds as Bounds3 | null);
-    setWeatherLocation(reply.weather_location);
-    setWeatherLatitude(reply.weather_latitude);
-    if (reply.role === "weather") {
-      weatherFileRevisionNow.current += 1;
-      setWeatherFileRevision(weatherFileRevisionNow.current);
-    } else {
-      setInputRevisions((current) => ({ ...current, [reply.role]: current[reply.role as MeshRole] + 1 }));
-    }
-  };
-  // A weather file added or replaced: the notice over the criterion's settings is about it and the period the form shows now (a
-  // later one replaces it).
-  const noteNewWeatherFile = (reply: InputFilesReply) => {
-    const shownForm = currentForm();
-    const readsPeriod = modes.find((candidate) => candidate.name === shownForm.mode)?.needs_period ?? false;
-    const newHemisphere = seasonsOfLatitude(reply.weather_latitude);
-    setWeatherFileChange({
-      weatherFileRevision: weatherFileRevisionNow.current, location: reply.weather_location, previousHemisphere: hemisphereOfLastWeatherFile.current,
-      newHemisphere, periodBefore: analysisPeriodOf(shownForm, readsPeriod),
-    });
-    if (newHemisphere !== null) hemisphereOfLastWeatherFile.current = newHemisphere;
-  };
-  const afterInputsChanged = (role: InputRole) => {
-    refreshStageStatus();
-    // The grid follows the maximum volume; a save of the unchanged shared settings brings its new plan.
-    if (role === "max_volume") sharedForm.dispatch({ type: "values_changed", values: {} });
-  };
-
-  const addFilesOneByOne: AddInputFiles = async (role, chosenFiles) => {
-    const problems: string[] = [];
-    for (const file of chosenFiles) {
-      try {
-        const reply = await addInput(token, project.name, role, file);
-        applyFilesReply(reply);
-        if (role === "weather") noteNewWeatherFile(reply);
-      } catch (error) {
-        if (serviceProblemOf(error) !== "other") {
-          onServiceProblem(error);
-          break;
-        }
-        problems.push(inputProblemText(error, file.name));
-      }
-    }
-    if (problems.length < chosenFiles.length) afterInputsChanged(role);
-    return problems;
-  };
-
-  const removeFileAndApply: RemoveInputFile = async (role, fileName) => {
-    try {
-      applyFilesReply(await removeInput(token, project.name, role, fileName));
-      if (role === "weather") setWeatherFileChange(null);         // the notice was about the file removed
-      afterInputsChanged(role);
-      return null;
-    } catch (error) {
-      if (serviceProblemOf(error) !== "other") onServiceProblem(error);
-      return inputProblemText(error, fileName);
-    }
-  };
-  // The app waits for these before a rename, reset or delete of the project (waitForInputChanges).
-  const addFiles: AddInputFiles = (role, chosenFiles) => followedInputChange(addFilesOneByOne(role, chosenFiles));
-  const removeFile: RemoveInputFile = (role, fileName) => followedInputChange(removeFileAndApply(role, fileName));
   // The criterion's test surfaces (test_surface_calls.ts): the 3D view loads the stored files again after each change (a replaced
   // file keeps its name). The local origin follows the maximum volume only, so it does not change with them.
   const testSurfaceCalls = testSurfaceCallsOf({
     token, project: project.name, criteria, criterionId, refreshStageStatus, followed: followedInputChange, onServiceProblem,
-    onStoredFiles: (stored) => {
-      setFiles((current) => ({ ...current, test_surfaces: stored }));
-      setInputRevisions((current) => ({ ...current, test_surfaces: current.test_surfaces + 1 }));
-    },
+    onStoredFiles: storeTestSurfaceFiles,
   });
   // The criterion's files as stored, in its order; a file just added shows once the stored files have been asked for again.
   const criterionTestSurfaces = criterion === null ? files.test_surfaces
@@ -380,7 +237,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
 
   // Either button of the notice ends it; the focus, on a button that goes away, moves to the period the notice was about.
   const endWeatherChangeNotice = () => {
-    setWeatherFileChange(null);
+    weather.setFileChange(null);
     setSettingToFocus({ name: fieldSettingOf(ANALYSIS_PERIOD_FIELDS[0]) });
   };
 
@@ -401,31 +258,14 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     goToSetting: workspaceCriteria.goToSetting, onServiceProblem,
   });
   const cards = workspaceCriteria.cardsOf(resultSteps, inputsDisabledReason);
-  const carvingSummaryOf = (entry: CriterionEntry) => resultSteps.results.summary?.criteria?.find((summary) => summary.id === entry.id);
-
-  const viewState: ProjectViewState = {
-    maxVolumeFiles: files.max_volume.length,
-    hasWeatherFile,
-    contextFiles: files.context.length,
-    terrainFiles: files.terrain.length,
-    mode: form.mode,
-    northDegrees,
-    voxelSize: Number(shownValue(form, "voxel_size")),
-    settingsToFix: settingsToFixByStep(sharedForm.form, criterionForm.form, criterionKeys),
-    stages: shownStages,
-    keptPercent: resultSteps.results.summary?.carving?.retention_pct ?? null,
-    criterionOff: criteria.criteria.length === 1 && criteria.criteria[0].bypassed,
-    // A name the user did not give ends in its first test surface file ("Daylight on windows"); the summary says the mode alone.
-    criteriaInChain: criteria.criteria.length < 2 ? null
-      : active.map((entry) => ({ name: entry.named_by_user ? entry.name : plainModeName(String(entry.settings?.mode ?? entry.name)),
-                                 keptPercent: carvingSummaryOf(entry)?.carving?.retention_pct ?? null })),
-    totalFloorArea: resultSteps.results.summary?.massing?.total_floor_area_m2 ?? null,
-    storeys: resultSteps.results.summary?.massing?.storeys_built ?? null,
-  };
+  const viewState = projectViewStateOf({
+    files, form, sharedForm: sharedForm.form, criterionForm: criterionForm.form, criterionKeys, northDegrees, stages: shownStages,
+    summary: resultSteps.results.summary, criteria: criteria.criteria, active,
+  });
 
   const weatherHint = messages.weatherNeededFor(listedWithAnd(modes.filter((mode) => mode.needs_epw).map((mode) => plainModeName(mode.name))));
   const weatherBox = (
-    <InputBox role="weather" files={files.weather} weatherLocation={weatherLocation} weatherHint={weatherHint} onAddFiles={addFiles}
+    <InputBox role="weather" files={files.weather} weatherLocation={weather.location} weatherHint={weatherHint} onAddFiles={addFiles}
               onRemoveFile={removeFile} disabledReason={inputsDisabledReason} weatherNeeded showsDisabledReason={false} />
   );
   const changeSettings = (values: Record<string, unknown>) => dispatch({ type: "values_changed", values });
@@ -433,7 +273,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const criterionOn = !(criterion?.bypassed ?? false);
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
-      <InputsStep files={files} weatherLocation={weatherLocation} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
+      <InputsStep files={files} weatherLocation={weather.location} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
                   onRemoveFile={removeFile} disabledReason={inputsDisabledReason} maxVolumeNote={carvedByNote(project.carving_chain ?? [])}
                   drawingProblems={{ max_volume: maxVolumeMesh.drawingProblems, context: contextMesh.drawingProblems, terrain: terrainMesh.drawingProblems }} />
     ),
@@ -449,7 +289,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                         onUseTestSurface={testSurfaceCalls.use} form={form} stepErrors={criterionForm.form.stepErrors} criterionKeys={criterionKeys}
                         onChange={changeSettings} onChooseMode={(mode) => dispatch({ type: "mode_chosen", mode })} disabledReason={inputsDisabledReason}
                         weatherDropZone={criterionOn && modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
-                        coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weatherLatitude)}
+                        coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weather.latitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
                         carvingRule={resultSteps.carvingRule} scoreUnit={modeInfo?.score_unit} />
       } />
