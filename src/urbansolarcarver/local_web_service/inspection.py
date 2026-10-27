@@ -12,6 +12,7 @@ time changes. A kept mesh is shared by every reader; whoever turns faces does it
 from __future__ import annotations
 
 import contextlib
+import filecmp
 import json
 import os
 import shutil
@@ -37,7 +38,8 @@ HEADER_ALIGNMENT_BYTES = 4      # the geometry header is padded so the arrays af
 FRAME_STEP_M = 1.0              # the frame of the geometry is the minimum corner of the bounds rounded down to this
 KEPT_FILE_COUNT = 32            # inspected files kept, the least recently used leaving first
 NORMAL_TOLERANCE = 1e-6         # how far a face normal of a saved file may be from the one expected
-OBJ_DECIMALS = 10               # the decimals of a written OBJ: georeferenced coordinates keep their millimetres and more
+POSITION_TOLERANCE_M = 1e-6     # how far a corner of a saved file may be from the one written
+OBJ_DECIMALS = 10              # the decimals of a written OBJ: georeferenced coordinates keep their millimetres and more
 
 
 @dataclass(frozen=True)
@@ -105,7 +107,7 @@ def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surface
 
     The file is written again in its own format with those surfaces turned (a surface is turned as a whole), read back with
     ``load_mesh``, and replaces the stored file only when it reads as the same triangles with the turned surfaces' normals
-    negated and the others' unchanged, and as the same surfaces. Before the first save the stored file is copied to
+    negated and the others' unchanged, and at the same places (to 1e-6 m). Before the first save the stored file is copied to
     ``inputs/originals/test_surfaces/`` and stays there until Restore original, an upload that replaces the file, or the file's
     removal. The save has the effects of an upload (stored_files.build_in_test_surface_file): the joined files of the criteria and
     studies that list the file are built again and the criteria and studies go out of date by them; there is no changed-file
@@ -142,7 +144,8 @@ def save_turned_surfaces(store: ProjectStore, name: str, file_name: str, surface
             try:
                 _put_in_place(store, name, project_folder, file_name, temporary_path)
             except BaseException:
-                if original_is_new:
+                # The new original is the only copy of the file as it was when the stored file did not come back: then it stays.
+                if original_is_new and _same_content(path, original_path):
                     original_path.unlink(missing_ok=True)
                 raise
         finally:
@@ -261,9 +264,9 @@ def _write_mesh_in_its_format(mesh: trimesh.Trimesh, path: Path) -> None:
 def _write_turned_file(turned_mesh: trimesh.Trimesh, temporary_path: Path, file_name: str, before: FileInspection,
                        expected_normals: np.ndarray) -> FileInspection:
     """Write *turned_mesh* to *temporary_path* and check that ``load_mesh`` reads it as the triangles of *before*, with the
-    expected face normals and the same surfaces; the inspection of what was read, named *file_name*.
+    expected face normals and the same corners; the inspection of what was read, named *file_name*.
 
-    ProjectError 500 when the file cannot be written, or reads as other triangles, other normals or other surfaces."""
+    ProjectError 500 when the file cannot be written, or reads as other triangles, normals or corners."""
     try:
         _write_mesh_in_its_format(turned_mesh, temporary_path)
     except Exception as error:      # the exporters fail with many kinds of error
@@ -277,10 +280,11 @@ def _write_turned_file(turned_mesh: trimesh.Trimesh, temporary_path: Path, file_
         raise refusal
     if not np.all(np.abs(reloaded.face_normals - expected_normals) <= NORMAL_TOLERANCE):
         raise refusal
-    after = _inspect_mesh(reloaded, file_name, test_surfaces.ROLE)
-    if not np.array_equal(after.surface_of_face, before.surface_of_face):
+    if np.abs(reloaded.vertices[reloaded.faces] - turned_mesh.vertices[turned_mesh.faces]).max() > POSITION_TOLERANCE_M:
         raise refusal
-    return after
+    # The surfaces may differ from the ones before: two panels that were told apart only by facing opposite ways join into one
+    # surface once one is turned, and that is a turn that holds.
+    return _inspect_mesh(reloaded, file_name, test_surfaces.ROLE)
 
 
 def _put_in_place(store: ProjectStore, name: str, project_folder: Path, file_name: str, new_path: Path) -> None:
@@ -290,6 +294,7 @@ def _put_in_place(store: ProjectStore, name: str, project_folder: Path, file_nam
     stored_path = test_surfaces.stored_path(project_folder, file_name)
     backup_path = _temporary_path_beside(stored_path)
     replaced = False
+    backup_is_needed = False
     try:
         shutil.copy2(stored_path, backup_path)
         project_json = store.read_project_json(name)
@@ -300,12 +305,22 @@ def _put_in_place(store: ProjectStore, name: str, project_folder: Path, file_nam
             store.write_project_json(name, project_json)
         except BaseException:
             if replaced:
+                backup_is_needed = True         # until the stored file is known to be back
                 os.replace(backup_path, stored_path)
+                backup_is_needed = False
                 with contextlib.suppress(Exception):        # the joined files follow the stored file again, if they can
                     stored_files.build_in_test_surface_file(project_folder, store.read_project_json(name), file_name)
             raise
     finally:
-        backup_path.unlink(missing_ok=True)
+        if not backup_is_needed:
+            backup_path.unlink(missing_ok=True)
+
+
+def _same_content(first: Path, second: Path) -> bool:
+    try:
+        return filecmp.cmp(first, second, shallow=False)
+    except OSError:
+        return False
 
 
 def _inspect_or_refuse(path: Path, role: str) -> FileInspection:

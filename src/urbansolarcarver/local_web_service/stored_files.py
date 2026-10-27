@@ -11,6 +11,7 @@ the same way once, by building its joined files and comparing them with those in
 """
 from __future__ import annotations
 
+import contextlib
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -92,6 +93,9 @@ def refresh_changed_inputs(store, name: str) -> bool:
                         project_json.inputs_revision += 1
                 elif role == test_surfaces.ROLE:
                     changed_names = _join_test_surfaces_again(project_folder, project_json, sorted(files))
+                    for file_name in files:     # the kept original of a saved flip is older than the file now in the folder
+                        with contextlib.suppress(OSError):
+                            test_surfaces.original_path(project_folder, file_name).unlink(missing_ok=True)
                 else:
                     changed_names = _join_mesh_role_again(store, name, project_folder, project_json, role, sorted(files))
             except (ProjectError, OSError) as error:

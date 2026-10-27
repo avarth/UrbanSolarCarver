@@ -434,3 +434,103 @@ def test_turning_during_a_run_is_409(client_with_blocking_run, projects_folder):
     assert client.post("/api/projects/p/inspect/test_surfaces/surface.ply/restore").status_code == 409
     assert stored.read_bytes() == before
     assert not (projects_folder / "p" / ORIGINALS_FOLDER).exists()
+
+
+# ---- Fix round 1: failures on the way, the reload check, a file replaced by hand ----
+
+def _folder_names(store):
+    return sorted(path.name for path in (store.open("p") / "inputs" / "test_surfaces").iterdir())
+
+
+def _joined(store):
+    return store.open("p") / "inputs" / "joined" / "test_surfaces_1.ply"
+
+
+def test_a_save_that_fails_after_the_replacement_leaves_the_file_as_it_was(store_after_a_run, monkeypatch):
+    from urbansolarcarver.local_web_service import stored_files
+    store = store_after_a_run
+    before, joined_before = _stored(store).read_bytes(), _joined(store).read_bytes()
+
+    def fails(*args):
+        raise ProjectError("the joined file could not be built", status_code=422)
+
+    monkeypatch.setattr(stored_files, "build_in_test_surface_file", fails)
+    with pytest.raises(ProjectError):
+        save_turned_surfaces(store, "p", "facades.obj", [0])
+    assert _stored(store).read_bytes() == before
+    assert not _kept(store).exists()
+    assert _folder_names(store) == ["facades.obj"]
+    assert _joined(store).read_bytes() == joined_before
+    assert criterion_status(store, "p")["1"]["preprocessing"] == "current"
+
+
+def test_the_original_stays_when_the_stored_file_cannot_be_put_back(store_after_a_run, monkeypatch):
+    from urbansolarcarver.local_web_service import stored_files
+    store = store_after_a_run
+    stored, before = _stored(store), _stored(store).read_bytes()
+    real_replace = os.replace
+    replaced_onto_stored = []
+
+    def replace(source, target):
+        if Path(target) == stored:
+            replaced_onto_stored.append(source)
+            if len(replaced_onto_stored) == 2:      # the second move onto the stored file is the rollback
+                raise PermissionError("held by another program")
+        real_replace(source, target)
+
+    def fails(*args):
+        raise ProjectError("the joined file could not be built", status_code=422)
+
+    monkeypatch.setattr(stored_files, "build_in_test_surface_file", fails)
+    monkeypatch.setattr(inspection.os, "replace", replace)
+    with pytest.raises(PermissionError):
+        save_turned_surfaces(store, "p", "facades.obj", [0])
+    monkeypatch.undo()
+    assert len(replaced_onto_stored) == 2
+    assert stored.read_bytes() != before        # the turned file stayed
+    assert _kept(store).read_bytes() == before  # so the original did too
+
+
+def test_a_panel_inverted_next_to_its_neighbour_joins_it_when_turned(store):
+    obj = "\n".join(["v 0 0 0", "v 6 0 0", "v 6 6 0", "v 0 6 0", "v 6 0 0", "v 12 0 0", "v 12 6 0", "v 6 6 0",
+                     "vn 0 0 1", "vn 0 0 -1",
+                     "f 1//1 2//1 3//1", "f 1//1 3//1 4//1", "f 5//2 7//2 6//2", "f 5//2 8//2 7//2"]) + "\n"
+    store.add_input("p", "test_surfaces", "row.obj", obj.encode())
+    assert project_inspection(store, "p").files[0].surface_count == 2
+    normals, surfaces = _normals_by_surface(_stored(store, "row.obj"))
+    assert normals[surfaces == 1][:, 2].tolist() == pytest.approx([-1, -1])
+    reply = save_turned_surfaces(store, "p", "row.obj", [1])
+    assert reply.surface_count == 1
+    normals, _ = _normals_by_surface(_stored(store, "row.obj"))
+    assert normals[:, 2].tolist() == pytest.approx([1, 1, 1, 1], abs=1e-6)
+
+
+def test_a_save_that_rounds_the_coordinates_writes_nothing(store, monkeypatch):
+    import trimesh
+    store.add_input("p", "test_surfaces", "site.obj", obj_panels([0], x_origin=4_500_000.4))
+    before = _stored(store, "site.obj").read_bytes()
+    real_writer = inspection._write_mesh_in_its_format
+
+    def rounding_writer(mesh, path):
+        vertices = mesh.vertices.copy()
+        vertices[:, 0] = np.round(vertices[:, 0])
+        real_writer(trimesh.Trimesh(vertices=vertices, faces=mesh.faces, process=False), path)
+
+    monkeypatch.setattr(inspection, "_write_mesh_in_its_format", rounding_writer)
+    with pytest.raises(ProjectError) as undone:
+        save_turned_surfaces(store, "p", "site.obj", [0])
+    assert undone.value.status_code == 500 and str(undone.value) == UNDONE_MESSAGE
+    assert _stored(store, "site.obj").read_bytes() == before
+    assert not _kept(store, "site.obj").exists()
+    assert _folder_names(store) == ["site.obj"]
+
+
+def test_a_file_replaced_by_hand_drops_its_kept_original(store_after_a_run):
+    store = store_after_a_run
+    save_turned_surfaces(store, "p", "facades.obj", [0])
+    assert _kept(store).is_file()
+    _overwrite(store, "test_surfaces", "facades.obj", obj_panels([0, 20, 40]))
+    assert store.refresh_changed_inputs("p") is True
+    assert not _kept(store).exists()
+    facades = next(entry for entry in project_inspection(store, "p").files if entry.file_name == "facades.obj")
+    assert facades.original_kept is False and facades.surface_count == 3
