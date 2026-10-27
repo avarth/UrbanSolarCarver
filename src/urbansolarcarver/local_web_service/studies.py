@@ -126,6 +126,15 @@ def checked_study_settings(metric: str, settings: Mapping) -> dict:
     return {key: getattr(check, key) for key in settings}
 
 
+def _takes_time_basis(metric: str, time_basis) -> bool:
+    """Whether the check accepts *time_basis* for *metric* (with the metric's default settings otherwise)."""
+    try:
+        build_check_settings({"metric": metric, "epw_path": _VALIDATION_WEATHER_FILE, **default_study_settings(metric), "time_basis": time_basis})
+    except ConfigError:
+        return False
+    return True
+
+
 def append_study(project_json: ProjectJson, metric: str, settings: dict, files: list[str]) -> StudyEntry:
     """Add a study at the end of the list of *project_json*, with the next id and the palette colour of that number, named by default."""
     checked_metric(metric)
@@ -149,16 +158,21 @@ def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | No
                  target: object = NOT_SENT) -> None:
     """Change a study in place; what is not given stays. A ProjectError(422) leaves it as it was.
 
-    A new metric resets the settings to its defaults, keeping the values of the keys both metrics have. *values* then change those
-    keys. A study the user did not name is named again by its metric and period.
+    A new metric resets the settings to its defaults, keeping the values of the keys both metrics have, except a time basis the new
+    metric does not take (only sun hours reads another clock than standard time), which becomes the default. *values* then change
+    those keys. The settings are checked after a metric change or with *values*, so no study is stored with settings its metric
+    refuses. A study the user did not name is named again by its metric and period.
     """
     new_name = None if name is None else checked_study_name(name)
     new_metric = entry.metric if metric is None else checked_metric(metric)
     settings = dict(entry.settings)
     if new_metric != entry.metric:
-        settings = {key: settings.get(key, default) for key, default in default_study_settings(new_metric).items()}
-    if values is not None:
-        settings = checked_study_settings(new_metric, {**settings, **values})
+        defaults = default_study_settings(new_metric)
+        settings = {key: settings.get(key, default) for key, default in defaults.items()}
+        if "time_basis" in settings and not _takes_time_basis(new_metric, settings["time_basis"]):
+            settings["time_basis"] = defaults["time_basis"]
+    if new_metric != entry.metric or values is not None:
+        settings = checked_study_settings(new_metric, {**settings, **(values or {})})
     entry.metric, entry.settings = new_metric, settings
     if new_name is not None:
         entry.name, entry.named_by_user = new_name, True

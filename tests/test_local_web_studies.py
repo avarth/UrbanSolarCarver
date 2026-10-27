@@ -158,6 +158,22 @@ def test_a_study_is_changed_by_its_target_and_its_settings(project_with_inputs):
     assert metric.value.status_code == 422
 
 
+def test_a_new_metric_that_does_not_take_the_time_basis_resets_it_to_standard(project_with_inputs):
+    from urbansolarcarver.local_web_service.simulation import refusal_of
+    store, name = _with_weather(project_with_inputs)
+    study = store.add_study(name, metric="sun_hours")
+    store.use_study_test_surface(name, study.id, "surface.ply")
+    assert store.update_study(name, study.id, values={"time_basis": "solar"}).settings["time_basis"] == "solar"
+    changed = store.update_study(name, study.id, metric="solar_energy")
+    assert changed.settings["time_basis"] == "standard" and store.studies(name)[0].settings["time_basis"] == "standard"
+    assert refusal_of(store, name, store.studies(name)[0]) is None      # a study that can run
+    store.update_study(name, study.id, metric="sun_hours")
+    assert store.update_study(name, study.id, values={"time_basis": "daylight_saving"}).settings["time_basis"] == "daylight_saving"
+    with pytest.raises(ProjectError) as refused:       # asked for together with a metric that refuses it
+        store.update_study(name, study.id, metric="useful_solar_energy", values={"time_basis": "solar"})
+    assert refused.value.status_code == 422 and store.studies(name)[0].metric == "sun_hours"
+
+
 def test_studies_are_reordered_by_their_ids(project_with_inputs):
     store, name = project_with_inputs
     ids = [store.add_study(name, metric="sky_view").id for _ in range(3)]

@@ -564,7 +564,7 @@ def run_geometries(max_volume_path, run_folder=None, fallback_voxel_size: float 
     from .io import load_mesh
     max_volume = load_mesh(str(max_volume_path))
     geometries = [CheckGeometry("max_volume", "Maximum volume", max_volume, path=str(max_volume_path))]
-    for found in run_geometry_files(run_folder, fallback_voxel_size):
+    for found in run_geometry_files(run_folder, fallback_voxel_size, report_unusable=True):
         geometries.append(CheckGeometry(found.name, found.label, load_mesh(str(found.path)), clip=max_volume,
                                         surface_tolerance=found.surface_tolerance, path=str(found.path)))
     return geometries

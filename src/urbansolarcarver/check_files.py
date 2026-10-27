@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from typing import NamedTuple, Optional
 
+from .run_context import report_issue
 from .stage_settings import stage_folder
 
 POINTS_FILE = "check_points.npz"
@@ -57,10 +58,15 @@ class RunGeometryFile(NamedTuple):
     surface_tolerance: float
 
 
-def run_geometry_files(run_folder, fallback_voxel_size: float = 1.0) -> list[RunGeometryFile]:
+def run_geometry_files(run_folder, fallback_voxel_size: float = 1.0, report_unusable: bool = False) -> list[RunGeometryFile]:
     """The carved envelope and the building massing of *run_folder* that were built (their manifest and mesh exist), in that
     order; none without a run folder. The surface tolerance is the voxel size of the analysis they were built from
-    (:func:`voxel_size_of`), *fallback_voxel_size* when the chain of manifests does not tell it."""
+    (:func:`voxel_size_of`), *fallback_voxel_size* when the chain of manifests does not tell it.
+
+    A geometry whose manifest exists but cannot be read or names no mesh is left out; with *report_unusable* (the check does
+    this, the service's state of a study does not) that is reported as an issue of the active run context naming the geometry
+    and the file, or as a warning without one.
+    """
     if run_folder is None:
         return []
     run_folder = Path(run_folder)
@@ -69,7 +75,12 @@ def run_geometry_files(run_folder, fallback_voxel_size: float = 1.0) -> list[Run
         folder = stage_folder(run_folder, stage)
         manifest = read_manifest(folder)
         mesh_name = manifest.get("mesh_path") if manifest is not None else None
-        if not isinstance(mesh_name, str) or not (folder / mesh_name).is_file():
+        if not isinstance(mesh_name, str):
+            if report_unusable and (folder / MANIFEST_FILE).is_file():
+                report_issue("geometry_manifest_unusable",
+                             f"{label} is left out of the check: its manifest {folder / MANIFEST_FILE} cannot be read or names no mesh.")
+            continue
+        if not (folder / mesh_name).is_file():
             continue
         tolerance = voxel_size_of(run_folder, manifest) or float(fallback_voxel_size)
         found.append(RunGeometryFile(name, label, folder / mesh_name, tolerance))

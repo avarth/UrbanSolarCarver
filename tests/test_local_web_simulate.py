@@ -6,6 +6,7 @@ check samples the test surfaces, lists the geometries of the run folder and writ
 import json
 import shutil
 import struct
+import warnings
 
 import numpy as np
 import pytest
@@ -214,6 +215,27 @@ def test_a_project_of_an_earlier_version_is_migrated_before_a_simulation(tmp_pat
     reply = client.post("/api/projects/old/simulate")
     assert reply.status_code == 422 and reply.json()["detail"] == "Add a study to run."
     assert [criterion.id for criterion in worker.store.criteria("old")] == ["1"]
+
+
+def test_an_unreadable_envelope_manifest_leaves_the_envelope_out_with_an_issue(service):
+    _client, worker, _engine = service
+    store = worker.store
+    project_folder = store.open("p")
+    write_fake_chain_run(store, "p", ["1"])
+    write_envelope_as_exported(project_folder)
+    shutil.rmtree(project_folder / "run" / "massing")
+    manifest_path = project_folder / "run" / "exporting" / "manifest.json"
+    manifest_path.write_text("{not json", encoding="utf-8")
+    study = add_study(store, "p")
+    events = simulate_and_wait(worker)
+    assert events[-1]["type"] == "run_finished"
+    issues = [event for event in events if event["type"] == "issue" and event["code"] == "geometry_manifest_unusable"]
+    assert len(issues) == 1 and issues[0]["study"] == study
+    assert "Carved envelope" in issues[0]["message"] and str(manifest_path) in issues[0]["message"]
+    assert simulation.result_geometries(store, "p", study) == ["max_volume"]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")      # the state of a study reports nothing and raises nothing
+        assert state_of(store, "p", study) == ("current", None)
 
 
 def test_a_result_traced_with_the_voxel_size_its_manifests_record_stays_current(service):
