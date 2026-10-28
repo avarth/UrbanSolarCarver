@@ -1,112 +1,168 @@
 # Energy-weighted solar usefulness in the app
 
-Date: 2026-10-28. Status: design, waiting for the user's approval.
+Date: 2026-10-28, revised the same day after the user's review of the first build. Status: design, waiting for the
+user's approval.
 
 ## Intent
 
 Benefit mode ("Solar usefulness" in the app) counts the sun of the hours colder than the balance temperature. The engine can
 instead weight every hour by what its sun saves a typical building in heating over the year (`simulated_weights.py`, the
-ISO 13790 hourly model, validated against RC_BuildingSimulator). The app has never offered this: the service never sets
-`simulated_weights_path`. The user wants it in the app as a form where a typical building is described, after which the app
-calculates the hourly weights (user, 2026-10-28: "a submenu to calculate simulated weights after the user fill an archetype
-form"). Uploading a ready `simulated_weights.json` is off the table.
+ISO 13790 hourly model, validated against RC_BuildingSimulator). The app gets this as a form where a typical building is
+described, after which the app calculates the hourly weights (user, 2026-10-28). Uploading a ready weights file is off the
+table.
+
+The first build (`c975f93`, `2fc976e`) worked but its building was a poor model (user review, 2026-10-28): a box with
+width, length and orientation, one U for walls and roof, an unshaded summer, presets that mixed age with construction, and
+a "Start from" list. This revision replaces the building model and the presets; the switch in the criterion, the
+calculation, the run step and the out-of-date rules of the first build stay.
 
 ## Names in the app
 
-- The model's name, 5R1C, does not appear in the app (user). Help text may say "a simple hourly model of one room
-  (ISO 13790)".
-- In a Solar usefulness criterion, a two-way switch **Which hours count**: **Cold hours** (the balance temperature rule,
-  as today, the default) or **Energy-weighted** (the typical building).
-- The building is the **Typical building**; its form opens from an **Edit building** button under the switch.
+- 5R1C does not appear in the app. Help text may say "a simple hourly model of one room (ISO 13790)".
+- In a Solar usefulness criterion: **Which hours count**, **Cold hours** (default) or **Energy-weighted**.
+- The building is the **Typical building**, edited in a sheet opened by **Edit building**.
 
 ## Decisions by the user
 
-1. One typical building per project, shared by every energy-weighted criterion. Later, uses may be assigned to context
-   volumes; not now.
-2. The weights are calculated in the form (a **Calculate** button, with a chart and numbers) and again by Run analysis on
-   its own when the building or the weather file changed since, so a run never uses old weights.
-3. **Start from** offers three plain types based on the three cases the engine was validated on.
+1. One typical building per project (uses per context volume later).
+2. Calculated in the sheet (**Calculate**) and again by Run analysis when the building or the weather file changed.
+3. A **library** of typical buildings, independent of projects, replaces "Start from". It ships read-only examples; the
+   user saves their own and reuses them in any project.
+4. Examples: an apartment and an office for each of the four Greek climate zones (KENAK), plus the ASHRAE 140 test boxes.
+   All KENAK values are those of the **reference building** of ΤΟΤΕΕ 20701-1/2017.
+5. The default room is a statistical middle case: a room turned 45° with the same window share on all four sides, 40 %.
+   Floor and ceiling are adiabatic; an exposed roof or floor, with its own U, is an advanced setting.
+6. Geometry and window shares are advanced settings, not basic ones.
+7. Keep it simple before a full energy-simulation interface: schedules are a choice among a few typical cases, not an
+   editor; summer shading is one factor and a period.
+8. Thermal mass: the ISO 13790 classes stay; the ΤΟΤΕΕ categories (table 3.14) are offered as the other way to give it.
 
-## The form
+## The building model
 
-A sheet beside the criterion panel, in the way the Simulate study popover sits beside its list. Folded groups with a
-one-line summary each, as in the criterion panel:
+A single zone, the ISO 13790 hourly model, with these inputs:
 
-| Group | Values (archetype keys) |
-|-------|-------------------------|
-| Shape | width, length, storey height (m), orientation (degrees clockwise from north) |
-| Windows | window share of the wall per side, north / east / south / west (0 to 0.9); glass solar transmittance g |
-| Walls and glass | U of the walls and roof, U of the glass (W/m²K); thermal mass (very light, light, medium, heavy, very heavy) |
-| Air | ventilation and infiltration (air changes per hour); heat recovery (0 to 1) |
-| Use | heating and cooling set points (°C); internal gains by day and by night (W/m²; day is 8:00 to 20:00) |
-| Summer shading | permanent shading factor (0 to 1, 1 = none); summer shading factor and its months |
+| Group | Values |
+|-------|--------|
+| Use | the schedule (a typical case), set points, internal gains while in use (W/m²), fresh air while in use (m³/h per m² of floor), heat recovery |
+| Fabric | U of the walls and of the windows; thermal mass (an ISO class or a ΤΟΤΕΕ category); whole-window g |
+| Room (advanced) | storey height, depth of the room from its facades, window share per side (NE, SE, SW, NW for the default room), turn |
+| Roof and floor (advanced) | roof exposed (yes/no) with its U; floor exposed (yes/no) with its U; adiabatic by default |
+| Air (advanced) | infiltration, m³/h per m² of window |
+| Summer shading | one factor for the windows during a period of dates; none outside it |
 
-- Only the shoebox form of the archetype. The explicit-area form stays in the CLI and Grasshopper.
-- Gains by day and by night are written as the 24-value profile `internal_gains_profile_w_m2`; equal values give a flat
-  profile.
-- Each value is checked as the engine checks it (`expand_shoebox`, `ZoneParams.from_archetype`, `_shading_factors`); an
-  error is shown at its field.
-- Below the groups: **Calculate**, then a chart of the weight of each hour (day of the year across, hour of the day down,
-  viridis, 0 to 1), a second chart for harm when the criterion counts harm, and three numbers: heating and cooling of the
-  typical building in kWh/m² a year, and the hours whose weight is above 0.01.
-- While the building differs from the one the weights were calculated for, the chart is dimmed with "Calculate again"
-  (the way out-of-date studies are muted in Simulate).
+- **The room.** The weights do not depend on the size of the room, only on ratios. The default room is a square plan
+  turned 45° with all four walls exposed and the same window share on each; its side is four times the room depth, so it
+  has the facade per m² of floor of a room that deep with one facade (6 m deep: a 24 × 24 m square, 3 m storey). Its
+  windows face NE, SE, SW and NW, so no direction is favoured.
+- **Schedules (typical cases):** "Apartment: 6:00 to 24:00 every day" (18 h, 7 days, ΤΟΤΕΕ table 2.1), "Office: 8:00 to
+  18:00 Monday to Friday" (10 h, 5 days, table 2.1), "Always" (for the ASHRAE boxes). ΤΟΤΕΕ gives the number of hours,
+  not which hours; the hours of day are my call. Internal gains and fresh air apply in the hours of the schedule;
+  infiltration applies always. The weekday of 1 January comes from the weather file's header (Monday when it gives none).
+- **Thermal mass:** either an ISO 13790 class (very light 80, light 110, medium 165, heavy 260, very heavy 370 kJ/m²K)
+  or a ΤΟΤΕΕ category (1: 80, 2: 110, 3: 165, 4: 230, 5: 280, 6: 300 kJ/m²K, with the table's construction descriptions).
+  A ΤΟΤΕΕ category takes the effective mass area of the ISO class nearest in capacity.
 
-### Start from (my call on the geometry)
+## Library examples
 
-The validation cases are given as areas. Their U values, air, mass and set points are kept; their floor area and volume
-become a box, and their window areas become window shares:
+### KENAK reference building, ΤΟΤΕΕ 20701-1/2017
 
-| Type | Box (m) | Window share | U walls / glass | Air (vent + infiltration), recovery | Mass | Gains day / night (W/m²) |
-|------|---------|--------------|-----------------|------------------------------|------|--------------------------|
-| Office, medium mass | 5 × 7 × 3 | S 0.27, E 0.10, W 0.10 | 0.5 / 1.8 | 1.2 + 0.3, 0 | medium | 7.1 / 1.7 |
-| Older home, heavy masonry | 5 × 8 × 2.75 | S 0.15, E 0.05, W 0.05, N 0.07 | 1.2 / 2.8 | 0.8 + 0.5, 0 | heavy | 5 / 5 |
-| Light, well-insulated home | 5 × 6 × 3 | S 0.4, W 0.22 | 0.25 / 1.0 | 1.5 + 0.2, 0.6 | light | 5 / 5 |
+Values that change with the climate zone:
 
-Set points 20 / 26 °C and g 0.6 for all three. The validation cases used office gains (250 W by day, 60 W at night) for
-all three; the two homes get the engine's default 5 W/m² instead (my call). A new project starts with the office type.
+| | Α | Β | Γ | Δ | Source |
+|---|---|---|---|---|---|
+| U walls, W/m²K | 0.60 | 0.50 | 0.45 | 0.40 | table 3.4α (reference building, §4.2.1) |
+| U roof, W/m²K (when exposed) | 0.50 | 0.45 | 0.40 | 0.35 | 3.4α |
+| U floor over pilotis, W/m²K (when exposed) | 0.50 | 0.45 | 0.40 | 0.35 | 3.4α |
+| U windows, W/m²K | 3.20 | 3.00 | 2.80 | 2.60 | 3.4α |
+| Summer shading period (cooling period) | 15 May to 15 Sep | 15 May to 15 Sep | 1 Jun to 31 Aug | 1 Jun to 31 Aug | §2.4.2 |
 
-## Service
+Values that change with the use:
 
-- `project.json` gets `typical_building`: the archetype values (shoebox keys), the type it started from, and, once
-  calculated, the key of the calculation: a hash of the archetype values and the weather file's fingerprint.
-- The weights are written to `inputs/typical_building/weights.json` (and the engine's heatmap PNG beside it).
-- Routes: read and save the building (validated); `POST .../typical-building/calculate` runs
-  `generate_simulated_weights` (about 9 s on the Golden weather file) and answers with the weights (benefit and harm,
-  8,760 values each, 3 decimals) and the three numbers. Without a weather file it refuses with the existing "add a
-  weather file" message.
-- A criterion's Which hours count is stored as a browser setting translated by the service: for Energy-weighted, the
-  generated `config.yaml` gets `simulated_weights_path: inputs/typical_building/weights.json` and leaves out
-  `balance_temperature` and `balance_offset` (the engine warns when both are given); the stored balance values are kept,
-  so switching back restores them.
-- Run analysis: when a criterion that is on is energy-weighted and the weights are missing or their key differs, the run
-  calculates them first, as a step of the run's progress ("Typical building").
-- Out of date: a criterion's preprocessing record keeps the key of the weights it ran with; another key dates its
-  preprocessing (and through it what follows, as today). Switching Which hours count changes `simulated_weights_path`,
-  which the engine's own settings comparison already catches. A weather change already dates everything.
+| | Apartment | Office | Source |
+|---|---|---|---|
+| Schedule | Apartment (18 h, every day) | Office (10 h, weekdays) | 2.1 |
+| Set points | 20 / 26 °C | 20 / 26 °C | 2.2 |
+| Fresh air while in use | 0.75 m³/h per m² | 3.0 m³/h per m² | 2.3 |
+| Heat recovery | none (natural ventilation) | 0.5 | §4.4.1, reference ventilation |
+| People | 4 W/m² | 8 W/m² | 2.7 |
+| Equipment × diversity | 4 × 0.5 = 2 W/m² | 15 × 0.3 = 4.5 W/m² | 2.8 |
+| Lighting | none (not counted for homes) | 16 W/m² (500 lx, reference building) | 2.4, 2.4α |
+| Internal gains while in use | 6 W/m² | 28.5 W/m² | sum |
+| Thermal mass | ΤΟΤΕΕ category 5: concrete frame, hollow clay bricks, 280 kJ/m²K | category 3: concrete frame, light infill, suspended ceilings, 165 kJ/m²K | 3.14 (my choice of category) |
 
-## Engine (small change)
+The same for all KENAK examples:
 
-`generate_simulated_weights` also records the base run's annual heating and cooling demand in the file's `meta`
-(`heating_kwh_m2`, `cooling_kwh_m2`), so the service reads the numbers from the file instead of simulating again.
+- Whole-window g 0.55: glass 0.76 at normal incidence, × 0.9 mean, × 0.8 for a 20 % frame (§4.2.7, reference building).
+- Infiltration 5.5 m³/h per m² of window (§4.4.1, reference building).
+- Summer shading of the windows (reference building, §4.3.1): S 0.70, SE and SW 0.73, E and W 0.75, NE and NW 0.80,
+  N 1.00. For the default room (NE, SE, SW, NW): their mean, 0.77. No shading outside the period.
+- Room: 6 m deep, 3 m storey, 40 % window share on each side, roof and floor adiabatic.
 
-## Unchanged
+The office lighting gain counts the reference building's full installed power in every hour of use; daylight would
+reduce it. The docs say so.
 
-- Analysis period and Count harm work as today; with Energy-weighted, Count harm subtracts the building's cooling share.
-- The cold period preset still describes the cold hours rule; its help says so when the criterion is energy-weighted.
-- CLI, Grasshopper and config files.
+### ASHRAE Standard 140, cases 600 and 900
+
+A free-standing box 8 × 6 × 2.7 m, walls and roof exposed, 12 m² of glass on the south wall only, floor insulated. Case 600
+is lightweight, case 900 heavyweight. Constant internal gains, infiltration only, set points of the test case. Its values
+are taken from a published description of the test and checked there before use; the library entry names its source. Its
+room fields are the explicit box (it is not the default room).
+
+## The library
+
+- Stored apart from projects: one YAML file per building in the user's app folder (next to the user preferences), so it
+  serves every project folder.
+- Examples ship with the app, read-only, grouped as Apartment, Office and Test boxes; the zone is part of the name
+  ("Apartment, zone Β").
+- A project keeps its own copy of the building and the name of the library entry it came from. Changes in the library do
+  not change a project; the sheet says "Changed from Apartment, zone Β" once the copy differs.
+- In the sheet: the library list (choose one: the project's copy is replaced), **Save to library** (overwrite the entry it
+  came from, when it is the user's own), **Save as new** (asks a name). Deleting and renaming own entries is in the list.
+- A new project uses "Apartment, zone Β" (my call; the user changes it once and the project keeps it).
+
+## The sheet
+
+- Library list at the top, then the basic groups (Use, Fabric, Summer shading) with one-line summaries, then an
+  **Advanced** fold (Room, Roof and floor, Air).
+- **Calculate** below, then one chart and three numbers.
+- The chart: day of the year across, hour of the day down; one diverging scale, red for the share of the sun that offsets
+  heating, white for no effect, blue for the share that adds to cooling (benefit minus harm). With Count harm off, the red
+  half only. Hours with the sun below the horizon are grey. Title "Effect of sunlight, by hour"; legend ends "offsets
+  heating" and "adds to cooling".
+- Numbers: heating and cooling of the typical building, kWh/m² a year, and the hours with the sun up whose weight is above
+  0.01 ("Hours that count", daytime only).
+- The sheet no longer covers the "Out of date" banner of the 3D view (the banner moves beside the sheet while it is open).
+
+## Engine changes
+
+1. Schedules: hourly internal gains and hourly fresh air (8,760 values each); the zone's ventilation conductance becomes an
+   hourly series, infiltration constant. The 24-value profile and the flat value still work (CLI, Grasshopper).
+2. Separate U values for walls, roof and floor, with roof and floor exposure switches (the shoebox today counts the roof at
+   the wall U and leaves out the floor). The old keys keep their meaning.
+3. Thermal capacity in kJ/m²K as the alternative to the mass class.
+4. Summer shading by a period of dates (day of year) as the alternative to whole months; one factor for all windows.
+5. The meta of the weights file records which hours have the sun up (for the grey hours and the daytime count).
+
+## Service and app changes from the first build
+
+- `typical_building.py`: the new values, the library (read, save, save as new, delete, rename; examples read-only), the
+  project's copy with its library name; validation per field as before.
+- The sheet as above; the "Start from" list goes.
+- Unchanged: the criterion switch, the box in Settings, Calculate and its route, the run step "Typical building", the
+  out-of-date rules, the hidden balance temperature.
 
 ## Not now
 
-Uses per context volume; national presets (TABULA); the explicit-area form; uploading a weights file; a cold period from
-the simulation.
+Uses per context volume; per-orientation weights (one room per facade direction, Shoeboxer); a schedule editor; shading
+per orientation in the sheet; other countries' tables; the explicit-area form in the app.
 
 ## Tests
 
-- Service: save and validate the building (one bad value per group); calculate writes the file and answers the numbers;
-  calculate without weather refuses; config.yaml of an energy-weighted criterion has the path and no balance values;
-  a run with stale weights recalculates them first; a changed building dates only the energy-weighted criteria.
-- Engine: the meta numbers match `simulate()` of the base run.
-- App: the switch hides the balance temperature; Edit building opens the sheet; Start from fills the values; a field error
-  shows at its field; Calculate shows the chart and numbers; a change after Calculate dims the chart.
-- Docs: `docs/ui.md`, `docs/simulated-weights.md` (a section on the app), `docs/modes.md`, CHANGELOG.
+- Engine: hourly gains and ventilation equal the flat case when constant; roof and floor exposure add their U × area;
+  capacity in kJ/m²K equals the matching class; a date period equals the months it spans.
+- Service: the library (examples read-only, save, save as new, delete, rename; a project's copy survives a library change);
+  every example validates and calculates (slow); field errors per value.
+- App: library choice replaces the copy and shows "Changed from"; Advanced fold; the diverging chart with grey night hours;
+  the banner beside the open sheet.
+- Docs: `docs/simulated-weights.md` (the room convention, the adiabatic default, the ΤΟΤΕΕ sources table by table, ISO
+  13790 replaced by EN ISO 52016-1, the facade-independent weights as a limit), `docs/ui.md`, `docs/modes.md`, CHANGELOG.
