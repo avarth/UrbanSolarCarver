@@ -15,19 +15,30 @@ versioning follows [Semantic Versioning](https://semver.org/).
   room"). Energy-weighted hides the balance temperature, whose values are kept for Cold hours; the cold period preset says it
   follows the cold hours rule. `PATCH /projects/{name}/criteria/{id}` takes `energy_weighted`.
 - **The typical building**, one per project, shared by its energy-weighted criteria, in a sheet beside the criterion panel (**Edit
-  building**): **Start from** three types based on the engine's validation cases (Office, medium mass; Older home, heavy masonry;
-  Light, well-insulated home), its shoebox values in six folded groups (Shape, Windows, Walls and glass, Air, Use, Summer
-  shading), each checked as the engine checks it with the error at its field, and **Calculate** (about 10 s): a day-by-hour chart
-  of the weights (viridis, 0 to 1), a second one of harm when the criterion counts harm, the building's heating and cooling in
-  kWh/m² a year and the hours that count. On Golden, CO the office needs 189.5 kWh/m² of heating and 26.9 of cooling, and 7,082
-  hours count. Once the building or the weather file changes, the chart is dimmed and the button reads **Calculate again**. Routes
-  `GET /typical-building-presets`, `GET` and `PUT /projects/{name}/typical-building`, `POST .../typical-building/calculate` and
-  `GET .../typical-building/weights`.
+  building**), chosen from a **library** apart from projects: read-only examples, the KENAK reference building of ΤΟΤΕΕ
+  20701-1/2017 for an apartment and an office in climate zones Α to Δ and the ASHRAE 140 boxes of cases 600 and 900 (some of their
+  values not confirmed against the standard's text), and the user's own entries (**Save to library**, **Save as new**, rename,
+  delete; one file each in `~/.urbansolarcarver/typical_buildings/`). The project keeps a copy and says "Changed from" the entry
+  once it differs; a new project takes "Apartment, zone Β". The values: Use (the hours in use as one of three typical cases, set
+  points, gains and fresh air while in use, heat recovery), Fabric (U of walls and windows, g, the thermal mass as an ISO 13790
+  class or a ΤΟΤΕΕ category of table 3.14), Summer shading (a factor and its dates), and under **Advanced** Room (the default
+  room, a square turned 45° with the same window share on its four walls, or a box), Roof and floor (adiabatic unless exposed,
+  each with its U) and Air (infiltration per m² of window). Each value is checked with the error at its field. **Calculate**
+  (about 10 s) shows **Effect of sunlight, by hour**, one day-by-hour chart (red where the sun offsets heating, blue where it adds
+  to cooling when the criterion counts harm, grey with the sun down), the building's heating and cooling in kWh/m² a year and the
+  daytime hours that count: on Golden, CO "Apartment, zone Β" needs 43.7 kWh/m² of heating and 24.1 of cooling, and 2,386 of the
+  4,438 hours with the sun up count. Once the building or the weather file changes, the chart is dimmed and the button reads
+  **Calculate again**. While the sheet is open the 3D view's "Out of date" stamp sits beside it. Routes `GET` and `POST
+  /typical-building-library`, `PUT` and `DELETE /typical-building-library/{id}`, `GET` and `PUT /projects/{name}/typical-building`,
+  `POST .../typical-building/calculate` and `GET .../typical-building/weights`.
 - **Run analysis calculates the weights first** when it analyses an energy-weighted criterion whose weights are missing or out of
   date, shown as the progress row "Typical building"; a changed building puts only the energy-weighted criteria out of date. Their
   `config.yaml` has `simulated_weights_path: inputs/typical_building/weights.json` and no balance values.
 - `generate_simulated_weights` records the base run's annual heating and cooling demand in the artifact's `meta`
-  (`heating_kwh_m2`, `cooling_kwh_m2`).
+  (`heating_kwh_m2`, `cooling_kwh_m2`) and the hours with the sun up (`sun_up`).
+- The simulated weights' archetype takes hourly internal gains and ventilation (8,760 values), separate `u_wall`, `u_roof` and
+  `u_floor` with `roof_exposed` and `floor_exposed`, a thermal capacity `mass_capacity_kj_m2k` instead of a mass class, and a
+  summer shading period `shading_hot_period` instead of whole months; the old keys keep their meaning.
 
 ### Changed (Simulate and Inspect, after use on Allatini)
 
