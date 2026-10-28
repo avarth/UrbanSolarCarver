@@ -261,6 +261,25 @@ class TestGenerateSimulatedWeights:
                                        tmp_path / "u2.json",
                                        internal_gains_w_m2=[1.0, 2.0, 3.0])
 
+    def test_meta_holds_the_annual_demand_of_the_zone(self, example_archetype_run_with_daily_profile):
+        """heating_kwh_m2 and cooling_kwh_m2 are simulate() of the same zone,
+        solar and internal gains, per m² of floor."""
+        from urbansolarcarver.simulated_weights import (
+            ZoneParams, expand_shoebox, simulate, transmitted_solar_from_epw,
+        )
+        from urbansolarcarver.weather_file import read_weather_file
+
+        epw, (_b, _h, meta) = example_archetype_run_with_daily_profile
+        arch = expand_shoebox(_example_archetype_without_gains())
+        windows = arch.pop("windows")
+        params = ZoneParams.from_archetype(**arch)
+        phi_int = np.tile(OFFICE_LIKE_DAY, HOURS // 24) * params.floor_area
+        result = simulate(params, read_weather_file(epw).dry_bulb_temperature(), phi_int,
+                          transmitted_solar_from_epw(epw, windows))
+        assert meta["heating_kwh_m2"] == pytest.approx(result.q_heating_wh / 1000.0 / params.floor_area, rel=1e-12)
+        assert meta["cooling_kwh_m2"] == pytest.approx(result.q_cooling_wh / 1000.0 / params.floor_area, rel=1e-12)
+        assert meta["heating_kwh_m2"] > 0.0 and meta["cooling_kwh_m2"] > 0.0
+
 
 def test_missing_windows_raises(tmp_path):
     from urbansolarcarver.simulated_weights import generate_simulated_weights

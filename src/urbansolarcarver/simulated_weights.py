@@ -694,7 +694,10 @@ def generate_simulated_weights(
     ``eps`` is the solar-gain perturbation [W] used by
     :func:`attribute_solar_gains`.  Writes the JSON artifact to
     ``out_path`` and, if matplotlib is installed, a heatmap PNG next to it
-    with the same name; returns the artifact path.
+    with the same name; returns the artifact path.  The artifact's meta
+    also holds the zone's annual heating and cooling demand per m² of floor
+    (``heating_kwh_m2``, ``cooling_kwh_m2``, in kWh/m²), from
+    :func:`simulate` with the same gains.
     """
     arch = expand_shoebox(archetype)
     profile = arch.pop("internal_gains_profile_w_m2", None)
@@ -744,6 +747,9 @@ def generate_simulated_weights(
         )
 
     benefit, harm = attribute_solar_gains(params, t_out, phi_int, phi_sol, eps=eps)
+    # The annual demand of the zone as given (shaded solar and internal gains),
+    # recorded so a reader need not simulate again.
+    base = simulate(params, t_out, phi_int, phi_sol)
     if shading is not None:
         # Only the fraction f_eff of an extra unshaded watt-hour reaches the
         # zone; scale the attribution accordingly (f_eff <= 1, so the
@@ -766,6 +772,8 @@ def generate_simulated_weights(
         "epw": str(epw_path),
         "archetype": arch_meta,
         "eps_w": eps,
+        "heating_kwh_m2": base.q_heating_wh / 1000.0 / params.floor_area,
+        "cooling_kwh_m2": base.q_cooling_wh / 1000.0 / params.floor_area,
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "generator": "usc simulate-weights (iso13790-5r1c)",
     }

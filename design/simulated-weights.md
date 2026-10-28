@@ -186,6 +186,9 @@ clamped with a tolerance check rather than asserted exactly.
     "method": "iso13790-5r1c-perturbation",
     "epw": "<path/name as given>",
     "archetype": { "...all §3 inputs, expanded form..." },
+    "eps_w": 1.0,
+    "heating_kwh_m2": "<annual heating demand of the zone, kWh per m² of floor>",
+    "cooling_kwh_m2": "<annual cooling demand, kWh per m² of floor>",
     "generated": "<iso timestamp>",
     "generator": "usc simulate-weights (iso13790-5r1c)"
   },
@@ -197,6 +200,10 @@ clamped with a tolerance check rather than asserted exactly.
 ```
 
 8760 hourly values (TMY, non-leap), index = hour of year, timestep 1.
+`heating_kwh_m2` and `cooling_kwh_m2` are the zone's own run (`simulate()` with the
+shaded solar and the internal gains), so a reader such as the browser app's typical
+building can show them without simulating again; a file written before they were
+added has neither.
 The generator (`generate_simulated_weights`) also writes a `.png` companion next to the
 artifact: benefit and harm as day × hour heatmaps, so the schedule can be
 inspected without writing code.
