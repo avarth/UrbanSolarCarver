@@ -1,15 +1,16 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import {
   applyLayerAppearance, buildingMassingLayer, dimmedAppearance, carvedByCriterionLayer, carvedOutlineSegments, contextLayer, inspectSurfacesLayer, LAYER_NAMES, maxVolumeLayer, terrainLayer,
   keptColumnTops, pointSizeForVoxel, splitScorePoints, type InspectLayerFile,
-  storeyOfPart, studyValuesLayer, testSurfacesLayer, volumeOutline,
+  storeyOfPart, studyValuesLayer, sunStudyLayer, testSurfacesLayer, volumeOutline,
 } from "./layers";
 import { decodeStudyValues, patchCorners } from "../simulate/study_values_decoder";
 import { studyValuesOf } from "../simulate/study_values_for_test";
 import { changeRamp, colourToken } from "./colour_scales";
 import { studyPaletteColour, type StudyPalette } from "./study_palettes";
+import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
 
 function scorePoints(indices: number[], scores: number[], kept: number[] | null): ScorePoints {
@@ -319,9 +320,9 @@ function meshesOf(layer: THREE.Object3D, fileIndex = 0): { front: THREE.Mesh; ba
 const indexOf = (mesh: THREE.Mesh) => Array.from(mesh.geometry.index!.array);
 const colourOf = (mesh: THREE.Mesh) => (mesh.material as THREE.MeshLambertMaterial).color.getHexString();
 
-test("the surface orientation layer is the last of the layers and draws each file as a front mesh and a back mesh on one geometry", () => {
+test("the surface orientation layer and the sun tool's are the last of the layers; it draws each file as a front mesh and a back mesh on one geometry", () => {
   setInspectColourTokens();
-  expect(LAYER_NAMES[LAYER_NAMES.length - 1]).toBe("inspect_surfaces");
+  expect(LAYER_NAMES.slice(-2)).toEqual(["inspect_surfaces", "sun_study"]);
   const layer = inspectSurfacesLayer([inspectFile()], { arrows: false });
   const { front, back } = meshesOf(layer);
   expect(front.geometry).toBe(back.geometry);
@@ -378,6 +379,20 @@ test("a dimmed study keeps its colours, muted and opaque; other dimmed layers fa
   expect(dimmedAppearance("study_values")).toEqual([1, 0.4]);
   expect(dimmedAppearance("kept_voxels")).toEqual([0.35, 1]);
   expect(dimmedAppearance("envelope")).toEqual([0.35, 1]);
+});
+
+test("the sun tool's layer draws the hour lines with their labels, the day's arc, and the sun only when it is up", () => {
+  setColourTokens();
+  const textContext = { font: "", fillStyle: "", textBaseline: "", measureText: () => ({ width: 40 }), fillText() {}, beginPath() {}, arc() {}, fill() {} };
+  const getContext = vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(((kind: string) => (kind === "2d" ? textContext : null)) as never);
+  const objects = { keyDays: [[[0, -1, 0], [0, 0, 1]] as Point3[]], hourLines: [{ hour: 12, label: "12 h", runs: [[[0, -1, 0.1], [0, -0.9, 0.4]] as Point3[]], labelAt: [0, -0.9, 0.4] as Point3 }],
+                    day: [[[1, 0, 0], [0, -0.7, 0.7], [-1, 0, 0]] as Point3[]], sun: [0, -0.7, 0.7] as Point3 };
+  const sprites = (layer: THREE.Object3D) => layer.children.filter((child) => child instanceof THREE.Sprite).length;
+  const withSun = sunStudyLayer(objects, { centre: [0, 0, 0], radius: 1 });
+  expect(withSun.children.some((child) => child instanceof LineSegments2)).toBe(true);
+  expect(sprites(withSun)).toBe(2);                       // the hour label and the sun
+  expect(sprites(sunStudyLayer({ ...objects, sun: null }, { centre: [0, 0, 0], radius: 1 }))).toBe(1);
+  getContext.mockRestore();
 });
 
 test("there is one arrow per surface, and none without arrows", () => {

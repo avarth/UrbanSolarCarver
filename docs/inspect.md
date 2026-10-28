@@ -97,9 +97,22 @@ The service computes all of this in `local_web_service/inspection.py`, with trim
 | `GET /projects/{name}/inspect` | The summary of every mesh file of the project; allowed while a run is going |
 | `GET /projects/{name}/inspect/test_surfaces/{file}/geometry` | The triangles of a test surface file with a surface number per triangle, as one binary (layout in `inspection.inspection_geometry`) |
 | `POST /projects/{name}/inspect/test_surfaces/{file}/turn` | Turn the surfaces named in `surfaces` of the file of `version` and save the file; 409 while a run of the project is active, or with `stored_file_changed: true` when the file stored now is not that version; 422 for a file closed as a whole, one that cannot be read, a surface that does not exist, or a file changed in the folder that cannot be read; 500 when the written file does not read as turned |
+| `GET /projects/{name}/sun-chart?date=MM-DD` | The Sun panel's sun path: the arcs of the March equinox and the solstices and of `date`, every 5 minutes, and an hour line for each whole hour, a point a week; 404 without a weather file |
+| `GET /projects/{name}/sun-positions?from=MM-DD&to=MM-DD&start=&end=&step=` | The sun above the horizon every `step` minutes from minute `start` to `end` of each day from `from` to `to` (over the new year when `to` comes first), with its altitude and azimuth; on every n-th day (`day_step`) when that would be more than 240 positions |
 | `POST /projects/{name}/inspect/test_surfaces/{file}/restore` | Put the kept original back in place of the file of `version`; 404 when none is kept, 409 while a run is active or (`stored_file_changed`) when the file stored now is another |
 
 Each file of the summary has a `version`, the sha256 of its bytes. A turn or a restore names it, and both first build the files changed in the project folder into the project. The service keeps the summary of each file it read, and for a test surface file its triangles and their surfaces, up to 32 files and 5 million kept triangles, the least recently used leaving first.
+
+## The Sun panel
+
+The **Sun** panel, under the Files panel and collapsed at first (the sun icon opens it), shows the site with the sun as architects study it on a sun path diagram and with shadow drawings. It needs the project's weather file, whose location gives the sun's course; without one it says so. The times are the weather file's local standard time, without daylight saving, and North is the project's, as in the carving.
+
+- **Day** and **Time** choose a moment: a month and a day (or 21 Mar, 21 Jun, 21 Sep, 21 Dec), and the time on a slider in 5 minute steps. The panel says how high the sun stands and its bearing from north, or that it is below the horizon.
+- **Sun path of the year and of this day** draws, on the hemisphere around the scene, the sun's arcs on the March equinox (the September one lies within a fraction of a degree of it) and the two solstices (dashed), a line for each whole hour showing where the sun stands at that hour through the year (labelled at its highest point), the chosen day's arc (bold) and the sun at the chosen time.
+- **Shadows at this time** lights the scene with the sun at that moment: the maximum volume, the test surfaces, the surroundings and the terrain cast shadows on each other, and on the ground where there is no terrain. The sky light is lowered meanwhile, so the shade reads.
+- **Hours in shade** counts, for every surface the view shows, how many of the hours from a start to an end hour it spends in shade on the chosen day, or as a mean per day over several days (**Over several days, until**). A surface is in shade at a time when something stands between it and the sun or it faces away from the sun. The legend's ramp runs from yellow (in sun all the range) to dark (in shade all of it).
+
+The hours in shade are a quick count, not an analysis. They are worked out on the graphics card from the camera: the view is drawn once for each sun position (every 10 minutes on one day, every 30 minutes over several days, on every n-th day when that would be more than 240 positions), and each draw adds the time it stands for where the surface is in shade. So the count is of what the camera sees, at the resolution of the shadow map (4096 pixels across about five times the site's radius), and it is counted again when the camera stops moving. Simulate's **Sun hours** study is the precise count, per test point, traced against the meshes.
 
 ## Not in Inspect
 

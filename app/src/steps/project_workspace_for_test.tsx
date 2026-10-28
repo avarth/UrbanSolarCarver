@@ -3,7 +3,7 @@
 // Each test file mocks ../viewer/scene with FakeViewerScene itself (vi.mock applies to the file it is written in).
 import { act, useState, type ComponentProps } from "react";
 import { vi } from "vitest";
-import type { CriterionEntry, InputFileChange, InputFileInfo, InspectedFile, ModeInfo, ProjectDetail, SunPath } from "../api_client/client";
+import type { CriterionEntry, InputFileChange, InputFileInfo, InspectedFile, ModeInfo, ProjectDetail, SunChart, SunPath } from "../api_client/client";
 import { FakeWebSocket } from "../api_client/fake_websocket_for_test";
 import { useLeavingInspect } from "../inspect/UnsavedTurnsDialog";
 import { SAVE_DELAY_MILLISECONDS } from "../settings_form/form_state";
@@ -85,6 +85,10 @@ export class FakeService {
   inputFileContents: Record<string, string> = {};
   /** The reply of GET sun-path; null: not there (404). */
   sunPath: SunPath | null = null;
+  /** The reply of GET sun-chart (Inspect's sun tool). */
+  sunChart: SunChart = { key_days: [], hour_lines: [], day: { date: "12-21", runs: [[[-0.5, -0.5, 0.71], [0, -0.6, 0.8]]] } };
+  /** GET sun-positions: the sun is up from 08:00 to 16:00, toward SUN_UP, every step of the range asked for, on one day. */
+  static readonly SUN_UP = [0, -0.6, 0.8];
   /** While set, an upload of an input file gets its reply only once this promise resolves. */
   uploadsAnswerWhen: Promise<void> | null = null;
   /** The location and latitude the reply to a weather file upload gives. */
@@ -183,6 +187,14 @@ export class FakeService {
       return json({ status: "started", run_id: `r${this.runsStarted.length}`, stages });
     }
     if (path === "/sun-path" && this.sunPath !== null) return json(this.sunPath);
+    if (path === "/sun-chart") return json(this.sunChart);
+    if (path === "/sun-positions") {
+      const query = new URLSearchParams(fullPath.split("?")[1]);
+      const [start, end, step] = ["start", "end", "step"].map((key) => Number(query.get(key)));
+      const minutes = Array.from({ length: Math.floor((end - start) / step) + 1 }, (_, index) => start + index * step).filter((minute) => minute >= 480 && minute <= 960);
+      return json({ positions: minutes.map((minute) => ({ date: query.get("from"), minute, vector: FakeService.SUN_UP, altitude: 53.1, azimuth: 180 })),
+                    days_sampled: 1, day_step: 1, step_minutes: step });
+    }
     if (path === "/run/summary") return json(this.summary);
     if (method === "POST" && path.startsWith("/inputs/")) {
       await this.uploadsAnswerWhen;

@@ -9,6 +9,7 @@ vi.mock("three", async (importOriginal) => {
   const three = await importOriginal<typeof import("three")>();
   class RendererThatDrawsNothing {
     readonly domElement = document.createElement("canvas");
+    readonly shadowMap = { enabled: false, type: 0 };
     setPixelRatio(): void {}
     setSize(): void {}
     render(): void {}

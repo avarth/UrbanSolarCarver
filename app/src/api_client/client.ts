@@ -17,6 +17,9 @@ export type GridPlanReply = Schemas["GridPlanReply"];
 export type StageStatusReply = Schemas["StageStatusReply"];
 export type InputFileChange = Schemas["InputFileChange"];
 export type SunPath = Schemas["SunPath"];
+export type SunChart = Schemas["SunChart"];
+export type SunPositions = Schemas["SunPositions"];
+export type SunPosition = Schemas["SunPosition"];
 export type ColdPeriodReply = Schemas["ColdPeriodReply"];
 export type StartRunReply = Schemas["StartRunReply"];
 export type CancelRunReply = Schemas["CancelRunReply"];
@@ -356,6 +359,14 @@ export function isStoredFileChanged(error: unknown): boolean {
 
 export const getSunPath = (token: string, project: string, criterionId?: string) =>
   requestJson<SunPath>(token, forCriterion(`${projectPath(project)}/sun-path`, criterionId));
+
+/** Inspect's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of *date* ("MM-DD"); 404 without a weather file. */
+export const getSunChart = (token: string, project: string, date: string) =>
+  requestJson<SunChart>(token, `${projectPath(project)}/sun-chart?${new URLSearchParams({ date })}`);
+
+/** The sun above the horizon every *step* minutes from *start* to *end* (minutes of the day) on each day from *from* to *to* ("MM-DD"). */
+export const getSunPositions = (token: string, project: string, range: { from: string; to: string; start: number; end: number; step: number }) =>
+  requestJson<SunPositions>(token, `${projectPath(project)}/sun-positions?${new URLSearchParams(Object.entries(range).map(([key, value]) => [key, String(value)]))}`);
 export const getColdPeriod = (token: string, project: string, baseTemperature: number) =>
   requestJson<ColdPeriodReply>(token, `${projectPath(project)}/cold-period?base_temperature=${encodeURIComponent(String(baseTemperature))}`);
 

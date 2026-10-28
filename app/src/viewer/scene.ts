@@ -3,7 +3,8 @@
 // Orbit with the left mouse button, pan with the right, zoom with the wheel. A click (a press and release within 5 px and 400 ms)
 // goes to the listeners of onLayerClick, unless an opaque surrounding (context, terrain) is nearer along the ray. Camera moves of frameAll, frameBox and viewTop take 400 ms, and are instant under
 // prefers-reduced-motion. No React here: the overlays (viewer_overlays/) read the camera through
-// onCameraChange and call the methods below.
+// onCameraChange and call the methods below. Inspect's sun tool adds a sun that casts shadows and a count of the hours in shade
+// (sun_shading.ts).
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
@@ -15,6 +16,8 @@ import { groundGrid, groundGridSpacing } from "./ground_grid";
 import type { Point3 } from "./local_origin";
 import { LAYER_NAMES, SURROUNDING_LAYERS, applyLayerAppearance, dimmedAppearance, disposeLayer, type LayerName } from "./layers";
 import type { Hemisphere } from "./sky_dome";
+import { isSolidMesh, SunShading } from "./sun_shading";
+import type { ShadeHours } from "./sun_study";
 import { fitTextSpritesToView } from "./text_sprite";
 
 export type { LayerName } from "./layers";
@@ -57,6 +60,9 @@ const TOP_VIEW_TILT_RADIANS = 1e-3;         // a hair off straight down, so "up"
 const FIRST_VIEW_DIRECTION = new THREE.Vector3(-0.5, -0.9, 0.75).normalize();     // from the south-south-west, above
 const EMPTY_SCENE_RADIUS_METRES = 60;
 const EMPTY_SCENE_HEMISPHERE: Hemisphere = { centre: [0, 0, 0], radius: EMPTY_SCENE_RADIUS_METRES };
+// The layers whose meshes cast and catch the sun's shadows, and those that make up the site the shadow camera covers.
+const SHADOW_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "envelope", "building_massing", "inspect_surfaces"];
+const SITE_LAYERS: readonly LayerName[] = ["max_volume", "test_surfaces", "envelope", "building_massing", "inspect_surfaces"];
 
 const toDegrees = (radians: number) => (radians / Math.PI) * 180;
 const normalisedDegrees = (angle: number) => ((angle % 360) + 360) % 360;
@@ -146,11 +152,14 @@ export class ViewerScene {
   private pendingHover: { x: number; y: number } | null = null;
   private press: Press | null = null;
   private readonly clickListeners = new Map<LayerName, Set<(intersection: THREE.Intersection) => void>>();
+  private readonly sunShading: SunShading;
 
   constructor(container: HTMLElement) {
     this.container = container;
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.shadowMap.enabled = true;          // only Inspect's sun casts shadows, and only while asked to
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     const canvas = this.renderer.domElement;
     canvas.style.display = "block";
     canvas.style.width = "100%";
@@ -166,9 +175,16 @@ export class ViewerScene {
 
     const skyLight = new THREE.HemisphereLight(colourToken("light-sky"), colourToken("light-ground"), 2.2);
     skyLight.position.set(0, 0, 1);
-    const sunLight = new THREE.DirectionalLight(colourToken("light-sky"), 1.6);
-    sunLight.position.set(-0.45, -0.7, 1);
-    this.scene.add(skyLight, sunLight);
+    const fixedLight = new THREE.DirectionalLight(colourToken("light-sky"), 1.6);
+    fixedLight.position.set(-0.45, -0.7, 1);
+    this.scene.add(skyLight, fixedLight);
+    this.sunShading = new SunShading({
+      scene: this.scene, renderer: this.renderer, camera: this.camera, skyLight, fixedLight,
+      shadowMeshes: () => this.shadowMeshes(),
+      siteBox: () => this.boxOf(SITE_LAYERS, false),
+      terrainShown: () => { const terrain = this.slots.get("terrain")!; return terrain.object !== null && terrain.visible; },
+      requestRender: () => this.requestRender(),
+    });
 
     this.hoverLabel = document.createElement("div");
     this.hoverLabel.style.cssText = "position:absolute;pointer-events:none;display:none;padding:2px 6px;border-radius:var(--radius-small);" +
@@ -243,6 +259,15 @@ export class ViewerScene {
   setSkyDomeOpacity(opacity: number): void {
     this.skyDomeOpacity = Math.min(1, Math.max(0, opacity));
     this.refreshLayers();
+  }
+
+  /**
+   * Inspect's sun tool: the sun toward *sun* (a vector toward it in model coordinates; null for none), casting shadows on the solid
+   * layers and the ground when *shadows*, and the hours in shade over a range drawn over the view (null for none).
+   */
+  setSunStudy(sun: Point3 | null, shadows: boolean, shade: ShadeHours | null): void {
+    this.sunShading.set(sun, shadows, shade);
+    this.requestRender();
   }
 
   /** Draws the frame again: a layer changed in place (the study's values recoloured for a new target). */
@@ -325,6 +350,7 @@ export class ViewerScene {
     for (const slot of this.slots.values()) if (slot.object) disposeLayer(slot.object);
     if (this.grid) disposeLayer(this.grid);
     if (this.ring) disposeLayer(this.ring);
+    this.sunShading.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.hoverLabel.remove();
@@ -348,7 +374,18 @@ export class ViewerScene {
     }
     this.fitPixelSizedObjects();
     this.renderer.domElement.setAttribute("aria-label", this.describe());
+    this.sunShading.invalidate();
     this.requestRender();
+  }
+
+  /** The solid meshes of the visible layers that cast and catch the sun's shadows. */
+  private shadowMeshes(): THREE.Mesh[] {
+    const meshes: THREE.Mesh[] = [];
+    for (const name of SHADOW_LAYERS) {
+      const slot = this.slots.get(name)!;
+      if (slot.object && slot.visible) slot.object.traverse((object) => { if (isSolidMesh(object)) meshes.push(object); });
+    }
+    return meshes;
   }
 
   /**
@@ -463,6 +500,7 @@ export class ViewerScene {
     for (const slot of this.slots.values()) slot.object?.userData.followCamera?.(this.camera.position);
     const state = this.cameraState();
     for (const listener of this.cameraListeners) listener(state);
+    this.sunShading.invalidate();
     this.requestRender();
   }
 
@@ -547,7 +585,9 @@ export class ViewerScene {
       this.frameRequest = null;
       if (this.cameraMove) this.stepCameraMove(now);
       if (this.pendingHover) this.updateHover();
+      this.sunShading.prepare();
       this.renderer.render(this.scene, this.camera);
+      this.sunShading.drawOverlay();
       if (this.cameraMove) this.requestRender();
     });
   }

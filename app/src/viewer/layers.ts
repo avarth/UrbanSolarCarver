@@ -15,14 +15,16 @@ import type { Point3 } from "./local_origin";
 import type { ScorePoints } from "./score_points_decoder";
 import { pointOnHemisphere, skyPatchOutline, skyPatchShares, type Hemisphere } from "./sky_dome";
 import type { SunPathObjects } from "./sun_path";
+import type { SunStudyObjects } from "./sun_study";
 import { recolourTextSprite, textSprite, type TextSprite } from "./text_sprite";
 
 export type LayerName = "max_volume" | "test_surfaces" | "context" | "terrain" | "kept_voxels" | "carved_voxels" | "carved_by_criterion" | "sun_path" |
-  "sky_dome" | "envelope" | "building_massing" | "study_values" | "inspect_surfaces";
+  "sky_dome" | "envelope" | "building_massing" | "study_values" | "inspect_surfaces" | "sun_study";
 
-/** The layers in the order of UX 8.2, which the layers menu and the accessible name follow; then the study of Simulate and the surface orientation of Inspect. */
+/** The layers in the order of UX 8.2, which the layers menu and the accessible name follow; then the study of Simulate, the surface
+ * orientation of Inspect and the sun path of Inspect's sun tool. */
 export const LAYER_NAMES: readonly LayerName[] = ["max_volume", "test_surfaces", "context", "terrain", "kept_voxels", "carved_voxels", "carved_by_criterion",
-  "sun_path", "sky_dome", "envelope", "building_massing", "study_values", "inspect_surfaces"];
+  "sun_path", "sky_dome", "envelope", "building_massing", "study_values", "inspect_surfaces", "sun_study"];
 
 /** The layers that can reach far beyond the site (a city model, a terrain kilometres wide): the camera frames the rest. */
 export const SURROUNDING_LAYERS: readonly LayerName[] = ["context", "terrain"];
@@ -720,6 +722,39 @@ export function sunPathLayer(objects: SunPathObjects, sphere: Hemisphere): THREE
     label.position.set(...marker.position);
     labels.push(label);
     layer.add(disc, label);
+  }
+  layer.userData.applyTheme = (theme: ViewportTheme) => labels.forEach((label) => recolourTextSprite(label, inkColour(theme)));
+  return layer;
+}
+
+// Inspect's sun path: the chosen day's arc 3 px wide, the arcs of the equinox and the solstices dashed, the hour lines thin and
+// faint, each labelled at its highest point, and the sun at the chosen time as a disc.
+const SUN_STUDY_DAY_PIXELS = 3;
+const SUN_STUDY_HOUR_LINE_OPACITY = 0.45;
+
+export function sunStudyLayer(objects: SunStudyObjects, sphere: Hemisphere): THREE.Object3D {
+  const sun = colourToken("sun");
+  const layer = new THREE.Group();
+  const polyline = (run: Point3[], material: THREE.LineBasicMaterial) => new THREE.Line(new THREE.BufferGeometry().setFromPoints(run.map((point) => new THREE.Vector3(...point))), material);
+  for (const run of objects.keyDays) {
+    layer.add(polyline(run, layerMaterial(new THREE.LineDashedMaterial({ color: sun, dashSize: DASH_SHARE * sphere.radius, gapSize: DASH_SHARE * sphere.radius }))).computeLineDistances());
+  }
+  const labels: TextSprite[] = [];
+  for (const line of objects.hourLines) {
+    for (const run of line.runs) layer.add(polyline(run, layerMaterial(new THREE.LineBasicMaterial({ color: sun, transparent: true }), SUN_STUDY_HOUR_LINE_OPACITY)));
+    const label = textSprite(line.label, colourToken("ink"), { pixels: HOUR_LABEL_PIXELS }, [0.5, -0.4]);
+    layerMaterial(label.material);
+    label.position.set(...line.labelAt);
+    labels.push(label);
+    layer.add(label);
+  }
+  const pairs = objects.day.flatMap((run) => run.slice(1).flatMap((point, index) => [...run[index], ...point]));
+  if (pairs.length) layer.add(new LineSegments2(new LineSegmentsGeometry().setPositions(pairs), layerMaterial(new LineMaterial({ color: sun, linewidth: SUN_STUDY_DAY_PIXELS, worldUnits: false }))));
+  if (objects.sun) {
+    const disc = new THREE.Sprite(layerMaterial(new THREE.SpriteMaterial({ map: discTexture(), color: sun, depthWrite: false })));
+    disc.position.set(...objects.sun);
+    disc.scale.setScalar(2 * SUN_DISC_SHARE * sphere.radius);
+    layer.add(disc);
   }
   layer.userData.applyTheme = (theme: ViewportTheme) => labels.forEach((label) => recolourTextSprite(label, inkColour(theme)));
   return layer;

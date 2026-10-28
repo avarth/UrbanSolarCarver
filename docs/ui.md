@@ -285,6 +285,7 @@ The switch **Design | Simulate | Inspect** in the header also opens Inspect, a w
 - Test surfaces are drawn two-sided: the side the normal points to in the test surface colour, the back side in orange, so a surface the wrong way round shows orange from outside. **Face normals** draws one normal per surface.
 - On a test surface file, **Flip mode** turns the whole surface under a click (a second click turns it back) and **Flip all** turns every surface. Turns are staged and shown at once; **Save** writes the file once in its own format, **Discard** drops the turns, and **Restore original** puts back the file as it was before the first save. A file that is closed as a whole cannot be flipped.
 - Save and Restore original act like an upload: the criteria and studies that list the file go out of date. They wait while a run of the project is going. If the file was replaced in the project folder since Inspect read it, they write nothing and say so, and its staged turns are dropped.
+- The **Sun** panel under the Files panel (it needs the weather file) chooses a day and a time and draws the year's sun path with that day, the shadows at that time, and the hours in shade over a range of hours on that day or over several days, a quick count on the view (Simulate's Sun hours are the precise one).
 - Leaving Inspect with turns not saved, or while a save is under way, asks Save, Discard or Stay. A save under way is said in the dialog, and if it is refused the dialog stays open with the reason.
 
 ## Where projects are kept

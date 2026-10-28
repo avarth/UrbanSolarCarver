@@ -7,6 +7,11 @@
   left: 12px;
   z-index: 5;
   max-width: calc(100% - 24px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--space-unit) * 2);
+  max-height: calc(100% - 24px);
   color: var(--colour-ink);
 }
 
@@ -89,3 +94,16 @@
 @media (max-width: 720px) {
   .files-panel { width: min(300px, calc(100vw - 48px)); }
 }
+
+/* The Sun panel, under the Files panel and built as it is: the day, the time, and the three parts of the sun tool. */
+.sun-panel-body { display: flex; flex-direction: column; gap: var(--space-unit); }
+.sun-panel-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-unit); }
+.sun-panel-label { min-width: 3.5em; color: var(--colour-muted); }
+.sun-panel-row input[type="range"] { flex: 1; min-width: 120px; }
+.sun-panel-clock { font-variant-numeric: tabular-nums; }
+.sun-panel-day { display: inline-flex; gap: var(--space-unit); }
+.sun-panel-key-days { display: flex; flex-wrap: wrap; gap: calc(var(--space-unit) * 2); }
+.sun-panel-key-days button[aria-pressed="true"] { font-weight: 600; text-decoration: none; }
+.sun-panel-check { display: flex; align-items: center; gap: var(--space-unit); }
+.sun-panel-shade { display: flex; flex-direction: column; gap: var(--space-unit); padding-left: calc(var(--space-unit) * 3); }
+.sun-panel-note { margin: 0; color: var(--colour-muted); font-size: var(--text-secondary); }

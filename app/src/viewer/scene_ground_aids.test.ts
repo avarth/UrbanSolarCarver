@@ -14,6 +14,7 @@ vi.mock("three", async (importOriginal) => {
   const three = await importOriginal<typeof import("three")>();
   class RendererKeepingTheScene {
     readonly domElement = document.createElement("canvas");
+    readonly shadowMap = { enabled: false, type: 0 };
     setPixelRatio(): void {}
     setSize(): void {}
     render(scene: THREE.Scene): void { drawn.scene = scene; }

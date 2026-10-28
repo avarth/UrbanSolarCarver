@@ -2,6 +2,7 @@
 import { messages } from "../messages";
 import { formattedNumber, withUnit } from "../steps/format_numbers";
 import { cividis, colourToken, keptScoreRange, storeyColour, sunRamp } from "../viewer/colour_scales";
+import { studyPaletteColour } from "../viewer/study_palettes";
 import type { ViewportTheme } from "../viewer/scene";
 import "./overlays.css";
 
@@ -11,6 +12,8 @@ export interface LegendContent {
   sunPath?: string;                               // sunPathLegend(sunPath)
   buildingMassing?: { storeyCount: number };
   carvedByCriterion?: { criteria: { name: string; colour: string }[]; thinningStep: number };     // one swatch and name per criterion that was on
+  /** Inspect's hours in shade: viridis from yellow (no shade) to dark (the whole range in shade). */
+  shadeHours?: { title: string; maxHours: number };
 }
 
 interface LegendProps {
@@ -60,8 +63,8 @@ function KeptVoxelsRange({ cutoff, unit }: { cutoff: number; unit?: string }) {
 }
 
 export function Legend({ content, theme }: LegendProps) {
-  const { keptVoxels, skyDome, sunPath, buildingMassing, carvedByCriterion } = content;
-  if (!keptVoxels && !skyDome && !sunPath && !buildingMassing && !carvedByCriterion) return null;
+  const { keptVoxels, skyDome, sunPath, buildingMassing, carvedByCriterion, shadeHours } = content;
+  if (!keptVoxels && !skyDome && !sunPath && !buildingMassing && !carvedByCriterion && !shadeHours) return null;
   return (
     <div className="viewer-overlay viewer-legend" data-viewport-theme={theme} role="group" aria-label={messages.legend}>
       {keptVoxels && (
@@ -90,6 +93,12 @@ export function Legend({ content, theme }: LegendProps) {
         <section>
           <h3>{skyDome.title}</h3>
           <Ramp colourAt={(t) => sunRamp(t, theme)} low={formattedNumber(skyDome.lowestWeight)} high={formattedNumber(skyDome.highestWeight)} />
+        </section>
+      )}
+      {shadeHours && (
+        <section>
+          <h3>{shadeHours.title}</h3>
+          <Ramp colourAt={(t) => studyPaletteColour("viridis", 1 - t)} low={withUnit(formattedNumber(0), "h")} high={withUnit(formattedNumber(shadeHours.maxHours), "h")} />
         </section>
       )}
       {sunPath && (

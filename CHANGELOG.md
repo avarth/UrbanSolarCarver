@@ -31,6 +31,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Added (Inspect)
 
+- **The Sun panel** in Inspect: a day and a time (local standard time of the weather file), the year's sun path on the hemisphere
+  (the arcs of the equinox and the solstices, an hour line per whole hour, the chosen day and the sun), the shadows at that time
+  (three.js shadow maps, on the ground where there is no terrain), and the hours in shade over a range of hours on a day or over
+  several days, counted on the view from the shadow maps and coloured in viridis. Routes `GET /projects/{name}/sun-chart` and
+  `GET /projects/{name}/sun-positions`, from the engine's sunpath (the weather file's location, the project's North).
 - **Inspect, a third workspace.** The header switch is now **Design | Simulate | Inspect**. Inspect shows which way every test
   surface faces and lets you turn the ones that face the wrong way, and it summarises each input mesh file. It runs no engine
   step and changes nothing until **Save** or **Restore original** is pressed. See [Inspect](docs/inspect.md).

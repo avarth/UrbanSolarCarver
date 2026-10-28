@@ -24,6 +24,7 @@ import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
 import { InspectView } from "../inspect/InspectView";
 import type { InspectTurns } from "../inspect/UnsavedTurnsDialog";
 import { useInspection, useInspectView } from "../inspect/use_inspection";
+import { useSunStudy } from "../inspect/use_sun_study";
 import { listedWithAnd, messages } from "../messages";
 import { hemisphereOfLatitude } from "../settings_form/analysis_period";
 import { shownValue, useSettingsForm, type FormStart, type SaveOutcome, type SettingsSend } from "../settings_form/form_state";
@@ -270,6 +271,7 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
     },
   });
   const inspectView = useInspectView(inspection, origin, inspecting);
+  const sunStudy = useSunStudy({ token, project: project.name, active: inspecting, hasWeatherFile, onServiceProblem });
   const latestInspection = useRef(inspection);
   latestInspection.current = inspection;
   reloadInspection.current = inspection.reload;
@@ -447,7 +449,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                            dimmedLayers: studyView.studyOutOfDate ? ["sky_dome" as const] : [] };
   // Inspect draws the inputs as Design does, the orientation of the test surfaces in place of the test surfaces, and no results.
   const inspectViewer = {
-    overlayContent: <InspectView inspection={inspection} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inputChangesNotice} />,
+    overlayContent: <InspectView inspection={inspection} sunStudy={sunStudy} origin={origin} saveDisabledReason={inputsDisabledReason} notice={inputChangesNotice} />,
+    sunStudy: sunStudy.view,
     dimmedLayers: [],
   };
   const shownByDefault = simulating ? LAYERS_SHOWN_IN_SIMULATE[studyView.geometry] : inspecting ? LAYERS_SHOWN_IN_INSPECT : LAYERS_SHOWN_IN_STEP[viewStep];

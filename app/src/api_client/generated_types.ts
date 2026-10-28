@@ -291,6 +291,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/projects/{name}/sun-chart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sun Chart
+         * @description Inspect's sun path: the arcs of the March equinox and the solstices, an hour line for each whole hour through the year, and
+         *     the arc of *date*, in the weather file's local standard time; 404 without a weather file.
+         */
+        get: operations["sun_chart"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/sun-positions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sun Positions
+         * @description The sun above the horizon every *step* minutes from *start* to *end* on each day from *from* to *to* (local standard
+         *     time), sampled on every n-th day when that would give more than 240 times; 404 without a weather file.
+         */
+        get: operations["sun_positions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/projects/{name}/criteria/{criterion_id}/settings": {
         parameters: {
             query?: never;
@@ -1740,6 +1782,37 @@ export interface components {
             geometries?: string[];
         };
         /**
+         * SunChart
+         * @description Inspect's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of the chosen day.
+         */
+        SunChart: {
+            /** Key Days */
+            key_days: components["schemas"]["SunChartDay"][];
+            /** Hour Lines */
+            hour_lines: components["schemas"]["SunHourLine"][];
+            day: components["schemas"]["SunChartDay"];
+        };
+        /**
+         * SunChartDay
+         * @description The sun's arc over one day of Inspect's sun path, above the horizon.
+         */
+        SunChartDay: {
+            /** Date */
+            date: string;
+            /** Runs */
+            runs: number[][][];
+        };
+        /**
+         * SunHourLine
+         * @description Where the sun stands at one whole hour of local standard time through the year (its analemma), above the horizon.
+         */
+        SunHourLine: {
+            /** Hour */
+            hour: number;
+            /** Runs */
+            runs: number[][][];
+        };
+        /**
          * SunMarker
          * @description The sun at one whole hour of the analysis period.
          */
@@ -1770,6 +1843,36 @@ export interface components {
             period_path: number[][];
             /** Markers */
             markers: components["schemas"]["SunMarker"][];
+        };
+        /**
+         * SunPosition
+         * @description The sun at one time, above the horizon.
+         */
+        SunPosition: {
+            /** Date */
+            date: string;
+            /** Minute */
+            minute: number;
+            /** Vector */
+            vector: number[];
+            /** Altitude */
+            altitude: number;
+            /** Azimuth */
+            azimuth: number;
+        };
+        /**
+         * SunPositions
+         * @description The sun above the horizon at the times of a range; a long range is sampled on every *day_step*-th day.
+         */
+        SunPositions: {
+            /** Positions */
+            positions: components["schemas"]["SunPosition"][];
+            /** Days Sampled */
+            days_sampled: number;
+            /** Day Step */
+            day_step: number;
+            /** Step Minutes */
+            step_minutes: number;
         };
         /**
          * TurnSurfacesRequest
@@ -2447,6 +2550,100 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sun_chart: {
+        parameters: {
+            query?: {
+                /** @description The day whose arc is drawn, MM-DD. */
+                date?: string;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SunChart"];
+                };
+            };
+            /** @description The project has no weather file: add one in Design (Inputs) to see the sun. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The date is not MM-DD. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    sun_positions: {
+        parameters: {
+            query: {
+                /** @description The first day, MM-DD. */
+                from: string;
+                /** @description The last day, MM-DD (before the first: over the new year). */
+                to: string;
+                /** @description The first minute of each day, 0 to 1440. */
+                start: number;
+                /** @description The last minute of each day, at or after start. */
+                end: number;
+                /** @description Minutes between two times of a day. */
+                step?: number;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SunPositions"];
+                };
+            };
+            /** @description The project has no weather file: add one in Design (Inputs) to see the sun. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A date or a time is out of range. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
                 };
             };
         };

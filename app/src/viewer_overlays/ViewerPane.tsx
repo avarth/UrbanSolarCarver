@@ -5,7 +5,8 @@
 // of the view says so ("Out of date", or "Updating" during a run); a thin bar along the top shows a run's progress. In Simulate
 // the selected study's values are one more layer, dimmed when the study is out of date, and the stamp shows while it is.
 // In Inspect the orientation of the test surfaces is one more layer, which replaces the test surfaces in the view; a click on a surface
-// is reported, and a request to frame a box moves the camera.
+// is reported, and a request to frame a box moves the camera. Inspect's sun tool draws the year's sun path with the chosen day and
+// the sun (the sun_study layer), the shadows at that time and the hours in shade over a range (the scene's setSunStudy).
 // Without WebGL (a remote desktop, a blocked graphics card) the scene cannot start: the view says so, and the steps go on working.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type * as THREE from "three";
@@ -17,7 +18,7 @@ import type { StudyView } from "../simulate/study_values";
 import { patchCorners } from "../simulate/study_values_decoder";
 import {
   buildingMassingLayer, carvedByCriterionLayer, carvedVoxelsLayer, contextLayer, envelopeLayer, inspectSurfacesLayer, keptColumnTops, keptVoxelsLayer, maxVolumeLayer,
-  skyDomeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
+  skyDomeLayer, splitScorePoints, storeyOfPart, studyValuesLayer, sunPathLayer, sunStudyLayer, terrainLayer, testSurfacesLayer, volumeOutline, type InspectLayerFile, type MaxVolumeAppearance,
   type VolumeOutline,
 } from "../viewer/layers";
 import type { Point3 } from "../viewer/local_origin";
@@ -25,6 +26,8 @@ import { DEFAULT_SKY_DOME_OPACITY, ViewerScene, type CameraState, type GroundAid
 import { voxelCentres, type ScorePoints } from "../viewer/score_points_decoder";
 import type { Hemisphere } from "../viewer/sky_dome";
 import { sunPathLegend, sunPathObjects, type SunPathWithNorth } from "../viewer/sun_path";
+import { sunStudyObjects } from "../viewer/sun_study";
+import type { SunStudyView } from "../inspect/use_sun_study";
 import { AxisGizmo } from "./AxisGizmo";
 import { Compass } from "./Compass";
 import { LayersMenu, type LayersMenuEntry } from "./LayersMenu";
@@ -124,6 +127,8 @@ export interface ViewerPaneProps {
   envelopeSeeThrough?: boolean;
   /** Inspect: while set, the test surfaces are hidden and the surface orientation layer is shown in their place. */
   inspect?: InspectView | null;
+  /** Inspect's sun tool: the sun path, the sun, its shadows and the hours in shade; null: none. */
+  sunStudy?: SunStudyView | null;
 }
 
 const NO_CAMERA: CameraState = { yawDegrees: 0, elevationDegrees: 90, metresPerPixel: 0 };
@@ -159,7 +164,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
                              maxVolumeAppearance, shownByDefault,
                              northDegrees, framingRequest, centreContent, results = NO_VIEWER_RESULTS, localOrigin = NO_SHIFT, dimmedLayers = NO_LAYERS,
                              missingLayers = NO_LAYERS, runProgress = null, overlayContent, mode = null,
-                             analysisCurrent = false, skyDomeTitle, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null }: ViewerPaneProps) {
+                             analysisCurrent = false, skyDomeTitle, study = null, studyOutOfDate = false, envelopeSeeThrough = false, inspect = null, sunStudy = null }: ViewerPaneProps) {
   const container = useRef<HTMLDivElement>(null);
   const [scene, setScene] = useState<ViewerScene | null>(null);
   const [sceneUnavailable, setSceneUnavailable] = useState(false);
@@ -291,6 +296,17 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
     if (inspectFrame) scene?.frameBox(inspectFrame.min, inspectFrame.max);
   }, [scene, inspectFrame?.request]);
 
+  // Inspect's sun tool: its layer is made again when the day, the time or the hemisphere changes (a few hundred line points).
+  const sunChart = sunStudy?.chart ?? null;
+  const sunVector = sunStudy?.sun ?? null;
+  const sunKey = sunVector?.join(",") ?? "";
+  useEffect(() => {
+    scene?.setLayer("sun_study", sunChart && hemisphere && sunStudyLayer(sunStudyObjects(sunChart, sunVector, hemisphere), hemisphere));
+  }, [scene, sunChart, hemisphere, sunKey]);
+  const sunShadows = sunStudy?.shadows ?? false;
+  const shade = sunStudy?.shade ?? null;
+  useEffect(() => scene?.setSunStudy(sunVector, sunShadows, shade), [scene, sunKey, sunShadows, shade]);
+
   const present: LayerName[] = [];
   if (maxVolume) present.push("max_volume");
   // A layer whose criteria are all hidden stays listed, so they can be shown again. In Inspect the orientation layer takes their place.
@@ -360,6 +376,7 @@ export function ViewerPane({ maxVolume, testSurfaces, onTestSurfacesShownChange,
           highestWeight: Math.max(...skyDome.weights) }
       : undefined,
     buildingMassing: shown("building_massing") && massing ? { storeyCount: storeyCountOf(massing) } : undefined,
+    shadeHours: shade ? { title: shade.title, maxHours: shade.maxHours } : undefined,
     carvedByCriterion: shown("carved_by_criterion") && carvedByCriterion
       ? { criteria: carvedByCriterion.criterionIds.flatMap((id) => criteria.filter((entry) => entry.id === id).map(({ name, colour }) => ({ name, colour }))),
           thinningStep: carvedVoxelsOfCriteria?.thinningStep ?? 1 }

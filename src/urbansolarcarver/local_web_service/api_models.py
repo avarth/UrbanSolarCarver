@@ -316,6 +316,42 @@ class SunPath(BaseModel):
     days: list[SunPathDay]
 
 
+class SunChartDay(BaseModel):
+    """The sun's arc over one day of Inspect's sun path, above the horizon."""
+    date: str                           # "06-21": month and day
+    runs: list[list[list[float]]]       # unbroken stretches of unit vectors toward the sun, every 5 minutes
+
+
+class SunHourLine(BaseModel):
+    """Where the sun stands at one whole hour of local standard time through the year (its analemma), above the horizon."""
+    hour: int
+    runs: list[list[list[float]]]       # unbroken stretches, one point a week
+
+
+class SunChart(BaseModel):
+    """Inspect's sun path: the arcs of the equinox and the solstices, the hour lines, and the arc of the chosen day."""
+    key_days: list[SunChartDay]
+    hour_lines: list[SunHourLine]
+    day: SunChartDay
+
+
+class SunPosition(BaseModel):
+    """The sun at one time, above the horizon."""
+    date: str                           # "MM-DD"
+    minute: int                         # of the day, local standard time
+    vector: list[float]                 # unit vector toward the sun, model coordinates
+    altitude: float                     # degrees above the horizon
+    azimuth: float                      # degrees clockwise from true north
+
+
+class SunPositions(BaseModel):
+    """The sun above the horizon at the times of a range; a long range is sampled on every *day_step*-th day."""
+    positions: list[SunPosition]
+    days_sampled: int
+    day_step: int
+    step_minutes: int
+
+
 class ColdPeriodDates(BaseModel):
     """Start and end of the cold period (inclusive); start after end wraps across the new year."""
     start_month: int
