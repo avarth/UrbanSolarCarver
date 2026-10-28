@@ -65,6 +65,8 @@ _RAYS_PER_LAUNCH = 1 << 25
 _MIN_HIT = 1e-3
 # The least margin of the ground a study can sample around the maximum volume's plan bounds (m; ground_square).
 GROUND_MARGIN = 20.0
+# A face of the surroundings whose normal points this far down (z component) is a bottom, left out of a study's surfaces.
+DOWNWARD_NORMAL_Z = -0.9
 
 
 class CheckDirections(NamedTuple):
@@ -626,6 +628,13 @@ def flat_pieces(mesh):
                            process=False)
 
 
+def without_downward_faces(mesh):
+    """*mesh* without the faces that face down (the bottoms of the surroundings' bodies, which stand on the ground and would read
+    no sun or sky, pulling a study's statistics down)."""
+    keep = mesh.face_normals[:, 2] > DOWNWARD_NORMAL_Z
+    return mesh.submesh([np.flatnonzero(keep)], append=True, repair=False) if not keep.all() else mesh
+
+
 def ground_square(max_volume):
     """A flat square facing up at the lowest z of *max_volume*, centred on its plan bounds and covering them with a margin on
     each side of :data:`GROUND_MARGIN` m or half the longer side of the bounds, whichever is more."""
@@ -640,7 +649,8 @@ def ground_square(max_volume):
 
 def study_surfaces(test_surface_path, surfaces_from, max_volume, *, context_path=None, terrain_path=None):
     """The surfaces a Simulate study samples, joined into one mesh: its test surface file when it has one, and each source of
-    *surfaces_from*: ``"context"`` the context files, their closed bodies turned to face out; ``"terrain"`` the terrain file,
+    *surfaces_from*: ``"context"`` the context files, their closed bodies turned to face out and without the faces that face
+    down (:func:`without_downward_faces`); ``"terrain"`` the terrain file,
     turned to face up when most of its area faces down; ``"ground"`` :func:`ground_square` under *max_volume* (a mesh).  The
     context and the terrain are cut into their flat pieces (:func:`flat_pieces`).
 
@@ -658,7 +668,7 @@ def study_surfaces(test_surface_path, surfaces_from, max_volume, *, context_path
             paths = _paths_of(context_path)
             if not paths:
                 raise InputError("The study samples the surroundings, but there is no surroundings file.")
-            meshes += [flat_pieces(load_mesh(path, fix_normals=True)) for path in paths]
+            meshes += [flat_pieces(without_downward_faces(load_mesh(path, fix_normals=True))) for path in paths]
         elif source == "terrain":
             if terrain_path is None:
                 raise InputError("The study samples the terrain, but there is no terrain file.")

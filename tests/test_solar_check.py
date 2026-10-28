@@ -506,6 +506,7 @@ def test_a_study_that_samples_the_context_has_points_on_it_and_none_without(tmp_
     assert east.any() and np.allclose(points[east, 0], 25.0)
     assert roof.any() and np.allclose(points[roof, 2], 30.0)
     assert with_context.values["open"][roof].min() > 95.0
+    assert not (on_context & (normals[:, 2] < -0.9)).any()        # its bottom, on the ground, is left out
 
 
 @REQUIRES_WARP_CPU

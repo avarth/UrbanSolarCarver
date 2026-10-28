@@ -34,13 +34,13 @@ Every change is saved at once. The studies are stored in `project.json` under `s
 
 Besides its files, a study can sample three surfaces of the project, for example to count the sun hours on the neighbours' facades or on the ground. A study needs files, one of these, or both:
 
-- **The surroundings**: every face of the context files. Each closed body is turned to face out first, so its facades and roofs face away from it. The check box is greyed until the project has surroundings files.
+- **The surroundings**: the faces of the context files, without those facing down (the bottoms, which stand on the ground). Each closed body is turned to face out first, so its facades and roofs face away from it. The check box is greyed until the project has surroundings files.
 - **The terrain**: the terrain file, turned to face up when most of its area faces down. Offered when the project has a terrain file.
 - **The ground around the site**: offered when the project has no terrain. A flat square at the lowest point of the maximum volume, centred on its plan, reaching beyond the maximum volume on each side by 20 m or half its longer side, whichever is more. For a 30 m by 50 m maximum volume that is 25 m, so the square is 100 m wide.
 
 The surroundings and the terrain are sampled face by face (each flat piece of them on its own), and the ground as one panel. They are sampled in the setting `surfaces_from` of the study (`context`, `terrain`, `ground`); choosing or dropping one makes the result out of date. A study that names the surroundings or the terrain while the project has no such file cannot run (**Add surroundings**, **Add a terrain**).
 
-The surroundings still block while they are sampled. A test point on one of their faces starts its rays a centimetre off the face, along the face's normal (the origin offset every test point has), so the face it stands on does not block it, while the rest of its body and the other bodies do. That needs closed bodies, which face out once turned. An open body (a facade without a roof, say) or one whose faces point into it after the turn reads as shaded by itself on the faces that point the wrong way: a point on such a face looks into its own body. The points under the bodies (their bottom faces, and the ground or terrain under them) see nothing and get 0, and they count in the result card's statistics.
+The surroundings still block while they are sampled. A test point on one of their faces starts its rays a centimetre off the face, along the face's normal (the origin offset every test point has), so the face it stands on does not block it, while the rest of its body and the other bodies do. That needs closed bodies, which face out once turned. An open body (a facade without a roof, say) or one whose faces point into it after the turn reads as shaded by itself on the faces that point the wrong way: a point on such a face looks into its own body. The ground or terrain under the bodies sees nothing and gets 0, and those points count in the result card's statistics.
 
 ## Metrics
 
