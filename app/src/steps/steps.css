@@ -574,6 +574,89 @@ p.run-outcome-error { color: var(--colour-error); font-weight: 600; }
 /* The notice of a new weather file, under the Settings header open or closed. */
 .panel-section > .weather-change-region:not(:empty) { padding-bottom: calc(var(--space-unit) * 3); }
 
+/* Which hours count, at the top of a Solar usefulness criterion's Settings, and under it, energy-weighted, the typical building's
+   box: its type, the state of its weights and Edit building. */
+.hours-counted .segmented-switch { align-self: flex-start; }
+.typical-building-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-unit);
+  margin-top: calc(var(--space-unit) * 2);
+  padding: calc(var(--space-unit) * 2) calc(var(--space-unit) * 3);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-small);
+}
+.typical-building-box p { margin: 0; }
+.typical-building-box-title { font-weight: 600; }
+.typical-building-box-state { color: var(--colour-muted); font-size: var(--text-secondary); }
+.typical-building-box .secondary-button { margin-top: var(--space-unit); }
+
+/* The typical building's sheet, beside the step panel (the top bar 48 px, the panel 340 px) over the 3D view, as Simulate's study
+   popover sits beside its list; as tall as the window lets it be, scrolling inside. Fixed, so the panel's scrolling neither moves
+   nor clips it. Its z-index makes it a stacking context above the view's overlays (the run report is 6): nothing of the view is
+   drawn over it, and the handles and bubbles inside it stay under what covers the sheet. */
+.typical-building-sheet {
+  position: fixed;
+  top: calc(48px + 12px);
+  left: calc(340px + 8px);
+  z-index: 7;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space-unit) * 3);
+  width: 360px;
+  max-width: calc(100vw - 340px - 16px);
+  max-height: calc(100vh - 48px - 24px);
+  overflow-y: auto;
+  padding: calc(var(--space-unit) * 3);
+  background: var(--colour-panel);
+  color: var(--colour-ink);
+  border: 1px solid var(--colour-line);
+  border-radius: var(--radius-large);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--colour-ink) 18%, transparent);
+}
+.typical-building-sheet p { margin: 0; }
+.typical-building-groups { border-top: 1px solid var(--colour-line); border-bottom: 1px solid var(--colour-line); }
+.typical-building-months { display: flex; flex-wrap: wrap; gap: var(--space-unit); }
+.typical-building-calculate { display: flex; flex-direction: column; gap: var(--space-unit); }
+.typical-building-calculate .primary-button { display: inline-flex; align-items: center; justify-content: center; gap: calc(var(--space-unit) * 2); }
+.typical-building-results-area { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
+.typical-building-out-of-date { color: var(--colour-out-of-date); font-size: var(--text-secondary); font-weight: 600; }
+.typical-building-results { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 3); }
+/* Weights of a building that has changed since: dimmed, as the 3D view dims results that are out of date. */
+.typical-building-results-out-of-date { opacity: 0.45; }
+/* The three numbers, one a row: the name on the left, the value on the right. */
+.typical-building-numbers { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; }
+.typical-building-numbers > div { display: flex; align-items: center; justify-content: space-between; gap: calc(var(--space-unit) * 2); }
+.typical-building-numbers dt { display: flex; align-items: center; gap: var(--space-unit); color: var(--colour-muted); }
+.typical-building-numbers dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* The weight of each hour of the year: the days across, the hours down, each hour one cell of the canvas, drawn without smoothing. */
+.weights-chart { display: flex; flex-direction: column; gap: var(--space-unit); margin: 0; }
+.weights-chart-title { font-size: var(--text-secondary); font-weight: 600; }
+.weights-chart-plot { display: flex; gap: var(--space-unit); }
+.weights-chart-hours {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-between;
+  width: 16px;
+  color: var(--colour-muted);
+  font-size: 10px;
+  line-height: 1;
+  text-align: right;
+}
+.weights-chart-canvas { flex: 1; min-width: 0; height: 96px; border-radius: 2px; image-rendering: pixelated; }
+.weights-chart-months, .weights-chart-legend { display: flex; margin-left: calc(16px + var(--space-unit)); color: var(--colour-muted); font-size: 10px; }
+.weights-chart-months span { flex-basis: 0; text-align: center; }
+.weights-chart-legend { align-items: center; gap: var(--space-unit); }
+.weights-chart-ramp { flex: 0 0 120px; height: 8px; border-radius: 2px; }
+
+@media (max-width: 720px) {
+  .typical-building-sheet { left: 8px; right: 8px; width: auto; max-width: none; }
+}
+
 /* The cards in carving order, Add criterion under them, then the selected criterion's panel, set off by a line. */
 .criteria-list-block { display: flex; flex-direction: column; gap: calc(var(--space-unit) * 2); }
 .criteria-list-block + .criterion-panel-frame,

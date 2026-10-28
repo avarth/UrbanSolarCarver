@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 const DAYLIGHT: CriterionEntry = {
-  id: "2", name: "Daylight on windows", named_by_user: true, colour: "#cc6677", bypassed: false, test_surface_files: ["windows.obj"],
+  id: "2", name: "Daylight on windows", named_by_user: true, colour: "#cc6677", bypassed: false, energy_weighted: false, test_surface_files: ["windows.obj"],
   settings: { mode: "daylight" },
 };
 

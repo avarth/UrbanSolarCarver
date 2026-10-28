@@ -9,6 +9,10 @@
 // useRunLoop runs one pipeline at a time, as the engine does: it starts a run, follows its events and keeps the last run's
 // state, for any project, so a run goes on being followed while another project is open. A simulation of the studies (Simulate's
 // Run) is one more job of the same loop, of one stage, "simulate", whose events name the study being run.
+//
+// Before the engine, a run that analyses an energy-weighted criterion calculates the typical building's weights when they are
+// missing or out of date: progress of the stage "typical_building", of no criterion, which the run's reply does not list. Its
+// first event puts it at the front of the run's order; it is not a pipeline stage (runStages leaves it out).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, cancelRun, failureTextOf, serviceProblemOf, startRun, startSimulation as postSimulation } from "../api_client/client";
 import { subscribeToRunEvents, type RunEvent } from "../api_client/events";
@@ -56,13 +60,16 @@ export interface RunState {
 
 /** The one stage of a simulation (Simulate's Run), outside the pipeline stages. */
 export const SIMULATE_STAGE = "simulate";
+/** The calculation of the typical building's weights a run may do before the engine, outside the pipeline stages. */
+export const TYPICAL_BUILDING_STAGE = "typical_building";
 
-const STAGE_DISPLAY_NAMES: Record<PipelineStage | typeof SIMULATE_STAGE, string> = {
+const STAGE_DISPLAY_NAMES: Record<PipelineStage | typeof SIMULATE_STAGE | typeof TYPICAL_BUILDING_STAGE, string> = {
   preprocessing: "Sun analysis",
   thresholding: "Carving",
   exporting: "Envelope mesh",
   massing: "Building massing",
   simulate: "Simulation",
+  typical_building: messages.typicalBuilding,
 };
 
 export function stageDisplayName(stage: string): string {
@@ -128,6 +135,7 @@ export function runReducer(state: RunState, event: RunEvent, now = Date.now()): 
   switch (event.type) {
     case "stage_progress": {
       if (event.stage === null) return state;
+      if (event.stage === TYPICAL_BUILDING_STAGE && !state.order.includes(TYPICAL_BUILDING_STAGE)) state = withTypicalBuildingFirst(state);
       const ownKey = progressKey(event.criterion, event.stage);
       const key = state.order.includes(ownKey) ? ownKey : event.stage;
       const position = state.order.indexOf(key);
@@ -153,9 +161,15 @@ export function runReducer(state: RunState, event: RunEvent, now = Date.now()): 
   }
 }
 
-/** The pipeline stages of the run, each once, in the order it runs them. */
+/** The run with the typical building's calculation in front of its stages, which wait until it is done. */
+function withTypicalBuildingFirst(state: RunState): RunState {
+  const waiting = Object.fromEntries(Object.entries(state.stages).map(([key, progress]) => [key, { ...progress, state: "waiting" as const }]));
+  return { ...state, order: [TYPICAL_BUILDING_STAGE, ...state.order], stages: { [TYPICAL_BUILDING_STAGE]: { state: "running", done: 0, total: 0 }, ...waiting } };
+}
+
+/** The pipeline stages of the run, each once, in the order it runs them (not the typical building's calculation). */
 export function runStages(state: RunState): string[] {
-  return [...new Set(state.order.map(stageOfKey))];
+  return [...new Set(state.order.map(stageOfKey))].filter((stage) => stage !== TYPICAL_BUILDING_STAGE);
 }
 
 /**

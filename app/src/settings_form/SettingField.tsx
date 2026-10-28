@@ -30,6 +30,8 @@ export interface SettingFieldExtras {
   coldPeriod?: ColdPeriodState | null;
   /** The hemisphere of the weather file, for the period control's heating season preset; northern when absent. */
   hemisphere?: Hemisphere;
+  /** The criterion counts its hours by the typical building: the cold period preset says it follows the cold hours rule. */
+  coldPeriodForColdHours?: boolean;
 }
 
 export interface SettingFieldProps {
@@ -173,6 +175,7 @@ export function SettingField({ view, form, onChange, disabled = false, extras }:
     case "analysis_period":
       controlElement = (
         <AnalysisPeriod {...control} onChange={onChange} coldPeriod={extras?.coldPeriod ?? null} hemisphere={extras?.hemisphere}
+                        coldPeriodForColdHours={extras?.coldPeriodForColdHours}
                         values={Object.fromEntries(ANALYSIS_PERIOD_FIELDS.map((name) => [name, shownValue(form, name)])) as Record<AnalysisPeriodField, number | null>} />
       );
       break;

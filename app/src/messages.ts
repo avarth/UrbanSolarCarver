@@ -591,6 +591,8 @@ export const messages = {
     `${startDay} ${MONTH_ABBREVIATIONS[startMonth - 1]} to ${endDay} ${MONTH_ABBREVIATIONS[endMonth - 1]}.`,
   coldPeriodNone: (baseText: string) => `No month-long stretch of the weather file has a mean below ${baseText} (balance temperature minus dead band).`,
   coldPeriodFailed: (reason: string) => `The cold period cannot be found. ${reason}`,
+  // Said after the line above in an energy-weighted criterion, which does not count the cold hours.
+  coldPeriodOfColdHoursRule: "This period follows the cold hours rule (the balance temperature under Cold hours), not the typical building.",
   temperatureText: (degrees: number) => `${Number(degrees.toFixed(1))} °C`,
   periodPresetNames: { winter_solstice: "21 December", summer_solstice: "21 June", heating_season: "Heating season, October to April", whole_year: "Whole year" },
   // The heating season preset where the weather file is in the southern hemisphere.
@@ -718,4 +720,72 @@ export const messages = {
   sunToolShadeNote: "A quick count of what the view shows, at the shadow map's resolution; Simulate's sun hours are the precise count.",
   sunToolDays: (first: string, last: string, dayStep: number) => (dayStep > 1 ? `mean of ${first} to ${last}, every ${dayStep} days` : `mean of ${first} to ${last}`),
   shadeHoursLegend: (start: string, end: string, days: string) => `Hours in shade per day, ${start} to ${end}, ${days}`,
+
+  // Which hours count in Solar usefulness, and the typical building an energy-weighted criterion counts them by: the switch and
+  // the box in the criterion's Settings, and the sheet beside the panel where the building is edited and calculated.
+  whichHoursCount: "Which hours count",
+  whichHoursCountChoices: { cold_hours: "Cold hours", energy_weighted: "Energy-weighted" },
+  whichHoursCountHelp: "Cold hours: the sun of the hours colder than the balance temperature counts. Energy-weighted: each hour counts by " +
+    "what its sun saves a typical building in heating over the year, from a simple hourly model of one room (ISO 13790).",
+  typicalBuilding: "Typical building",
+  typicalBuildingCustom: "Custom",
+  typicalBuildingStates: { current: "Calculated", out_of_date: "Changed since it was calculated", missing: "Not calculated yet" },
+  // Under the state while the weights are not current: the run does it on its own.
+  typicalBuildingRunCalculates: "Run analysis calculates it first.",
+  typicalBuildingReading: "Reading the typical building",
+  editBuilding: "Edit building",
+  closeTypicalBuilding: "Close",
+  startFrom: "Start from",
+  typicalBuildingGroups: { shape: "Shape", windows: "Windows", walls: "Walls and glass", air: "Air", use: "Use", shading: "Summer shading" },
+  typicalBuildingFields: {
+    width: "Width, east to west", length: "Length, north to south", height: "Storey height", orientation: "Orientation", wwr: "Window share of each wall",
+    g_value: "Glass solar transmittance (g)", u_opaque: "U of the walls and roof", u_window: "U of the glass", mass_class: "Thermal mass",
+    ach_vent: "Ventilation", ach_infiltration: "Infiltration", heat_recovery: "Heat recovery", t_set_heating: "Heating set point",
+    t_set_cooling: "Cooling set point", gains_day_w_m2: "Internal gains by day", gains_night_w_m2: "Internal gains by night",
+    shading_permanent: "Permanent shading factor", shading_hot: "Summer shading factor", hot_months: "Months of the summer shading",
+  } as Record<string, string>,
+  typicalBuildingSides: { north: "North", east: "East", south: "South", west: "West" } as Record<string, string>,
+  typicalBuildingSideInitials: { north: "N", east: "E", south: "S", west: "W" } as Record<string, string>,
+  typicalBuildingUnits: { metres: "m", degrees: "°", uValue: "W/m²K", perHour: "per hour", celsius: "°C", wattsPerSquareMetre: "W/m²" },
+  typicalBuildingNotes: {
+    orientation: "Clockwise from north; 0 has the south wall facing south.",
+    wwr: "The glazed share of each wall, 0 to 0.9.",
+    heat_recovery: "The share of the exhaust heat the ventilation recovers, 0 to 1.",
+    gains: "Day is 8:00 to 20:00.",
+    shading: "0 to 1; 1 lets all the sun through. Empty: no shading.",
+  },
+  massClasses: { very_light: "Very light", light: "Light", medium: "Medium", heavy: "Heavy", very_heavy: "Very heavy" } as Record<string, string>,
+  // The one line of each group of the sheet while it is closed.
+  shapeSummary: (widthText: string, lengthText: string, heightText: string, orientationText: string) =>
+    `${widthText} × ${lengthText} × ${heightText} m, ${orientationText}° from north`,
+  windowsSummary: (sharesText: string, gText: string) => `${sharesText}; g ${gText}`,
+  noWindows: "No windows",
+  // *massWord*: the thermal mass in lower case, "medium".
+  wallsSummary: (wallsText: string, glassText: string, massWord: string) => `U ${wallsText} and ${glassText} W/m²K, ${massWord} mass`,
+  airSummary: (ventilationText: string, infiltrationText: string, recoveryText: string | null) =>
+    `${ventilationText} + ${infiltrationText} air changes per hour${recoveryText === null ? "" : `, recovery ${recoveryText}`}`,
+  useSummary: (heatingText: string, coolingText: string, dayText: string, nightText: string) =>
+    `${heatingText} to ${coolingText} °C, gains ${dayText} and ${nightText} W/m²`,
+  noShading: "None",
+  permanentShadingSummary: (factorText: string) => `permanent ${factorText}`,
+  summerShadingSummary: (factorText: string, monthsText: string) => `summer ${factorText} in ${monthsText}`,
+  monthAbbreviations: MONTH_ABBREVIATIONS,
+  calculate: "Calculate",
+  calculateAgain: "Calculate again",
+  calculating: "Calculating, about 10 s",
+  // Why Calculate waits: one sentence without a final period, as the run buttons' reasons.
+  calculateNeedsWeatherFile: "Add a weather file in Design (Inputs) to calculate the typical building",
+  calculateWaitsForValues: "Fix the values marked above to calculate",
+  typicalBuildingOutOfDate: "The building or the weather file changed since this was calculated.",
+  benefitChartTitle: "What each hour's sun saves in heating",
+  harmChartTitle: "What each hour's sun adds to cooling",
+  weightsChartLabel: (title: string) => `${title}, 0 to 1: day of the year across, hour of the day down`,
+  weightsChartHours: "Hour",
+  weightsChartWaits: "Reading the weights",
+  heatingDemand: "Heating",
+  coolingDemand: "Cooling",
+  demandPerYear: (valueText: string) => `${valueText} kWh/m² a year`,
+  countedHours: "Hours that count",
+  countedHoursOfYear: (count: number) => `${groupedDigits(count)} of 8 760`,
+  countedHoursNote: "Hours whose weight is above 0.01.",
 };

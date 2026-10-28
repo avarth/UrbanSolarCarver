@@ -1,10 +1,12 @@
+import { act } from "react";
 import { afterEach, expect, test, vi } from "vitest";
 import { initialFormState, type FormState } from "../settings_form/form_state";
 import { CRITERION_KEYS, MODES, SCHEMA } from "../steps/project_workspace_for_test";
 import { click, renderForTest, type RenderedOverlay } from "../viewer_overlays/render_for_test";
-import { CriterionPanel, type CriterionPanelProps } from "./CriterionPanel";
+import { CriterionPanel, type CriterionPanelProps, type HoursCountedProps } from "./CriterionPanel";
 import { usePanelSections } from "./PanelSection";
 import { PANEL_SECTIONS, type PanelSectionId } from "./section_summaries";
+import type { TypicalBuildingHook } from "./use_typical_building";
 
 let rendered: RenderedOverlay | null = null;
 
@@ -209,4 +211,59 @@ test("a request to open a section (a link to a setting) opens it, once per reque
   click(sectionHeader("settings"));
   rendered.rerender(<PanelWithRequest {...panelProps()} request={request} />);    // the same request again: done already
   expect(sectionOpen("settings")).toBe(false);
+});
+
+// The typical building as the workspace's hook holds it once read: the office type, not calculated yet.
+const OFFICE = { width: 5, length: 7, height: 3, orientation: 0, wwr: { north: 0, east: 0.1, south: 0.27, west: 0.1 } };
+const BUILDING: TypicalBuildingHook = {
+  stored: { values: OFFICE, start_from: "office", state: "missing" }, values: OFFICE, startFrom: "office",
+  presets: { office: { label: "Office, medium mass", values: OFFICE } }, readProblem: null, fieldErrors: {}, problem: null, calculating: false,
+  weights: null, change: () => {}, calculate: () => {}, readWeights: () => {},
+};
+
+function hoursCounted(overrides: Partial<HoursCountedProps> = {}): HoursCountedProps {
+  return { energyWeighted: false, onChange: async () => null, building: BUILDING, hasWeatherFile: true, ...overrides };
+}
+
+const switchButtons = () => [...rendered!.container.querySelectorAll<HTMLButtonElement>(".hours-counted .segmented-switch button")];
+
+test("in Solar usefulness, Settings starts with Which hours count: Cold hours shows the balance temperature, Energy-weighted the typical building", async () => {
+  const onChange = vi.fn(async () => null);
+  rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ onChange }) })} />);
+  const settings = find('.panel-section[data-section="settings"]')!;
+  expect(settings.querySelector(".setting-field")!.getAttribute("data-setting")).toBe("energy_weighted");
+  expect(switchButtons().map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([["Cold hours", "true"], ["Energy-weighted", "false"]]);
+  expect(find('[data-setting="balance_temperature"]')).not.toBeNull();
+  expect(find(".typical-building-box")).toBeNull();
+  await act(async () => { switchButtons()[1].dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  expect(onChange).toHaveBeenCalledWith(true);
+
+  rendered.rerender(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ energyWeighted: true }) })} />);
+  expect(find('[data-setting="balance_temperature"]')).toBeNull();
+  expect([...find(".typical-building-box")!.querySelectorAll("p")].map((line) => line.textContent))
+    .toEqual(["Typical building", "Office, medium mass", "Not calculated yet. Run analysis calculates it first."]);
+  expect(rendered.container.textContent).not.toMatch(/5R1C/);
+});
+
+test("Edit building opens the typical building's sheet beside the panel; Close ends it and gives the focus back to Edit building", () => {
+  rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("benefit"), hoursCounted: hoursCounted({ energyWeighted: true }) })} />);
+  const edit = [...rendered.container.querySelectorAll<HTMLButtonElement>(".typical-building-box button")].find((button) => button.textContent === "Edit building")!;
+  expect(edit.getAttribute("aria-expanded")).toBe("false");
+  expect(find(".typical-building-sheet")).toBeNull();
+  click(edit);
+  const sheet = find(".typical-building-sheet")!;
+  expect(sheet.getAttribute("role")).toBe("dialog");
+  expect(edit.getAttribute("aria-expanded")).toBe("true");
+  expect(edit.getAttribute("aria-controls")).toBe(sheet.id);
+  // The sheet is outside the folded sections, so it stays open when Settings is closed.
+  expect(sheet.closest(".panel-section")).toBeNull();
+  click(sheet.querySelector<HTMLButtonElement>(".study-popover-close")!);
+  expect(find(".typical-building-sheet")).toBeNull();
+  expect(document.activeElement).toBe(edit);
+});
+
+test("another mode has no Which hours count, whatever the criterion says", () => {
+  rendered = renderForTest(<CriterionPanel {...panelProps({ form: formFor("time-based"), hoursCounted: hoursCounted({ energyWeighted: true }) })} />);
+  expect(find(".hours-counted")).toBeNull();
+  expect(find(".typical-building-box")).toBeNull();
 });

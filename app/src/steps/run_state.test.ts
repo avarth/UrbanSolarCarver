@@ -76,8 +76,24 @@ test("the progress bar counts finished stages and the batch fraction of the runn
 });
 
 test("stages are named in plain words", () => {
-  expect(["preprocessing", "thresholding", "exporting", "massing"].map(stageDisplayName))
-    .toEqual(["Sun analysis", "Carving", "Envelope mesh", "Building massing"]);
+  expect(["preprocessing", "thresholding", "exporting", "massing", "typical_building"].map(stageDisplayName))
+    .toEqual(["Sun analysis", "Carving", "Envelope mesh", "Building massing", "Typical building"]);
+});
+
+test("the typical building's calculation, which the run's reply does not list, goes in front of the stages and is no pipeline stage", () => {
+  let s = initialRunState([progressKey("1", "preprocessing"), progressKey("1", "thresholding")]);
+  s = runReducer(s, { type: "stage_progress", stage: "typical_building", criterion: null, done: 0, total: 1 });
+  expect(s.order).toEqual(["typical_building", "1:preprocessing", "1:thresholding"]);
+  expect(s.stages.typical_building.state).toBe("running");
+  expect(s.stages["1:preprocessing"].state).toBe("waiting");
+  expect(runningCriterion(s)).toBeNull();
+  expect(runStages(s)).toEqual(["preprocessing", "thresholding"]);
+  s = runReducer(s, { type: "stage_progress", stage: "typical_building", criterion: null, done: 1, total: 1 });
+  s = runReducer(s, { type: "stage_progress", stage: "preprocessing", criterion: "1", done: 0, total: 1 });
+  expect(s.order).toHaveLength(3);
+  expect(s.stages.typical_building.state).toBe("done");
+  expect(stagesDone(s)).toEqual([]);
+  expect(runProgressShare(s)).toBeCloseTo(1 / 3);
 });
 
 test("an issue raised before any stage began (stage null, as the service sends it) is kept with the run's warnings", () => {

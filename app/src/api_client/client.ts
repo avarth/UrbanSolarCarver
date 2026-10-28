@@ -37,6 +37,9 @@ export type StudyEntry = Schemas["StudyEntry"];
 export type MetricInfo = Schemas["MetricInfo"];
 export type InspectedFile = Schemas["InspectedFile"];
 export type InspectReply = Schemas["InspectReply"];
+export type TypicalBuildingReply = Schemas["TypicalBuildingReply"];
+export type TypicalBuildingWeightsReply = Schemas["TypicalBuildingWeightsReply"];
+export type TypicalBuildingPreset = Schemas["TypicalBuildingPreset"];
 
 /** What a new study starts from: a metric (its defaults, no files), or a criterion (its metric, period, mode settings and files). */
 export type StudySource = { metric: string } | { from_criterion: string };
@@ -245,9 +248,12 @@ function forCriterion(address: string, criterionId?: string): string {
 export const addCriterion = (token: string, project: string, mode: string, name?: string) =>
   requestJson<CriterionEntry>(token, `${projectPath(project)}/criteria`, "POST", name === undefined ? { mode } : { mode, name });
 
-/** Changes what is given of a criterion's name, colour, bypass and settings; what is not given stays. */
+/**
+ * Changes what is given of a criterion's name, colour, bypass, settings and Which hours count (energy_weighted: by the typical
+ * building); what is not given stays.
+ */
 export const updateCriterion = (token: string, project: string, criterionId: string,
-                                changes: { name?: string; colour?: string; bypassed?: boolean; values?: Record<string, unknown> }) =>
+                                changes: { name?: string; colour?: string; bypassed?: boolean; energy_weighted?: boolean; values?: Record<string, unknown> }) =>
   requestJson<CriterionEntry>(token, criterionPath(project, criterionId), "PATCH", changes);
 
 export async function deleteCriterion(token: string, project: string, criterionId: string): Promise<void> {
@@ -274,6 +280,26 @@ export const reuseTestSurface = (token: string, project: string, criterionId: st
 
 export const removeCriterionTestSurface = (token: string, project: string, criterionId: string, fileName: string) =>
   requestJson<CriterionEntry>(token, `${criterionPath(project, criterionId)}/test-surfaces/${encodeURIComponent(fileName)}`, "DELETE");
+
+// The typical building of the project, which an energy-weighted Solar usefulness criterion counts its hours by -----------------
+
+/** The types the typical building can start from, by key, in the order the app offers them. */
+export const getTypicalBuildingPresets = (token: string) => requestJson<Record<string, TypicalBuildingPreset>>(token, "/api/typical-building-presets");
+
+/** The project's typical building (the default type before it is saved) and the state of its weights. */
+export const getTypicalBuilding = (token: string, project: string) => requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building`);
+
+/** Saves the values and the type they started from; a value that is not valid is 422 with its field ("wwr.south" for a window share). */
+export const putTypicalBuilding = (token: string, project: string, values: Record<string, unknown>, startFrom: string | null) =>
+  requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building`, "PUT", { values, start_from: startFrom });
+
+/** Calculates the weights of the stored building with the project's weather file (about 9 s); 404 without a weather file. */
+export const calculateTypicalBuilding = (token: string, project: string) =>
+  requestJson<TypicalBuildingReply>(token, `${projectPath(project)}/typical-building/calculate`, "POST");
+
+/** The weights of the last calculation, 8,760 each, hour 0 at 1 January 0:00; 404 before the first. */
+export const getTypicalBuildingWeights = (token: string, project: string) =>
+  requestJson<TypicalBuildingWeightsReply>(token, `${projectPath(project)}/typical-building/weights`);
 
 // The studies of the Simulate workspace (apart from the criteria) --------------------------------------------------------------
 

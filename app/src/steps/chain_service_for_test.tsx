@@ -91,7 +91,7 @@ export class ChainService extends FakeService {
     if (method === "POST" && path === "/criteria") {
       const id = String(Math.max(...this.entries.map((entry) => Number(entry.id))) + 1);
       const mode = String(body.mode);
-      const entry: CriterionEntry = { id, name: plainModeName(mode), named_by_user: false, colour: "#228833", bypassed: false, test_surface_files: [],
+      const entry: CriterionEntry = { id, name: plainModeName(mode), named_by_user: false, colour: "#228833", bypassed: false, energy_weighted: false, test_surface_files: [],
                                       settings: { mode, ...this.modes.find((candidate) => candidate.name === mode)?.starting_values } };
       this.entries = [...this.entries, entry];
       this.criterionStages[id] = { preprocessing: "missing", thresholding: "missing" };
@@ -159,7 +159,7 @@ export class ChainService extends FakeService {
 }
 
 export function criterion(id: string, name: string, settings: Record<string, unknown>, files: string[], colour = "#4477aa"): CriterionEntry {
-  return { id, name, named_by_user: true, colour, bypassed: false, test_surface_files: files, settings };
+  return { id, name, named_by_user: true, colour, bypassed: false, energy_weighted: false, test_surface_files: files, settings };
 }
 
 // Criterion 1 protects the facades on 21 December; criterion 2 the windows on 21 March, with its own cutoff; criterion 3, daylight, the roofs.

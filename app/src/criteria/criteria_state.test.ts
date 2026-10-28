@@ -7,7 +7,7 @@ import {
 } from "./criteria_state";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
-  return { id, name: `Criterion ${id}`, named_by_user: false, colour: "#336699", bypassed: false, test_surface_files: ["roofs.obj"], settings: {}, ...overrides };
+  return { id, name: `Criterion ${id}`, named_by_user: false, colour: "#336699", bypassed: false, energy_weighted: false, test_surface_files: ["roofs.obj"], settings: {}, ...overrides };
 }
 
 type Stages = Record<"preprocessing" | "thresholding", StageState>;

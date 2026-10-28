@@ -9,7 +9,7 @@ const BY_FILE = { "facades.obj": meshOf(1), "windows.obj": meshOf(2), "roofs.obj
 const NONE_HIDDEN: ReadonlySet<string> = new Set();
 
 function entry(id: string, colour: string, files: string[], bypassed = false): CriterionEntry {
-  return { id, name: `Criterion ${id}`, named_by_user: true, colour, bypassed, test_surface_files: files, settings: {} };
+  return { id, name: `Criterion ${id}`, named_by_user: true, colour, bypassed, energy_weighted: false, test_surface_files: files, settings: {} };
 }
 
 const FACADES = entry("1", "#4477aa", ["facades.obj"]), WINDOWS = entry("2", "#ee6677", ["windows.obj"]), ROOFS = entry("3", "#228833", ["roofs.obj"]);

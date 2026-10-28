@@ -14,7 +14,8 @@
 //
 // In Solar usefulness a fifth preset, "Cold period from the weather file", sets the dates of the weather file's cold period
 // (steps/cold_period_request.ts). What it found, or why it cannot be used yet, is the preset's tooltip (on hover and keyboard focus,
-// as the mode tiles show theirs) and its description for a screen reader. The heating season preset follows the hemisphere of the
+// as the mode tiles show theirs) and its description for a screen reader; in an energy-weighted criterion it adds that the cold
+// period follows the cold hours rule, not the typical building. The heating season preset follows the hemisphere of the
 // weather file: October to April in the north, April to October in the south.
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { messages } from "../../messages";
@@ -37,6 +38,8 @@ interface AnalysisPeriodProps extends ControlProps {
   coldPeriod?: ColdPeriodState | null;
   /** The hemisphere of the weather file, for the heating season preset; northern without a weather file. */
   hemisphere?: Hemisphere;
+  /** The criterion counts its hours by the typical building: the cold period preset says it follows the cold hours rule. */
+  coldPeriodForColdHours?: boolean;
 }
 
 /** The name of a preset's button: the heating season names its months, which follow the hemisphere. */
@@ -78,7 +81,7 @@ const MONTH_CELLS = messages.monthInitials.map((initial, index) => ({ label: ini
 const HOUR_CELLS = Array.from({ length: HOURS_IN_DAY }, (_, hour) => ({ label: hour % 6 === 0 ? String(hour) : "", length: 1 }));
 
 export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, describedBy, disabled, coldPeriod = null,
-                                 hemisphere = "northern" }: AnalysisPeriodProps) {
+                                 hemisphere = "northern", coldPeriodForColdHours = false }: AnalysisPeriodProps) {
   const stored = periodFromSettings(values);
   const current = stored ?? WHOLE_YEAR_EVERY_HOUR;
   // The period of a drag, as dragged (the end date of one night is applied to what is shown and sent, not kept), else null.
@@ -128,7 +131,7 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
           </button>
         ))}
         {coldPeriod !== null && (
-          <ColdPeriodPreset coldPeriod={coldPeriod} disabled={disabled}
+          <ColdPeriodPreset coldPeriod={coldPeriod} disabled={disabled} forColdHours={coldPeriodForColdHours}
                             pressed={stored !== null && coldPeriod.kind === "found" && datesMatch(current, coldPeriod.dates)}
                             onUse={(dates) => send(periodWithDates(current, dates))} />
         )}
@@ -139,6 +142,8 @@ export function AnalysisPeriod({ values, onChange, inputId, labelId, invalid, de
 
 interface ColdPeriodPresetProps {
   coldPeriod: ColdPeriodState;
+  /** The criterion is energy-weighted: the tooltip adds that the cold period follows the cold hours rule. */
+  forColdHours: boolean;
   pressed: boolean;
   disabled: boolean;
   onUse: (dates: PeriodDates) => void;
@@ -150,7 +155,7 @@ interface ColdPeriodPresetProps {
  * it; it lets the pointer through, so it never takes a click. A screen reader reads the same text as the button's description, a
  * status region, so a change (the cold period found) is announced.
  */
-function ColdPeriodPreset({ coldPeriod, pressed, disabled, onUse }: ColdPeriodPresetProps) {
+function ColdPeriodPreset({ coldPeriod, forColdHours, pressed, disabled, onUse }: ColdPeriodPresetProps) {
   const [hovered, setHovered] = useState(false);
   const [keyboardFocused, setKeyboardFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);     // Escape closes the tooltip while the pointer or the focus is still there
@@ -162,7 +167,7 @@ function ColdPeriodPreset({ coldPeriod, pressed, disabled, onUse }: ColdPeriodPr
   const tooltip = useRef<HTMLSpanElement>(null);
   const descriptionId = useId();
   const open = (hovered || keyboardFocused) && !dismissed;
-  const line = coldPeriodLine(coldPeriod);
+  const line = forColdHours ? `${coldPeriodLine(coldPeriod)} ${messages.coldPeriodOfColdHoursRule}` : coldPeriodLine(coldPeriod);
 
   useEffect(() => {
     if (!open) return;

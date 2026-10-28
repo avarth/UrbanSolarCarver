@@ -8,10 +8,11 @@
 // steps are hidden and the studies (use_studies.ts) are shown over the view (SimulateView), the selected one's values drawn on the
 // geometry Simulate shows (use_study_view.ts). In Inspect the steps are hidden too and the Files panel (InspectView) is shown over the
 // view, which draws the orientation of the test surfaces (use_inspection.ts); turns not saved are reported to the app, which asks
-// before Inspect is left.
+// before Inspect is left. The project's typical building (use_typical_building.ts) is read once the shown criterion counts its hours
+// by it (Energy-weighted, in Solar usefulness).
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
+  failureTextOf, putSharedSettings, serviceProblemOf, updateCriterion, type HealthReply, type ModeInfo, type ProjectDetail,
 } from "../api_client/client";
 import { filesOfOtherCriteria } from "../criteria/criteria_state";
 import { CriteriaStep } from "../criteria/CriteriaStep";
@@ -20,6 +21,7 @@ import { usePanelSections } from "../criteria/PanelSection";
 import { sectionOfSetting } from "../criteria/section_summaries";
 import { testSurfaceCallsOf } from "../criteria/test_surface_calls";
 import { useCriteria } from "../criteria/use_criteria";
+import { useTypicalBuilding } from "../criteria/use_typical_building";
 import { useWorkspaceCriteria } from "../criteria/use_workspace_criteria";
 import { InspectView } from "../inspect/InspectView";
 import type { InspectTurns } from "../inspect/UnsavedTurnsDialog";
@@ -348,6 +350,22 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
   const changeSettings = (values: Record<string, unknown>) => dispatch({ type: "values_changed", values });
   // A criterion that is off (the chain skips it) needs no test surfaces nor weather file: its panel asks for neither.
   const criterionOn = !(criterion?.bypassed ?? false);
+  // Which hours count of a Solar usefulness criterion; the switch changes its config, so its stages are read again.
+  const energyWeighted = criterion?.energy_weighted ?? false;
+  const typicalBuilding = useTypicalBuilding({
+    token, project: project.name, active: form.mode === "benefit" && energyWeighted, runActive, weatherRevision: weather.fileRevision, onServiceProblem,
+  });
+  const changeEnergyWeighted = async (on: boolean): Promise<string | null> => {
+    try {
+      await criteria.setEnergyWeighted(criterionId, on);
+      refreshStageStatus();
+      return null;
+    } catch (error) {
+      if (serviceProblemOf(error) === "other") return failureTextOf(error);
+      onServiceProblem(error);
+      return null;
+    }
+  };
   const stepContent: Record<StepName, ReactNode> = {
     inputs: (
       <InputsStep files={files} weatherLocation={weather.location} weatherHint={weatherHint} inputsBounds={inputsBounds} onAddFiles={addFiles}
@@ -368,7 +386,8 @@ export function ProjectWorkspace(props: ProjectWorkspaceProps) {
                         weatherDropZone={criterionOn && modeNeedsWeatherFile && !hasWeatherFile ? weatherBox : null} inputRoles={inputRolesWithFiles}
                         coldPeriod={coldPeriod} hemisphere={hemisphereOfLatitude(weather.latitude)}
                         weatherChangeNotice={weatherChangeSuggestionNow === null ? null : { suggestion: weatherChangeSuggestionNow, onDismiss: endWeatherChangeNotice }}
-                        carvingRule={resultSteps.carvingRule} scoreUnit={modeInfo?.score_unit} />
+                        carvingRule={resultSteps.carvingRule} scoreUnit={modeInfo?.score_unit}
+                        hoursCounted={{ energyWeighted, onChange: changeEnergyWeighted, building: typicalBuilding, hasWeatherFile }} />
       } />
     ),
     ...resultSteps.content,

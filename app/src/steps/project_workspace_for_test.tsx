@@ -253,7 +253,7 @@ export const FILE_CHANGED_SINCE_READ = "The file changed in the project folder s
 
 /** Criterion 1 of the project "p", with *settings* (the mode and its settings), as the service replies with it. */
 export function criterionEntry(settings: Record<string, unknown>, testSurfaceFiles: string[] = ["surfaces.obj"]): CriterionEntry {
-  return { id: "1", name: String(settings.mode), named_by_user: false, colour: "#4477aa", bypassed: false, test_surface_files: testSurfaceFiles, settings };
+  return { id: "1", name: String(settings.mode), named_by_user: false, colour: "#4477aa", bypassed: false, energy_weighted: false, test_surface_files: testSurfaceFiles, settings };
 }
 
 /**

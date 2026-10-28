@@ -19,6 +19,8 @@ export interface CriteriaHook {
   add: (mode: string) => Promise<CriterionEntry>;
   rename: (id: string, name: string) => Promise<CriterionEntry>;
   setBypassed: (id: string, on: boolean) => Promise<CriterionEntry>;
+  /** Which hours count of a Solar usefulness criterion: by the typical building (true) or by the cold hours rule. */
+  setEnergyWeighted: (id: string, on: boolean) => Promise<CriterionEntry>;
   /** Adds a copy at the end and selects it. */
   duplicate: (id: string) => Promise<CriterionEntry>;
   /** Removes the criterion; when it was selected, the next card (else the previous one) is selected. The others keep their switches. */
@@ -63,6 +65,7 @@ export function useCriteria(token: string, project: ProjectDetail): CriteriaHook
     },
     rename: (id, name) => changeEntry(updateCriterion(token, project.name, id, { name })),
     setBypassed: (id, on) => changeEntry(updateCriterion(token, project.name, id, { bypassed: on })),
+    setEnergyWeighted: (id, on) => changeEntry(updateCriterion(token, project.name, id, { energy_weighted: on })),
     duplicate: async (id) => {
       const entry = await duplicateCriterion(token, project.name, id);
       appendAndSelect(entry);

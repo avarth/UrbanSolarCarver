@@ -532,7 +532,7 @@ export interface paths {
         head?: never;
         /**
          * Update Criterion
-         * @description Change the name, colour, bypass or settings of a criterion; what is not sent stays.
+         * @description Change the name, colour, bypass, settings or Which hours count (energy_weighted) of a criterion; what is not sent stays.
          *
          *     *values* replace the criterion's settings on top of the starting values of their mode. The shared settings
          *     among them are ignored: they are saved with PUT /projects/{name}/shared-settings. A bad name or colour is 422 with a
@@ -574,6 +574,92 @@ export interface paths {
          * @description Put the criteria in the order of *ids*, which names each criterion once (else 422).
          */
         put: operations["reorder_criteria"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/typical-building-presets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Typical Building Presets
+         * @description The types the typical building can start from, by key, in the order the app offers them.
+         */
+        get: operations["typical_building_presets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/typical-building": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Typical Building
+         * @description The project's typical building (the default type before it is saved) and the state of its weights.
+         */
+        get: operations["get_typical_building"];
+        /**
+         * Save Typical Building
+         * @description Save the typical building's values and the type it started from; a value that is not valid is 422 with its field (a window
+         *     share as "wwr.<side>"), and nothing changes then. The weights are not calculated again here.
+         */
+        put: operations["save_typical_building"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/typical-building/calculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Calculate Typical Building
+         * @description Calculate the hourly weights of the stored typical building with the project's weather file (about 9 s); 404 without a
+         *     weather file, 409 while a run of the project is active.
+         */
+        post: operations["calculate_typical_building"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/projects/{name}/typical-building/weights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Typical Building Weights
+         * @description The hourly benefit and harm weights of the last calculation, 8,760 each; 404 before the first one.
+         */
+        get: operations["typical_building_weights"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1275,6 +1361,11 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             };
+            /**
+             * Energy Weighted
+             * @default false
+             */
+            energy_weighted: boolean;
         };
         /**
          * CriterionOrderRequest
@@ -1886,6 +1977,63 @@ export interface components {
             version: string;
         };
         /**
+         * TypicalBuildingPreset
+         * @description A type the typical building can start from.
+         */
+        TypicalBuildingPreset: {
+            /** Label */
+            label: string;
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * TypicalBuildingReply
+         * @description The typical building and the state of its weights; the numbers come from the weights file and are None without one.
+         */
+        TypicalBuildingReply: {
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+            /** Start From */
+            start_from: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "current" | "out_of_date" | "missing";
+            /** Heating Kwh M2 */
+            heating_kwh_m2?: number | null;
+            /** Cooling Kwh M2 */
+            cooling_kwh_m2?: number | null;
+            /** Counted Hours */
+            counted_hours?: number | null;
+        };
+        /**
+         * TypicalBuildingRequest
+         * @description The body of a save of the typical building: its values and the type it started from.
+         */
+        TypicalBuildingRequest: {
+            /** Values */
+            values: {
+                [key: string]: unknown;
+            };
+            /** Start From */
+            start_from?: string | null;
+        };
+        /**
+         * TypicalBuildingWeightsReply
+         * @description The hourly weights of the typical building, 8,760 each from 1 January 0:00, to 3 decimals.
+         */
+        TypicalBuildingWeightsReply: {
+            /** Benefit */
+            benefit: number[];
+            /** Harm */
+            harm: number[];
+        };
+        /**
          * UpdateCriterionRequest
          * @description The body of a criterion change: what is not sent (or null) stays as it is.
          */
@@ -1900,6 +2048,8 @@ export interface components {
             values?: {
                 [key: string]: unknown;
             } | null;
+            /** Energy Weighted */
+            energy_weighted?: boolean | null;
         };
         /**
          * UpdateStudyRequest
@@ -3283,6 +3433,201 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    typical_building_presets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["TypicalBuildingPreset"];
+                    };
+                };
+            };
+        };
+    };
+    get_typical_building: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypicalBuildingReply"];
+                };
+            };
+            /** @description There is no such project. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    save_typical_building: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TypicalBuildingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypicalBuildingReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Settings that do not validate (the fields), or a request that cannot be served as sent (a message). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConfigErrorReply"] | components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    calculate_typical_building: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypicalBuildingReply"];
+                };
+            };
+            /** @description The project has no weather file: add one in Design (Inputs) to calculate the typical building. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description A run of this project is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description The request cannot be served as sent. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+        };
+    };
+    typical_building_weights: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TypicalBuildingWeightsReply"];
+                };
+            };
+            /** @description The typical building has not been calculated. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorDetailReply"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

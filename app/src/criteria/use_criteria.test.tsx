@@ -5,7 +5,7 @@ import { renderForTest } from "../viewer_overlays/render_for_test";
 import { useCriteria, type CriteriaHook } from "./use_criteria";
 
 function entry(id: string, overrides: Partial<CriterionEntry> = {}): CriterionEntry {
-  return { id, name: `Criterion ${id}`, named_by_user: false, colour: "#336699", bypassed: false, test_surface_files: [], settings: {}, ...overrides };
+  return { id, name: `Criterion ${id}`, named_by_user: false, colour: "#336699", bypassed: false, energy_weighted: false, test_surface_files: [], settings: {}, ...overrides };
 }
 
 function projectWith(criteria: CriterionEntry[] | undefined): ProjectDetail {

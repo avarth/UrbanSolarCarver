@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 function entry(id: string, name: string, mode: string): CriterionEntry {
-  return { id, name, named_by_user: false, colour: "#336699", bypassed: false, test_surface_files: ["roofs.obj"], settings: { mode } };
+  return { id, name, named_by_user: false, colour: "#336699", bypassed: false, energy_weighted: false, test_surface_files: ["roofs.obj"], settings: { mode } };
 }
 
 const THREE_CRITERIA = [entry("1", "Daylight on windows", "daylight"), entry("4", "Solar usefulness on facades", "benefit"), entry("2", "Night cooling", "radiative_cooling")];

@@ -13,7 +13,7 @@ afterEach(() => {
 });
 
 function entry(id: string, name: string): CriterionEntry {
-  return { id, name, named_by_user: false, colour: "#336699", bypassed: false, test_surface_files: ["windows.ply"], settings: { mode: "daylight" } };
+  return { id, name, named_by_user: false, colour: "#336699", bypassed: false, energy_weighted: false, test_surface_files: ["windows.ply"], settings: { mode: "daylight" } };
 }
 
 function listProps(criteria: CriterionEntry[], overrides: Partial<CriterionListProps> = {}): CriterionListProps {
