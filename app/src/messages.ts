@@ -725,6 +725,7 @@ export const messages = {
   // the box in the criterion's Settings, and the sheet beside the panel where the building is edited and calculated.
   whichHoursCount: "Which hours count",
   whichHoursCountChoices: { cold_hours: "Cold hours", energy_weighted: "Energy-weighted" },
+  energyWeightedSummary: (summary: string) => `Energy-weighted, ${summary}`,
   whichHoursCountHelp: "Cold hours: the sun of the hours colder than the balance temperature counts. Energy-weighted: each hour counts by " +
     "what its sun saves a typical building in heating over the year, from a simple hourly model of one room (ISO 13790).",
   typicalBuilding: "Typical building",

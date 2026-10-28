@@ -267,3 +267,12 @@ test("another mode has no Which hours count, whatever the criterion says", () =>
   expect(find(".hours-counted")).toBeNull();
   expect(find(".typical-building-box")).toBeNull();
 });
+
+test("energy-weighted, the Settings summary says so, and the hidden balance temperature is neither summed up nor counted to fix", () => {
+  const form = { ...formFor("benefit"), fieldErrors: { balance_offset: "Input should be greater than or equal to 0" } };
+  rendered = renderForTest(<CriterionPanel {...panelProps({ form, openSections: new Set(), hoursCounted: hoursCounted({ energyWeighted: true }) })} />);
+  expect(sectionSummary("settings")!.textContent).toMatch(/^Energy-weighted, /);
+  expect(isWarning(sectionSummary("settings")!)).toBe(false);
+  rendered.rerender(<CriterionPanel {...panelProps({ form, openSections: new Set(), hoursCounted: hoursCounted({ energyWeighted: false }) })} />);
+  expect(sectionSummary("settings")!.textContent).toBe("1 setting to fix");
+});

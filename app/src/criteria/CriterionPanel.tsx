@@ -112,7 +112,11 @@ function WhichHoursCount({ hoursCounted, disabled, sheetOpen, sheetId, onToggleS
 
 export function CriterionPanel(props: CriterionPanelProps) {
   const { form, criterionKeys, onChange, disabledReason, openSections, onOpenSections } = props;
-  const toFix = settingsToFixBySection({ fieldErrors: form.fieldErrors, stepErrors: props.stepErrors }, criterionKeys);
+  // Which hours count, in Solar usefulness; energy-weighted, the balance temperature is not read, and is not shown, counted or summed up.
+  const hoursCounted = form.mode === "benefit" ? props.hoursCounted : undefined;
+  const energyWeighted = hoursCounted?.energyWeighted ?? false;
+  const readKeys = energyWeighted ? new Set([...criterionKeys].filter((name) => !BALANCE_TEMPERATURE.includes(name))) : criterionKeys;
+  const toFix = settingsToFixBySection({ fieldErrors: form.fieldErrors, stepErrors: props.stepErrors }, readKeys);
   const criterionOn = props.criterionOn ?? true;
   const needsWeatherFile = criterionOn && props.weatherDropZone !== null && props.weatherDropZone !== undefined && props.weatherDropZone !== false;
   // What a section has to fix: its summary is in the warning colour.
@@ -123,9 +127,6 @@ export function CriterionPanel(props: CriterionPanelProps) {
     carving: toFix.carving !== undefined,
   };
   const valuesReset = (form.valuesResetByModeChange?.settings.length ?? 0) > 0;
-  // Which hours count, in Solar usefulness; energy-weighted, the balance temperature is not read, and is not shown.
-  const hoursCounted = form.mode === "benefit" ? props.hoursCounted : undefined;
-  const energyWeighted = hoursCounted?.energyWeighted ?? false;
   const [sheetOpen, setSheetOpen] = useState(false);
   // Cold hours (or another mode) ends the sheet; Energy-weighted again does not bring it back.
   if (sheetOpen && !energyWeighted) setSheetOpen(false);
@@ -147,7 +148,7 @@ export function CriterionPanel(props: CriterionPanelProps) {
   const summaries: Record<PanelSectionId, string> = {
     test_surfaces: testSurfacesSummary(props.testSurfaces.map((file) => file.name)),
     mode: needsWeatherFile ? messages.modeNeedsWeatherFileSummary(modeSummary(form.mode)) : modeSummary(form.mode),
-    settings: criterionSettingsSummary(form, criterionKeys),
+    settings: energyWeighted ? messages.energyWeightedSummary(criterionSettingsSummary(form, readKeys)) : criterionSettingsSummary(form, readKeys),
     carving: criterionOn ? carvingRuleSummary(form, props.scoreUnit) : messages.criterionOff,
   };
   // A closed section with settings to fix says how many, as a step row does.
@@ -183,7 +184,7 @@ export function CriterionPanel(props: CriterionPanelProps) {
           )}
           <SettingsStep form={form} stepErrors={props.stepErrors} onChange={onChange} disabledReason={disabledReason} inputRoles={props.inputRoles}
                         coldPeriod={props.coldPeriod} hemisphere={props.hemisphere} coldPeriodForColdHours={energyWeighted}
-                        settingShown={(name) => criterionKeys.has(name) && !(energyWeighted && BALANCE_TEMPERATURE.includes(name))}
+                        settingShown={(name) => readKeys.has(name)}
                         showsDisabledReason={false} />
         </>
       ), (
