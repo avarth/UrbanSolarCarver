@@ -122,9 +122,12 @@ def test_the_kenak_examples_have_the_values_of_the_reference_building():
         (0.60, 0.50, 0.50, 3.20), (0.50, 0.45, 0.45, 3.00), (0.45, 0.40, 0.40, 2.80), (0.40, 0.35, 0.35, 2.60)]
     assert [(v["shading_start"], v["shading_end"]) for v in by_zone.values()] == [("05-15", "09-15")] * 2 + [("06-01", "08-31")] * 2
     assert {key: DEFAULT[key] for key in ("schedule", "gains_w_m2", "fresh_air_m3h_m2", "heat_recovery", "totee_category")} == {
-        "schedule": "apartment", "gains_w_m2": 6.0, "fresh_air_m3h_m2": 0.75, "heat_recovery": 0.0, "totee_category": 5}
+        "schedule": "apartment", "gains_w_m2": 6.0, "fresh_air_m3h_m2": 0.75, "heat_recovery": 0.0, "totee_category": "reference"}
     assert {key: OFFICE[key] for key in ("schedule", "gains_w_m2", "fresh_air_m3h_m2", "heat_recovery", "totee_category")} == {
-        "schedule": "office", "gains_w_m2": 28.5, "fresh_air_m3h_m2": 3.0, "heat_recovery": 0.5, "totee_category": 3}
+        "schedule": "office", "gains_w_m2": 28.5, "fresh_air_m3h_m2": 3.0, "heat_recovery": 0.5, "totee_category": "reference"}
+    assert all(entry.values["mass_kind"] == "totee" and entry.values["totee_category"] == "reference"
+               for entry in typical_building.library() if entry.id.startswith("kenak-"))
+    assert typical_building.TOTEE_CATEGORIES["reference"] == (250.0, "Reference building (ΚΕΝΑΚ art. 9): 250 kJ/m²K")
     assert (DEFAULT["g_value"], DEFAULT["shading_factor"], DEFAULT["infiltration_m3h_m2_window"]) == (0.55, 0.77, 5.5)
     assert (DEFAULT["room"], DEFAULT["depth"], DEFAULT["height"], DEFAULT["wwr"]) == (
         "average", 6.0, 3.0, {"ne": 0.4, "se": 0.4, "sw": 0.4, "nw": 0.4})
@@ -163,7 +166,10 @@ def test_the_air_and_the_gains_follow_the_schedule():
 
 def test_the_mass_and_the_shading_become_engine_keys():
     archetype = typical_building.archetype_of(DEFAULT)
-    assert archetype["mass_capacity_kj_m2k"] == 280.0 and "mass_class" not in archetype
+    assert archetype["mass_capacity_kj_m2k"] == 250.0 and "mass_class" not in archetype
+    category_5 = typical_building.archetype_of(changed(DEFAULT, totee_category=5.0))
+    assert category_5["mass_capacity_kj_m2k"] == 280.0
+    assert typical_building.validate(changed(DEFAULT, totee_category=5.0))["totee_category"] == 5
     assert (archetype["shading_hot"], archetype["shading_hot_period"]) == (0.77, [135, 258])     # 15 May to 15 September
     iso = typical_building.archetype_of(changed(DEFAULT, mass_kind="iso", shading_factor=None))
     assert iso["mass_class"] == "heavy" and "mass_capacity_kj_m2k" not in iso
@@ -191,6 +197,7 @@ def test_the_weekday_of_the_first_day_comes_from_the_weather_file(tmp_path):
     (DEFAULT, {"mass_class": "granite"}, "mass_class"),
     (DEFAULT, {"totee_category": 7}, "totee_category"),
     (DEFAULT, {"totee_category": True}, "totee_category"),
+    (DEFAULT, {"totee_category": "Reference"}, "totee_category"),
     (DEFAULT, {"u_wall": 100.0}, "u_wall"),                             # the engine's check: more loss than the mass can take
     (DEFAULT, {"shading_factor": 2.0}, "shading_factor"),               # Summer shading
     (DEFAULT, {"shading_start": "02-29"}, "shading_start"),
@@ -223,7 +230,7 @@ def test_the_messages_name_what_to_give():
         return [error.message for error in refused.value.errors]
 
     assert messages(schedule="night") == ["Choose one of apartment, office, always."]
-    assert messages(totee_category=0) == ["Choose one of 1, 2, 3, 4, 5, 6."]
+    assert messages(totee_category=0) == ["Choose one of 1, 2, 3, 4, 5, 6, reference."]
     assert messages(shading_start="02-29") == ["Give a day as MM-DD, for example 05-15 for 15 May (not 02-29)."]
     assert messages(roof_exposed="yes") == ["Give true or false."]
     assert messages(wwr_ne=0.95) == ["Give a number from 0 to 0.9."]

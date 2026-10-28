@@ -59,8 +59,9 @@ A single zone, the ISO 13790 hourly model, with these inputs:
   not which hours; the hours of day are my call. Internal gains and fresh air apply in the hours of the schedule;
   infiltration applies always. The weekday of 1 January comes from the weather file's header (Monday when it gives none).
 - **Thermal mass:** either an ISO 13790 class (very light 80, light 110, medium 165, heavy 260, very heavy 370 kJ/m²K)
-  or a ΤΟΤΕΕ category (1: 80, 2: 110, 3: 165, 4: 230, 5: 280, 6: 300 kJ/m²K, with the table's construction descriptions).
-  A ΤΟΤΕΕ category takes the effective mass area of the ISO class nearest in capacity.
+  or a ΤΟΤΕΕ category (1: 80, 2: 110, 3: 165, 4: 230, 5: 280, 6: 300 kJ/m²K, with the table's construction descriptions),
+  or the reference building's value (§4.2.4, ΚΕΝΑΚ article 9: 250 kJ/m²K). A ΤΟΤΕΕ category or the reference value takes the
+  effective mass area of the ISO class nearest in capacity (250: heavy).
 
 ## Library examples
 
@@ -88,7 +89,7 @@ Values that change with the use:
 | Equipment × diversity | 4 × 0.5 = 2 W/m² | 15 × 0.3 = 4.5 W/m² | 2.8 |
 | Lighting | none (not counted for homes) | 16 W/m² (500 lx, reference building) | 2.4, 2.4α |
 | Internal gains while in use | 6 W/m² | 28.5 W/m² | sum |
-| Thermal mass | ΤΟΤΕΕ category 5: concrete frame, hollow clay bricks, 280 kJ/m²K | category 3: concrete frame, light infill, suspended ceilings, 165 kJ/m²K | 3.14 (my choice of category) |
+| Thermal mass | reference building, 250 kJ/m²K | reference building, 250 kJ/m²K | §4.2.4 (ΚΕΝΑΚ article 9) |
 
 The same for all KENAK examples:
 

@@ -66,7 +66,9 @@ SCHEDULES = {
 MASS_KINDS = ("iso", "totee")
 # ΤΟΤΕΕ 20701-1/2017 table 3.14: thermal capacity per m² of floor of typical constructions, kJ/(m²K), and their description.
 # Categories 4 to 6 hold when the insulation is missing or on the outside or in the core of the brickwork; with insulation on the
-# inside the zone falls in category 3.
+# inside the zone falls in category 3. "reference" is the value of the reference building (§4.2.4, ΚΕΝΑΚ article 9), the
+# KENAK examples' mass.
+TOTEE_REFERENCE = "reference"
 TOTEE_CATEGORIES = {
     1: (80.0, "Light timber frame, infill of plasterboard or timber, insulation on the inside of walls, ceiling and floor"),
     2: (110.0, "Light steel frame, infill of curtain walls or light insulated panels"),
@@ -74,6 +76,7 @@ TOTEE_CATEGORIES = {
     4: (230.0, "Load-bearing stone or solid brick walls, timber floors"),
     5: (280.0, "Concrete frame, infill of hollow clay bricks"),
     6: (300.0, "Load-bearing stone or solid brick walls, concrete floors"),
+    TOTEE_REFERENCE: (250.0, "Reference building (ΚΕΝΑΚ art. 9): 250 kJ/m²K"),
 }
 ROOMS = ("average", "box")
 ROOM_KEYS = {"average": ("depth",), "box": ("width", "length", "orientation")}     # the keys of each room besides the shared ones
@@ -221,7 +224,7 @@ def _checked_date(value, name: str, errors: list[ConfigFieldError]) -> str | Non
 
 
 def validate(values) -> dict:
-    """The values checked and in their stored form (numbers as floats, every side of the room in wwr, the ΤΟΤΕΕ category an int).
+    """The values checked and in their stored form (numbers as floats, every side of the room in wwr, a ΤΟΤΕΕ category 1 to 6 an int).
 
     Every building has the keys of VALUE_KEYS and those of its room (ROOM_KEYS). Raises ConfigError with an error per field (the
     field is the value's key, "wwr.<side>" for a window share): each value's type and range (window shares 0 to 0.9, factors 0 to
@@ -261,7 +264,7 @@ def validate(values) -> dict:
         "room": _checked_choice(room, "room", ROOMS, errors),
         "height": _checked_number(values["height"], "height", errors, above=0.0),
     }
-    if checked["totee_category"] is not None:
+    if checked["totee_category"] not in (None, TOTEE_REFERENCE):
         checked["totee_category"] = int(checked["totee_category"])
     for key in room_keys:
         checked[key] = _checked_number(values[key], key, errors, **({} if key == "orientation" else {"above": 0.0}))
@@ -350,10 +353,11 @@ KENAK_ZONES = {
 }
 # By use: schedule (table 2.1), set points (2.2), fresh air while in use (2.3), heat recovery (§4.4.1, reference ventilation),
 # internal gains while in use (people 2.7 + equipment x diversity 2.8 + lighting 2.4, 2.4α: 4 + 2 for an apartment, 8 + 4.5 + 16
-# for an office) and the ΤΟΤΕΕ mass category (3.14) with the ISO class nearest to it.
+# for an office). The thermal mass is the reference building's for both (TOTEE_REFERENCE, 250 kJ/m²K), with the ISO class nearest
+# to it (heavy, 260) kept for a switch to an ISO class.
 KENAK_USES = {
-    "apartment": ("Apartment", "apartment", 0.75, 0.0, 6.0, 5, "heavy"),
-    "office": ("Office", "office", 3.0, 0.5, 28.5, 3, "medium"),
+    "apartment": ("Apartment", "apartment", 0.75, 0.0, 6.0),
+    "office": ("Office", "office", 3.0, 0.5, 28.5),
 }
 DEFAULT_LIBRARY_ID = "kenak-apartment-b"    # the building of a new project
 
@@ -364,10 +368,10 @@ def _kenak_values(use: str, zone: str) -> dict:
     (the mean of the reference building's NE, SE, SW and NW factors 0.80, 0.73, 0.73, 0.80, §4.3.1) and the average room 6 m deep
     with a 3 m storey, 40 % windows on each side, roof and floor not exposed."""
     _letter, u_wall, u_roof_and_floor, u_window, (shading_start, shading_end) = KENAK_ZONES[zone]
-    _label, schedule, fresh_air, heat_recovery, gains, category, mass_class = KENAK_USES[use]
+    _label, schedule, fresh_air, heat_recovery, gains = KENAK_USES[use]
     return {"schedule": schedule, "t_set_heating": 20.0, "t_set_cooling": 26.0, "gains_w_m2": gains, "fresh_air_m3h_m2": fresh_air,
             "heat_recovery": heat_recovery, "u_wall": u_wall, "u_window": u_window, "g_value": 0.55,
-            "mass_kind": "totee", "mass_class": mass_class, "totee_category": category,
+            "mass_kind": "totee", "mass_class": "heavy", "totee_category": TOTEE_REFERENCE,
             "shading_factor": 0.77, "shading_start": shading_start, "shading_end": shading_end,
             "room": "average", "height": 3.0, "depth": 6.0, "wwr": {side: 0.4 for side in WWR_SIDES["average"]},
             "roof_exposed": False, "u_roof": u_roof_and_floor, "floor_exposed": False, "u_floor": u_roof_and_floor,
