@@ -53,7 +53,8 @@ class StudyEntry(BaseModel):
     colour: str                         # "#RRGGBB", from the criteria palette
     metric: str                         # a key of check_settings.CHECK_METRICS
     settings: dict = Field(default_factory=dict)    # the period and the mode settings the metric reads (studies.STUDY_SETTING_KEYS)
-    target: float | None = Field(None, allow_inf_nan=False)     # in the metric's unit
+    target: float | None = Field(None, allow_inf_nan=False)     # in the metric's unit; the low end of the colour scale by value
+    target_max: float | None = Field(None, allow_inf_nan=False)     # in the metric's unit; the high end of the colour scale by value
     test_surface_files: list[str] = Field(default_factory=list)     # file names in inputs/test_surfaces/
 
 
@@ -431,11 +432,12 @@ class AddStudyRequest(BaseModel):
 
 
 class UpdateStudyRequest(BaseModel):
-    """The body of a study change: what is not sent stays as it is; target null means no target."""
+    """The body of a study change: what is not sent stays as it is; target (or target_max) null means none."""
     name: str | None = None
     metric: str | None = None
     values: dict | None = None          # the metric's settings among studies.STUDY_SETTING_KEYS; they change those keys only
     target: float | None = Field(None, allow_inf_nan=False)
+    target_max: float | None = Field(None, allow_inf_nan=False)
 
 
 class ReorderStudiesRequest(BaseModel):

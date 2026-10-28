@@ -586,14 +586,14 @@ class ProjectStore:
             return entry
 
     def update_study(self, project: str, study_id: str, /, *, name: str | None = None, metric: str | None = None,
-                     values: dict | None = None, target: object = NOT_SENT) -> StudyEntry:
+                     values: dict | None = None, target: object = NOT_SENT, target_max: object = NOT_SENT) -> StudyEntry:
         """Change a study of the project *project*; what is not given stays (change_study says how). ProjectError 404 for an
         unknown study, 422 for a name that is empty, an unknown metric, or settings that are not valid for the metric; nothing
         changes then."""
         with self.project_lock(project):
             project_json = self.read_project_json(project)
             entry = find_study(project_json, study_id)
-            change_study(entry, name=name, metric=metric, values=values, target=target)
+            change_study(entry, name=name, metric=metric, values=values, target=target, target_max=target_max)
             self.write_project_json(project, project_json)
             return entry
 

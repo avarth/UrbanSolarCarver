@@ -155,6 +155,10 @@ def test_a_study_is_changed_by_its_target_and_its_settings(project_with_inputs):
     assert changed.target == 120.5 and changed.settings["balance_temperature"] == 18.0
     assert store.update_study(name, study.id, name="Renamed").target == 120.5       # not sent: stays
     assert store.update_study(name, study.id, target=None).target is None           # null: none
+    both = store.update_study(name, study.id, target=100.0, target_max=900.0)        # the two ends of the colour scale by value
+    assert (both.target, both.target_max) == (100.0, 900.0)
+    assert store.update_study(name, study.id, target=150.0).target_max == 900.0     # not sent: stays
+    assert store.update_study(name, study.id, target_max=None).target_max is None
     for bad in ({"threshold": 1}, {"dew_point_celsius": 10}, {"start_month": 13}, {"balance_offset": -1}):
         before = store.studies(name)
         with pytest.raises(ProjectError) as refused:
@@ -287,6 +291,7 @@ def test_study_routes(client_with_inputs):
     assert patched.status_code == 200
     assert (patched.json()["name"], patched.json()["target"], patched.json()["settings"]["end_hour"]) == ("Dec sun", 2.5, 15)
     assert client.patch("/api/projects/p/studies/1", json={"target": None}).json()["target"] is None
+    assert client.patch("/api/projects/p/studies/1", json={"target_max": 6.5}).json()["target_max"] == 6.5
     assert client.patch("/api/projects/p/studies/1", json={"values": {"start_month": 13}}).status_code == 422
     assert client.patch("/api/projects/p/studies/9", json={"name": "x"}).status_code == 404
 

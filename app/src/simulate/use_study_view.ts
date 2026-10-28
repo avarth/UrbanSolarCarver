@@ -1,17 +1,25 @@
 // What Simulate shows of the selected study on the 3D view: its values (GET studies/{id}/values, read while Simulate is open, again
-// after each run), the geometry shown and Change (kept across studies), the target (saved with the study), and what the view, the
-// legend and the result card draw from them. One study at a time: the values of another study are not drawn once one is selected.
-// The statistics are computed once per set of values and geometry; the share at the target once per target.
+// after each run), the geometry shown, Change and the colouring (kept across studies), the colour range and palette, and what the
+// view, the legend and the result card draw from them. One study at a time: the values of another study are not drawn once one is
+// selected. The statistics are computed once per set of values and geometry; the share at the target once per target.
+//
+// The colour range (user, 2026-10-28): a low and a high end; the palette runs between them and values beyond either end take that
+// end's colour. By value the ends are the study's target (the low end, which the result card's "at target" reads) and target_max,
+// saved with the study, by default 0 and the highest value of the geometry shown. By share they are percentages of the open-site
+// value, 0 and 100 by default, kept for each study while the app is open. The palette is the viewer's choice, kept in the browser.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ApiError, getStudyValues, serviceProblemOf } from "../api_client/client";
+import { ApiError, getStudyValues, serviceProblemOf, type StudyChange } from "../api_client/client";
 import type { RunLoop } from "../steps/run_state";
 import type { StageState } from "../steps/step_summaries";
+import { isStudyPalette, STUDY_PALETTES, type StudyPalette } from "../viewer/study_palettes";
 import { changeOf, changeTolerance, distributionOf, highestOf, keptShareOf, OPEN_COLUMN, shareAtOrAbove, type ColourBy, type StudyGeometry,
   type StudyStatistics, type StudyView } from "./study_values";
 import { decodeStudyValues, type StudyValues } from "./study_values_decoder";
 import type { StudiesHook } from "./use_studies";
 
 const NOT_FOUND = 404;
+const PALETTE_STORAGE_KEY = "usc.studyPalette";
+const FULL_SHARE: [number, number] = [0, 100];
 
 interface StudyViewSource {
   token: string;
@@ -26,9 +34,25 @@ interface StudyViewSource {
   /** The states of Design's envelope ("exporting") and massing stages. */
   envelopeStage: StageState;
   massingStage: StageState;
-  /** The studies cannot be changed now (a run of the project): the target waits. */
+  /** The studies cannot be changed now (a run of the project): the saved ends wait. */
   editDisabled: boolean;
   onServiceProblem: (error: unknown) => void;
+}
+
+/** The legend's content: the scale the bar spans, the two ends of the colour range on it, and what it is coloured by. */
+export interface StudyLegend {
+  label: string;
+  unit: string;
+  mode: "share" | "value" | "change";
+  /** The extent of the bar: 0 to 100 (%) by share, 0 to the highest value (or change) otherwise. */
+  scale: [number, number];
+  /** The two ends of the colour range (not by change, where the bar is the change ramp). */
+  low: number;
+  high: number;
+  palette: StudyPalette;
+  hasLoss: boolean;
+  /** The ends cannot be moved now (a run of the project); by value they are saved with the study. */
+  disabled: boolean;
 }
 
 export interface StudyViewHook {
@@ -40,6 +64,8 @@ export interface StudyViewHook {
   /** How the values are coloured when Change is off (kept across studies): share of the open-site value, or the value. */
   colourBy: ColourBy;
   setColourBy: (colourBy: ColourBy) => void;
+  palette: StudyPalette;
+  setPalette: (palette: StudyPalette) => void;
   available: StudyGeometry[];
   outOfDateInDesign: StudyGeometry[];
   /** Geometries Design has built that the selected study's last result does not have: they wait for a new run of the study. */
@@ -51,24 +77,41 @@ export interface StudyViewHook {
   /** What the 3D view draws; null without a selected study whose values have the geometry shown. */
   view: StudyView | null;
   /** The legend and the result card; null when the view draws nothing. */
-  legend: { label: string; unit: string; range: [number, number]; mode: "share" | "value" | "change"; hasLoss: boolean; hasNoShare: boolean;
-            target: number | null; disabled: boolean } | null;
+  legend: StudyLegend | null;
   card: { geometry: StudyGeometry; unit: string; statistics: StudyStatistics; baseline: StudyStatistics | null } | null;
-  /** Shows the target at once and saves it with the selected study once the gesture ends. */
-  setTarget: (target: number | null) => void;
+  /** Moves the low or the high end of the colour range (null: back to its default); by value it is saved with the selected study once
+   * the gesture ends. */
+  setRangeEnd: (end: "low" | "high", value: number | null) => void;
 }
 
-/** How long after the last change of the target it is saved: a held arrow key is one save, of the value it ended on. */
+/** How long after the last change of a saved end it is saved: a held arrow key is one save, of the value it ended on. */
 export const TARGET_SAVE_DELAY_MILLISECONDS = 300;
+
+/** The palette kept in the browser, magma when there is none or the storage cannot be read. */
+function storedPalette(): StudyPalette {
+  try {
+    const stored = window.localStorage.getItem(PALETTE_STORAGE_KEY);
+    return isStudyPalette(stored) ? stored : STUDY_PALETTES[0];
+  } catch {
+    return STUDY_PALETTES[0];
+  }
+}
 
 export function useStudyView({ token, project, studies, active, runs, envelopeBuilt, massingBuilt, envelopeStage, massingStage, editDisabled,
                                onServiceProblem }: StudyViewSource): StudyViewHook {
   const [chosenGeometry, setGeometry] = useState<StudyGeometry>("max_volume");
   const [chosenChange, setChange] = useState(false);
   const [colourBy, setColourBy] = useState<ColourBy>("share");
+  const [palette, setPaletteState] = useState<StudyPalette>(storedPalette);
+  const setPalette = (next: StudyPalette) => {
+    setPaletteState(next);
+    try { window.localStorage.setItem(PALETTE_STORAGE_KEY, next); } catch { /* the choice lasts this session */ }
+  };
+  // By share: each study's range, while the app is open.
+  const [shareRanges, setShareRanges] = useState<Record<string, [number, number]>>({});
   const [loaded, setLoaded] = useState<{ id: string; values: StudyValues } | null>(null);
-  // A target being saved, shown until the study's entry has it.
-  const [savingTarget, setSavingTarget] = useState<{ id: string; target: number | null } | null>(null);
+  // The saved ends being saved, shown until the study's entry has them.
+  const [saving, setSaving] = useState<{ id: string; change: StudyChange } | null>(null);
 
   const selected = studies.studies.find((study) => study.entry.id === studies.selectedId) ?? null;
   const selectedId = selected?.entry.id ?? null;
@@ -102,19 +145,19 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
 
   const shown = values?.values[geometry] ?? null;
   const baselineValues = values?.values.max_volume ?? null;
-  const target = selected === null ? null : savingTarget?.id === selectedId ? savingTarget.target : selected.entry.target ?? null;
+  const savedEnd = (key: "target" | "target_max"): number | null => {
+    if (selected === null) return null;
+    if (saving?.id === selectedId && key in saving.change) return saving.change[key] ?? null;
+    return selected.entry[key] ?? null;
+  };
+  const target = savedEnd("target");
+  const targetMax = savedEnd("target_max");
 
   const distribution = useMemo(() => (shown === null ? null : distributionOf(shown)), [shown]);
   const baselineDistribution = useMemo(() => (baselineValues === null || geometry === "max_volume" ? null : distributionOf(baselineValues)),
                                        [baselineValues, geometry]);
   const share = useMemo(() => (shown === null ? null : shareAtOrAbove(shown, target)), [shown, target]);
   const openValues = values?.values[OPEN_COLUMN] ?? null;
-  // Some point the open site gives nothing (within the change tolerance): by share it is drawn in a neutral colour the legend names.
-  const hasNoShare = useMemo(() => {
-    if (openValues === null) return false;
-    const tolerance = changeTolerance(openValues, values?.values.max_volume);
-    return openValues.some((open) => !(open > tolerance));
-  }, [openValues]);
   const kept = useMemo(() => (shown === null || openValues === null ? null : keptShareOf(shown, openValues)), [shown, openValues]);
   const baselineKept = useMemo(() => (baselineValues === null || openValues === null || geometry === "max_volume" ? null
     : keptShareOf(baselineValues, openValues)), [baselineValues, openValues, geometry]);
@@ -129,18 +172,25 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
     return { highest: highestOf(changes), hasLoss: changes.some((value) => value < -tolerance) };
   }, [change, shown, values]);
 
+  // The colour range on the scale shown.
+  const byShare = colourBy === "share";
+  const shareRange = (selectedId !== null ? shareRanges[selectedId] : undefined) ?? FULL_SHARE;
+  const valueHigh = targetMax ?? highest;
+  const [low, high]: [number, number] = byShare ? shareRange : [target ?? 0, valueHigh];
+  const scale: [number, number] = change ? [0, changeScale?.highest ?? 0] : byShare ? FULL_SHARE : [0, Math.max(highest, valueHigh, target ?? 0)];
+
   const unit = values?.header.unit ?? "";
   const label = studies.metrics.find((metric) => metric.name === selected?.entry.metric)?.label ?? "";
   const drawn = values !== null && shown !== null && selected !== null;
-  // The target shows at once; it is saved once a gesture ends: TARGET_SAVE_DELAY_MILLISECONDS after the last change (a drag gives
+  // A saved end shows at once; it is saved once a gesture ends: TARGET_SAVE_DELAY_MILLISECONDS after the last change (a drag gives
   // one change, at its release; held or repeated keys many). The saves go one after another, so the service applies them in order.
   const latestStudies = useRef(studies);
   latestStudies.current = studies;
-  const pendingSave = useRef<{ id: string; target: number | null; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const pendingSave = useRef<{ id: string; change: StudyChange; timer: ReturnType<typeof setTimeout> } | null>(null);
   const saves = useRef<Promise<unknown>>(Promise.resolve());
-  const save = (id: string, next: number | null) => {
-    const done = () => setSavingTarget((saving) => (saving?.id === id && saving.target === next ? null : saving));
-    saves.current = saves.current.then(() => latestStudies.current.update(id, { target: next })).then(done, (error: unknown) => {
+  const save = (id: string, sent: StudyChange) => {
+    const done = () => setSaving((current) => (current?.id === id && current.change === sent ? null : current));
+    saves.current = saves.current.then(() => latestStudies.current.update(id, sent)).then(done, (error: unknown) => {
       done();
       if (serviceProblemOf(error) !== "other") onServiceProblem(error);
     });
@@ -150,25 +200,38 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
     if (pending === null) return;
     clearTimeout(pending.timer);
     pendingSave.current = null;
-    save(pending.id, pending.target);
+    save(pending.id, pending.change);
   };
-  useEffect(() => flushSave, []);         // a target still waiting is saved when the workspace closes
-  const setTarget = (next: number | null) => {
+  useEffect(() => flushSave, []);         // an end still waiting is saved when the workspace closes
+  const saveEnd = (key: "target" | "target_max", next: number | null) => {
     if (selectedId === null) return;
     if (pendingSave.current !== null && pendingSave.current.id !== selectedId) flushSave();
+    const earlier = pendingSave.current?.id === selectedId ? pendingSave.current.change : {};
     if (pendingSave.current !== null) clearTimeout(pendingSave.current.timer);
-    setSavingTarget({ id: selectedId, target: next });
-    pendingSave.current = { id: selectedId, target: next, timer: setTimeout(flushSave, TARGET_SAVE_DELAY_MILLISECONDS) };
+    const merged: StudyChange = { ...earlier, [key]: next };
+    setSaving({ id: selectedId, change: merged });
+    pendingSave.current = { id: selectedId, change: merged, timer: setTimeout(flushSave, TARGET_SAVE_DELAY_MILLISECONDS) };
+  };
+  const setRangeEnd = (end: "low" | "high", next: number | null) => {
+    if (selectedId === null) return;
+    if (byShare) {
+      const [shareLow, shareHigh] = shareRange;
+      const range: [number, number] = end === "low" ? [next ?? FULL_SHARE[0], shareHigh] : [shareLow, next ?? FULL_SHARE[1]];
+      setShareRanges((ranges) => ({ ...ranges, [selectedId]: range }));
+      return;
+    }
+    saveEnd(end === "low" ? "target" : "target_max", next);
   };
 
   return {
-    geometry, setGeometry, change, setChange, colourBy, setColourBy, available, outOfDateInDesign, waitingForStudy, setTarget,
+    geometry, setGeometry, change, setChange, colourBy, setColourBy, palette, setPalette, available, outOfDateInDesign, waitingForStudy,
+    setRangeEnd,
     waitingForRun: active && running && hasResult && values === null,
     studyOutOfDate: active && selected?.state === "out_of_date",
-    view: drawn ? { values, geometry, change, colourBy, target, unit, dimmed: selected.state === "out_of_date" } : null,
+    view: drawn ? { values, geometry, change, colourBy, range: [low, high], palette, unit, dimmed: selected.state === "out_of_date" } : null,
     legend: drawn ? {
-      label, unit, target, disabled: editDisabled, mode: change ? "change" : colourBy, hasLoss: changeScale?.hasLoss ?? false, hasNoShare,
-      range: change ? [0, changeScale?.highest ?? 0] : colourBy === "share" ? [0, 100] : [0, highest],
+      label, unit, mode: change ? "change" : colourBy, scale, low, high, palette, hasLoss: changeScale?.hasLoss ?? false,
+      disabled: !byShare && editDisabled,
     } : null,
     card: drawn && distribution !== null ? {
       geometry, unit, statistics: { ...distribution, shareAtTarget: share, keptShare: kept },

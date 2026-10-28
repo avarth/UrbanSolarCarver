@@ -32,13 +32,13 @@ interface SimulateViewProps {
   onServiceProblem: (error: unknown) => void;
   /** The selected study on the view: the geometry switch, the target legend and the result card. */
   studyView: StudyViewHook;
-  /** The viewport theme, which the target legend's colours follow. */
+  /** The viewport theme (the legend's palettes do not depend on it). */
   theme?: ViewportTheme;
   /** The notice of input files changed in the project folder or missing from it, at the top of the studies panel. */
   notice?: ReactNode;
 }
 
-export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView, theme = "light",
+export function SimulateView({ project, studies, criteria, storedTestSurfaces, runs, onStoredFilesChange, onServiceProblem, studyView,
                                notice }: SimulateViewProps) {
   const [popoverStudyId, setPopoverStudyId] = useState<string | null>(null);
   const view = useRef<HTMLDivElement>(null);
@@ -133,8 +133,9 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
       </div>
       {studyView.waitingForRun && <p className="viewer-overlay study-view-note" role="status">{messages.studyShownWhenRunEnds}</p>}
       {legend !== null && (
-        <TargetLegend label={legend.label} unit={legend.unit} range={legend.range} target={legend.target} mode={legend.mode} hasLoss={legend.hasLoss}
-                      hasNoShare={legend.hasNoShare} disabled={legend.disabled} theme={theme} onTargetChange={studyView.setTarget} onColourByChange={studyView.setColourBy} />
+        <TargetLegend label={legend.label} unit={legend.unit} mode={legend.mode} scale={legend.scale} low={legend.low} high={legend.high}
+                      palette={legend.palette} hasLoss={legend.hasLoss} disabled={legend.disabled} onRangeEndChange={studyView.setRangeEnd}
+                      onColourByChange={studyView.setColourBy} onPaletteChange={studyView.setPalette} />
       )}
       {card !== null && <ResultCard geometry={card.geometry} unit={card.unit} statistics={card.statistics} baseline={card.baseline} />}
     </>

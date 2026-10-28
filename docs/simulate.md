@@ -81,23 +81,25 @@ The context and the terrain block in all three. With several criteria the envelo
 
 There is one job at a time. While a Design run is going, Run shows "A Design run is in progress" and waits; while a simulation is going, Design's run buttons say so. Nothing is queued. The progress shows under Run with a Cancel button.
 
-## The legend, the target and the result card
+## The legend, the colour range and the result card
 
 The legend along the bottom of the view shows the scale the values are coloured by, with a switch between two:
 
-- **% of open site** (the default): each point coloured by its share of its open-site value, its value with nothing built (the context and terrain still block). The scale runs from 0 to 100 %, the same for every geometry, so Max volume, Envelope and Massing compare directly. A point the open site gives nothing (a facade that sees no sun in the period, say) has no share and is drawn in a neutral grey, which the legend names ("No open-site value").
-- **The study's unit** (for example kWh/m²): each point coloured by its value, from 0 to the highest value of the geometry shown.
+- **% of open site** (the default): each point coloured by its share of its open-site value, its value with nothing built (the context and terrain still block). The scale runs from 0 to 100 %, the same for every geometry, so Max volume, Envelope and Massing compare directly. A point the open site gives nothing (a facade that sees no sun in the period, say) loses nothing, so it counts as 100 %.
+- **Value** in the study's unit (for example kWh/m²): each point coloured by its value.
 
-Both use viridis, a scale that stays even in lightness and readable with the common colour vision deficiencies. Colouring by share is the default because a study's values spread mostly with the way each surface faces: on Allatini's Solar energy study the roofs reach about 1,550 kWh/m² while the facades lie between 200 and 800, so on a value scale the facades' gains are small steps in the middle of the scale. By share, the maximum volume keeps 78 % of the open-site value there and the envelope 99 %. In the Change view the legend shows the change ramp, and the loss colour when some point lost.
+Colouring by share is the default because a study's values spread mostly with the way each surface faces: on Allatini's Solar energy study the roofs reach about 1,550 kWh/m² while the facades lie between 200 and 800, so on a value scale the facades' gains are small steps in the middle of the scale. By share, the maximum volume keeps 78 % of the open-site value there and the envelope 99 %.
 
-The **target** is in the study's unit, so it is set on the unit scale: a mark on the legend. Drag it, or focus it and use the arrow keys (1 % of the range), Page Up and Page Down (10 %) and Home and End; Delete clears it. The target is saved with the study, once per drag. Points below the target are drawn in one muted colour of their own, apart from the scale, by share too, where the legend names the target under the scale. The target does not apply to the Change view.
+**The colour range.** Two marks on the legend set the low and the high end of the colours. The palette runs between them, and a value beyond an end takes that end's colour, so the colours can spread over the values that matter (the facades between 200 and 800 kWh/m², say, rather than 0 to the roofs' 1,550). Drag a mark, or press on the bar to move the nearer one; or focus a mark and use the arrow keys (1 % of the bar), Page Up and Page Down (10 %) and Home and End; Delete puts it back to its default. The ends cannot pass each other. By value the low end is the study's **target** and the high end its upper end, both saved with the study (by default 0 and the highest value of the geometry shown); the result card's "at target" counts the points at or above the low end. By share the ends are percentages, 0 and 100 by default, kept for each study while the app is open.
+
+**The palette** is chosen on the legend: Magma (the default), Inferno, Plasma or Viridis, matplotlib's perceptually even palettes, each from dark to light without a grey middle (Viridis is the one most readable with the common colour vision deficiencies). The choice is kept in the browser. In the Change view the legend shows the change ramp instead, without ends, and the loss colour when some point lost.
 
 The **result card** in the bottom right corner is for the selected study on the geometry shown. It gives:
 
 - what the geometry keeps of the open-site value: the sum of its values over the sum with nothing built, for example "keeps 99 % of the open-site value (78)",
 - the mean,
 - the lowest tenth (10th percentile),
-- with a target, the share of points at or above it.
+- with a target (the low end by value), the share of points at or above it.
 
 On Envelope and Massing each line has the maximum volume's value in brackets, for example "mean 3.6 h (4.1)".
 

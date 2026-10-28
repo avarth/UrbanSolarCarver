@@ -267,7 +267,7 @@ const scene = () => FakeViewerScene.latest!;
 const studyLayerSummary = () => scene().layers.get("study_values")?.userData.summary ?? null;
 const geometrySegment = (label: string) => [...container().querySelectorAll<HTMLButtonElement>(".geometry-switch-segment")]
   .find((button) => button.textContent === label)!;
-const targetMark = () => container().querySelector<HTMLElement>('.target-legend [role="slider"]')!;
+const targetMark = () => container().querySelector<HTMLElement>('.target-legend [role="slider"][data-end="low"]')!;
 const targetBar = () => container().querySelector<HTMLElement>(".target-legend-bar")!;
 /** Colours by the value in the study's unit, where the target is moved (the default is the share of the open-site value). */
 const colourByValue = () => act(() => container().querySelector<HTMLButtonElement>(".target-legend-colour-by button:last-child")!.click());
@@ -372,7 +372,6 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
     service.valuesOf = { 1: studyValuesOf({ open: [8, 8, 8, 8], max_volume: [0, 2, 6, 8] }) };
   });
   await selectStudy("Sun hours, 21 Dec");
-  expect(container().querySelector('.target-legend [role="slider"]')).toBeNull();      // by share the target is not moved on the scale
   colourByValue();
   const layer = scene().layers.get("study_values")!;
   const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
@@ -411,7 +410,7 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   await waitForTargetSave();
   expect(simulateService.studyPatches.at(-1)).toEqual({ id: "1", body: { target: null } });
   expect(simulateService.studyPatches).toHaveLength(3);
-  expect(targetMark().getAttribute("aria-valuetext")).toBe("No target");
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("0 h");          // no target: the low end is back at 0
   expect(cardLines()).toHaveLength(3);
 });
 
@@ -444,16 +443,27 @@ test("a study run before the envelope was built waits on Envelope with the reaso
   expect(stamp()).toBeNull();
 });
 
-test("by share a point the open site gives nothing is named in the legend; the value button names the unit", async () => {
+test("by share the two ends are percentages kept for the study while the app is open, not saved; the value button names the unit", async () => {
   await openSimulate(undefined, (service) => {
     service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
-    service.valuesOf = { 1: studyValuesOf({ open: [4, 0], max_volume: [1, 0] }) };
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 4] }) };
   });
   const legend = () => container().querySelector(".target-legend")!;
-  expect(legend().textContent).toContain("No open-site value");
   expect([...legend().querySelectorAll(".target-legend-colour-by button")].map((button) => button.textContent)).toEqual(["% of open site", "Value (h)"]);
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("0\u00a0%");
+  const layer = scene().layers.get("study_values")!;
+  const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
+  const version = colours.version;
+  act(() => targetMark().focus());
+  act(() => { targetMark().dispatchEvent(new KeyboardEvent("keydown", { key: "PageUp", bubbles: true, cancelable: true })); });
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("10\u00a0%");
+  expect(colours.version).toBeGreaterThan(version);                  // the same layer recoloured
+  await waitForTargetSave();
+  expect(simulateService.studyPatches).toEqual([]);                  // by share nothing is saved
   colourByValue();
-  expect(legend().textContent).not.toContain("No open-site value");      // by value every point has its value
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("0\u00a0h");   // by value the ends are the study's own
+  act(() => legend().querySelector<HTMLButtonElement>(".target-legend-colour-by button")!.click());
+  expect(targetMark().getAttribute("aria-valuetext")).toBe("10\u00a0%");  // the share range is kept
 });
 
 test("the stamp shows while the selected study is out of date, even before its values are drawn", async () => {
@@ -473,27 +483,23 @@ test("while a study's popover is open the geometry switch moves to the right of 
   expect(bar().classList.contains("simulate-geometry-bar-beside-popover")).toBe(false);
 });
 
-test("the part of the legend below the target takes the colour the view gives those points on the viewport's theme", async () => {
-  const [lightColour, darkColour] = ["#8e7b88", "#6e5f6a"];
-  document.documentElement.style.setProperty("--colour-below-target", lightColour);        // jsdom has no theme tokens
-  document.documentElement.style.setProperty("--colour-below-target-on-dark", darkColour);
+test("the palette is magma at first, can be chosen on the legend, and is kept in the browser", async () => {
+  window.localStorage.clear();
   try {
     await openSimulate(undefined, (service) => {
-      service.studies = [{ ...study("1", "sun_hours", ["facades.obj"], "current"), entry: { ...study("1", "sun_hours", ["facades.obj"]).entry, target: 2 } }];
+      service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
       service.valuesOf = { 1: studyValuesOf({ open: [4, 4, 4], max_volume: [1, 2, 3] }) };
     });
-    await selectStudy("Sun hours, 21 Dec");
-    // By share the target is named under the scale, its points still muted.
-    expect(container().querySelector(".target-legend-note")!.textContent).toBe("Points below the target value (2 h) are muted.");
-    colourByValue();
-    const below = () => container().querySelector<HTMLElement>(".target-legend-below")!;
-    const swatch = (hex: string) => { const probe = document.createElement("span"); probe.style.background = hex; return probe.style.background; };
-    expect(below().style.background).toBe(swatch(lightColour));
-    act(() => container().querySelector<HTMLButtonElement>('button[aria-label="Dark viewport"]')!.click());
-    expect(below().style.background).toBe(swatch(darkColour));
+    const select = () => container().querySelector<HTMLSelectElement>(".target-legend-palette")!;
+    expect(select().value).toBe("magma");
+    const layer = scene().layers.get("study_values")!;
+    const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
+    const version = colours.version;
+    act(() => { select().value = "viridis"; select().dispatchEvent(new Event("change", { bubbles: true })); });
+    expect(select().value).toBe("viridis");
+    expect(colours.version).toBeGreaterThan(version);
+    expect(window.localStorage.getItem("usc.studyPalette")).toBe("viridis");
   } finally {
-    document.documentElement.style.removeProperty("--colour-below-target");
-    document.documentElement.style.removeProperty("--colour-below-target-on-dark");
     window.localStorage.clear();
   }
 });

@@ -155,7 +155,7 @@ def find_study(project_json: ProjectJson, study_id: str) -> StudyEntry:
 
 
 def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | None = None, values: Mapping | None = None,
-                 target: object = NOT_SENT) -> None:
+                 target: object = NOT_SENT, target_max: object = NOT_SENT) -> None:
     """Change a study in place; what is not given stays. A ProjectError(422) leaves it as it was.
 
     A new metric resets the settings to its defaults, keeping the values of the keys both metrics have, except a time basis the new
@@ -180,3 +180,5 @@ def change_study(entry: StudyEntry, *, name: str | None = None, metric: str | No
         entry.name = default_study_name(new_metric, settings)
     if target is not NOT_SENT:
         entry.target = target
+    if target_max is not NOT_SENT:
+        entry.target_max = target_max

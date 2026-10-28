@@ -1,6 +1,7 @@
 // What Simulate computes from a study's values (study_values_decoder.ts): the statistics of the result card, the change from the
 // maximum volume that Change colours, and the tolerance under which a change counts as none. Each is one pass over the points (the
 // percentile sorts a copy): the first build found the tolerance once per point and froze the browser on 527,633 points.
+import type { StudyPalette } from "../viewer/study_palettes";
 import type { StudyValues } from "./study_values_decoder";
 
 /** The geometries a study's values are traced against; the names of the service's columns. */
@@ -25,8 +26,10 @@ export interface StudyView {
   /** Colour by the change from the maximum volume, whatever colourBy says. */
   change: boolean;
   colourBy: ColourBy;
-  /** Points below it are drawn in one muted colour; null without a target. */
-  target: number | null;
+  /** The low and high ends of the colour range: percent of the open-site value by share, the study's unit by value. The palette runs
+   * between them; a value below the low end takes its colour, above the high end the high end's colour. */
+  range: [number, number];
+  palette: StudyPalette;
   unit: string;
   /** The study is out of date: its values are drawn dimmed. */
   dimmed: boolean;
@@ -53,9 +56,10 @@ export function keptShareOf(values: Float32Array, open: Float32Array): number | 
   return possible > 0 ? kept / possible : null;
 }
 
-/** A point's value as a share (0 to 1) of its open-site value; null where the open site gives it nothing (within *tolerance*). */
-export function shareOfOpen(value: number, open: number, tolerance: number): number | null {
-  return open > tolerance ? Math.min(1, Math.max(0, value / open)) : null;
+/** A point's value as a share (0 to 1) of its open-site value. Where the open site gives it nothing (within *tolerance*) it loses
+ * nothing, so its share is 1: it is drawn as fully kept rather than in a colour of its own (user, 2026-10-28). */
+export function shareOfOpen(value: number, open: number, tolerance: number): number {
+  return open > tolerance ? Math.min(1, Math.max(0, value / open)) : 1;
 }
 
 /** The value at *share* (0 to 1) of the sorted values, interpolated between the two nearest points as numpy does. */

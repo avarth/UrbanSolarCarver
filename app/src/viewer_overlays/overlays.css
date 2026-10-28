@@ -269,8 +269,8 @@
   .viewer-run-progress-bar { transition: none; }
 }
 
-/* The target legend of Simulate (TargetLegend): along the bottom of the view, above the scale bar. The scale is a bar with the
-   target's mark on it, which a drag or the arrow keys move; the part below the target takes the muted colour of those points. */
+/* The legend of Simulate (TargetLegend): along the bottom of the view, above the scale bar. The scale is a bar with the two ends of
+   the colour range on it, which a drag or the arrow keys move; the bar is coloured as the view is, each end's colour beyond it. */
 .target-legend {
   bottom: calc(var(--overlay-gap) + 40px);
   left: 50%;
@@ -280,12 +280,16 @@
 }
 .target-legend-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
 .target-legend-title { font-weight: 600; }
+.target-legend-colour-by { margin-bottom: 8px; }
 .target-legend-colour-by button { padding: 1px 8px; font-size: inherit; }
-.target-legend-note { margin: 4px 0 0; color: var(--colour-muted); }
-.viewer-overlay[data-viewport-theme="dark"] .target-legend-note { color: var(--colour-muted-on-dark); }
+.target-legend-palette { font: inherit; padding: 1px 4px; border: 1px solid var(--colour-line); border-radius: var(--radius-small);
+  background: var(--colour-panel); color: var(--colour-ink); }
+.viewer-overlay[data-viewport-theme="dark"] .target-legend-palette { background: var(--colour-overlay-on-dark); color: var(--colour-ink-on-dark);
+  border-color: var(--colour-line-on-dark); }
+.target-legend-range { color: var(--colour-muted); }
+.viewer-overlay[data-viewport-theme="dark"] .target-legend-range { color: var(--colour-muted-on-dark); }
 .target-legend-bar { position: relative; height: 12px; border-radius: 2px; cursor: pointer; touch-action: none; user-select: none; }
 .target-legend-bar[data-disabled="true"] { cursor: default; }
-.target-legend-below { position: absolute; top: 0; bottom: 0; left: 0; border-radius: 2px 0 0 2px; pointer-events: none; }
 .target-legend-mark {
   position: absolute;
   top: -5px;
@@ -298,7 +302,6 @@
   border-radius: 2px;
   cursor: ew-resize;
 }
-.target-legend-mark[data-empty="true"] { background: transparent; border: 1px dashed var(--colour-ink); }
 .target-legend-mark[aria-disabled="true"] { cursor: default; opacity: 0.5; }
 .target-legend-mark:focus-visible { outline: 2px solid var(--colour-accent); outline-offset: 2px; }
 .target-legend-ends { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-variant-numeric: tabular-nums; }
