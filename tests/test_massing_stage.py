@@ -176,6 +176,17 @@ def test_raised_part_warns_and_follows_stacking(tmp_path):
     assert any(np.array(p["outline"])[:, 0].min() > 0 for p in plates)    # high block too
 
 
+def test_a_volume_cut_by_sloped_terrain_says_why_floors_reaching_into_the_ground_are_not_built(tmp_path):
+    # The volume reaches 3 m under a terrain rising 1 in 4 northward across its 12 m depth (0 m at its south edge, 3 m at its north).
+    terrain = trimesh.Trimesh([[-40, -6, 0], [40, -6, 0], [40, 6, 3], [-40, 6, 3]], [[0, 1, 2], [0, 2, 3]])
+    terrain_path = tmp_path / "terrain.ply"
+    terrain.export(terrain_path)
+    cfg, thr = _run_upstream(tmp_path, _box([30, 12, 23], z0=-3.0), terrain_path=str(terrain_path))
+    _set_mask(thr, lambda occ: occ)
+    with pytest.warns(UserWarning, match=r"terrain cuts the maximum volume, whose lowest point lies 3\.00 m below"):
+        _massing(cfg, thr, tmp_path / "m")
+
+
 def test_nothing_buildable_gives_valid_empty_outputs(tmp_path):
     cfg, thr = _run_upstream(tmp_path, _box([30, 12, 20]))
 

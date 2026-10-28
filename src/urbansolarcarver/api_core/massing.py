@@ -282,6 +282,17 @@ def _run_massing(settings: MassingSettings, options: RunOptions, upstream: Thres
         z0 = lowest_layer_bottom
     if z_top is None:
         z_top = highest_layer_top
+    # The terrain took the voxels below the ground: floors still count from the maximum volume's lowest point, under the ground,
+    # so on sloped ground the ground floor seldom fits and, stacked, nothing above it (user, 2026-10-28: a volume on a 1 in 6
+    # slope gave no plates, with only the general no-plates warning).
+    under_ground = lowest_layer_bottom - z0
+    if chain.pre.manifest.terrain_path is not None and under_ground > 0.5 * vs:
+        report_issue(
+            "under_ground",
+            f"massing: the terrain cuts the maximum volume, whose lowest point lies {under_ground:.2f} m below the lowest ground "
+            f"it keeps; floors count from that lowest point, so floors that reach into the ground are not built "
+            f"(sloped ground is not supported yet)",
+        )
     levels = mg.floor_levels(z0, z_top, settings.ground_floor_height, settings.floor_height)
     counted_layers = mg.layers_centred_within(origin[2], vs, occ.shape[2], z0, z_top)
     floors = mg.build_floors(cells_ij, bay, occ, kept, origin[2], vs, levels,

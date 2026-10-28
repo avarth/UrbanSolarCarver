@@ -188,6 +188,8 @@ export class ViewerScene {
       shadowMeshes: () => this.shadowMeshes(),
       siteBox: () => this.boxOf(SITE_LAYERS, false),
       terrainShown: () => { const terrain = this.slots.get("terrain")!; return terrain.object !== null && terrain.visible; },
+      clipCircle: () => (this.sceneHemisphere === null ? null
+        : { centre: [this.sceneHemisphere.centre[0], this.sceneHemisphere.centre[1]], radius: this.sceneHemisphere.radius }),
       requestRender: () => this.requestRender(),
     });
 
@@ -253,6 +255,7 @@ export class ViewerScene {
   /** The hemisphere around the whole scene (R2 2), the one the sun path and the sky dome are drawn on: the compass ring lies on its rim. */
   setSceneHemisphere(hemisphere: Hemisphere | null): void {
     this.sceneHemisphere = hemisphere;
+    this.sunShading?.invalidate();      // the hours in shade are clipped to its rim
     this.rebuildGroundAids();
   }
 

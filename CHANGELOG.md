@@ -38,6 +38,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   control; counted on the view from the shadow maps, in viridis or grey, drawn under the sun path). Routes
   `GET /projects/{name}/sun-chart` and `GET /projects/{name}/sun-positions`, from the engine's sunpath (the weather file's
   location, the project's North), with `time_basis`.
+- **The hours in shade are coloured inside the compass circle only.**
 - **A Show switch beside the studies panel's title** hides the selected study from the view (its colours, legend and result card).
 
 ### Added (Inspect)
@@ -79,6 +80,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `GET /projects/{name}/inspect/test_surfaces/{file}/geometry`, `POST .../turn` and `POST .../restore` (both with the file's
   `version`). A file is read once and kept until its size or modification time changes: the summary alone for the maximum
   volume, context and terrain, and the triangles of the test surface files up to 5 million in all. No engine function is added.
+
+### Changed (massing on sloped ground)
+
+- **A warning when the terrain cuts the maximum volume.** Floors count from the maximum volume's lowest point; when that lies
+  below the ground the carving keeps, the massing now says how far below, and that floors reaching into the ground are not built.
+  Before, a volume reaching under a 1 in 6 slope gave no plates with only the general "no floor plates fit" warning.
 
 ### Fixed (input files replaced in the project folder)
 

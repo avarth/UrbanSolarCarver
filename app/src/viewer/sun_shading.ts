@@ -6,7 +6,7 @@
 // in a colour ramp, viridis or grey, from light at no shade to dark at the whole range in shade. The scene draws it under the sun
 // path and the sky dome (scene.ts, OVER_THE_COUNT_LAYERS). It is a picture of what the camera sees,
 // counted again once the camera rests and hidden while it moves, at the shadow map's resolution; Simulate's sun hours are the precise
-// count, per test point.
+// count, per test point. Only what lies inside the compass circle (in plan) is coloured (user, 2026-10-28).
 import * as THREE from "three";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import type { Point3 } from "./local_origin";
@@ -23,6 +23,7 @@ const SHADE_OVERLAY_OPACITY = 0.85;
 const RECOUNT_DELAY_MILLISECONDS = 250;
 const LIT_THRESHOLD = 1e-4;
 const RAMP_ENTRIES = 256;
+const NO_CLIP_RADIUS = 1e30;            // a radius nothing lies beyond (a finite float for the shader)
 
 /** What the sun shading needs of the view. */
 export interface SunShadingHost {
@@ -37,6 +38,8 @@ export interface SunShadingHost {
   siteBox(): THREE.Box3;
   /** The terrain is shown: it catches the shadows on the ground, so the shadow catcher stays hidden. */
   terrainShown(): boolean;
+  /** The compass circle in plan (the scene hemisphere's rim): the hours in shade are coloured inside it only; null: everywhere. */
+  clipCircle(): { centre: [number, number]; radius: number } | null;
   requestRender(): void;
 }
 
@@ -73,6 +76,8 @@ export class SunShading {
   private readonly skyIntensity: number;
   private readonly fixedIntensity: number;
   private readonly maskMaterial = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide });
+  private readonly clipCentre = { value: new THREE.Vector2() };
+  private readonly clipRadius = { value: NO_CLIP_RADIUS };
   private readonly countMaterial: THREE.MeshLambertMaterial;
   private readonly hoursEach = { value: 0 };
   private readonly overlayScene = new THREE.Scene();
@@ -91,6 +96,15 @@ export class SunShading {
     this.ground.visible = false;
     host.scene.add(this.light, this.light.target, this.ground);
 
+    // The surfaces seen, marked where they lie inside the compass circle in plan: what lies outside keeps alpha 0 and no colour.
+    this.maskMaterial.onBeforeCompile = (shader) => {
+      shader.uniforms.clipCentre = this.clipCentre;
+      shader.uniforms.clipRadius = this.clipRadius;
+      shader.vertexShader = `varying vec2 vPlan;\n${shader.vertexShader}`.replace("#include <project_vertex>",
+        "#include <project_vertex>\n\tvPlan = (modelMatrix * vec4(transformed, 1.0)).xy;");
+      shader.fragmentShader = `uniform vec2 clipCentre;\nuniform float clipRadius;\nvarying vec2 vPlan;\n${shader.fragmentShader}`.replace("void main() {",
+        "void main() {\n\tif (distance(vPlan, clipCentre) > clipRadius) discard;");
+    };
     // The count: Lambert lit by the sun alone, written as the hours of this position where nothing of the sun arrives, added up.
     this.countMaterial = new THREE.MeshLambertMaterial({
       side: THREE.DoubleSide, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneFactor,
@@ -265,7 +279,11 @@ export class SunShading {
     renderer.setRenderTarget(this.target);
     renderer.setClearColor(0x000000, 0);
     renderer.clear();
-    // The surfaces seen, marked with alpha 1; then one pass per sun position adds its hours where the surface is in shade.
+    // The surfaces seen, marked with alpha 1 inside the compass circle; then one pass per sun position adds its hours where the
+    // surface is in shade.
+    const circle = this.host.clipCircle();
+    this.clipCentre.value.set(circle?.centre[0] ?? 0, circle?.centre[1] ?? 0);
+    this.clipRadius.value = circle?.radius ?? NO_CLIP_RADIUS;
     scene.overrideMaterial = this.maskMaterial;
     renderer.render(scene, camera);
     scene.overrideMaterial = this.countMaterial;
