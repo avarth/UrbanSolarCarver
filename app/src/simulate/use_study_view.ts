@@ -51,7 +51,8 @@ export interface StudyViewHook {
   /** What the 3D view draws; null without a selected study whose values have the geometry shown. */
   view: StudyView | null;
   /** The legend and the result card; null when the view draws nothing. */
-  legend: { label: string; unit: string; range: [number, number]; mode: "share" | "value" | "change"; hasLoss: boolean; target: number | null; disabled: boolean } | null;
+  legend: { label: string; unit: string; range: [number, number]; mode: "share" | "value" | "change"; hasLoss: boolean; hasNoShare: boolean;
+            target: number | null; disabled: boolean } | null;
   card: { geometry: StudyGeometry; unit: string; statistics: StudyStatistics; baseline: StudyStatistics | null } | null;
   /** Shows the target at once and saves it with the selected study once the gesture ends. */
   setTarget: (target: number | null) => void;
@@ -108,6 +109,12 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
                                        [baselineValues, geometry]);
   const share = useMemo(() => (shown === null ? null : shareAtOrAbove(shown, target)), [shown, target]);
   const openValues = values?.values[OPEN_COLUMN] ?? null;
+  // Some point the open site gives nothing (within the change tolerance): by share it is drawn in a neutral colour the legend names.
+  const hasNoShare = useMemo(() => {
+    if (openValues === null) return false;
+    const tolerance = changeTolerance(openValues, values?.values.max_volume);
+    return openValues.some((open) => !(open > tolerance));
+  }, [openValues]);
   const kept = useMemo(() => (shown === null || openValues === null ? null : keptShareOf(shown, openValues)), [shown, openValues]);
   const baselineKept = useMemo(() => (baselineValues === null || openValues === null || geometry === "max_volume" ? null
     : keptShareOf(baselineValues, openValues)), [baselineValues, openValues, geometry]);
@@ -160,7 +167,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
     studyOutOfDate: active && selected?.state === "out_of_date",
     view: drawn ? { values, geometry, change, colourBy, target, unit, dimmed: selected.state === "out_of_date" } : null,
     legend: drawn ? {
-      label, unit, target, disabled: editDisabled, mode: change ? "change" : colourBy, hasLoss: changeScale?.hasLoss ?? false,
+      label, unit, target, disabled: editDisabled, mode: change ? "change" : colourBy, hasLoss: changeScale?.hasLoss ?? false, hasNoShare,
       range: change ? [0, changeScale?.highest ?? 0] : colourBy === "share" ? [0, 100] : [0, highest],
     } : null,
     card: drawn && distribution !== null ? {

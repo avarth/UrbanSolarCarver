@@ -25,6 +25,8 @@ export interface TargetLegendProps {
   mode: "share" | "value" | "change";
   /** Switches between share and value (not shown by change). */
   onColourByChange?: (colourBy: ColourBy) => void;
+  /** By share: some point has no open-site value, so its neutral colour is named. */
+  hasNoShare?: boolean;
   /** By change: some point lost, so the loss colour is named. */
   hasLoss?: boolean;
   /** The target cannot be changed now (a run of the project). */
@@ -47,8 +49,8 @@ function keptInRange(value: number, [low, high]: [number, number]): number {
   return Number(Math.min(high, Math.max(low, value)).toPrecision(SIGNIFICANT_DIGITS));
 }
 
-export function TargetLegend({ label, unit, range, target, onTargetChange, mode, onColourByChange, hasLoss = false, disabled = false,
-                              theme = "light" }: TargetLegendProps) {
+export function TargetLegend({ label, unit, range, target, onTargetChange, mode, onColourByChange, hasNoShare = false, hasLoss = false,
+                              disabled = false, theme = "light" }: TargetLegendProps) {
   const bar = useRef<HTMLDivElement>(null);
   const mark = useRef<HTMLDivElement>(null);
   // While a drag goes on, the mark follows the pointer; the target is given at the release. The ref has the latest move, which a
@@ -111,7 +113,7 @@ export function TargetLegend({ label, unit, range, target, onTargetChange, mode,
         {mode !== "change" && onColourByChange !== undefined && (
           <div className="segmented-switch target-legend-colour-by" role="group" aria-label={messages.colourBy}>
             <button type="button" aria-pressed={mode === "share"} onClick={() => onColourByChange("share")}>{messages.colourByShare}</button>
-            <button type="button" aria-pressed={valueMode} onClick={() => onColourByChange("value")}>{unit}</button>
+            <button type="button" aria-pressed={valueMode} onClick={() => onColourByChange("value")}>{messages.colourByValue(unit)}</button>
           </div>
         )}
       </div>
@@ -134,7 +136,10 @@ export function TargetLegend({ label, unit, range, target, onTargetChange, mode,
       </div>
       <div className="target-legend-ends">
         <span>{mode === "share" ? withUnit(formattedNumber(low), "%") : formattedNumber(low)}</span>
-        {!valueMode && hasLoss && (
+        {mode === "share" && hasNoShare && (
+          <span className="target-legend-loss"><span className="target-legend-loss-swatch" style={{ background: colourToken("storey-low") }} aria-hidden="true" />{messages.noOpenSiteValue}</span>
+        )}
+        {mode === "change" && hasLoss && (
           <span className="target-legend-loss"><span className="target-legend-loss-swatch" style={{ background: changeRamp(-1) }} aria-hidden="true" />{messages.changeLoss}</span>
         )}
         <span>{mode === "share" ? withUnit(formattedNumber(high), "%") : formattedNumber(high)}</span>

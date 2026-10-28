@@ -134,7 +134,7 @@ export function SimulateView({ project, studies, criteria, storedTestSurfaces, r
       {studyView.waitingForRun && <p className="viewer-overlay study-view-note" role="status">{messages.studyShownWhenRunEnds}</p>}
       {legend !== null && (
         <TargetLegend label={legend.label} unit={legend.unit} range={legend.range} target={legend.target} mode={legend.mode} hasLoss={legend.hasLoss}
-                      disabled={legend.disabled} theme={theme} onTargetChange={studyView.setTarget} onColourByChange={studyView.setColourBy} />
+                      hasNoShare={legend.hasNoShare} disabled={legend.disabled} theme={theme} onTargetChange={studyView.setTarget} onColourByChange={studyView.setColourBy} />
       )}
       {card !== null && <ResultCard geometry={card.geometry} unit={card.unit} statistics={card.statistics} baseline={card.baseline} />}
     </>

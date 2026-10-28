@@ -444,6 +444,18 @@ test("a study run before the envelope was built waits on Envelope with the reaso
   expect(stamp()).toBeNull();
 });
 
+test("by share a point the open site gives nothing is named in the legend; the value button names the unit", async () => {
+  await openSimulate(undefined, (service) => {
+    service.studies = [study("1", "sun_hours", ["facades.obj"], "current")];
+    service.valuesOf = { 1: studyValuesOf({ open: [4, 0], max_volume: [1, 0] }) };
+  });
+  const legend = () => container().querySelector(".target-legend")!;
+  expect(legend().textContent).toContain("No open-site value");
+  expect([...legend().querySelectorAll(".target-legend-colour-by button")].map((button) => button.textContent)).toEqual(["% of open site", "Value (h)"]);
+  colourByValue();
+  expect(legend().textContent).not.toContain("No open-site value");      // by value every point has its value
+});
+
 test("the stamp shows while the selected study is out of date, even before its values are drawn", async () => {
   await openSimulate(undefined, (service) => { service.studies = [study("1", "sun_hours", ["facades.obj"], "out_of_date")]; });     // no values
   await selectStudy("Sun hours, 21 Dec");
@@ -472,7 +484,7 @@ test("the part of the legend below the target takes the colour the view gives th
     });
     await selectStudy("Sun hours, 21 Dec");
     // By share the target is named under the scale, its points still muted.
-    expect(container().querySelector(".target-legend-note")!.textContent).toBe("Points below the target (2 h) are muted.");
+    expect(container().querySelector(".target-legend-note")!.textContent).toBe("Points below the target value (2 h) are muted.");
     colourByValue();
     const below = () => container().querySelector<HTMLElement>(".target-legend-below")!;
     const swatch = (hex: string) => { const probe = document.createElement("span"); probe.style.background = hex; return probe.style.background; };
