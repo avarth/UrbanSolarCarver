@@ -49,9 +49,11 @@ class CriterionEntry(BaseModel):
 
 
 class TypicalBuildingEntry(BaseModel):
-    """The typical building of a project, which the energy-weighted criteria share (typical_building.py)."""
-    values: dict                        # the form's values, the shoebox archetype keys (typical_building.VALUE_KEYS)
-    start_from: str | None = None       # the type it started from (a key of typical_building.PRESETS); None for none
+    """The typical building of a project, which the energy-weighted criteria share (typical_building.py): a copy of its values and
+    the library entry they came from."""
+    values: dict                        # the form's values (typical_building.VALUE_KEYS and the keys of the room)
+    library_id: str | None = None       # the library entry it came from (typical_building.library_entry); None for none
+    library_name: str | None = None     # that entry's name when it was chosen, kept when the entry is renamed or deleted
     calculated_key: str | None = None   # the key of the weights in inputs/typical_building/weights.json; None before a calculation
 
 
@@ -101,7 +103,7 @@ class ProjectJson(BaseModel):
     criterion_records: dict[str, dict[str, StageRecord]] = Field(default_factory=dict)
     studies: list[StudyEntry] = Field(default_factory=list)     # the studies of the Simulate workspace, in the order shown
     next_study_id: int = 1      # the id the next study gets
-    typical_building: TypicalBuildingEntry | None = None    # None: the default type (typical_building.DEFAULT_PRESET), not calculated
+    typical_building: TypicalBuildingEntry | None = None    # None: the default entry (typical_building.DEFAULT_LIBRARY_ID), not calculated
 
 
 StageState = Literal["current", "out_of_date", "missing"]
@@ -550,33 +552,53 @@ class CancelRunReply(BaseModel):
     cancelled: bool
 
 
-class TypicalBuildingPreset(BaseModel):
-    """A type the typical building can start from."""
-    label: str
+class TypicalBuildingLibraryEntry(BaseModel):
+    """A building of the typical building library: a built-in example (read-only) or one of the user's own."""
+    id: str
+    name: str
+    group: Literal["apartment", "office", "test", "own"]    # test: the ASHRAE 140 boxes
+    read_only: bool                     # true for the examples
+    source: str | None                  # where an example's values come from; None for an own entry
     values: dict
+
+
+class NewLibraryEntryRequest(BaseModel):
+    """The body of Save as new: the name of the new own entry and its values."""
+    name: str
+    values: dict
+
+
+class UpdateLibraryEntryRequest(BaseModel):
+    """The body of a change of an own entry: a new name (rename), new values (Save to library), or both; an absent one stays."""
+    name: str | None = None
+    values: dict | None = None
 
 
 class TypicalBuildingRequest(BaseModel):
-    """The body of a save of the typical building: its values and the type it started from."""
+    """The body of a save of the project's typical building: its values and, when given, the library entry they came from (null:
+    from none). Left out, the entry the building came from stays."""
     values: dict
-    start_from: str | None = None
+    library_id: str | None = None
 
 
 class TypicalBuildingReply(BaseModel):
     """The typical building and the state of its weights; the numbers come from the weights file and are None without one."""
     values: dict
-    start_from: str | None
+    library_id: str | None              # the library entry the building came from
+    library_name: str | None            # its name now, or the name kept when it is gone
+    changed: bool                       # the values differ from the entry's; false when there is no entry
     # current: calculated for these values and weather file; out_of_date: for others; missing: never calculated
     state: StageState
     heating_kwh_m2: float | None = None     # the building's heating demand in a year, kWh per m² of floor
     cooling_kwh_m2: float | None = None     # its cooling demand
-    counted_hours: int | None = None        # the hours whose benefit weight is above 0.01
+    counted_hours: int | None = None        # the hours with the sun up whose benefit weight is above 0.01
 
 
 class TypicalBuildingWeightsReply(BaseModel):
     """The hourly weights of the typical building, 8,760 each from 1 January 0:00, to 3 decimals."""
     benefit: list[float]                # the share of an hour's sun that saves heating, 0 to 1
     harm: list[float]                   # the share that becomes cooling load, 0 to 1
+    sun_up: list[int]                   # 1 for the hours with the sun above the horizon, 0 for the others
 
 
 class ErrorDetailReply(BaseModel):

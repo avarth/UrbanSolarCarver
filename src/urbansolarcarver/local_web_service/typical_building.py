@@ -1,15 +1,25 @@
-"""The typical building of a project: the values of its form, the types it can start from, and its hourly weights.
+"""The typical building of a project: the values of its form, the library it is chosen from, and its hourly weights.
 
 A Solar usefulness criterion that is energy-weighted (``CriterionEntry.energy_weighted``) counts each hour by what its sun
 saves this building in heating over the year, instead of the cold hours rule. project.json keeps one building per project
-(``TypicalBuildingEntry``); the engine's generator (simulated_weights.generate_simulated_weights) calculates its weights into
-WEIGHTS_PATH, which config.yaml names as simulated_weights_path for every such criterion (criteria.engine_settings).
+(``TypicalBuildingEntry``): a copy of the values and the library entry they came from. The engine's generator
+(simulated_weights.generate_simulated_weights) calculates its weights into WEIGHTS_PATH, which config.yaml names as
+simulated_weights_path for every such criterion (criteria.engine_settings).
 
-The values are the shoebox form of the engine's archetype (archetype_of turns them into it). The weights are calculated for a
-key: a hash of the values and of the weather file. A calculation records its key in ``calculated_key``; the weights are out of
-date when the values or the weather file give another key now, and each energy-weighted criterion's preprocessing record keeps
-the key it ran with (stage_records.py). This module does not import torch or Ladybug: the generator imports Ladybug when it
-reads the weather file.
+The values describe one room in the app's words (a schedule, set points, U values, window shares, ...); archetype_of turns them
+into the engine's shoebox archetype. The default room ("average") is a square plan of side 4 x depth turned 45° with the same
+window share on its four walls (NE, SE, SW, NW), the roof and the floor adiabatic; "box" is the explicit box of width, length and
+orientation (the ASHRAE 140 test boxes). An average room equals the box of width and length 4 x depth, orientation 45, whose
+north, east, south and west shares are the ne, se, sw and nw ones.
+
+The library is apart from projects: the built-in examples (EXAMPLES, read-only: the KENAK reference building of ΤΟΤΕΕ
+20701-1/2017 for an apartment and an office in each of the climate zones Α to Δ, and ASHRAE 140 cases 600 and 900) and one YAML
+file per own entry in library_folder(), beside the user preferences file, so the entries serve every projects folder.
+
+The weights are calculated for a key: a hash of the values and of the weather file. A calculation records its key in
+``calculated_key``; the weights are out of date when the values or the weather file give another key now, and each
+energy-weighted criterion's preprocessing record keeps the key it ran with (stage_records.py). This module does not import torch
+or Ladybug: the generator imports Ladybug when it reads the weather file.
 """
 from __future__ import annotations
 
@@ -19,90 +29,145 @@ import hashlib
 import json
 import math
 import os
+import re
+import secrets
 import shutil
 import tempfile
+import threading
 from dataclasses import dataclass, field
+from datetime import date
 from pathlib import Path
 
+import numpy as np
+import yaml
+
 from ..errors import ConfigError, ConfigFieldError
-from ..simulated_weights import MASS_CLASSES, ZoneParams, _shading_factors, expand_shoebox, read_simulated_weights
-from .api_models import ProjectJson, TypicalBuildingEntry, TypicalBuildingReply, TypicalBuildingWeightsReply
+from ..simulated_weights import HOURS, MASS_CLASSES, ZoneParams, _shading_factors, expand_shoebox, read_simulated_weights
+from . import user_preferences
+from .api_models import ProjectJson, TypicalBuildingEntry, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingWeightsReply
 from .project_names import ProjectError
 
 NO_WEATHER_FILE_MESSAGE = "The project has no weather file: add one in Design (Inputs) to calculate the typical building."
 WEIGHTS_PATH = "inputs/typical_building/weights.json"     # relative to the project folder; the heatmap PNG is beside it
 STAGE = "typical_building"          # the stage the run's progress events name while the run calculates the weights
-SIDES = ("north", "east", "south", "west")
-DAY_HOURS = range(8, 20)            # the hours with the gains by day, 8:00 to 20:00; the gains by night fill the others
-COUNTED_WEIGHT = 0.01               # an hour whose benefit is above this counts (TypicalBuildingReply.counted_hours)
+COUNTED_WEIGHT = 0.01               # an hour with the sun up whose benefit is above this counts (TypicalBuildingReply.counted_hours)
 WEIGHT_DECIMALS = 3                 # of the weights the browser gets
 MAX_WINDOW_SHARE = 0.9
+MAX_NAME_LENGTH = 80
 NOT_CALCULATED_MESSAGE = "The typical building has not been calculated yet: press Calculate."
-# The keys of the values, in the order of the form's groups (Shape, Windows, Walls and glass, Air, Use, Summer shading).
-VALUE_KEYS = ("width", "length", "height", "orientation", "wwr", "g_value", "u_opaque", "u_window", "mass_class", "ach_vent",
-              "ach_infiltration", "heat_recovery", "t_set_heating", "t_set_cooling", "gains_day_w_m2", "gains_night_w_m2",
-              "shading_permanent", "shading_hot", "hot_months")
 
-
-@dataclass(frozen=True)
-class Preset:
-    """A type the building can start from: its label in the app and its values."""
-    label: str
-    values: dict = field(default_factory=dict)
-
-
-def _preset_values(width, length, height, wwr, u_opaque, u_window, mass_class, ach_vent, ach_infiltration, heat_recovery,
-                   gains_day, gains_night) -> dict:
-    """The values of a type: these, with the set points 20 and 26 °C, g 0.6, facing north and no shading."""
-    return {"width": width, "length": length, "height": height, "orientation": 0.0,
-            "wwr": {side: float(wwr.get(side, 0.0)) for side in SIDES}, "g_value": 0.6,
-            "u_opaque": u_opaque, "u_window": u_window, "mass_class": mass_class,
-            "ach_vent": ach_vent, "ach_infiltration": ach_infiltration, "heat_recovery": heat_recovery,
-            "t_set_heating": 20.0, "t_set_cooling": 26.0, "gains_day_w_m2": gains_day, "gains_night_w_m2": gains_night,
-            "shading_permanent": None, "shading_hot": None, "hot_months": [6, 7, 8]}
-
-
-# The three cases the engine's model was checked on (design/simulated-weights.md), their floor area and volume made a box and
-# their window areas window shares. The office keeps the office gains of the checks (250 W by day and 60 W at night on 35 m²);
-# the homes get the engine's default 5 W/m².
-PRESETS: dict[str, Preset] = {
-    "office": Preset("Office, medium mass", _preset_values(
-        5.0, 7.0, 3.0, {"south": 0.27, "east": 0.10, "west": 0.10}, 0.5, 1.8, "medium", 1.2, 0.3, 0.0, 7.1, 1.7)),
-    "heavy_home": Preset("Older home, heavy masonry", _preset_values(
-        5.0, 8.0, 2.75, {"south": 0.15, "east": 0.05, "west": 0.05, "north": 0.07}, 1.2, 2.8, "heavy", 0.8, 0.5, 0.0, 5.0, 5.0)),
-    "light_home": Preset("Light, well-insulated home", _preset_values(
-        5.0, 6.0, 3.0, {"south": 0.4, "west": 0.22}, 0.25, 1.0, "light", 1.5, 0.2, 0.6, 5.0, 5.0)),
+# The typical cases of use (ΤΟΤΕΕ 20701-1/2017 table 2.1 gives the hours a day and the days a week, not which hours): the hours of
+# the day in use (start, end), and whether only Monday to Friday. Internal gains and fresh air apply in these hours only.
+SCHEDULES = {
+    "apartment": (6, 24, False),    # 6:00 to 24:00 every day, 18 h
+    "office": (8, 18, True),        # 8:00 to 18:00 Monday to Friday, 10 h
+    "always": (0, 24, False),       # every hour (the ASHRAE 140 boxes)
 }
-DEFAULT_PRESET = "office"           # the type a project's building starts from until it is saved
+MASS_KINDS = ("iso", "totee")
+# ΤΟΤΕΕ 20701-1/2017 table 3.14: thermal capacity per m² of floor of typical constructions, kJ/(m²K), and their description.
+# Categories 4 to 6 hold when the insulation is missing or on the outside or in the core of the brickwork; with insulation on the
+# inside the zone falls in category 3.
+TOTEE_CATEGORIES = {
+    1: (80.0, "Light timber frame, infill of plasterboard or timber, insulation on the inside of walls, ceiling and floor"),
+    2: (110.0, "Light steel frame, infill of curtain walls or light insulated panels"),
+    3: (165.0, "Concrete frame, infill of lightweight concrete blocks or plasterboard, suspended ceilings"),
+    4: (230.0, "Load-bearing stone or solid brick walls, timber floors"),
+    5: (280.0, "Concrete frame, infill of hollow clay bricks"),
+    6: (300.0, "Load-bearing stone or solid brick walls, concrete floors"),
+}
+ROOMS = ("average", "box")
+ROOM_KEYS = {"average": ("depth",), "box": ("width", "length", "orientation")}     # the keys of each room besides the shared ones
+WWR_SIDES = {"average": ("ne", "se", "sw", "nw"), "box": ("north", "east", "south", "west")}
+AVERAGE_ROOM_SIDES = {"ne": "north", "se": "east", "sw": "south", "nw": "west"}    # the box side each side of the turned room is
+AVERAGE_ROOM_TURN = 45.0
+# The keys every building has, in the order of the sheet's groups (Use, Fabric, Summer shading, then Room, Roof and floor, Air).
+VALUE_KEYS = ("schedule", "t_set_heating", "t_set_cooling", "gains_w_m2", "fresh_air_m3h_m2", "heat_recovery",
+              "u_wall", "u_window", "g_value", "mass_kind", "mass_class", "totee_category",
+              "shading_factor", "shading_start", "shading_end",
+              "room", "height", "wwr",
+              "roof_exposed", "u_roof", "floor_exposed", "u_floor",
+              "infiltration_m3h_m2_window")
+DATE_PATTERN = re.compile(r"^(\d{2})-(\d{2})$")
+DAY_NAMES = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
 
 
-def building_of(project_json: ProjectJson) -> TypicalBuildingEntry:
-    """The project's building; the default type, not calculated, when project.json has none."""
-    if project_json.typical_building is not None:
-        return project_json.typical_building
-    return TypicalBuildingEntry(values=copy.deepcopy(PRESETS[DEFAULT_PRESET].values), start_from=DEFAULT_PRESET)
+# ---- The values and the engine's archetype ----
+
+def first_weekday(epw_path: Path | str | None) -> int:
+    """The weekday of 1 January in the weather file, 0 for Monday to 6 for Sunday: the start day of its DATA PERIODS line; Monday
+    when there is no file or the line gives none."""
+    if epw_path is None:
+        return 0
+    with contextlib.suppress(OSError):
+        with open(epw_path, encoding="latin-1") as file:
+            for _line_number, line in zip(range(20), file):
+                if line.upper().startswith("DATA PERIODS"):
+                    fields = [part.strip().lower() for part in line.split(",")]
+                    if len(fields) > 4 and fields[4] in DAY_NAMES:
+                        return DAY_NAMES.index(fields[4])
+                    break
+    return 0
 
 
-def archetype_of(values: dict) -> dict:
-    """The engine's shoebox archetype for the values of the form.
+def hours_in_use(schedule: str, weekday_of_first_day: int = 0) -> np.ndarray:
+    """(8760,) bool: the hours of the year in use by the schedule (SCHEDULES), hour 0 being 1 January 0:00."""
+    start, end, weekdays_only = SCHEDULES[schedule]
+    hour = np.arange(HOURS)
+    in_use = (hour % 24 >= start) & (hour % 24 < end)
+    if weekdays_only:
+        in_use &= (hour // 24 + weekday_of_first_day) % 7 < 5
+    return in_use
 
-    The gains become a 24-value profile (day gains from 8:00 to 20:00) or one flat value when day and night are equal; a side
-    without windows, a shading factor that is not set and the months of an unset summer shading are left out.
+
+def day_of_year(month_day: str) -> int:
+    """The day of the year, 1 to 365, of a valid "MM-DD" (a year without 29 February)."""
+    month, day = (int(part) for part in month_day.split("-"))
+    return date(2001, month, day).timetuple().tm_yday
+
+
+def room_box(values: dict) -> tuple[float, float, float, dict]:
+    """The room as the engine's box: (width, length, orientation, window share by north/east/south/west)."""
+    if values["room"] == "average":
+        side = 4.0 * values["depth"]
+        return side, side, AVERAGE_ROOM_TURN, {AVERAGE_ROOM_SIDES[side_name]: share for side_name, share in values["wwr"].items()}
+    return values["width"], values["length"], values["orientation"], dict(values["wwr"])
+
+
+def archetype_of(values: dict, epw_path: Path | str | None = None) -> dict:
+    """The engine's shoebox archetype for the values of the form; the weather file gives the weekday of 1 January (Monday without it).
+
+    Fresh air (m³/h per m² of floor) over the storey height gives the ventilation in air changes per hour, and infiltration (m³/h per
+    m² of window) times the window area over the volume the infiltration's; the gains and the fresh air apply in the hours of the
+    schedule (8,760 values each), or as one value when the schedule is every hour. A side without windows is left out; the summer
+    shading is the hot shading of the engine over the period of its dates.
     """
-    archetype = {key: values[key] for key in ("width", "length", "height", "orientation", "g_value", "u_opaque", "u_window",
-                                              "mass_class", "ach_vent", "ach_infiltration", "heat_recovery", "t_set_heating",
-                                              "t_set_cooling")}
-    archetype["wwr"] = {side: share for side, share in values["wwr"].items() if share > 0}
-    day, night = values["gains_day_w_m2"], values["gains_night_w_m2"]
-    if day == night:
-        archetype["internal_gains_w_m2"] = day
+    width, length, orientation, wwr = room_box(values)
+    height = values["height"]
+    volume = width * length * height
+    window_area = sum(share * (width if side in ("north", "south") else length) * height for side, share in wwr.items())
+    archetype = {"width": width, "length": length, "height": height, "orientation": orientation,
+                 "wwr": {side: share for side, share in wwr.items() if share > 0},
+                 "g_value": values["g_value"], "u_wall": values["u_wall"], "u_window": values["u_window"],
+                 "roof_exposed": values["roof_exposed"], "u_roof": values["u_roof"],
+                 "floor_exposed": values["floor_exposed"], "u_floor": values["u_floor"],
+                 "ach_infiltration": values["infiltration_m3h_m2_window"] * window_area / volume,
+                 "heat_recovery": values["heat_recovery"],
+                 "t_set_heating": values["t_set_heating"], "t_set_cooling": values["t_set_cooling"]}
+    ach_vent = values["fresh_air_m3h_m2"] / height
+    in_use = hours_in_use(values["schedule"], first_weekday(epw_path))
+    if in_use.all():
+        archetype["ach_vent"] = ach_vent
+        archetype["internal_gains_w_m2"] = values["gains_w_m2"]
     else:
-        archetype["internal_gains_profile_w_m2"] = [day if hour in DAY_HOURS else night for hour in range(24)]
-    if values["shading_permanent"] is not None:
-        archetype["shading_permanent"] = values["shading_permanent"]
-    if values["shading_hot"] is not None:
-        archetype["shading_hot"] = values["shading_hot"]
-        archetype["hot_months"] = list(values["hot_months"])
+        archetype["ach_vent"] = [ach_vent if hour_in_use else 0.0 for hour_in_use in in_use.tolist()]
+        archetype["internal_gains_w_m2"] = [values["gains_w_m2"] if hour_in_use else 0.0 for hour_in_use in in_use.tolist()]
+    if values["mass_kind"] == "iso":
+        archetype["mass_class"] = values["mass_class"]
+    else:
+        archetype["mass_capacity_kj_m2k"] = TOTEE_CATEGORIES[values["totee_category"]][0]
+    if values["shading_factor"] is not None:
+        archetype["shading_hot"] = values["shading_factor"]
+        archetype["shading_hot_period"] = [day_of_year(values["shading_start"]), day_of_year(values["shading_end"])]
     return archetype
 
 
@@ -130,58 +195,94 @@ def _checked_number(value, name: str, errors: list[ConfigFieldError], low: float
     return float(value)
 
 
-def validate(values) -> dict:
-    """The values checked and in their stored form (numbers as floats, every side in wwr, the months sorted once each).
+def _checked_choice(value, name: str, choices, errors: list[ConfigFieldError]):
+    if isinstance(value, bool) or value not in choices:
+        errors.append(ConfigFieldError(name, f"Choose one of {', '.join(str(choice) for choice in choices)}."))
+        return None
+    return value
 
-    Raises ConfigError with an error per field (the field is the value's key, "wwr.<side>" for a window share): each value's
-    type and range (window shares 0 to 0.9, factors 0 to 1, months 1 to 12), then the engine's own checks of the archetype
-    (expand_shoebox, ZoneParams.from_archetype, _shading_factors).
+
+def _checked_bool(value, name: str, errors: list[ConfigFieldError]) -> bool | None:
+    if not isinstance(value, bool):
+        errors.append(ConfigFieldError(name, "Give true or false."))
+        return None
+    return value
+
+
+def _checked_date(value, name: str, errors: list[ConfigFieldError]) -> str | None:
+    """*value* when it is a day of a year without 29 February as "MM-DD"; None otherwise, with an error for the field *name*."""
+    match = DATE_PATTERN.match(value) if isinstance(value, str) else None
+    if match is not None:
+        with contextlib.suppress(ValueError):
+            date(2001, int(match[1]), int(match[2]))
+            return value
+    errors.append(ConfigFieldError(name, "Give a day as MM-DD, for example 05-15 for 15 May (not 02-29)."))
+    return None
+
+
+def validate(values) -> dict:
+    """The values checked and in their stored form (numbers as floats, every side of the room in wwr, the ΤΟΤΕΕ category an int).
+
+    Every building has the keys of VALUE_KEYS and those of its room (ROOM_KEYS). Raises ConfigError with an error per field (the
+    field is the value's key, "wwr.<side>" for a window share): each value's type and range (window shares 0 to 0.9, factors 0 to
+    1, dates "MM-DD", the choices of schedule, mass kind, ISO class, ΤΟΤΕΕ category and room), then the engine's own checks of the
+    archetype (expand_shoebox, ZoneParams.from_archetype).
     """
     if not isinstance(values, dict):
         raise ConfigError("The typical building's values must be a mapping.", [ConfigFieldError(None, "The values must be a mapping.")])
-    errors = [ConfigFieldError(key, "Not a value of the typical building.") for key in sorted(set(values) - set(VALUE_KEYS))]
-    errors += [ConfigFieldError(key, "This value is missing.") for key in VALUE_KEYS if key not in values]
+    room = values.get("room")
+    all_room_keys = {key for keys in ROOM_KEYS.values() for key in keys}
+    known_room = isinstance(room, str) and room in ROOMS
+    # the keys of the room; with a room that is not known (an error at room below) the keys of either room are not refused
+    room_keys = ROOM_KEYS[room] if known_room else ()
+    allowed = set(VALUE_KEYS) | (set(room_keys) if known_room else all_room_keys)
+    errors = [ConfigFieldError(key, f"Not a value of the {room} room." if key in all_room_keys
+                               else "Not a value of the typical building.")
+              for key in sorted(set(values) - allowed)]
+    errors += [ConfigFieldError(key, "This value is missing.") for key in VALUE_KEYS + room_keys if key not in values]
     if errors:
         raise ConfigError("The typical building's values are not valid.", errors)
     checked = {
-        "width": _checked_number(values["width"], "width", errors, above=0.0),
-        "length": _checked_number(values["length"], "length", errors, above=0.0),
+        "schedule": _checked_choice(values["schedule"], "schedule", tuple(SCHEDULES), errors),
+        "t_set_heating": _checked_number(values["t_set_heating"], "t_set_heating", errors),
+        "t_set_cooling": _checked_number(values["t_set_cooling"], "t_set_cooling", errors),
+        "gains_w_m2": _checked_number(values["gains_w_m2"], "gains_w_m2", errors, low=0.0),
+        "fresh_air_m3h_m2": _checked_number(values["fresh_air_m3h_m2"], "fresh_air_m3h_m2", errors, low=0.0),
+        "heat_recovery": _checked_number(values["heat_recovery"], "heat_recovery", errors, 0.0, 1.0),
+        "u_wall": _checked_number(values["u_wall"], "u_wall", errors, above=0.0),
+        "u_window": _checked_number(values["u_window"], "u_window", errors, above=0.0),
+        "g_value": _checked_number(values["g_value"], "g_value", errors, 0.0, 1.0),
+        "mass_kind": _checked_choice(values["mass_kind"], "mass_kind", MASS_KINDS, errors),
+        "mass_class": _checked_choice(values["mass_class"], "mass_class", tuple(MASS_CLASSES), errors),
+        "totee_category": _checked_choice(values["totee_category"], "totee_category", tuple(TOTEE_CATEGORIES), errors),
+        "shading_factor": _checked_number(values["shading_factor"], "shading_factor", errors, 0.0, 1.0, optional=True),
+        "shading_start": _checked_date(values["shading_start"], "shading_start", errors),
+        "shading_end": _checked_date(values["shading_end"], "shading_end", errors),
+        "room": _checked_choice(room, "room", ROOMS, errors),
         "height": _checked_number(values["height"], "height", errors, above=0.0),
-        "orientation": _checked_number(values["orientation"], "orientation", errors),
     }
+    if checked["totee_category"] is not None:
+        checked["totee_category"] = int(checked["totee_category"])
+    for key in room_keys:
+        checked[key] = _checked_number(values[key], key, errors, **({} if key == "orientation" else {"above": 0.0}))
+    sides = WWR_SIDES.get(checked["room"], ())
     wwr = values["wwr"]
-    if not isinstance(wwr, dict) or set(wwr) - set(SIDES):
-        errors.append(ConfigFieldError("wwr", f"Give a window share for each of {', '.join(SIDES)}."))
+    if checked["room"] is None:
+        checked["wwr"] = None
+    elif not isinstance(wwr, dict) or set(wwr) - set(sides):
+        errors.append(ConfigFieldError("wwr", f"Give a window share for each of {', '.join(sides)}."))
         checked["wwr"] = None
     else:
         # a side left out has no window
-        checked["wwr"] = {side: _checked_number(wwr.get(side, 0.0), f"wwr.{side}", errors, 0.0, MAX_WINDOW_SHARE) for side in SIDES}
+        checked["wwr"] = {side: _checked_number(wwr.get(side, 0.0), f"wwr.{side}", errors, 0.0, MAX_WINDOW_SHARE) for side in sides}
     checked.update({
-        "g_value": _checked_number(values["g_value"], "g_value", errors, 0.0, 1.0),
-        "u_opaque": _checked_number(values["u_opaque"], "u_opaque", errors, above=0.0),
-        "u_window": _checked_number(values["u_window"], "u_window", errors, above=0.0),
-        "ach_vent": _checked_number(values["ach_vent"], "ach_vent", errors, low=0.0),
-        "ach_infiltration": _checked_number(values["ach_infiltration"], "ach_infiltration", errors, low=0.0),
-        "heat_recovery": _checked_number(values["heat_recovery"], "heat_recovery", errors, 0.0, 1.0),
-        "t_set_heating": _checked_number(values["t_set_heating"], "t_set_heating", errors),
-        "t_set_cooling": _checked_number(values["t_set_cooling"], "t_set_cooling", errors),
-        "gains_day_w_m2": _checked_number(values["gains_day_w_m2"], "gains_day_w_m2", errors, low=0.0),
-        "gains_night_w_m2": _checked_number(values["gains_night_w_m2"], "gains_night_w_m2", errors, low=0.0),
-        "shading_permanent": _checked_number(values["shading_permanent"], "shading_permanent", errors, 0.0, 1.0, optional=True),
-        "shading_hot": _checked_number(values["shading_hot"], "shading_hot", errors, 0.0, 1.0, optional=True),
+        "roof_exposed": _checked_bool(values["roof_exposed"], "roof_exposed", errors),
+        "u_roof": _checked_number(values["u_roof"], "u_roof", errors, above=0.0),
+        "floor_exposed": _checked_bool(values["floor_exposed"], "floor_exposed", errors),
+        "u_floor": _checked_number(values["u_floor"], "u_floor", errors, above=0.0),
+        "infiltration_m3h_m2_window": _checked_number(values["infiltration_m3h_m2_window"], "infiltration_m3h_m2_window", errors,
+                                                      low=0.0),
     })
-    mass_class = values["mass_class"]
-    if not isinstance(mass_class, str) or mass_class not in MASS_CLASSES:
-        errors.append(ConfigFieldError("mass_class", f"Choose one of {', '.join(MASS_CLASSES)}."))
-    checked["mass_class"] = mass_class
-    months = values["hot_months"]
-    if not isinstance(months, list) or not all(isinstance(month, int) and not isinstance(month, bool) and 1 <= month <= 12 for month in months):
-        errors.append(ConfigFieldError("hot_months", "Give the months as numbers from 1 to 12."))
-        checked["hot_months"] = None
-    else:
-        checked["hot_months"] = sorted(set(months))
-        if values["shading_hot"] is not None and not months:
-            errors.append(ConfigFieldError("hot_months", "Choose the months of the summer shading."))
     if None not in (checked["t_set_heating"], checked["t_set_cooling"]) and checked["t_set_cooling"] <= checked["t_set_heating"]:
         errors.append(ConfigFieldError("t_set_cooling", "The cooling set point must be above the heating set point."))
     if errors:
@@ -195,8 +296,7 @@ def _check_with_the_engine(values: dict) -> None:
     archetype = archetype_of(values)
     try:
         expanded = expand_shoebox({key: value for key, value in archetype.items()
-                                   if key not in ("internal_gains_w_m2", "internal_gains_profile_w_m2", "shading_permanent",
-                                                  "shading_hot", "hot_months")})
+                                   if key not in ("internal_gains_w_m2", "shading_hot", "shading_hot_period")})
     except ValueError as error:
         message = "Give at least one side a window share." if "no windows" in str(error) else str(error)
         raise ConfigError(str(error), [ConfigFieldError("wwr", message)]) from error
@@ -205,26 +305,243 @@ def _check_with_the_engine(values: dict) -> None:
         ZoneParams.from_archetype(**expanded)
     except ValueError as error:
         if "H_tr,op" in str(error):
-            field_error = ConfigFieldError("u_opaque", "The walls and roof lose too much heat for the thermal mass: lower their U value "
-                                                       "or choose a heavier mass.")
+            field_error = ConfigFieldError("u_wall", "The walls, and the roof and floor when exposed, lose too much heat for the "
+                                                     "thermal mass: lower their U values or choose a heavier mass.")
         elif "air change" in str(error):
-            field_error = ConfigFieldError("ach_vent", "Ventilation and infiltration together must be above 0.")
+            field_error = ConfigFieldError("infiltration_m3h_m2_window", "Some hours have no air change (no fresh air and no "
+                                                                         "infiltration): give the infiltration a value above 0.")
         else:
-            field_error = ConfigFieldError("mass_class" if "mass_class" in str(error) else None, str(error))
+            field_error = ConfigFieldError(None, str(error))
         raise ConfigError(str(error), [field_error]) from error
     try:
-        _shading_factors(windows, archetype.get("shading_permanent"), archetype.get("shading_hot"), archetype.get("hot_months"))
+        _shading_factors(windows, None, archetype.get("shading_hot"), None, archetype.get("shading_hot_period"))
     except ValueError as error:
-        field_name = next((key for key in ("hot_months", "shading_hot", "shading_permanent") if key in str(error)), None)
-        raise ConfigError(str(error), [ConfigFieldError(field_name, str(error))]) from error
+        raise ConfigError(str(error), [ConfigFieldError("shading_factor", str(error))]) from error
 
 
-def checked_start_from(start_from: str | None) -> str | None:
-    """*start_from* when it names a type or is None; ConfigError at the field start_from otherwise."""
-    if start_from is not None and start_from not in PRESETS:
-        raise ConfigError(f"'{start_from}' is not a type to start from.",
-                          [ConfigFieldError("start_from", f"Choose one of {', '.join(PRESETS)}.")])
-    return start_from
+# ---- The library ----
+
+@dataclass(frozen=True)
+class LibraryEntry:
+    """A building of the library: an example (read-only, built in) or one of the user's own (a YAML file in library_folder())."""
+    id: str
+    name: str
+    group: str                          # "apartment", "office", "test" (the ASHRAE boxes) or "own"
+    values: dict = field(default_factory=dict)
+    source: str | None = None           # where an example's values come from; None for an own entry
+
+    @property
+    def read_only(self) -> bool:
+        return self.group != "own"
+
+    def reply(self) -> TypicalBuildingLibraryEntry:
+        return TypicalBuildingLibraryEntry(id=self.id, name=self.name, group=self.group, read_only=self.read_only, source=self.source,
+                                           values=copy.deepcopy(self.values))
+
+
+TOTEE_SOURCE = "ΤΟΤΕΕ 20701-1/2017 (ΦΕΚ Β' 4003/17.11.2017)"
+# The KENAK reference building by climate zone (ΤΟΤΕΕ 20701-1/2017 table 3.4α, §4.2.1): U of walls, roof and floor over pilotis
+# (both used when exposed), windows, W/m²K; and the zone's cooling period (§2.4.2), the period of the summer shading.
+KENAK_ZONES = {
+    "a": ("Α", 0.60, 0.50, 3.20, ("05-15", "09-15")),
+    "b": ("Β", 0.50, 0.45, 3.00, ("05-15", "09-15")),
+    "c": ("Γ", 0.45, 0.40, 2.80, ("06-01", "08-31")),
+    "d": ("Δ", 0.40, 0.35, 2.60, ("06-01", "08-31")),
+}
+# By use: schedule (table 2.1), set points (2.2), fresh air while in use (2.3), heat recovery (§4.4.1, reference ventilation),
+# internal gains while in use (people 2.7 + equipment x diversity 2.8 + lighting 2.4, 2.4α: 4 + 2 for an apartment, 8 + 4.5 + 16
+# for an office) and the ΤΟΤΕΕ mass category (3.14) with the ISO class nearest to it.
+KENAK_USES = {
+    "apartment": ("Apartment", "apartment", 0.75, 0.0, 6.0, 5, "heavy"),
+    "office": ("Office", "office", 3.0, 0.5, 28.5, 3, "medium"),
+}
+DEFAULT_LIBRARY_ID = "kenak-apartment-b"    # the building of a new project
+
+
+def _kenak_values(use: str, zone: str) -> dict:
+    """The values of the KENAK reference building for a use and a climate zone: as KENAK_ZONES and KENAK_USES, with g 0.55 (glass 0.76
+    x 0.9 mean over the angles x 0.8 for a 20 % frame, §4.2.7), infiltration 5.5 m³/h per m² of window (§4.4.1), summer shading 0.77
+    (the mean of the reference building's NE, SE, SW and NW factors 0.80, 0.73, 0.73, 0.80, §4.3.1) and the average room 6 m deep
+    with a 3 m storey, 40 % windows on each side, roof and floor not exposed."""
+    _letter, u_wall, u_roof_and_floor, u_window, (shading_start, shading_end) = KENAK_ZONES[zone]
+    _label, schedule, fresh_air, heat_recovery, gains, category, mass_class = KENAK_USES[use]
+    return {"schedule": schedule, "t_set_heating": 20.0, "t_set_cooling": 26.0, "gains_w_m2": gains, "fresh_air_m3h_m2": fresh_air,
+            "heat_recovery": heat_recovery, "u_wall": u_wall, "u_window": u_window, "g_value": 0.55,
+            "mass_kind": "totee", "mass_class": mass_class, "totee_category": category,
+            "shading_factor": 0.77, "shading_start": shading_start, "shading_end": shading_end,
+            "room": "average", "height": 3.0, "depth": 6.0, "wwr": {side: 0.4 for side in WWR_SIDES["average"]},
+            "roof_exposed": False, "u_roof": u_roof_and_floor, "floor_exposed": False, "u_floor": u_roof_and_floor,
+            "infiltration_m3h_m2_window": 5.5}
+
+
+ASHRAE_SOURCE = ("ANSI/ASHRAE Standard 140 (BESTEST), case {case}: 8 x 6 x 2.7 m box, 12 m² of double clear glass on the south wall, "
+                 "U walls {u_wall}, roof 0.318, floor 0.039 (over outdoor air), window 3.0 W/m²K, glass SHGC 0.787 x 0.9 mean over the "
+                 "angles, 200 W constant gains, infiltration 0.5 ach, 20 / 27 °C. {construction}. Layers from the Modelica Buildings "
+                 "library's BESTEST data (LBNL); the U values computed from them with the standard's surface coefficients; the window U "
+                 "and SHGC are not checked against the standard's text.")
+
+
+def _ashrae_values(u_wall: float, mass_class: str, category: int) -> dict:
+    """The values of an ASHRAE 140 box: as ASHRAE_SOURCE, the gains 200 W over 48 m², the infiltration 0.5 ach as 5.4 m³/h per m² of
+    its 12 m² of window (0.5 x 129.6 m³ / 12), no fresh air, no shading, the thermal mass an ISO class (the ΤΟΤΕΕ category nearest
+    to it kept for a switch)."""
+    return {"schedule": "always", "t_set_heating": 20.0, "t_set_cooling": 27.0, "gains_w_m2": round(200.0 / 48.0, 4),
+            "fresh_air_m3h_m2": 0.0, "heat_recovery": 0.0, "u_wall": u_wall, "u_window": 3.0, "g_value": 0.71,
+            "mass_kind": "iso", "mass_class": mass_class, "totee_category": category,
+            "shading_factor": None, "shading_start": "06-01", "shading_end": "08-31",
+            "room": "box", "height": 2.7, "width": 8.0, "length": 6.0, "orientation": 0.0,
+            "wwr": {"north": 0.0, "east": 0.0, "south": round(12.0 / 21.6, 4), "west": 0.0},
+            "roof_exposed": True, "u_roof": 0.318, "floor_exposed": True, "u_floor": 0.039,
+            "infiltration_m3h_m2_window": 5.4}
+
+
+def _examples() -> dict[str, LibraryEntry]:
+    examples = {}
+    for use, (label, *_rest) in KENAK_USES.items():
+        for zone, (letter, *_zone_rest) in KENAK_ZONES.items():
+            examples[f"kenak-{use}-{zone}"] = LibraryEntry(
+                f"kenak-{use}-{zone}", f"{label}, zone {letter}", use, validate(_kenak_values(use, zone)),
+                f"{TOTEE_SOURCE}, reference building, zone {letter}")
+    examples["ashrae140-600"] = LibraryEntry(
+        "ashrae140-600", "ASHRAE 140 case 600 (light)", "test", validate(_ashrae_values(0.514, "very_light", 1)),
+        ASHRAE_SOURCE.format(case=600, u_wall=0.514, construction="Lightweight: timber siding, glass fibre, plasterboard; about "
+                                                                   "40 kJ/m²K, so the lightest ISO class (very light, 80)"))
+    examples["ashrae140-900"] = LibraryEntry(
+        "ashrae140-900", "ASHRAE 140 case 900 (heavy)", "test", validate(_ashrae_values(0.512, "heavy", 5)),
+        ASHRAE_SOURCE.format(case=900, u_wall=0.512, construction="Heavyweight: 100 mm concrete block walls and an 80 mm concrete "
+                                                                   "floor inside the insulation; about 305 kJ/m²K, so the ISO class "
+                                                                   "nearest to it (heavy, 260)"))
+    return examples
+
+
+EXAMPLES: dict[str, LibraryEntry] = _examples()
+OWN_ID_PATTERN = re.compile(r"^own-[0-9a-f]{12}$")
+_library_lock = threading.Lock()        # one change of the own entries at a time
+
+
+def library_folder() -> Path:
+    """The folder of the user's own entries, beside the user preferences file (user_preferences.preferences_file)."""
+    return user_preferences.preferences_file().parent / "typical_buildings"
+
+
+def _read_own_entry(path: Path) -> LibraryEntry | None:
+    """The own entry in *path*; None when the file cannot be read or does not hold a name and valid values."""
+    try:
+        stored = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError, UnicodeDecodeError):
+        return None
+    if not isinstance(stored, dict) or not isinstance(stored.get("name"), str):
+        return None
+    try:
+        values = validate(stored.get("values"))
+    except ConfigError:
+        return None
+    return LibraryEntry(path.stem, stored["name"], "own", values)
+
+
+def own_entries() -> list[LibraryEntry]:
+    """The user's own entries by name; a file that cannot be read or holds values that are not valid is left out."""
+    folder = library_folder()
+    paths = sorted(folder.glob("own-*.yaml")) if folder.is_dir() else []
+    entries = [entry for entry in (_read_own_entry(path) for path in paths if OWN_ID_PATTERN.match(path.stem)) if entry is not None]
+    return sorted(entries, key=lambda entry: (entry.name.casefold(), entry.id))
+
+
+def library() -> list[LibraryEntry]:
+    """The examples (apartments, offices, test boxes, in that order) and then the user's own entries by name."""
+    return list(EXAMPLES.values()) + own_entries()
+
+
+def library_entry(entry_id: str | None) -> LibraryEntry | None:
+    """The entry with this id, None when there is none."""
+    if entry_id is None:
+        return None
+    if entry_id in EXAMPLES:
+        return EXAMPLES[entry_id]
+    if not OWN_ID_PATTERN.match(entry_id):
+        return None
+    return _read_own_entry(library_folder() / f"{entry_id}.yaml")
+
+
+def _checked_name(name, entry_id: str | None = None) -> str:
+    """*name* without the spaces around it; ConfigError at the field name when empty or too long, ProjectError 409 when another entry
+    has it (letter case aside)."""
+    if not isinstance(name, str) or not name.strip():
+        raise ConfigError("The building has no name.", [ConfigFieldError("name", "Give the building a name.")])
+    name = name.strip()
+    if len(name) > MAX_NAME_LENGTH:
+        raise ConfigError("The name is too long.", [ConfigFieldError("name", f"Give a name of at most {MAX_NAME_LENGTH} characters.")])
+    if any(entry.name.casefold() == name.casefold() and entry.id != entry_id for entry in library()):
+        raise ProjectError(f"A building named '{name}' is already in the library: choose another name.", status_code=409)
+    return name
+
+
+def _write_own_entry(entry_id: str, name: str, values: dict) -> None:
+    """Write the entry's file as a whole, through a temporary file in the same folder."""
+    folder = library_folder()
+    folder.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix="writing-", suffix=".yaml.tmp", dir=folder)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as temporary_file:
+            yaml.safe_dump({"name": name, "values": values}, temporary_file, allow_unicode=True, sort_keys=False)
+        os.replace(temporary_name, folder / f"{entry_id}.yaml")
+    except BaseException:
+        Path(temporary_name).unlink(missing_ok=True)
+        raise
+
+
+def _own_entry_to_change(entry_id: str, verb: str) -> LibraryEntry:
+    entry = library_entry(entry_id)
+    if entry is None:
+        raise ProjectError(f"There is no building '{entry_id}' in the library.", status_code=404)
+    if entry.read_only:
+        raise ProjectError(f"'{entry.name}' is an example and cannot be {verb}: save a copy of it with Save as new.", status_code=409)
+    return entry
+
+
+def add_entry(name, values) -> LibraryEntry:
+    """Save a new own entry (Save as new); ConfigError for a value or the name, ProjectError 409 for a name in use."""
+    checked = validate(values)
+    with _library_lock:
+        name = _checked_name(name)
+        entry_id = f"own-{secrets.token_hex(6)}"
+        _write_own_entry(entry_id, name, checked)
+    return LibraryEntry(entry_id, name, "own", checked)
+
+
+def update_entry(entry_id: str, name=None, values=None) -> LibraryEntry:
+    """Rename an own entry, change its values (Save to library), or both; ProjectError 404 for no such entry, 409 for an example or a
+    name in use, ConfigError for a value or the name. Nothing changes on an error."""
+    checked = validate(values) if values is not None else None
+    with _library_lock:
+        entry = _own_entry_to_change(entry_id, "changed")
+        name = _checked_name(name, entry_id) if name is not None else entry.name
+        checked = checked if checked is not None else entry.values
+        _write_own_entry(entry_id, name, checked)
+    return LibraryEntry(entry_id, name, "own", checked)
+
+
+def delete_entry(entry_id: str) -> None:
+    """Delete an own entry; ProjectError 404 for no such entry, 409 for an example. A project that copied it keeps its copy."""
+    with _library_lock:
+        _own_entry_to_change(entry_id, "deleted")
+        (library_folder() / f"{entry_id}.yaml").unlink(missing_ok=True)
+
+
+# ---- The project's building and its weights ----
+
+def default_building() -> TypicalBuildingEntry:
+    entry = EXAMPLES[DEFAULT_LIBRARY_ID]
+    return TypicalBuildingEntry(values=copy.deepcopy(entry.values), library_id=entry.id, library_name=entry.name)
+
+
+def building_of(project_json: ProjectJson) -> TypicalBuildingEntry:
+    """The project's building; a copy of the default entry (DEFAULT_LIBRARY_ID), not calculated, when project.json has none or holds
+    the values of the first build of this form (with no schedule)."""
+    building = project_json.typical_building
+    if building is None or "schedule" not in building.values:
+        return default_building()
+    return building
 
 
 def _file_digest(path: Path) -> str:
@@ -260,8 +577,15 @@ def needs_calculation(store, name: str, key: str) -> bool:
     return building.calculated_key != key or not weights_file(store.open(name)).is_file()
 
 
+def _sun_up(meta: dict) -> np.ndarray:
+    """The meta's hours with the sun up as a bool array; every hour for a file written before the meta held them."""
+    sun_up = np.asarray(meta.get("sun_up", ()), dtype=bool)
+    return sun_up if sun_up.shape == (HOURS,) else np.ones(HOURS, dtype=bool)
+
+
 def reply(store, name: str) -> TypicalBuildingReply:
-    """The building with the state of its weights and, when the weights file exists, the numbers it holds."""
+    """The building, the library entry it came from (changed when the copy differs from the entry; the entry's name now, or the name
+    the project kept when the entry is gone), the state of its weights and, when the weights file exists, the numbers it holds."""
     with store.project_lock(name):
         project_json = store.read_project_json(name)
         building = building_of(project_json)
@@ -277,31 +601,49 @@ def reply(store, name: str) -> TypicalBuildingReply:
                 state = "missing"
             else:
                 heating, cooling = meta.get("heating_kwh_m2"), meta.get("cooling_kwh_m2")
-                counted = int((benefit > COUNTED_WEIGHT).sum())
-        return TypicalBuildingReply(values=building.values, start_from=building.start_from, state=state, heating_kwh_m2=heating,
-                                    cooling_kwh_m2=cooling, counted_hours=counted)
+                counted = int(((benefit > COUNTED_WEIGHT) & _sun_up(meta)).sum())
+    entry = library_entry(building.library_id)
+    return TypicalBuildingReply(values=building.values, library_id=building.library_id,
+                                library_name=entry.name if entry is not None else building.library_name,
+                                changed=entry is not None and entry.values != building.values, state=state,
+                                heating_kwh_m2=heating, cooling_kwh_m2=cooling, counted_hours=counted)
 
 
 def weights_reply(store, name: str) -> TypicalBuildingWeightsReply:
-    """The hourly weights of the weights file, to WEIGHT_DECIMALS decimals; ProjectError 404 when there is none."""
+    """The hourly weights of the weights file, to WEIGHT_DECIMALS decimals, and its hours with the sun up; ProjectError 404 when there
+    is none."""
     path = weights_file(store.open(name))
     try:
-        benefit, harm, _meta = read_simulated_weights(path)
+        benefit, harm, meta = read_simulated_weights(path)
     except ValueError as error:
         raise ProjectError(NOT_CALCULATED_MESSAGE, status_code=404) from error
     return TypicalBuildingWeightsReply(benefit=[round(float(value), WEIGHT_DECIMALS) for value in benefit],
-                                       harm=[round(float(value), WEIGHT_DECIMALS) for value in harm])
+                                       harm=[round(float(value), WEIGHT_DECIMALS) for value in harm],
+                                       sun_up=[int(value) for value in _sun_up(meta)])
 
 
-def save(store, name: str, values, start_from: str | None) -> TypicalBuildingReply:
-    """Store the building's values (validate) and the type it started from; the key of its last calculation stays. ConfigError, and
-    nothing changes, when a value is not valid."""
+_KEEP = object()        # save(): keep the library entry the building came from
+
+
+def save(store, name: str, values, library_id=_KEEP) -> TypicalBuildingReply:
+    """Store the building's values (validate) and, when *library_id* is given, the library entry they came from (None: from none);
+    the key of its last calculation stays. ConfigError, and nothing changes, when a value is not valid or *library_id* names no
+    entry (field library_id)."""
     checked = validate(values)
-    start_from = checked_start_from(start_from)
+    entry = None
+    if library_id is not _KEEP and library_id is not None:
+        entry = library_entry(library_id)
+        if entry is None:
+            raise ConfigError(f"'{library_id}' is not a building in the library.",
+                              [ConfigFieldError("library_id", "Not a building in the library.")])
     with store.project_lock(name):
         project_json = store.read_project_json(name)
-        calculated_key = building_of(project_json).calculated_key
-        project_json.typical_building = TypicalBuildingEntry(values=checked, start_from=start_from, calculated_key=calculated_key)
+        building = building_of(project_json)
+        if library_id is _KEEP:
+            origin = {"library_id": building.library_id, "library_name": building.library_name}
+        else:
+            origin = {"library_id": entry.id if entry else None, "library_name": entry.name if entry else None}
+        project_json.typical_building = TypicalBuildingEntry(values=checked, calculated_key=building.calculated_key, **origin)
         store.write_project_json(name, project_json)
     return reply(store, name)
 
@@ -312,7 +654,7 @@ def calculate(store, name: str, values: dict | None = None) -> str:
 
     The generator writes into a new folder beside WEIGHTS_PATH, and the files replace the earlier ones together with the record of the
     key, under the project lock, so the file and its key always belong together. The lock is not held while the generator runs (about
-    9 s). ProjectError: 404 without a weather file (NO_WEATHER_FILE_MESSAGE), 422 when the generator fails.
+    7 s). ProjectError: 404 without a weather file (NO_WEATHER_FILE_MESSAGE), 422 when the generator fails.
     """
     from ..simulated_weights import generate_simulated_weights
     if values is None:
@@ -326,7 +668,7 @@ def calculate(store, name: str, values: dict | None = None) -> str:
     work_folder = Path(tempfile.mkdtemp(dir=target.parent, prefix="calculating-"))
     try:
         try:
-            written = Path(generate_simulated_weights(str(weather_path), archetype_of(values), work_folder / target.name))
+            written = Path(generate_simulated_weights(str(weather_path), archetype_of(values, weather_path), work_folder / target.name))
         except Exception as error:      # the weather file cannot be read, or the generator refuses the archetype
             raise ProjectError(f"The typical building could not be calculated: {error}", status_code=422) from error
         with store.project_lock(name):

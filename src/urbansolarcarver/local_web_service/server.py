@@ -40,7 +40,8 @@ from .api_models import (
     CriterionEntry, CriterionOrderRequest, CriterionSettingsReply, ErrorDetailReply, ExampleInfo, ExampleProject, FieldErrorReply, HealthReply, InputFileInfo, InputFilesReply, InspectedFile, InspectReply, MissingInputsReply, ModeInfo, ProjectDetail, RestoreOriginalRequest,
     ProjectsFolderChoiceReply, ProjectsFolderReply, ProjectsFolderSource, ProjectSummary, RenameProjectRequest, RunSummary, SkyDome, StageStatusReply, StartRunReply, StartRunRequest, StoredFileChangedReply, SunChart, SunPath, SunPositions, TurnSurfacesRequest,
     UpdateCriterionRequest, AddStudyRequest, ReorderStudiesRequest, StudiesReply, StudyEntry, StudyWithState, UpdateStudyRequest,
-    TypicalBuildingPreset, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
+    NewLibraryEntryRequest, TypicalBuildingLibraryEntry, TypicalBuildingReply, TypicalBuildingRequest, TypicalBuildingWeightsReply,
+    UpdateLibraryEntryRequest,
 )
 from .carve_further import carve_further
 from .criteria import active_criteria, find_criterion
@@ -85,6 +86,11 @@ _CRITERION_RESPONSES = {
 _STUDY_RESPONSES = {
     404: {"model": ErrorDetailReply, "description": "There is no such study."},
     **_ERROR_RESPONSES,
+}
+_LIBRARY_RESPONSES = {
+    404: {"model": ErrorDetailReply, "description": "There is no such building in the library."},
+    409: {"model": ErrorDetailReply, "description": "The entry is an example (read-only), or the name is in use."},
+    422: {"model": ConfigErrorReply, "description": "A value or the name is not valid (the fields)."},
 }
 _CONFIG_OR_MESSAGE_ERROR = {
     "model": Union[ConfigErrorReply, ErrorDetailReply],
@@ -622,27 +628,50 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             store.reorder_criteria(name, request.ids)
             return store.criteria(name)
 
-    @router.get("/typical-building-presets")
-    def typical_building_presets() -> dict[str, TypicalBuildingPreset]:
-        """The types the typical building can start from, by key, in the order the app offers them."""
-        return {key: TypicalBuildingPreset(label=preset.label, values=preset.values) for key, preset in typical_building.PRESETS.items()}
+    @router.get("/typical-building-library")
+    def typical_building_library() -> list[TypicalBuildingLibraryEntry]:
+        """The library of typical buildings, apart from projects: the examples (apartments and offices of the KENAK reference building
+        by climate zone, the ASHRAE 140 test boxes; read-only), then the user's own entries by name."""
+        return [entry.reply() for entry in typical_building.library()]
+
+    @router.post("/typical-building-library", responses={409: _LIBRARY_RESPONSES[409], 422: _LIBRARY_RESPONSES[422]})
+    def add_typical_building_library_entry(request: NewLibraryEntryRequest) -> TypicalBuildingLibraryEntry:
+        """Save a new own entry (Save as new); 422 with the field for a value or the name, 409 for a name in use."""
+        return typical_building.add_entry(request.name, request.values).reply()
+
+    @router.put("/typical-building-library/{entry_id}", responses=_LIBRARY_RESPONSES)
+    def update_typical_building_library_entry(entry_id: str, request: UpdateLibraryEntryRequest) -> TypicalBuildingLibraryEntry:
+        """Rename an own entry or change its values (Save to library); 409 for an example or a name in use. The projects that copied the
+        entry keep their copies (they read as changed when they differ)."""
+        return typical_building.update_entry(entry_id, request.name, request.values).reply()
+
+    @router.delete("/typical-building-library/{entry_id}", status_code=204, response_class=Response,
+                   responses={404: _LIBRARY_RESPONSES[404], 409: _LIBRARY_RESPONSES[409]})
+    def delete_typical_building_library_entry(entry_id: str) -> Response:
+        """Delete an own entry; 409 for an example. The projects that copied it keep their copies and the entry's name."""
+        typical_building.delete_entry(entry_id)
+        return Response(status_code=204)
 
     @router.get("/projects/{name}/typical-building", responses={404: {"model": ErrorDetailReply, "description": "There is no such project."}})
     def get_typical_building(name: str) -> TypicalBuildingReply:
-        """The project's typical building (the default type before it is saved) and the state of its weights."""
+        """The project's typical building (a copy of the default library entry before it is saved), the entry it came from, and the
+        state of its weights."""
         return typical_building.reply(folder_in_use.store, name)
 
     @router.put("/projects/{name}/typical-building", responses={409: _ERROR_RESPONSES[409], 422: _CONFIG_OR_MESSAGE_ERROR})
     def save_typical_building(name: str, request: TypicalBuildingRequest) -> TypicalBuildingReply:
-        """Save the typical building's values and the type it started from; a value that is not valid is 422 with its field (a window
-        share as "wwr.<side>"), and nothing changes then. The weights are not calculated again here."""
+        """Save the typical building's values and, when library_id is sent, the library entry they came from (choosing an entry sends
+        its values and id; null: from none); a value that is not valid is 422 with its field (a window share as "wwr.<side>"), and
+        nothing changes then. The weights are not calculated again here."""
         with writable_project(name) as store:
-            return typical_building.save(store, name, request.values, request.start_from)
+            if "library_id" in request.model_fields_set:
+                return typical_building.save(store, name, request.values, request.library_id)
+            return typical_building.save(store, name, request.values)
 
     @router.post("/projects/{name}/typical-building/calculate",
                  responses={404: {"model": ErrorDetailReply, "description": typical_building.NO_WEATHER_FILE_MESSAGE}, **_ERROR_RESPONSES})
     def calculate_typical_building(name: str) -> TypicalBuildingReply:
-        """Calculate the hourly weights of the stored typical building with the project's weather file (about 9 s); 404 without a
+        """Calculate the hourly weights of the stored typical building with the project's weather file (about 7 s); 404 without a
         weather file, 409 while a run of the project is active."""
         store = folder_in_use.store
         with store.project_lock(name):      # not held while the weights are calculated: calculate takes it to put them in place
@@ -653,7 +682,8 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
     @router.get("/projects/{name}/typical-building/weights",
                 responses={404: {"model": ErrorDetailReply, "description": "The typical building has not been calculated."}})
     def typical_building_weights(name: str) -> TypicalBuildingWeightsReply:
-        """The hourly benefit and harm weights of the last calculation, 8,760 each; 404 before the first one."""
+        """The hourly benefit and harm weights of the last calculation and its hours with the sun up, 8,760 each; 404 before the first
+        one."""
         return typical_building.weights_reply(folder_in_use.store, name)
 
     @router.get("/projects/{name}/studies", responses={404: _STUDY_RESPONSES[404]})
