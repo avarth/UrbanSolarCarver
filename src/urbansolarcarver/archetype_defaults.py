@@ -23,3 +23,9 @@ WINDOW_TO_WALL_DEFAULTS = {"south": 0.35, "east": 0.15, "west": 0.15, "north": 0
 
 # Optional keys with no default (absent = feature off).
 ARCHETYPE_OPTIONAL_KEYS = ("shading_permanent", "shading_hot", "hot_months")
+
+# Whether the shoebox's roof and floor lose heat to the outside when the
+# archetype does not say: the roof does, the slab on the ground does not.
+# The usc archetype command and Grasshopper do not offer these keys; the
+# browser app's typical building gives them.
+SHOEBOX_EXPOSURE_DEFAULTS = {"roof_exposed": True, "floor_exposed": False}

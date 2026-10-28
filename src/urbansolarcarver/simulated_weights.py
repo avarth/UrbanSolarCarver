@@ -42,7 +42,7 @@ from typing import Sequence, Tuple
 
 import numpy as np
 
-from .archetype_defaults import ARCHETYPE_DEFAULTS
+from .archetype_defaults import ARCHETYPE_DEFAULTS, SHOEBOX_EXPOSURE_DEFAULTS
 from .weather_file import read_weather_file
 
 log = logging.getLogger(__name__)
@@ -66,13 +66,22 @@ MASS_CLASSES = {
 }
 
 
+def nearest_mass_class(capacity_kj_m2k: float) -> str:
+    """The Table-12 class whose C_m per m² floor is nearest to the given
+    capacity [kJ/(m²K)]; on a tie the lighter class."""
+    return min(MASS_CLASSES, key=lambda name: abs(
+        MASS_CLASSES[name][1] / 1000.0 - float(capacity_kj_m2k)))
+
+
 @dataclass(frozen=True)
 class ZoneParams:
     """5R1C parameters: conductances (``h_*``) in W/K, ``c_m`` in J/K,
     areas (``floor_area``, ``a_m``, ``a_t``) in m², set-points in °C.
 
     ``h_tr_em`` is exterior to mass, ``h_tr_w`` windows, ``h_tr_is`` air to
-    internal surfaces, ``h_tr_ms`` surfaces to mass, ``h_ve`` ventilation.
+    internal surfaces, ``h_tr_ms`` surfaces to mass, ``h_ve`` ventilation:
+    one value, or an (8760,) array of one value per hour when the
+    ventilation follows a schedule.
 
     Use :meth:`from_archetype` to derive them from physical archetype
     inputs per the standard; tests may also construct directly from
@@ -83,7 +92,7 @@ class ZoneParams:
     h_tr_w: float
     h_tr_is: float
     h_tr_ms: float
-    h_ve: float
+    h_ve: "float | np.ndarray"
     c_m: float
     a_m: float
     a_t: float
@@ -99,17 +108,20 @@ class ZoneParams:
         area_opaque: float,
         u_window: float,
         area_window: float,
-        ach_vent: float,
+        ach_vent: "float | Sequence[float]",
         ach_infiltration: float,
         heat_recovery: float = ARCHETYPE_DEFAULTS["heat_recovery"],
-        mass_class: str = ARCHETYPE_DEFAULTS["mass_class"],
+        mass_class: "str | None" = None,
         t_set_heating: float = ARCHETYPE_DEFAULTS["t_set_heating"],
         t_set_cooling: float = ARCHETYPE_DEFAULTS["t_set_cooling"],
+        mass_capacity_kj_m2k: "float | None" = None,
     ) -> "ZoneParams":
         """Derive the network from archetype inputs per ISO 13790.
 
         - A_tot = 4.5 · A_f;  H_tr,is = 3.45 · A_tot
-        - (A_m, C_m) from the Table-12 mass class
+        - (A_m, C_m) from the Table-12 mass class, or, with
+          ``mass_capacity_kj_m2k``, C_m = capacity · 1000 · A_f and A_m of
+          the class nearest in capacity (the lighter one on a tie)
         - H_tr,ms = 9.1 · A_m
         - H_tr,op = U_opaque · A_opaque;  H_tr,w = U_window · A_window
         - H_tr,em = 1 / (1/H_tr,op − 1/H_tr,ms)   (§12.2.2 serial split)
@@ -119,18 +131,38 @@ class ZoneParams:
 
         Units: areas in m², ``volume`` in m³, U-values in W/(m²K), air
         change rates in 1/h, ``heat_recovery`` (η_hr) as a fraction 0-1,
-        set-points in °C.
+        set-points in °C, ``mass_capacity_kj_m2k`` in kJ/(m²K) of floor.
+        ``ach_vent`` is one value or 8760 hourly values (a ventilation
+        schedule); then ``h_ve`` is hourly too, heat recovery applying to
+        the ventilation part of each hour. ``mass_class`` defaults to the
+        archetype default ("medium") when no capacity is given.
 
-        Raises ValueError for an unknown ``mass_class``, when
-        H_tr,op >= H_tr,ms (the serial split would be negative or
-        infinite), or when the total air change rate is not positive.
+        Raises ValueError for an unknown ``mass_class``, for both
+        ``mass_class`` and ``mass_capacity_kj_m2k``, for a capacity that
+        is not positive, when H_tr,op >= H_tr,ms (the serial split would
+        be negative or infinite), for an ``ach_vent`` that is neither one
+        value nor 8760, or when the total air change rate is not positive
+        (in any hour).
         """
-        if mass_class not in MASS_CLASSES:
-            raise ValueError(
-                f"mass_class must be one of {sorted(MASS_CLASSES)}, "
-                f"got {mass_class!r}"
-            )
-        am_factor, cm_per_m2 = MASS_CLASSES[mass_class]
+        if mass_capacity_kj_m2k is not None:
+            if mass_class is not None:
+                raise ValueError("give either mass_class or "
+                                 "mass_capacity_kj_m2k, not both")
+            capacity = float(mass_capacity_kj_m2k)
+            if not capacity > 0:
+                raise ValueError(f"mass_capacity_kj_m2k must be positive, "
+                                 f"got {mass_capacity_kj_m2k!r}")
+            am_factor = MASS_CLASSES[nearest_mass_class(capacity)][0]
+            cm_per_m2 = capacity * 1000.0
+        else:
+            if mass_class is None:
+                mass_class = ARCHETYPE_DEFAULTS["mass_class"]
+            if mass_class not in MASS_CLASSES:
+                raise ValueError(
+                    f"mass_class must be one of {sorted(MASS_CLASSES)}, "
+                    f"got {mass_class!r}"
+                )
+            am_factor, cm_per_m2 = MASS_CLASSES[mass_class]
         a_t = LAMBDA_AT * floor_area
         a_m = am_factor * floor_area
         c_m = cm_per_m2 * floor_area
@@ -144,11 +176,26 @@ class ZoneParams:
                 f"mass class."
             )
         h_tr_em = 1.0 / (1.0 / h_tr_op - 1.0 / h_tr_ms)
-        ach_tot = ach_vent + ach_infiltration
-        if ach_tot <= 0:
-            raise ValueError("Total air change rate must be positive")
-        b_ek = 1.0 - (ach_vent / ach_tot) * heat_recovery
-        h_ve = 1200.0 * b_ek * volume * ach_tot / 3600.0
+        vent = np.asarray(ach_vent, dtype=np.float64)
+        if vent.ndim == 0:
+            ach_vent = float(vent)
+            ach_tot = ach_vent + ach_infiltration
+            if ach_tot <= 0:
+                raise ValueError("Total air change rate must be positive")
+            b_ek = 1.0 - (ach_vent / ach_tot) * heat_recovery
+            h_ve = 1200.0 * b_ek * volume * ach_tot / 3600.0
+        elif vent.shape == (HOURS,):
+            # The same formula hour by hour: infiltration is constant, the
+            # ventilation follows its schedule.
+            ach_tot = vent + ach_infiltration
+            if (ach_tot <= 0).any():
+                raise ValueError("Total air change rate must be positive "
+                                 "in every hour")
+            b_ek = 1.0 - (vent / ach_tot) * heat_recovery
+            h_ve = 1200.0 * b_ek * volume * ach_tot / 3600.0
+        else:
+            raise ValueError(f"ach_vent must be a single value or {HOURS} "
+                             f"hourly values, got shape {vent.shape}")
         return cls(
             floor_area=floor_area,
             h_tr_em=h_tr_em,
@@ -177,10 +224,13 @@ class SimulationResult:
 def _hourly_constants(p: ZoneParams):
     """Precompute the state-independent quantities of equations C.2-C.11.
 
-    Returns (H_tr,1, H_tr,2, H_tr,3, A_m/A_t, the surface-node share of the
-    gains from C.2, and the two coefficients of the mass update C.4).
+    Returns (H_ve, H_tr,1, H_tr,2, H_tr,3, A_m/A_t, the surface-node share
+    of the gains from C.2, and the two coefficients of the mass update
+    C.4). With an hourly ``h_ve`` the ones that depend on it are (8760,)
+    arrays; :func:`_constants_by_hour` gives the values of each hour.
     """
-    h1 = 1.0 / (1.0 / p.h_ve + 1.0 / p.h_tr_is)          # C.6
+    h_ve = p.h_ve
+    h1 = 1.0 / (1.0 / h_ve + 1.0 / p.h_tr_is)            # C.6
     h2 = h1 + p.h_tr_w                                    # C.7
     h3 = 1.0 / (1.0 / h2 + 1.0 / p.h_tr_ms)               # C.8
     m_frac = p.a_m / p.a_t
@@ -188,7 +238,17 @@ def _hourly_constants(p: ZoneParams):
     c_h = p.c_m / 3600.0
     denom_m = c_h + 0.5 * (h3 + p.h_tr_em)
     coef_prev = c_h - 0.5 * (h3 + p.h_tr_em)
-    return h1, h2, h3, m_frac, st_frac, denom_m, coef_prev
+    return h_ve, h1, h2, h3, m_frac, st_frac, denom_m, coef_prev
+
+
+def _constants_by_hour(consts):
+    """The constants of :func:`_hourly_constants` hour by hour: a list of
+    8760 tuples of floats, or None when none of them changes by the hour."""
+    if not any(np.ndim(c) for c in consts):
+        return None
+    columns = [np.broadcast_to(np.asarray(c, dtype=np.float64), (HOURS,)).tolist()
+               for c in consts]
+    return list(zip(*columns))
 
 
 def _air_temperature(p, consts, t_m_prev, t_e, phi_int, phi_sol, phi_hc):
@@ -197,27 +257,28 @@ def _air_temperature(p, consts, t_m_prev, t_e, phi_int, phi_sol, phi_hc):
     Temperatures in °C, powers in W: ``t_m_prev`` is the mass temperature
     at the start of the hour, ``t_e`` the outdoor temperature, ``phi_int``
     the internal gains, ``phi_sol`` the solar gains and ``phi_hc`` the
-    heating (+) or cooling (−) power.  Returns (theta_air, theta_m_next).
+    heating (+) or cooling (−) power.  ``consts`` are the constants of the
+    hour (:func:`_constants_by_hour`).  Returns (theta_air, theta_m_next).
     All arguments broadcast; the heating/cooling power enters the air node
     (the standard's base case).
     """
-    h1, h2, h3, m_frac, st_frac, denom_m, coef_prev = consts
+    h_ve, h1, h2, h3, m_frac, st_frac, denom_m, coef_prev = consts
     gains = 0.5 * phi_int + phi_sol
     phi_ia = 0.5 * phi_int + phi_hc                       # C.1 (+ HC to air)
     phi_st = st_frac * gains                              # C.2
     phi_m = m_frac * gains                                # C.3
     # C.5, with supply-air temperature = t_e (no preheating)
     phi_m_tot = phi_m + p.h_tr_em * t_e + h3 * (
-        phi_st + p.h_tr_w * t_e + h1 * (phi_ia / p.h_ve + t_e)
+        phi_st + p.h_tr_w * t_e + h1 * (phi_ia / h_ve + t_e)
     ) / h2
     t_m_next = (t_m_prev * coef_prev + phi_m_tot) / denom_m   # C.4
     t_m_avg = 0.5 * (t_m_next + t_m_prev)                     # C.9
     t_s = (
         p.h_tr_ms * t_m_avg + phi_st + p.h_tr_w * t_e
-        + h1 * (t_e + phi_ia / p.h_ve)
+        + h1 * (t_e + phi_ia / h_ve)
     ) / (p.h_tr_ms + p.h_tr_w + h1)                           # C.10
-    t_air = (p.h_tr_is * t_s + p.h_ve * t_e + phi_ia) / (
-        p.h_tr_is + p.h_ve
+    t_air = (p.h_tr_is * t_s + h_ve * t_e + phi_ia) / (
+        p.h_tr_is + h_ve
     )                                                          # C.11
     return t_air, t_m_next
 
@@ -239,6 +300,7 @@ def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
     temperature and signed demand of row 0 (otherwise None).
     """
     consts = _hourly_constants(p)
+    consts_by_hour = _constants_by_hour(consts)
     phi_10 = 10.0 * p.floor_area  # C.4.2 test load
 
     if deltas is None:
@@ -253,6 +315,8 @@ def _march(p, t_out, phi_int, phi_sol_base, *, deltas: float | None = None,
     series_demand = np.empty(HOURS) if record_series else None
 
     for h in range(HOURS):
+        if consts_by_hour is not None:
+            consts = consts_by_hour[h]
         t_e = float(t_out[h])
         p_int = float(phi_int[h])
         if deltas is None:
@@ -380,16 +444,44 @@ def transmitted_solar_from_epw(
 
     Returns an (8760,) array of the summed gain over all windows [W].
     """
+    return _summed_gains(_window_gains(epw_path, windows), hourly_factors)
+
+
+def _window_gains(epw_path: str, windows) -> list:
+    """The unshaded hourly gain of each window [W]: area x g x irradiance on
+    its plane, one (8760,) array per window (see transmitted_solar_from_epw)."""
     wea = read_weather_file(epw_path).solar_irradiance_wea()
-    total = np.zeros(HOURS)
-    for i, (azimuth, area, g) in enumerate(windows):
+    gains = []
+    for azimuth, area, g in windows:
         irr, *_ = wea.directional_irradiance(0, float(azimuth))
-        contribution = float(area) * float(g) * np.asarray(
-            irr.values, dtype=np.float64)
+        gains.append(float(area) * float(g) * np.asarray(
+            irr.values, dtype=np.float64))
+    return gains
+
+
+def _summed_gains(window_gains, hourly_factors=None) -> np.ndarray:
+    """The sum of the windows' gains, each times its hourly factors if any."""
+    total = np.zeros(HOURS)
+    for i, contribution in enumerate(window_gains):
         if hourly_factors is not None:
             contribution = contribution * hourly_factors[i]
         total += contribution
     return total
+
+
+def sun_up_hours(epw_path: str) -> np.ndarray:
+    """(8760,) array of 0 and 1: 1 for the hours with the sun above the
+    horizon at the weather file's site.
+
+    The sun is placed as :func:`transmitted_solar_from_epw` places it: by a
+    Ladybug Sunpath at the middle of each hour (the Wea's datetimes).
+    """
+    from ladybug.sunpath import Sunpath
+    wea = read_weather_file(epw_path).solar_irradiance_wea()
+    sunpath = Sunpath.from_location(wea.location)
+    sunpath.is_leap_year = wea.is_leap_year
+    return np.array([1 if sunpath.calculate_sun_from_date_time(moment).altitude > 0 else 0
+                     for moment in wea.datetimes], dtype=np.int8)
 
 
 # ---------------------------------------------------------------------------
@@ -442,19 +534,50 @@ def _hot_months_mask(hot_months: Sequence[int]) -> np.ndarray:
     return np.isin(month_of_day, months)
 
 
-def _shading_factors(windows, shading_permanent, shading_hot, hot_months):
+def _hot_period_mask(period: Sequence[int]) -> np.ndarray:
+    """(8760,) bool mask: True from the first to the last day of the period.
+
+    ``period`` is [first_day, last_day], days of the year 1-365, both
+    included; a first day after the last wraps the new year (e.g.
+    [335, 59] is 1 December to 28 February).
+    """
+    try:
+        first, last = period
+    except (TypeError, ValueError):
+        raise ValueError(f"shading_hot_period must be [first_day, last_day], "
+                         f"got {period!r}") from None
+    if not all(isinstance(day, (int, np.integer)) and not isinstance(day, bool)
+               and 1 <= day <= HOURS // 24 for day in (first, last)):
+        raise ValueError(f"shading_hot_period days must be whole days of the "
+                         f"year 1-{HOURS // 24}, got {list(period)}")
+    day_of_year = np.arange(HOURS) // 24 + 1
+    if first <= last:
+        return (day_of_year >= first) & (day_of_year <= last)
+    return (day_of_year >= first) | (day_of_year <= last)
+
+
+def _shading_factors(windows, shading_permanent, shading_hot, hot_months,
+                     hot_period=None):
     """Per-window hourly transmission factors from the declared coefficients.
 
     Each window is binned to its nearest cardinal facade. The permanent
-    factor applies to all hours; during ``hot_months`` the hot factor
-    multiplies on top of it. Returns a list of (8760,) arrays, or None
-    when no shading is declared.
+    factor applies to all hours; during ``hot_months``, or during the days
+    of ``hot_period`` ([first_day, last_day], see :func:`_hot_period_mask`),
+    the hot factor multiplies on top of it. Returns a list of (8760,)
+    arrays, or None when no shading is declared.
     """
-    if shading_hot is not None and hot_months is None:
+    if hot_months is not None and hot_period is not None:
+        raise ValueError("give either hot_months or shading_hot_period, "
+                         "not both")
+    if shading_hot is not None and hot_months is None and hot_period is None:
         raise ValueError("shading_hot requires hot_months (the calendar "
-                         "months when the seasonal shading is deployed)")
+                         "months when the seasonal shading is deployed) or "
+                         "shading_hot_period (its first and last day)")
     if hot_months is not None and shading_hot is None:
         raise ValueError("hot_months has no effect without shading_hot")
+    if hot_period is not None and shading_hot is None:
+        raise ValueError("shading_hot_period has no effect without "
+                         "shading_hot")
     if shading_permanent is None and shading_hot is None:
         return None
 
@@ -462,7 +585,10 @@ def _shading_factors(windows, shading_permanent, shading_hot, hot_months):
         shading_permanent if shading_permanent is not None else 1.0,
         "shading_permanent")
     factors = []
-    hot_mask = _hot_months_mask(hot_months) if shading_hot is not None else None
+    hot_mask = None
+    if shading_hot is not None:
+        hot_mask = (_hot_months_mask(hot_months) if hot_months is not None
+                    else _hot_period_mask(hot_period))
     hot = (_normalize_shading(shading_hot, "shading_hot")
            if shading_hot is not None else None)
     for azimuth, _area, _g in windows:
@@ -548,6 +674,10 @@ def _validate_series(name: str, arr: np.ndarray) -> None:
 # ---------------------------------------------------------------------------
 
 _SHOEBOX_KEYS = frozenset({"width", "length", "height"})
+# Keys that only the shoebox form takes besides its dimensions.
+_SHOEBOX_EXTRA_KEYS = frozenset({"wwr", "g_value", "orientation", "u_wall",
+                                 "u_roof", "u_floor", "roof_exposed",
+                                 "floor_exposed"})
 _EXPLICIT_KEYS = frozenset({"floor_area", "volume", "area_opaque",
                             "area_window", "windows"})
 _FACADES = {  # cardinal name -> (azimuth_deg, horizontal-extent key)
@@ -573,18 +703,32 @@ def expand_shoebox(archetype: dict) -> dict:
     - ``g_value``: glazing solar transmittance for all windows (default 0.6)
     - ``orientation``: degrees to rotate the box clockwise from north
       (optional, default 0)
+    - ``roof_exposed`` (default true) and ``floor_exposed`` (default
+      false): whether the roof and the floor lose heat to the outside; a
+      roof or floor that is not exposed is adiabatic (a storey between
+      others, or a slab whose ground loss is left out)
+    - the opaque U values: either ``u_opaque``, one U for the walls and
+      the exposed roof and floor, or ``u_wall`` with ``u_roof`` (needed
+      when the roof is exposed) and ``u_floor`` (needed when the floor is
+      exposed)
 
     Derived: floor area = width x length; volume = floor area x height;
     per-facade window areas = wwr x facade area; ``area_opaque`` = opaque
-    walls + roof (ground slab excluded); ``area_window`` = sum of windows.
+    walls + the exposed roof and floor; ``area_window`` = sum of windows.
+    With ``u_wall``, ``u_opaque`` is the area-weighted U of that opaque
+    area, so H_tr,op = u_wall x opaque walls + u_roof x roof (if exposed)
+    + u_floor x floor (if exposed).
     Archetypes without any of the shoebox keys above are returned as an
     unchanged copy.
 
     Raises ValueError if the shoebox keys are incomplete, mixed with
-    explicit-area keys, non-positive, or define no window.
+    explicit-area keys, non-positive, or define no window; for both
+    ``u_opaque`` and ``u_wall``, for ``u_roof``/``u_floor`` without
+    ``u_wall``, for a missing U of an exposed roof or floor, or for an
+    exposure that is not true or false.
     """
     keys = set(archetype)
-    if not keys & (_SHOEBOX_KEYS | {"wwr", "g_value", "orientation"}):
+    if not keys & (_SHOEBOX_KEYS | _SHOEBOX_EXTRA_KEYS):
         return dict(archetype)
     if not keys >= _SHOEBOX_KEYS:
         missing = sorted(_SHOEBOX_KEYS - keys)
@@ -604,6 +748,29 @@ def expand_shoebox(archetype: dict) -> dict:
     wwr = arch.pop("wwr", None) or {}
     g_value = float(arch.pop("g_value", ARCHETYPE_DEFAULTS["g_value"]))
     orientation = float(arch.pop("orientation", ARCHETYPE_DEFAULTS["orientation"]))
+    exposed = {}
+    for part in ("roof", "floor"):
+        value = arch.pop(f"{part}_exposed", SHOEBOX_EXPOSURE_DEFAULTS[f"{part}_exposed"])
+        if not isinstance(value, bool):
+            raise ValueError(f"{part}_exposed must be true or false, got {value!r}")
+        exposed[part] = value
+    u_wall = arch.pop("u_wall", None)
+    u_roof = arch.pop("u_roof", None)
+    u_floor = arch.pop("u_floor", None)
+    if u_wall is not None and "u_opaque" in arch:
+        raise ValueError("give either u_opaque (one U for walls, roof and "
+                         "floor) or u_wall with u_roof and u_floor, not both")
+    if u_wall is None and (u_roof is not None or u_floor is not None):
+        raise ValueError("u_roof and u_floor go with u_wall (use u_opaque "
+                         "for one U of the whole opaque envelope)")
+    if u_wall is not None:
+        for part, value in (("roof", u_roof), ("floor", u_floor)):
+            if exposed[part] and value is None:
+                raise ValueError(f"u_{part} is needed when {part}_exposed is "
+                                 f"true (or set {part}_exposed: false)")
+        for name, value in (("u_wall", u_wall), ("u_roof", u_roof), ("u_floor", u_floor)):
+            if value is not None and not float(value) > 0:
+                raise ValueError(f"{name} must be positive, got {value!r}")
 
     unknown = set(wwr) - set(_FACADES)
     if unknown:
@@ -626,12 +793,22 @@ def expand_shoebox(archetype: dict) -> dict:
         raise ValueError("shoebox archetype has no windows: set wwr for at "
                          "least one facade")
 
-    arch["floor_area"] = width * length
-    arch["volume"] = width * length * height
+    floor_area = width * length
+    arch["floor_area"] = floor_area
+    arch["volume"] = floor_area * height
     arch["area_window"] = window_area
-    # Opaque envelope = walls minus glazing, plus roof (slab-on-grade floor
-    # is treated as adiabatic, consistent with the explicit-areas examples).
-    arch["area_opaque"] = gross_walls - window_area + width * length
+    # Opaque envelope = walls minus glazing, plus the roof and the floor
+    # when exposed (by default the roof is and the slab-on-grade floor is
+    # adiabatic, consistent with the explicit-areas examples).
+    opaque_walls = gross_walls - window_area
+    arch["area_opaque"] = (opaque_walls
+                           + (floor_area if exposed["roof"] else 0.0)
+                           + (floor_area if exposed["floor"] else 0.0))
+    if u_wall is not None:
+        h_tr_op = (float(u_wall) * opaque_walls
+                   + (float(u_roof) * floor_area if exposed["roof"] else 0.0)
+                   + (float(u_floor) * floor_area if exposed["floor"] else 0.0))
+        arch["u_opaque"] = h_tr_op / arch["area_opaque"]
     arch["windows"] = windows
     return arch
 
@@ -682,11 +859,14 @@ def generate_simulated_weights(
     arguments plus ``windows``: a list of [azimuth_deg, area_m2, g_value]
     (or the shoebox geometry shorthand, see :func:`expand_shoebox`).
     Optional keys: ``shading_permanent``, ``shading_hot`` and
-    ``hot_months`` (transmission multipliers, see :func:`_shading_factors`),
-    and the internal-gain keys below.
+    ``hot_months`` or ``shading_hot_period`` (transmission multipliers,
+    see :func:`_shading_factors`), and the internal-gain keys below.
+    ``ach_vent`` may be 8760 hourly values (see
+    :meth:`ZoneParams.from_archetype`).
 
-    Internal gains are either a single flat value [W/m²] or a 24-value
-    daily occupancy profile [W/m² per hour of day], tiled over the year.
+    Internal gains are either a single flat value [W/m²], a 24-value
+    daily occupancy profile [W/m² per hour of day], tiled over the year,
+    or 8760 hourly values from 1 January 0:00.
     They may come from the ``internal_gains_w_m2`` /
     ``internal_gains_profile_w_m2`` archetype keys, or be passed as the
     ``internal_gains_w_m2`` argument (which takes precedence). Default 5.0.
@@ -697,7 +877,9 @@ def generate_simulated_weights(
     with the same name; returns the artifact path.  The artifact's meta
     also holds the zone's annual heating and cooling demand per m² of floor
     (``heating_kwh_m2``, ``cooling_kwh_m2``, in kWh/m²), from
-    :func:`simulate` with the same gains.
+    :func:`simulate` with the same gains, and ``sun_up``, 8760 values of
+    0 or 1 marking the hours with the sun above the horizon
+    (:func:`sun_up_hours`).
     """
     arch = expand_shoebox(archetype)
     profile = arch.pop("internal_gains_profile_w_m2", None)
@@ -714,6 +896,7 @@ def generate_simulated_weights(
     shading_permanent = arch.pop("shading_permanent", None)
     shading_hot = arch.pop("shading_hot", None)
     hot_months = arch.pop("hot_months", None)
+    hot_period = arch.pop("shading_hot_period", None)
     windows = arch.pop("windows", None)
     if not windows:
         raise ValueError(
@@ -721,17 +904,19 @@ def generate_simulated_weights(
             "entries) or shoebox geometry (width/length/height/wwr)"
         )
     shading = _shading_factors(windows, shading_permanent, shading_hot,
-                               hot_months)
+                               hot_months, hot_period)
     params = ZoneParams.from_archetype(**arch)
 
     t_out = read_weather_file(epw_path).dry_bulb_temperature()
-    phi_sol = transmitted_solar_from_epw(epw_path, windows,
-                                         hourly_factors=shading)
+    # The irradiance of each window is computed once (Ladybug's transposition
+    # takes about 0.25 s a window) for the shaded and the unshaded sums.
+    window_gains = _window_gains(epw_path, windows)
+    phi_sol = _summed_gains(window_gains, shading)
     if shading is not None:
         # Effective shading factor per hour (shaded / unshaded gain).  Benefit
         # mode applies the weights to unshaded sky irradiance, so the weight
         # per transmitted watt-hour must be reduced by the same shading.
-        unshaded = transmitted_solar_from_epw(epw_path, windows)
+        unshaded = _summed_gains(window_gains)
         f_eff = np.divide(phi_sol, unshaded,
                           out=np.ones(HOURS), where=unshaded > 0.0)
 
@@ -740,10 +925,12 @@ def generate_simulated_weights(
         phi_int = np.full(HOURS, float(gains) * params.floor_area)
     elif gains.shape == (24,):
         phi_int = np.tile(gains, HOURS // 24) * params.floor_area
+    elif gains.shape == (HOURS,):
+        phi_int = gains * params.floor_area
     else:
         raise ValueError(
-            "internal_gains_w_m2 must be a single value or a 24-value "
-            f"daily profile, got shape {gains.shape}"
+            "internal_gains_w_m2 must be a single value, a 24-value "
+            f"daily profile or {HOURS} hourly values, got shape {gains.shape}"
         )
 
     benefit, harm = attribute_solar_gains(params, t_out, phi_int, phi_sol, eps=eps)
@@ -762,11 +949,16 @@ def generate_simulated_weights(
                   else [float(v) for v in gains])
     arch_meta = {**arch, "windows": [list(w) for w in windows],
                  "internal_gains_w_m2": gains_meta}
+    if np.ndim(arch.get("ach_vent")):
+        arch_meta["ach_vent"] = [float(v) for v in arch["ach_vent"]]
     if shading_permanent is not None:
         arch_meta["shading_permanent"] = shading_permanent
     if shading_hot is not None:
         arch_meta["shading_hot"] = shading_hot
-        arch_meta["hot_months"] = [int(m) for m in hot_months]
+        if hot_months is not None:
+            arch_meta["hot_months"] = [int(m) for m in hot_months]
+        else:
+            arch_meta["shading_hot_period"] = [int(d) for d in hot_period]
     meta = {
         "method": "iso13790-5r1c-perturbation",
         "epw": str(epw_path),
@@ -774,6 +966,7 @@ def generate_simulated_weights(
         "eps_w": eps,
         "heating_kwh_m2": base.q_heating_wh / 1000.0 / params.floor_area,
         "cooling_kwh_m2": base.q_cooling_wh / 1000.0 / params.floor_area,
+        "sun_up": [int(v) for v in sun_up_hours(epw_path)],
         "generated": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "generator": "usc simulate-weights (iso13790-5r1c)",
     }

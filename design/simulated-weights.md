@@ -127,19 +127,38 @@ defaults**), in either of two forms:
   `height`, per-facade `wwr` (window-to-wall ratio keyed north/east/
   south/west), `g_value`, optional `orientation`. Floor area, volume,
   per-facade window areas, `area_window`, and `area_opaque` (opaque walls
-  minus glazing, plus roof; slab-on-grade treated adiabatic) are derived
-  by `expand_shoebox()`.
+  minus glazing, plus the exposed roof and floor) are derived by
+  `expand_shoebox()`. `roof_exposed` (default true) and `floor_exposed`
+  (default false, a slab on the ground treated adiabatic) say which of the
+  two lose heat to the outside; one that is not exposed is adiabatic. The
+  opaque U values are either `u_opaque` (one U for the walls and the
+  exposed roof and floor, the old meaning) or `u_wall` with `u_roof` and
+  `u_floor` (each needed when its part is exposed), giving
+  H_tr,op = u_wall·opaque walls + u_roof·roof + u_floor·floor; giving both
+  `u_opaque` and `u_wall` is an error.
 - **Explicit areas**: `A_f`, volume `V`, opaque `U·A` (or H_tr,op), window
   `U·A`, per-orientation window area × g-value (`windows` list).
 
 Both forms additionally take ACH (vent + infiltration), heat-recovery
 η_hr, mass class, set-points (default 20/26 °C), and flat internal gains
-[W/m²] or a 24-value daily profile.
+[W/m²], a 24-value daily profile or 8760 hourly values.
+
+- `ach_vent` is one value or 8760 hourly values (a ventilation schedule):
+  H_ve is then hourly, the time loop takes each hour's H_ve and the
+  constants that depend on it (H_tr,1 to H_tr,3 and the mass-update
+  coefficients), and heat recovery applies to the ventilation part of
+  each hour; `ach_infiltration` stays one value. 8760 equal values give
+  the flat result exactly.
+- `mass_capacity_kj_m2k` is the alternative to `mass_class`: C_m =
+  capacity · 1000 · A_f, and A_m of the Table-12 class nearest in
+  capacity (the lighter one on a tie). Giving both is an error.
 
 Shading (optional, declared coefficients; deliberately no device
 geometry): `shading_permanent` (year-round transmission multiplier) and
 `shading_hot` (additional multiplier active during the user-declared
-`hot_months`). Each accepts a scalar or a per-facade mapping
+`hot_months`, or during `shading_hot_period: [first_day, last_day]`,
+days of the year 1-365, both included, wrapping the new year when the
+first is after the last; one or the other). Each accepts a scalar or a per-facade mapping
 (north/east/south/west; windows bin to their nearest cardinal). The
 factors multiply `Φ_sol` per window, AND the attribution derivatives are
 scaled by the effective hourly transmission `f_eff(t) = Φ_shaded/Φ_unshaded`
@@ -189,6 +208,7 @@ clamped with a tolerance check rather than asserted exactly.
     "eps_w": 1.0,
     "heating_kwh_m2": "<annual heating demand of the zone, kWh per m² of floor>",
     "cooling_kwh_m2": "<annual cooling demand, kWh per m² of floor>",
+    "sun_up": [8760 values 0 or 1],
     "generated": "<iso timestamp>",
     "generator": "usc simulate-weights (iso13790-5r1c)"
   },
@@ -203,7 +223,10 @@ clamped with a tolerance check rather than asserted exactly.
 `heating_kwh_m2` and `cooling_kwh_m2` are the zone's own run (`simulate()` with the
 shaded solar and the internal gains), so a reader such as the browser app's typical
 building can show them without simulating again; a file written before they were
-added has neither.
+added has neither. `sun_up` marks the hours with the sun above the horizon at the
+weather file's site (`sun_up_hours()`: a Ladybug Sunpath at the middle of each hour, where
+`transmitted_solar_from_epw` places the sun), so a reader can tell night hours from day
+hours whose weight is 0.
 The generator (`generate_simulated_weights`) also writes a `.png` companion next to the
 artifact: benefit and harm as day × hour heatmaps, so the schedule can be
 inspected without writing code.
@@ -273,13 +296,14 @@ thermal-lag signature); with `include_harm` the redistribution reaches
 Single zone, lumped mass: same-hour weighting is facade-independent by
 construction (time-of-day carries the direction signal; perimeter-zone
 effects are out of scope for a massing tool). Ideal convective conditioning
-at the air node; continuous operation, no setback. Fixed ACH: no night
-flushing (a schedulable H_ve remains the first extension slot). Shading is
+at the air node; continuous operation, no setback. Ventilation follows a
+fixed hourly schedule at most: no night flushing in response to the
+weather. Shading is
 declared, not adaptive: the fixed-calendar `shading_hot` coefficient stands
 in for occupant-operated devices; without it, cooling harm is overestimated
 (conservative for the opt-in harm channel), and even with it there is no
-response to same-day conditions. Flat internal gains or one repeated daily
-profile. TMY weather. Marginal
+response to same-day conditions. Flat internal gains, one repeated daily
+profile, or a fixed hourly series. TMY weather. Marginal
 linearization at the archetype operating point. Weights derived without the
 carve's own shading context (first-order acceptable; one-iteration
 robustness check possible). The correlation constants and coupling

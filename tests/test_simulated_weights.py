@@ -280,6 +280,12 @@ class TestGenerateSimulatedWeights:
         assert meta["cooling_kwh_m2"] == pytest.approx(result.q_cooling_wh / 1000.0 / params.floor_area, rel=1e-12)
         assert meta["heating_kwh_m2"] > 0.0 and meta["cooling_kwh_m2"] > 0.0
 
+    def test_meta_holds_the_hours_with_the_sun_up(self, example_archetype_run_with_daily_profile):
+        from urbansolarcarver.simulated_weights import sun_up_hours
+
+        epw, (_b, _h, meta) = example_archetype_run_with_daily_profile
+        assert meta["sun_up"] == [int(v) for v in sun_up_hours(epw)]
+
 
 def test_missing_windows_raises(tmp_path):
     from urbansolarcarver.simulated_weights import generate_simulated_weights
@@ -502,3 +508,174 @@ def test_shoebox_extras_without_dimensions_are_rejected():
     from urbansolarcarver.simulated_weights import expand_shoebox
     with pytest.raises(ValueError, match="missing"):
         expand_shoebox({"wwr": {"south": 0.4}})
+
+
+# ---------------------------------------------------------------------------
+# Schedules, separate U values, thermal capacity, shading period, sun up
+# ---------------------------------------------------------------------------
+
+class TestHourlyVentilation:
+    """ach_vent of 8760 values: an hourly H_ve, with infiltration constant."""
+    _BASE = TestFromArchetype._BASE
+
+    def test_a_constant_series_gives_the_flat_conductance(self):
+        flat = ZoneParams.from_archetype(**self._BASE, heat_recovery=0.6)
+        hourly = ZoneParams.from_archetype(**{**self._BASE, "ach_vent": [self._BASE["ach_vent"]] * HOURS},
+                                           heat_recovery=0.6)
+        assert hourly.h_ve.shape == (HOURS,)
+        np.testing.assert_array_equal(hourly.h_ve, np.full(HOURS, flat.h_ve))
+
+    @pytest.mark.slow
+    def test_a_constant_series_simulates_as_the_flat_value(self):
+        """The hourly path of the time loop gives the flat result exactly."""
+        import dataclasses
+        t_out, phi_int, phi_sol = _driving("medium_office")
+        flat = _params_from_reference("medium_office")
+        hourly = dataclasses.replace(flat, h_ve=np.full(HOURS, flat.h_ve))
+        a = simulate(flat, t_out, phi_int, phi_sol)
+        b = simulate(hourly, t_out, phi_int, phi_sol)
+        assert (a.q_heating_wh, a.q_cooling_wh) == (b.q_heating_wh, b.q_cooling_wh)
+        np.testing.assert_array_equal(a.t_air, b.t_air)
+        np.testing.assert_array_equal(a.demand_w, b.demand_w)
+
+    def test_heat_recovery_applies_to_the_ventilation_of_each_hour(self):
+        schedule = np.where(np.arange(HOURS) % 24 >= 8, 2.0, 0.0)
+        p = ZoneParams.from_archetype(**{**self._BASE, "ach_vent": schedule}, heat_recovery=0.5)
+        volume, infiltration = self._BASE["volume"], self._BASE["ach_infiltration"]
+        assert p.h_ve[0] == pytest.approx(1200.0 * volume * infiltration / 3600.0)          # infiltration only
+        assert p.h_ve[8] == pytest.approx(1200.0 * volume * (infiltration + 2.0 * 0.5) / 3600.0)
+
+    def test_bad_series_raise(self):
+        with pytest.raises(ValueError, match="8760 hourly values"):
+            ZoneParams.from_archetype(**{**self._BASE, "ach_vent": [1.0] * 24})
+        with pytest.raises(ValueError, match="every hour"):
+            ZoneParams.from_archetype(**{**self._BASE, "ach_vent": [0.0] * HOURS, "ach_infiltration": 0.0})
+
+
+class TestSeparateUValues:
+    BASE = {key: value for key, value in TestExpandShoebox.BASE.items() if key != "u_opaque"}
+    WALLS = 108 - 16.8          # opaque walls of the 10 x 8 x 3 box (TestExpandShoebox)
+
+    def _h_op(self, arch):
+        from urbansolarcarver.simulated_weights import expand_shoebox
+        expanded = expand_shoebox(arch)
+        return expanded["u_opaque"] * expanded["area_opaque"]
+
+    def test_walls_only_when_roof_and_floor_are_not_exposed(self):
+        arch = {**self.BASE, "u_wall": 0.5, "roof_exposed": False}
+        assert self._h_op(arch) == pytest.approx(0.5 * self.WALLS)
+
+    def test_the_exposed_roof_and_floor_add_their_u_times_area(self):
+        walls = 0.5 * self.WALLS
+        assert self._h_op({**self.BASE, "u_wall": 0.5, "u_roof": 0.3}) == pytest.approx(walls + 0.3 * 80)
+        both = {**self.BASE, "u_wall": 0.5, "u_roof": 0.3, "u_floor": 0.2, "floor_exposed": True}
+        assert self._h_op(both) == pytest.approx(walls + 0.3 * 80 + 0.2 * 80)
+
+    def test_u_opaque_keeps_its_meaning_and_counts_an_exposed_floor(self):
+        from urbansolarcarver.simulated_weights import expand_shoebox
+        old = expand_shoebox(TestExpandShoebox.BASE)
+        assert old["u_opaque"] == 0.6 and old["area_opaque"] == pytest.approx(self.WALLS + 80)
+        with_floor = expand_shoebox({**TestExpandShoebox.BASE, "floor_exposed": True})
+        assert with_floor["area_opaque"] == pytest.approx(self.WALLS + 160)
+        no_roof = expand_shoebox({**TestExpandShoebox.BASE, "roof_exposed": False})
+        assert no_roof["area_opaque"] == pytest.approx(self.WALLS)
+
+    def test_bad_combinations_raise(self):
+        from urbansolarcarver.simulated_weights import expand_shoebox
+        with pytest.raises(ValueError, match="not both"):
+            expand_shoebox({**TestExpandShoebox.BASE, "u_wall": 0.5, "u_roof": 0.3})
+        with pytest.raises(ValueError, match="u_roof is needed"):
+            expand_shoebox({**self.BASE, "u_wall": 0.5})
+        with pytest.raises(ValueError, match="u_floor is needed"):
+            expand_shoebox({**self.BASE, "u_wall": 0.5, "roof_exposed": False, "floor_exposed": True})
+        with pytest.raises(ValueError, match="go with u_wall"):
+            expand_shoebox({**TestExpandShoebox.BASE, "u_roof": 0.3})
+        with pytest.raises(ValueError, match="true or false"):
+            expand_shoebox({**TestExpandShoebox.BASE, "roof_exposed": "yes"})
+        with pytest.raises(ValueError, match="positive"):
+            expand_shoebox({**self.BASE, "u_wall": 0.0, "u_roof": 0.3})
+
+
+class TestMassCapacity:
+    _BASE = TestFromArchetype._BASE
+
+    def test_the_capacity_of_a_class_equals_the_class(self):
+        for name, (_am, cm_m2) in MASS_CLASSES.items():
+            by_class = ZoneParams.from_archetype(**self._BASE, mass_class=name)
+            by_capacity = ZoneParams.from_archetype(**self._BASE, mass_capacity_kj_m2k=cm_m2 / 1000.0)
+            assert by_capacity == by_class
+
+    def test_the_mass_area_is_that_of_the_nearest_class(self):
+        from urbansolarcarver.simulated_weights import nearest_mass_class
+        assert [nearest_mass_class(c) for c in (40, 230, 280, 300, 320)] == [
+            "very_light", "heavy", "heavy", "heavy", "very_heavy"]
+        assert nearest_mass_class(212.5) == "medium"        # a tie takes the lighter class
+        p = ZoneParams.from_archetype(**self._BASE, mass_capacity_kj_m2k=280)
+        assert p.c_m == pytest.approx(280_000 * self._BASE["floor_area"])
+        assert p.a_m == pytest.approx(3.0 * self._BASE["floor_area"])
+
+    def test_bad_capacity_raises(self):
+        with pytest.raises(ValueError, match="not both"):
+            ZoneParams.from_archetype(**self._BASE, mass_class="heavy", mass_capacity_kj_m2k=260)
+        with pytest.raises(ValueError, match="positive"):
+            ZoneParams.from_archetype(**self._BASE, mass_capacity_kj_m2k=0)
+
+
+class TestShadingPeriod:
+    def test_a_period_equals_the_months_it_spans(self):
+        from urbansolarcarver.simulated_weights import _hot_months_mask, _hot_period_mask, _shading_factors
+        np.testing.assert_array_equal(_hot_period_mask([152, 243]), _hot_months_mask([6, 7, 8]))
+        windows = [[180.0, 10.0, 0.6], [90.0, 5.0, 0.6]]
+        by_months = _shading_factors(windows, 0.9, 0.5, [6, 7, 8])
+        by_period = _shading_factors(windows, 0.9, 0.5, None, [152, 243])
+        for months_series, period_series in zip(by_months, by_period):
+            np.testing.assert_array_equal(months_series, period_series)
+
+    def test_a_period_wraps_the_new_year(self):
+        from urbansolarcarver.simulated_weights import _hot_months_mask, _hot_period_mask
+        np.testing.assert_array_equal(_hot_period_mask([335, 59]), _hot_months_mask([12, 1, 2]))
+        assert _hot_period_mask([100, 100]).sum() == 24
+
+    def test_bad_periods_raise(self):
+        from urbansolarcarver.simulated_weights import _hot_period_mask, _shading_factors
+        windows = [[180.0, 10.0, 0.6]]
+        for period in ([0, 10], [10, 366], [1.5, 10], [10], None):
+            with pytest.raises(ValueError, match="shading_hot_period"):
+                _hot_period_mask(period)
+        with pytest.raises(ValueError, match="not both"):
+            _shading_factors(windows, None, 0.5, [7], [152, 243])
+        with pytest.raises(ValueError, match="no effect"):
+            _shading_factors(windows, None, None, None, [152, 243])
+
+
+def test_the_sun_is_up_when_ladybug_gives_direct_sun():
+    """sun_up_hours places the sun where transmitted_solar_from_epw does: no
+    direct sun reaches a surface in an hour marked 0."""
+    from _epw import resolve_epw
+    from urbansolarcarver.simulated_weights import sun_up_hours
+    from urbansolarcarver.weather_file import read_weather_file
+
+    epw = resolve_epw()
+    if not epw:
+        pytest.skip("no EPW available")
+    up = sun_up_hours(epw)
+    assert up.shape == (HOURS,) and set(np.unique(up)) == {0, 1}
+    assert 4300 < up.sum() < 4500                       # about half the year
+    assert up[0] == 0 and up[12] == 1                   # 1 January, midnight and noon
+    _total, direct, *_ = read_weather_file(epw).solar_irradiance_wea().directional_irradiance(90, 180)
+    assert not np.asarray(direct.values)[up == 0].any()
+
+
+@pytest.mark.slow
+def test_hourly_gains_and_ventilation_equal_the_flat_values(tmp_path, shoebox_run_with_gains_key_inside_the_archetype):
+    """8760 equal values of internal gains and ventilation give the weights of
+    the flat values (the shared unshaded run: 7.5 W/m², 0.8 ach)."""
+    from urbansolarcarver.simulated_weights import generate_simulated_weights
+
+    epw, arch, (benefit, harm, meta) = shoebox_run_with_gains_key_inside_the_archetype
+    hourly = dict(arch, internal_gains_w_m2=[7.5] * HOURS, ach_vent=[arch["ach_vent"]] * HOURS)
+    b, h, m = read_simulated_weights(generate_simulated_weights(epw, hourly, tmp_path / "h.json"))
+    np.testing.assert_array_equal(b, benefit)
+    np.testing.assert_array_equal(h, harm)
+    assert (m["heating_kwh_m2"], m["cooling_kwh_m2"]) == (meta["heating_kwh_m2"], meta["cooling_kwh_m2"])
+    assert len(m["archetype"]["ach_vent"]) == HOURS
