@@ -640,7 +640,7 @@ def _build_router(folder_in_use: _ProjectsFolderInUse, warm_up: GpuWarmUp, choos
             return typical_building.save(store, name, request.values, request.start_from)
 
     @router.post("/projects/{name}/typical-building/calculate",
-                 responses={404: {"model": ErrorDetailReply, "description": sun_study.NO_WEATHER_FILE_MESSAGE}, **_ERROR_RESPONSES})
+                 responses={404: {"model": ErrorDetailReply, "description": typical_building.NO_WEATHER_FILE_MESSAGE}, **_ERROR_RESPONSES})
     def calculate_typical_building(name: str) -> TypicalBuildingReply:
         """Calculate the hourly weights of the stored typical building with the project's weather file (about 9 s); 404 without a
         weather file, 409 while a run of the project is active."""

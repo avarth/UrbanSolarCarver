@@ -14,7 +14,7 @@ from local_web_test_support import GOLDEN_EPW, FakeEngine, box_bytes, make_worke
 from test_local_web_server import build_client, client, client_with_blocking_run, create_project, projects_folder, upload  # noqa: F401 (fixtures)
 from urbansolarcarver import simulated_weights
 from urbansolarcarver.errors import ConfigError
-from urbansolarcarver.local_web_service import sun_study, typical_building
+from urbansolarcarver.local_web_service import typical_building
 from urbansolarcarver.local_web_service.projects import ProjectStore
 from urbansolarcarver.local_web_service.stage_records import criterion_status
 
@@ -190,7 +190,7 @@ def test_calculate_writes_the_weights_and_answers_the_numbers(client, fake_gener
 def test_calculate_without_a_weather_file_is_refused(client, fake_generator):
     create_project(client, "p", "benefit")
     refused = client.post("/api/projects/p/typical-building/calculate")
-    assert refused.status_code == 404 and refused.json()["detail"] == sun_study.NO_WEATHER_FILE_MESSAGE
+    assert refused.status_code == 404 and refused.json()["detail"] == typical_building.NO_WEATHER_FILE_MESSAGE
     assert fake_generator.archetypes == []
 
 

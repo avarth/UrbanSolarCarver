@@ -29,6 +29,7 @@ from ..simulated_weights import MASS_CLASSES, ZoneParams, _shading_factors, expa
 from .api_models import ProjectJson, TypicalBuildingEntry, TypicalBuildingReply, TypicalBuildingWeightsReply
 from .project_names import ProjectError
 
+NO_WEATHER_FILE_MESSAGE = "The project has no weather file: add one in Design (Inputs) to calculate the typical building."
 WEIGHTS_PATH = "inputs/typical_building/weights.json"     # relative to the project folder; the heatmap PNG is beside it
 STAGE = "typical_building"          # the stage the run's progress events name while the run calculates the weights
 SIDES = ("north", "east", "south", "west")
@@ -311,10 +312,9 @@ def calculate(store, name: str, values: dict | None = None) -> str:
 
     The generator writes into a new folder beside WEIGHTS_PATH, and the files replace the earlier ones together with the record of the
     key, under the project lock, so the file and its key always belong together. The lock is not held while the generator runs (about
-    9 s). ProjectError: 404 without a weather file (sun_study.NO_WEATHER_FILE_MESSAGE), 422 when the generator fails.
+    9 s). ProjectError: 404 without a weather file (NO_WEATHER_FILE_MESSAGE), 422 when the generator fails.
     """
     from ..simulated_weights import generate_simulated_weights
-    from .sun_study import NO_WEATHER_FILE_MESSAGE
     if values is None:
         values = building_of(store.read_project_json(name)).values
     weather_path = store.weather_file_path(name)
