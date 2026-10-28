@@ -269,8 +269,9 @@ const geometrySegment = (label: string) => [...container().querySelectorAll<HTML
   .find((button) => button.textContent === label)!;
 const targetMark = () => container().querySelector<HTMLElement>('.target-legend [role="slider"][data-end="low"]')!;
 const targetBar = () => container().querySelector<HTMLElement>(".target-legend-bar")!;
-/** Colours by the value in the study's unit, where the target is moved (the default is the share of the open-site value). */
-const colourByValue = () => act(() => container().querySelector<HTMLButtonElement>(".target-legend-colour-by button:last-child")!.click());
+/** Colours by the value in the study's unit (the default), where the target is moved; or by the share of the no-build value. */
+const colourByValue = () => act(() => container().querySelector<HTMLButtonElement>(".target-legend-colour-by button:first-child")!.click());
+const colourByShare = () => act(() => container().querySelector<HTMLButtonElement>(".target-legend-colour-by button:last-child")!.click());
 const cardLines = () => [...container().querySelectorAll(".result-card-line")].map((line) => line.textContent);
 const stamp = () => container().querySelector(".viewer-out-of-date");
 const BUILT_ENVELOPE = { carving: CARVING, envelope: { ...ENVELOPE, mesh_file: "export.obj" }, massing: null };
@@ -300,13 +301,14 @@ test("selecting another study draws its values; only one study is drawn", async 
   expect(simulateService.requests).toContain("GET /studies/1/values");
   expect(studyLayerSummary()).toBe("3 points");
   expect(scene().visibleLayers.has("study_values")).toBe(true);
-  expect(cardLines()).toEqual(["keeps 50 % of the open-site value", "mean 2 h", "lowest tenth 1.2 h"]);
+  expect(cardLines()).toEqual(["keeps 50 % of the no-build value", "mean 2 h", "lowest tenth 1.2 h"]);
   await selectStudy("Sky view factor");
   expect(simulateService.requests).toContain("GET /studies/2/values");
   expect(studyLayerSummary()).toBe("2 points");      // the one layer now holds the second study's values
-  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sky view factor, share of the open-site value");
+  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sky view factor (%)");    // by value at first
+  colourByShare();
+  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sky view factor, share of the no-build value");
   colourByValue();
-  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sky view factor (%)");
   expect(stamp()).toBeNull();
   // A study that has not run has nothing to draw.
   await chooseAddStudy("Cooling sky");
@@ -349,7 +351,7 @@ test("the geometry shown uses Design's layers, without the criteria's test surfa
   await settle();
   expect([...scene().visibleLayers].sort()).toEqual(["envelope", "study_values"]);
   expect(scene().envelopeSeeThrough).toBe(true);
-  expect(cardLines()).toEqual(["keeps 88 % of the open-site value (38)", "mean 3.5 h (1.5)", "lowest tenth 3.1 h (1.1)"]);
+  expect(cardLines()).toEqual(["keeps 88 % of the no-build value (38)", "mean 3.5 h (1.5)", "lowest tenth 3.1 h (1.1)"]);
   expect(stamp()).toBeNull();
 
   // Back in Design the steps' layers and the envelope's own look come back, without the study.
@@ -386,7 +388,7 @@ test("dragging the target mark or pressing arrow keys moves the target and saves
   await settle();
   // Shown at once: the mark, the card, and the same layer recoloured in place (points below the target muted).
   expect(targetMark().getAttribute("aria-valuenow")).toBe("5");
-  expect(cardLines()).toEqual(["keeps 50 % of the open-site value", "mean 4 h", "lowest tenth 0.6 h", "at target 50 %"]);
+  expect(cardLines()).toEqual(["keeps 50 % of the no-build value", "mean 4 h", "lowest tenth 0.6 h", "at target 50 %"]);
   expect(scene().layers.get("study_values")).toBe(layer);
   expect(colours.version).toBeGreaterThan(coloursVersion);
   expect(scene().redraws).toBeGreaterThan(redraws);
@@ -435,7 +437,7 @@ test("a study run before the envelope was built waits on Envelope with the reaso
   expect(studyLayerSummary()).toBe("3 points");
   expect(scene().dimmed.has("study_values")).toBe(true);
   expect(stamp()!.textContent).toContain("Out of date");
-  expect(cardLines()).toEqual(["keeps 56 % of the open-site value", "mean 50 %", "lowest tenth 42 %"]);
+  expect(cardLines()).toEqual(["keeps 56 % of the no-build value", "mean 50 %", "lowest tenth 42 %"]);
 
   // The first study has the envelope: the choice comes back.
   await selectStudy("Sun hours, 21 Dec");
@@ -449,7 +451,8 @@ test("by share the two ends are percentages kept for the study while the app is 
     service.valuesOf = { 1: studyValuesOf({ open: [4, 4], max_volume: [1, 4] }) };
   });
   const legend = () => container().querySelector(".target-legend")!;
-  expect([...legend().querySelectorAll(".target-legend-colour-by button")].map((button) => button.textContent)).toEqual(["% of open site", "Value (h)"]);
+  expect([...legend().querySelectorAll(".target-legend-colour-by button")].map((button) => button.textContent)).toEqual(["Value (h)", "% of no-build"]);
+  colourByShare();
   expect(targetMark().getAttribute("aria-valuetext")).toBe("0\u00a0%");
   const layer = scene().layers.get("study_values")!;
   const colours = (layer as THREE.Mesh).geometry.getAttribute("color") as THREE.BufferAttribute;
@@ -462,7 +465,7 @@ test("by share the two ends are percentages kept for the study while the app is 
   expect(simulateService.studyPatches).toEqual([]);                  // by share nothing is saved
   colourByValue();
   expect(targetMark().getAttribute("aria-valuetext")).toBe("0\u00a0h");   // by value the ends are the study's own
-  act(() => legend().querySelector<HTMLButtonElement>(".target-legend-colour-by button")!.click());
+  colourByShare();
   expect(targetMark().getAttribute("aria-valuetext")).toBe("10\u00a0%");  // the share range is kept
 });
 

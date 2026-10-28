@@ -286,8 +286,6 @@
   background: var(--colour-panel); color: var(--colour-ink); }
 .viewer-overlay[data-viewport-theme="dark"] .target-legend-palette { background: var(--colour-overlay-on-dark); color: var(--colour-ink-on-dark);
   border-color: var(--colour-line-on-dark); }
-.target-legend-range { color: var(--colour-muted); }
-.viewer-overlay[data-viewport-theme="dark"] .target-legend-range { color: var(--colour-muted-on-dark); }
 .target-legend-bar { position: relative; height: 12px; border-radius: 2px; cursor: pointer; touch-action: none; user-select: none; }
 .target-legend-bar[data-disabled="true"] { cursor: default; }
 .target-legend-mark {

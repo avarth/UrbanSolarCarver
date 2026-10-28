@@ -1,5 +1,5 @@
 // The result card in the bottom right corner of Simulate's view (simulate design, section 3): for the selected study on the geometry
-// shown, what it keeps of the open-site value (the sum of its values over the sum with nothing built), the mean, the lowest tenth
+// shown, what it keeps of the no-build value (the sum of its values over the sum with nothing built), the mean, the lowest tenth
 // (10th percentile) and, with a target, the share of points at or above it; each with the maximum volume's value in brackets, which
 // the heading names: "mean 3.6 h (4.1)". A result without test points shows no card.
 import { messages } from "../messages";

@@ -85,10 +85,10 @@ There is one job at a time. While a Design run is going, Run shows "A Design run
 
 The legend along the bottom of the view shows the scale the values are coloured by, with a switch between two:
 
-- **% of open site** (the default): each point coloured by its share of its open-site value, its value with nothing built (the context and terrain still block). The scale runs from 0 to 100 %, the same for every geometry, so Max volume, Envelope and Massing compare directly. A point the open site gives nothing (a facade that sees no sun in the period, say) loses nothing, so it counts as 100 %.
-- **Value** in the study's unit (for example kWh/m²): each point coloured by its value.
+- **Value** in the study's unit (for example kWh/m²), the default: each point coloured by its value.
+- **% of no-build**: each point coloured by its share of its **no-build value**, its value with nothing built on the plot (no maximum volume, envelope or massing). The surroundings and the terrain still block, so the no-build value is not a value without any context: it is the most each point can receive in the city as it is. The scale runs from 0 to 100 %, the same for every geometry, so Max volume, Envelope and Massing compare directly. A point that gets nothing in the no-build case (a facade that sees no sun in the period, say) loses nothing, so it counts as 100 %.
 
-Colouring by share is the default because a study's values spread mostly with the way each surface faces: on Allatini's Solar energy study the roofs reach about 1,550 kWh/m² while the facades lie between 200 and 800, so on a value scale the facades' gains are small steps in the middle of the scale. By share, the maximum volume keeps 78 % of the open-site value there and the envelope 99 %.
+A study's values spread mostly with the way each surface faces: on Allatini's Solar energy study the roofs reach about 1,550 kWh/m² while the facades lie between 200 and 800. By value, move the high end down to the facades' range to see their differences (below); by share, every point is measured against its own no-build value, and the maximum volume keeps 78 % of the no-build value there and the envelope 99 %.
 
 **The colour range.** Two marks on the legend set the low and the high end of the colours. The palette runs between them, and a value beyond an end takes that end's colour, so the colours can spread over the values that matter (the facades between 200 and 800 kWh/m², say, rather than 0 to the roofs' 1,550). Drag a mark, or press on the bar to move the nearer one; or focus a mark and use the arrow keys (1 % of the bar), Page Up and Page Down (10 %) and Home and End; Delete puts it back to its default. The ends cannot pass each other. By value the low end is the study's **target** and the high end its upper end, both saved with the study (by default 0 and the highest value of the geometry shown); the result card's "at target" counts the points at or above the low end. By share the ends are percentages, 0 and 100 by default, kept for each study while the app is open.
 
@@ -96,7 +96,7 @@ Colouring by share is the default because a study's values spread mostly with th
 
 The **result card** in the bottom right corner is for the selected study on the geometry shown. It gives:
 
-- what the geometry keeps of the open-site value: the sum of its values over the sum with nothing built, for example "keeps 99 % of the open-site value (78)",
+- what the geometry keeps of the no-build value: the sum of its values over the sum with nothing built on the plot, for example "keeps 99 % of the no-build value (78)",
 - the mean,
 - the lowest tenth (10th percentile),
 - with a target (the low end by value), the share of points at or above it.

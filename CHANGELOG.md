@@ -9,13 +9,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ### Changed (Simulate and Inspect, after use on Allatini)
 
-- **Simulate colours each point by its share of its open-site value** (its value with nothing built), 0 to 100 % on one scale for
-  every geometry, by default; the legend switches to the value in the study's unit. A **colour range** with a low and a high end, both
-  draggable, spreads the palette over the values that matter; values beyond an end take its colour (no muted colour any more); by value
-  the ends are the study's target and `target_max`, saved with it. **Palettes**: Magma by default, Inferno, Plasma, Viridis, chosen on
-  the legend and kept in the browser, in place of cividis, whose grey middle hid the facades' gains. The result card leads with what the geometry keeps of the open-site
-  value ("keeps 99 % of the open-site value (78)"). On Allatini's Solar energy study the maximum volume keeps 78 % and the envelope
-  99 %; on the old value scale the gain looked slight.
+- **Simulate colours by value or by share of the no-build value.** The legend colours by the value in the study's unit (the
+  default) or by each point's share of its **no-build value**, its value with nothing built on the plot (the surroundings and terrain
+  still block), 0 to 100 % on one scale for every geometry. A **colour range** with a low and a high end, both draggable, spreads the
+  palette over the values that matter; values beyond an end take its colour (no muted colour any more); by value the ends are the
+  study's target and `target_max`, saved with it. **Palettes**: Magma by default, Inferno, Plasma, Viridis, chosen on the legend and
+  kept in the browser, in place of cividis, whose grey middle hid the facades' gains. The result card leads with what the geometry
+  keeps of the no-build value ("keeps 99 % of the no-build value (78)"). On Allatini's Solar energy study the maximum volume keeps
+  78 % and the envelope 99 %; on the old value scale the gain looked slight.
 - **A study is on the view without a press**: the first study with a result when none is selected, so a finished run shows its values.
 - **"Useful solar energy" is now "Useful solar gains"** (the energy received in the hours that need heating); studies named by
   default take the new name. The metric's key `useful_solar_energy` is unchanged.

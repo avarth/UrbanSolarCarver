@@ -37,10 +37,10 @@ function keyDown(element: HTMLElement, key: string): boolean {
 
 const cssColour = (hex: string) => { const probe = document.createElement("span"); probe.style.color = hex; return probe.style.color; };
 
-test("the legend shows the scale, the two ends of the colour range as sliders, and the range between them", () => {
+test("the legend shows the scale and the two ends of the colour range as sliders", () => {
   renderLegend();
   expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sun hours (h)");
-  expect([...container().querySelectorAll(".target-legend-ends > span")].map((end) => end.textContent)).toEqual(["0", "colours 2 to 6", "8"]);
+  expect([...container().querySelectorAll(".target-legend-ends > span")].map((end) => end.textContent)).toEqual(["0", "8"]);
   expect(mark("low")!.getAttribute("aria-label")).toBe("Low end of the colours (target)");
   expect([mark("low")!.getAttribute("aria-valuemin"), mark("low")!.getAttribute("aria-valuemax")]).toEqual(["0", "6"]);   // not past the high end
   expect([mark("high")!.getAttribute("aria-valuemin"), mark("high")!.getAttribute("aria-valuemax")]).toEqual(["2", "8"]);
@@ -90,12 +90,12 @@ test("arrow keys move an end by 1 % of the bar, Home and End to its limits, Dele
 test("by share the scale is 0 to 100 %, and the switch and the palette are offered", () => {
   const onColourByChange = vi.fn(), onPaletteChange = vi.fn();
   renderLegend({ mode: "share", scale: [0, 100], low: 20, high: 100, onColourByChange, onPaletteChange });
-  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sun hours, share of the open-site value");
+  expect(container().querySelector(".target-legend-title")!.textContent).toBe("Sun hours, share of the no-build value");
   expect([...container().querySelectorAll(".target-legend-ends > span")].map((end) => end.textContent))
-    .toEqual(["0 %", "colours 20 % to 100 %", "100 %"]);
+    .toEqual(["0 %", "100 %"]);
   const buttons = [...container().querySelectorAll<HTMLButtonElement>(".target-legend-colour-by button")];
-  expect(buttons.map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([["% of open site", "true"], ["Value (h)", "false"]]);
-  act(() => buttons[1].click());
+  expect(buttons.map((button) => [button.textContent, button.getAttribute("aria-pressed")])).toEqual([["Value (h)", "false"], ["% of no-build", "true"]]);
+  act(() => buttons[0].click());
   expect(onColourByChange).toHaveBeenCalledWith("value");
   const select = container().querySelector<HTMLSelectElement>(".target-legend-palette")!;
   expect([...select.options].map((option) => option.textContent)).toEqual(["Magma", "Inferno", "Plasma", "Viridis"]);

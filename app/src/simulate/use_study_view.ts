@@ -5,7 +5,7 @@
 //
 // The colour range (user, 2026-10-28): a low and a high end; the palette runs between them and values beyond either end take that
 // end's colour. By value the ends are the study's target (the low end, which the result card's "at target" reads) and target_max,
-// saved with the study, by default 0 and the highest value of the geometry shown. By share they are percentages of the open-site
+// saved with the study, by default 0 and the highest value of the geometry shown. By share they are percentages of the no-build
 // value, 0 and 100 by default, kept for each study while the app is open. The palette is the viewer's choice, kept in the browser.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ApiError, getStudyValues, serviceProblemOf, type StudyChange } from "../api_client/client";
@@ -61,7 +61,7 @@ export interface StudyViewHook {
   /** Colour by the change from the maximum volume (never on the maximum volume itself). */
   change: boolean;
   setChange: (change: boolean) => void;
-  /** How the values are coloured when Change is off (kept across studies): share of the open-site value, or the value. */
+  /** How the values are coloured when Change is off (kept across studies): share of the no-build value, or the value. */
   colourBy: ColourBy;
   setColourBy: (colourBy: ColourBy) => void;
   palette: StudyPalette;
@@ -101,7 +101,7 @@ export function useStudyView({ token, project, studies, active, runs, envelopeBu
                                onServiceProblem }: StudyViewSource): StudyViewHook {
   const [chosenGeometry, setGeometry] = useState<StudyGeometry>("max_volume");
   const [chosenChange, setChange] = useState(false);
-  const [colourBy, setColourBy] = useState<ColourBy>("share");
+  const [colourBy, setColourBy] = useState<ColourBy>("value");
   const [palette, setPaletteState] = useState<StudyPalette>(storedPalette);
   const setPalette = (next: StudyPalette) => {
     setPaletteState(next);

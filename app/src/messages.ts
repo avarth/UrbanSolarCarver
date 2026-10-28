@@ -100,21 +100,20 @@ export const messages = {
   changeNeedsGeometry: "Choose Envelope or Massing",
   changeLegend: (unit: string) => `Change from max volume (${unit})`,
   changeLoss: "Loss",
-  // Colouring by each point's share of what it receives with nothing built (the default), or by the value, between the two ends of
-  // the colour range, in a palette of the viewer's choice.
-  shareLegend: (label: string) => `${label}, share of the open-site value`,
+  // Colouring by the value (the default), or by each point's share of what it receives with nothing built on the plot (the no-build
+  // value: the surroundings and terrain still block), between the two ends of the colour range, in a palette of the viewer's choice.
+  shareLegend: (label: string) => `${label}, share of the no-build value`,
   colourBy: "Colour by",
-  colourByShare: "% of open site",
+  colourByShare: "% of no-build",
   colourByValue: (unit: string) => `Value (${unit})`,
   palette: "Palette",
   paletteNames: { magma: "Magma", inferno: "Inferno", plasma: "Plasma", viridis: "Viridis" } as Record<string, string>,
   rangeLow: "Low end of the colours (target)",
   rangeHigh: "High end of the colours",
   rangeEndHint: "Drag to move. Values beyond an end take its colour. Delete puts it back.",
-  rangeText: (low: string, high: string) => `colours ${low} to ${high}`,
   resultCard: "Result",
   studyShownWhenRunEnds: "Shown when the run ends",
-  resultKept: (percent: string) => `keeps ${percent} of the open-site value`,
+  resultKept: (percent: string) => `keeps ${percent} of the no-build value`,
   resultMean: (value: string) => `mean ${value}`,
   resultLowestTenth: (value: string) => `lowest tenth ${value}`,
   resultAtTarget: (value: string) => `at target ${value}`,

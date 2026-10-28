@@ -1,7 +1,7 @@
 // The legend along the bottom of Simulate's view (simulate design, section 3): the colour scale of the selected study, with the two
 // ends of its colour range as draggable marks (user, 2026-10-28: a low and a high threshold; values beyond an end take that end's
-// colour, so the palette spreads over the range that matters), a switch between share of the open-site value (0 to 100 %) and the
-// value in the study's unit, and the palette. By value the low end is the study's target and the high end its target_max, both saved
+// colour, so the palette spreads over the range that matters), a switch between the value in the study's unit (first) and the share
+// of the no-build value (0 to 100 %), and the palette. By value the low end is the study's target and the high end its target_max, both saved
 // with the study; by share they are percentages. A press or drag on the bar moves the nearer end, which is given once, at the
 // release; on a mark (a slider) the arrow keys move it by 1 % of the bar, Page Up and Page Down by 10 %, Home and End to the ends of
 // the bar, and Delete (or Backspace) puts it back to its default. By change from the maximum volume the bar is the change ramp,
@@ -144,8 +144,8 @@ export function TargetLegend({ label, unit, mode, scale, low, high, palette, onR
       </div>
       {mode !== "change" && onColourByChange !== undefined && (
         <div className="segmented-switch target-legend-colour-by" role="group" aria-label={messages.colourBy}>
-          <button type="button" aria-pressed={byShare} onClick={() => onColourByChange("share")}>{messages.colourByShare}</button>
           <button type="button" aria-pressed={mode === "value"} onClick={() => onColourByChange("value")}>{messages.colourByValue(unit)}</button>
+          <button type="button" aria-pressed={byShare} onClick={() => onColourByChange("share")}>{messages.colourByShare}</button>
         </div>
       )}
       <div ref={bar} className="target-legend-bar" data-disabled={disabled ? "true" : undefined} style={{ background: gradient }}
@@ -157,7 +157,6 @@ export function TargetLegend({ label, unit, mode, scale, low, high, palette, onR
       </div>
       <div className="target-legend-ends">
         <span>{format(scaleLow)}</span>
-        {mode !== "change" && <span className="target-legend-range">{messages.rangeText(format(shownLow), format(shownHigh))}</span>}
         {mode === "change" && hasLoss && (
           <span className="target-legend-loss"><span className="target-legend-loss-swatch" style={{ background: changeRamp(-1) }} aria-hidden="true" />{messages.changeLoss}</span>
         )}

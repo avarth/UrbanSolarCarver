@@ -12,10 +12,10 @@ export const STUDY_GEOMETRIES: readonly StudyGeometry[] = ["max_volume", "envelo
 export const OPEN_COLUMN = "open";
 
 /**
- * How the values are coloured when Change is off: by each point's share of its open-site value (its value with nothing built, the open
- * column), one 0 to 100 % scale for every geometry, or by the value in the study's unit. Share is the default: the spread of values
- * follows the surfaces' orientation (roofs far above facades), which a value scale shows instead of what the building takes away
- * (user, 2026-10-28).
+ * How the values are coloured when Change is off: by the value in the study's unit (the default, user 2026-10-28), or by each point's
+ * share of its no-build value (its value with nothing built on the plot, the open column; the surroundings and terrain still block),
+ * one 0 to 100 % scale for every geometry, which shows what the building takes away rather than the spread the surfaces' orientation
+ * gives the values (roofs far above facades).
  */
 export type ColourBy = "share" | "value";
 
@@ -26,7 +26,7 @@ export interface StudyView {
   /** Colour by the change from the maximum volume, whatever colourBy says. */
   change: boolean;
   colourBy: ColourBy;
-  /** The low and high ends of the colour range: percent of the open-site value by share, the study's unit by value. The palette runs
+  /** The low and high ends of the colour range: percent of the no-build value by share, the study's unit by value. The palette runs
    * between them; a value below the low end takes its colour, above the high end the high end's colour. */
   range: [number, number];
   palette: StudyPalette;
@@ -41,12 +41,12 @@ export interface StudyStatistics {
   lowestTenth: number;
   /** The share of points (0 to 1) at or above the target; null without one. Every point stands for about the same test area. */
   shareAtTarget: number | null;
-  /** The sum of the values over the sum of the open-site values (0 to 1): what the geometry keeps of what the site gives with nothing
-   * built; null when the open site gives nothing. */
+  /** The sum of the values over the sum of the no-build values (0 to 1): what the geometry keeps of what the site gives with nothing
+   * built; null when the no-build case gives nothing. */
   keptShare: number | null;
 }
 
-/** What *values* keep of the open-site values: their sum over the open column's (0 to 1); null when the open column sums to nothing. */
+/** What *values* keep of the no-build values: their sum over the open column's (0 to 1); null when the open column sums to nothing. */
 export function keptShareOf(values: Float32Array, open: Float32Array): number | null {
   let kept = 0, possible = 0;
   for (let point = 0; point < values.length; point++) {
@@ -56,7 +56,7 @@ export function keptShareOf(values: Float32Array, open: Float32Array): number | 
   return possible > 0 ? kept / possible : null;
 }
 
-/** A point's value as a share (0 to 1) of its open-site value. Where the open site gives it nothing (within *tolerance*) it loses
+/** A point's value as a share (0 to 1) of its no-build value. Where the no-build case gives it nothing (within *tolerance*) it loses
  * nothing, so its share is 1: it is drawn as fully kept rather than in a colour of its own (user, 2026-10-28). */
 export function shareOfOpen(value: number, open: number, tolerance: number): number {
   return open > tolerance ? Math.min(1, Math.max(0, value / open)) : 1;

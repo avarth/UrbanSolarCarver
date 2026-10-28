@@ -217,10 +217,10 @@ test("values beyond an end of the range take that end's colour, not a colour of 
   expect(patchColours(studyValuesLayer(view, corners))).toEqual([magma(0), magma(0.5), magma(1), magma(0)]);
 });
 
-test("by share each point is coloured by its value over its open-site value in percent; no open-site value counts as 100 %", () => {
+test("by share each point is coloured by its value over its no-build value in percent; no no-build value counts as 100 %", () => {
   setColourTokens();
   // Open 4, 8, 4, 0 and envelope 0, 4, 4, 0: shares 0, 50 and 100 % (the second point's value is the highest of the envelope, yet
-  // half of its own open-site value), and 100 % for a point the open site gives nothing (it loses nothing).
+  // half of its own no-build value), and 100 % for a point the no-build case gives nothing (it loses nothing).
   const values = decodeStudyValues(studyValuesOf({ open: [4, 8, 4, 0], max_volume: [1, 1, 1, 0], envelope: [0, 4, 4, 0] }));
   const view = { values, geometry: "envelope" as const, change: false, colourBy: "share" as const, range: [0, 100] as [number, number],
                  palette: "magma" as const, unit: "h", dimmed: false };

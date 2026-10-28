@@ -476,7 +476,7 @@ function paintStudyValues(colours: Float32Array, view: StudyView): void {
     const span = high > low ? high - low : 1;
     const rampAt = (x: number) => ramp[Math.min(255, Math.max(0, Math.floor(((x - low) / span) * 256)))];
     if (view.colourBy === "share") {
-      // Each point by its share of its own open-site value, in percent (a point the open site gives nothing loses nothing: 100 %).
+      // Each point by its share of its own no-build value, in percent (a point the no-build case gives nothing loses nothing: 100 %).
       const open = studyValues.values[OPEN_COLUMN];
       const tolerance = changeTolerance(open, studyValues.values.max_volume);
       for (let point = 0; point < count; point++) paint(point, rampAt(open === undefined ? 100 : 100 * shareOfOpen(shown[point], open[point], tolerance)));
@@ -501,7 +501,7 @@ function paletteColours(palette: StudyPalette): THREE.Color[] {
 /**
  * The selected study's test point patches on the geometry shown (*corners*: study_values_decoder.patchCorners), unlit so the colours
  * read as the legend's. By share (the default) or by value: the chosen palette (magma by default) between the two ends of the colour
- * range, in percent of each point's open-site value or in the study's unit; a value beyond an end takes that end's colour. By change from the maximum
+ * range, in percent of each point's no-build value or in the study's unit; a value beyond an end takes that end's colour. By change from the maximum
  * volume: the change ramp from no change to the largest gain, a loss in the carved colour, a change within the tolerance none. The
  * patches lie on test surfaces, so they are pulled forward in depth as those are. A new range, palette, colouring or Change of the same
  * values and geometry recolours the patches in place (userData.recolour); the palettes do not depend on the viewport theme.
