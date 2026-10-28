@@ -22,7 +22,7 @@ Pressing a row selects the file. The view frames it and draws the other test sur
 - **Closed bodies**: how many of the file's bodies are closed, of how many. A body is the triangles joined by shared edges. For the maximum volume an open body is shown as a warning, because the voxelizer needs closed volumes. For the surroundings and the test surfaces it is information only.
 - **Surfaces**, for a test surface file: how many surfaces it has (below).
 
-The summary is worked out when Inspect asks for it, not at upload, and it is kept until the file changes. It reads each file as the engine's loader does, so the triangles you see are the ones the engine uses.
+The summary is worked out when Inspect asks for it, not at upload, and it is kept until the file changes. The test surface and maximum volume files are read as the engine's loader reads them, with their normals made consistent, so the triangles you see are the ones the engine uses. The surroundings and terrain files are read as stored, without that step, as the engine reads them too: nothing reads their orientation, and fixing it takes seconds on a large mesh.
 
 ## What the colours and arrows mean
 
@@ -57,7 +57,9 @@ Turns are **staged**. The view shows them at once and the row says, for example,
 | PLY | float64 coordinates |
 | GLB, STL | float32, as these formats hold nothing finer; coordinates are kept as precisely as the format allows |
 
-The service then reads the written file back with the engine's loader and compares it with what you turned. If the triangles, their normals or their corners are not what was written, nothing is saved and the file stays as it was. A saved file keeps the geometry only. USC reads geometry only, so OBJ groups, materials and texture coordinates and PLY colours are not in the saved file. The original, which is kept (below), still has them.
+A GLB or STL that another program wrote with coordinates float32 cannot hold exactly may have a corner move by about one float32 step when it is saved: for a GLB that is about 4 µm at 50 m from the file's whole-metre offset, for an STL about 0.25 mm at 4 km from zero. OBJ and PLY corners do not move.
+
+The service then reads the written file back with the engine's loader and compares it with what you turned. If the triangles or their normals are not what was written, or a corner moved by more than 1 µm (for GLB and STL, more than two float32 steps at the file's largest coordinate), nothing is saved and the file stays as it was. A saved file keeps the geometry only. USC reads geometry only, so OBJ groups, materials and texture coordinates and PLY colours are not in the saved file. The original, which is kept (below), still has them.
 
 Save has the effects of uploading the file again through the app:
 
@@ -67,6 +69,12 @@ Save has the effects of uploading the file again through the app:
 
 Save and Restore original are not available while a run of the project is going. The panel says so beside the buttons.
 
+### A file that changed in the project folder
+
+Turns are staged on the version of the file Inspect read, and Save sends that version with them. Before it writes anything, the service builds the files changed in the project folder into the project, as when the window comes back to the front, and compares the file stored now with that version. If you replaced the file by hand meanwhile, even with one that has as many triangles and surfaces and the same bounds, Save writes nothing and says **The file changed in the project folder since its surfaces were turned, so nothing was saved.** Its staged turns are dropped, since the surfaces of the new version are numbered anew, and Inspect reads the files again. Restore original does the same with **The file changed in the project folder since Inspect read it, so nothing was restored.**, so it never puts an older original over a file you replaced. The kept original of a file replaced by hand is dropped (below), and the file has a "changed in the project folder" notice as any file replaced by hand.
+
+Inspect also reads the files again when the stage status finds a file changed in the project folder, for example when the window comes back to the front, so turns staged on a replaced file are dropped before you press Save.
+
 ### Restore original
 
 Before the first save of a file, the file as it was is kept in the project folder, in `inputs/originals/test_surfaces/`. **Restore original** puts it back byte for byte, with the same effects as a save, and removes the kept copy. The button shows on the selected row while an original is kept.
@@ -75,7 +83,7 @@ The kept original is dropped when you upload a file with the same name, when you
 
 ### Leaving Inspect with turns not saved
 
-Switching to Design or Simulate while a file has staged turns asks **Save the turned surfaces before leaving Inspect?** with three answers: **Save** (writes every file with turns, then leaves), **Discard** (drops them and leaves) and **Stay**. If a save is refused, for example because a run is going, the dialog stays open with the reason.
+Switching to Design or Simulate while a file has staged turns, or while a save or restore is under way, asks **Save the turned surfaces before leaving Inspect?** with three answers: **Save** (writes every file with turns, then leaves), **Discard** (drops them and leaves) and **Stay**. While a save is under way the dialog says **A save is under way.**; Save and Discard wait for it, and when it is written with nothing left to save the dialog leaves by itself. If a save is refused, the one under way included, for example because a run is going or the file changed in the project folder, the dialog stays open with the reason, so a failed save is never left unseen in another workspace.
 
 If a file changed while turns were staged on it (a new version uploaded, or replaced in the project folder), the staged turns are dropped and the panel says **The file changed, so its turns not saved were dropped.** The surfaces of the new version are numbered anew, so the old turns would not mean the same surfaces.
 
@@ -87,8 +95,10 @@ The service computes all of this in `local_web_service/inspection.py`, with trim
 |---|---|
 | `GET /projects/{name}/inspect` | The summary of every mesh file of the project; allowed while a run is going |
 | `GET /projects/{name}/inspect/test_surfaces/{file}/geometry` | The triangles of a test surface file with a surface number per triangle, as one binary (layout in `inspection.inspection_geometry`) |
-| `POST /projects/{name}/inspect/test_surfaces/{file}/turn` | Turn the surfaces named in `surfaces` and save the file; 409 while a run of the project is active, 422 for a file closed as a whole, one that cannot be read or a surface that does not exist, 500 when the written file does not read as turned |
-| `POST /projects/{name}/inspect/test_surfaces/{file}/restore` | Put the kept original back; 404 when none is kept, 409 while a run is active |
+| `POST /projects/{name}/inspect/test_surfaces/{file}/turn` | Turn the surfaces named in `surfaces` of the file of `version` and save the file; 409 while a run of the project is active, or with `stored_file_changed: true` when the file stored now is not that version; 422 for a file closed as a whole, one that cannot be read, a surface that does not exist, or a file changed in the folder that cannot be read; 500 when the written file does not read as turned |
+| `POST /projects/{name}/inspect/test_surfaces/{file}/restore` | Put the kept original back in place of the file of `version`; 404 when none is kept, 409 while a run is active or (`stored_file_changed`) when the file stored now is another |
+
+Each file of the summary has a `version`, the sha256 of its bytes. A turn or a restore names it, and both first build the files changed in the project folder into the project. The service keeps the summary of each file it read, and for a test surface file its triangles and their surfaces, up to 32 files and 5 million kept triangles, the least recently used leaving first.
 
 ## Not in Inspect
 

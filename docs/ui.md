@@ -283,7 +283,8 @@ The switch **Design | Simulate | Inspect** in the header also opens Inspect, a w
 - The **Files** panel floats over the top left of the view and collapses to an icon. It lists the maximum volume, test surface, surroundings and terrain files, each with its triangle count and area; pressing a row frames the file, draws the other test surface files faint and opens its bounds, closed bodies and (for test surfaces) surface count. A file the app cannot read is listed with its problem.
 - Test surfaces are drawn two-sided: the side the normal points to in the test surface colour, the back side in orange, so a surface the wrong way round shows orange from outside. **Arrows** draws one arrow per surface along its normal.
 - On a test surface file, **Flip mode** turns the whole surface under a click (a second click turns it back) and **Flip all** turns every surface. Turns are staged and shown at once; **Save** writes the file once in its own format, **Discard** drops the turns, and **Restore original** puts back the file as it was before the first save. A file that is closed as a whole cannot be flipped.
-- Save and Restore original act like an upload: the criteria and studies that list the file go out of date. They wait while a run of the project is going. Leaving Inspect with turns not saved asks Save, Discard or Stay.
+- Save and Restore original act like an upload: the criteria and studies that list the file go out of date. They wait while a run of the project is going. If the file was replaced in the project folder since Inspect read it, they write nothing and say so, and its staged turns are dropped.
+- Leaving Inspect with turns not saved, or while a save is under way, asks Save, Discard or Stay. A save under way is said in the dialog, and if it is refused the dialog stays open with the reason.
 
 ## Where projects are kept
 

@@ -24,17 +24,28 @@ versioning follows [Semantic Versioning](https://semver.org/).
   surface file that is closed as a whole cannot be flipped, since the loader turns closed bodies outward. Turns are staged;
   **Save** writes the file once in its own format (OBJ at 10 decimals, PLY float64, GLB and STL float32), reads it back with
   the engine's loader and saves nothing if the turns or coordinates did not hold. OBJ groups, materials and texture
-  coordinates and PLY colours are not kept in a saved file. **Discard** drops the turns. Leaving Inspect with turns not saved
-  asks Save, Discard or Stay; turns staged on a file that changed meanwhile are dropped with a message.
+  coordinates and PLY colours are not kept in a saved file; a GLB or STL corner can move by about one float32 step. **Discard**
+  drops the turns. Leaving Inspect with turns not saved, or while a save is under way, asks Save, Discard or Stay; a save under
+  way is said there, and its refusal keeps the dialog open with the reason. Turns staged on a file that changed meanwhile are
+  dropped with a message.
+- **A file replaced in the project folder is never overwritten.** Turns are staged on the version of the file (the sha256 of its
+  bytes) and Save sends it. Save and Restore original first build the files changed in the folder into the project, then answer
+  409 and write nothing when the stored file is another version ("The file changed in the project folder since its surfaces
+  were turned, so nothing was saved."), so a turn is not applied to other surfaces and Restore original does not put an older
+  original over the replacement. The app then drops the file's turns and reads the files again; it also reads them again when
+  the stage status finds a changed file.
 - **Restore original.** Before the first save the file is kept in `inputs/originals/test_surfaces/`; Restore original puts it
   back byte for byte. An upload of a file with that name, removing the file, or replacing it by hand in the project folder
   drops the kept original.
 - **Effects of a save.** Save and Restore original act like an upload: the joined files of the criteria and studies that list
   the file are built again and those criteria and studies go out of date; no "changed in the project folder" notice is given.
   Both are refused (409) while a run of the project is active.
+- **Clicks in Flip mode stop at the surroundings.** A click on a context building or the terrain does not turn a test surface
+  hidden behind it; a test surface lying on a context face still takes the click.
 - **Service.** `local_web_service/inspection.py` and the routes `GET /projects/{name}/inspect`,
-  `GET /projects/{name}/inspect/test_surfaces/{file}/geometry`, `POST .../turn` and `POST .../restore`. A file is read once and
-  kept until its size or modification time changes. No engine function is added.
+  `GET /projects/{name}/inspect/test_surfaces/{file}/geometry`, `POST .../turn` and `POST .../restore` (both with the file's
+  `version`). A file is read once and kept until its size or modification time changes: the summary alone for the maximum
+  volume, context and terrain, and the triangles of the test surface files up to 5 million in all. No engine function is added.
 
 ### Fixed (input files replaced in the project folder)
 
